@@ -170,6 +170,7 @@ function AppContent() {
   // const [showSessionPanel, setShowSessionPanel] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
+  const [showQueuePanel, setShowQueuePanel] = useState(false);
   const [mobileSearchExpanded, setMobileSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -387,9 +388,16 @@ function AppContent() {
                       <span className="hidden sm:inline">Playlists</span>
                     </button>
                     <button
-                      onClick={() => setRightPanelTab('queue')}
+                      onClick={() => {
+                        // Desktop: toggle docked panel; Mobile: use tab
+                        if (window.innerWidth >= 768) {
+                          setShowQueuePanel(!showQueuePanel);
+                        } else {
+                          setRightPanelTab('queue');
+                        }
+                      }}
                       className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                        rightPanelTab === 'queue'
+                        rightPanelTab === 'queue' || showQueuePanel
                           ? 'bg-zinc-800 text-white'
                           : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
                       }`}
@@ -497,8 +505,9 @@ function AppContent() {
                 </Suspense>
               </div>
             )}
+            {/* Queue tab content - only show on mobile; desktop uses docked panel */}
             {rightPanelTab === 'queue' && (
-              <div className="h-full">
+              <div className="h-full md:hidden">
                 <Suspense fallback={<LazyLoadSpinner />}>
                   <QueueView />
                 </Suspense>
@@ -518,6 +527,27 @@ function AppContent() {
             )}
           </main>
         </div>
+
+        {/* Right panel - Queue (desktop only, docked) */}
+        {showQueuePanel && (
+          <div className={`hidden md:flex w-80 border-l ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} flex-col`}>
+            <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
+              <h2 className="font-semibold">Queue</h2>
+              <button
+                onClick={() => setShowQueuePanel(false)}
+                className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
+                aria-label="Close queue panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <QueueView />
+              </Suspense>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Player bar - fixed at bottom */}

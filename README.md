@@ -32,14 +32,14 @@ Most music players search by artist, album, or genre. Familiar searches by *how 
 
 | Full Player | Visualizer |
 |:--:|:--:|
-| ![Full Player](screenshots/09-full-player.png) | ![Visualizer](screenshots/06-visualizer.png) |
+| ![Full Player](screenshots/14-mobile-full-player.png) | ![Visualizer](screenshots/06-visualizer.png) |
 
 <details>
 <summary><strong>More screenshots</strong></summary>
 
-| Timeline | Playlists |
+| Albums | Playlists |
 |:--:|:--:|
-| ![Timeline](screenshots/04-library-timeline.png) | ![Playlists](screenshots/05-playlists.png) |
+| ![Albums](screenshots/04-library-albums.png) | ![Playlists](screenshots/05-playlists.png) |
 
 | Settings | Admin Setup |
 |:--:|:--:|

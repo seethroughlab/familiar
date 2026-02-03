@@ -111,6 +111,8 @@ export default defineConfig({
           },
           {
             // Don't cache audio streams - always fetch fresh
+            // Note: NetworkOnly doesn't support networkTimeoutSeconds, so timeouts
+            // are handled at the application level (offlineService.ts and useAudioEngine.ts)
             urlPattern: /\/api\/v1\/tracks\/.*\/stream/,
             handler: 'NetworkOnly',
           },

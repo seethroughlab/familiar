@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Alphabet Bar** - Quick A-Z navigation for long lists
+  - Hover on right edge to reveal vertical A-Z bar
+  - Click a letter to jump directly to that section
+  - Works on Tracks, Artists, and Albums views
+  - Only appears when list has 100+ items and is sorted alphabetically
+  - Backend `/library/letter-index` endpoint returns letter→index mapping
+  - Touch-drag with haptic feedback on mobile
+- **Docked Queue Panel** - Desktop queue now docks to right side
+  - Click Queue tab to toggle persistent side panel
+  - Separate from mobile tab behavior (mobile still uses tab view)
+  - Drag tracks from library directly into queue panel
+- **Now Playing indicator for playlists** - Visual feedback for active playlist
+  - Green highlight and animated equalizer icon on currently playing playlist
+  - Appears in AI Playlists section
+- **Favorite toggle in context menu** - Quick access to favorites
+  - Right-click any track to add/remove from favorites
+  - Heart icon shows current favorite status
+- **Album Download button** - Download entire album for offline
+  - New download button in album header view
+  - Shows progress during download
+  - Shows "Downloaded" status when complete
+
+### Fixed
+
+- **README screenshot links** - Fixed broken image references
+  - Full Player screenshot now points to correct file
+  - Timeline screenshot replaced with Albums (timeline screenshot was never generated)
+
 ## [0.1.0-alpha.7] - 2026-02-03
 
 Queue Management & Discovery Mode

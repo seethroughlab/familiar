@@ -67,6 +67,16 @@ class LLMService:
             {"role": "user", "content": message}
         ]
 
+        # Build dynamic system prompt with current settings
+        settings = get_app_settings_service().get()
+        discovery_mode = settings.playlist_discovery_mode
+        system_prompt = SYSTEM_PROMPT + f"""
+
+## Current User Settings
+
+- **playlist_discovery_mode**: "{discovery_mode}"
+{"  → You MUST include suggested_tracks in queue_tracks calls. Always suggest 3-5 relevant tracks the user might want to acquire that fit the request but aren't in their library." if discovery_mode == "suggest_missing" else "  → Only use local library tracks. Do not include suggested_tracks."}"""
+
         first_turn = True
         max_iterations = 8  # Prevent infinite tool loops
         iteration = 0
@@ -77,7 +87,7 @@ class LLMService:
                 create_kwargs: dict[str, Any] = {
                     "model": "claude-sonnet-4-5-20250929",
                     "max_tokens": 2048,
-                    "system": SYSTEM_PROMPT,
+                    "system": system_prompt,
                     "tools": cast(Any, MUSIC_TOOLS),
                     "messages": cast(Any, messages),
                 }

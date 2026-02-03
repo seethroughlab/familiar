@@ -292,7 +292,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
       format: null,
       analysis_version: 0,
     }));
-    setQueue(queueTracks, startIndex);
+    setQueue(queueTracks, startIndex, { type: 'playlist', id: playlistId });
   };
 
   const formatDuration = (seconds: number | null) => {

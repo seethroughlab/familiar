@@ -1,10 +1,15 @@
 import { useState, useCallback } from 'react';
-import { ListMusic, Play, Pause, GripVertical, X, Shuffle, Trash2, Music } from 'lucide-react';
+import { ListMusic, Play, Pause, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { tracksApi } from '../../api/client';
 import type { Track } from '../../types';
 
-export function QueueView() {
+interface QueueViewProps {
+  onTrackDropped?: (trackId: string) => void;
+}
+
+export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const {
     queue,
     queueIndex,
@@ -18,6 +23,7 @@ export function QueueView() {
     clearQueue,
     removeFromQueue,
     exitLazyMode,
+    addToQueue,
   } = usePlayerStore();
 
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -25,6 +31,7 @@ export function QueueView() {
   // Drag-to-reorder state (only for regular queue mode)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const isLazyMode = lazyQueueIds && lazyQueueIds.length > 0;
 
@@ -67,6 +74,39 @@ export function QueueView() {
     setDraggedIndex(null);
     setDropTargetIndex(null);
   }, []);
+
+  // Handle external track drops (from library)
+  const handleExternalDragOver = useCallback((e: React.DragEvent) => {
+    // Check if this is an external track drop (not internal reorder)
+    if (e.dataTransfer.types.includes('application/track-id')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleExternalDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
+
+  const handleExternalDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const trackId = e.dataTransfer.getData('application/track-id');
+    if (trackId) {
+      // Fetch track and add to queue
+      try {
+        const tracks = await tracksApi.getBatch([trackId]);
+        if (tracks.length > 0) {
+          addToQueue(tracks[0]);
+          onTrackDropped?.(trackId);
+        }
+      } catch (error) {
+        console.error('Failed to add track to queue:', error);
+      }
+    }
+  }, [addToQueue, onTrackDropped]);
 
   // Handle clicking on a track to jump to it
   const handleTrackClick = useCallback((index: number) => {
@@ -145,7 +185,12 @@ export function QueueView() {
   const isEmpty = totalCount === 0;
 
   return (
-    <div className="h-full flex flex-col">
+    <div
+      className={`h-full flex flex-col ${isDragOver ? 'ring-2 ring-green-500 ring-inset' : ''}`}
+      onDragOver={handleExternalDragOver}
+      onDragLeave={handleExternalDragLeave}
+      onDrop={handleExternalDrop}
+    >
       {/* Header */}
       <div className={`px-4 py-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
         <div className="flex items-center justify-between">
@@ -201,12 +246,23 @@ export function QueueView() {
       {/* Track list */}
       <div className="flex-1 overflow-y-auto">
         {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <Music className="w-16 h-16 text-zinc-600 mb-4" />
-            <h2 className="text-lg font-medium text-zinc-400 mb-2">Your queue is empty</h2>
-            <p className="text-sm text-zinc-500 max-w-xs">
-              Add tracks from your library or ask Claude to create a playlist
-            </p>
+          <div className={`flex flex-col items-center justify-center h-full text-center px-4 ${
+            isDragOver ? 'bg-green-900/10' : ''
+          }`}>
+            {isDragOver ? (
+              <>
+                <Plus className="w-16 h-16 text-green-500 mb-4" />
+                <h2 className="text-lg font-medium text-green-400 mb-2">Drop to add to queue</h2>
+              </>
+            ) : (
+              <>
+                <Music className="w-16 h-16 text-zinc-600 mb-4" />
+                <h2 className="text-lg font-medium text-zinc-400 mb-2">Your queue is empty</h2>
+                <p className="text-sm text-zinc-500 max-w-xs">
+                  Drag tracks here or ask Claude to create a playlist
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="p-2 space-y-1">

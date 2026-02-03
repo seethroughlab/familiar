@@ -125,9 +125,39 @@ export async function downloadTrackForOffline(
     console.log('[Offline] Resuming download from byte:', resumeFrom);
   }
 
+  // Set up abort controller with timeout for iOS PWA resilience
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+
   // Fetch the audio file with progress tracking
   console.log('[Offline] Fetching track:', trackId, resumeFrom > 0 ? '(resuming)' : '');
-  const response = await fetch(`/api/v1/tracks/${trackId}/stream`, { headers });
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/tracks/${trackId}/stream`, {
+      headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      const message = 'Download timed out - please try again';
+      console.error('[Offline] Download timeout:', trackId);
+      window.dispatchEvent(
+        new CustomEvent('offline-download-error', {
+          detail: { trackId, error: message },
+        })
+      );
+      throw new Error(message);
+    }
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    window.dispatchEvent(
+      new CustomEvent('offline-download-error', {
+        detail: { trackId, error: message },
+      })
+    );
+    throw error;
+  }
 
   // Check for successful response (200 OK or 206 Partial Content)
   if (!response.ok && response.status !== 206) {

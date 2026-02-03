@@ -61,7 +61,7 @@ async function globalSetup() {
     }
 
     // Verify tracks are available
-    const tracksResponse = await context.get('/api/v1/library/tracks?limit=1');
+    const tracksResponse = await context.get('/api/v1/tracks?page_size=1');
     if (tracksResponse.ok()) {
       const tracks = await tracksResponse.json();
       console.log(`📊 Library has ${tracks.total || 0} tracks available for testing`);

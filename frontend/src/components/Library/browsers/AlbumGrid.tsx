@@ -17,6 +17,7 @@ import {
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlbumContextMenu } from '../AlbumContextMenu';
+import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useDownloadStore, getAlbumJobId } from '../../../stores/downloadStore';
 import { getOfflineTrackIds, removeOfflineTrack } from '../../../services/offlineService';
@@ -114,6 +115,26 @@ export function AlbumGrid({
   const allAlbums = data?.pages.flatMap((page) => page.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
+  // Alphabet bar for quick navigation (only when sorted by name or artist)
+  const {
+    letterIndex,
+    activeLetter,
+    isVisible: isAlphabetBarVisible,
+    jumpToLetter,
+  } = useAlphabetBar({
+    entityType: 'albums',
+    sortField: sortBy === 'name' ? 'name' : sortBy === 'artist' ? 'artist' : sortBy,
+    filters: {
+      search: filters.search,
+      artist: filters.artist,
+    },
+    total,
+    pageSize: PAGE_SIZE,
+    fetchNextPage,
+    hasNextPage: hasNextPage ?? false,
+    loadedItemCount: allAlbums.length,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -143,7 +164,7 @@ export function AlbumGrid({
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-alphabet-scroll-container>
       {/* Sort controls */}
       <div className="flex items-center gap-2 mb-4">
         <span className="text-sm text-zinc-400">Sort by:</span>
@@ -174,10 +195,11 @@ export function AlbumGrid({
 
       {/* Album grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4">
-        {allAlbums.map((album) => (
+        {allAlbums.map((album, index) => (
           <AlbumCard
             key={`${album.artist}-${album.name}`}
             album={album}
+            index={index}
             onClick={() => onGoToAlbum(album.artist, album.name)}
             onGoToYear={onGoToYear}
             onContextMenu={(e) => handleAlbumContextMenu(album, e)}
@@ -334,6 +356,14 @@ export function AlbumGrid({
           }}
         />
       )}
+
+      {/* Alphabet bar for quick navigation */}
+      <AlphabetBar
+        letterIndex={letterIndex}
+        activeLetter={activeLetter}
+        onLetterSelect={jumpToLetter}
+        visible={isAlphabetBarVisible}
+      />
     </div>
   );
 }
@@ -346,16 +376,18 @@ interface AlbumCardProps {
     track_count: number;
     first_track_id: string;
   };
+  index: number;
   onClick: () => void;
   onGoToYear: (year: number) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }
 
-function AlbumCard({ album, onClick, onGoToYear, onContextMenu }: AlbumCardProps) {
+function AlbumCard({ album, index, onClick, onGoToYear, onContextMenu }: AlbumCardProps) {
   return (
     <div
       role="button"
       tabIndex={0}
+      data-list-index={index}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

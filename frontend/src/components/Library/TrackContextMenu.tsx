@@ -16,6 +16,7 @@ import {
   Map,
   Trash2,
   X,
+  Heart,
 } from 'lucide-react';
 import type { Track } from '../../types';
 
@@ -34,6 +35,9 @@ interface TrackContextMenuProps {
   onMakePlaylist: () => void;
   onEditMetadata?: () => void;
   onRemoveFromDownloads?: () => void;
+  // Favorite toggle
+  isFavorite?: boolean;
+  onToggleFavorite?: () => void;
   // Bulk selection props (for mobile long-press)
   selectedCount?: number;
   onPlaySelected?: () => void;
@@ -46,16 +50,17 @@ interface MenuItemProps {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  iconClassName?: string;
 }
 
-function MenuItem({ icon, label, onClick, disabled }: MenuItemProps) {
+function MenuItem({ icon, label, onClick, disabled, iconClassName }: MenuItemProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
     >
-      <span className="text-zinc-400">{icon}</span>
+      <span className={iconClassName || "text-zinc-400"}>{icon}</span>
       <span>{label}</span>
     </button>
   );
@@ -80,6 +85,8 @@ export function TrackContextMenu({
   onMakePlaylist,
   onEditMetadata,
   onRemoveFromDownloads,
+  isFavorite,
+  onToggleFavorite,
   selectedCount = 0,
   onPlaySelected,
   onAddSelectedToPlaylist,
@@ -246,6 +253,16 @@ export function TrackContextMenu({
         label={isSelected ? 'Deselect' : 'Select'}
         onClick={() => handleAction(onToggleSelect)}
       />
+
+      {/* Favorite */}
+      {onToggleFavorite && (
+        <MenuItem
+          icon={<Heart className="w-4 h-4" fill={isFavorite ? 'currentColor' : 'none'} />}
+          label={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+          onClick={() => handleAction(onToggleFavorite)}
+          iconClassName={isFavorite ? 'text-pink-500' : 'text-zinc-400'}
+        />
+      )}
 
       {/* Edit Metadata */}
       {onEditMetadata && (

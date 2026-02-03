@@ -18,10 +18,12 @@ import { useLongPress } from '../../../hooks/useLongPress';
 import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
 import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns } from '../columnDefinitions';
 import { useOfflineTrack } from '../../../hooks/useOfflineTrack';
+import { useOfflineAlbum } from '../../../hooks/useOfflineAlbum';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { registerBrowser, type BrowserProps, type ContextMenuState, initialContextMenuState } from '../types';
 import { TrackContextMenu } from '../TrackContextMenu';
 import { AlbumArtwork } from '../../AlbumArtwork';
+import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
 
 const PAGE_SIZE = 50;
@@ -110,6 +112,68 @@ function FavoriteButton({ trackId }: { trackId: string }) {
   );
 }
 
+interface AlbumTrack {
+  id: string;
+}
+
+interface AlbumOfflineButtonProps {
+  tracks: AlbumTrack[];
+  artist: string;
+  album: string;
+}
+
+function AlbumOfflineButton({ tracks, artist, album }: AlbumOfflineButtonProps) {
+  const {
+    offlineCount,
+    totalCount,
+    isFullyOffline,
+    isPartiallyOffline,
+    isDownloading,
+    currentTrack,
+    overallProgress,
+    download,
+    remove,
+  } = useOfflineAlbum(tracks, { artist, album });
+
+  if (isDownloading) {
+    return (
+      <button
+        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 rounded-full transition-colors"
+        title={`Downloading track ${currentTrack} of ${totalCount}...`}
+      >
+        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+        <span className="text-sm">{overallProgress}%</span>
+      </button>
+    );
+  }
+
+  if (isFullyOffline) {
+    return (
+      <button
+        onClick={remove}
+        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-full transition-colors"
+        title="Remove offline copies"
+      >
+        <Check className="w-4 h-4 text-green-500" />
+        <span className="text-sm">Downloaded</span>
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={download}
+      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-full transition-colors"
+      title={isPartiallyOffline ? `Download remaining ${totalCount - offlineCount} tracks` : 'Download album for offline'}
+    >
+      <Download className="w-4 h-4" />
+      <span className="text-sm">
+        {isPartiallyOffline ? `${offlineCount}/${totalCount}` : 'Download'}
+      </span>
+    </button>
+  );
+}
+
 interface TrackRowProps {
   track: Track;
   index: number;
@@ -157,6 +221,12 @@ function MobileTrackCard({
   return (
     <div
       data-testid="track-row"
+      data-list-index={index}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/track-id', track.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
       onClick={onClick}
       onContextMenu={onContextMenu}
       {...longPressHandlers}
@@ -239,6 +309,12 @@ function TrackRow({
   return (
     <div
       data-testid="track-row"
+      data-list-index={index}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('application/track-id', track.id);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
       onClick={onClick}
       onContextMenu={onContextMenu}
       onMouseDown={(e) => {
@@ -347,6 +423,7 @@ export function TrackListBrowser({
   const selectRange = useSelectionStore((state) => state.selectRange);
   const columns = useColumnStore((state) => state.columns);
   const reorderColumns = useColumnStore((state) => state.reorderColumns);
+  const { isFavorite, toggle } = useFavorites();
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
@@ -510,6 +587,27 @@ export function TrackListBrowser({
   const total = filters.downloadedOnly && offlineTrackIds
     ? allTracks.length
     : data?.pages[0]?.total ?? 0;
+
+  // Alphabet bar for quick navigation
+  const {
+    letterIndex,
+    activeLetter,
+    isVisible: isAlphabetBarVisible,
+    jumpToLetter,
+  } = useAlphabetBar({
+    entityType: 'tracks',
+    sortField: 'artist', // TrackListBrowser sorts by artist by default
+    filters: {
+      search: filters.search,
+      artist: filters.artist,
+      album: filters.album,
+    },
+    total,
+    pageSize: PAGE_SIZE,
+    fetchNextPage,
+    hasNextPage: hasNextPage ?? false,
+    loadedItemCount: allTracks.length,
+  });
 
   // Update visible tracks store when tracks change (for LLM context)
   const setVisibleTracks = useVisibleTracksStore((state) => state.setVisibleTracks);
@@ -721,7 +819,7 @@ export function TrackListBrowser({
   const isAlbumView = filters.album && allTracks.length > 0;
   const albumStats = isAlbumView ? {
     artist: filters.artist || allTracks[0]?.album_artist || allTracks[0]?.artist || 'Unknown Artist',
-    album: filters.album,
+    album: filters.album!, // Non-null assertion: isAlbumView guarantees filters.album is defined
     year: allTracks.find(t => t.year)?.year || null,
     trackCount: total,
     totalDuration: allTracks.reduce((sum, t) => sum + (t.duration_seconds || 0), 0),
@@ -738,7 +836,7 @@ export function TrackListBrowser({
   };
 
   return (
-    <div>
+    <div data-alphabet-scroll-container>
       {/* Album header when viewing an album */}
       {albumStats && (
         <div className="flex items-start gap-4 md:gap-6 p-4 mb-4 bg-zinc-800/30 rounded-lg">
@@ -779,8 +877,8 @@ export function TrackListBrowser({
               </span>
             </div>
 
-            {/* Play button */}
-            <div className="mt-4">
+            {/* Play and Download buttons */}
+            <div className="mt-4 flex items-center gap-2">
               <button
                 onClick={handlePlayAll}
                 disabled={isLoadingPlayAll}
@@ -793,6 +891,11 @@ export function TrackListBrowser({
                 )}
                 Play
               </button>
+              <AlbumOfflineButton
+                tracks={allTracks.map(t => ({ id: t.id }))}
+                artist={albumStats.artist}
+                album={albumStats.album}
+              />
             </div>
           </div>
         </div>
@@ -1008,6 +1111,12 @@ export function TrackListBrowser({
               onEditTrack(contextMenu.track.id);
             }
           }}
+          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
+          onToggleFavorite={() => {
+            if (contextMenu.track) {
+              toggle(contextMenu.track.id);
+            }
+          }}
           // Bulk selection props for mobile
           selectedCount={selectedTrackIds.size}
           onPlaySelected={() => {
@@ -1021,6 +1130,14 @@ export function TrackListBrowser({
           onClearSelection={onClearSelection}
         />
       )}
+
+      {/* Alphabet bar for quick navigation */}
+      <AlphabetBar
+        letterIndex={letterIndex}
+        activeLetter={activeLetter}
+        onLetterSelect={jumpToLetter}
+        visible={isAlphabetBarVisible}
+      />
     </div>
   );
 }

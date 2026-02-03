@@ -69,7 +69,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   // Pan and zoom state
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(15);  // Start zoomed in (max zoom is 15)
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
@@ -571,9 +571,9 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
         } else {
           // Single click: recenter on this artist
           setCenterArtist(artist.name);
-          // Reset view
+          // Reset view with default zoom
           setPan({ x: 0, y: 0 });
-          setZoom(1);
+          setZoom(15);
         }
       }
     },
@@ -590,7 +590,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
   }, []);
 
   const handleReset = useCallback(() => {
-    setZoom(1);
+    setZoom(15);  // Reset to default zoomed-in view
     setPan({ x: 0, y: 0 });
   }, []);
 
@@ -598,7 +598,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
     setCenterArtist(artistName);
     setShowPicker(false);
     setPan({ x: 0, y: 0 });
-    setZoom(1);
+    setZoom(15);  // Start with default zoomed-in view
   }, []);
 
   const handleChangeCenterArtist = useCallback(() => {

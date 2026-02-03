@@ -869,6 +869,12 @@ export interface MusicMap3DResponse {
   total_entities: number;
 }
 
+// Letter Index (for Alphabet Bar navigation)
+export interface LetterIndexResponse {
+  letters: Record<string, number>;  // {"A": 0, "B": 47, "C": 123, "#": 500}
+  total: number;
+}
+
 export const libraryApi = {
   getStats: async (): Promise<LibraryStats> => {
     const { data } = await api.get('/library/stats');
@@ -1021,6 +1027,17 @@ export const libraryApi = {
     // Cache version param to bust browser cache when image sources change
     const cacheVersion = 'v2';
     return `/api/v1/library/artists/${encodeURIComponent(artistName)}/image?size=${size}&_cv=${cacheVersion}`;
+  },
+
+  getLetterIndex: async (params: {
+    entity_type: 'tracks' | 'artists' | 'albums';
+    sort_field: string;
+    search?: string;
+    artist?: string;
+    album?: string;
+  }): Promise<LetterIndexResponse> => {
+    const { data } = await api.get('/library/letter-index', { params });
+    return data;
   },
 
   getDiscover: async (params?: {

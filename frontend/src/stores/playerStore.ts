@@ -29,6 +29,7 @@ export interface LibraryFilters {
 
 export interface QueueSource {
   type: QueueSourceType;
+  id?: string;  // Playlist ID, album hash, artist name, etc.
   filters?: LibraryFilters;  // For library context, to re-fetch with new shuffle state
 }
 
@@ -97,7 +98,7 @@ interface PlayerState {
   playTrack: (track: Track) => void;
   playNext: () => void;
   playPrevious: () => void;
-  setQueue: (tracks: Track[], startIndex?: number) => void;
+  setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   jumpToQueueIndex: (index: number) => void;
 
@@ -461,7 +462,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  setQueue: (tracks, startIndex = 0) => {
+  setQueue: (tracks, startIndex = 0, source?: QueueSource) => {
     const { shuffle } = get();
     const queueItems = tracks.map((track) => ({
       track,
@@ -488,7 +489,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       lazyQueueIds: null,
       lazyQueueIndex: -1,
       prefetchedTracks: new Map(),
-      queueSource: null,  // Clear source when using regular queue
+      queueSource: source || null,
     });
     persistState();
   },

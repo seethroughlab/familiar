@@ -693,6 +693,30 @@ export function useAudioEngine() {
         currentElement.addEventListener('canplay', playWhenReady);
         currentElement.addEventListener('loadedmetadata', handleMetadata);
         currentElement.addEventListener('error', handleLoadError);
+
+        // iOS PWA load timeout detection - detect hung loads that never fire events
+        const loadTimeout = setTimeout(() => {
+          if (loadIdRef.current === currentLoadId && currentElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+            console.error('[Audio] Load timeout - iOS PWA may have suspended network');
+            window.dispatchEvent(
+              new CustomEvent('audio-load-timeout', {
+                detail: { trackId: trackIdToLoad },
+              })
+            );
+            // Don't auto-stop playback, but log for debugging
+          }
+        }, 30000);
+
+        currentElement.addEventListener(
+          'canplay',
+          () => clearTimeout(loadTimeout),
+          { once: true }
+        );
+        currentElement.addEventListener(
+          'error',
+          () => clearTimeout(loadTimeout),
+          { once: true }
+        );
       }
 
       isLoadingRef.current = false;

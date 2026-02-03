@@ -32,7 +32,7 @@ interface Props {
 
 export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = {}) {
   const queryClient = useQueryClient();
-  const { setQueue } = usePlayerStore();
+  const { setQueue, queueSource, isPlaying } = usePlayerStore();
   const { total: favoritesCount } = useFavorites();
   const { total: downloadsCount, totalSizeFormatted: downloadsTotalSize } = useDownloadedTracks();
   const { isOffline } = useOfflineStatus();
@@ -196,9 +196,9 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const playMutation = useMutation({
     mutationFn: async (playlistId: string) => {
       const playlist = await playlistsApi.get(playlistId);
-      return playlist.tracks;
+      return { tracks: playlist.tracks, playlistId };
     },
-    onSuccess: (tracks) => {
+    onSuccess: ({ tracks, playlistId }) => {
       if (tracks.length > 0) {
         const queueTracks = tracks.map(t => ({
           id: t.id,
@@ -216,7 +216,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
           format: null,
           analysis_version: 0,
         }));
-        setQueue(queueTracks);
+        setQueue(queueTracks, 0, { type: 'playlist', id: playlistId });
       }
     },
   });
@@ -355,33 +355,53 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
                   <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
                 </div>
               ) : (
-                aiPlaylists.map((playlist) => (
+                aiPlaylists.map((playlist) => {
+                  const isNowPlaying = queueSource?.type === 'playlist' && queueSource?.id === playlist.id;
+                  return (
                   <div
                     key={playlist.id}
-                    className="group flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg transition-colors"
+                    className={`group flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                      isNowPlaying
+                        ? 'bg-green-900/20 hover:bg-green-900/30 ring-1 ring-green-500/30'
+                        : 'bg-zinc-800/50 hover:bg-zinc-800'
+                    }`}
                   >
-                    {/* Play button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePlay(playlist.id);
-                      }}
-                      disabled={playMutation.isPending}
-                      className="p-2 bg-purple-600 hover:bg-purple-500 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity disabled:opacity-50"
-                    >
-                      {playMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Play className="w-4 h-4" fill="currentColor" />
-                      )}
-                    </button>
+                    {/* Now playing indicator or Play button */}
+                    {isNowPlaying && isPlaying ? (
+                      <div className="p-2 bg-green-600 rounded-full flex items-center justify-center">
+                        <div className="flex items-center gap-0.5">
+                          <div className="w-0.5 h-3 bg-white animate-pulse" />
+                          <div className="w-0.5 h-3 bg-white animate-pulse [animation-delay:0.2s]" />
+                          <div className="w-0.5 h-3 bg-white animate-pulse [animation-delay:0.4s]" />
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePlay(playlist.id);
+                        }}
+                        disabled={playMutation.isPending}
+                        className={`p-2 rounded-full transition-opacity disabled:opacity-50 ${
+                          isNowPlaying
+                            ? 'bg-green-600 hover:bg-green-500 opacity-100'
+                            : 'bg-purple-600 hover:bg-purple-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                        }`}
+                      >
+                        {playMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Play className="w-4 h-4" fill="currentColor" />
+                        )}
+                      </button>
+                    )}
 
                     {/* Info */}
                     <div
                       className="flex-1 min-w-0 cursor-pointer"
                       onClick={() => handleSelectPlaylist(playlist)}
                     >
-                      <div className="font-medium truncate flex items-center gap-2">
+                      <div className={`font-medium truncate flex items-center gap-2 ${isNowPlaying ? 'text-green-400' : ''}`}>
                         {playlist.name}
                         {cachedPlaylistIds.has(playlist.id) && (
                           <span title="Available offline">
@@ -434,7 +454,8 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
                       )}
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}

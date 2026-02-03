@@ -1811,6 +1811,255 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
     )
 
 
+# ============================================================================
+# Letter Index (for Alphabet Bar navigation)
+# ============================================================================
+
+
+class LetterIndexResponse(BaseModel):
+    """Letter index for alphabet bar navigation."""
+
+    letters: dict[str, int]  # {"A": 0, "B": 47, "C": 123, "#": 500}
+    total: int
+
+
+@router.get("/letter-index", response_model=LetterIndexResponse)
+async def get_letter_index(
+    db: DbSession,
+    entity_type: Literal["tracks", "artists", "albums"] = "tracks",
+    sort_field: str = "artist",  # tracks: artist/album/title, artists: name, albums: name/artist
+    search: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+) -> LetterIndexResponse:
+    """Get letter→index mapping for alphabet bar navigation.
+
+    Returns the first occurrence index for each letter in the sorted list,
+    allowing fast jumping to items starting with that letter.
+
+    Non-alphabetic characters (numbers, symbols) map to '#'.
+
+    Args:
+        entity_type: What to index - 'tracks', 'artists', or 'albums'
+        sort_field: Field to sort/index by
+        search: Optional search filter
+        artist: Filter by artist (for tracks/albums)
+        album: Filter by album (for tracks only)
+    """
+    from sqlalchemy import case, literal_column, text
+    from sqlalchemy.dialects.postgresql import TEXT
+
+    letters: dict[str, int] = {}
+    total = 0
+
+    if entity_type == "tracks":
+        # Determine sort column based on sort_field
+        if sort_field == "album":
+            sort_col = func.coalesce(Track.album, "")
+        elif sort_field == "title":
+            sort_col = func.coalesce(Track.title, "")
+        else:  # Default to artist
+            sort_col = func.coalesce(Track.artist, "")
+
+        # Build base query with filters
+        base_filter = [Track.status == TrackStatus.ACTIVE]
+        if search:
+            search_lower = f"%{search.lower()}%"
+            base_filter.append(
+                (func.lower(Track.title).like(search_lower))
+                | (func.lower(Track.artist).like(search_lower))
+                | (func.lower(Track.album).like(search_lower))
+            )
+        if artist:
+            base_filter.append(func.lower(Track.artist) == artist.lower())
+        if album:
+            base_filter.append(func.lower(Track.album) == album.lower())
+
+        # Get total count
+        count_query = select(func.count(Track.id)).where(*base_filter)
+        total = await db.scalar(count_query) or 0
+
+        # Extract first letter, normalize to uppercase, map non-alpha to '#'
+        first_char = func.upper(func.substring(sort_col, 1, 1))
+        letter_expr = case(
+            (func.substring(first_char, 1, 1).op("~")("[A-Z]"), first_char),
+            else_="#",
+        )
+
+        # Build subquery with row numbers
+        row_num_query = (
+            select(
+                letter_expr.label("letter"),
+                func.row_number()
+                .over(order_by=[func.lower(sort_col), Track.album, Track.track_number])
+                .label("row_num"),
+            )
+            .where(*base_filter)
+            .subquery()
+        )
+
+        # Get first index for each letter
+        letter_query = (
+            select(
+                row_num_query.c.letter,
+                func.min(row_num_query.c.row_num).label("first_index"),
+            )
+            .group_by(row_num_query.c.letter)
+            .order_by(row_num_query.c.letter)
+        )
+
+        result = await db.execute(letter_query)
+        for row in result.all():
+            # Convert to 0-based index
+            letters[row.letter] = row.first_index - 1
+
+    elif entity_type == "artists":
+        # Sort by artist name
+        sort_col = func.max(Track.artist)  # Pick canonical display name
+        artist_normalized = func.lower(Track.artist)
+
+        # Build base filter
+        base_filter = [
+            Track.artist.isnot(None),
+            Track.artist != "",
+            Track.status == TrackStatus.ACTIVE,
+        ]
+        if search:
+            base_filter.append(func.lower(Track.artist).contains(search.lower()))
+
+        # Get total count
+        count_query = (
+            select(func.count(func.distinct(artist_normalized)))
+            .select_from(Track)
+            .where(*base_filter)
+        )
+        total = await db.scalar(count_query) or 0
+
+        # Subquery to get distinct artists with row numbers
+        artist_subquery = (
+            select(
+                func.max(Track.artist).label("name"),
+                artist_normalized.label("artist_normalized"),
+            )
+            .where(*base_filter)
+            .group_by(artist_normalized)
+            .subquery()
+        )
+
+        # Add row numbers
+        first_char = func.upper(func.substring(artist_subquery.c.name, 1, 1))
+        letter_expr = case(
+            (func.substring(first_char, 1, 1).op("~")("[A-Z]"), first_char),
+            else_="#",
+        )
+
+        row_num_query = (
+            select(
+                letter_expr.label("letter"),
+                func.row_number()
+                .over(order_by=artist_subquery.c.artist_normalized)
+                .label("row_num"),
+            )
+            .select_from(artist_subquery)
+            .subquery()
+        )
+
+        # Get first index for each letter
+        letter_query = (
+            select(
+                row_num_query.c.letter,
+                func.min(row_num_query.c.row_num).label("first_index"),
+            )
+            .group_by(row_num_query.c.letter)
+            .order_by(row_num_query.c.letter)
+        )
+
+        result = await db.execute(letter_query)
+        for row in result.all():
+            letters[row.letter] = row.first_index - 1
+
+    elif entity_type == "albums":
+        # Determine sort column
+        album_artist_col = func.coalesce(func.nullif(Track.album_artist, ""), Track.artist)
+        if sort_field == "artist":
+            sort_col = album_artist_col
+        else:  # Default to album name
+            sort_col = Track.album
+
+        # Build base filter
+        base_filter = [
+            Track.album.isnot(None),
+            Track.album != "",
+            Track.status == TrackStatus.ACTIVE,
+        ]
+        if search:
+            search_lower = f"%{search.lower()}%"
+            base_filter.append(
+                (func.lower(Track.album).like(search_lower))
+                | (func.lower(album_artist_col).like(search_lower))
+            )
+        if artist:
+            base_filter.append(func.lower(album_artist_col) == artist.lower())
+
+        # Subquery to get distinct albums
+        album_artist_lower = func.lower(album_artist_col)
+        album_lower = func.lower(Track.album)
+        album_subquery = (
+            select(
+                func.max(Track.album).label("album_name"),
+                func.max(album_artist_col).label("artist_name"),
+                album_lower.label("album_normalized"),
+                album_artist_lower.label("artist_normalized"),
+            )
+            .where(*base_filter)
+            .group_by(album_artist_lower, album_lower)
+            .subquery()
+        )
+
+        # Get total count
+        count_query = select(func.count()).select_from(album_subquery)
+        total = await db.scalar(count_query) or 0
+
+        # Determine which column to use for letter extraction
+        if sort_field == "artist":
+            name_col = album_subquery.c.artist_name
+            order_col = album_subquery.c.artist_normalized
+        else:
+            name_col = album_subquery.c.album_name
+            order_col = album_subquery.c.album_normalized
+
+        first_char = func.upper(func.substring(name_col, 1, 1))
+        letter_expr = case(
+            (func.substring(first_char, 1, 1).op("~")("[A-Z]"), first_char),
+            else_="#",
+        )
+
+        row_num_query = (
+            select(
+                letter_expr.label("letter"),
+                func.row_number().over(order_by=order_col).label("row_num"),
+            )
+            .select_from(album_subquery)
+            .subquery()
+        )
+
+        # Get first index for each letter
+        letter_query = (
+            select(
+                row_num_query.c.letter,
+                func.min(row_num_query.c.row_num).label("first_index"),
+            )
+            .group_by(row_num_query.c.letter)
+            .order_by(row_num_query.c.letter)
+        )
+
+        result = await db.execute(letter_query)
+        for row in result.all():
+            letters[row.letter] = row.first_index - 1
+
+    return LetterIndexResponse(letters=letters, total=total)
+
+
 class CancelResponse(BaseModel):
     """Response for cancel operations."""
 

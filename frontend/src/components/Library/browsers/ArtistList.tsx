@@ -10,6 +10,7 @@ import { Users, Loader2 } from 'lucide-react';
 import { libraryApi, tracksApi } from '../../../api/client';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
+import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 
 const PAGE_SIZE = 50;
 
@@ -71,6 +72,25 @@ export function ArtistList({
   const allArtists = data?.pages.flatMap((page) => page.items) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
+  // Alphabet bar for quick navigation (only when sorted by name)
+  const {
+    letterIndex,
+    activeLetter,
+    isVisible: isAlphabetBarVisible,
+    jumpToLetter,
+  } = useAlphabetBar({
+    entityType: 'artists',
+    sortField: sortBy === 'name' ? 'name' : sortBy, // Only alphabetic nav for name sort
+    filters: {
+      search: filters.search,
+    },
+    total,
+    pageSize: PAGE_SIZE,
+    fetchNextPage,
+    hasNextPage: hasNextPage ?? false,
+    loadedItemCount: allArtists.length,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -100,7 +120,7 @@ export function ArtistList({
   }
 
   return (
-    <div className="p-4">
+    <div className="p-4" data-alphabet-scroll-container>
       {/* Sort controls */}
       <div className="flex items-center gap-2 mb-4">
         <span className="text-sm text-zinc-400">Sort by:</span>
@@ -130,10 +150,11 @@ export function ArtistList({
 
       {/* Artist grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4">
-        {allArtists.map((artist) => (
+        {allArtists.map((artist, index) => (
           <ArtistCard
             key={artist.name}
             artist={artist}
+            index={index}
             onClick={() => onGoToArtist(artist.name)}
           />
         ))}
@@ -148,6 +169,14 @@ export function ArtistList({
 
       {/* Invisible sentinel element that triggers loading when scrolled into view */}
       {hasNextPage && <div ref={sentinelRef} className="h-4" />}
+
+      {/* Alphabet bar for quick navigation */}
+      <AlphabetBar
+        letterIndex={letterIndex}
+        activeLetter={activeLetter}
+        onLetterSelect={jumpToLetter}
+        visible={isAlphabetBarVisible}
+      />
     </div>
   );
 }
@@ -159,16 +188,18 @@ interface ArtistCardProps {
     album_count: number;
     first_track_id: string;
   };
+  index: number;
   onClick: () => void;
 }
 
-function ArtistCard({ artist, onClick }: ArtistCardProps) {
+function ArtistCard({ artist, index, onClick }: ArtistCardProps) {
   const [imageError, setImageError] = useState(false);
   const [albumArtError, setAlbumArtError] = useState(false);
 
   return (
     <button
       onClick={onClick}
+      data-list-index={index}
       className="group text-left bg-zinc-800/30 rounded-lg overflow-hidden hover:bg-zinc-800 transition-colors"
     >
       {/* Artist artwork - square aspect ratio */}
