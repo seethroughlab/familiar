@@ -709,19 +709,35 @@ export function TrackListBrowser({
     virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' });
   }, [virtualizer]);
 
-  // Auto-scroll to current track when it changes (desktop only)
+  // Auto-scroll to current track when it changes or on mount (desktop only)
   useEffect(() => {
     if (!currentTrack) return;
 
-    // Find index of current track in the displayed list
-    // Use sparse array which has length = total
-    const currentIndex = allTracks.findIndex(t => t?.id === currentTrack.id);
+    const scrollToCurrentTrack = async () => {
+      // Fast path: check if track is already loaded in sparse array
+      const loadedIndex = allTracks.findIndex(t => t?.id === currentTrack.id);
+      if (loadedIndex >= 0) {
+        virtualizer.scrollToIndex(loadedIndex, { align: 'center', behavior: 'smooth' });
+        return;
+      }
 
-    if (currentIndex >= 0) {
-      // Scroll to the track with 'center' alignment for better context
-      virtualizer.scrollToIndex(currentIndex, { align: 'center', behavior: 'smooth' });
-    }
-  }, [currentTrack?.id, allTracks, virtualizer]);
+      // Slow path: fetch index from server (track might be on an unloaded page)
+      try {
+        const { index } = await tracksApi.getIndex(currentTrack.id, {
+          search: filters.search,
+          artist: filters.artist,
+          album: filters.album,
+        });
+        if (index >= 0) {
+          virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' });
+        }
+      } catch {
+        // Track might not match current filters - ignore silently
+      }
+    };
+
+    scrollToCurrentTrack();
+  }, [currentTrack?.id, allTracks, virtualizer, filters.search, filters.artist, filters.album]);
 
   // Alphabet bar for quick navigation
   const {

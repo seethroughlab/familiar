@@ -353,6 +353,73 @@ async def list_tracks(
     )
 
 
+class TrackIndexResponse(BaseModel):
+    """Response for track index lookup."""
+
+    index: int
+
+
+@router.get("/{track_id}/index", response_model=TrackIndexResponse)
+async def get_track_index(
+    db: DbSession,
+    track_id: UUID,
+    search: str | None = None,
+    artist: str | None = None,
+    album: str | None = None,
+) -> TrackIndexResponse:
+    """Get the 0-based index of a track in the sorted list.
+
+    Uses ROW_NUMBER() to efficiently find position without loading all tracks.
+    Returns {"index": N} or {"index": -1} if not found.
+    """
+    # Build base query with same filters as list_tracks
+    base_query = select(Track.id)
+
+    if search:
+        search_filter = f"%{search}%"
+        base_query = base_query.where(
+            Track.title.ilike(search_filter)
+            | Track.artist.ilike(search_filter)
+            | Track.album.ilike(search_filter)
+        )
+    if artist:
+        base_query = base_query.where(
+            Track.artist.ilike(f"%{artist}%") | Track.album_artist.ilike(f"%{artist}%")
+        )
+    if album:
+        base_query = base_query.where(Track.album.ilike(f"%{album}%"))
+
+    # Apply same ordering as list_tracks
+    base_query = base_query.order_by(Track.artist, Track.album, Track.track_number)
+
+    # Use ROW_NUMBER() to get the index
+    row_num = func.row_number().over(
+        order_by=[Track.artist, Track.album, Track.track_number]
+    ).label("row_num")
+
+    numbered_query = (
+        select(Track.id, row_num)
+        .where(
+            Track.id.in_(base_query)
+        )
+        .order_by(Track.artist, Track.album, Track.track_number)
+        .subquery()
+    )
+
+    # Find the specific track's row number
+    result = await db.execute(
+        select(numbered_query.c.row_num)
+        .where(numbered_query.c.id == track_id)
+    )
+    row = result.scalar_one_or_none()
+
+    if row is None:
+        return TrackIndexResponse(index=-1)
+
+    # ROW_NUMBER() is 1-based, convert to 0-based index
+    return TrackIndexResponse(index=row - 1)
+
+
 @router.get("/{track_id}", response_model=TrackResponse)
 async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
     """Get a single track with its latest analysis."""

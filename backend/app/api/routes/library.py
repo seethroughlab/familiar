@@ -1914,7 +1914,7 @@ async def get_letter_index(
 
     elif entity_type == "artists":
         # Sort by artist name
-        sort_col = func.max(Track.artist)  # Pick canonical display name
+        sort_col = func.coalesce(func.max(Track.artist), "")  # Pick canonical display name
         artist_normalized = func.lower(Track.artist)
 
         # Build base filter
@@ -1983,7 +1983,7 @@ async def get_letter_index(
         if sort_field == "artist":
             sort_col = album_artist_col
         else:  # Default to album name
-            sort_col = Track.album
+            sort_col = func.coalesce(Track.album, "")
 
         # Build base filter
         base_filter = [

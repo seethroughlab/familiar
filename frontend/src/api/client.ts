@@ -128,6 +128,22 @@ export const tracksApi = {
     return data;
   },
 
+  /**
+   * Get the 0-based index of a track in the sorted/filtered list.
+   * Used for auto-scrolling to the current track after navigation.
+   */
+  getIndex: async (
+    id: string,
+    filters?: {
+      search?: string;
+      artist?: string;
+      album?: string;
+    }
+  ): Promise<{ index: number }> => {
+    const { data } = await api.get(`/tracks/${id}/index`, { params: filters });
+    return data;
+  },
+
   enrich: async (id: string): Promise<{ status: string; message: string }> => {
     const { data } = await api.post(`/tracks/${id}/enrich`);
     return data;
