@@ -80,7 +80,10 @@ test.describe('Screenshot Capture', () => {
   test('02 - Library Mood Grid', async ({ page }) => {
     await navigateToTab(page, 'Library');
     await selectBrowser(page, 'Mood Grid');
-    await page.waitForTimeout(1000);
+    // Mood Grid needs time to load the grid data from the API
+    // Wait for the grid cells to appear (they have specific classes)
+    await page.waitForSelector('[class*="grid"]', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(3000); // Extra time for rendering
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '02-library-mood-grid.png'),
@@ -88,10 +91,28 @@ test.describe('Screenshot Capture', () => {
     });
   });
 
-  test('03 - Library Music Map', async ({ page }) => {
-    await navigateToTab(page, 'Library');
-    await selectBrowser(page, 'Music Map');
-    await page.waitForTimeout(2000); // Music Map takes longer to compute
+  test('03 - Library Music Map', async ({ page, request }) => {
+    // First, get an artist from the library to center the map on
+    let centerArtist = 'Radiohead'; // Default fallback
+    try {
+      const artistsRes = await request.get('/api/v1/library/artists?limit=10');
+      if (artistsRes.ok()) {
+        const artists = await artistsRes.json();
+        if (artists.length > 0) {
+          // Pick an artist with a reasonable name
+          centerArtist = artists[0].name;
+        }
+      }
+    } catch {
+      // Use fallback
+    }
+
+    // Navigate directly with the center parameter to show the map
+    await page.goto(`/#library?browser=ego-music-map&center=${encodeURIComponent(centerArtist)}`);
+    await page.waitForLoadState('networkidle');
+    // Wait for the map canvas to render
+    await page.waitForSelector('canvas', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(3000); // Extra time for the map to compute and render
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '03-library-music-map.png'),
@@ -99,13 +120,13 @@ test.describe('Screenshot Capture', () => {
     });
   });
 
-  test('04 - Library Timeline', async ({ page }) => {
+  test('04 - Library Album Grid', async ({ page }) => {
     await navigateToTab(page, 'Library');
-    await selectBrowser(page, 'Timeline');
-    await page.waitForTimeout(1000);
+    await selectBrowser(page, 'Albums');
+    await page.waitForTimeout(2000); // Wait for album artwork to load
 
     await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, '04-library-timeline.png'),
+      path: path.join(SCREENSHOT_DIR, '04-library-albums.png'),
       fullPage: false,
     });
   });
@@ -121,8 +142,20 @@ test.describe('Screenshot Capture', () => {
   });
 
   test('06 - Visualizer', async ({ page }) => {
+    // First play a track so the visualizer has something to show
+    await navigateToTab(page, 'Library');
+    await page.waitForTimeout(500);
+
+    // Double-click a track to play it
+    const trackRow = page.locator('[data-testid="track-row"]').first();
+    if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await trackRow.dblclick();
+      await page.waitForTimeout(1000); // Wait for playback to start
+    }
+
+    // Now go to visualizer
     await navigateToTab(page, 'Visualizer');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500); // Give visualizer time to render
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '06-visualizer.png'),
@@ -163,16 +196,32 @@ test.describe('Screenshot Capture', () => {
     await page.waitForTimeout(500);
 
     // Try to double-click a track to play it
-    const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
-    if (await trackRow.isVisible()) {
+    const trackRow = page.locator('[data-testid="track-row"]').first();
+    if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
       await trackRow.dblclick();
       await page.waitForTimeout(1000);
     }
 
     // Click the expand button in the player bar to open full player
-    const expandButton = page.locator('button[aria-label*="expand"], button:has(svg.lucide-maximize2)').first();
-    if (await expandButton.isVisible()) {
+    const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
+    if (await expandButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await expandButton.click();
+      await page.waitForTimeout(1000);
+    }
+
+    // Click the Discover tab to show similar artists
+    const discoverTab = page.locator('button:has(svg.lucide-compass)').first();
+    if (await discoverTab.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await discoverTab.click();
+      await page.waitForTimeout(2000); // Wait for discovery data to load
+    }
+
+    // Scroll down to show the Similar Artists section
+    const scrollContainer = page.locator('.overflow-y-auto').first();
+    if (await scrollContainer.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await scrollContainer.evaluate((el) => {
+        el.scrollTop = 300; // Scroll down to show artists
+      });
       await page.waitForTimeout(500);
     }
 
@@ -182,8 +231,8 @@ test.describe('Screenshot Capture', () => {
     });
 
     // Close full player
-    const closeButton = page.locator('button[aria-label*="close"], button:has(svg.lucide-x)').first();
-    if (await closeButton.isVisible()) {
+    const closeButton = page.locator('button:has(svg.lucide-x)').first();
+    if (await closeButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await closeButton.click();
     }
   });
@@ -315,17 +364,24 @@ test.describe('Mobile Screenshots', () => {
     await page.waitForTimeout(500);
 
     // Play a track
-    const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
-    if (await trackRow.isVisible()) {
+    const trackRow = page.locator('[data-testid="track-row"]').first();
+    if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
       await trackRow.dblclick();
       await page.waitForTimeout(1000);
     }
 
     // Expand to full player
     const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
-    if (await expandButton.isVisible()) {
+    if (await expandButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await expandButton.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
+    }
+
+    // Click the Discover tab to show similar artists
+    const discoverTab = page.locator('button:has(svg.lucide-compass)').first();
+    if (await discoverTab.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await discoverTab.click();
+      await page.waitForTimeout(2000); // Wait for discovery data to load
     }
 
     await page.screenshot({
