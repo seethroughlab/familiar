@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Mobile infinite scroll in Track view** - lazy loading now works on mobile devices
+  - Both mobile and desktop views rendered but used the same IntersectionObserver ref
+  - The ref was assigned to the last (desktop) element, which is hidden on mobile
+  - Fixed by using separate refs for mobile and desktop sentinels
 - **Artist view back button** - no longer gets stuck when navigating back
   - Fixed auto-switch useEffect that would re-open artist detail after closing
   - Now clears both `artistDetail` and `artist` filter params on back
