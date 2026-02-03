@@ -1,10 +1,17 @@
 /**
  * TrackList Browser - Traditional track list view.
  *
- * Uses infinite scroll to load tracks progressively as you scroll.
+ * Desktop: Uses @tanstack/react-virtual for virtualization, enabling:
+ * - Instant scroll-to-index for alphabet bar navigation (works for any index, even unloaded)
+ * - Efficient rendering of large lists (only visible rows + overscan are rendered)
+ * - Progressive page loading as user scrolls
+ *
+ * Mobile: Uses intersection observer for simpler infinite scroll.
+ *
  * Wraps TrackList with BrowserProps interface for the pluggable browser system.
  */
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Pause, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc } from 'lucide-react';
@@ -19,7 +26,7 @@ import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
 import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns } from '../columnDefinitions';
 import { useOfflineTrack } from '../../../hooks/useOfflineTrack';
 import { useOfflineAlbum } from '../../../hooks/useOfflineAlbum';
-import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
+import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver'; // Still used for mobile view
 import { registerBrowser, type BrowserProps, type ContextMenuState, initialContextMenuState } from '../types';
 import { TrackContextMenu } from '../TrackContextMenu';
 import { AlbumArtwork } from '../../AlbumArtwork';
@@ -27,6 +34,7 @@ import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
 
 const PAGE_SIZE = 50;
+const ROW_HEIGHT = 40; // Height of each track row in pixels (desktop view)
 
 // Register this browser
 registerBrowser(
@@ -557,18 +565,61 @@ export function TrackListBrowser({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Separate refs for mobile and desktop sentinels
-  // Both views render but are hidden via CSS, so a single ref would only attach
-  // to the last rendered element (desktop), breaking infinite scroll on mobile
+  // Mobile still uses intersection observer for infinite scroll
+  // Desktop uses virtualization which handles loading automatically
   const mobileSentinelRef = useIntersectionObserver({
     onIntersect: handleLoadMore,
     enabled: hasNextPage && !isFetchingNextPage,
   });
 
-  const desktopSentinelRef = useIntersectionObserver({
-    onIntersect: handleLoadMore,
-    enabled: hasNextPage && !isFetchingNextPage,
-  });
+  // Track which pages we've loaded (either from infinite query or direct fetch)
+  const loadedPagesRef = useRef<Set<number>>(new Set([1]));
+  const [sparsePages, setSparsePages] = useState<Map<number, Track[]>>(new Map());
+
+  // Direct page fetching for sparse loading (when jumping to far indices)
+  const fetchPage = useCallback(async (pageNumber: number) => {
+    if (loadedPagesRef.current.has(pageNumber)) return;
+
+    loadedPagesRef.current.add(pageNumber); // Mark as loading to prevent duplicates
+
+    try {
+      const result = await tracksApi.list({
+        page: pageNumber,
+        page_size: PAGE_SIZE,
+        search: filters.search,
+        artist: filters.artist,
+        album: filters.album,
+        year_from: filters.yearFrom,
+        year_to: filters.yearTo,
+        energy_min: filters.energyMin,
+        energy_max: filters.energyMax,
+        valence_min: filters.valenceMin,
+        valence_max: filters.valenceMax,
+        include_features: needsFeatures,
+      });
+
+      setSparsePages(prev => new Map(prev).set(pageNumber, result.items));
+    } catch (error) {
+      // Remove from loaded set so it can be retried
+      loadedPagesRef.current.delete(pageNumber);
+      console.error(`Failed to fetch page ${pageNumber}:`, error);
+    }
+  }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax, needsFeatures]);
+
+  // Reset sparse pages and loaded tracking when filters change
+  useEffect(() => {
+    loadedPagesRef.current = new Set([1]);
+    setSparsePages(new Map());
+  }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax]);
+
+  // Track which pages came from infinite query
+  useEffect(() => {
+    if (data?.pages) {
+      data.pages.forEach(page => loadedPagesRef.current.add(page.page));
+    }
+  }, [data?.pages]);
 
   // Flatten all pages into a single array
   const allTracksUnfiltered = useMemo(
@@ -576,17 +627,101 @@ export function TrackListBrowser({
     [data]
   );
 
+  // Build unified sparse array merging infinite query and direct-fetched pages
+  const allTracksSparse = useMemo(() => {
+    const totalCount = data?.pages[0]?.total ?? 0;
+    if (totalCount === 0) return [];
+
+    const arr: (Track | undefined)[] = new Array(totalCount);
+
+    // Fill from infinite query pages
+    data?.pages.forEach(page => {
+      const startIdx = (page.page - 1) * PAGE_SIZE;
+      page.items.forEach((track, i) => { arr[startIdx + i] = track; });
+    });
+
+    // Fill from directly-fetched sparse pages
+    sparsePages.forEach((tracks, pageNum) => {
+      const startIdx = (pageNum - 1) * PAGE_SIZE;
+      tracks.forEach((track, i) => { arr[startIdx + i] = track; });
+    });
+
+    return arr;
+  }, [data?.pages, sparsePages]);
+
   // Filter by downloaded tracks if downloadedOnly is enabled
+  // Note: For downloaded-only mode, we use allTracksUnfiltered (dense array)
+  // since we can't filter a sparse array by offline status efficiently
   const allTracks = useMemo(() => {
     if (filters.downloadedOnly && offlineTrackIds && offlineTrackIds.size > 0) {
       return allTracksUnfiltered.filter(track => offlineTrackIds.has(track.id));
     }
-    return allTracksUnfiltered;
-  }, [allTracksUnfiltered, filters.downloadedOnly, offlineTrackIds]);
+    // Use sparse array for normal mode to support alphabet bar jumping
+    return allTracksSparse;
+  }, [allTracksUnfiltered, allTracksSparse, filters.downloadedOnly, offlineTrackIds]) as (Track | undefined)[];
 
   const total = filters.downloadedOnly && offlineTrackIds
     ? allTracks.length
     : data?.pages[0]?.total ?? 0;
+
+  // Desktop scroll container ref for virtualizer
+  const desktopScrollRef = useRef<HTMLDivElement>(null);
+
+  // Virtualizer for desktop view - enables instant scrollToIndex for any position
+  const virtualizer = useVirtualizer({
+    count: total,
+    getScrollElement: () => desktopScrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10, // Render 10 extra items above/below viewport
+  });
+
+  // Fetch pages containing visible items (supports sparse/targeted loading for alphabet bar jumps)
+  useEffect(() => {
+    const virtualItems = virtualizer.getVirtualItems();
+    if (virtualItems.length === 0) return;
+
+    const firstIdx = virtualItems[0].index;
+    const lastIdx = virtualItems[virtualItems.length - 1].index;
+
+    // Calculate which pages contain visible items
+    const firstPage = Math.floor(firstIdx / PAGE_SIZE) + 1;
+    const lastPage = Math.floor(lastIdx / PAGE_SIZE) + 1;
+
+    // Find missing pages in visible range
+    const missingPages: number[] = [];
+    for (let p = firstPage; p <= lastPage; p++) {
+      if (!loadedPagesRef.current.has(p)) {
+        missingPages.push(p);
+      }
+    }
+
+    if (missingPages.length > 0) {
+      // Fetch only the needed pages (sparse loading)
+      missingPages.forEach(p => fetchPage(p));
+    } else if (lastIdx >= total - 1 && hasNextPage && !isFetchingNextPage) {
+      // Normal sequential loading at end of loaded data
+      fetchNextPage();
+    }
+  }, [virtualizer.getVirtualItems(), hasNextPage, isFetchingNextPage, total, fetchNextPage, fetchPage]);
+
+  // Callback for alphabet bar to use virtualizer's scrollToIndex
+  const scrollToIndex = useCallback((index: number) => {
+    virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' });
+  }, [virtualizer]);
+
+  // Auto-scroll to current track when it changes (desktop only)
+  useEffect(() => {
+    if (!currentTrack) return;
+
+    // Find index of current track in the displayed list
+    // Use sparse array which has length = total
+    const currentIndex = allTracks.findIndex(t => t?.id === currentTrack.id);
+
+    if (currentIndex >= 0) {
+      // Scroll to the track with 'center' alignment for better context
+      virtualizer.scrollToIndex(currentIndex, { align: 'center', behavior: 'smooth' });
+    }
+  }, [currentTrack?.id, allTracks, virtualizer]);
 
   // Alphabet bar for quick navigation
   const {
@@ -606,14 +741,16 @@ export function TrackListBrowser({
     pageSize: PAGE_SIZE,
     fetchNextPage,
     hasNextPage: hasNextPage ?? false,
-    loadedItemCount: allTracks.length,
+    loadedItemCount: total, // With sparse loading, array length equals total
+    scrollToIndex, // Use virtualizer's scrollToIndex for instant navigation
   });
 
   // Update visible tracks store when tracks change (for LLM context)
+  // Use allTracksUnfiltered (dense array) for this since we only want loaded tracks
   const setVisibleTracks = useVisibleTracksStore((state) => state.setVisibleTracks);
   useEffect(() => {
-    if (allTracks.length > 0) {
-      const visibleTracks = allTracks.map((t) => ({
+    if (allTracksUnfiltered.length > 0) {
+      const visibleTracks = allTracksUnfiltered.map((t) => ({
         id: t.id,
         title: t.title || 'Unknown Title',
         artist: t.artist || 'Unknown Artist',
@@ -631,21 +768,21 @@ export function TrackListBrowser({
 
       setVisibleTracks(visibleTracks, total, filterDescription);
     }
-  }, [allTracks, total, filters, setVisibleTracks]);
+  }, [allTracksUnfiltered, total, filters, setVisibleTracks]);
 
-  // Prefetch artwork for visible albums
+  // Prefetch artwork for visible albums (use dense array)
   const prefetchArtworkBatch = useArtworkPrefetchBatch();
   useEffect(() => {
-    if (allTracks.length > 0) {
+    if (allTracksUnfiltered.length > 0) {
       prefetchArtworkBatch(
-        allTracks.map((t) => ({
+        allTracksUnfiltered.map((t) => ({
           artist: t.artist,
           album: t.album,
           trackId: t.id,
         }))
       );
     }
-  }, [allTracks, prefetchArtworkBatch]);
+  }, [allTracksUnfiltered, prefetchArtworkBatch]);
 
   // Threshold for using lazy queue mode vs loading all tracks
   const LAZY_QUEUE_THRESHOLD = 200;
@@ -694,19 +831,20 @@ export function TrackListBrowser({
         return;
       }
 
-      // For smaller result sets, use regular queue
-      if (allTracks.length > 0) {
-        setQueue(allTracks, index);
+      // For smaller result sets, use regular queue (use dense array)
+      if (allTracksUnfiltered.length > 0) {
+        setQueue(allTracksUnfiltered as Track[], index);
       }
     },
-    [currentTrack, isPlaying, setIsPlaying, allTracks, setQueue, total, shuffle, queueFilters, setLazyQueue]
+    [currentTrack, isPlaying, setIsPlaying, allTracksUnfiltered, setQueue, total, shuffle, queueFilters, setLazyQueue]
   );
 
   const handleRowClick = useCallback(
     (track: Track, e: React.MouseEvent) => {
       if (e.shiftKey) {
         // Shift+click: select range from last clicked to this track
-        const allIds = allTracks.map((t) => t.id);
+        // Use dense array for shift-select to work correctly
+        const allIds = allTracksUnfiltered.map((t) => t.id);
         selectRange(track.id, allIds);
       } else if (e.metaKey || e.ctrlKey) {
         // Cmd/Ctrl+click: toggle individual track selection
@@ -716,7 +854,7 @@ export function TrackListBrowser({
         onSelectTrack(track.id, false);
       }
     },
-    [onSelectTrack, selectRange, allTracks]
+    [onSelectTrack, selectRange, allTracksUnfiltered]
   );
 
   const handleRowDoubleClick = useCallback(
@@ -768,12 +906,12 @@ export function TrackListBrowser({
       return;
     }
 
-    // For smaller result sets, use regular queue
+    // For smaller result sets, use regular queue (use dense array)
     // setQueue() already respects the global shuffle toggle
-    if (allTracks.length > 0) {
-      setQueue(allTracks, 0);
+    if (allTracksUnfiltered.length > 0) {
+      setQueue(allTracksUnfiltered as Track[], 0);
     }
-  }, [total, shuffle, queueFilters, setLazyQueue, allTracks, setQueue]);
+  }, [total, shuffle, queueFilters, setLazyQueue, allTracksUnfiltered, setQueue]);
 
   // Check if currently playing from lazy queue
   const isInLazyQueueMode = lazyQueueIds !== null && lazyQueueIds.length > 0;
@@ -794,7 +932,7 @@ export function TrackListBrowser({
     );
   }
 
-  if (!allTracks.length) {
+  if (total === 0) {
     const hasFilters = filters.search || filters.artist || filters.album;
     return (
       <div className="flex flex-col items-center justify-center py-20 text-zinc-500">
@@ -815,15 +953,15 @@ export function TrackListBrowser({
     );
   }
 
-  // Compute album stats from tracks
-  const isAlbumView = filters.album && allTracks.length > 0;
+  // Compute album stats from tracks (use dense array for reliable access)
+  const isAlbumView = filters.album && allTracksUnfiltered.length > 0;
   const albumStats = isAlbumView ? {
-    artist: filters.artist || allTracks[0]?.album_artist || allTracks[0]?.artist || 'Unknown Artist',
+    artist: filters.artist || allTracksUnfiltered[0]?.album_artist || allTracksUnfiltered[0]?.artist || 'Unknown Artist',
     album: filters.album!, // Non-null assertion: isAlbumView guarantees filters.album is defined
-    year: allTracks.find(t => t.year)?.year || null,
+    year: allTracksUnfiltered.find(t => t.year)?.year || null,
     trackCount: total,
-    totalDuration: allTracks.reduce((sum, t) => sum + (t.duration_seconds || 0), 0),
-    firstTrackId: allTracks[0]?.id,
+    totalDuration: allTracksUnfiltered.reduce((sum, t) => sum + (t.duration_seconds || 0), 0),
+    firstTrackId: allTracksUnfiltered[0]?.id,
   } : null;
 
   const formatTotalDuration = (seconds: number) => {
@@ -836,7 +974,7 @@ export function TrackListBrowser({
   };
 
   return (
-    <div data-alphabet-scroll-container>
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Album header when viewing an album */}
       {albumStats && (
         <div className="flex items-start gap-4 md:gap-6 p-4 mb-4 bg-zinc-800/30 rounded-lg">
@@ -892,7 +1030,7 @@ export function TrackListBrowser({
                 Play
               </button>
               <AlbumOfflineButton
-                tracks={allTracks.map(t => ({ id: t.id }))}
+                tracks={allTracksUnfiltered.map(t => ({ id: t.id }))}
                 artist={albumStats.artist}
                 album={albumStats.album}
               />
@@ -902,7 +1040,7 @@ export function TrackListBrowser({
       )}
 
       {/* Toolbar for non-album view */}
-      {!albumStats && allTracks.length > 0 && (
+      {!albumStats && total > 0 && (
         <div className="flex items-center justify-between px-4 py-3 mb-2">
           <div className="text-sm text-zinc-400">
             {total.toLocaleString()} tracks
@@ -929,8 +1067,9 @@ export function TrackListBrowser({
       )}
 
       {/* Mobile view - card layout (visible below md breakpoint) */}
+      {/* Mobile uses dense array (allTracksUnfiltered) since it doesn't support sparse loading */}
       <div className="md:hidden">
-        {allTracks.map((track, index) => (
+        {allTracksUnfiltered.map((track, index) => (
           <MobileTrackCard
             key={track.id}
             track={track}
@@ -966,15 +1105,15 @@ export function TrackListBrowser({
         {hasNextPage && <div ref={mobileSentinelRef} className="h-4" />}
         {/* Mobile footer */}
         <div className="px-4 py-4 text-sm text-zinc-500">
-          {allTracks.length} of {total} tracks
+          {allTracksUnfiltered.length} of {total} tracks
         </div>
       </div>
 
-      {/* Desktop view - grid layout (visible at md and above) */}
-      <div className="hidden md:block">
-        {/* Header */}
+      {/* Desktop view - virtualized grid layout (visible at md and above) */}
+      <div className="hidden md:flex md:flex-col md:h-full">
+        {/* Header - fixed outside scroll area */}
         <div
-          className="grid gap-4 px-4 py-2 text-sm text-zinc-400 border-b border-zinc-800"
+          className="grid gap-4 px-4 py-2 text-sm text-zinc-400 border-b border-zinc-800 flex-shrink-0"
           style={{ gridTemplateColumns: gridColumns }}
         >
           <div>#</div>
@@ -1012,44 +1151,92 @@ export function TrackListBrowser({
           <div></div>
         </div>
 
-        {/* Tracks */}
-        <div className="mt-2">
-          {allTracks.map((track, index) => (
-            <TrackRow
-              key={track.id}
-              track={track}
-              index={index}
-              isCurrentTrack={currentTrack?.id === track.id}
-              isPlaying={currentTrack?.id === track.id && isPlaying}
-              isSelected={selectedTrackIds.has(track.id)}
-              onPlay={() => handlePlayTrack(track, index)}
-              onClick={(e) => {
-                if (e.detail === 2) {
-                  handleRowDoubleClick(track, index);
-                } else {
-                  handleRowClick(track, e);
-                }
-              }}
-              onContextMenu={(e) => handleContextMenu(track, e)}
-              visibleColumnIds={visibleColumnIds}
-              gridColumns={gridColumns}
-            />
-          ))}
+        {/* Virtualized track list */}
+        <div
+          ref={desktopScrollRef}
+          className="flex-1 overflow-auto"
+          data-alphabet-scroll-container
+        >
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const track = allTracks[virtualRow.index];
+              const index = virtualRow.index;
+
+              return (
+                <div
+                  key={virtualRow.key}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {track ? (
+                    <TrackRow
+                      track={track}
+                      index={index}
+                      isCurrentTrack={currentTrack?.id === track.id}
+                      isPlaying={currentTrack?.id === track.id && isPlaying}
+                      isSelected={selectedTrackIds.has(track.id)}
+                      onPlay={() => handlePlayTrack(track, index)}
+                      onClick={(e) => {
+                        if (e.detail === 2) {
+                          handleRowDoubleClick(track, index);
+                        } else {
+                          handleRowClick(track, e);
+                        }
+                      }}
+                      onContextMenu={(e) => handleContextMenu(track, e)}
+                      visibleColumnIds={visibleColumnIds}
+                      gridColumns={gridColumns}
+                    />
+                  ) : (
+                    // Loading placeholder for items not yet loaded
+                    <div
+                      className="grid gap-4 px-4 py-2 rounded-md"
+                      style={{ gridTemplateColumns: gridColumns }}
+                    >
+                      <div className="flex items-center justify-center">
+                        <span className="text-zinc-600">{index + 1}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="h-4 w-32 bg-zinc-800 rounded animate-pulse" />
+                      </div>
+                      {visibleColumnIds.map((colId) => (
+                        <div key={colId} className="flex items-center">
+                          <div className="h-4 w-20 bg-zinc-800/50 rounded animate-pulse" />
+                        </div>
+                      ))}
+                      <div />
+                      <div />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Loading indicator for infinite scroll */}
+        {/* Loading indicator when fetching more */}
         {isFetchingNextPage && (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+          <div className="flex items-center justify-center py-2 flex-shrink-0">
+            <Loader2 className="w-4 h-4 animate-spin text-zinc-400 mr-2" />
+            <span className="text-sm text-zinc-500">Loading more...</span>
           </div>
         )}
 
-        {/* Sentinel for infinite scroll */}
-        {hasNextPage && <div ref={desktopSentinelRef} className="h-4" />}
-
         {/* Desktop footer */}
-        <div className="px-4 py-4 text-sm text-zinc-500">
-          {allTracks.length} of {total} tracks
+        <div className="px-4 py-2 text-sm text-zinc-500 flex-shrink-0 border-t border-zinc-800/50">
+          {allTracksUnfiltered.length + sparsePages.size * PAGE_SIZE} of {total} tracks loaded
         </div>
       </div>
 
@@ -1061,7 +1248,7 @@ export function TrackListBrowser({
           isSelected={selectedTrackIds.has(contextMenu.track.id)}
           onClose={closeContextMenu}
           onPlay={() => {
-            const index = allTracks.findIndex((t) => t.id === contextMenu.track?.id);
+            const index = allTracksUnfiltered.findIndex((t) => t.id === contextMenu.track?.id);
             if (contextMenu.track && index !== -1) {
               handlePlayTrack(contextMenu.track, index);
             }
@@ -1120,8 +1307,8 @@ export function TrackListBrowser({
           // Bulk selection props for mobile
           selectedCount={selectedTrackIds.size}
           onPlaySelected={() => {
-            // Play selected tracks - get tracks from allTracks by IDs
-            const selectedTracks = allTracks.filter((t) => selectedTrackIds.has(t.id));
+            // Play selected tracks - get tracks from dense array by IDs
+            const selectedTracks = allTracksUnfiltered.filter((t) => selectedTrackIds.has(t.id));
             if (selectedTracks.length > 0) {
               setQueue(selectedTracks, 0);
               onClearSelection();

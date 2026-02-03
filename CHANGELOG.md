@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New download button in album header view
   - Shows progress during download
   - Shows "Downloaded" status when complete
+- **Auto-scroll to current track** - Track list follows playback
+  - Automatically scrolls to show currently playing track
+  - Centers track in viewport for better context
+  - Works especially well with shuffle mode
 
 ### Fixed
 

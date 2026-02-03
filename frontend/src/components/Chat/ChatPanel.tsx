@@ -458,7 +458,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
           {/* Offline warning */}
           {isOffline && (
             <div className="p-3 bg-amber-900/20 border border-amber-800 rounded-lg flex items-start gap-2">
@@ -517,7 +517,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
                 )}
 
                 {/* Message content */}
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
 
                 {/* Streaming indicator */}
                 {message.role === 'assistant' && !message.content && isLoading && (

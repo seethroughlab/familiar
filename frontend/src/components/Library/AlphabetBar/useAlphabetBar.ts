@@ -3,7 +3,7 @@
  *
  * Manages letter index fetching, visibility logic, and jump-to-letter functionality.
  */
-import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { libraryApi } from '../../../api/client';
 
@@ -20,7 +20,11 @@ interface UseAlphabetBarOptions {
   fetchNextPage: () => Promise<unknown>;
   hasNextPage: boolean;
   loadedItemCount: number;
-  /** Callback to scroll to a specific index in the list */
+  /**
+   * Optional callback for virtualized lists.
+   * When provided, uses the virtualizer's scrollToIndex instead of DOM-based scrolling.
+   * This allows jumping to any index, even if that item hasn't been loaded yet.
+   */
   scrollToIndex?: (index: number) => void;
 }
 
@@ -29,10 +33,8 @@ interface UseAlphabetBarResult {
   activeLetter: string | undefined;
   isVisible: boolean;
   isLoading: boolean;
-  jumpToLetter: (letter: string) => Promise<void>;
+  jumpToLetter: (letter: string) => void;
   setActiveLetter: (letter: string | undefined) => void;
-  /** The target index after jumping (for parent to handle scroll) */
-  targetIndex: number | null;
 }
 
 // Minimum items before showing alphabet bar
@@ -53,8 +55,13 @@ export function useAlphabetBar({
   scrollToIndex,
 }: UseAlphabetBarOptions): UseAlphabetBarResult {
   const [activeLetter, setActiveLetter] = useState<string | undefined>();
-  const [targetIndex, setTargetIndex] = useState<number | null>(null);
-  const isJumpingRef = useRef(false);
+  const [pendingScrollIndex, setPendingScrollIndex] = useState<number | null>(null);
+  const loadedItemCountRef = useRef(loadedItemCount);
+
+  // Keep ref updated
+  useEffect(() => {
+    loadedItemCountRef.current = loadedItemCount;
+  }, [loadedItemCount]);
 
   // Determine if the bar should be visible
   const isVisible = useMemo(() => {
@@ -87,65 +94,99 @@ export function useAlphabetBar({
 
   const letterIndex = letterIndexData?.letters;
 
-  // Jump to a letter - fetch pages as needed, then scroll to the item
+  // Scroll to element by index, with retry logic
+  const scrollToElement = useCallback((targetIdx: number) => {
+    const tryScroll = (attempts = 0): boolean => {
+      const container = document.querySelector('[data-alphabet-scroll-container]');
+      if (!container) return false;
+
+      const items = container.querySelectorAll('[data-list-index]');
+      const targetItem = Array.from(items).find(
+        (el) => el.getAttribute('data-list-index') === String(targetIdx)
+      );
+
+      if (targetItem) {
+        targetItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return true;
+      }
+
+      // Retry a few times with increasing delay
+      if (attempts < 5) {
+        setTimeout(() => tryScroll(attempts + 1), 100 * (attempts + 1));
+      }
+      return false;
+    };
+
+    tryScroll();
+  }, []);
+
+  // Effect to handle pending scroll after items are loaded
+  useEffect(() => {
+    if (pendingScrollIndex === null) return;
+
+    // Check if we have enough items loaded
+    if (loadedItemCount > pendingScrollIndex) {
+      // Items are loaded, scroll to the element
+      // Small delay to let React render
+      setTimeout(() => {
+        scrollToElement(pendingScrollIndex);
+        setPendingScrollIndex(null);
+      }, 50);
+    }
+  }, [loadedItemCount, pendingScrollIndex, scrollToElement]);
+
+  // Jump to a letter - uses virtualizer's scrollToIndex if available, otherwise falls back to DOM-based approach
   const jumpToLetter = useCallback(
-    async (letter: string) => {
-      if (!letterIndex || !(letter in letterIndex) || isJumpingRef.current) {
+    (letter: string) => {
+      if (!letterIndex || !(letter in letterIndex)) {
         return;
       }
 
       const targetIdx = letterIndex[letter];
       if (targetIdx === undefined) return;
 
-      isJumpingRef.current = true;
       setActiveLetter(letter);
-      setTargetIndex(targetIdx);
 
-      try {
-        // Calculate how many pages we need to load
-        const targetPage = Math.floor(targetIdx / pageSize) + 1;
-        const currentlyLoadedPages = Math.ceil(loadedItemCount / pageSize);
-
-        // Fetch pages until we have the target item
-        let pagesToFetch = targetPage - currentlyLoadedPages;
-        while (pagesToFetch > 0 && hasNextPage) {
-          await fetchNextPage();
-          pagesToFetch--;
-          // Small delay to let state update
-          await new Promise((resolve) => setTimeout(resolve, 10));
-        }
-
-        // Wait a bit for React to render the new items
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // Call the scroll callback if provided
-        if (scrollToIndex) {
-          scrollToIndex(targetIdx);
-        } else {
-          // Fallback: try to scroll using DOM query
-          // Look for track rows, artist cards, or album cards
-          const container = document.querySelector('[data-alphabet-scroll-container]');
-          if (container) {
-            const items = container.querySelectorAll('[data-list-index]');
-            const targetItem = Array.from(items).find(
-              (el) => el.getAttribute('data-list-index') === String(targetIdx)
-            );
-            if (targetItem) {
-              targetItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          }
-        }
-      } finally {
-        isJumpingRef.current = false;
+      // If we have a virtualizer scrollToIndex, use it directly
+      // The virtualizer can scroll to any index mathematically without needing DOM elements
+      if (scrollToIndex) {
+        scrollToIndex(targetIdx);
+        return;
       }
+
+      // Fallback: DOM-based scrolling for non-virtualized lists
+      // Check if we already have enough items loaded
+      if (loadedItemCountRef.current > targetIdx) {
+        // Already loaded, just scroll
+        scrollToElement(targetIdx);
+        return;
+      }
+
+      // Need to load more pages
+      setPendingScrollIndex(targetIdx);
+
+      // Calculate and fetch needed pages
+      const fetchPages = async () => {
+        const targetPage = Math.floor(targetIdx / pageSize) + 1;
+        let currentPages = Math.ceil(loadedItemCountRef.current / pageSize);
+
+        while (currentPages < targetPage && hasNextPage) {
+          await fetchNextPage();
+          currentPages++;
+          // Update ref manually since state update is async
+          loadedItemCountRef.current = currentPages * pageSize;
+        }
+      };
+
+      fetchPages();
     },
-    [letterIndex, pageSize, loadedItemCount, hasNextPage, fetchNextPage, scrollToIndex]
+    [letterIndex, pageSize, hasNextPage, fetchNextPage, scrollToElement, scrollToIndex]
   );
 
   // Clear active letter when filters change
   useEffect(() => {
     setActiveLetter(undefined);
-    setTargetIndex(null);
+    setPendingScrollIndex(null);
   }, [filters.search, filters.artist, filters.album, sortField]);
 
   return {
@@ -155,6 +196,5 @@ export function useAlphabetBar({
     isLoading,
     jumpToLetter,
     setActiveLetter,
-    targetIndex,
   };
 }
