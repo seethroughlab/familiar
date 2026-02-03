@@ -4,8 +4,9 @@ import { Page } from '@playwright/test';
  * Helper to create or select a profile before tests
  */
 export async function ensureProfile(page: Page, profileName = 'Test User') {
-  // Wait for page to settle
-  await page.waitForLoadState('networkidle');
+  // Wait for page to settle (use domcontentloaded instead of networkidle to avoid timeout)
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForTimeout(1000); // Brief wait for initial render
 
   // Check if we're on profile selector (shows "Who's listening?")
   const profileSelector = page.getByRole('heading', { name: "Who's listening?" });
@@ -42,7 +43,7 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
 /**
  * Navigate to a specific tab in the main UI
  */
-export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Visualizer' | 'Settings') {
+export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Visualizer' | 'Settings') {
   // The tab buttons contain the text directly
   const tabButton = page.locator(`button:has-text("${tabName}")`).first();
   await tabButton.click();

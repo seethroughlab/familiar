@@ -59,17 +59,31 @@ async function selectBrowser(page: import('@playwright/test').Page, browserName:
   }
 }
 
+/**
+ * Helper to dismiss the PWA install prompt if it appears.
+ */
+async function dismissPwaPrompt(page: import('@playwright/test').Page) {
+  const gotItButton = page.locator('button:has-text("Got it")').first();
+  if (await gotItButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await gotItButton.click();
+    await page.waitForTimeout(300);
+  }
+}
+
 test.describe('Screenshot Capture', () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize(VIEWPORT);
     await page.goto('/');
     await ensureProfile(page);
+    // Dismiss PWA prompt if it appears
+    await dismissPwaPrompt(page);
   });
 
   test('01 - Library Track List', async ({ page }) => {
-    // Default view is the track list
     await navigateToTab(page, 'Library');
-    await page.waitForTimeout(1000); // Wait for data to load
+    // Select the Tracks view (not Albums which might be default)
+    await selectBrowser(page, 'Tracks');
+    await page.waitForTimeout(1500); // Wait for data to load
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '01-library-tracks.png'),
@@ -91,28 +105,39 @@ test.describe('Screenshot Capture', () => {
     });
   });
 
-  test('03 - Library Music Map', async ({ page, request }) => {
-    // First, get an artist from the library to center the map on
-    let centerArtist = 'Radiohead'; // Default fallback
-    try {
-      const artistsRes = await request.get('/api/v1/library/artists?limit=10');
-      if (artistsRes.ok()) {
-        const artists = await artistsRes.json();
-        if (artists.length > 0) {
-          // Pick an artist with a reasonable name
-          centerArtist = artists[0].name;
-        }
-      }
-    } catch {
-      // Use fallback
+  test('03 - Library Music Map', async ({ page }) => {
+    // Navigate to library first
+    await navigateToTab(page, 'Library');
+    await page.waitForTimeout(500);
+
+    // Select Music Map browser
+    await selectBrowser(page, 'Music Map');
+    await page.waitForTimeout(1000);
+
+    // The artist picker modal should appear - click a good artist
+    const artistOption = page.locator('button:has-text("Aphex Twin"), button:has-text("Beatles"), button:has-text("Boards Of Canada")').first();
+    if (await artistOption.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await artistOption.click();
+      await page.waitForTimeout(500);
     }
 
-    // Navigate directly with the center parameter to show the map
-    await page.goto(`/#library?browser=ego-music-map&center=${encodeURIComponent(centerArtist)}`);
-    await page.waitForLoadState('networkidle');
     // Wait for the map canvas to render
-    await page.waitForSelector('canvas', { timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(3000); // Extra time for the map to compute and render
+    await page.waitForSelector('canvas', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(3000); // Map needs time to compute positions
+
+    // Dismiss PWA prompt before zooming
+    await dismissPwaPrompt(page);
+
+    // Zoom in so artist names are readable
+    // Click the zoom in button multiple times (more clicks = more zoom)
+    const zoomInButton = page.locator('button[title="Zoom in"]').first();
+    for (let i = 0; i < 6; i++) {
+      if (await zoomInButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await zoomInButton.click();
+        await page.waitForTimeout(150);
+      }
+    }
+    await page.waitForTimeout(500); // Let the zoom animation settle
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '03-library-music-map.png'),
@@ -142,20 +167,28 @@ test.describe('Screenshot Capture', () => {
   });
 
   test('06 - Visualizer', async ({ page }) => {
-    // First play a track so the visualizer has something to show
+    // First switch to Track List and play a track so the visualizer has something to show
     await navigateToTab(page, 'Library');
-    await page.waitForTimeout(500);
+    await selectBrowser(page, 'Tracks');
+    await page.waitForTimeout(1500);
 
-    // Double-click a track to play it
-    const trackRow = page.locator('[data-testid="track-row"]').first();
-    if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await trackRow.dblclick();
-      await page.waitForTimeout(1000); // Wait for playback to start
+    // Click the Play button in the toolbar to start playback
+    const playAllButton = page.locator('button:has-text("Play")').first();
+    if (await playAllButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await playAllButton.click();
+      await page.waitForTimeout(2000); // Wait for playback to start
+    } else {
+      // Fallback: try double-clicking a track row
+      const trackRow = page.locator('[data-testid="track-row"]').first();
+      if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await trackRow.dblclick();
+        await page.waitForTimeout(2000);
+      }
     }
 
     // Now go to visualizer
     await navigateToTab(page, 'Visualizer');
-    await page.waitForTimeout(1500); // Give visualizer time to render
+    await page.waitForTimeout(2000); // Give visualizer time to render
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '06-visualizer.png'),
@@ -174,67 +207,56 @@ test.describe('Screenshot Capture', () => {
   });
 
   test('08 - Chat Panel with AI', async ({ page }) => {
-    // Chat panel is always visible on desktop
-    // Focus on the chat input to show the interface
-    const chatInput = page.locator('textarea[placeholder*="message"], input[placeholder*="message"]').first();
-    if (await chatInput.isVisible()) {
-      await chatInput.focus();
-    }
-    await page.waitForTimeout(500);
-
-    // Take a screenshot of just the left panel (chat area)
-    // We'll capture the full page and crop in post if needed
-    await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, '08-chat-panel.png'),
-      fullPage: false,
-    });
-  });
-
-  test('09 - Full Player', async ({ page }) => {
-    // First, we need to play a track to see the full player
+    // The chat panel is visible on the left side of any view
+    // Navigate to Library with Tracks view to show a good backdrop
     await navigateToTab(page, 'Library');
-    await page.waitForTimeout(500);
+    await selectBrowser(page, 'Tracks');
+    await page.waitForTimeout(1000);
 
-    // Try to double-click a track to play it
-    const trackRow = page.locator('[data-testid="track-row"]').first();
-    if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await trackRow.dblclick();
-      await page.waitForTimeout(1000);
-    }
+    // Dismiss PWA prompt if it appears
+    await dismissPwaPrompt(page);
 
-    // Click the expand button in the player bar to open full player
-    const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
-    if (await expandButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await expandButton.click();
-      await page.waitForTimeout(1000);
-    }
-
-    // Click the Discover tab to show similar artists
-    const discoverTab = page.locator('button:has(svg.lucide-compass)').first();
-    if (await discoverTab.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await discoverTab.click();
-      await page.waitForTimeout(2000); // Wait for discovery data to load
-    }
-
-    // Scroll down to show the Similar Artists section
-    const scrollContainer = page.locator('.overflow-y-auto').first();
-    if (await scrollContainer.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await scrollContainer.evaluate((el) => {
-        el.scrollTop = 300; // Scroll down to show artists
-      });
+    // Type a sample message to show the chat interface in action
+    // The chat input is an input element, not textarea
+    const chatInput = page.locator('input[placeholder*="Familiar"]').first();
+    if (await chatInput.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await chatInput.fill('Make me a playlist of upbeat 80s songs');
       await page.waitForTimeout(500);
     }
 
     await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, '09-full-player.png'),
+      path: path.join(SCREENSHOT_DIR, '08-chat-panel.png'),
       fullPage: false,
     });
 
-    // Close full player
-    const closeButton = page.locator('button:has(svg.lucide-x)').first();
-    if (await closeButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await closeButton.click();
+    // Clear the input after screenshot
+    if (await chatInput.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await chatInput.clear();
     }
+  });
+
+  test('09 - AI Playlist Detail', async ({ page }) => {
+    // Navigate to Playlists and expand an AI playlist to show its tracks
+    await navigateToTab(page, 'Playlists');
+    await page.waitForTimeout(1000);
+
+    // Dismiss PWA prompt if it appears
+    await dismissPwaPrompt(page);
+
+    // Click on an AI playlist to expand it and show its tracks
+    const playlistButton = page.locator('button:has-text("Crystalline Reverie"), button:has-text("Digital Nostalgia"), button:has-text("Essential IDM")').first();
+    if (await playlistButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await playlistButton.click();
+      await page.waitForTimeout(1500); // Wait for tracks to load
+    }
+
+    // Dismiss PWA prompt again if it reappeared
+    await dismissPwaPrompt(page);
+
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, '09-ai-playlist.png'),
+      fullPage: false,
+    });
   });
 
   test('10 - Keyboard Shortcuts', async ({ page }) => {
@@ -361,28 +383,26 @@ test.describe('Mobile Screenshots', () => {
     await page.goto('/');
     await ensureProfile(page);
     await navigateToTab(page, 'Library');
-    await page.waitForTimeout(500);
+    // Mobile defaults to Track List view, wait for it to load
+    await page.waitForTimeout(1500);
 
-    // Play a track
+    // Play a track - on mobile, track rows are visible directly
     const trackRow = page.locator('[data-testid="track-row"]').first();
-    if (await trackRow.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await trackRow.isVisible({ timeout: 5000 }).catch(() => false)) {
       await trackRow.dblclick();
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
     }
 
     // Expand to full player
     const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
-    if (await expandButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await expandButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await expandButton.click();
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
     }
 
-    // Click the Discover tab to show similar artists
-    const discoverTab = page.locator('button:has(svg.lucide-compass)').first();
-    if (await discoverTab.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await discoverTab.click();
-      await page.waitForTimeout(2000); // Wait for discovery data to load
-    }
+    // The mobile full player shows the visualizer by default, which is nice
+    // Just wait for it to render
+    await page.waitForTimeout(1000);
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '14-mobile-full-player.png'),
