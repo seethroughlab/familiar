@@ -4,7 +4,7 @@ Tests cover track matching, export functionality, import preview,
 import execution with merge mode, and external track handling.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -410,7 +410,6 @@ class TestImportMergeMode:
     async def test_merge_play_history_adds_counts(self, service, mock_db):
         """Merge mode should add play counts together."""
         # This tests the internal _import_play_history method
-        from datetime import timezone
 
         profile_id = uuid4()
         track_id = uuid4()
@@ -419,7 +418,7 @@ class TestImportMergeMode:
         existing_record = MagicMock(spec=ProfilePlayHistory)
         existing_record.play_count = 5
         existing_record.total_play_seconds = 900
-        existing_record.last_played_at = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+        existing_record.last_played_at = datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC)
 
         # AsyncMock.execute returns a coroutine, so we need its result to be
         # something that has .scalar_one_or_none() as a sync method
@@ -480,7 +479,7 @@ class TestImportExternalTracks:
             "source": "spotify_playlist",
         }
 
-        result = await service._get_or_create_external_track(ext_data)
+        await service._get_or_create_external_track(ext_data)
 
         mock_db.add.assert_called_once()
         added_track = mock_db.add.call_args[0][0]

@@ -13,9 +13,7 @@ from app.services.embedding_map import (
     EmbeddingMapService,
     MapData,
     MapData3D,
-    MapEdge,
     MapNode,
-    MapNode3D,
     get_embedding_map_service,
 )
 

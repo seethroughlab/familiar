@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.db.models import SpotifyFavorite, SpotifyProfile, Track
+from app.db.models import SpotifyProfile, Track
 from app.services.spotify import SpotifyService, SpotifySyncService
 
 
@@ -95,7 +95,7 @@ class TestSpotifyServiceOAuth:
                 mock_sp.current_user.return_value = {"id": "spotify_user_id"}
                 mock_spotify.return_value = mock_sp
 
-                result = await service.handle_callback(mock_db, "auth_code", state)
+                await service.handle_callback(mock_db, "auth_code", state)
 
                 # Should add new profile
                 mock_db.add.assert_called_once()
@@ -173,7 +173,7 @@ class TestSpotifyServiceTokenRefresh:
             mock_oauth.return_value = mock_oauth_instance
 
             with patch("app.services.spotify.spotipy.Spotify") as mock_spotify:
-                client = await service.get_client(mock_db, profile_id)
+                await service.get_client(mock_db, profile_id)
 
                 # Should have called refresh
                 mock_oauth_instance.refresh_access_token.assert_called_once_with("refresh_token")

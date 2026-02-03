@@ -49,7 +49,7 @@ class TestLLMServiceInit:
         mock_settings_instance.get_effective.return_value = "sk-test-key"
         mock_settings.return_value = mock_settings_instance
 
-        service = LLMService()
+        LLMService()
 
         mock_settings_instance.get_effective.assert_called_once_with("anthropic_api_key")
         mock_anthropic.assert_called_once_with(api_key="sk-test-key")
@@ -62,7 +62,7 @@ class TestLLMServiceInit:
         mock_settings_instance.get_effective.return_value = None
         mock_settings.return_value = mock_settings_instance
 
-        service = LLMService()
+        LLMService()
 
         mock_anthropic.assert_called_once_with(api_key=None)
 
@@ -264,7 +264,7 @@ class TestLLMServiceErrorHandling:
             mock_settings_instance.get_effective.return_value = "sk-test-key"
             mock_settings.return_value = mock_settings_instance
 
-            with patch("app.services.llm.service.anthropic.Anthropic") as mock_anthropic:
+            with patch("app.services.llm.service.anthropic.Anthropic"):
                 service = LLMService()
                 return service
 

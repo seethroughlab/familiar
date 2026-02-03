@@ -271,7 +271,7 @@ class TestProgressPersistence:
         mock_redis = MagicMock()
 
         with patch("app.services.tasks.get_redis", return_value=mock_redis):
-            reporter = SyncProgressReporter()
+            SyncProgressReporter()
 
             call_args = mock_redis.set.call_args[0]
             assert call_args[0] == SYNC_PROGRESS_KEY
