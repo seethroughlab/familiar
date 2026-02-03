@@ -480,7 +480,15 @@ export function TrackListBrowser({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  const sentinelRef = useIntersectionObserver({
+  // Separate refs for mobile and desktop sentinels
+  // Both views render but are hidden via CSS, so a single ref would only attach
+  // to the last rendered element (desktop), breaking infinite scroll on mobile
+  const mobileSentinelRef = useIntersectionObserver({
+    onIntersect: handleLoadMore,
+    enabled: hasNextPage && !isFetchingNextPage,
+  });
+
+  const desktopSentinelRef = useIntersectionObserver({
     onIntersect: handleLoadMore,
     enabled: hasNextPage && !isFetchingNextPage,
   });
@@ -852,7 +860,7 @@ export function TrackListBrowser({
           </div>
         )}
         {/* Sentinel for infinite scroll */}
-        {hasNextPage && <div ref={sentinelRef} className="h-4" />}
+        {hasNextPage && <div ref={mobileSentinelRef} className="h-4" />}
         {/* Mobile footer */}
         <div className="px-4 py-4 text-sm text-zinc-500">
           {allTracks.length} of {total} tracks
@@ -934,7 +942,7 @@ export function TrackListBrowser({
         )}
 
         {/* Sentinel for infinite scroll */}
-        {hasNextPage && <div ref={sentinelRef} className="h-4" />}
+        {hasNextPage && <div ref={desktopSentinelRef} className="h-4" />}
 
         {/* Desktop footer */}
         <div className="px-4 py-4 text-sm text-zinc-500">
