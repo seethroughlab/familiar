@@ -1846,8 +1846,7 @@ async def get_letter_index(
         artist: Filter by artist (for tracks/albums)
         album: Filter by album (for tracks only)
     """
-    from sqlalchemy import case, literal_column, text
-    from sqlalchemy.dialects.postgresql import TEXT
+    from sqlalchemy import case
 
     letters: dict[str, int] = {}
     total = 0
