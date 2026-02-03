@@ -14,6 +14,7 @@ import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
 import { useFavorites } from '../../../hooks/useFavorites';
 import { useArtworkPrefetchBatch } from '../../../hooks/useArtworkPrefetch';
+import { useLongPress } from '../../../hooks/useLongPress';
 import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
 import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns } from '../columnDefinitions';
 import { useOfflineTrack } from '../../../hooks/useOfflineTrack';
@@ -132,6 +133,7 @@ function MobileTrackCard({
   onPlay,
   onClick,
   onContextMenu,
+  onLongPress,
 }: {
   track: Track;
   index: number;
@@ -141,6 +143,7 @@ function MobileTrackCard({
   onPlay: () => void;
   onClick: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onLongPress: (position: { x: number; y: number }) => void;
 }) {
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '--:--';
@@ -149,11 +152,14 @@ function MobileTrackCard({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const longPressHandlers = useLongPress(onLongPress);
+
   return (
     <div
       data-testid="track-row"
       onClick={onClick}
       onContextMenu={onContextMenu}
+      {...longPressHandlers}
       className={`group flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-zinc-800/30 ${
         isSelected
           ? 'bg-purple-500/20'
@@ -162,30 +168,36 @@ function MobileTrackCard({
           : 'hover:bg-zinc-800/50'
       }`}
     >
-      {/* Play button / index */}
-      <div className="w-8 flex-shrink-0 flex items-center justify-center">
-        <span className="group-hover:hidden text-zinc-400 text-sm">
-          {isCurrentTrack && isPlaying ? (
-            <div className="flex gap-0.5">
+      {/* Play button / index - show play icon on mobile when selected, number otherwise */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onPlay(); }}
+        className="w-8 flex-shrink-0 flex items-center justify-center text-zinc-400"
+      >
+        {isCurrentTrack && isPlaying ? (
+          <>
+            {/* Equalizer animation - always show when playing */}
+            <div className="flex gap-0.5 md:group-hover:hidden">
               <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
               <div className="w-0.5 h-2 bg-green-500 animate-pulse delay-75" />
               <div className="w-0.5 h-4 bg-green-500 animate-pulse delay-150" />
             </div>
-          ) : (
-            index + 1
-          )}
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onPlay(); }}
-          className="hidden group-hover:flex items-center justify-center"
-        >
-          {isCurrentTrack && isPlaying ? (
-            <Pause className="w-4 h-4" fill="currentColor" />
-          ) : (
-            <Play className="w-4 h-4" fill="currentColor" />
-          )}
-        </button>
-      </div>
+            {/* Desktop: pause on hover */}
+            <Pause className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
+          </>
+        ) : (
+          <>
+            {/* Mobile: show play icon when selected, number otherwise */}
+            {isSelected ? (
+              <Play className="md:hidden w-4 h-4" fill="currentColor" />
+            ) : (
+              <span className="md:hidden text-sm">{index + 1}</span>
+            )}
+            {/* Desktop: show number, play on hover */}
+            <span className="hidden md:block md:group-hover:hidden text-sm">{index + 1}</span>
+            <Play className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
+          </>
+        )}
+      </button>
 
       {/* Track info */}
       <div className="flex-1 min-w-0">
@@ -323,6 +335,7 @@ export function TrackListBrowser({
   filters,
   selectedTrackIds,
   onSelectTrack,
+  onClearSelection,
   onQueueTrack,
   onGoToArtist,
   onGoToAlbum,
@@ -823,6 +836,13 @@ export function TrackListBrowser({
               }
             }}
             onContextMenu={(e) => handleContextMenu(track, e)}
+            onLongPress={(position) => {
+              setContextMenu({
+                isOpen: true,
+                track,
+                position,
+              });
+            }}
           />
         ))}
         {/* Loading indicator for infinite scroll */}
@@ -966,7 +986,7 @@ export function TrackListBrowser({
           }}
           onAddToPlaylist={() => {
             // TODO: Open playlist picker modal
-            
+
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
@@ -980,6 +1000,17 @@ export function TrackListBrowser({
               onEditTrack(contextMenu.track.id);
             }
           }}
+          // Bulk selection props for mobile
+          selectedCount={selectedTrackIds.size}
+          onPlaySelected={() => {
+            // Play selected tracks - get tracks from allTracks by IDs
+            const selectedTracks = allTracks.filter((t) => selectedTrackIds.has(t.id));
+            if (selectedTracks.length > 0) {
+              setQueue(selectedTracks, 0);
+              onClearSelection();
+            }
+          }}
+          onClearSelection={onClearSelection}
         />
       )}
     </div>

@@ -50,7 +50,7 @@ export function SelectionToolbar({
   };
 
   return (
-    <div className="sticky top-0 z-10 flex items-center justify-between gap-4 px-4 py-2 bg-purple-900/90 backdrop-blur-sm border-b border-purple-700">
+    <div className="sticky top-0 z-10 hidden md:flex items-center justify-between gap-4 px-4 py-2 bg-purple-900/90 backdrop-blur-sm border-b border-purple-700">
       <div className="flex items-center gap-4">
         <span className="text-sm font-medium text-white">
           {selectedCount} track{selectedCount !== 1 ? 's' : ''} selected

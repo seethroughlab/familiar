@@ -51,6 +51,7 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",  # Coverage reporting
     "ruff>=0.1.0",
     "mypy>=1.8.0",
     "httpx>=0.26.0",  # For TestClient
@@ -114,6 +115,24 @@ ignore_errors = true
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+# Coverage configuration - start low and increase over time
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=40"
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/workers/*",  # Workers have external dependencies
+    "app/db/migrations/*",  # Migration scripts
+    "app/__main__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
 
 [tool.uv]
 # Note: torch is installed separately in Docker with CPU-only version

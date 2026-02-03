@@ -15,6 +15,7 @@ import {
   Edit3,
   Map,
   Trash2,
+  X,
 } from 'lucide-react';
 import type { Track } from '../../types';
 
@@ -33,6 +34,11 @@ interface TrackContextMenuProps {
   onMakePlaylist: () => void;
   onEditMetadata?: () => void;
   onRemoveFromDownloads?: () => void;
+  // Bulk selection props (for mobile long-press)
+  selectedCount?: number;
+  onPlaySelected?: () => void;
+  onAddSelectedToPlaylist?: () => void;
+  onClearSelection?: () => void;
 }
 
 interface MenuItemProps {
@@ -74,6 +80,10 @@ export function TrackContextMenu({
   onMakePlaylist,
   onEditMetadata,
   onRemoveFromDownloads,
+  selectedCount = 0,
+  onPlaySelected,
+  onAddSelectedToPlaylist,
+  onClearSelection,
 }: TrackContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -106,15 +116,29 @@ export function TrackContextMenu({
       const rect = menuRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
+      const isMobile = viewportWidth < 768;
 
-      // Adjust horizontal position if menu would go off-screen
-      if (rect.right > viewportWidth) {
-        menuRef.current.style.left = `${position.x - rect.width}px`;
-      }
+      if (isMobile) {
+        // On mobile, center horizontally with padding
+        const padding = 16;
+        const menuWidth = Math.min(rect.width, viewportWidth - padding * 2);
+        menuRef.current.style.left = `${(viewportWidth - menuWidth) / 2}px`;
+        menuRef.current.style.width = `${menuWidth}px`;
 
-      // Adjust vertical position if menu would go off-screen
-      if (rect.bottom > viewportHeight) {
-        menuRef.current.style.top = `${position.y - rect.height}px`;
+        // Adjust vertical position if menu would go off-screen
+        if (rect.bottom > viewportHeight) {
+          menuRef.current.style.top = `${Math.max(padding, viewportHeight - rect.height - padding)}px`;
+        }
+      } else {
+        // Desktop: adjust horizontal position if menu would go off-screen
+        if (rect.right > viewportWidth) {
+          menuRef.current.style.left = `${position.x - rect.width}px`;
+        }
+
+        // Adjust vertical position if menu would go off-screen
+        if (rect.bottom > viewportHeight) {
+          menuRef.current.style.top = `${position.y - rect.height}px`;
+        }
       }
     }
   }, [position]);
@@ -123,6 +147,8 @@ export function TrackContextMenu({
     action();
     onClose();
   };
+
+  const showBulkActions = selectedCount > 1;
 
   return (
     <div
@@ -133,6 +159,39 @@ export function TrackContextMenu({
         top: position.y,
       }}
     >
+      {/* Bulk actions section (shown when multiple tracks selected) */}
+      {showBulkActions && (
+        <>
+          <div className="px-3 py-2 border-b border-zinc-700 bg-purple-900/30">
+            <div className="text-sm font-medium text-purple-300">
+              {selectedCount} tracks selected
+            </div>
+          </div>
+          {onPlaySelected && (
+            <MenuItem
+              icon={<Play className="w-4 h-4" />}
+              label={`Play ${selectedCount} selected`}
+              onClick={() => handleAction(onPlaySelected)}
+            />
+          )}
+          {onAddSelectedToPlaylist && (
+            <MenuItem
+              icon={<ListPlus className="w-4 h-4" />}
+              label={`Add ${selectedCount} to playlist...`}
+              onClick={() => handleAction(onAddSelectedToPlaylist)}
+            />
+          )}
+          {onClearSelection && (
+            <MenuItem
+              icon={<X className="w-4 h-4" />}
+              label="Clear selection"
+              onClick={() => handleAction(onClearSelection)}
+            />
+          )}
+          <MenuDivider />
+        </>
+      )}
+
       {/* Track info header */}
       <div className="px-3 py-2 border-b border-zinc-700">
         <div className="text-sm font-medium text-white truncate">

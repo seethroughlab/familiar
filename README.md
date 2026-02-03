@@ -4,20 +4,64 @@
 [![Release](https://github.com/seethroughlab/familiar/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/seethroughlab/familiar/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-An LLM-powered local music player that combines library management with AI-powered discovery. Your music, your server, your data.
+**Describe what you want to hear.** Familiar is a local music player that understands the *sound* of your music, not just its metadata. Ask for "something that sounds like rain on a window" and it actually works.
 
-**Designed for home servers and NAS devices.** Familiar runs as a web service, making your music library accessible from any device on your network. The multi-profile support means everyone in your household gets their own favorites and listening history. While it can run on a personal computer, it really shines on always-on hardware like a Synology, QNAP, Unraid, or Raspberry Pi.
+**Your music, your server, your data.** Runs entirely on your hardware - no cloud dependency, no subscriptions, no data leaving your network.
+
+**Community-powered analysis.** Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.
+
+## Why Familiar?
+
+Most music players search by artist, album, or genre. Familiar searches by *how music sounds*.
+
+- **Semantic audio search** - "Find me something melancholy with piano" searches the actual audio, not just tags
+- **CLAP embeddings** - AI model that understands the sound of your music, trained on millions of audio-text pairs
+- **AI that knows YOUR library** - Not generic recommendations. Claude searches, filters, and creates playlists from tracks you actually own
+- **Community cache** - Analysis results shared anonymously via hashed fingerprints. New users benefit instantly from the community's processing
+- **Privacy-first** - Runs on your NAS or home server. Your listening data stays yours
+
+## Screenshots
+
+| Library Track List | AI Chat |
+|:--:|:--:|
+| ![Library](screenshots/01-library-tracks.png) | ![Chat](screenshots/08-chat-panel.png) |
+
+| Music Map | Mood Grid |
+|:--:|:--:|
+| ![Music Map](screenshots/03-library-music-map.png) | ![Mood Grid](screenshots/02-library-mood-grid.png) |
+
+| Full Player | Visualizer |
+|:--:|:--:|
+| ![Full Player](screenshots/09-full-player.png) | ![Visualizer](screenshots/06-visualizer.png) |
+
+<details>
+<summary><strong>More screenshots</strong></summary>
+
+| Timeline | Playlists |
+|:--:|:--:|
+| ![Timeline](screenshots/04-library-timeline.png) | ![Playlists](screenshots/05-playlists.png) |
+
+| Settings | Admin Setup |
+|:--:|:--:|
+| ![Settings](screenshots/07-settings.png) | ![Admin Setup](screenshots/11-admin-setup.png) |
+
+### Mobile Interface
+
+| Library (Mobile) | Settings (Mobile) |
+|:--:|:--:|
+| ![Mobile Library](screenshots/12-mobile-library.png) | ![Mobile Settings](screenshots/13-mobile-settings.png) |
+
+</details>
 
 ## Features
 
-### AI-Powered Music Chat
-Talk to your music library using Claude. Ask questions like:
-- "Play something gloomy with Eastern influences" *(semantic search via CLAP)*
-- "Find tracks similar to this one"
-- "Create a playlist for a dinner party"
-- "Fix the album artist for this compilation"
-
-The AI understands your library's metadata, audio features (BPM, key, energy), and **CLAP audio embeddings** — so you can describe the *sound* you want, not just genres or artists. It can also help fix metadata issues by proposing corrections for your review.
+### Discovery & Search
+- **Semantic audio search** - Describe the sound you want: "upbeat with synths", "acoustic and melancholy"
+- **AI chat assistant** - 25 tools for search, playback, metadata correction, and playlist creation
+- **Find similar tracks** - Click any track to find sonically similar music via CLAP embeddings
+- **Mood Grid** - 2D scatter plot by energy and valence (happy/sad × calm/energetic)
+- **Music Map** - Ego-centric similarity map. Click any artist to center the view
+- **3D Explorer** - Navigate a 3D space of artists with hover-to-preview audio
 
 <details>
 <summary><strong>Available AI Tools (25)</strong></summary>
@@ -42,7 +86,7 @@ The AI understands your library's metadata, audio features (BPM, key, energy), a
 | **Spotify Integration** | |
 | `get_spotify_status` | Check if Spotify is connected |
 | `get_spotify_favorites` | Get Spotify likes matched to local library |
-| `get_unmatched_spotify_favorites` | Spotify likes you don't have locally |
+| `unmatched_spotify_favorites` | Spotify likes you don't have locally |
 | `get_spotify_sync_stats` | Match rate and sync statistics |
 | **Discovery** | |
 | `search_bandcamp` | Search Bandcamp for albums/tracks to purchase |
@@ -58,154 +102,97 @@ The AI understands your library's metadata, audio features (BPM, key, energy), a
 
 </details>
 
-### Local Library Management
-- **Fast scanning** - Scans thousands of tracks quickly with metadata extraction
-- **Audio analysis** - Automatic BPM, key detection, and audio feature extraction via librosa
-- **CLAP embeddings** - Semantic audio search powered by LAION's CLAP model (optional)
+### Playback & Experience
+- **Synced lyrics** - Auto-scrolling lyrics display fetched from LRCLIB.net
+- **6 audio visualizers** - Cosmic Orb, Frequency Bars, Album Kaleidoscope, Color Flow, Lyric Storm, Typography Wave
+- **Visualizer plugins** - Open API for community visualizers ([create your own](docs/VISUALIZER_API.md))
+- **Music video playback** - Download and match music videos from YouTube
+- **Keyboard shortcuts** - Full keyboard control (press `?` for help)
+- **Multi-profile support** - Each household member gets their own favorites and history
+
+### Library Management
+- **Fast scanning with community cache** - Pre-computed analysis from other users speeds up initial scan
+- **Audio analysis** - BPM, key detection, energy, danceability, and more via librosa
+- **CLAP embeddings** - Semantic audio search powered by LAION's CLAP model
+- **Smart playlists** - Dynamic playlists with rules for BPM, key, energy, genre, and more
+- **Metadata editing** - Right-click to edit, AI-assisted corrections, duplicate artist detection
 - **AcoustID fingerprinting** - Identify unknown tracks
-- **Simple configuration** - Single library path configured via Docker volume mount
-- **Format support** - MP3, FLAC, AAC, OGG, WAV, AIFF, and more
 
-### Spotify Integration
-- Sync your Spotify favorites to your local library
-- Automatic matching of Spotify tracks to local files
-- See which favorites you're missing locally
-- One-click sync to keep everything up to date
+### Mobile & Offline
+- **PWA support** - Install on mobile or desktop, works offline
+- **Download tracks** - Cache music for offline playback
+- **Lock screen controls** - Media notifications and controls
+- **Works over Tailscale** - Access your library anywhere with HTTPS
 
-### Last.fm Scrobbling
-- Automatic scrobbling as you listen
-- Love/unlove tracks
-- View your listening history
+### Integrations
+- **Spotify sync** - Import your Spotify favorites, see what you're missing locally
+- **Last.fm scrobbling** - Automatic scrobbling, love/unlove tracks
+- **Bandcamp discovery** - Search and get purchase recommendations
 
-### Smart Playlists
-Create dynamic playlists with rules:
-- Filter by artist, album, genre, year
-- Audio features: BPM range, key, energy level
-- Recently added, most played, favorites
-- Combine multiple rules with AND/OR logic
+## Keyboard Shortcuts
 
-### Progressive Web App (PWA)
-- Install on desktop or mobile
-- Offline playback with cached tracks
-- Background sync when connection returns
-- Lock screen controls and media notifications
-- Works over Tailscale HTTPS
+Press `?` anytime to see all shortcuts.
 
-### Music Videos
-- Download music videos from YouTube
-- Automatic matching to library tracks
-- Toggle between audio and video playback
+| Key | Action |
+|-----|--------|
+| `Space` | Play / Pause |
+| `←` / `→` | Previous / Next track |
+| `↑` / `↓` | Volume up / down |
+| `J` / `L` | Seek backward / forward 10s |
+| `S` | Toggle shuffle |
+| `R` | Cycle repeat mode |
+| `M` | Mute / Unmute |
+| `F` | Toggle full player |
+| `Esc` | Close overlay |
+| `?` | Show shortcuts help |
 
-### Multi-Profile Support
-- Multiple user profiles for household use
-- Each profile has its own favorites and history
-- Simple profile switching (no passwords)
+## Community Cache
 
-### Library Browser Views
-Explore your music in multiple ways:
-- **Artists & Albums** - Visual grids with artwork, infinite scroll
-- **Mood Grid** - 2D scatter plot by energy and valence (happy/sad × calm/energetic)
-- **Music Map** - Ego-centric similarity map powered by CLAP embeddings. Click any artist to center the map on them, with similar artists radiating outward. Includes lasso selection and Figma-style controls.
-- **Timeline** - Browse by release year
-- **3D Explorer** - Navigate a 3D space of artists with hover-to-preview audio
+Familiar includes an optional community cache that shares pre-computed audio analysis between users.
 
-### Metadata Editing & Corrections
-- **Right-click to edit** any track's metadata (title, artist, album, year, genre, and more)
-- **AI-assisted corrections** - The LLM can look up correct metadata from MusicBrainz and propose fixes
-- **Proposed Changes queue** - Review and approve metadata corrections before applying
-- **Write to files** - Optionally write changes back to ID3/Vorbis tags
-- **Duplicate artist detection** - Find and merge artists with variant spellings (e.g., "Artist_Name" vs "Artist and Name")
+**How it works:**
+1. When you scan a track, Familiar generates an AcoustID fingerprint
+2. The fingerprint is hashed (SHA256) - one-way, anonymous, not reversible
+3. The hash is used to look up pre-computed CLAP embeddings and audio features
+4. If found, analysis is instant. If not, Familiar computes locally and optionally contributes back
 
-### Audio Visualizers
-Six built-in visualizers with real-time audio reactivity:
-- **Cosmic Orb** - GPU particle system with glowing orb and waveform ring
-- **Frequency Bars** - Classic spectrum analyzer with 128 gradient bars
-- **Album Kaleidoscope** - Shader-based kaleidoscope from album artwork
-- **Color Flow** - Flowing particles using colors extracted from artwork
-- **Lyric Storm** - 3D floating lyrics with depth and motion blur
-- **Typography Wave** - Animated text waves
+**Privacy guarantees:**
+- Only hashed fingerprints are transmitted - no track names, artists, or file paths
+- Fingerprint hashes are one-way - your library contents cannot be determined
+- Contribution is opt-in (lookup is enabled by default)
 
-**[Create Your Own Visualizers](docs/VISUALIZER_API.md)** - Open API for community contributions with access to track metadata, audio features, real-time frequency data, and timed lyrics.
+**Benefits:**
+- New installations can skip hours of audio analysis
+- Popular tracks are analyzed once across the community
+- Your processing helps future users
 
-### Community Plugins
-Extend Familiar with community-created visualizers:
-- **[Lyric Pulse](https://github.com/seethroughlab/familiar-plugin-lyric-pulse)** - BPM-synced lyric display with glowing pulse effects
-- **[Timeline](https://github.com/seethroughlab/familiar-plugin-timeline)** - Visual timeline showing track position and upcoming lyrics
+Configure in Admin (`/admin`) under Community Cache.
 
-## Screenshots
-
-<!-- Screenshots are auto-generated. Run `cd frontend && BASE_URL=http://localhost:5173 npm run screenshots` to update. -->
-
-| Library Track List | Mood Grid |
-|:--:|:--:|
-| ![Library](screenshots/01-library-tracks.png) | ![Mood Grid](screenshots/02-library-mood-grid.png) |
-
-| Music Map | Timeline |
-|:--:|:--:|
-| ![Music Map](screenshots/03-library-music-map.png) | ![Timeline](screenshots/04-library-timeline.png) |
-
-| Playlists | Settings |
-|:--:|:--:|
-| ![Playlists](screenshots/05-playlists.png) | ![Settings](screenshots/07-settings.png) |
-
-| Full Player | Visualizer |
-|:--:|:--:|
-| ![Full Player](screenshots/09-full-player.png) | ![Visualizer](screenshots/06-visualizer.png) |
-
-| Admin Setup |
-|:--:|
-| ![Admin Setup](screenshots/11-admin-setup.png) |
-
-### Mobile Interface
-
-Familiar is fully responsive with a touch-friendly card layout on mobile devices.
-
-| Library (Mobile) | Settings (Mobile) |
-|:--:|:--:|
-| ![Mobile Library](screenshots/12-mobile-library.png) | ![Mobile Settings](screenshots/13-mobile-settings.png) |
-
-## Coming Soon
-
-Features planned for future releases:
-
-### Listening Sessions (WebRTC)
-Share what you're listening to with friends in real-time. Host a session, share a link, and guests hear synchronized audio - no account required. Requires public signaling server deployment.
-
-### Multi-Room Audio
-Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
-
-### Additional LLM Providers
-Support for more AI providers beyond Claude and Ollama, including OpenAI (ChatGPT), Google Gemini, and other compatible APIs.
-
-## Documentation
-
-- **[Visualizer API](docs/VISUALIZER_API.md)** - Create custom audio visualizers with full metadata access
-- **[Library Browser API](docs/LIBRARY_BROWSERS.md)** - Create custom 2D/3D library visualizations
-- **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation
-
-## Quick Start (Docker)
-
-The easiest way to run Familiar is with Docker:
+## Quick Start
 
 ```bash
-# Clone the repository
 git clone https://github.com/seethroughlab/familiar.git
-cd familliar/docker
-
-# Copy and configure environment
+cd familiar/docker
 cp .env.example .env
-# Edit .env: set MUSIC_LIBRARY_PATH to your music folder and FRONTEND_URL to your server URL
-
-# Start all services
+# Edit .env: set MUSIC_LIBRARY_PATH and FRONTEND_URL
 docker compose -f docker-compose.prod.yml up -d
-
-# Initialize the database (first run only)
-docker exec familiar-api python -m app.db.init_db
 ```
 
-Access the web UI at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
+Access at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
 
-**Music Library Configuration:** Your music folder is mounted at `/music` inside the container. Set `MUSIC_LIBRARY_PATH` in your `.env` file to point to your music folder on the host (e.g., `/srv/music`, `/volume1/music`, or `~/Music`).
+**Music Library:** Set `MUSIC_LIBRARY_PATH` in `.env` to your music folder (e.g., `/srv/music`, `/volume1/music`, `~/Music`). It's mounted at `/music` inside the container.
+
+## Upgrading
+
+Pull the latest image and restart:
+
+```bash
+docker pull ghcr.io/seethroughlab/familiar:latest
+docker compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Database migrations run automatically on startup.
 
 ## Installation
 
@@ -222,31 +209,24 @@ Access the web UI at http://localhost:4400, then go to `/admin` to configure API
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/seethroughlab/familiar.git
-   cd familliar/docker
+   cd familiar/docker
    ```
 
 2. **Create environment file:**
    ```bash
-   cp ../.env.example .env
+   cp .env.example .env
    ```
 
    Edit `.env` and set:
    - `MUSIC_LIBRARY_PATH` - path to your music library on the host
    - `FRONTEND_URL` - your server's URL (e.g., `http://myserver:4400`)
 
-   > **Note:** Your music folder is mounted at `/music` inside the container. API keys are configured via the Admin UI at `/admin` after startup.
-
 3. **Start the services:**
    ```bash
    docker compose -f docker-compose.prod.yml up -d
    ```
 
-4. **Initialize database:**
-   ```bash
-   docker exec familiar-api python -m app.db.init_db
-   ```
-
-5. **Access the UI** at http://localhost:4400 and go to `/admin` to configure API keys.
+4. **Access the UI** at http://localhost:4400 and go to `/admin` to configure API keys.
 
 ### OpenMediaVault Installation
 
@@ -335,14 +315,9 @@ Familiar works great on OpenMediaVault NAS systems. Here's how to set it up:
    - Click the "Up" button in Compose → Files
    - Or via SSH: `docker compose -f /path/to/familiar.yml up -d`
 
-5. **Initialize the database:**
-   ```bash
-   docker exec familiar-api python -m app.db.init_db
-   ```
-
-6. **Access Familiar:**
+5. **Access Familiar:**
    - Open `http://your-omv-ip:4400` in a browser
-   - Go to Settings to configure integrations
+   - Go to `/admin` to configure API keys and start a scan
 
 #### Optional: HTTPS Access via nginx Proxy
 
@@ -384,8 +359,7 @@ docker pull ghcr.io/seethroughlab/familiar:latest
 
 # Restart the containers
 cd /path/to/familiar
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml up -d
+docker compose down && docker compose up -d
 
 # Or via OMV web UI:
 # Compose → Files → Select familiar → Down → Pull → Up
@@ -405,9 +379,6 @@ docker exec familiar-api ls -la /music
 ```bash
 # Check postgres is healthy
 docker logs familiar-postgres
-
-# Reset database if needed
-docker exec familiar-api python -m app.db.init_db
 ```
 
 **Background tasks not processing:**
@@ -531,7 +502,7 @@ Familiar supports Synology NAS with Container Manager (DSM 7.2+) or Docker (olde
 
 6. **Access Familiar:**
    - Open `http://your-synology-ip:4400`
-   - Go to Settings to configure API keys and start a library scan
+   - Go to `/admin` to configure API keys and start a library scan
 
 #### Updating on Synology
 
@@ -620,9 +591,7 @@ cp .env.example .env
 FRONTEND_URL=http://myserver:4400
 ```
 
-**Music Library:** Your music folder is mounted at `/music` inside the container via the `MUSIC_LIBRARY_PATH` environment variable. To change the library location, update `MUSIC_LIBRARY_PATH` in your `.env` or `docker-compose.yml` file.
-
-All other settings (API keys) are configured via the Admin UI at `/admin`.
+All other settings (API keys, community cache) are configured via the Admin UI at `/admin`.
 
 ### Getting API Keys
 
@@ -684,6 +653,45 @@ This creates `.crt` and `.key` files (you're responsible for renewal every 90 da
 
 See [Tailscale HTTPS docs](https://tailscale.com/kb/1153/enabling-https) for more details.
 
+## Coming Soon
+
+Features planned for future releases:
+
+### Listening Sessions (WebRTC)
+Share what you're listening to with friends in real-time. Host a session, share a link, and guests hear synchronized audio - no account required. Requires public signaling server deployment.
+
+### Multi-Room Audio
+Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
+
+### Additional LLM Providers
+Support for more AI providers beyond Claude and Ollama, including OpenAI (ChatGPT), Google Gemini, and other compatible APIs.
+
+## Documentation
+
+- **[Visualizer API](docs/VISUALIZER_API.md)** - Create custom audio visualizers with full metadata access
+- **[Library Browser API](docs/LIBRARY_BROWSERS.md)** - Create custom 2D/3D library visualizations
+- **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation
+
+## Community Plugins
+
+Extend Familiar with community-created visualizers:
+- **[Lyric Pulse](https://github.com/seethroughlab/familiar-plugin-lyric-pulse)** - BPM-synced lyric display with glowing pulse effects
+- **[Timeline](https://github.com/seethroughlab/familiar-plugin-timeline)** - Visual timeline showing track position and upcoming lyrics
+
+## Beta Feedback
+
+Familiar is in active development and we'd love your feedback!
+
+**What's most helpful:**
+- Bug reports with steps to reproduce
+- Feature requests with use cases
+- Performance issues (especially on NAS devices)
+- UI/UX suggestions
+
+**How to report:**
+- [GitHub Issues](https://github.com/seethroughlab/familiar/issues) - Bugs and feature requests
+- Include your platform, Docker version, and relevant logs (`docker logs familiar-api`)
+
 ## Project Structure
 
 ```
@@ -727,18 +735,6 @@ Currently, audio analysis runs on CPU only (~6-7 seconds per track). GPU acceler
 - librosa (BPM, key detection) is CPU-only regardless
 
 **Would GPU support be useful for your setup?** [Open an issue](https://github.com/seethroughlab/familiar/issues) to share your thoughts!
-
-## Reporting Issues
-
-Found a bug or have a feature request? Please open an issue:
-
-**[GitHub Issues](https://github.com/seethroughlab/familiar/issues)**
-
-When reporting bugs, please include:
-- Your platform (OS, NAS model if applicable, Docker version)
-- Steps to reproduce the issue
-- Container logs: `docker logs familiar-api`
-- Browser console errors (if frontend issue)
 
 ## Contributing
 

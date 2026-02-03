@@ -14,6 +14,7 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { BrowserPicker } from './BrowserPicker';
 import { SelectionToolbar } from './SelectionToolbar';
+import { MobileSelectionIndicator } from './MobileSelectionIndicator';
 import { ArtistDetail } from './ArtistDetail';
 import { AlbumDetail } from './AlbumDetail';
 import {
@@ -520,6 +521,12 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
           </div>
         )}
       </div>
+
+      {/* Mobile selection indicator */}
+      <MobileSelectionIndicator
+        selectedCount={selectedTrackIds.size}
+        onClear={clearSelection}
+      />
     </div>
   );
 }

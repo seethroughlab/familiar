@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Selection toolbar** - appears when tracks selected with count display and "Remove from Downloads" action
   - **Checkboxes** - visible checkbox column for quick selection, green highlight on selected rows
   - **Context menu delete** - "Remove from Downloads" option in right-click menu
+- **Queue tab** - new top-level tab to view and manage the playback queue
+  - **Queue view** - see all queued tracks with current track highlighted
+  - **Drag-to-reorder** - drag tracks to change playback order (regular queue mode)
+  - **Click to jump** - click any track to jump to it immediately
+  - **Remove tracks** - X button to remove individual tracks from queue
+  - **Clear All** - button to empty the entire queue
+  - **Lazy queue support** - shows limited view when shuffling large libraries (current + next 3 tracks)
+  - **Shuffle indicator** - header shows when shuffle is enabled
+  - **Empty state** - helpful message when queue is empty
 
 ### Changed
 

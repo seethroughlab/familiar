@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { TAB_PARAM_WHITELIST, type AppTab } from './utils/urlParams';
-import { Search, Library, Settings, Zap, Activity, MessageSquare, X, Loader2 } from 'lucide-react';
+import { Search, Library, Settings, Zap, Activity, MessageSquare, X, Loader2, ListMusic } from 'lucide-react';
 import { isVisualizerAvailable } from './hooks/useAudioEngine';
 import { logger } from './utils/logger';
 import { PlayerBar } from './components/Player/PlayerBar';
@@ -25,6 +25,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 const FullPlayer = lazy(() => import('./components/FullPlayer').then(m => ({ default: m.FullPlayer })));
 const PlaylistsView = lazy(() => import('./components/Playlists').then(m => ({ default: m.PlaylistsView })));
+const QueueView = lazy(() => import('./components/Queue').then(m => ({ default: m.QueueView })));
 const VisualizerView = lazy(() => import('./components/Visualizer').then(m => ({ default: m.VisualizerView })));
 const AdminSetup = lazy(() => import('./components/Admin').then(m => ({ default: m.AdminSetup })));
 
@@ -99,7 +100,7 @@ function AppContent() {
   const getTabFromUrl = (): RightPanelTab => {
     // Check hash first (e.g., #settings, #playlists)
     const hash = window.location.hash.slice(1); // Remove #
-    if (hash === 'settings' || hash === 'playlists' || hash === 'library') {
+    if (hash === 'settings' || hash === 'playlists' || hash === 'library' || hash === 'queue') {
       return hash;
     }
     // Visualizer only available on desktop
@@ -111,6 +112,7 @@ function AppContent() {
     logger.debug('[AppContent] getTabFromUrl, hash:', hash, 'path:', path);
     if (path === '/settings') return 'settings';
     if (path === '/playlists') return 'playlists';
+    if (path === '/queue') return 'queue';
     if (path === '/visualizer' && isVisualizerAvailable()) return 'visualizer';
 
     // Check for playlist-specific view params (downloads, favorites)
@@ -384,6 +386,18 @@ function AppContent() {
                       <Zap className="w-4 h-4 inline-block sm:mr-1.5" />
                       <span className="hidden sm:inline">Playlists</span>
                     </button>
+                    <button
+                      onClick={() => setRightPanelTab('queue')}
+                      className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
+                        rightPanelTab === 'queue'
+                          ? 'bg-zinc-800 text-white'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                      }`}
+                      aria-label="Queue"
+                    >
+                      <ListMusic className="w-4 h-4 inline-block sm:mr-1.5" />
+                      <span className="hidden sm:inline">Queue</span>
+                    </button>
                     {isVisualizerAvailable() && (
                       <button
                         onClick={() => setRightPanelTab('visualizer')}
@@ -480,6 +494,13 @@ function AppContent() {
                     selectedPlaylistId={selectedPlaylistId}
                     onPlaylistViewed={() => setSelectedPlaylistId(null)}
                   />
+                </Suspense>
+              </div>
+            )}
+            {rightPanelTab === 'queue' && (
+              <div className="h-full">
+                <Suspense fallback={<LazyLoadSpinner />}>
+                  <QueueView />
                 </Suspense>
               </div>
             )}

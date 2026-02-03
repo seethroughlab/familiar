@@ -98,6 +98,8 @@ interface PlayerState {
   playNext: () => void;
   playPrevious: () => void;
   setQueue: (tracks: Track[], startIndex?: number) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
+  jumpToQueueIndex: (index: number) => void;
 
   // Lazy queue actions
   setLazyQueue: (ids: string[], source?: QueueSource) => Promise<void>;
@@ -487,6 +489,54 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       lazyQueueIndex: -1,
       prefetchedTracks: new Map(),
       queueSource: null,  // Clear source when using regular queue
+    });
+    persistState();
+  },
+
+  reorderQueue: (fromIndex: number, toIndex: number) => {
+    const { queue, queueIndex, currentTrack } = get();
+    if (fromIndex < 0 || fromIndex >= queue.length || toIndex < 0 || toIndex >= queue.length) {
+      return;
+    }
+
+    const newQueue = [...queue];
+    const [removed] = newQueue.splice(fromIndex, 1);
+    newQueue.splice(toIndex, 0, removed);
+
+    // Adjust queueIndex to keep current track selected
+    let newQueueIndex = queueIndex;
+    if (currentTrack) {
+      newQueueIndex = newQueue.findIndex(item => item.track.id === currentTrack.id);
+    }
+
+    set({
+      queue: newQueue,
+      queueIndex: newQueueIndex,
+    });
+    persistState();
+  },
+
+  jumpToQueueIndex: (index: number) => {
+    const { queue, currentTrack } = get();
+    if (index < 0 || index >= queue.length) {
+      return;
+    }
+
+    const targetItem = queue[index];
+    if (!targetItem) return;
+
+    // Add current track to history if exists
+    if (currentTrack) {
+      set((s) => ({
+        history: [...s.history.slice(-49), s.currentTrack!],
+      }));
+    }
+
+    set({
+      queueIndex: index,
+      currentTrack: targetItem.track,
+      isPlaying: true,
+      currentTime: 0,
     });
     persistState();
   },

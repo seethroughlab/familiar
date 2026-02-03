@@ -188,6 +188,27 @@ test.describe('Screenshot Capture', () => {
     }
   });
 
+  test('10 - Keyboard Shortcuts', async ({ page }) => {
+    await navigateToTab(page, 'Library');
+    await page.waitForTimeout(500);
+
+    // Press ? to open shortcuts help modal
+    await page.keyboard.press('Shift+?');
+    await page.waitForTimeout(500);
+
+    // Wait for the shortcuts modal to appear
+    const shortcutsModal = page.locator('text=Keyboard Shortcuts').first();
+    if (await shortcutsModal.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await page.screenshot({
+        path: path.join(SCREENSHOT_DIR, '10-keyboard-shortcuts.png'),
+        fullPage: false,
+      });
+    }
+
+    // Close the modal
+    await page.keyboard.press('Escape');
+  });
+
 });
 
 // Profile selector screenshot (separate test to avoid profile auto-selection)
@@ -251,6 +272,64 @@ test.describe('Admin Setup', () => {
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '11-admin-setup.png'),
+      fullPage: false,
+    });
+  });
+});
+
+// Mobile screenshots for README
+test.describe('Mobile Screenshots', () => {
+  const MOBILE_VIEWPORT = { width: 390, height: 844 }; // iPhone 14
+
+  test('12 - Mobile Library', async ({ page }) => {
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto('/');
+    await ensureProfile(page);
+    await navigateToTab(page, 'Library');
+    await page.waitForTimeout(1000);
+
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, '12-mobile-library.png'),
+      fullPage: false,
+    });
+  });
+
+  test('13 - Mobile Settings', async ({ page }) => {
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto('/');
+    await ensureProfile(page);
+    await navigateToTab(page, 'Settings');
+    await page.waitForTimeout(500);
+
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, '13-mobile-settings.png'),
+      fullPage: false,
+    });
+  });
+
+  test('14 - Mobile Full Player', async ({ page }) => {
+    await page.setViewportSize(MOBILE_VIEWPORT);
+    await page.goto('/');
+    await ensureProfile(page);
+    await navigateToTab(page, 'Library');
+    await page.waitForTimeout(500);
+
+    // Play a track
+    const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
+    if (await trackRow.isVisible()) {
+      await trackRow.dblclick();
+      await page.waitForTimeout(1000);
+    }
+
+    // Expand to full player
+    const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
+    if (await expandButton.isVisible()) {
+      await expandButton.click();
+      await page.waitForTimeout(500);
+    }
+
+    await page.screenshot({
+      path: path.join(SCREENSHOT_DIR, '14-mobile-full-player.png'),
       fullPage: false,
     });
   });
