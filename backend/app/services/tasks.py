@@ -15,11 +15,11 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-import redis
 from sqlalchemy import and_
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.config import ANALYSIS_VERSION, settings
+from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +42,6 @@ def log_memory(label: str) -> None:
     sys.stdout.flush()  # Ensure log is written before potential OOM
 
 # Redis client for progress reporting (using resilient client for retry logic)
-from app.services.redis_client import ResilientRedisClient, get_resilient_redis
-
-
 def get_redis() -> ResilientRedisClient:
     """Get resilient Redis client for progress updates.
 

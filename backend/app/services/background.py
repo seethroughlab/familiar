@@ -17,7 +17,6 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 
-from app.config import settings
 from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
 # Rate limiting for executor recreation to prevent runaway process spawning

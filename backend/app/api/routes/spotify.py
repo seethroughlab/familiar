@@ -339,7 +339,7 @@ async def get_unmatched_tracks(
             result.sort(key=lambda t: t.added_at or "", reverse=True)
 
         return result
-    except Exception as e:
+    except Exception:
         logger.exception("Error retrieving unmatched tracks")
         raise HTTPException(
             status_code=500,

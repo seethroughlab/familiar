@@ -11,9 +11,6 @@ import httpx
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Timeout for LLM calls (shorter for playlist name generation)
-_PLAYLIST_NAME_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
-
 from app.db.models import (
     ChangeScope,
     ChangeSource,
@@ -30,6 +27,9 @@ from app.db.models import (
 from app.services.app_settings import get_app_settings_service
 from app.services.external_track_matcher import ExternalTrackMatcher
 from app.services.metadata_lookup import get_metadata_lookup_service
+
+# Timeout for LLM calls (shorter for playlist name generation)
+_PLAYLIST_NAME_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 
 logger = logging.getLogger(__name__)
 

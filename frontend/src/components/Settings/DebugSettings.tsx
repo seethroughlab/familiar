@@ -10,7 +10,8 @@ import {
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import * as offlineService from '../../services/offlineService';
-import { apiErrorTracker, TrackedError } from '../../utils/apiErrorTracker';
+import { apiErrorTracker } from '../../utils/apiErrorTracker';
+import type { TrackedError } from '../../utils/apiErrorTracker';
 
 // Capture console logs
 const logBuffer: { time: string; level: string; message: string }[] = [];
