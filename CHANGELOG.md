@@ -72,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Artist image lookup logging** - Debug logging for Last.fm and Spotify failures
 - **README screenshot links** - Fixed broken image references
   - Full Player screenshot now points to correct file
+- **Track restarts when opening Visualizer/FullPlayer** - Playback no longer restarts when switching views
+  - Root cause: `loadedTrackIdRef` was a local ref but guarded global audio elements
+  - Fix: Moved tracking state to module scope so all hook instances share the same state
+  - Opening Visualizer, FullPlayer, or switching tabs no longer interrupts playback
   - Timeline screenshot replaced with Albums (timeline screenshot was never generated)
 
 ## [0.1.0-alpha.7] - 2026-02-03

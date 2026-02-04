@@ -79,6 +79,9 @@ interface PlayerState {
   crossfadeState: CrossfadeState;
   nextTrackPreloaded: boolean;
 
+  // Audio loading state (for play button spinner)
+  isLoadingAudio: boolean;
+
   // Hydration
   isHydrated: boolean;
 
@@ -111,6 +114,9 @@ interface PlayerState {
   setNextTrackPreloaded: (preloaded: boolean) => void;
   getNextTrack: () => Track | null;
   advanceToNextTrack: (track: Track) => void;
+
+  // Audio loading actions
+  setIsLoadingAudio: (loading: boolean) => void;
 
   // Hydration
   hydrate: () => Promise<void>;
@@ -207,6 +213,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   queueSource: null,
   crossfadeState: 'idle',
   nextTrackPreloaded: false,
+  isLoadingAudio: false,
   isHydrated: false,
   isPreviewMode: false,
   previewTrack: null,
@@ -609,6 +616,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setCrossfadeState: (crossfadeState) => set({ crossfadeState }),
 
   setNextTrackPreloaded: (nextTrackPreloaded) => set({ nextTrackPreloaded }),
+
+  setIsLoadingAudio: (isLoadingAudio) => set({ isLoadingAudio }),
 
   getNextTrack: () => {
     const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, lazyQueueIds, lazyQueueIndex, prefetchedTracks } = get();

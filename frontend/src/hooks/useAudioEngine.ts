@@ -93,6 +93,15 @@ let nextOfflineUrl: string | null = null;
 // Current master volume
 let currentMasterVolume = 1;
 
+// Module-level tracking state (matches audio element pattern)
+// These must be global so multiple hook instances share the same state
+let loadedTrackId: string | null = null;
+let currentLoadId = 0;
+let preloadingTrackId: string | null = null;
+let queueTransition = false;
+let errorCount = 0;
+let lastErrorTrackId: string | null = null;
+
 // ============================================================================
 // Exported functions for visualizer access
 // ============================================================================
@@ -270,14 +279,8 @@ function updateDirectPlaybackVolumes(): void {
 // ============================================================================
 
 export function useAudioEngine() {
+  // Keep animationFrameRef as local (used for cleanup per instance)
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const isLoadingRef = useRef(false);
-  const preloadingTrackIdRef = useRef<string | null>(null);
-  const loadedTrackIdRef = useRef<string | null>(null);
-  const loadIdRef = useRef(0);
-  const errorCountRef = useRef(0);
-  const lastErrorTrackRef = useRef<string | null>(null);
-  const queueTransitionRef = useRef(false);
 
   const {
     currentTrack,
@@ -293,6 +296,7 @@ export function useAudioEngine() {
     setNextTrackPreloaded,
     getNextTrack,
     advanceToNextTrack,
+    setIsLoadingAudio,
   } = usePlayerStore();
 
   const { crossfadeDuration, crossfadeEnabled } = useAudioSettingsStore();
@@ -301,9 +305,9 @@ export function useAudioEngine() {
   // Preload next track
   // --------------------------------------------------------------------------
   const preloadNextTrack = useCallback(async (trackId: string): Promise<boolean> => {
-    if (preloadingTrackIdRef.current === trackId) return false;
+    if (preloadingTrackId === trackId) return false;
 
-    preloadingTrackIdRef.current = trackId;
+    preloadingTrackId = trackId;
     const nextElement = getNextElement();
     if (!nextElement) return false;
 
@@ -328,18 +332,18 @@ export function useAudioEngine() {
 
         const timeout = setTimeout(() => {
           cleanup();
-          preloadingTrackIdRef.current = null;
+          preloadingTrackId = null;
           resolve(false);
         }, 10000);
 
         const onCanPlay = () => {
           cleanup();
-          preloadingTrackIdRef.current = null;
+          preloadingTrackId = null;
           resolve(true);
         };
         const onError = () => {
           cleanup();
-          preloadingTrackIdRef.current = null;
+          preloadingTrackId = null;
           resolve(false);
         };
         nextElement.addEventListener('canplay', onCanPlay);
@@ -347,7 +351,7 @@ export function useAudioEngine() {
       });
     } catch (e) {
       console.error('Error preloading track:', e);
-      preloadingTrackIdRef.current = null;
+      preloadingTrackId = null;
       return false;
     }
   }, []);
@@ -424,7 +428,7 @@ export function useAudioEngine() {
       };
     }
 
-    loadedTrackIdRef.current = nextTrack.id;
+    loadedTrackId = nextTrack.id;
     advanceToNextTrack(nextTrack);
   }, [advanceToNextTrack]);
 
@@ -443,10 +447,10 @@ export function useAudioEngine() {
     if (crossfadeContext?.animationFrameId) cancelAnimationFrame(crossfadeContext.animationFrameId);
     crossfadeContext = null;
 
-    preloadingTrackIdRef.current = null;
+    preloadingTrackId = null;
 
     const currentId = usePlayerStore.getState().currentTrack?.id;
-    if (currentId) loadedTrackIdRef.current = currentId;
+    if (currentId) loadedTrackId = currentId;
 
     if (useDirectPlayback) {
       const newCurrentElement = getCurrentElement();
@@ -490,7 +494,7 @@ export function useAudioEngine() {
     if (crossfadeContext.timeoutId) clearTimeout(crossfadeContext.timeoutId);
     crossfadeContext = null;
 
-    preloadingTrackIdRef.current = null;
+    preloadingTrackId = null;
     setCrossfadeState('idle');
     setNextTrackPreloaded(false);
   }, [setCrossfadeState, setNextTrackPreloaded]);
@@ -549,7 +553,7 @@ export function useAudioEngine() {
 
     // Setup ended handlers for elements
     const handleEnded = (isA: boolean) => () => {
-      if (queueTransitionRef.current) return;
+      if (queueTransition) return;
       if (currentElementIsA === isA && !crossfadeContext?.isActive) {
         playNext();
       }
@@ -564,28 +568,37 @@ export function useAudioEngine() {
 
       console.error('Audio error:', e);
 
-      const currentId = usePlayerStore.getState().currentTrack?.id;
-      const currentTrackTitle = usePlayerStore.getState().currentTrack?.title;
+      const { currentTrack: track, isPlaying: playing } = usePlayerStore.getState();
+      const currentId = track?.id;
+      const currentTrackTitle = track?.title;
 
-      if (currentId === lastErrorTrackRef.current) {
-        errorCountRef.current++;
-        if (errorCountRef.current >= 3) {
-          errorCountRef.current = 0;
-          lastErrorTrackRef.current = null;
+      // Only show error toast if user was trying to play
+      // (Don't show errors during background preloading on hydration)
+      if (!playing) {
+        return;
+      }
+
+      if (currentId === lastErrorTrackId) {
+        errorCount++;
+        if (errorCount >= 3) {
+          errorCount = 0;
+          lastErrorTrackId = null;
           showError('Playback failed', {
             description: `Unable to play "${currentTrackTitle || 'track'}". Skipping to next track.`,
           });
+          setIsLoadingAudio(false);
           playNext();
           return;
         }
       } else {
-        errorCountRef.current = 1;
-        lastErrorTrackRef.current = currentId ?? null;
+        errorCount = 1;
+        lastErrorTrackId = currentId ?? null;
       }
       showError('Playback error', {
         description: `Failed to play "${currentTrackTitle || 'track'}"`,
       });
       setIsPlaying(false);
+      setIsLoadingAudio(false);
     };
 
     const endedA = handleEnded(true);
@@ -634,16 +647,16 @@ export function useAudioEngine() {
         revokeOfflineTrackUrl(currentOfflineUrl);
         currentOfflineUrl = null;
       }
-      loadedTrackIdRef.current = null;
+      loadedTrackId = null;
       return;
     }
 
-    if (loadedTrackIdRef.current === currentTrack.id) return;
+    if (loadedTrackId === currentTrack.id) return;
     if (crossfadeContext?.isActive) return;
 
-    queueTransitionRef.current = true;
-    isLoadingRef.current = true;
-    const currentLoadId = ++loadIdRef.current;
+    queueTransition = true;
+    setIsLoadingAudio(true); // Show loading spinner on play button
+    const thisLoadId = ++currentLoadId;
     const trackIdToLoad = currentTrack.id;
 
     const loadTrack = async () => {
@@ -654,7 +667,7 @@ export function useAudioEngine() {
 
       const { url, isOffline } = await getTrackUrl(trackIdToLoad);
 
-      if (loadIdRef.current !== currentLoadId) {
+      if (currentLoadId !== thisLoadId) {
         if (isOffline) revokeOfflineTrackUrl(url);
         return;
       }
@@ -666,15 +679,16 @@ export function useAudioEngine() {
         currentElement.load();
 
         const transitionTimeout = setTimeout(() => {
-          if (loadIdRef.current === currentLoadId && queueTransitionRef.current) {
-            queueTransitionRef.current = false;
+          if (currentLoadId === thisLoadId && queueTransition) {
+            queueTransition = false;
           }
         }, 10000);
 
         const playWhenReady = () => {
-          if (loadIdRef.current !== currentLoadId) return;
+          if (currentLoadId !== thisLoadId) return;
           clearTimeout(transitionTimeout);
-          queueTransitionRef.current = false;
+          queueTransition = false;
+          setIsLoadingAudio(false); // Audio is ready, hide spinner
 
           const shouldPlay = usePlayerStore.getState().isPlaying;
           if (shouldPlay) {
@@ -686,16 +700,17 @@ export function useAudioEngine() {
         };
 
         const handleMetadata = () => {
-          if (loadIdRef.current !== currentLoadId) return;
+          if (currentLoadId !== thisLoadId) return;
           setDuration(currentElement.duration);
-          loadedTrackIdRef.current = trackIdToLoad;
+          loadedTrackId = trackIdToLoad;
           currentElement.removeEventListener('loadedmetadata', handleMetadata);
         };
 
         const handleLoadError = () => {
-          if (loadIdRef.current !== currentLoadId) return;
+          if (currentLoadId !== thisLoadId) return;
           clearTimeout(transitionTimeout);
-          queueTransitionRef.current = false;
+          queueTransition = false;
+          setIsLoadingAudio(false); // Clear loading state on error
           currentElement.removeEventListener('error', handleLoadError);
         };
 
@@ -705,7 +720,7 @@ export function useAudioEngine() {
 
         // iOS PWA load timeout detection - detect hung loads that never fire events
         const loadTimeout = setTimeout(() => {
-          if (loadIdRef.current === currentLoadId && currentElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
+          if (currentLoadId === thisLoadId && currentElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
             console.error('[Audio] Load timeout - iOS PWA may have suspended network');
             window.dispatchEvent(
               new CustomEvent('audio-load-timeout', {
@@ -727,13 +742,11 @@ export function useAudioEngine() {
           { once: true }
         );
       }
-
-      isLoadingRef.current = false;
     };
 
     loadTrack();
     updateMediaSession();
-  }, [currentTrack?.id, setDuration, updateMediaSession]);
+  }, [currentTrack?.id, setDuration, updateMediaSession, setIsLoadingAudio]);
 
   // --------------------------------------------------------------------------
   // Play/pause
