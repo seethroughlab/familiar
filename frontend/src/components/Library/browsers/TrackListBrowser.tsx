@@ -799,6 +799,8 @@ export function TrackListBrowser({
   // Track the current track ID we're scrolling to, for cancellation
   const scrollTargetRef = useRef<string | null>(null);
   const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track the previous track ID to avoid re-scrolling on filter/data changes
+  const prevTrackIdRef = useRef<string | null>(null);
 
   // Auto-scroll to current track when it changes (desktop only)
   useEffect(() => {
@@ -807,12 +809,20 @@ export function TrackListBrowser({
       return;
     }
 
-    // Skip auto-scroll if user recently navigated (e.g., clicked alphabet bar)
-    if (userNavigatedRef.current) {
+    const trackId = currentTrack.id;
+
+    // Only scroll if track actually changed (not just re-render from filter/data changes)
+    if (trackId === prevTrackIdRef.current) {
       return;
     }
 
-    const trackId = currentTrack.id;
+    // Skip auto-scroll if user recently navigated (e.g., clicked alphabet bar)
+    if (userNavigatedRef.current) {
+      prevTrackIdRef.current = trackId; // Still update ref to avoid scrolling later
+      return;
+    }
+
+    prevTrackIdRef.current = trackId;
     scrollTargetRef.current = trackId;
 
     // Clear any pending scroll (handles rapid track skipping)
@@ -822,6 +832,7 @@ export function TrackListBrowser({
 
     const scrollToCurrentTrack = async (targetId: string) => {
       // 1. Try local lookup in sparse array first (preserves true indices)
+      // Read allTracks inside callback to avoid dependency
       let localIndex = -1;
       for (let i = 0; i < allTracks.length; i++) {
         if (allTracks[i]?.id === targetId) {
@@ -836,6 +847,7 @@ export function TrackListBrowser({
       }
 
       // 2. Track not in loaded data - need server lookup
+      // Read filters inside callback to avoid dependency
       try {
         const { index } = await tracksApi.getIndex(targetId, {
           search: filters.search,
@@ -867,7 +879,7 @@ export function TrackListBrowser({
         clearTimeout(scrollDebounceRef.current);
       }
     };
-  }, [currentTrack?.id, virtualizer, filters.search, filters.artist, filters.album, allTracks]);
+  }, [currentTrack?.id, virtualizer]);
 
   // Alphabet bar for quick navigation
   const {

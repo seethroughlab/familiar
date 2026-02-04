@@ -162,6 +162,9 @@ const persistState = () => {
   });
 };
 
+// Maximum prefetch cache size to prevent unbounded memory growth
+const MAX_PREFETCH_CACHE_SIZE = 50;
+
 // Helper to prefetch upcoming tracks in lazy mode
 const prefetchUpcomingTracks = async (
   ids: string[],
@@ -184,6 +187,25 @@ const prefetchUpcomingTracks = async (
       tracks.forEach(track => {
         newPrefetched.set(track.id, track);
       });
+
+      // Evict oldest entries if cache exceeds max size (simple LRU)
+      if (newPrefetched.size > MAX_PREFETCH_CACHE_SIZE) {
+        // Get track IDs that are "near" current position (keep these)
+        const nearbyIds = new Set<string>();
+        for (let i = Math.max(0, currentIndex - 5); i <= Math.min(ids.length - 1, currentIndex + 10); i++) {
+          if (ids[i]) nearbyIds.add(ids[i]);
+        }
+
+        // Remove oldest entries that aren't nearby
+        const entries = Array.from(newPrefetched.entries());
+        for (const [id] of entries) {
+          if (newPrefetched.size <= MAX_PREFETCH_CACHE_SIZE) break;
+          if (!nearbyIds.has(id)) {
+            newPrefetched.delete(id);
+          }
+        }
+      }
+
       return newPrefetched;
     } catch (error) {
       console.error('Failed to prefetch tracks:', error);
@@ -233,9 +255,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   toggleShuffle: async () => {
     const { shuffle, queue, queueIndex, lazyQueueIds, queueSource, currentTrack } = get();
     const newShuffle = !shuffle;
+    const previousShuffle = shuffle;
 
     // Handle lazy queue mode with library source - re-fetch IDs from server
     if (lazyQueueIds && lazyQueueIds.length > 0 && queueSource?.type === 'library') {
+      // Optimistic update - show new shuffle state immediately
       set({ shuffle: newShuffle });
 
       try {
@@ -257,11 +281,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             lazyQueueIndex: newIndex >= 0 ? newIndex : 0,
           });
         }
+        persistState();
       } catch (error) {
         console.error('Failed to refresh lazy queue with new shuffle state:', error);
+        // Rollback shuffle state on failure
+        set({ shuffle: previousShuffle });
       }
 
-      persistState();
       return;
     }
 
@@ -349,6 +375,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
 
       const nextTrackId = lazyQueueIds[nextLazyIndex];
+
+      // Validate that the track ID exists (bounds check)
+      if (!nextTrackId) {
+        console.warn('[Player] Lazy queue index out of bounds:', nextLazyIndex, 'of', lazyQueueIds.length);
+        // Can't recover - stop playback to avoid infinite loop
+        set({ isPlaying: false });
+        return;
+      }
+
       let nextTrack = prefetchedTracks.get(nextTrackId);
 
       // Fetch track if not prefetched

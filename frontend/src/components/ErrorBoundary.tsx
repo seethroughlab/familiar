@@ -89,12 +89,18 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
+interface SilentErrorBoundaryProps {
+  children: ReactNode;
+  /** Optional minimal fallback message (default: shows a small error indicator) */
+  fallbackMessage?: string;
+}
+
 /**
- * Minimal error boundary for inline components (shows nothing on error).
- * Use when you don't want to disrupt the UI.
+ * Minimal error boundary for inline components.
+ * Shows a small fallback UI instead of nothing, so users know something went wrong.
  */
-export class SilentErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode }) {
+export class SilentErrorBoundary extends Component<SilentErrorBoundaryProps, { hasError: boolean }> {
+  constructor(props: SilentErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
@@ -107,9 +113,24 @@ export class SilentErrorBoundary extends Component<{ children: ReactNode }, { ha
     console.error('[SilentErrorBoundary]', error, errorInfo);
   }
 
+  handleRetry = () => {
+    this.setState({ hasError: false });
+  };
+
   render() {
     if (this.state.hasError) {
-      return null;
+      // Show minimal fallback UI instead of nothing
+      return (
+        <div className="text-xs text-zinc-500 p-2 text-center">
+          <span>{this.props.fallbackMessage || 'Something went wrong.'}</span>
+          <button
+            onClick={this.handleRetry}
+            className="ml-2 text-zinc-400 hover:text-white underline"
+          >
+            Retry
+          </button>
+        </div>
+      );
     }
     return this.props.children;
   }

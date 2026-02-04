@@ -22,6 +22,7 @@ from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 # Rate limiting for executor recreation to prevent runaway process spawning
 EXECUTOR_RESET_COOLDOWN = 30.0  # Minimum seconds between executor resets
 EXECUTOR_MAX_CONSECUTIVE_FAILURES = 5  # Max failures before giving up
+EXECUTOR_AUTO_RECOVERY_DELAY = 300.0  # Auto-recover after 5 minutes of being disabled
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class BackgroundManager:
         self._last_executor_reset: float = 0.0
         self._consecutive_executor_failures: int = 0
         self._executor_disabled: bool = False
+        self._executor_disabled_at: float = 0.0  # Timestamp when executor was disabled
         # Track current work for crash diagnostics
         self._current_track_id: str | None = None
         self._crashed_track_ids: set[str] = set()  # Tracks that have caused crashes
@@ -116,9 +118,10 @@ class BackgroundManager:
         self._consecutive_executor_failures += 1
         if self._consecutive_executor_failures >= EXECUTOR_MAX_CONSECUTIVE_FAILURES:
             self._executor_disabled = True
+            self._executor_disabled_at = time.monotonic()
             logger.error(
                 f"Executor disabled after {self._consecutive_executor_failures} consecutive "
-                f"failures - analysis will be unavailable until restart"
+                f"failures - will auto-recover in {EXECUTOR_AUTO_RECOVERY_DELAY}s"
             )
             return False
 
@@ -359,13 +362,13 @@ class BackgroundManager:
             if data:
                 progress = json.loads(data)
                 if progress.get("status") == "running":
-                    # Check if heartbeat is recent
+                    # Check if heartbeat is recent (60 second threshold)
                     heartbeat = progress.get("last_heartbeat")
                     if heartbeat:
                         try:
                             hb_time = datetime.fromisoformat(heartbeat)
                             age = datetime.utcnow() - hb_time
-                            if age < timedelta(minutes=2):
+                            if age < timedelta(seconds=60):
                                 # Recent heartbeat = sync is actively running
                                 return True
                             elif has_lock:
@@ -396,8 +399,34 @@ class BackgroundManager:
         return False
 
     def _acquire_sync_lock(self) -> bool:
-        """Try to acquire the sync lock in Redis. Returns True if acquired."""
+        """Try to acquire the sync lock in Redis. Returns True if acquired.
+
+        If a stale lock exists (no recent heartbeat), it will be cleared first.
+        """
+        from datetime import datetime, timedelta
+
         try:
+            # First, try to clear any stale locks based on heartbeat
+            data: bytes | None = self.redis.get("familiar:sync:progress")  # type: ignore[assignment]
+            if data:
+                try:
+                    progress = json.loads(data)
+                    heartbeat = progress.get("last_heartbeat")
+                    if heartbeat:
+                        hb_time = datetime.fromisoformat(heartbeat)
+                        age = datetime.utcnow() - hb_time
+                        # If heartbeat is older than 60 seconds, consider the lock stale
+                        if age > timedelta(seconds=60):
+                            logger.info(
+                                f"Clearing stale sync lock before acquire "
+                                f"(heartbeat was {age.total_seconds():.0f}s ago)"
+                            )
+                            self.redis.delete("familiar:sync:lock", "familiar:sync:progress")
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    # Invalid progress data, clear it
+                    self.redis.delete("familiar:sync:lock", "familiar:sync:progress")
+
+            # Now try to acquire
             return bool(self.redis.set("familiar:sync:lock", "1", nx=True, ex=7200))  # 2 hour expiry
         except Exception:
             return False
@@ -427,10 +456,34 @@ class BackgroundManager:
         When multiple tasks hit a crash simultaneously, only one will reset the
         executor (others are rate-limited). Rate-limited tasks will retry with
         the newly-reset executor rather than failing immediately.
+
+        If the executor is disabled, it will auto-recover after 5 minutes.
         """
-        # Check if executor is disabled before even trying
+        # Check if executor is disabled - but allow auto-recovery after delay
         if self._executor_disabled:
-            raise RuntimeError("Process pool executor is disabled due to repeated failures")
+            time_since_disabled = time.monotonic() - self._executor_disabled_at
+            if time_since_disabled >= EXECUTOR_AUTO_RECOVERY_DELAY:
+                logger.info(
+                    f"Auto-recovering executor after {time_since_disabled:.0f}s "
+                    f"(threshold: {EXECUTOR_AUTO_RECOVERY_DELAY}s)"
+                )
+                # Reset the circuit breaker
+                self._executor_disabled = False
+                self._consecutive_executor_failures = 0
+                self._executor_disabled_at = 0.0
+                # Old executor is broken, will be recreated on access
+                if self._executor is not None:
+                    try:
+                        self._executor.shutdown(wait=False, cancel_futures=True)
+                    except Exception:
+                        pass
+                    self._executor = None
+            else:
+                remaining = EXECUTOR_AUTO_RECOVERY_DELAY - time_since_disabled
+                raise RuntimeError(
+                    f"Process pool executor is disabled due to repeated failures. "
+                    f"Will auto-recover in {remaining:.0f}s."
+                )
 
         loop = asyncio.get_event_loop()
         retries = 0

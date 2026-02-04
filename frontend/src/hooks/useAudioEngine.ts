@@ -161,6 +161,9 @@ function createAudioElement(): HTMLAudioElement {
   return el;
 }
 
+// Track if we've shown init error (avoid spam)
+let hasShownInitError = false;
+
 function initializeAudioGraph(): boolean {
   try {
     if (useDirectPlayback) {
@@ -229,6 +232,13 @@ function initializeAudioGraph(): boolean {
     return true;
   } catch (e) {
     console.error('Failed to initialize audio graph:', e);
+    // Only show error toast once per session
+    if (!hasShownInitError) {
+      hasShownInitError = true;
+      showError('Audio initialization failed', {
+        description: 'Try refreshing the page. Audio playback may not work correctly.',
+      });
+    }
     return false;
   }
 }
@@ -566,7 +576,13 @@ export function useAudioEngine() {
       const currentElement = getCurrentElement();
       if (target !== currentElement) return;
 
-      console.error('Audio error:', e);
+      // Get the media error code for better diagnostics
+      const mediaError = target.error;
+      const errorCode = mediaError?.code;
+      const isDecodeError = errorCode === MediaError.MEDIA_ERR_DECODE;
+      const isUnsupported = errorCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
+
+      console.error('Audio error:', e, 'code:', errorCode, 'message:', mediaError?.message);
 
       const { currentTrack: track, isPlaying: playing } = usePlayerStore.getState();
       const currentId = track?.id;
@@ -578,6 +594,21 @@ export function useAudioEngine() {
         return;
       }
 
+      // For decode/format errors, skip immediately with a single toast
+      // (no point retrying - the file is corrupted or unsupported)
+      if (isDecodeError || isUnsupported) {
+        showError('Skipped unplayable track', {
+          description: `"${currentTrackTitle || 'Track'}" appears to be corrupted or unsupported.`,
+        });
+        setIsLoadingAudio(false);
+        // Reset error tracking
+        errorCount = 0;
+        lastErrorTrackId = null;
+        playNext();
+        return;
+      }
+
+      // For other errors (network, etc.), retry a few times before skipping
       if (currentId === lastErrorTrackId) {
         errorCount++;
         if (errorCount >= 3) {
@@ -769,7 +800,13 @@ export function useAudioEngine() {
         currentElement.play().catch((err) => {
           if (err.name !== 'AbortError') {
             console.error('Play failed:', err);
-            if (err.name === 'NotAllowedError') setIsPlaying(false);
+            if (err.name === 'NotAllowedError') {
+              setIsPlaying(false);
+              // Notify user about autoplay policy block
+              showError('Playback blocked', {
+                description: 'Click the play button to start playback. Your browser requires user interaction.',
+              });
+            }
           }
         });
       }

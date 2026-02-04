@@ -46,6 +46,56 @@ let currentAbortController: AbortController | null = null;
 // Flag to track if we've restored from IndexedDB
 let hasRestoredFromDB = false;
 
+// Track if we've shown storage full error (avoid spam)
+let hasShownStorageFullError = false;
+
+// Listen for storage-full events from offlineService
+if (typeof window !== 'undefined') {
+  window.addEventListener('offline-storage-full', () => {
+    if (!hasShownStorageFullError) {
+      hasShownStorageFullError = true;
+      showError('Storage full', {
+        description: 'Free up space by removing downloaded tracks in Settings > Downloads.',
+        duration: 10000, // Show longer since this is important
+      });
+      // Reset flag after a minute to allow showing again if user tries again
+      setTimeout(() => {
+        hasShownStorageFullError = false;
+      }, 60000);
+    }
+  });
+}
+
+// Throttled progress update to reduce state updates (max 2/second)
+let lastProgressUpdate = 0;
+let pendingProgressUpdate: { jobId: string; progress: number } | null = null;
+let progressUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+const PROGRESS_UPDATE_INTERVAL = 500; // 500ms = max 2 updates/second
+
+function throttledProgressUpdate(jobId: string, progress: number) {
+  const now = Date.now();
+  const timeSinceLastUpdate = now - lastProgressUpdate;
+
+  if (timeSinceLastUpdate >= PROGRESS_UPDATE_INTERVAL) {
+    // Enough time has passed, update immediately
+    lastProgressUpdate = now;
+    updateJob(jobId, { currentProgress: progress });
+  } else {
+    // Store pending update and schedule it
+    pendingProgressUpdate = { jobId, progress };
+    if (!progressUpdateTimeout) {
+      progressUpdateTimeout = setTimeout(() => {
+        if (pendingProgressUpdate) {
+          lastProgressUpdate = Date.now();
+          updateJob(pendingProgressUpdate.jobId, { currentProgress: pendingProgressUpdate.progress });
+          pendingProgressUpdate = null;
+        }
+        progressUpdateTimeout = null;
+      }, PROGRESS_UPDATE_INTERVAL - timeSinceLastUpdate);
+    }
+  }
+}
+
 /**
  * Persist a job to IndexedDB.
  */
@@ -303,9 +353,8 @@ async function processNextJob() {
     try {
       console.log('[Download] Downloading track', i + 1, 'of', tracksToDownload.length, ':', trackId);
       await offlineService.downloadTrackForOffline(trackId, (progress) => {
-        updateJob(nextJob.id, {
-          currentProgress: progress.percentage,
-        });
+        // Use throttled update to avoid state update storms
+        throttledProgressUpdate(nextJob.id, progress.percentage);
       });
 
       succeeded++;

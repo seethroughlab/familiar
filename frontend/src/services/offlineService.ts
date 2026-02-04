@@ -243,7 +243,36 @@ export async function downloadTrackForOffline(
   };
 
   console.log('[Offline] Storing track in IndexedDB:', trackId, 'size:', blob.size);
-  await db.offlineTracks.put(offlineTrack);
+
+  try {
+    await db.offlineTracks.put(offlineTrack);
+  } catch (error) {
+    // Handle quota exceeded error
+    const isQuotaError =
+      error instanceof DOMException &&
+      (error.name === 'QuotaExceededError' ||
+        error.code === 22 ||
+        // Firefox
+        error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
+
+    if (isQuotaError) {
+      console.error('[Offline] Storage quota exceeded:', trackId);
+      // Dispatch event for UI to show "Storage full" message
+      window.dispatchEvent(
+        new CustomEvent('offline-storage-full', {
+          detail: {
+            trackId,
+            blobSize: blob.size,
+            message: 'Storage is full. Free up space by removing downloaded tracks.',
+          },
+        })
+      );
+      // Also clear partial download since we can't store the full track
+      await clearPartialDownload(trackId);
+      throw new Error('Storage quota exceeded. Free up space by removing downloaded tracks.');
+    }
+    throw error;
+  }
 
   // Clear partial download record on success
   await clearPartialDownload(trackId);

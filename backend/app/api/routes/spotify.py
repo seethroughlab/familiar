@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete
 
 from app.api.deps import CurrentProfile, DbSession, RequiredProfile
+from app.api.exceptions import sanitize_error_for_client
 from app.db.models import SpotifyFavorite, SpotifyProfile
 from app.services.spotify import SpotifyPlaylistService, SpotifyService, SpotifySyncService
 from app.services.tasks import get_spotify_sync_progress
@@ -465,7 +466,7 @@ async def list_spotify_playlists(
         playlists = await service.list_playlists(profile.id, limit=limit)
         return [SpotifyPlaylistInfo(**p) for p in playlists]
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Invalid playlist request"))
     except Exception as e:
         logger.error(f"Error listing Spotify playlists: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch playlists")
@@ -504,7 +505,7 @@ async def get_spotify_playlist_tracks(
             match_rate=result["match_rate"],
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Invalid playlist request"))
     except Exception as e:
         logger.error(f"Error getting Spotify playlist tracks: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch playlist tracks")
@@ -558,7 +559,7 @@ async def import_spotify_playlist(
             track_count=track_count,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Invalid import request"))
     except Exception as e:
         logger.error(f"Error importing Spotify playlist: {e}")
         raise HTTPException(status_code=500, detail="Failed to import playlist")

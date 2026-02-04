@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import sanitize_error_for_client
 from app.db.models import Track
 from app.services.smart_playlists import SmartPlaylistService
 
@@ -149,7 +150,7 @@ async def create_smart_playlist(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=sanitize_error_for_client(e, "Invalid smart playlist configuration"),
         )
 
     return playlist_to_response(playlist)
@@ -200,7 +201,7 @@ async def update_smart_playlist(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=sanitize_error_for_client(e, "Invalid smart playlist configuration"),
         )
 
     return playlist_to_response(playlist)

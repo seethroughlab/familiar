@@ -78,7 +78,9 @@ export function DownloadIndicator() {
 
   // Restore download queue from IndexedDB on mount
   useEffect(() => {
-    restoreDownloadQueue();
+    restoreDownloadQueue().catch((error) => {
+      console.error('[Download] Failed to restore queue:', error);
+    });
   }, []);
 
   // Check if we're on iOS and should show the warning

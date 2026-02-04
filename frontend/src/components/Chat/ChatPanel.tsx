@@ -8,6 +8,7 @@ import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { getOrCreateDeviceProfile } from '../../services/profileService';
 import * as chatService from '../../services/chatService';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
+import { notifyError } from '../../utils/errorNotifications';
 import type { ChatSession, ChatToolCall } from '../../db';
 
 interface Track {
@@ -42,28 +43,46 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
   // Load profile and sessions on mount
   useEffect(() => {
     const init = async () => {
-      const profile = await getOrCreateDeviceProfile();
-      setProfileId(profile);
+      try {
+        const profile = await getOrCreateDeviceProfile();
+        setProfileId(profile);
 
-      if (profile) {
-        const allSessions = await chatService.listSessions(profile);
-        setSessions(allSessions);
+        if (profile) {
+          const allSessions = await chatService.listSessions(profile);
+          setSessions(allSessions);
 
-        // Load most recent session or create new one
-        if (allSessions.length > 0) {
-          setCurrentSession(allSessions[0]);
+          // Load most recent session or create new one
+          if (allSessions.length > 0) {
+            setCurrentSession(allSessions[0]);
+          }
         }
+      } catch (error) {
+        console.error('Failed to initialize chat:', error);
+        notifyError(error, { operation: 'initialize chat' });
       }
     };
     init();
   }, []);
 
   // Check LLM configuration status on mount
+  // Track network vs config errors separately
+  const [llmError, setLlmError] = useState<'network' | null>(null);
   useEffect(() => {
     fetch('/api/v1/chat/status')
-      .then((r) => r.json())
-      .then(setLlmStatus)
-      .catch(() => setLlmStatus({ configured: false, provider: 'unknown' }));
+      .then((r) => {
+        if (!r.ok) throw new Error('Failed to check LLM status');
+        return r.json();
+      })
+      .then((status) => {
+        setLlmStatus(status);
+        setLlmError(null);
+      })
+      .catch((error) => {
+        console.error('Failed to check LLM status:', error);
+        // Distinguish network errors from config errors
+        setLlmError('network');
+        setLlmStatus(null);
+      });
   }, []);
 
   const scrollToBottom = () => {
@@ -472,8 +491,21 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
             </div>
           )}
 
+          {/* LLM network error warning */}
+          {llmError === 'network' && !isOffline && (
+            <div className="p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-red-400">Connection error</p>
+                <p className="text-xs text-zinc-500 mt-1">
+                  Could not connect to the server. Check your network connection and try refreshing.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* LLM configuration warning */}
-          {llmStatus && !llmStatus.configured && !isOffline && (
+          {llmStatus && !llmStatus.configured && !isOffline && !llmError && (
             <div className="p-3 bg-amber-900/20 border border-amber-800 rounded-lg flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
               <div>

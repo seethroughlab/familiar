@@ -48,6 +48,9 @@ export function GuestListener() {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const userIdRef = useRef<string | null>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const maxReconnectAttempts = 10;
 
   // Get WebSocket URL
   const getWsUrl = useCallback(() => {
@@ -142,6 +145,10 @@ export function GuestListener() {
 
   // Cleanup connections
   const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
@@ -155,6 +162,7 @@ export function GuestListener() {
       wsRef.current = null;
     }
     setIsReceivingAudio(false);
+    reconnectAttemptsRef.current = 0;
   }, []);
 
   // Handle WebSocket messages
@@ -170,6 +178,8 @@ export function GuestListener() {
         }
         setError(null);
         setIsConnecting(false);
+        // Reset reconnect attempts on successful connection
+        reconnectAttemptsRef.current = 0;
 
         // Request WebRTC stream
         setTimeout(() => {
@@ -247,7 +257,21 @@ export function GuestListener() {
 
     ws.onclose = () => {
       if (session) {
-        setError('Connection lost');
+        reconnectAttemptsRef.current += 1;
+
+        if (reconnectAttemptsRef.current > maxReconnectAttempts) {
+          setError('Connection lost. Please try rejoining the session.');
+          return;
+        }
+
+        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, max 60s
+        const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current - 1), 60000);
+        console.log(`[Guest] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+        setError(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...`);
+
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          joinSession();
+        }, delay);
       }
     };
 

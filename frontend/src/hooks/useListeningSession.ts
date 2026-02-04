@@ -53,6 +53,8 @@ export function useListeningSession({ userId, username }: UseListeningSessionOpt
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const reconnectAttemptsRef = useRef<number>(0);
+  const maxReconnectAttempts = 10;
 
   const { setIsPlaying, currentTrack, isPlaying, currentTime } = usePlayerStore();
   const audioEngine = useAudioEngine();
@@ -198,6 +200,8 @@ export function useListeningSession({ userId, username }: UseListeningSessionOpt
     ws.onopen = () => {
       setIsConnecting(false);
       setError(null);
+      // Reset reconnect attempts on successful connection
+      reconnectAttemptsRef.current = 0;
     };
 
     ws.onmessage = handleMessage;
@@ -211,11 +215,22 @@ export function useListeningSession({ userId, username }: UseListeningSessionOpt
       setIsConnecting(false);
       wsRef.current = null;
 
-      // Auto-reconnect if in session
+      // Auto-reconnect if in session with exponential backoff
       if (session) {
+        reconnectAttemptsRef.current += 1;
+
+        if (reconnectAttemptsRef.current > maxReconnectAttempts) {
+          setError('Connection lost. Please try rejoining the session.');
+          return;
+        }
+
+        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, max 60s
+        const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current - 1), 60000);
+        console.log(`[Session] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+
         reconnectTimeoutRef.current = window.setTimeout(() => {
           connect();
-        }, 3000);
+        }, delay);
       }
     };
 

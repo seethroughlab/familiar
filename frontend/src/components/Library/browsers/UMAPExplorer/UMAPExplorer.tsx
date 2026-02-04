@@ -270,23 +270,36 @@ function use3DMapStream() {
     });
 
     eventSource.addEventListener('error', (event) => {
-      // Check if this is a custom error event or connection error
+      // Check if this is a custom error event with data or a connection error
       if (event instanceof MessageEvent && event.data) {
+        // Server sent an error event with data
         try {
           const errorData = JSON.parse(event.data);
-          setError(errorData.error || 'Unknown error');
+          setError(errorData.error || 'Failed to load 3D map');
         } catch {
-          setError('Connection error');
+          setError('Failed to load 3D map');
         }
         setIsLoading(false);
-      } else {
-        // Connection closed - only an error if we didn't receive data
+        eventSource.close();
+      } else if (eventSource.readyState === EventSource.CLOSED) {
+        // Connection was closed - only an error if we didn't receive data
         if (!receivedDataRef.current) {
-          setError('Connection error');
+          setError('Connection lost. Please refresh to try again.');
           setIsLoading(false);
         }
+        eventSource.close();
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        // Still trying to connect - EventSource will auto-retry
+        // Don't set error yet, let it retry
+        console.warn('3D map SSE connection interrupted, retrying...');
+      } else {
+        // Unknown error state
+        if (!receivedDataRef.current) {
+          setError('Connection error. Please refresh to try again.');
+          setIsLoading(false);
+        }
+        eventSource.close();
       }
-      eventSource.close();
     });
 
     return () => {

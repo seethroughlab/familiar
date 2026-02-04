@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import sanitize_error_for_client
 from app.db.models import ExternalTrack, ExternalTrackSource
 from app.services.external_track_matcher import ExternalTrackMatcher
 
@@ -229,7 +230,7 @@ async def manual_match(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
+            detail=sanitize_error_for_client(e, "Track not found"),
         )
 
     if not external_track:

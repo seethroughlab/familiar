@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import sanitize_error_for_client
 from app.services.export_import import ExportImportService, ImportService
 
 logger = logging.getLogger(__name__)
@@ -232,7 +233,7 @@ async def execute_import(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail=sanitize_error_for_client(e, "Invalid import request"),
         )
     except Exception as e:
         logger.error(f"Import failed: {e}")
