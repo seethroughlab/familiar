@@ -52,7 +52,11 @@ class TestLLMServiceInit:
         LLMService()
 
         mock_settings_instance.get_effective.assert_called_once_with("anthropic_api_key")
-        mock_anthropic.assert_called_once_with(api_key="sk-test-key")
+        mock_anthropic.assert_called_once()
+        call_kwargs = mock_anthropic.call_args.kwargs
+        assert call_kwargs["api_key"] == "sk-test-key"
+        # Should also have timeout configured
+        assert "timeout" in call_kwargs
 
     @patch("app.services.llm.service.get_app_settings_service")
     @patch("app.services.llm.service.anthropic.Anthropic")
@@ -64,7 +68,9 @@ class TestLLMServiceInit:
 
         LLMService()
 
-        mock_anthropic.assert_called_once_with(api_key=None)
+        mock_anthropic.assert_called_once()
+        call_kwargs = mock_anthropic.call_args.kwargs
+        assert call_kwargs["api_key"] is None
 
 
 class TestLLMServiceChat:
