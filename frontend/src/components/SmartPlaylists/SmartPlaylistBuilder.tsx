@@ -25,6 +25,7 @@ const OPERATOR_LABELS: Record<string, string> = {
   is_empty: 'is empty',
   is_not_empty: 'is not empty',
   within_days: 'within last',
+  not_within_days: 'not within last',
 };
 
 export function SmartPlaylistBuilder({ playlist, onClose, onSaved }: Props) {
@@ -90,6 +91,9 @@ export function SmartPlaylistBuilder({ playlist, onClose, onSaved }: Props) {
     const analysisField = fields?.analysis_fields.find(f => f.name === fieldName);
     if (analysisField) return analysisField.type;
 
+    const playHistoryField = fields?.play_history_fields?.find(f => f.name === fieldName);
+    if (playHistoryField) return playHistoryField.type;
+
     return 'string';
   };
 
@@ -111,6 +115,7 @@ export function SmartPlaylistBuilder({ playlist, onClose, onSaved }: Props) {
   const allFields = [
     ...(fields?.track_fields || []),
     ...(fields?.analysis_fields || []),
+    ...(fields?.play_history_fields || []),
   ];
 
   return (
@@ -276,6 +281,8 @@ interface RuleRowProps {
 function RuleRow({ rule, fields, operators, fieldType, onFieldChange, onChange, onRemove }: RuleRowProps) {
   const needsValue = !['is_empty', 'is_not_empty'].includes(rule.operator);
   const isBetween = rule.operator === 'between';
+  const isBoolean = fieldType === 'boolean';
+  const isDateWithDays = ['within_days', 'not_within_days'].includes(rule.operator);
 
   return (
     <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded-md">
@@ -305,16 +312,29 @@ function RuleRow({ rule, fields, operators, fieldType, onFieldChange, onChange, 
         ))}
       </select>
 
+      {/* Boolean value dropdown */}
+      {needsValue && isBoolean && (
+        <select
+          value={rule.value === true ? 'true' : 'false'}
+          onChange={(e) => onChange({ value: e.target.value === 'true' })}
+          className="w-24 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <option value="true">Yes</option>
+          <option value="false">No</option>
+        </select>
+      )}
+
       {/* Value input */}
-      {needsValue && !isBetween && (
+      {needsValue && !isBetween && !isBoolean && (
         <input
-          type={fieldType === 'number' ? 'number' : 'text'}
+          type={fieldType === 'number' || isDateWithDays ? 'number' : 'text'}
           value={rule.value as string || ''}
           onChange={(e) => onChange({
-            value: fieldType === 'number' ? parseFloat(e.target.value) || '' : e.target.value
+            value: fieldType === 'number' || isDateWithDays ? parseFloat(e.target.value) || '' : e.target.value
           })}
           placeholder="value"
-          step={fieldType === 'number' ? 0.1 : undefined}
+          step={fieldType === 'number' ? 0.1 : 1}
+          min={isDateWithDays ? 1 : undefined}
           className="flex-1 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500"
         />
       )}
@@ -348,8 +368,8 @@ function RuleRow({ rule, fields, operators, fieldType, onFieldChange, onChange, 
         </>
       )}
 
-      {/* Days suffix for within_days */}
-      {rule.operator === 'within_days' && (
+      {/* Days suffix for within_days and not_within_days */}
+      {isDateWithDays && (
         <span className="text-zinc-500 text-sm">days</span>
       )}
 

@@ -298,10 +298,17 @@ async def get_available_fields() -> dict[str, Any]:
             {"name": "instrumentalness", "type": "number", "description": "Instrumental vs vocal", "range": [0, 1]},
             {"name": "speechiness", "type": "number", "description": "Presence of spoken words", "range": [0, 1]},
         ],
+        "play_history_fields": [
+            {"name": "last_played_at", "type": "date", "description": "Last played"},
+            {"name": "play_count", "type": "number", "description": "Play count"},
+            {"name": "total_play_seconds", "type": "number", "description": "Total play time (seconds)"},
+            {"name": "never_played", "type": "boolean", "description": "Never played"},
+        ],
         "operators": {
             "string": ["equals", "not_equals", "contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"],
             "number": ["equals", "not_equals", "greater_than", "less_than", "greater_or_equal", "less_or_equal", "between"],
-            "date": ["within_days"],
+            "date": ["within_days", "not_within_days", "is_empty", "is_not_empty"],
+            "boolean": ["equals"],
             "list": ["in", "not_in"],
         },
     }

@@ -7,7 +7,7 @@ from uuid import UUID
 from sqlalchemy import Float, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import SmartPlaylist, Track, TrackAnalysis
+from app.db.models import ProfilePlayHistory, SmartPlaylist, Track, TrackAnalysis
 
 # Fields that exist directly on the Track model
 TRACK_FIELDS = {
@@ -17,13 +17,24 @@ TRACK_FIELDS = {
 }
 
 # Date/timestamp fields that need special handling
-DATE_FIELDS = {"created_at"}
+DATE_FIELDS = {"created_at", "last_played_at"}
 
 # String fields that support ILIKE operations
 STRING_FIELDS = {"title", "artist", "album", "album_artist", "genre", "format", "album_type"}
 
 # Numeric fields
-NUMERIC_FIELDS = {"year", "track_number", "disc_number", "duration_seconds"}
+NUMERIC_FIELDS = {"year", "track_number", "disc_number", "duration_seconds", "play_count", "total_play_seconds"}
+
+# Fields from ProfilePlayHistory (profile-scoped play history)
+PLAY_HISTORY_FIELDS = {
+    "last_played_at",      # datetime - when track was last played
+    "play_count",          # int - number of times played
+    "total_play_seconds",  # float - cumulative play time
+    "never_played",        # boolean - tracks with no play history
+}
+
+# Boolean fields
+BOOLEAN_FIELDS = {"never_played"}
 
 # Fields that exist in TrackAnalysis.features JSONB
 ANALYSIS_FIELDS = {
@@ -40,6 +51,7 @@ OPERATORS = {
     "between", "in", "not_in",
     "is_empty", "is_not_empty",
     "within_days",  # For date fields
+    "not_within_days",  # For date fields - not played in last N days
 }
 
 
@@ -136,7 +148,7 @@ class SmartPlaylistService:
         offset: int = 0,
     ) -> list[Track]:
         """Get tracks matching the smart playlist rules."""
-        query = self._build_query(playlist)
+        query = self._build_query(playlist, playlist.profile_id)
 
         # Apply ordering
         order_column = self._get_order_column(playlist.order_by)
@@ -160,7 +172,7 @@ class SmartPlaylistService:
 
     async def get_track_count(self, playlist: SmartPlaylist) -> int:
         """Get the count of tracks matching the rules."""
-        query = self._build_query(playlist)
+        query = self._build_query(playlist, playlist.profile_id)
         count_query = select(func.count()).select_from(query.subquery())
         result = await self.db.execute(count_query)
         return result.scalar() or 0
@@ -176,7 +188,9 @@ class SmartPlaylistService:
 
     def _validate_rules(self, rules: list[dict[str, Any]]) -> None:
         """Validate rule structure."""
+        all_valid_fields = TRACK_FIELDS | ANALYSIS_FIELDS | PLAY_HISTORY_FIELDS
         string_operators = {"contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"}
+        date_operators = {"within_days", "not_within_days", "is_empty", "is_not_empty"}
 
         for rule in rules:
             if "field" not in rule:
@@ -188,7 +202,7 @@ class SmartPlaylistService:
             operator = rule["operator"]
 
             # Validate field
-            if field not in TRACK_FIELDS and field not in ANALYSIS_FIELDS:
+            if field not in all_valid_fields:
                 raise ValueError(f"Unknown field: {field}")
 
             # Validate operator
@@ -196,8 +210,12 @@ class SmartPlaylistService:
                 raise ValueError(f"Unknown operator: {operator}")
 
             # Validate operator/field type compatibility
-            if field in DATE_FIELDS and operator != "within_days":
-                raise ValueError(f"Field '{field}' only supports 'within_days' operator, got '{operator}'")
+            if field in DATE_FIELDS and operator not in date_operators:
+                raise ValueError(f"Field '{field}' only supports date operators, got '{operator}'")
+
+            # Boolean fields only support equals
+            if field in BOOLEAN_FIELDS and operator != "equals":
+                raise ValueError(f"Field '{field}' only supports 'equals' operator, got '{operator}'")
 
             if operator in string_operators and field not in STRING_FIELDS and field not in {"key"}:
                 # 'key' is a string field in ANALYSIS_FIELDS
@@ -208,13 +226,18 @@ class SmartPlaylistService:
             if operator not in ("is_empty", "is_not_empty") and "value" not in rule:
                 raise ValueError(f"Rule with operator '{operator}' requires 'value'")
 
-    def _build_query(self, playlist: SmartPlaylist) -> Any:
+    def _build_query(self, playlist: SmartPlaylist, profile_id: UUID) -> Any:
         """Build SQLAlchemy query from playlist rules."""
         # Start with base query
         # Join with latest analysis for feature queries
         needs_analysis = any(
             rule["field"] in ANALYSIS_FIELDS for rule in playlist.rules
         )
+        needs_play_history = any(
+            rule["field"] in PLAY_HISTORY_FIELDS for rule in playlist.rules
+        )
+
+        query = select(Track)
 
         if needs_analysis:
             # Subquery to get latest analysis per track
@@ -228,7 +251,7 @@ class SmartPlaylistService:
             )
 
             query = (
-                select(Track)
+                query
                 .join(
                     latest_analysis,
                     Track.id == latest_analysis.c.track_id,
@@ -241,13 +264,22 @@ class SmartPlaylistService:
                     ),
                 )
             )
-        else:
-            query = select(Track)
+
+        if needs_play_history:
+            # Left join with ProfilePlayHistory for the current profile
+            # Left join ensures tracks with no play history are included
+            query = query.outerjoin(
+                ProfilePlayHistory,
+                and_(
+                    Track.id == ProfilePlayHistory.track_id,
+                    ProfilePlayHistory.profile_id == profile_id,
+                ),
+            )
 
         # Build conditions from rules
         conditions = []
         for rule in playlist.rules:
-            condition = self._build_condition(rule, needs_analysis)
+            condition = self._build_condition(rule, needs_analysis, needs_play_history)
             if condition is not None:
                 conditions.append(condition)
 
@@ -260,11 +292,18 @@ class SmartPlaylistService:
 
         return query
 
-    def _build_condition(self, rule: dict[str, Any], has_analysis_join: bool) -> Any:
+    def _build_condition(self, rule: dict[str, Any], has_analysis_join: bool, has_play_history_join: bool = False) -> Any:
         """Build a single condition from a rule."""
         field = rule["field"]
         operator = rule["operator"]
         value = rule.get("value")
+
+        # Handle special "never_played" boolean field
+        if field == "never_played":
+            if value:  # never_played = true -> tracks with no play history
+                return ProfilePlayHistory.track_id.is_(None)
+            else:  # never_played = false -> tracks that have been played
+                return ProfilePlayHistory.track_id.isnot(None)
 
         # Get the column or JSONB path
         if field in TRACK_FIELDS:
@@ -272,6 +311,12 @@ class SmartPlaylistService:
         elif field in ANALYSIS_FIELDS and has_analysis_join:
             # Access JSONB field
             column = cast(TrackAnalysis.features[field].astext, Float)
+        elif field in PLAY_HISTORY_FIELDS and has_play_history_join:
+            # Play history fields - treat NULL as 0 for numeric comparisons
+            if field in ("play_count", "total_play_seconds"):
+                column = func.coalesce(getattr(ProfilePlayHistory, field), 0)
+            else:
+                column = getattr(ProfilePlayHistory, field)
         else:
             return None
 
@@ -281,8 +326,9 @@ class SmartPlaylistService:
             # Can't use string operators on non-string fields (dates, numbers)
             return None
 
-        # Date fields only support within_days
-        if field in DATE_FIELDS and operator != "within_days":
+        # Date fields only support date operators
+        date_operators = {"within_days", "not_within_days", "is_empty", "is_not_empty"}
+        if field in DATE_FIELDS and operator not in date_operators:
             return None
 
         # Build condition based on operator
@@ -319,8 +365,14 @@ class SmartPlaylistService:
                 return ~column.in_(value)
             return None
         elif operator == "is_empty":
+            # For play history date fields, NULL means never played
+            if field == "last_played_at":
+                return column.is_(None)
             return or_(column.is_(None), column == "")
         elif operator == "is_not_empty":
+            # For play history date fields, NOT NULL means has been played
+            if field == "last_played_at":
+                return column.isnot(None)
             return and_(column.isnot(None), column != "")
         elif operator == "within_days":
             # Value can come as string or int from JSON
@@ -329,6 +381,17 @@ class SmartPlaylistService:
                 if days is not None:
                     cutoff = datetime.utcnow() - timedelta(days=days)
                     return column >= cutoff
+            except (ValueError, TypeError):
+                pass
+            return None
+        elif operator == "not_within_days":
+            # Tracks NOT played in the last N days (includes never played)
+            try:
+                days = int(value) if value is not None else None
+                if days is not None:
+                    cutoff = datetime.utcnow() - timedelta(days=days)
+                    # Either never played (NULL) or played before the cutoff
+                    return or_(column.is_(None), column < cutoff)
             except (ValueError, TypeError):
                 pass
             return None
@@ -341,6 +404,11 @@ class SmartPlaylistService:
             return getattr(Track, order_by)
         elif order_by in ANALYSIS_FIELDS:
             return cast(TrackAnalysis.features[order_by].astext, Float)
+        elif order_by in ("play_count", "total_play_seconds", "last_played_at"):
+            # Play history fields - use coalesce for numeric to sort NULLs as 0
+            if order_by in ("play_count", "total_play_seconds"):
+                return func.coalesce(getattr(ProfilePlayHistory, order_by), 0)
+            return getattr(ProfilePlayHistory, order_by)
         else:
             return Track.title  # Default
 

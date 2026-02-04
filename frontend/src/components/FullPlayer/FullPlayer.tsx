@@ -30,6 +30,7 @@ import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
+import { useFavorites } from '../../hooks/useFavorites';
 import type { Track } from '../../types';
 
 type ViewMode = 'visualizer' | 'video' | 'lyrics' | 'discover';
@@ -177,6 +178,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   const {
     currentTrack,
     isPlaying,
+    isLoadingAudio,
     currentTime,
     duration,
     volume,
@@ -191,6 +193,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
 
   const { seek, togglePlayPause } = useAudioEngine();
   const { addToQueue, setQueue } = usePlayerStore();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   // Prefetch artwork for the current track
   const prefetchArtwork = useArtworkPrefetch();
@@ -422,14 +425,16 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
         {/* Progress bar */}
         <div className="mb-6">
           <div
-            className="h-1.5 bg-zinc-700 rounded-full cursor-pointer group"
+            className="py-3 cursor-pointer group"
             onClick={handleSeek}
           >
-            <div
-              className="h-full bg-white rounded-full relative group-hover:bg-green-500 transition-colors"
-              style={{ width: `${progress}%` }}
-            >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg" />
+            <div className="h-1.5 bg-zinc-700 rounded-full">
+              <div
+                className="h-full bg-white rounded-full relative group-hover:bg-green-500 transition-colors"
+                style={{ width: `${progress}%` }}
+              >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg" />
+              </div>
             </div>
           </div>
           <div className="flex justify-between text-sm text-zinc-400 mt-2">
@@ -462,9 +467,11 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           <button
             onClick={togglePlayPause}
             className="p-5 bg-white text-black rounded-full hover:scale-105 transition-transform shadow-lg"
-            aria-label={isPlaying ? 'Pause' : 'Play'}
+            aria-label={isLoadingAudio ? 'Loading' : isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? (
+            {isLoadingAudio ? (
+              <Loader2 className="w-8 h-8 animate-spin" />
+            ) : isPlaying ? (
               <Pause className="w-8 h-8" fill="currentColor" />
             ) : (
               <Play className="w-8 h-8" fill="currentColor" />
@@ -562,6 +569,12 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           onEditMetadata={() => {
             if (contextMenu.track) {
               useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
+            }
+          }}
+          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
+          onToggleFavorite={() => {
+            if (contextMenu.track) {
+              toggleFavorite(contextMenu.track.id);
             }
           }}
         />

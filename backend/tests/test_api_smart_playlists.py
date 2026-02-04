@@ -196,6 +196,7 @@ class TestAvailableFields:
         assert "string" in operators
         assert "number" in operators
         assert "date" in operators
+        assert "boolean" in operators
 
         # String operators
         assert "contains" in operators["string"]
@@ -206,6 +207,43 @@ class TestAvailableFields:
         assert "greater_than" in operators["number"]
         assert "less_than" in operators["number"]
         assert "between" in operators["number"]
+
+        # Date operators
+        assert "within_days" in operators["date"]
+        assert "not_within_days" in operators["date"]
+
+        # Boolean operators
+        assert "equals" in operators["boolean"]
+
+    def test_play_history_fields_structure(self, client: TestClient) -> None:
+        """Test that play history fields have expected structure."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        assert "play_history_fields" in data
+
+        for field in data["play_history_fields"]:
+            assert "name" in field
+            assert "type" in field
+            assert "description" in field
+
+        # Check specific expected fields
+        field_names = {f["name"] for f in data["play_history_fields"]}
+        assert "last_played_at" in field_names
+        assert "play_count" in field_names
+        assert "total_play_seconds" in field_names
+        assert "never_played" in field_names
+
+    def test_play_history_field_types(self, client: TestClient) -> None:
+        """Test that play history fields have correct types."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        field_types = {f["name"]: f["type"] for f in data["play_history_fields"]}
+        assert field_types["last_played_at"] == "date"
+        assert field_types["play_count"] == "number"
+        assert field_types["total_play_seconds"] == "number"
+        assert field_types["never_played"] == "boolean"
 
     def test_analysis_fields_have_ranges(self, client: TestClient) -> None:
         """Test that numeric analysis fields have range hints."""

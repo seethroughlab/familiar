@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 export interface ColumnConfig {
   id: string;
   visible: boolean;
+  width?: number | null;  // null = default width from columnDefinitions, number = custom pixels
 }
 
 // Default column configuration (order matters)
@@ -28,6 +29,8 @@ interface ColumnState {
   columns: ColumnConfig[];
   toggleColumn: (id: string) => void;
   reorderColumns: (fromIndex: number, toIndex: number) => void;
+  setColumnWidth: (id: string, width: number) => void;
+  resetColumnWidth: (id: string) => void;
   resetToDefaults: () => void;
 }
 
@@ -53,8 +56,25 @@ export const useColumnStore = create<ColumnState>()(
         });
       },
 
+      setColumnWidth: (id: string, width: number) => {
+        set((state) => ({
+          columns: state.columns.map((col) =>
+            col.id === id ? { ...col, width } : col
+          ),
+        }));
+      },
+
+      resetColumnWidth: (id: string) => {
+        set((state) => ({
+          columns: state.columns.map((col) =>
+            col.id === id ? { ...col, width: null } : col
+          ),
+        }));
+      },
+
       resetToDefaults: () => {
-        set({ columns: DEFAULT_COLUMNS });
+        // Reset to defaults including clearing all custom widths
+        set({ columns: DEFAULT_COLUMNS.map(col => ({ ...col, width: null })) });
       },
     }),
     {

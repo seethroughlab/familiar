@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Maximize2, Shuffle, Repeat } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Maximize2, Shuffle, Repeat, Loader2 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
@@ -9,6 +9,7 @@ import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
+import { useFavorites } from '../../hooks/useFavorites';
 
 interface PlayerBarProps {
   onExpandClick?: () => void;
@@ -57,6 +58,7 @@ export function PlayerBar({
   const {
     currentTrack,
     isPlaying,
+    isLoadingAudio,
     currentTime,
     duration,
     volume,
@@ -72,6 +74,7 @@ export function PlayerBar({
 
   const { seek, togglePlayPause } = useAudioEngine();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   // Prefetch artwork for the current track
   const prefetchArtwork = useArtworkPrefetch();
@@ -141,9 +144,11 @@ export function PlayerBar({
             data-testid="play-pause-mobile"
             onClick={togglePlayPause}
             className="p-3 bg-white text-black rounded-full flex-shrink-0"
-            aria-label={isPlaying ? 'Pause' : 'Play'}
+            aria-label={isLoadingAudio ? 'Loading' : isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? (
+            {isLoadingAudio ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : isPlaying ? (
               <Pause className="w-5 h-5" fill="currentColor" />
             ) : (
               <Play className="w-5 h-5" fill="currentColor" />
@@ -154,13 +159,15 @@ export function PlayerBar({
         <div className="px-4 pb-2">
           <div
             data-testid="progress-bar-mobile"
-            className="h-1 bg-zinc-700 rounded-full cursor-pointer"
+            className="py-2 cursor-pointer"
             onClick={handleSeek}
           >
-            <div
-              className="h-full bg-white rounded-full"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="h-1 bg-zinc-700 rounded-full">
+              <div
+                className="h-full bg-white rounded-full"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -207,9 +214,11 @@ export function PlayerBar({
               data-testid="play-pause"
               onClick={togglePlayPause}
               className="p-3 bg-white text-black rounded-full hover:scale-105 transition-transform"
-              aria-label={isPlaying ? 'Pause' : 'Play'}
+              aria-label={isLoadingAudio ? 'Loading' : isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying ? (
+              {isLoadingAudio ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : isPlaying ? (
                 <Pause className="w-5 h-5" fill="currentColor" />
               ) : (
                 <Play className="w-5 h-5" fill="currentColor" />
@@ -245,14 +254,16 @@ export function PlayerBar({
             </span>
             <div
               data-testid="progress-bar"
-              className="flex-1 h-1 bg-zinc-700 rounded-full cursor-pointer group"
+              className="flex-1 py-2 cursor-pointer group"
               onClick={handleSeek}
             >
-              <div
-                className="h-full bg-white rounded-full relative group-hover:bg-green-500 transition-colors"
-                style={{ width: `${progress}%` }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="h-1 bg-zinc-700 rounded-full">
+                <div
+                  className="h-full bg-white rounded-full relative group-hover:bg-green-500 transition-colors"
+                  style={{ width: `${progress}%` }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
             </div>
             <span className="text-xs text-zinc-400 w-10">
@@ -328,6 +339,12 @@ export function PlayerBar({
           onEditMetadata={() => {
             if (contextMenu.track) {
               useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
+            }
+          }}
+          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
+          onToggleFavorite={() => {
+            if (contextMenu.track) {
+              toggleFavorite(contextMenu.track.id);
             }
           }}
         />

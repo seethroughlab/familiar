@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { TAB_PARAM_WHITELIST, type AppTab } from './utils/urlParams';
 import { Search, Library, Settings, Zap, Activity, MessageSquare, X, Loader2, ListMusic } from 'lucide-react';
@@ -68,6 +68,7 @@ function AppContent() {
   const [importFiles, setImportFiles] = useState<File[] | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Triple-tap recovery mechanism for mobile (closes all overlays)
   const tapCountRef = useRef(0);
@@ -158,15 +159,11 @@ function AppContent() {
     navigate(newUrl, { replace: true });
   }, [navigate]);
 
-  // Listen for hash changes (back/forward navigation)
+  // Sync tab state with URL changes (works for both programmatic and browser navigation)
   useEffect(() => {
-    const handleHashChange = () => {
-      const tab = getTabFromUrl();
-      setRightPanelTabState(tab);
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+    const tab = getTabFromUrl();
+    setRightPanelTabState(tab);
+  }, [location]);
   const [showFullPlayer, setShowFullPlayer] = useState(false);
   // Listening sessions disabled for v0.1.0
   // const [showSessionPanel, setShowSessionPanel] = useState(false);

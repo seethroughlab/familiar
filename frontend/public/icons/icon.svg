@@ -5,8 +5,8 @@
       <stop offset="100%" style="stop-color:#16a34a;stop-opacity:1" />
     </linearGradient>
   </defs>
-  <!-- Background circle -->
-  <circle cx="256" cy="256" r="256" fill="#18181b"/>
+  <!-- Background (full square - iOS applies its own rounded mask) -->
+  <rect width="512" height="512" fill="#18181b"/>
   <!-- Music note / waveform representation -->
   <g fill="url(#grad)">
     <!-- Stylized sound waves -->

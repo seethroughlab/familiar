@@ -1170,10 +1170,16 @@ export interface AvailableFields {
     description: string;
     range?: [number, number];
   }>;
+  play_history_fields?: Array<{
+    name: string;
+    type: string;
+    description: string;
+  }>;
   operators: {
     string: string[];
     number: string[];
     date: string[];
+    boolean?: string[];
     list: string[];
   };
 }

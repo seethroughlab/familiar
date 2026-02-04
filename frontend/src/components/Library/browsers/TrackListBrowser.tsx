@@ -453,6 +453,15 @@ export function TrackListBrowser({
   const [draggedColId, setDraggedColId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
+  // Resize state for columns
+  const setColumnWidth = useColumnStore((state) => state.setColumnWidth);
+  const resetColumnWidth = useColumnStore((state) => state.resetColumnWidth);
+  const [resizing, setResizing] = useState<{
+    columnId: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
   // Get visible column IDs in order
   const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
 
@@ -466,19 +475,29 @@ export function TrackListBrowser({
     [visibleColumnIds, analysisColumnIds]
   );
 
+  // Build map of custom column widths
+  const columnWidths = useMemo(() => {
+    return Object.fromEntries(columns.map(c => [c.id, c.width]));
+  }, [columns]);
+
   // Build grid template columns
   const gridColumns = useMemo(() => {
     const cols: string[] = ['3rem']; // Index column
-    cols.push('1fr'); // Title (always visible)
+    cols.push('1fr'); // Title (always visible, flexible)
 
     for (const colId of visibleColumnIds) {
-      const colDef = COLUMN_DEFINITIONS.find((d) => d.id === colId);
-      cols.push(colDef?.width || '1fr');
+      const customWidth = columnWidths[colId];
+      if (customWidth != null) {
+        cols.push(`${customWidth}px`);
+      } else {
+        const colDef = COLUMN_DEFINITIONS.find((d) => d.id === colId);
+        cols.push(colDef?.width || '1fr');
+      }
     }
 
     cols.push('3rem', '3rem'); // Favorite, Offline
     return cols.join(' ');
-  }, [visibleColumnIds]);
+  }, [visibleColumnIds, columnWidths]);
 
   // Drag handlers for column reordering
   const handleDragStart = (colId: string) => {
@@ -513,6 +532,60 @@ export function TrackListBrowser({
     setDraggedColId(null);
     setDropTargetId(null);
   };
+
+  // Minimum column width in pixels
+  const MIN_COLUMN_WIDTH = 50;
+
+  // Resize handlers
+  const handleResizeStart = useCallback((columnId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Get the current width of the column
+    const headerEl = e.currentTarget.parentElement;
+    const currentWidth = headerEl?.getBoundingClientRect().width || 100;
+
+    setResizing({
+      columnId,
+      startX: e.clientX,
+      startWidth: currentWidth,
+    });
+  }, []);
+
+  // Handle resize mouse move and mouse up
+  useEffect(() => {
+    if (!resizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - resizing.startX;
+      const newWidth = Math.max(MIN_COLUMN_WIDTH, resizing.startWidth + delta);
+      setColumnWidth(resizing.columnId, newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setResizing(null);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizing, setColumnWidth]);
+
+  // Apply resize cursor and prevent text selection during resize
+  useEffect(() => {
+    if (resizing) {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      return () => {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [resizing]);
 
   const {
     data,
@@ -704,13 +777,28 @@ export function TrackListBrowser({
     }
   }, [virtualizer.getVirtualItems(), hasNextPage, isFetchingNextPage, total, fetchNextPage, fetchPage]);
 
+  // Track when user intentionally navigates (e.g., alphabet bar click)
+  // Used to suppress auto-scroll to current track
+  const userNavigatedRef = useRef(false);
+  const userNavigatedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Callback for alphabet bar to use virtualizer's scrollToIndex
   const scrollToIndex = useCallback((index: number) => {
+    // Mark that user intentionally navigated - suppress auto-scroll for 2 seconds
+    userNavigatedRef.current = true;
+    if (userNavigatedTimeoutRef.current) {
+      clearTimeout(userNavigatedTimeoutRef.current);
+    }
+    userNavigatedTimeoutRef.current = setTimeout(() => {
+      userNavigatedRef.current = false;
+    }, 2000);
+
     virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' });
   }, [virtualizer]);
 
   // Track the current track ID we're scrolling to, for cancellation
   const scrollTargetRef = useRef<string | null>(null);
+  const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-scroll to current track when it changes (desktop only)
   useEffect(() => {
@@ -719,21 +807,44 @@ export function TrackListBrowser({
       return;
     }
 
+    // Skip auto-scroll if user recently navigated (e.g., clicked alphabet bar)
+    if (userNavigatedRef.current) {
+      return;
+    }
+
     const trackId = currentTrack.id;
     scrollTargetRef.current = trackId;
 
-    const scrollToCurrentTrack = async () => {
-      // Always fetch index from server - more reliable for sparse arrays
-      // and handles the case where track is on an unloaded page
+    // Clear any pending scroll (handles rapid track skipping)
+    if (scrollDebounceRef.current) {
+      clearTimeout(scrollDebounceRef.current);
+    }
+
+    const scrollToCurrentTrack = async (targetId: string) => {
+      // 1. Try local lookup in sparse array first (preserves true indices)
+      let localIndex = -1;
+      for (let i = 0; i < allTracks.length; i++) {
+        if (allTracks[i]?.id === targetId) {
+          localIndex = i;
+          break;
+        }
+      }
+
+      if (localIndex >= 0) {
+        virtualizer.scrollToIndex(localIndex, { align: 'center', behavior: 'smooth' });
+        return; // Found locally, no API needed
+      }
+
+      // 2. Track not in loaded data - need server lookup
       try {
-        const { index } = await tracksApi.getIndex(trackId, {
+        const { index } = await tracksApi.getIndex(targetId, {
           search: filters.search,
           artist: filters.artist,
           album: filters.album,
         });
 
         // Check if we're still trying to scroll to this track (handles rapid skipping)
-        if (scrollTargetRef.current !== trackId) return;
+        if (scrollTargetRef.current !== targetId) return;
 
         if (index >= 0) {
           virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' });
@@ -743,8 +854,20 @@ export function TrackListBrowser({
       }
     };
 
-    scrollToCurrentTrack();
-  }, [currentTrack?.id, virtualizer, filters.search, filters.artist, filters.album]);
+    // Debounce: wait 150ms before scrolling (allows rapid skipping to settle)
+    scrollDebounceRef.current = setTimeout(() => {
+      // Double-check user hasn't navigated during debounce period
+      if (!userNavigatedRef.current) {
+        scrollToCurrentTrack(trackId);
+      }
+    }, 150);
+
+    return () => {
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current);
+      }
+    };
+  }, [currentTrack?.id, virtualizer, filters.search, filters.artist, filters.album, allTracks]);
 
   // Alphabet bar for quick navigation
   const {
@@ -1147,26 +1270,36 @@ export function TrackListBrowser({
             const isDragging = draggedColId === colId;
             const isDropTarget = dropTargetId === colId;
             return (
-              <div
-                key={colId}
-                draggable
-                onDragStart={() => handleDragStart(colId)}
-                onDragOver={(e) => handleDragOver(e, colId)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, colId)}
-                onDragEnd={handleDragEnd}
-                className={`cursor-grab select-none ${
-                  colDef.align === 'right'
-                    ? 'text-right'
-                    : colDef.align === 'center'
-                    ? 'text-center'
-                    : ''
-                } ${isDragging ? 'opacity-50' : ''} ${
-                  isDropTarget ? 'border-l-2 border-green-500' : ''
-                }`}
-                title={`${colDef.label} (drag to reorder)`}
-              >
-                {colDef.shortLabel || colDef.label}
+              <div key={colId} className="relative">
+                <div
+                  draggable
+                  onDragStart={() => handleDragStart(colId)}
+                  onDragOver={(e) => handleDragOver(e, colId)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, colId)}
+                  onDragEnd={handleDragEnd}
+                  className={`cursor-grab select-none truncate pr-2 ${
+                    colDef.align === 'right'
+                      ? 'text-right'
+                      : colDef.align === 'center'
+                      ? 'text-center'
+                      : ''
+                  } ${isDragging ? 'opacity-50' : ''} ${
+                    isDropTarget ? 'border-l-2 border-green-500' : ''
+                  }`}
+                  title={`${colDef.label} (drag to reorder)`}
+                >
+                  {colDef.shortLabel || colDef.label}
+                </div>
+
+                {/* Resize handle */}
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize
+                             hover:bg-zinc-500/30 transition-colors"
+                  onMouseDown={(e) => handleResizeStart(colId, e)}
+                  onDoubleClick={() => resetColumnWidth(colId)}
+                  title="Drag to resize, double-click to reset"
+                />
               </div>
             );
           })}
