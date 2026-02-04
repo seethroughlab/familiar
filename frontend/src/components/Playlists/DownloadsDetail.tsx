@@ -9,6 +9,7 @@ import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
 import type { Track } from '../../types';
+import { showError, showSuccess } from '../../stores/toastStore';
 
 interface Props {
   onBack: () => void;
@@ -78,6 +79,7 @@ export function DownloadsDetail({ onBack }: Props) {
       await refresh();
     } catch (error) {
       console.error('Failed to remove track from downloads:', error);
+      showError('Failed to remove track from downloads');
     }
   };
 
@@ -88,8 +90,10 @@ export function DownloadsDetail({ onBack }: Props) {
       await refresh();
       setShowClearConfirm(false);
       setSelectedTrackIds(new Set());
+      showSuccess('Downloads cleared');
     } catch (error) {
       console.error('Failed to clear downloads:', error);
+      showError('Failed to clear downloads');
     }
   };
 
@@ -122,14 +126,17 @@ export function DownloadsDetail({ onBack }: Props) {
 
   // Bulk delete handler
   const handleBulkDelete = async () => {
+    const count = selectedTrackIds.size;
     try {
       for (const trackId of selectedTrackIds) {
         await removeOfflineTrack(trackId);
       }
       await refresh();
       setSelectedTrackIds(new Set());
+      showSuccess(`Removed ${count} track${count !== 1 ? 's' : ''} from downloads`);
     } catch (error) {
       console.error('Failed to remove selected tracks:', error);
+      showError('Failed to remove selected tracks');
     }
   };
 
@@ -386,6 +393,7 @@ export function DownloadsDetail({ onBack }: Props) {
                 await refresh();
               } catch (error) {
                 console.error('Failed to remove track from downloads:', error);
+                showError('Failed to remove track from downloads');
               }
             }
           }}

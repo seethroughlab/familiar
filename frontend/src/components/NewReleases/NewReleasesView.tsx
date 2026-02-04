@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { newReleasesApi, type NewRelease, type NewReleasesStatus } from '../../api/client';
 import { NewReleaseCard } from './NewReleaseCard';
+import { showError } from '../../stores/toastStore';
 
 interface NewReleasesViewProps {
   defaultExpanded?: boolean;
@@ -92,6 +93,7 @@ export function NewReleasesView({ defaultExpanded = false }: NewReleasesViewProp
       setReleases((prev) => prev.filter((r) => r.id !== releaseId));
     } catch (err) {
       console.error('Failed to dismiss release:', err);
+      showError('Failed to dismiss release');
     }
   };
 

@@ -9,6 +9,7 @@ import {
   revokeOfflineTrackUrl,
 } from '../services/offlineService';
 import { EffectsChain, initEffectsChain } from '../services/audioEffects';
+import { showError } from '../stores/toastStore';
 
 // ============================================================================
 // Platform Detection
@@ -564,11 +565,16 @@ export function useAudioEngine() {
       console.error('Audio error:', e);
 
       const currentId = usePlayerStore.getState().currentTrack?.id;
+      const currentTrackTitle = usePlayerStore.getState().currentTrack?.title;
+
       if (currentId === lastErrorTrackRef.current) {
         errorCountRef.current++;
         if (errorCountRef.current >= 3) {
           errorCountRef.current = 0;
           lastErrorTrackRef.current = null;
+          showError('Playback failed', {
+            description: `Unable to play "${currentTrackTitle || 'track'}". Skipping to next track.`,
+          });
           playNext();
           return;
         }
@@ -576,6 +582,9 @@ export function useAudioEngine() {
         errorCountRef.current = 1;
         lastErrorTrackRef.current = currentId ?? null;
       }
+      showError('Playback error', {
+        description: `Failed to play "${currentTrackTitle || 'track'}"`,
+      });
       setIsPlaying(false);
     };
 

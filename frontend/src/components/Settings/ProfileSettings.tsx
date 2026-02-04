@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { User, RefreshCw, Pencil, X, Check, Camera, Loader2 } from 'lucide-react';
 import { getSelectedProfileId, getProfile, clearSelectedProfile, type Profile } from '../../services/profileService';
 import { profilesApi } from '../../api/client';
+import { showError, showWarning } from '../../stores/toastStore';
 
 export function ProfileSettings() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -77,13 +78,13 @@ export function ProfileSettings() {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      showWarning('Please select an image file');
       return;
     }
 
     // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      showWarning('Image must be less than 5MB');
       return;
     }
 
@@ -93,7 +94,9 @@ export function ProfileSettings() {
       setProfile(updated);
     } catch (err) {
       console.error('Failed to upload avatar:', err);
-      alert('Failed to upload avatar. Please try again.');
+      showError('Failed to upload avatar', {
+        description: 'Please try again',
+      });
     } finally {
       setIsUploadingAvatar(false);
       // Reset file input

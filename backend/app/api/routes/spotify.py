@@ -100,7 +100,8 @@ async def get_spotify_status(
     try:
         stats = await sync_service.get_sync_stats(profile.id)
         connected = stats.get("spotify_user_id") is not None
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Failed to get Spotify sync stats for profile {profile.id}: {e}")
         connected = False
         stats = None
 
@@ -173,10 +174,20 @@ async def spotify_callback(
         redirect_url = f"{base_url}/settings?spotify_connected=true&spotify_user={spotify_profile.spotify_user_id}"
         logger.info(f"OAuth successful, redirecting to: {redirect_url}")
         return RedirectResponse(url=redirect_url, status_code=302)
+    except ValueError as e:
+        # State validation failed
+        logger.error(f"OAuth callback failed (invalid state): {e}")
+        return RedirectResponse(
+            url=f"{base_url}/settings?spotify_error=invalid_state",
+            status_code=302,
+        )
     except Exception as e:
-        error_redirect = f"{base_url}/settings?spotify_error={str(e)}"
-        logger.error(f"OAuth callback failed: {e}, redirecting to: {error_redirect}")
-        return RedirectResponse(url=error_redirect, status_code=302)
+        # Token exchange or other error
+        logger.error(f"OAuth callback failed: {e}")
+        return RedirectResponse(
+            url=f"{base_url}/settings?spotify_error=auth_failed",
+            status_code=302,
+        )
 
 
 @router.post("/sync", response_model=SpotifySyncStatus)

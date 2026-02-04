@@ -148,6 +148,32 @@ class LibraryImportError(FamiliarError):
     message = "Failed to import library data"
 
 
+def create_sse_error(
+    error_code: str,
+    user_message: str | None = None,
+) -> str:
+    """Create a sanitized SSE error event.
+
+    Returns a JSON-encoded error dict suitable for SSE event data.
+    Logs the error code for debugging while sending a safe message to clients.
+
+    Args:
+        error_code: Short error code for logging (e.g., "map_computation_failed")
+        user_message: Optional user-friendly message. Defaults to generic message.
+
+    Returns:
+        JSON string with error field for SSE event data
+    """
+    import json
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.error(f"SSE error: {error_code}")
+
+    message = user_message or "An unexpected error occurred. Please try again."
+    return json.dumps({"error": message})
+
+
 def sanitize_error_for_client(
     exception: Exception,
     default_message: str = "An unexpected error occurred",

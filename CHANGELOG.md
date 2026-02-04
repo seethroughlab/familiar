@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Toast Notification System** - User-friendly notifications throughout the app
+  - New `toastStore` using Sonner library with dark theme styling
+  - Success/error/warning/info toast types with descriptions
+  - Loading toasts that can be updated
+  - Promise-based toasts for async operations
+  - `useToast` hook for component usage
+  - `errorNotifications` utility with user-friendly error message extraction
+  - `useRetryableOperation` hook for operations with automatic retry logic
+- **Play History Tracking** - Local play history is now recorded
+  - New `usePlayTracking` hook tracks playback and records to backend
+  - Records plays after 30 seconds AND (50% of track OR 4 minutes)
+  - Follows same rules as Last.fm scrobbling
+  - Enables new releases feature to work (relies on play history)
+- **Improved Error Feedback** - Visual feedback for failures throughout the app
+  - Audio playback errors show toast with track name
+  - Download completion/failure shows toast notification
+  - Offline sync completion shows toast with count
+  - Playlist reorder/remove failures show toast
+  - Profile avatar upload failures show toast
+  - New releases dismiss failures show toast
+  - Downloads management actions show toast feedback
 - **Alphabet Bar** - Quick A-Z navigation for long lists
   - Hover on right edge to reveal vertical A-Z bar
   - Click a letter to jump directly to that section
@@ -37,6 +58,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Error Message Sanitization** - Internal error details no longer exposed to users
+  - Health check endpoints return "Connection failed" instead of raw exception messages
+  - Spotify OAuth callback returns generic error codes instead of raw exceptions
+  - Library map computation SSE returns user-friendly messages
+  - Export/import errors return helpful guidance instead of stack traces
+  - Added `create_sse_error()` helper for sanitized SSE error events
+  - All sanitized errors are still logged server-side for debugging
+- **Replaced alert() dialogs with toast notifications** - Modern UX for user feedback
+  - Profile settings: avatar upload validation and errors
+  - Offline settings: sync status and errors
+  - Track artwork upload: file validation warnings
+- **Artist image lookup logging** - Debug logging for Last.fm and Spotify failures
 - **README screenshot links** - Fixed broken image references
   - Full Player screenshot now points to correct file
   - Timeline screenshot replaced with Albums (timeline screenshot was never generated)

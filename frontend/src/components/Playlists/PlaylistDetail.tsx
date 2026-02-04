@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Play, Pause, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Radio } from 'lucide-react';
-import { playlistsApi } from '../../api/client';
+import { playlistsApi, tracksApi } from '../../api/client';
+import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadStore, getPlaylistJobId } from '../../stores/downloadStore';
@@ -87,6 +88,7 @@ function PlaylistDiscoverySection({
         }
       } catch (err) {
         console.error('Failed to add to wishlist:', err);
+        showError('Failed to add to wishlist');
       }
     }
   };
@@ -330,13 +332,13 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
     } else if (item.entityType === 'artist' && item.inLibrary) {
       // Play tracks by this artist
       try {
-        const { tracksApi } = await import('../../api/client');
         const response = await tracksApi.list({ artist: item.name, page_size: 50 });
         if (response.items.length > 0) {
           setQueue(response.items, 0);
         }
       } catch (error) {
         console.error('Failed to fetch artist tracks:', error);
+        showError('Failed to load artist tracks');
       }
     }
   }, [currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
@@ -395,6 +397,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
       await playlistsApi.reorderItems(playlistId, tracks.map(t => t.playlist_track_id));
     } catch (error) {
       console.error('Failed to reorder tracks:', error);
+      showError('Failed to reorder tracks');
       // Revert on error
       queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
     }
@@ -476,6 +479,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
       await playlistsApi.reorderTracks(playlistId, remainingTracks.map(t => t.id));
     } catch (error) {
       console.error('Failed to remove tracks:', error);
+      showError('Failed to remove tracks');
       queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
     }
   }, [playlist, selectedTrackIds, playlistId, queryClient]);

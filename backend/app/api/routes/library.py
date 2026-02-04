@@ -670,8 +670,8 @@ async def get_artist_image(
                         url=image_url,
                         headers={"Cache-Control": "public, max-age=86400"},
                     )
-        except Exception:
-            pass  # Last.fm lookup failed, continue to fallback
+        except Exception as e:
+            logger.debug(f"Last.fm artist image lookup failed for '{artist_name}': {e}")
 
     # Step 3: Try Spotify (requires profile with Spotify connection)
     profile_id = request.headers.get("X-Profile-ID")
@@ -703,8 +703,8 @@ async def get_artist_image(
                         url=image_url,
                         headers={"Cache-Control": "public, max-age=86400"},
                     )
-        except Exception:
-            pass  # Spotify lookup failed, continue to fallback
+        except Exception as e:
+            logger.debug(f"Spotify artist image lookup failed for '{artist_name}': {e}")
 
     # Step 4: Fallback to first album's artwork
     track_query = (
@@ -1537,9 +1537,11 @@ async def get_music_map_stream(
                     }
                     yield f"event: complete\ndata: {json.dumps(response)}\n\n"
         except ImportError as e:
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            logger.warning(f"Map computation missing dependency: {e}")
+            yield f"event: error\ndata: {json.dumps({'error': 'Required dependencies not available. Install umap-learn for map visualization.'})}\n\n"
         except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'error': f'Map computation failed: {e}'})}\n\n"
+            logger.error(f"Map computation failed: {e}")
+            yield f"event: error\ndata: {json.dumps({'error': 'Failed to compute library map. Please try again.'})}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -1714,9 +1716,11 @@ async def get_3d_music_map_stream(
                     }
                     yield f"event: complete\ndata: {json.dumps(response)}\n\n"
         except ImportError as e:
-            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            logger.warning(f"3D map computation missing dependency: {e}")
+            yield f"event: error\ndata: {json.dumps({'error': 'Required dependencies not available. Install umap-learn for map visualization.'})}\n\n"
         except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'error': f'3D map computation failed: {e}'})}\n\n"
+            logger.error(f"3D map computation failed: {e}")
+            yield f"event: error\ndata: {json.dumps({'error': 'Failed to compute 3D library map. Please try again.'})}\n\n"
 
     return StreamingResponse(
         event_stream(),

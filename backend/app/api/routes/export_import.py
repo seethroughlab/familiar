@@ -4,6 +4,7 @@ Handles exporting and importing user data for backup and migration.
 """
 
 import json
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -13,6 +14,8 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession, RequiredProfile
 from app.services.export_import import ExportImportService, ImportService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/export-import", tags=["export-import"])
 
@@ -232,9 +235,10 @@ async def execute_import(
             detail=str(e),
         )
     except Exception as e:
+        logger.error(f"Import failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Import failed: {e}",
+            detail="Import failed. Please check the file format and try again.",
         )
 
     return ImportExecuteResponse(

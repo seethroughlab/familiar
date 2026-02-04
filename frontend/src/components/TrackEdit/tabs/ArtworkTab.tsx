@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, Trash2, Image, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
+import { showWarning } from '../../../stores/toastStore';
 
 interface Props {
   trackId: string;
@@ -60,13 +61,13 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
     // Validate file type
     const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!validTypes.includes(file.type)) {
-      alert('Please select a JPEG, PNG, or WebP image');
+      showWarning('Please select a JPEG, PNG, or WebP image');
       return;
     }
 
     // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
-      alert('Image must be smaller than 10MB');
+      showWarning('Image must be smaller than 10MB');
       return;
     }
 

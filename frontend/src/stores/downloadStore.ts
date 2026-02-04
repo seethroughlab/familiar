@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import * as offlineService from '../services/offlineService';
 import { db, type PersistedDownloadJob } from '../db';
+import { showSuccess, showError, showWarning } from './toastStore';
 
 export type DownloadJobStatus = 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
 
@@ -346,6 +347,23 @@ async function processNextJob() {
       currentProgress: 0,
       error: failed > 0 ? `${failed} track(s) failed to download` : undefined,
     });
+
+    // Show toast notification for download completion
+    if (finalStatus === 'completed' && succeeded > 0) {
+      if (failed > 0) {
+        showWarning(`Downloaded ${succeeded} tracks, ${failed} failed`, {
+          description: nextJob.name,
+        });
+      } else {
+        showSuccess(`Downloaded ${succeeded} tracks for offline`, {
+          description: nextJob.name,
+        });
+      }
+    } else if (finalStatus === 'failed') {
+      showError('Download failed', {
+        description: `Failed to download tracks from "${nextJob.name}"`,
+      });
+    }
 
     // Schedule removal after completion
     scheduleJobRemoval(nextJob.id);

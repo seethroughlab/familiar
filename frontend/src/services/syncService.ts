@@ -5,6 +5,7 @@
 import { db, isIndexedDBAvailable, type PendingAction } from '../db';
 import { getSelectedProfileId } from './profileService';
 import { logger } from '../utils/logger';
+import { showSuccess, showWarning } from '../stores/toastStore';
 
 type ActionType = 'scrobble' | 'now_playing' | 'sync_spotify' | 'favorite_toggle';
 
@@ -237,6 +238,15 @@ export function initSyncListeners(): () => void {
     logger.log('Back online, processing pending actions...');
     const result = await processPendingActions();
     logger.log(`Processed ${result.processed} actions, ${result.failed} failed`);
+
+    // Show toast for sync results if there were pending actions
+    if (result.processed > 0 || result.failed > 0) {
+      if (result.failed > 0) {
+        showWarning(`Synced ${result.processed} actions, ${result.failed} failed`);
+      } else {
+        showSuccess(`Synced ${result.processed} pending actions`);
+      }
+    }
   };
 
   window.addEventListener('online', handleOnline);

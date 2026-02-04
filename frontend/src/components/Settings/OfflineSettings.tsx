@@ -20,6 +20,7 @@ import * as syncService from '../../services/syncService';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { OfflineTracksPanel } from './OfflineTracksPanel';
 import { StorageQuotaDisplay } from './StorageQuotaDisplay';
+import { showWarning, showSuccess, showError } from '../../stores/toastStore';
 
 export function OfflineSettings() {
   const { isOnline, isOffline } = useOfflineStatus();
@@ -107,7 +108,7 @@ export function OfflineSettings() {
 
   const handleSyncPending = async () => {
     if (!isOnline) {
-      alert('Cannot sync while offline');
+      showWarning('Cannot sync while offline');
       return;
     }
     setIsLoading((prev) => ({ ...prev, syncPending: true }));
@@ -115,12 +116,15 @@ export function OfflineSettings() {
       const result = await syncService.processPendingActions();
       await loadStats();
       if (result.processed > 0 || result.failed > 0) {
-        alert(
-          `Synced ${result.processed} actions${result.failed > 0 ? `, ${result.failed} failed` : ''}`
-        );
+        if (result.failed > 0) {
+          showWarning(`Synced ${result.processed} actions, ${result.failed} failed`);
+        } else if (result.processed > 0) {
+          showSuccess(`Synced ${result.processed} actions`);
+        }
       }
     } catch (error) {
       console.error('Failed to sync pending actions:', error);
+      showError('Failed to sync pending actions');
     } finally {
       setIsLoading((prev) => ({ ...prev, syncPending: false }));
     }

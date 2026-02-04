@@ -63,7 +63,8 @@ async def db_health_check(db: DbSession) -> dict[str, Any]:
         await db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
-        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+        logger.error(f"Database health check failed: {e}")
+        return {"status": "unhealthy", "database": "disconnected", "error": "Connection failed"}
 
 
 @router.get("/health/system", response_model=SystemHealth)
@@ -146,10 +147,11 @@ async def system_health_check(db: DbSession) -> SystemHealth:
             message="PostgreSQL connected",
         ))
     except Exception as e:
+        logger.error(f"Database health check failed: {e}")
         services.append(ServiceStatus(
             name="database",
             status="unhealthy",
-            message=f"PostgreSQL error: {str(e)}",
+            message="PostgreSQL connection failed",
         ))
 
     # Check Redis
@@ -165,10 +167,11 @@ async def system_health_check(db: DbSession) -> SystemHealth:
             message="Redis connected",
         ))
     except Exception as e:
+        logger.error(f"Redis health check failed: {e}")
         services.append(ServiceStatus(
             name="redis",
             status="unhealthy",
-            message=f"Redis error: {str(e)}",
+            message="Redis connection failed",
         ))
 
     # Check Background Processing (in-process BackgroundManager)
@@ -194,12 +197,12 @@ async def system_health_check(db: DbSession) -> SystemHealth:
             details={"sync_running": is_sync_running, "active_analyses": active_analyses},
         ))
     except Exception as e:
+        logger.warning(f"Cannot check background processing status: {e}")
         services.append(ServiceStatus(
             name="background_processing",
             status="unhealthy",
-            message=f"Cannot check status: {str(e)}",
+            message="Cannot check status",
         ))
-        logger.warning(f"Cannot check background processing status: {e}")
 
     # Check Analysis Backlog
     # Note: Analysis progress is informational, not a health concern.
@@ -232,10 +235,11 @@ async def system_health_check(db: DbSession) -> SystemHealth:
                 "Background processing is not running."
             )
     except Exception as e:
+        logger.error(f"Cannot check analysis status: {e}")
         services.append(ServiceStatus(
             name="analysis",
             status="unhealthy",
-            message=f"Cannot check analysis status: {str(e)}",
+            message="Cannot check analysis status",
         ))
 
     # Determine overall status
