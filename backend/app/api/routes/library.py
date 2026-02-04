@@ -1,5 +1,6 @@
 """Library management endpoints."""
 
+import logging
 from pathlib import Path
 from typing import Literal
 
@@ -9,12 +10,15 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
+from app.api.exceptions import sanitize_error_for_client
 from app.api.ratelimit import SCAN_RATE_LIMIT, limiter
 from app.config import settings
 from app.db.models import AlbumType, Track, TrackAnalysis, TrackStatus
 from app.services.import_service import ImportService, MusicImportError, save_upload_to_temp
 from app.services.scanner import LibraryScanner
 from app.services.tasks import get_sync_progress
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/library", tags=["library"])
 
@@ -1756,7 +1760,7 @@ async def get_ego_centric_map(
     try:
         data = await service.compute_ego_map(db, center=center, limit=limit, mode=mode)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=sanitize_error_for_client(e, "Artist not found"))
 
     return EgoMapResponse(
         center=EgoMapCenterResponse(
@@ -2330,7 +2334,7 @@ async def import_music(
         )
 
     except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Import failed"))
     except Exception:
         raise HTTPException(status_code=500, detail="Import failed")
     finally:
@@ -2533,7 +2537,7 @@ async def import_preview(
         )
 
     except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Preview failed"))
     except Exception:
         raise HTTPException(status_code=500, detail="Preview failed")
     finally:
@@ -2648,7 +2652,7 @@ async def import_execute(
         return ImportExecuteResponse(**result)
 
     except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Import failed"))
     except Exception:
         raise HTTPException(status_code=500, detail="Import failed")
 
