@@ -176,6 +176,20 @@ class ResilientRedisClient:
         """Trim list with retry logic."""
         return self._client.ltrim(key, start, end)
 
+    @with_retry()
+    def setex(self, key: str, seconds: int, value: str | bytes) -> bool:
+        """Set a value with expiration time in seconds."""
+        return self._client.setex(key, seconds, value)
+
+    def scan_iter(self, match: str | None = None, count: int | None = None):
+        """Iterate over keys matching a pattern.
+
+        Note: This returns an iterator directly from the underlying client.
+        Retry logic is not applied to the iteration itself, but the initial
+        connection is handled by the underlying client's retry_on_timeout setting.
+        """
+        return self._client.scan_iter(match=match, count=count)
+
     def ping(self) -> bool:
         """Check if Redis is available (no retry, used for health checks)."""
         try:
