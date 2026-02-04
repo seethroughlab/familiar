@@ -7,8 +7,12 @@ from typing import Any
 from uuid import UUID
 
 import anthropic
+import httpx
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# Timeout for LLM calls (shorter for playlist name generation)
+_PLAYLIST_NAME_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 
 from app.db.models import (
     ChangeScope,
@@ -152,7 +156,7 @@ Respond with ONLY the playlist name, nothing else."""
             if not api_key:
                 raise ValueError("No API key")
 
-            anthropic_client = anthropic.Anthropic(api_key=api_key)
+            anthropic_client = anthropic.Anthropic(api_key=api_key, timeout=_PLAYLIST_NAME_TIMEOUT)
             message = anthropic_client.messages.create(
                 model="claude-3-5-haiku-20241022",
                 max_tokens=50,

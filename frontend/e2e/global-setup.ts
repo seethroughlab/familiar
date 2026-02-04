@@ -62,9 +62,54 @@ async function globalSetup() {
 
     // Verify tracks are available
     const tracksResponse = await context.get('/api/v1/tracks?page_size=1');
+    let trackCount = 0;
     if (tracksResponse.ok()) {
       const tracks = await tracksResponse.json();
-      console.log(`📊 Library has ${tracks.total || 0} tracks available for testing`);
+      trackCount = tracks.total || 0;
+      console.log(`📊 Library has ${trackCount} tracks available for testing`);
+    }
+
+    // Wait for analysis to complete (features + embeddings) if we have tracks
+    if (trackCount > 0) {
+      console.log('🔬 Waiting for analysis to complete...');
+
+      let analysisAttempts = 0;
+      const maxAnalysisAttempts = 180; // 3 minutes max for analysis
+
+      while (analysisAttempts < maxAnalysisAttempts) {
+        const statsResponse = await context.get('/api/v1/library/stats');
+
+        if (statsResponse.ok()) {
+          const stats = await statsResponse.json();
+          const analyzed = stats.analyzed_tracks || 0;
+          const pending = stats.pending_analysis || 0;
+
+          if (pending === 0 || analyzed >= trackCount) {
+            console.log(`✅ Analysis complete: ${analyzed}/${trackCount} tracks analyzed`);
+            break;
+          }
+
+          // Show progress every 10 seconds
+          if (analysisAttempts % 10 === 0) {
+            console.log(`⏳ Analysis progress: ${analyzed}/${trackCount} (${pending} pending)`);
+          }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        analysisAttempts++;
+      }
+
+      if (analysisAttempts >= maxAnalysisAttempts) {
+        console.warn('⚠️ Analysis timed out - some tracks may not have embeddings');
+      }
+
+      // Verify embeddings are ready for similarity search
+      const embeddingsResponse = await context.get('/api/v1/library/stats');
+      if (embeddingsResponse.ok()) {
+        const stats = await embeddingsResponse.json();
+        const withEmbeddings = stats.tracks_with_embeddings || 0;
+        console.log(`🧠 ${withEmbeddings}/${trackCount} tracks have embeddings`);
+      }
     }
 
     console.log('✅ E2E setup complete');

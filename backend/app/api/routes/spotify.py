@@ -340,7 +340,11 @@ async def get_unmatched_tracks(
 
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Error retrieving unmatched tracks")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to retrieve unmatched tracks",
+        )
 
 
 @router.post("/disconnect")

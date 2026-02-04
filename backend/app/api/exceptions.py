@@ -126,3 +126,78 @@ class AnalysisError(FamiliarError):
 
     status_code = 500
     message = "Audio analysis failed"
+
+
+class MapComputationError(FamiliarError):
+    """UMAP/t-SNE map computation failed."""
+
+    status_code = 500
+    message = "Failed to compute library map"
+
+
+class SpotifyAPIError(ExternalServiceError):
+    """Spotify API call failed."""
+
+    message = "Spotify request failed"
+
+
+class LibraryImportError(FamiliarError):
+    """Library import operation failed."""
+
+    status_code = 500
+    message = "Failed to import library data"
+
+
+def sanitize_error_for_client(
+    exception: Exception,
+    default_message: str = "An unexpected error occurred",
+) -> str:
+    """Sanitize an exception for safe client exposure.
+
+    Converts internal exceptions to user-friendly messages without
+    exposing stack traces, file paths, or other sensitive details.
+
+    Args:
+        exception: The exception to sanitize
+        default_message: Message to use for unknown exception types
+
+    Returns:
+        A user-friendly error message safe for client display
+    """
+    import anthropic
+
+    # Handle our custom exceptions - use their message
+    if isinstance(exception, FamiliarError):
+        return exception.message
+
+    # Handle Anthropic API errors with user-friendly messages
+    if isinstance(exception, anthropic.AuthenticationError):
+        return "Invalid API key. Check your Anthropic API key in Settings."
+
+    if isinstance(exception, anthropic.RateLimitError):
+        return "Rate limit exceeded. Please wait a moment and try again."
+
+    if isinstance(exception, anthropic.BadRequestError):
+        return "The request could not be processed. Please try rephrasing."
+
+    if isinstance(exception, anthropic.APIConnectionError):
+        return "Could not connect to the AI service. Check your internet connection."
+
+    if isinstance(exception, anthropic.APIStatusError):
+        return "The AI service is temporarily unavailable. Please try again later."
+
+    if isinstance(exception, anthropic.APITimeoutError):
+        return "The AI request timed out. Please try again."
+
+    if isinstance(exception, anthropic.APIError):
+        return "An error occurred with the AI service. Please try again."
+
+    # Handle common Python exceptions
+    if isinstance(exception, TimeoutError):
+        return "The request timed out. Please try again."
+
+    if isinstance(exception, ConnectionError):
+        return "Connection error. Check your internet connection."
+
+    # Default - don't expose internal details
+    return default_message

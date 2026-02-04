@@ -17,9 +17,8 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 
-import redis
-
 from app.config import settings
+from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
 # Rate limiting for executor recreation to prevent runaway process spawning
 EXECUTOR_RESET_COOLDOWN = 30.0  # Minimum seconds between executor resets
@@ -57,7 +56,7 @@ class BackgroundManager:
     def __init__(self):
         self._executor: ProcessPoolExecutor | None = None
         self._scheduler = None
-        self._redis: redis.Redis | None = None
+        self._redis: ResilientRedisClient | None = None
         self._current_sync_task: asyncio.Task | None = None
         self._analysis_tasks: dict[str, asyncio.Task] = {}
         self._lock = asyncio.Lock()
@@ -71,10 +70,10 @@ class BackgroundManager:
         self._crashed_track_ids: set[str] = set()  # Tracks that have caused crashes
 
     @property
-    def redis(self) -> redis.Redis:
-        """Lazy Redis client."""
+    def redis(self) -> ResilientRedisClient:
+        """Lazy resilient Redis client with automatic retry."""
         if self._redis is None:
-            self._redis = redis.from_url(settings.redis_url)
+            self._redis = get_resilient_redis()
         return self._redis
 
     @property

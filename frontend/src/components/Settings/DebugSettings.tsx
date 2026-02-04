@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bug, RefreshCw, Trash2, Download } from 'lucide-react';
+import { Bug, RefreshCw, Trash2, Download, AlertCircle } from 'lucide-react';
 import {
   getAudioContext,
   getAudioAnalyser,
@@ -10,6 +10,7 @@ import {
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import * as offlineService from '../../services/offlineService';
+import { apiErrorTracker, TrackedError } from '../../utils/apiErrorTracker';
 
 // Capture console logs
 const logBuffer: { time: string; level: string; message: string }[] = [];
@@ -62,8 +63,19 @@ export function DebugSettings() {
   const [expanded, setExpanded] = useState(false);
   const [logs, setLogs] = useState<typeof logBuffer>([]);
   const [offlineCount, setOfflineCount] = useState<number | null>(null);
+  const [apiErrors, setApiErrors] = useState<TrackedError[]>([]);
   const { isPlaying, currentTrack } = usePlayerStore();
   const { jobs, activeJobId } = useDownloadStore();
+
+  // Subscribe to API errors
+  useEffect(() => {
+    const unsubscribe = apiErrorTracker.subscribe((errors) => {
+      setApiErrors(errors);
+    });
+    // Initial load
+    setApiErrors(apiErrorTracker.getErrors());
+    return unsubscribe;
+  }, []);
 
   // Refresh logs and offline count periodically when expanded
   useEffect(() => {
@@ -252,6 +264,71 @@ export function DebugSettings() {
             {jobs.size === 0 && (
               <div className="text-zinc-500 text-xs italic">No active download jobs</div>
             )}
+          </div>
+
+          {/* API Errors */}
+          <div className="bg-zinc-900/50 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h5 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                API Errors ({apiErrors.length})
+              </h5>
+              <button
+                onClick={() => apiErrorTracker.clear()}
+                className="p-1 text-zinc-400 hover:text-red-400"
+                title="Clear errors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="max-h-48 overflow-y-auto space-y-2 text-xs font-mono">
+              {apiErrors.length === 0 ? (
+                <div className="text-zinc-500 italic">No API errors recorded</div>
+              ) : (
+                apiErrors.slice(0, 20).map((err) => (
+                  <div
+                    key={err.id}
+                    className={`p-2 rounded ${
+                      err.severity === 'error'
+                        ? 'bg-red-900/30 border border-red-800/50'
+                        : err.severity === 'warning'
+                        ? 'bg-yellow-900/30 border border-yellow-800/50'
+                        : 'bg-zinc-800/50 border border-zinc-700/50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          err.category === 'network'
+                            ? 'bg-orange-500/20 text-orange-400'
+                            : err.category === 'auth'
+                            ? 'bg-red-500/20 text-red-400'
+                            : err.category === 'server'
+                            ? 'bg-red-500/20 text-red-400'
+                            : err.category === 'external'
+                            ? 'bg-yellow-500/20 text-yellow-400'
+                            : 'bg-zinc-500/20 text-zinc-400'
+                        }`}
+                      >
+                        {err.category}
+                        {err.statusCode && ` (${err.statusCode})`}
+                      </span>
+                      <span className="text-zinc-500">
+                        {err.timestamp.toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div className="text-zinc-400 mb-1">
+                      <span className="text-zinc-500">{err.method}</span>{' '}
+                      <span className="text-zinc-300">{err.endpoint}</span>
+                    </div>
+                    <div className="text-zinc-200 break-all">{err.message}</div>
+                    {err.context && (
+                      <div className="text-zinc-500 mt-1">Context: {err.context}</div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
           {/* Console Logs */}

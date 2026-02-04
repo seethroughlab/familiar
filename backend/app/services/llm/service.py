@@ -6,6 +6,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import anthropic
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.app_settings import get_app_settings_service
@@ -15,13 +16,20 @@ from .tools import MUSIC_TOOLS, SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
+# Timeout configuration for Anthropic API calls
+# - connect: Time to establish connection (10s)
+# - read: Time to wait for response data (120s - allows for long tool chains)
+# - write: Time to send request data (120s)
+# - pool: Time to acquire connection from pool (10s)
+LLM_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=120.0, pool=10.0)
+
 
 class LLMService:
     """Service for conversational music discovery using Claude."""
 
     def __init__(self) -> None:
         api_key = self._get_api_key()
-        self.claude_client = anthropic.Anthropic(api_key=api_key)
+        self.claude_client = anthropic.Anthropic(api_key=api_key, timeout=LLM_TIMEOUT)
 
     def _get_api_key(self) -> str | None:
         """Get Anthropic API key with proper precedence."""

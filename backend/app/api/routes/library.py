@@ -1442,10 +1442,16 @@ async def get_music_map(
 
     try:
         map_data = await service.compute_map(db, entity_type=entity_type, limit=limit)
-    except ImportError as e:
-        raise HTTPException(status_code=501, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Map computation failed: {e}")
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Required dependencies not available. Install umap-learn for map visualization.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to compute library map",
+        )
 
     return MusicMapResponse(
         nodes=[
@@ -1621,10 +1627,16 @@ async def get_3d_music_map(
 
     try:
         map_data = await service.compute_3d_map(db, entity_type=entity_type)
-    except ImportError as e:
-        raise HTTPException(status_code=501, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"3D map computation failed: {e}")
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Required dependencies not available. Install umap-learn for map visualization.",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to compute 3D library map",
+        )
 
     return MusicMap3DResponse(
         nodes=[
@@ -2315,8 +2327,8 @@ async def import_music(
 
     except MusicImportError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Import failed: {e}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Import failed")
     finally:
         # Clean up temp file
         temp_path.unlink(missing_ok=True)
@@ -2518,8 +2530,8 @@ async def import_preview(
 
     except MusicImportError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Preview failed: {e}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Preview failed")
     finally:
         # Clean up temp file (session has its own copy)
         temp_path.unlink(missing_ok=True)
@@ -2633,8 +2645,8 @@ async def import_execute(
 
     except MusicImportError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Import failed: {e}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Import failed")
 
 
 class AnalysisStatus(BaseModel):

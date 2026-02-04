@@ -1,6 +1,7 @@
 """Chat endpoints for LLM-powered music discovery."""
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
@@ -11,9 +12,12 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentProfile, DbSession
+from app.api.exceptions import sanitize_error_for_client
 from app.api.ratelimit import CHAT_RATE_LIMIT, limiter
 from app.services.app_settings import get_app_settings_service
 from app.services.llm import LLMService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -83,7 +87,10 @@ async def generate_sse_events(
             # Format as SSE
             yield f"data: {json.dumps(event)}\n\n"
     except Exception as e:
-        yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        # Log the full error for debugging, but send sanitized message to client
+        logger.exception("Error in chat stream")
+        safe_message = sanitize_error_for_client(e)
+        yield f"data: {json.dumps({'type': 'error', 'message': safe_message})}\n\n"
 
     yield "data: [DONE]\n\n"
 

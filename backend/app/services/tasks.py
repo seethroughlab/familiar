@@ -41,16 +41,17 @@ def log_memory(label: str) -> None:
     logger.info(f"[MEMORY] {label}: {mem_mb:.1f} MB (PID {os.getpid()})")
     sys.stdout.flush()  # Ensure log is written before potential OOM
 
-# Redis client for progress reporting
-_redis_client: redis.Redis | None = None
+# Redis client for progress reporting (using resilient client for retry logic)
+from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
 
-def get_redis() -> redis.Redis:
-    """Get Redis client for progress updates."""
-    global _redis_client
-    if _redis_client is None:
-        _redis_client = redis.from_url(settings.redis_url)
-    return _redis_client
+def get_redis() -> ResilientRedisClient:
+    """Get resilient Redis client for progress updates.
+
+    The resilient client automatically retries on transient failures
+    and has configured socket timeouts.
+    """
+    return get_resilient_redis()
 
 
 # Redis keys for progress tracking

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import type { Track, TrackListResponse, LibraryStats } from '../types';
 import { getSelectedProfileId, clearSelectedProfile } from '../services/profileService';
+import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -20,10 +21,14 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Handle 401 errors - profile may have been deleted
+// Handle 401 errors and track all API errors for debugging
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Track error for debugging visibility
+    const errorInfo = extractAxiosError(error);
+    apiErrorTracker.track(errorInfo);
+
     // Check if this is an "invalid profile" error
     if (
       error.response?.status === 401 &&

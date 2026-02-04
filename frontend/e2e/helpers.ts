@@ -117,3 +117,90 @@ export async function waitForAudioReady(page: Page, timeout = 10000) {
     { timeout }
   );
 }
+
+/**
+ * Wait for library sync to complete
+ */
+export async function waitForSyncComplete(page: Page, timeout = 120000) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    // Check sync status via page context
+    const status = await page.evaluate(async () => {
+      const response = await fetch('/api/v1/library/sync/status');
+      if (response.ok) {
+        return response.json();
+      }
+      return null;
+    });
+
+    if (status && (status.status === 'idle' || status.status === 'completed' || status.status === 'complete')) {
+      return status;
+    }
+
+    if (status && status.status === 'error') {
+      throw new Error(`Sync failed: ${status.message}`);
+    }
+
+    await page.waitForTimeout(1000);
+  }
+
+  throw new Error('Sync timed out');
+}
+
+/**
+ * Trigger library sync and wait for completion
+ */
+export async function syncLibraryAndWait(page: Page, timeout = 120000) {
+  // Trigger sync
+  const startResult = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/library/sync', { method: 'POST' });
+    if (response.ok) {
+      return response.json();
+    }
+    return null;
+  });
+
+  if (!startResult) {
+    throw new Error('Failed to start sync');
+  }
+
+  if (startResult.status === 'already_running') {
+    // Wait for existing sync to complete
+    return waitForSyncComplete(page, timeout);
+  }
+
+  // Wait for sync to complete
+  return waitForSyncComplete(page, timeout);
+}
+
+/**
+ * Check if analysis is complete for tracks
+ */
+export async function waitForAnalysisComplete(page: Page, timeout = 180000) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    const stats = await page.evaluate(async () => {
+      const response = await fetch('/api/v1/library/stats');
+      if (response.ok) {
+        return response.json();
+      }
+      return null;
+    });
+
+    if (stats) {
+      const total = stats.total_tracks || 0;
+      const analyzed = stats.analyzed_tracks || 0;
+      const pending = stats.pending_analysis || 0;
+
+      if (total === 0 || pending === 0 || analyzed >= total) {
+        return { total, analyzed, pending };
+      }
+    }
+
+    await page.waitForTimeout(2000);
+  }
+
+  throw new Error('Analysis timed out');
+}
