@@ -709,25 +709,32 @@ export function TrackListBrowser({
     virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' });
   }, [virtualizer]);
 
-  // Auto-scroll to current track when it changes or on mount (desktop only)
+  // Track the current track ID we're scrolling to, for cancellation
+  const scrollTargetRef = useRef<string | null>(null);
+
+  // Auto-scroll to current track when it changes (desktop only)
   useEffect(() => {
-    if (!currentTrack) return;
+    if (!currentTrack) {
+      scrollTargetRef.current = null;
+      return;
+    }
+
+    const trackId = currentTrack.id;
+    scrollTargetRef.current = trackId;
 
     const scrollToCurrentTrack = async () => {
-      // Fast path: check if track is already loaded in sparse array
-      const loadedIndex = allTracks.findIndex(t => t?.id === currentTrack.id);
-      if (loadedIndex >= 0) {
-        virtualizer.scrollToIndex(loadedIndex, { align: 'center', behavior: 'smooth' });
-        return;
-      }
-
-      // Slow path: fetch index from server (track might be on an unloaded page)
+      // Always fetch index from server - more reliable for sparse arrays
+      // and handles the case where track is on an unloaded page
       try {
-        const { index } = await tracksApi.getIndex(currentTrack.id, {
+        const { index } = await tracksApi.getIndex(trackId, {
           search: filters.search,
           artist: filters.artist,
           album: filters.album,
         });
+
+        // Check if we're still trying to scroll to this track (handles rapid skipping)
+        if (scrollTargetRef.current !== trackId) return;
+
         if (index >= 0) {
           virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' });
         }
@@ -737,7 +744,7 @@ export function TrackListBrowser({
     };
 
     scrollToCurrentTrack();
-  }, [currentTrack?.id, allTracks, virtualizer, filters.search, filters.artist, filters.album]);
+  }, [currentTrack?.id, virtualizer, filters.search, filters.artist, filters.album]);
 
   // Alphabet bar for quick navigation
   const {

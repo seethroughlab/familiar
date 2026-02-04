@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
   Sparkles, Play, MoreVertical, Trash2, Loader2,
-  ChevronDown, ChevronUp, ListMusic, Heart, CloudOff, Download, HardDrive
+  ChevronDown, ChevronUp, ListMusic, Heart, CloudOff, Download, HardDrive, Gift
 } from 'lucide-react';
 import { playlistsApi, smartPlaylistsApi } from '../../api/client';
 import type { Playlist, SmartPlaylist } from '../../api/client';
@@ -18,7 +18,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import * as playlistCache from '../../services/playlistCache';
 
-type ViewMode = 'list' | 'detail' | 'favorites' | 'downloads' | 'smart-detail';
+type ViewMode = 'list' | 'detail' | 'favorites' | 'downloads' | 'wishlist' | 'smart-detail';
 
 interface SelectedPlaylist {
   type: 'static' | 'smart';
@@ -49,6 +49,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const getViewModeFromUrl = useCallback((): ViewMode => {
     if (urlView === 'favorites') return 'favorites';
     if (urlView === 'downloads') return 'downloads';
+    if (urlView === 'wishlist') return 'wishlist';
     if (urlSmartPlaylistId) return 'smart-detail';
     if (urlPlaylistId) return 'detail';
     return 'list';
@@ -68,6 +69,14 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
     queryFn: () => smartPlaylistsApi.get(urlSmartPlaylistId!),
     enabled: !!urlSmartPlaylistId,
   });
+
+  // Fetch wishlist for count display
+  const { data: wishlist } = useQuery({
+    queryKey: ['wishlist'],
+    queryFn: () => playlistsApi.getWishlist(),
+    retry: isOffline ? false : 3,
+  });
+  const wishlistCount = wishlist?.tracks?.length ?? 0;
 
   // Sync URL params to state when they change
   useEffect(() => {
@@ -91,6 +100,8 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
       setSearchParams({ view: 'favorites' });
     } else if (mode === 'downloads') {
       setSearchParams({ view: 'downloads' });
+    } else if (mode === 'wishlist') {
+      setSearchParams({ view: 'wishlist' });
     } else if (mode === 'list') {
       // Clear playlist-related params
       const newParams = new URLSearchParams(searchParams);
@@ -258,6 +269,16 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
     );
   }
 
+  // Show wishlist view (reuse PlaylistDetail with wishlist ID)
+  if (viewMode === 'wishlist' && wishlist?.id) {
+    return (
+      <PlaylistDetail
+        playlistId={wishlist.id}
+        onBack={handleBack}
+      />
+    );
+  }
+
   // Show smart playlist detail view
   if (viewMode === 'smart-detail' && selectedSmartPlaylist) {
     return (
@@ -319,6 +340,22 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
                 </span>
               </>
             )}
+          </div>
+        </div>
+      </button>
+
+      {/* Wishlist Section */}
+      <button
+        onClick={() => setViewMode('wishlist')}
+        className="w-full flex items-center gap-3 p-3 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 rounded-lg border border-purple-500/20 transition-colors"
+      >
+        <div className="p-2 rounded-full bg-purple-500/20">
+          <Gift className="w-5 h-5 text-purple-500" />
+        </div>
+        <div className="flex-1 text-left">
+          <div className="font-semibold">Wishlist</div>
+          <div className="text-sm text-zinc-400">
+            {wishlistCount} {wishlistCount === 1 ? 'item' : 'items'} to acquire
           </div>
         </div>
       </button>
