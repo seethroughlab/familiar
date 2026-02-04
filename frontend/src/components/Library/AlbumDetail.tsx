@@ -253,6 +253,8 @@ export function AlbumDetail({
     usePlayerStore();
   const [contextMenu, setContextMenu] =
     useState<ContextMenuState>(initialContextMenuState);
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null);
 
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
     e.preventDefault();
@@ -322,6 +324,28 @@ export function AlbumDetail({
     }));
     setQueue(queueTracks, trackIndex);
   };
+
+  const handleTrackClick = useCallback((trackId: string, idx: number, e: React.MouseEvent) => {
+    if (!album) return;
+
+    if (e.shiftKey && lastClickedId) {
+      // Shift-click: select range
+      const lastIdx = album.tracks.findIndex(t => t.id === lastClickedId);
+      const [start, end] = [Math.min(lastIdx, idx), Math.max(lastIdx, idx)];
+      const rangeIds = album.tracks.slice(start, end + 1).map(t => t.id);
+      setSelectedTrackIds(new Set([...selectedTrackIds, ...rangeIds]));
+    } else if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl-click: toggle single selection
+      const newSet = new Set(selectedTrackIds);
+      if (newSet.has(trackId)) newSet.delete(trackId);
+      else newSet.add(trackId);
+      setSelectedTrackIds(newSet);
+    } else {
+      // Plain click: select only this track
+      setSelectedTrackIds(new Set([trackId]));
+    }
+    setLastClickedId(trackId);
+  }, [album, lastClickedId, selectedTrackIds]);
 
   const handlePlayOtherAlbum = async (artistName: string, albumName: string) => {
     try {
@@ -509,10 +533,18 @@ export function AlbumDetail({
             return (
               <div
                 key={track.id}
-                onClick={() => handlePlayTrack(idx)}
+                onClick={(e) => handleTrackClick(track.id, idx, e)}
+                onDoubleClick={() => handlePlayTrack(idx)}
+                onMouseDown={(e) => {
+                  if (e.shiftKey || e.metaKey || e.ctrlKey) e.preventDefault();
+                }}
                 onContextMenu={(e) => handleContextMenu(fullTrack, e)}
                 className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                  selectedTrackIds.has(track.id)
+                    ? 'bg-purple-500/20 hover:bg-purple-500/30'
+                    : currentTrack?.id === track.id
+                      ? 'bg-zinc-800/30'
+                      : ''
                 }`}
               >
                 <div className="w-8 text-center">
@@ -583,7 +615,8 @@ export function AlbumDetail({
         <TrackContextMenu
           track={contextMenu.track}
           position={contextMenu.position}
-          isSelected={false}
+          isSelected={selectedTrackIds.has(contextMenu.track.id)}
+          selectedCount={selectedTrackIds.size}
           onClose={closeContextMenu}
           onPlay={() => {
             const idx = album.tracks.findIndex(
@@ -603,8 +636,17 @@ export function AlbumDetail({
             // Already on this album
           }}
           onToggleSelect={() => {
-            // Not applicable in album detail
+            if (contextMenu.track) {
+              const newSet = new Set(selectedTrackIds);
+              if (newSet.has(contextMenu.track.id)) {
+                newSet.delete(contextMenu.track.id);
+              } else {
+                newSet.add(contextMenu.track.id);
+              }
+              setSelectedTrackIds(newSet);
+            }
           }}
+          onClearSelection={() => setSelectedTrackIds(new Set())}
           onAddToPlaylist={() => {
             
           }}

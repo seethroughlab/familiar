@@ -177,6 +177,8 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [albumContextMenu, setAlbumContextMenu] = useState<AlbumContextMenuState>(initialAlbumContextMenuState);
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null);
 
   // Track which artists we've already triggered enrichment for
   const enrichedArtistsRef = useRef<Set<string>>(new Set());
@@ -350,6 +352,28 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
     }));
     setQueue(queueTracks, trackIndex);
   };
+
+  const handleTrackClick = useCallback((trackId: string, idx: number, e: React.MouseEvent) => {
+    if (!artist) return;
+
+    if (e.shiftKey && lastClickedId) {
+      // Shift-click: select range
+      const lastIdx = artist.tracks.findIndex(t => t.id === lastClickedId);
+      const [start, end] = [Math.min(lastIdx, idx), Math.max(lastIdx, idx)];
+      const rangeIds = artist.tracks.slice(start, end + 1).map(t => t.id);
+      setSelectedTrackIds(new Set([...selectedTrackIds, ...rangeIds]));
+    } else if (e.metaKey || e.ctrlKey) {
+      // Cmd/Ctrl-click: toggle single selection
+      const newSet = new Set(selectedTrackIds);
+      if (newSet.has(trackId)) newSet.delete(trackId);
+      else newSet.add(trackId);
+      setSelectedTrackIds(newSet);
+    } else {
+      // Plain click: select only this track
+      setSelectedTrackIds(new Set([trackId]));
+    }
+    setLastClickedId(trackId);
+  }, [artist, lastClickedId, selectedTrackIds]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '--:--';
@@ -666,10 +690,18 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
             return (
             <div
               key={track.id}
-              onClick={() => handlePlayTrack(idx)}
+              onClick={(e) => handleTrackClick(track.id, idx, e)}
+              onDoubleClick={() => handlePlayTrack(idx)}
+              onMouseDown={(e) => {
+                if (e.shiftKey || e.metaKey || e.ctrlKey) e.preventDefault();
+              }}
               onContextMenu={(e) => handleContextMenu(fullTrack, e)}
               className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                selectedTrackIds.has(track.id)
+                  ? 'bg-purple-500/20 hover:bg-purple-500/30'
+                  : currentTrack?.id === track.id
+                    ? 'bg-zinc-800/30'
+                    : ''
               }`}
             >
               <div className="w-8 text-center">
@@ -758,7 +790,8 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
         <TrackContextMenu
           track={contextMenu.track}
           position={contextMenu.position}
-          isSelected={false}
+          isSelected={selectedTrackIds.has(contextMenu.track.id)}
+          selectedCount={selectedTrackIds.size}
           onClose={closeContextMenu}
           onPlay={() => {
             const idx = artist.tracks.findIndex(t => t.id === contextMenu.track?.id);
@@ -778,8 +811,17 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
             }
           }}
           onToggleSelect={() => {
-            // Not applicable in artist detail
+            if (contextMenu.track) {
+              const newSet = new Set(selectedTrackIds);
+              if (newSet.has(contextMenu.track.id)) {
+                newSet.delete(contextMenu.track.id);
+              } else {
+                newSet.add(contextMenu.track.id);
+              }
+              setSelectedTrackIds(newSet);
+            }
           }}
+          onClearSelection={() => setSelectedTrackIds(new Set())}
           onAddToPlaylist={() => {
             // TODO: Open playlist picker modal
             
