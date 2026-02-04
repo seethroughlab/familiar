@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import { TAB_PARAM_WHITELIST, type AppTab } from './utils/urlParams';
 import { Search, Library, Settings, Zap, Activity, MessageSquare, X, Loader2, ListMusic } from 'lucide-react';
 import { isVisualizerAvailable } from './hooks/useAudioEngine';
@@ -38,6 +39,7 @@ function LazyLoadSpinner() {
   );
 }
 import { useScrobbling } from './hooks/useScrobbling';
+import { usePlayTracking } from './hooks/usePlayTracking';
 import { useMetadataEnrichment } from './hooks/useMetadataEnrichment';
 // Listening sessions disabled for v0.1.0
 // import { useListeningSession } from './hooks/useListeningSession';
@@ -176,6 +178,9 @@ function AppContent() {
 
   // Initialize Last.fm scrobbling
   useScrobbling();
+
+  // Initialize local play history tracking
+  usePlayTracking();
 
   // Initialize automatic metadata enrichment
   useMetadataEnrichment();
@@ -721,6 +726,16 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Toaster
+        theme="dark"
+        position="bottom-right"
+        toastOptions={{
+          className: 'bg-zinc-900 border-zinc-800 text-white',
+          descriptionClassName: 'text-zinc-400',
+        }}
+        closeButton
+        richColors
+      />
       <WorkerAlert />
       <QueryClientProvider client={queryClient}>
         <Routes>

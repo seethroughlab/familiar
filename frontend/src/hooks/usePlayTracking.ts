@@ -1,0 +1,91 @@
+import { useEffect, useRef } from 'react';
+import { usePlayerStore } from '../stores/playerStore';
+import { playTrackingApi } from '../api/client';
+
+/**
+ * Hook for tracking local play history.
+ *
+ * Records plays to the backend when:
+ * - Track has been played for at least 30 seconds
+ * - AND either 50% of the track has been played OR 4 minutes have passed
+ *
+ * This follows the same rules as Last.fm scrobbling.
+ */
+export function usePlayTracking() {
+  const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore();
+
+  const recordedTrackRef = useRef<string | null>(null);
+  const accumulatedTimeRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
+  const lastTrackIdRef = useRef<string | null>(null);
+  const currentTrackIdRef = useRef<string | null>(null);
+
+  // Store current track id in ref for cleanup function
+  useEffect(() => {
+    currentTrackIdRef.current = currentTrack?.id ?? null;
+  }, [currentTrack?.id]);
+
+  // Reset state when track changes
+  useEffect(() => {
+    const trackId = currentTrack?.id ?? null;
+
+    // If track changed, record partial play from previous track if applicable
+    if (lastTrackIdRef.current && lastTrackIdRef.current !== trackId) {
+      // If we haven't recorded the previous track but have significant time, record it
+      if (
+        recordedTrackRef.current !== lastTrackIdRef.current &&
+        accumulatedTimeRef.current >= 30
+      ) {
+        const prevTrackId = lastTrackIdRef.current;
+        const prevAccumulatedTime = accumulatedTimeRef.current;
+        playTrackingApi.recordPlay(prevTrackId, prevAccumulatedTime).catch(() => {
+          // Ignore errors for partial plays
+        });
+      }
+
+      // Reset for new track
+      recordedTrackRef.current = null;
+      accumulatedTimeRef.current = 0;
+      lastTimeRef.current = 0;
+    }
+
+    lastTrackIdRef.current = trackId;
+  }, [currentTrack?.id]);
+
+  // Track accumulated play time and record when threshold is met
+  useEffect(() => {
+    if (!currentTrack || !isPlaying || !duration) return;
+
+    // Already recorded this track
+    if (recordedTrackRef.current === currentTrack.id) return;
+
+    // Update accumulated time (only count forward progress)
+    if (currentTime > lastTimeRef.current) {
+      accumulatedTimeRef.current += currentTime - lastTimeRef.current;
+    } else if (currentTime < lastTimeRef.current) {
+      // User seeked backward - don't subtract, just update reference
+    }
+    lastTimeRef.current = currentTime;
+
+    // Calculate thresholds
+    const halfDuration = duration / 2;
+    const fourMinutes = 4 * 60;
+    const recordThreshold = Math.min(halfDuration, fourMinutes);
+
+    // Must have played at least 30 seconds
+    if (accumulatedTimeRef.current < 30) return;
+
+    // Check if we've reached the record threshold
+    if (accumulatedTimeRef.current >= recordThreshold) {
+      recordedTrackRef.current = currentTrack.id;
+
+      // Record the play with duration
+      playTrackingApi.recordPlay(currentTrack.id, accumulatedTimeRef.current).catch((err) => {
+        // Reset so we can retry on next threshold check
+        console.error('Failed to record play:', err);
+        recordedTrackRef.current = null;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when track ID changes, not object reference
+  }, [currentTrack?.id, currentTime, duration, isPlaying]);
+}
