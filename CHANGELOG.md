@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Library Export/Import for Migration** - Export complete library data for migrating to a new machine
+  - **Export includes**: metadata, analysis features, audio embeddings, fingerprints, user overrides
+  - **Intelligent matching**: Matches tracks by file_hash (exact), acoustid (fingerprint), ISRC, MusicBrainz ID, or fuzzy title/artist
+  - **Import modes**: match_only (safe), merge (fill gaps), replace (overwrite)
+  - **Gzip compression**: Reduces ~100MB library exports to ~15MB
+  - **Progress indicators**: Upload/download progress in UI
+  - **New endpoints**: `/library/export`, `/library/import/preview`, `/library/import/execute`
+  - **Settings UI**: New "Library Migration" section in Data Management
 - **Toast Notification System** - User-friendly notifications throughout the app
   - New `toastStore` using Sonner library with dark theme styling
   - Success/error/warning/info toast types with descriptions

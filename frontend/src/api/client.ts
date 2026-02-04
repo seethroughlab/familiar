@@ -2396,4 +2396,145 @@ export const exportImportApi = {
   },
 };
 
+// Library Export/Import API (for machine migration)
+export interface LibraryExportRequest {
+  include_embeddings?: boolean;
+  include_acoustid?: boolean;
+  compress?: boolean;
+}
+
+export interface LibraryImportPreviewSummary {
+  total_tracks: number;
+  tracks_with_analysis: number;
+  tracks_with_embeddings: number;
+  tracks_with_user_overrides: number;
+  analysis_version: number | null;
+}
+
+export interface LibraryImportPreviewMatching {
+  total: number;
+  matched: number;
+  unmatched: number;
+  by_method: Record<string, number>;
+  unmatched_samples: Array<{
+    title: string | null;
+    artist: string | null;
+    album: string | null;
+  }>;
+}
+
+export interface LibraryImportPreviewResponse {
+  session_id: string;
+  summary: LibraryImportPreviewSummary;
+  matching: LibraryImportPreviewMatching;
+  warnings: string[];
+  exported_at: string | null;
+  familiar_version: string | null;
+}
+
+export interface LibraryImportExecuteRequest {
+  session_id: string;
+  mode: 'match_only' | 'merge' | 'replace';
+  apply_metadata?: boolean;
+  apply_analysis?: boolean;
+  apply_embeddings?: boolean;
+  apply_user_overrides?: boolean;
+}
+
+export interface LibraryImportResults {
+  analysis_imported: number;
+  embeddings_imported: number;
+  user_overrides_imported: number;
+  metadata_updated: number;
+  skipped: number;
+  errors: string[];
+}
+
+export interface LibraryImportExecuteResponse {
+  status: string;
+  results: LibraryImportResults;
+}
+
+export const libraryExportApi = {
+  /**
+   * Download library export as a file.
+   * Includes track metadata, analysis, embeddings, and user overrides.
+   */
+  downloadExport: async (
+    request: LibraryExportRequest = {},
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<void> => {
+    const response = await api.post('/export-import/library/export', request, {
+      responseType: 'blob',
+      timeout: 600000, // 10 minutes for large libraries
+      onDownloadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          onProgress(progressEvent.loaded, progressEvent.total);
+        }
+      },
+    });
+
+    // Extract filename from Content-Disposition header or generate one
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `familiar-library-export-${new Date().toISOString().split('T')[0].replace(/-/g, '')}`;
+
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^";\n]+)"?/);
+      if (match) {
+        filename = match[1];
+      }
+    } else {
+      // Add extension based on compression
+      filename += request.compress !== false ? '.json.gz' : '.json';
+    }
+
+    // Create blob and trigger download
+    const blob = new Blob([response.data], {
+      type: request.compress !== false ? 'application/gzip' : 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
+  /**
+   * Preview a library import file.
+   * Returns matching statistics and a session_id for execution.
+   */
+  previewImport: async (
+    file: File,
+    onProgress?: (loaded: number, total: number) => void
+  ): Promise<LibraryImportPreviewResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post('/export-import/library/import/preview', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000, // 5 minutes for large files
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          onProgress(progressEvent.loaded, progressEvent.total);
+        }
+      },
+    });
+    return data;
+  },
+
+  /**
+   * Execute a library import from a previewed session.
+   */
+  executeImport: async (
+    request: LibraryImportExecuteRequest
+  ): Promise<LibraryImportExecuteResponse> => {
+    const { data } = await api.post('/export-import/library/import/execute', request, {
+      timeout: 600000, // 10 minutes for large imports
+    });
+    return data;
+  },
+};
+
 export default api;
