@@ -2480,3 +2480,132 @@ async def run_track_enrichment(track_id: str) -> dict[str, Any]:
         await local_engine.dispose()
 
     return result
+
+
+async def propose_enrichment_for_track(track_id: str) -> dict[str, Any]:
+    """Propose metadata enrichment for a track with incomplete metadata.
+
+    This runs asynchronously as a background task when a track is played.
+    Unlike run_track_enrichment (which directly modifies files), this creates
+    a ProposedChange for the user to review.
+
+    Actions:
+    1. Check if track already has a pending proposal
+    2. Look up track metadata via MusicBrainz
+    3. If confident match found (>0.8), create ProposedChange
+    """
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.db.models import ChangeSource, ChangeStatus, ProposedChange, Track
+    from app.services.metadata_enrichment import get_missing_fields
+    from app.services.metadata_lookup import MetadataLookupService
+    from app.services.proposed_changes import ProposedChangesService
+
+    result: dict[str, Any] = {
+        "track_id": track_id,
+        "status": "skipped",
+        "reason": None,
+        "proposal_created": False,
+    }
+
+    local_engine = create_async_engine(settings.database_url, echo=False)
+    local_session_maker = async_sessionmaker(
+        local_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    try:
+        async with local_session_maker() as db:
+            # Get the track
+            stmt = select(Track).where(Track.id == UUID(track_id))
+            query_result = await db.execute(stmt)
+            track = query_result.scalar_one_or_none()
+
+            if not track:
+                result["reason"] = "Track not found"
+                return result
+
+            # Check if track already has a pending proposal
+            existing_stmt = select(ProposedChange).where(
+                ProposedChange.target_ids.contains([track_id]),
+                ProposedChange.status == ChangeStatus.PENDING,
+                ProposedChange.source == ChangeSource.AUTO_ENRICHMENT,
+            )
+            existing_result = await db.execute(existing_stmt)
+            if existing_result.scalar_one_or_none():
+                result["reason"] = "Pending proposal already exists"
+                return result
+
+            # Get missing fields
+            missing_fields = get_missing_fields(track)
+            if not missing_fields:
+                result["reason"] = "No missing fields"
+                return result
+
+            # Look up metadata from MusicBrainz
+            lookup_service = MetadataLookupService()
+
+            # We need at least title and artist to look up
+            title = track.title or ""
+            artist = track.artist or ""
+            if not title or not artist:
+                result["reason"] = "Track missing title or artist for lookup"
+                return result
+
+            candidates = await lookup_service.lookup_track(
+                title=title,
+                artist=artist,
+                album=track.album,
+                limit=1,
+            )
+
+            if not candidates:
+                result["reason"] = "No MusicBrainz matches found"
+                return result
+
+            best_match = candidates[0]
+            if best_match.confidence < 0.8:
+                result["reason"] = f"Match confidence too low ({best_match.confidence:.2f})"
+                return result
+
+            # Create proposed changes for each missing field that has a value
+            service = ProposedChangesService(db)
+            proposals_created = 0
+
+            for field in missing_fields:
+                new_value = best_match.metadata.get(field)
+                if new_value:
+                    await service.create_change(
+                        change_type="metadata",
+                        target_type="track",
+                        target_ids=[track_id],
+                        source=ChangeSource.AUTO_ENRICHMENT,
+                        field=field,
+                        old_value=getattr(track, field, None),
+                        new_value=new_value,
+                        source_detail=f"MusicBrainz: {best_match.source_id}",
+                        confidence=best_match.confidence,
+                        reason=f"Auto-detected missing {field} during playback",
+                    )
+                    proposals_created += 1
+
+            if proposals_created > 0:
+                result["status"] = "success"
+                result["proposal_created"] = True
+                result["fields_proposed"] = [
+                    f for f in missing_fields if best_match.metadata.get(f)
+                ]
+                logger.info(
+                    f"Created {proposals_created} enrichment proposal(s) for track {track_id}"
+                )
+            else:
+                result["reason"] = "No enrichable fields found in MusicBrainz data"
+
+    except Exception as e:
+        logger.error(f"Auto-enrichment proposal failed for {track_id}: {e}", exc_info=True)
+        result["status"] = "error"
+        result["error"] = str(e)
+    finally:
+        await local_engine.dispose()
+
+    return result

@@ -1,6 +1,7 @@
 """Track endpoints."""
 
 from collections.abc import AsyncIterator, Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -11,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DbSession, RequiredProfile
+from app.api.deps import CurrentProfile, DbSession, RequiredProfile
 from app.db.models import ProfilePlayHistory, Track, TrackAnalysis
 from app.services.artwork import compute_album_hash, get_artwork_path
 
@@ -49,6 +50,9 @@ class TrackResponse(BaseModel):
     format: str | None
     analysis_version: int
     features: TrackFeaturesResponse | None = None
+    # Play history (profile-specific, populated when profile header is present)
+    last_played_at: datetime | None = None
+    play_count: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -191,6 +195,7 @@ class BatchTracksRequest(BaseModel):
 async def get_tracks_batch(
     db: DbSession,
     request: BatchTracksRequest,
+    profile: CurrentProfile,
 ) -> list[TrackResponse]:
     """Get full track metadata for a batch of IDs.
 
@@ -214,11 +219,28 @@ async def get_tracks_batch(
     result = await db.execute(query)
     tracks_by_id = {str(t.id): t for t in result.scalars().all()}
 
+    # Fetch play history for current profile if available
+    play_history_map: dict[UUID, ProfilePlayHistory] = {}
+    if profile and uuids:
+        ph_query = select(ProfilePlayHistory).where(
+            ProfilePlayHistory.profile_id == profile.id,
+            ProfilePlayHistory.track_id.in_(uuids),
+        )
+        ph_result = await db.execute(ph_query)
+        play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
+
     # Return in requested order, skipping missing tracks
     ordered_tracks = []
     for id_str in request.ids:
         if id_str in tracks_by_id:
-            ordered_tracks.append(TrackResponse.model_validate(tracks_by_id[id_str]))
+            track = tracks_by_id[id_str]
+            response = TrackResponse.model_validate(track)
+            # Add play history if available
+            if track.id in play_history_map:
+                ph = play_history_map[track.id]
+                response.last_played_at = ph.last_played_at
+                response.play_count = ph.play_count
+            ordered_tracks.append(response)
 
     return ordered_tracks
 
@@ -226,6 +248,7 @@ async def get_tracks_batch(
 @router.get("", response_model=TrackListResponse)
 async def list_tracks(
     db: DbSession,
+    profile: CurrentProfile,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     search: str | None = None,
@@ -325,6 +348,17 @@ async def list_tracks(
     result = await db.execute(query)
     tracks = result.scalars().all()
 
+    # Fetch play history for current profile if available
+    play_history_map: dict[UUID, ProfilePlayHistory] = {}
+    if profile and tracks:
+        track_ids = [t.id for t in tracks]
+        ph_query = select(ProfilePlayHistory).where(
+            ProfilePlayHistory.profile_id == profile.id,
+            ProfilePlayHistory.track_id.in_(track_ids),
+        )
+        ph_result = await db.execute(ph_query)
+        play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
+
     # Build response with optional features
     items = []
     for track in tracks:
@@ -343,6 +377,11 @@ async def list_tracks(
                     instrumentalness=latest.features.get("instrumentalness"),
                     speechiness=latest.features.get("speechiness"),
                 )
+        # Add play history if available
+        if track.id in play_history_map:
+            ph = play_history_map[track.id]
+            response.last_played_at = ph.last_played_at
+            response.play_count = ph.play_count
         items.append(response)
 
     return TrackListResponse(
@@ -699,6 +738,7 @@ async def stream_track(
     db: DbSession,
     track_id: UUID,
     request: Request,
+    background_tasks: BackgroundTasks,
 ) -> StreamingResponse:
     """Stream audio file with range request support for seeking."""
     # Get track from database
@@ -708,6 +748,13 @@ async def stream_track(
 
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
+
+    # Trigger auto-enrichment in background if track has incomplete metadata
+    from app.services.metadata_enrichment import needs_enrichment
+    from app.services.tasks import propose_enrichment_for_track
+
+    if needs_enrichment(track, check_artwork=False):
+        background_tasks.add_task(propose_enrichment_for_track, str(track.id))
 
     file_path = Path(track.file_path)
     if not file_path.exists():

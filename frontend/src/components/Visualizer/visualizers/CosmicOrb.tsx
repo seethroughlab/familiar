@@ -203,8 +203,8 @@ function CircularWaveform() {
       const angle = (i / segments) * Math.PI * 2;
 
       // Add secondary wave oscillation
-      const wave = Math.sin(timeRef.current * 3 + i * 0.1) * 0.1 * (1 + bass);
-      const radius = 1.5 + value * 1.5 + bass * 0.5 + wave;
+      const wave = Math.sin(timeRef.current * 3 + i * 0.1) * 0.15 * (1 + bass);
+      const radius = 2.0 + value * 1.8 + bass * 0.6 + wave;
 
       positions.setXYZ(i, Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
     }
@@ -258,8 +258,8 @@ function SecondaryWaveform() {
       const value = frequencyData ? frequencyData[dataIndex] / 255 : 0;
       const angle = (i / segments) * Math.PI * 2;
 
-      const wave = Math.cos(timeRef.current * 2 + i * 0.15) * 0.15 * (1 + mid);
-      const radius = 2 + value * 1.2 + mid * 0.3 + wave;
+      const wave = Math.cos(timeRef.current * 2 + i * 0.15) * 0.2 * (1 + mid);
+      const radius = 2.8 + value * 1.5 + mid * 0.4 + wave;
 
       positions.setXYZ(i, Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
     }
@@ -309,7 +309,7 @@ function ReactiveOrb() {
 
   return (
     <mesh ref={meshRef}>
-      <icosahedronGeometry args={[0.8, 4]} />
+      <icosahedronGeometry args={[1.2, 4]} />
       {/* @ts-expect-error - Custom R3F element registered via extend() */}
       <orbMaterial
         ref={materialRef}
@@ -330,11 +330,11 @@ function GlowingCore() {
 
     const audioData = getAudioData();
     const bass = audioData?.bass ?? 0;
-    const scale = 0.3 + bass * 0.2;
+    const scale = 0.4 + bass * 0.3; // Increased base size
     meshRef.current.scale.setScalar(scale);
 
     const material = meshRef.current.material as THREE.MeshBasicMaterial;
-    material.opacity = 0.5 + bass * 0.5;
+    material.opacity = 0.6 + bass * 0.4;
   });
 
   return (
@@ -343,9 +343,74 @@ function GlowingCore() {
       <meshBasicMaterial
         color="#ffffff"
         transparent
-        opacity={0.5}
+        opacity={0.6}
       />
     </mesh>
+  );
+}
+
+// Starfield background for cosmic depth
+function Starfield() {
+  const starsRef = useRef<THREE.Points>(null);
+  const timeRef = useRef(0);
+
+  const { positions, sizes, twinklePhases } = useMemo(() => {
+    const count = 500;
+    const positions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const twinklePhases = new Float32Array(count);
+
+    for (let i = 0; i < count; i++) {
+      // Distribute stars on a large sphere
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const radius = 25 + Math.random() * 15; // Between 25-40 units away
+
+      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = radius * Math.cos(phi);
+
+      sizes[i] = Math.random() * 0.5 + 0.2;
+      twinklePhases[i] = Math.random() * Math.PI * 2;
+    }
+
+    return { positions, sizes, twinklePhases };
+  }, []);
+
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+    return geo;
+  }, [positions, sizes]);
+
+  useFrame((_, delta) => {
+    if (!starsRef.current) return;
+    timeRef.current += delta;
+
+    // Subtle twinkle effect by modulating opacity
+    const sizeAttr = starsRef.current.geometry.attributes.size;
+    for (let i = 0; i < sizes.length; i++) {
+      const twinkle = Math.sin(timeRef.current * 2 + twinklePhases[i]) * 0.3 + 0.7;
+      sizeAttr.setX(i, sizes[i] * twinkle);
+    }
+    sizeAttr.needsUpdate = true;
+
+    // Very slow rotation
+    starsRef.current.rotation.y += delta * 0.01;
+  });
+
+  return (
+    <points ref={starsRef} geometry={geometry}>
+      <pointsMaterial
+        size={0.3}
+        sizeAttenuation
+        color="#ffffff"
+        transparent
+        opacity={0.8}
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
   );
 }
 
@@ -355,40 +420,30 @@ function CosmicOrbScene() {
 
   return (
     <>
-      <color attach="background" args={['#050510']} />
+      <color attach="background" args={['#020208']} />
       <ambientLight intensity={0.2} />
       <pointLight position={[10, 10, 10]} intensity={1} color="#a855f7" />
       <pointLight position={[-10, -10, 5]} intensity={0.8} color="#06b6d4" />
+
+      {/* Starfield for cosmic depth */}
+      <Starfield />
 
       <GlowingCore />
       <ReactiveOrb />
       <CircularWaveform />
       <SecondaryWaveform />
 
-      {/* GPU Particles - 5000 particles orbiting */}
+      {/* GPU Particles - reduced count, pushed outward for more empty space around orb */}
       <GPUParticles
-        count={5000}
-        size={0.015}
+        count={3000}
+        size={0.012}
         color="#a855f7"
         secondaryColor="#06b6d4"
-        spread={5}
-        speed={0.8}
+        spread={8}
+        speed={0.6}
         audioData={null}
         behavior="orbit"
-        opacity={0.7}
-      />
-
-      {/* Second particle layer with different behavior */}
-      <GPUParticles
-        count={2000}
-        size={0.01}
-        color="#06b6d4"
-        secondaryColor="#22c55e"
-        spread={6}
-        speed={0.5}
-        audioData={null}
-        behavior="flow"
-        opacity={0.5}
+        opacity={0.6}
       />
 
       <OrbitControls

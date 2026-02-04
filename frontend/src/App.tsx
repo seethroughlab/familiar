@@ -276,7 +276,7 @@ function AppContent() {
   return (
     <GlobalDropZone onFilesDropped={setImportFiles}>
     {/* Use h-dvh for iOS dynamic viewport, fallback to h-screen */}
-    <div className={`h-screen h-[100dvh] flex flex-col ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
+    <div className={`h-screen h-[100dvh] flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
       {/* Main content area - pb-24 on mobile accounts for fixed player bar + safe area */}
       <div className="flex-1 flex overflow-hidden pb-20 md:pb-20">
         {/* Left panel - Chat (hidden on mobile, shown via overlay) */}

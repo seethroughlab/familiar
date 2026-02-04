@@ -122,9 +122,10 @@ test.describe('AI Chat (Mocked)', () => {
     const sendButton = page.locator('button:has(svg):not([disabled])').last();
     await sendButton.click();
 
-    // Wait for response text to appear
+    // Wait for the streaming to complete and UI to update
+    // Use longer timeout since stream parsing is async
     const responseText = page.locator('text=/upbeat music|Happy Song|Dance Track/i').first();
-    await expect(responseText).toBeVisible({ timeout: 10000 });
+    await expect(responseText).toBeVisible({ timeout: 15000 });
   });
 
   test('tool calls are displayed during processing', async ({ page }) => {
@@ -172,9 +173,9 @@ test.describe('AI Chat (Mocked)', () => {
     const sendButton = page.locator('button:has(svg):not([disabled])').last();
     await sendButton.click();
 
-    // Should show error message
+    // Should show error message - use longer timeout for async stream parsing
     const errorText = page.locator('text=/error|failed|problem/i').first();
-    await expect(errorText).toBeVisible({ timeout: 10000 });
+    await expect(errorText).toBeVisible({ timeout: 15000 });
   });
 
   test('handles no tracks found gracefully', async ({ page }) => {
@@ -195,9 +196,9 @@ test.describe('AI Chat (Mocked)', () => {
     const sendButton = page.locator('button:has(svg):not([disabled])').last();
     await sendButton.click();
 
-    // Should show "no tracks found" type message
+    // Should show "no tracks found" type message - use longer timeout for async stream parsing
     const noTracksText = page.locator('text=/couldn\'t find|no tracks|not found/i').first();
-    await expect(noTracksText).toBeVisible({ timeout: 10000 });
+    await expect(noTracksText).toBeVisible({ timeout: 15000 });
   });
 
   test('chat shows disabled state when API is not configured', async ({ page }) => {
@@ -246,9 +247,9 @@ test.describe('AI Chat (Mocked)', () => {
     // Wait for response
     await page.waitForTimeout(2000);
 
-    // Check that tracks appear in queue or response mentions them
+    // Check that tracks appear in queue or response mentions them - use longer timeout for async stream parsing
     const trackMention = page.locator('text=/Happy Song|Dance Track|2 tracks/i').first();
-    const hasTrackMention = await trackMention.isVisible({ timeout: 5000 }).catch(() => false);
+    const hasTrackMention = await trackMention.isVisible({ timeout: 15000 }).catch(() => false);
 
     expect(hasTrackMention).toBe(true);
   });

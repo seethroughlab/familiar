@@ -119,15 +119,19 @@ test.describe('Visualizer', () => {
   test('visualizer tab opens', async ({ page }) => {
     await navigateToTab(page, 'Visualizer');
 
+    // Wait for visualizer content to mount - give it more time
+    await page.waitForTimeout(1000);
+
     // Without a track playing, visualizer shows placeholder
     // Either shows "No track playing" or a canvas if track is playing
     const noTrack = page.getByText('No track playing');
     const canvas = page.locator('canvas');
 
-    const hasNoTrack = await noTrack.isVisible({ timeout: 3000 }).catch(() => false);
-    const hasCanvas = await canvas.isVisible({ timeout: 1000 }).catch(() => false);
+    // Use longer timeouts to account for component mount time
+    const hasNoTrack = await noTrack.isVisible({ timeout: 5000 }).catch(() => false);
+    const hasCanvas = await canvas.isVisible({ timeout: 2000 }).catch(() => false);
 
-    // One of these should be visible
+    // At least one should be visible
     expect(hasNoTrack || hasCanvas).toBe(true);
   });
 

@@ -169,13 +169,9 @@ const KaleidoscopeMaterial = shaderMaterial(
       );
       color.rgb = mix(color.rgb, color.rgb * rainbow, 0.15 * uMid);
 
-      // Edge glow
-      float edgeGlow = smoothstep(0.7, 1.0, dist) * (0.4 + uBass * 0.6);
+      // Edge glow (starts earlier, subtler intensity)
+      float edgeGlow = smoothstep(0.5, 1.0, dist) * (0.2 + uBass * 0.4);
       color.rgb += vec3(0.6, 0.3, 0.9) * edgeGlow;
-
-      // Vignette
-      float vignette = 1.0 - smoothstep(0.3, 1.0, dist);
-      color.rgb *= vignette;
 
       gl_FragColor = color;
     }
@@ -427,7 +423,7 @@ function KaleidoscopeScene({ artworkUrl }: { artworkUrl: string }) {
         enableVignette
         bloomIntensity={1.5}
         bloomThreshold={0.4}
-        vignetteIntensity={0.5}
+        vignetteIntensity={0.3}
       />
     </>
   );

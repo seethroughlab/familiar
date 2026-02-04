@@ -9,8 +9,8 @@
  * - Colors extracted from album artwork
  */
 import { useRef, useMemo, useEffect, useState, memo } from 'react';
-import { Canvas, useFrame, extend } from '@react-three/fiber';
-import { MeshReflectorMaterial, shaderMaterial } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { extractPalette } from '../../../utils/colorExtraction';
@@ -19,57 +19,13 @@ import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 
 const DEFAULT_PALETTE = ['#a855f7', '#06b6d4', '#22c55e', '#f59e0b', '#ec4899'];
 
-// Custom shader for glowing rings
-const RingMaterial = shaderMaterial(
-  {
-    uTime: 0,
-    uBass: 0,
-    uColor: new THREE.Color('#ffffff'),
-  },
-  // Vertex shader
-  `
-    varying vec2 vUv;
-    varying vec3 vPosition;
 
-    void main() {
-      vUv = uv;
-      vPosition = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  // Fragment shader
-  `
-    uniform float uTime;
-    uniform float uBass;
-    uniform vec3 uColor;
-
-    varying vec2 vUv;
-    varying vec3 vPosition;
-
-    void main() {
-      // Create pulsing glow effect
-      float pulse = sin(uTime * 3.0 + vUv.x * 10.0) * 0.5 + 0.5;
-      float glow = (0.5 + uBass * 0.5) * (pulse * 0.3 + 0.7);
-
-      // Edge glow
-      float edgeFade = smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.7, vUv.y);
-
-      vec3 finalColor = uColor * glow * (1.0 + uBass);
-      float alpha = edgeFade * (0.6 + uBass * 0.4);
-
-      gl_FragColor = vec4(finalColor, alpha);
-    }
-  `
-);
-
-extend({ RingMaterial });
-
-// GPU Flow Particles using instanced mesh
+// GPU Flow Particles using instanced mesh - vertical stream of light
 function FlowParticles({ palette }: { palette: string[] }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   useAudioAnalyser(true);
   const timeRef = useRef(0);
-  const count = 8000;
+  const count = 10000;
 
   const { positions, velocities, phases, colorIndices } = useMemo(() => {
     const positions = new Float32Array(count * 3);
@@ -78,18 +34,19 @@ function FlowParticles({ palette }: { palette: string[] }) {
     const colorIndices = new Float32Array(count);
 
     for (let i = 0; i < count; i++) {
-      // Distribute in a cylinder
+      // Distribute in a narrower column for vertical flow emphasis
       const angle = Math.random() * Math.PI * 2;
-      const radius = Math.random() * 4 + 0.5;
-      const height = (Math.random() - 0.5) * 6;
+      const radius = Math.random() * 2.5 + 0.3; // Narrower spread
+      const height = (Math.random() - 0.5) * 10; // Taller range
 
       positions[i * 3] = Math.cos(angle) * radius;
       positions[i * 3 + 1] = height;
       positions[i * 3 + 2] = Math.sin(angle) * radius;
 
-      velocities[i * 3] = (Math.random() - 0.5) * 0.02;
-      velocities[i * 3 + 1] = Math.random() * 0.02 + 0.01;
-      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+      // Stronger upward velocity, reduced horizontal drift
+      velocities[i * 3] = (Math.random() - 0.5) * 0.01;
+      velocities[i * 3 + 1] = Math.random() * 0.04 + 0.03; // Increased from 0.01-0.03 to 0.03-0.07
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.01;
 
       phases[i] = Math.random() * Math.PI * 2;
       colorIndices[i] = Math.floor(Math.random() * palette.length);
@@ -133,40 +90,45 @@ function FlowParticles({ palette }: { palette: string[] }) {
 
       const phase = phases[i];
 
-      // Curl noise-like flow
-      const flowX = noise(y * 0.3, z * 0.3, x * 0.3, time * 0.3);
-      const flowY = noise(z * 0.3, x * 0.3, y * 0.3, time * 0.3 + 100);
-      const flowZ = noise(x * 0.3, y * 0.3, z * 0.3, time * 0.3 + 200);
+      // Simplified flow - emphasize vertical motion
+      const flowX = noise(y * 0.2, z * 0.2, x * 0.2, time * 0.2);
+      const flowZ = noise(x * 0.2, y * 0.2, z * 0.2, time * 0.2 + 200);
 
-      const speed = 0.02 * (1 + bass * 2 + intensity);
+      const speed = 0.015 * (1 + bass * 1.5 + intensity);
 
-      x += flowX * speed + velocities[i3] * (1 + mid);
-      y += flowY * speed * 0.5 + velocities[i3 + 1] * (1 + treble);
-      z += flowZ * speed + velocities[i3 + 2] * (1 + mid);
+      // Horizontal drift is subtle
+      x += flowX * speed * 0.3 + velocities[i3] * (1 + mid * 0.5);
+      z += flowZ * speed * 0.3 + velocities[i3 + 2] * (1 + mid * 0.5);
 
-      // Spiral motion
+      // Strong upward flow
+      y += velocities[i3 + 1] * (1 + bass * 2 + treble);
+
+      // Gentle spiral - reduced speed
       const angle = Math.atan2(z, x);
       const radius = Math.sqrt(x * x + z * z);
-      const spiralSpeed = 0.005 + bass * 0.02;
+      const spiralSpeed = 0.002 + bass * 0.008;
       const newAngle = angle + spiralSpeed;
 
       x = Math.cos(newAngle) * radius;
       z = Math.sin(newAngle) * radius;
 
-      // Vertical bounds with wrap-around
-      if (y > 3) {
-        y = -3;
-        x = (Math.random() - 0.5) * 8;
-        z = (Math.random() - 0.5) * 8;
+      // Vertical bounds with wrap-around - taller range
+      if (y > 5) {
+        y = -5;
+        // Respawn in narrow column
+        const respawnAngle = Math.random() * Math.PI * 2;
+        const respawnRadius = Math.random() * 2.5 + 0.3;
+        x = Math.cos(respawnAngle) * respawnRadius;
+        z = Math.sin(respawnAngle) * respawnRadius;
       }
-      if (y < -3) y = 3;
+      if (y < -5) y = 5;
 
-      // Radial bounds
+      // Radial bounds - keep column narrow
       const dist = Math.sqrt(x * x + z * z);
-      if (dist > 5) {
-        const scale = 5 / dist;
-        x *= scale * 0.8;
-        z *= scale * 0.8;
+      if (dist > 3.5) {
+        const scale = 3.5 / dist;
+        x *= scale * 0.9;
+        z *= scale * 0.9;
       }
 
       positions[i3] = x;
@@ -174,19 +136,20 @@ function FlowParticles({ palette }: { palette: string[] }) {
       positions[i3 + 2] = z;
 
       // Update instance
-      const size = 0.02 * (1 + intensity * 0.5 + Math.sin(time + phase) * 0.2);
+      const size = 0.018 * (1 + intensity * 0.5 + Math.sin(time + phase) * 0.2);
       dummy.position.set(x, y, z);
       dummy.scale.setScalar(size);
       dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, dummy.matrix);
 
-      // Update color with audio reactivity
-      const colorIdx = Math.floor(colorIndices[i]) % paletteColors.length;
+      // Update color with audio reactivity - add height-based color variation
+      const heightRatio = (y + 5) / 10; // 0 at bottom, 1 at top
+      const colorIdx = Math.floor(colorIndices[i] + heightRatio * 2) % paletteColors.length;
       const baseColor = paletteColors[colorIdx];
       const dynamicColor = baseColor.clone();
 
-      // Brighten based on audio
-      dynamicColor.offsetHSL(0, 0, intensity * 0.3);
+      // Brighten based on audio and height
+      dynamicColor.offsetHSL(0, 0, intensity * 0.3 + heightRatio * 0.1);
       meshRef.current.setColorAt(i, dynamicColor);
     }
 
@@ -209,117 +172,6 @@ function FlowParticles({ palette }: { palette: string[] }) {
   );
 }
 
-// Glowing torus rings
-function GlowingRings({ palette }: { palette: string[] }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const materialsRef = useRef<THREE.ShaderMaterial[]>([]);
-  useAudioAnalyser(true);
-  const timeRef = useRef(0);
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return;
-    timeRef.current += delta;
-
-    const audioData = getAudioData();
-    const bass = audioData?.bass ?? 0;
-    const mid = audioData?.mid ?? 0;
-    const treble = audioData?.treble ?? 0;
-
-    groupRef.current.children.forEach((child, i) => {
-      const mesh = child as THREE.Mesh;
-      const speed = i % 2 === 0 ? 1 : -1;
-
-      mesh.rotation.x += 0.003 * speed + (i % 2 === 0 ? bass : treble) * 0.02;
-      mesh.rotation.y += 0.002 * speed + mid * 0.01;
-      mesh.rotation.z += 0.001 * speed;
-
-      // Pulse scale
-      const pulsePhase = i * 0.5;
-      const pulse = Math.sin(timeRef.current * 2 + pulsePhase) * 0.1;
-      const scale = 1 + bass * 0.3 + pulse;
-      mesh.scale.setScalar(scale);
-
-      // Update shader uniforms
-      if (materialsRef.current[i]) {
-        materialsRef.current[i].uniforms.uTime.value = timeRef.current;
-        materialsRef.current[i].uniforms.uBass.value = bass;
-      }
-    });
-  });
-
-  return (
-    <group ref={groupRef}>
-      {palette.slice(0, 4).map((color, i) => (
-        <mesh
-          key={i}
-          rotation={[
-            Math.PI / 2 + i * 0.2,
-            i * Math.PI / 3,
-            i * 0.1,
-          ]}
-        >
-          <torusGeometry args={[1.2 + i * 0.4, 0.03 + i * 0.01, 16, 100]} />
-          {/* @ts-expect-error - Custom R3F element registered via extend() */}
-          <ringMaterial
-            ref={(el: THREE.ShaderMaterial | null) => {
-              if (el) materialsRef.current[i] = el;
-            }}
-            transparent
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            uColor={new THREE.Color(color)}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-// Central energy core
-function EnergyCore({ palette }: { palette: string[] }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  useAudioAnalyser(true);
-
-  useFrame(() => {
-    if (!meshRef.current) return;
-
-    const audioData = getAudioData();
-    const bass = audioData?.bass ?? 0;
-    const intensity = (audioData?.averageFrequency ?? 0) / 255;
-
-    // Pulsing scale
-    const scale = 0.3 + bass * 0.3 + intensity * 0.2;
-    meshRef.current.scale.setScalar(scale);
-
-    // Rotation
-    meshRef.current.rotation.y += 0.01 + bass * 0.02;
-    meshRef.current.rotation.x += 0.005;
-
-    // Update material
-    const material = meshRef.current.material as THREE.MeshBasicMaterial;
-    material.opacity = 0.5 + bass * 0.5;
-  });
-
-  const coreColor = useMemo(() => {
-    const c1 = new THREE.Color(palette[0]);
-    const c2 = new THREE.Color(palette[1] || palette[0]);
-    return c1.lerp(c2, 0.5);
-  }, [palette]);
-
-  return (
-    <mesh ref={meshRef}>
-      <icosahedronGeometry args={[1, 2]} />
-      <meshBasicMaterial
-        color={coreColor}
-        transparent
-        opacity={0.7}
-        wireframe
-        toneMapped={false}
-      />
-    </mesh>
-  );
-}
 
 // Reflective ground - wrapped in memo to prevent HMR serialization issues
 const ReflectiveGround = memo(function ReflectiveGround({ palette }: { palette: string[] }) {
@@ -348,34 +200,35 @@ const ReflectiveGround = memo(function ReflectiveGround({ palette }: { palette: 
   );
 });
 
-// Scene with fog and lighting
+// Scene with fog and lighting - focused on vertical particle flow
 function ColorFlowScene({ palette }: { palette: string[] }) {
   useAudioAnalyser(true);
 
   const bgColor = useMemo(() => {
     const color = new THREE.Color(palette[0]);
-    color.multiplyScalar(0.05);
+    color.multiplyScalar(0.03);
     return color;
   }, [palette]);
 
   const fogColor = useMemo(() => {
     const color = new THREE.Color(palette[0]);
-    color.multiplyScalar(0.1);
+    color.multiplyScalar(0.08);
     return color;
   }, [palette]);
 
   return (
     <>
       <color attach="background" args={[bgColor]} />
-      <fog attach="fog" args={[fogColor, 5, 15]} />
+      <fog attach="fog" args={[fogColor, 4, 18]} />
 
-      <ambientLight intensity={0.3} />
-      <pointLight position={[5, 5, 5]} intensity={1} color={palette[0]} />
-      <pointLight position={[-5, 3, -5]} intensity={0.8} color={palette[1] || palette[0]} />
-      <pointLight position={[0, -2, 0]} intensity={0.5} color={palette[2] || palette[0]} />
+      <ambientLight intensity={0.2} />
+      {/* Lights positioned to illuminate the vertical column */}
+      <pointLight position={[3, 3, 3]} intensity={1} color={palette[0]} />
+      <pointLight position={[-3, 0, -3]} intensity={0.8} color={palette[1] || palette[0]} />
+      <pointLight position={[0, -3, 2]} intensity={0.6} color={palette[2] || palette[0]} />
+      <pointLight position={[0, 4, 0]} intensity={0.5} color={palette[3] || palette[0]} />
 
-      <EnergyCore palette={palette} />
-      <GlowingRings palette={palette} />
+      {/* Only particles and ground - no central object */}
       <FlowParticles palette={palette} />
       <ReflectiveGround palette={palette} />
 
@@ -383,9 +236,9 @@ function ColorFlowScene({ palette }: { palette: string[] }) {
       <AudioReactiveEffects
         enableBloom
         enableVignette
-        bloomIntensity={1.5}
-        bloomThreshold={0.4}
-        vignetteIntensity={0.4}
+        bloomIntensity={1.8}
+        bloomThreshold={0.3}
+        vignetteIntensity={0.5}
       />
     </>
   );
@@ -405,7 +258,7 @@ export function ColorFlow({ artworkUrl }: VisualizerProps) {
   return (
     <div className="w-full h-full">
       <Canvas
-        camera={{ position: [0, 2, 8], fov: 50 }}
+        camera={{ position: [0, 0.5, 6], fov: 55 }}
         gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
         dpr={[1, 2]}
       >
@@ -420,7 +273,7 @@ registerVisualizer(
   {
     id: 'color-flow',
     name: 'Color Flow',
-    description: 'Enhanced flowing particles with reflections',
+    description: 'Vertical stream of light with reflective floor',
     usesMetadata: true,
   },
   ColorFlow

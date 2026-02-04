@@ -184,8 +184,8 @@ def _get_cors_origins() -> list[str]:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_get_cors_origins(),
-    # Allow Tailscale IPs (100.x.x.x) for remote development
-    allow_origin_regex=r"^https?://100\.\d+\.\d+\.\d+(:\d+)?$",
+    # Allow private network access: single-word hostnames and any IPv4 addresses
+    allow_origin_regex=r"^https?://([a-zA-Z0-9-]+|\d+\.\d+\.\d+\.\d+)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],

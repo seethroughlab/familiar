@@ -549,7 +549,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
                 )}
 
                 {/* Message content */}
-                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                <p className="text-sm whitespace-pre-wrap break-words select-text">{message.content}</p>
 
                 {/* Streaming indicator */}
                 {message.role === 'assistant' && !message.content && isLoading && (

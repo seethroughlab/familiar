@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Maximize2, Minimize2, Music } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
@@ -12,7 +12,8 @@ export function VisualizerView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore();
   const { visualizerId, setVisualizerId } = useVisualizerStore();
@@ -40,9 +41,11 @@ export function VisualizerView() {
     if (visualizerId && visualizerId !== currentUrlType) {
       const newParams = new URLSearchParams(searchParams);
       newParams.set('type', visualizerId);
-      setSearchParams(newParams, { replace: true });
+      // Use navigate to preserve the hash (e.g., #visualizer)
+      const paramString = newParams.toString();
+      navigate(`?${paramString}${window.location.hash}`, { replace: true });
     }
-  }, [visualizerId, searchParams, setSearchParams]);
+  }, [visualizerId, searchParams, navigate]);
 
   // Fetch lyrics for visualizer
   useEffect(() => {
@@ -113,7 +116,7 @@ export function VisualizerView() {
   // Show placeholder when no track is playing
   if (!currentTrack) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-zinc-500">
+      <div data-testid="visualizer-placeholder" className="h-full flex flex-col items-center justify-center text-zinc-500">
         <Music className="w-16 h-16 mb-4" />
         <p className="text-lg">No track playing</p>
         <p className="text-sm mt-2">Play a track to see the visualizer</p>

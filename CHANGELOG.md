@@ -58,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CORS blocking audio on non-localhost origins** - Audio playback now works from any hostname
+  - Previously only allowed localhost and Tailscale IPs (100.x.x.x)
+  - Now allows any single-word hostname (e.g., `nas`, `openmediavault`) and any IPv4 address
+  - Fixes 20+ second delays when accessing via NAS hostname on local network
 - **Error Message Sanitization** - Internal error details no longer exposed to users
   - Health check endpoints return "Connection failed" instead of raw exception messages
   - Spotify OAuth callback returns generic error codes instead of raw exceptions

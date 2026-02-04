@@ -14,6 +14,9 @@ export interface Track {
   format: string | null;
   analysis_version: number;
   features?: TrackFeatures;
+  // Play history (profile-specific)
+  last_played_at?: string | null;
+  play_count?: number | null;
 }
 
 export interface TrackFeatures {
