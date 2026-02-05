@@ -11,6 +11,8 @@ import {
 import {
   useAudioEffectsStore,
   type ReverbPreset,
+  type SaturationState,
+  type TremoloState,
 } from '../../stores/audioEffectsStore';
 import { areAudioEffectsAvailable } from '../../hooks/useAudioEngine';
 
@@ -163,6 +165,30 @@ export function AudioEffectsSettings() {
     setFilterLowpassFreq,
     setFilterHighpassQ,
     setFilterLowpassQ,
+    stereoWidth,
+    setStereoWidthEnabled,
+    setStereoWidth,
+    saturation,
+    setSaturationEnabled,
+    setSaturationDrive,
+    setSaturationType,
+    setSaturationMix,
+    bitcrusher,
+    setBitcrusherEnabled,
+    setBitcrusherBits,
+    setBitcrusherSampleRateReduction,
+    setBitcrusherMix,
+    chorus,
+    setChorusEnabled,
+    setChorusRate,
+    setChorusDepth,
+    setChorusVoices,
+    setChorusMix,
+    tremolo,
+    setTremoloEnabled,
+    setTremoloRate,
+    setTremoloDepth,
+    setTremoloShape,
     presets,
     activePresetName,
     savePreset,
@@ -177,6 +203,21 @@ export function AudioEffectsSettings() {
     'Studio Polish',
     'Bass Boost',
     'Dreamy',
+    'Lo-Fi',
+    'Late Night',
+    'Club',
+    'Telephone',
+    'Underwater',
+    '80s Gated',
+    'Spoken Word',
+    'Wide Stereo',
+    'Analog Warmth',
+    'Retro 8-Bit',
+    'Thick & Lush',
+    'Vintage Amp',
+    'Psychedelic',
+    'Synthwave',
+    'Broken Radio',
   ];
 
   const handleSavePreset = () => {
@@ -577,6 +618,199 @@ export function AudioEffectsSettings() {
                 onChange={setFilterLowpassQ}
                 formatValue={formatQ}
                 disabled={!filter.enabled}
+              />
+            </EffectSection>
+
+            {/* Stereo Width */}
+            <EffectSection
+              title="Stereo Width"
+              enabled={stereoWidth.enabled}
+              onToggle={setStereoWidthEnabled}
+            >
+              <EffectSlider
+                label="Width"
+                value={stereoWidth.width}
+                min={0}
+                max={2}
+                step={0.05}
+                onChange={setStereoWidth}
+                formatValue={(v) => v === 0 ? 'Mono' : v === 1 ? 'Normal' : `${(v * 100).toFixed(0)}%`}
+                disabled={!stereoWidth.enabled}
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                0% = Mono, 100% = Normal, 200% = Extra Wide
+              </p>
+            </EffectSection>
+
+            {/* Saturation */}
+            <EffectSection
+              title="Saturation"
+              enabled={saturation.enabled}
+              onToggle={setSaturationEnabled}
+            >
+              <div className={!saturation.enabled ? 'opacity-50' : ''}>
+                <label className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 mb-1 block">
+                  Type
+                </label>
+                <select
+                  value={saturation.type}
+                  onChange={(e) => setSaturationType(e.target.value as SaturationState['type'])}
+                  disabled={!saturation.enabled}
+                  className="w-full bg-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:cursor-not-allowed"
+                >
+                  <option value="warm">Warm (Tube)</option>
+                  <option value="tape">Tape</option>
+                  <option value="hard">Hard Clip</option>
+                </select>
+              </div>
+              <EffectSlider
+                label="Drive"
+                value={saturation.drive}
+                min={1}
+                max={5}
+                step={0.1}
+                onChange={setSaturationDrive}
+                formatValue={(v) => v.toFixed(1)}
+                disabled={!saturation.enabled}
+              />
+              <EffectSlider
+                label="Mix"
+                value={saturation.mix}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={setSaturationMix}
+                formatValue={formatPercent}
+                disabled={!saturation.enabled}
+              />
+            </EffectSection>
+
+            {/* Chorus */}
+            <EffectSection
+              title="Chorus"
+              enabled={chorus.enabled}
+              onToggle={setChorusEnabled}
+            >
+              <EffectSlider
+                label="Rate"
+                value={chorus.rate}
+                min={0.1}
+                max={5}
+                step={0.1}
+                onChange={setChorusRate}
+                formatValue={(v) => `${v.toFixed(1)} Hz`}
+                disabled={!chorus.enabled}
+              />
+              <EffectSlider
+                label="Depth"
+                value={chorus.depth}
+                min={0}
+                max={10}
+                step={0.5}
+                onChange={setChorusDepth}
+                formatValue={(v) => `${v.toFixed(1)} ms`}
+                disabled={!chorus.enabled}
+              />
+              <EffectSlider
+                label="Voices"
+                value={chorus.voices}
+                min={2}
+                max={3}
+                step={1}
+                onChange={setChorusVoices}
+                formatValue={(v) => `${v}`}
+                disabled={!chorus.enabled}
+              />
+              <EffectSlider
+                label="Mix"
+                value={chorus.mix}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={setChorusMix}
+                formatValue={formatPercent}
+                disabled={!chorus.enabled}
+              />
+            </EffectSection>
+
+            {/* Tremolo */}
+            <EffectSection
+              title="Tremolo"
+              enabled={tremolo.enabled}
+              onToggle={setTremoloEnabled}
+            >
+              <div className={!tremolo.enabled ? 'opacity-50' : ''}>
+                <label className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 mb-1 block">
+                  Shape
+                </label>
+                <select
+                  value={tremolo.shape}
+                  onChange={(e) => setTremoloShape(e.target.value as TremoloState['shape'])}
+                  disabled={!tremolo.enabled}
+                  className="w-full bg-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:cursor-not-allowed"
+                >
+                  <option value="sine">Sine (Smooth)</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="square">Square (Choppy)</option>
+                </select>
+              </div>
+              <EffectSlider
+                label="Rate"
+                value={tremolo.rate}
+                min={0.5}
+                max={20}
+                step={0.5}
+                onChange={setTremoloRate}
+                formatValue={(v) => `${v.toFixed(1)} Hz`}
+                disabled={!tremolo.enabled}
+              />
+              <EffectSlider
+                label="Depth"
+                value={tremolo.depth}
+                min={0}
+                max={1}
+                step={0.05}
+                onChange={setTremoloDepth}
+                formatValue={formatPercent}
+                disabled={!tremolo.enabled}
+              />
+            </EffectSection>
+
+            {/* Bitcrusher */}
+            <EffectSection
+              title="Bitcrusher"
+              enabled={bitcrusher.enabled}
+              onToggle={setBitcrusherEnabled}
+            >
+              <EffectSlider
+                label="Bit Depth"
+                value={bitcrusher.bits}
+                min={1}
+                max={16}
+                step={1}
+                onChange={setBitcrusherBits}
+                formatValue={(v) => `${v} bit`}
+                disabled={!bitcrusher.enabled}
+              />
+              <EffectSlider
+                label="Sample Rate Reduction"
+                value={bitcrusher.sampleRateReduction}
+                min={1}
+                max={32}
+                step={1}
+                onChange={setBitcrusherSampleRateReduction}
+                formatValue={(v) => `÷${v}`}
+                disabled={!bitcrusher.enabled}
+              />
+              <EffectSlider
+                label="Mix"
+                value={bitcrusher.mix}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={setBitcrusherMix}
+                formatValue={formatPercent}
+                disabled={!bitcrusher.enabled}
               />
             </EffectSection>
           </div>

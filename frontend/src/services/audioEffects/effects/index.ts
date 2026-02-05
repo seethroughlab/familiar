@@ -4,3 +4,8 @@ export { CompressorEffect } from './CompressorEffect';
 export { ReverbEffect } from './ReverbEffect';
 export { DelayEffect } from './DelayEffect';
 export { FilterEffect } from './FilterEffect';
+export { StereoWidthEffect } from './StereoWidthEffect';
+export { SaturationEffect } from './SaturationEffect';
+export { BitcrusherEffect } from './BitcrusherEffect';
+export { ChorusEffect } from './ChorusEffect';
+export { TremoloEffect } from './TremoloEffect';

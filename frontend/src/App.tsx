@@ -395,15 +395,16 @@ function AppContent() {
                         setShowMobileChat(true);
                       }
                     }}
-                    className={`p-2 rounded-lg transition-colors ${
+                    className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
                       showChatPanel
-                        ? 'bg-zinc-700 text-white'
+                        ? 'bg-zinc-800 text-white'
                         : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
                     }`}
                     aria-label={showChatPanel ? 'Close chat' : 'Open chat'}
                     title="AI Assistant"
                   >
-                    <MessageSquare className="w-5 h-5" />
+                    <MessageSquare className="w-4 h-4 inline-block sm:mr-1.5" />
+                    <span className="hidden sm:inline">Chat</span>
                   </button>
 
                   {/* Tabs */}
