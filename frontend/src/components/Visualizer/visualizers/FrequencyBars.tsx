@@ -14,6 +14,15 @@ import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser'
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 
+// Soft limiter - linear response up to threshold, then compresses
+const softLimit = (value: number, threshold: number, max: number): number => {
+  if (value <= threshold) return value;
+  const excess = value - threshold;
+  const range = max - threshold;
+  return threshold + range * (1 - Math.exp(-excess / range));
+};
+
+
 function FrequencyBarsScene() {
   const meshesRef = useRef<THREE.Mesh[]>([]);
   const spotlightsRef = useRef<THREE.SpotLight[]>([]);
@@ -46,6 +55,7 @@ function FrequencyBarsScene() {
     });
   }, []);
 
+
   useFrame((_, delta) => {
     timeRef.current += delta;
 
@@ -56,14 +66,16 @@ function FrequencyBarsScene() {
     const bass = audioData?.bass ?? 0;
     const mid = audioData?.mid ?? 0;
     const treble = audioData?.treble ?? 0;
-    const step = frequencyData ? Math.floor(frequencyData.length / barCount) : 1;
 
     meshesRef.current.forEach((mesh, i) => {
       if (!mesh) return;
 
       let value: number;
       if (frequencyData) {
-        const dataIndex = Math.min(i * step, frequencyData.length - 1);
+        // Use only the useful frequency range (0-16kHz, ~75% of bins)
+        // This avoids dead bars on the right from empty high-frequency bins
+        const usableBins = Math.floor(frequencyData.length * 0.75);
+        const dataIndex = Math.floor((i / barCount) * usableBins);
         value = frequencyData[dataIndex] / 255;
       } else {
         // Fallback wave animation
@@ -74,9 +86,10 @@ function FrequencyBarsScene() {
       mesh.scale.y = THREE.MathUtils.lerp(mesh.scale.y, targetHeight, 0.25);
       mesh.position.y = mesh.scale.y / 2 - 1;
 
-      // Update emissive intensity based on value - higher values for stronger glow
+      // Update emissive intensity based on value - soft limited to prevent washout
       const material = mesh.material as THREE.MeshStandardMaterial;
-      material.emissiveIntensity = 0.5 + value * 1.2 + bass * 0.5;
+      const rawIntensity = 0.3 + value * 0.7 + bass * 0.3;
+      material.emissiveIntensity = softLimit(rawIntensity, 0.6, 1.2);
     });
 
     // Animate spotlights - sweep across bars with audio reactivity
@@ -105,9 +118,10 @@ function FrequencyBarsScene() {
         target.position.y = 1; // Aim at middle of bars, not the floor
       }
 
-      // Intensity pulses with different frequencies
+      // Intensity pulses with different frequencies - soft limited to prevent washout
       const pulseFactors = [bass, mid, treble];
-      spotlight.intensity = 40 + pulseFactors[i] * 60;
+      const compressedPulse = softLimit(pulseFactors[i], 0.5, 0.85);
+      spotlight.intensity = 25 + compressedPulse * 35;
 
       // Slight color shift based on audio
       const hueShift = pulseFactors[i] * 0.1;
@@ -175,12 +189,12 @@ function FrequencyBarsScene() {
         ))}
       </group>
 
-      {/* Post-processing effects - lower threshold for bar glow */}
+      {/* Post-processing effects - raised threshold to reduce washout */}
       <AudioReactiveEffects
         enableBloom
         enableVignette
         bloomIntensity={1.5}
-        bloomThreshold={0.4}
+        bloomThreshold={0.5}
         bloomRadius={0.6}
         vignetteIntensity={0.4}
       />

@@ -94,6 +94,8 @@ async def list_track_ids(
     energy_max: float | None = Query(None, ge=0, le=1, description="Maximum energy (0-1)"),
     valence_min: float | None = Query(None, ge=0, le=1, description="Minimum valence (0-1)"),
     valence_max: float | None = Query(None, ge=0, le=1, description="Maximum valence (0-1)"),
+    sort_by: str | None = Query(None, description="Column to sort by"),
+    sort_order: str = Query('asc', pattern='^(asc|desc)$', description="Sort direction"),
 ) -> TrackIdsResponse:
     """Get all track IDs matching filters.
 
@@ -171,6 +173,45 @@ async def list_track_ids(
     # Apply ordering
     if shuffle:
         query = query.order_by(func.random())
+    elif sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
+        from sqlalchemy import Float, cast, nulls_last
+
+        if sort_by in SORT_FIELD_MAP:
+            sort_col = SORT_FIELD_MAP[sort_by]
+            # Note: lastPlayed sort not supported for IDs endpoint (no profile context)
+            if sort_by != 'lastPlayed':
+                if sort_order == 'desc':
+                    query = query.order_by(nulls_last(sort_col.desc()))
+                else:
+                    query = query.order_by(nulls_last(sort_col.asc()))
+            else:
+                query = query.order_by(Track.artist, Track.album, Track.track_number)
+        else:
+            # Feature sort - need to join with analysis if not already joined
+            if not has_feature_filter:
+                analysis_subq = (
+                    select(
+                        TrackAnalysis.track_id,
+                        func.max(TrackAnalysis.version).label("max_version")
+                    )
+                    .where(TrackAnalysis.features.isnot(None))
+                    .group_by(TrackAnalysis.track_id)
+                    .subquery()
+                )
+                query = query.outerjoin(
+                    analysis_subq,
+                    Track.id == analysis_subq.c.track_id
+                ).outerjoin(
+                    TrackAnalysis,
+                    (TrackAnalysis.track_id == analysis_subq.c.track_id) &
+                    (TrackAnalysis.version == analysis_subq.c.max_version)
+                )
+
+            sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
+            if sort_order == 'desc':
+                query = query.order_by(nulls_last(sort_expr.desc()))
+            else:
+                query = query.order_by(nulls_last(sort_expr.asc()))
     else:
         query = query.order_by(Track.artist, Track.album, Track.track_number)
 
@@ -245,6 +286,26 @@ async def get_tracks_batch(
     return ordered_tracks
 
 
+# Map frontend column IDs to database fields for sorting
+SORT_FIELD_MAP: dict[str, Any] = {
+    'artist': Track.artist,
+    'album': Track.album,
+    'title': Track.title,
+    'duration': Track.duration_seconds,
+    'year': Track.year,
+    'genre': Track.genre,
+    'trackNum': Track.track_number,
+    'format': Track.format,
+    'lastPlayed': ProfilePlayHistory.last_played_at,
+}
+
+# Analysis features that need JSONB extraction
+SORT_FEATURE_FIELDS = {
+    'bpm', 'energy', 'danceability', 'valence',
+    'acousticness', 'instrumentalness', 'key',
+}
+
+
 @router.get("", response_model=TrackListResponse)
 async def list_tracks(
     db: DbSession,
@@ -262,6 +323,8 @@ async def list_tracks(
     valence_min: float | None = Query(None, ge=0, le=1, description="Minimum valence (0-1)"),
     valence_max: float | None = Query(None, ge=0, le=1, description="Maximum valence (0-1)"),
     include_features: bool = Query(False, description="Include audio analysis features"),
+    sort_by: str | None = Query(None, description="Column to sort by"),
+    sort_order: str = Query('asc', pattern='^(asc|desc)$', description="Sort direction"),
 ) -> TrackListResponse:
     """List tracks with optional filtering and pagination."""
     query = select(Track)
@@ -341,8 +404,59 @@ async def list_tracks(
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query) or 0
 
-    # Apply pagination and ordering
-    query = query.order_by(Track.artist, Track.album, Track.track_number)
+    # Apply dynamic ordering based on sort_by parameter
+    if sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
+        from sqlalchemy import Float, cast, nulls_last
+
+        if sort_by in SORT_FIELD_MAP:
+            # Direct column sort
+            sort_col = SORT_FIELD_MAP[sort_by]
+
+            # Special handling for lastPlayed which requires joining play history
+            if sort_by == 'lastPlayed' and profile:
+                # Left join with play history for this profile
+                query = query.outerjoin(
+                    ProfilePlayHistory,
+                    (ProfilePlayHistory.track_id == Track.id) &
+                    (ProfilePlayHistory.profile_id == profile.id)
+                )
+
+            if sort_order == 'desc':
+                query = query.order_by(nulls_last(sort_col.desc()))
+            else:
+                query = query.order_by(nulls_last(sort_col.asc()))
+        else:
+            # Feature sort (JSONB field) - need to join with analysis if not already joined
+            if not has_feature_filter:
+                # Join with latest analysis
+                analysis_subq = (
+                    select(
+                        TrackAnalysis.track_id,
+                        func.max(TrackAnalysis.version).label("max_version")
+                    )
+                    .where(TrackAnalysis.features.isnot(None))
+                    .group_by(TrackAnalysis.track_id)
+                    .subquery()
+                )
+                query = query.outerjoin(
+                    analysis_subq,
+                    Track.id == analysis_subq.c.track_id
+                ).outerjoin(
+                    TrackAnalysis,
+                    (TrackAnalysis.track_id == analysis_subq.c.track_id) &
+                    (TrackAnalysis.version == analysis_subq.c.max_version)
+                )
+
+            # Build sort expression for JSONB field
+            sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
+            if sort_order == 'desc':
+                query = query.order_by(nulls_last(sort_expr.desc()))
+            else:
+                query = query.order_by(nulls_last(sort_expr.asc()))
+    else:
+        # Default ordering
+        query = query.order_by(Track.artist, Track.album, Track.track_number)
+
     query = query.offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(query)

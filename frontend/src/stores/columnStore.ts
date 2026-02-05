@@ -16,6 +16,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'genre', visible: false },
   { id: 'trackNum', visible: false },
   { id: 'format', visible: false },
+  { id: 'lastPlayed', visible: false },
   { id: 'bpm', visible: false },
   { id: 'key', visible: false },
   { id: 'energy', visible: false },
@@ -27,17 +28,23 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 interface ColumnState {
   columns: ColumnConfig[];
+  sortBy: string | null;      // Column ID being sorted
+  sortOrder: 'asc' | 'desc';
   toggleColumn: (id: string) => void;
   reorderColumns: (fromIndex: number, toIndex: number) => void;
   setColumnWidth: (id: string, width: number) => void;
   resetColumnWidth: (id: string) => void;
   resetToDefaults: () => void;
+  setSortBy: (columnId: string | null, order?: 'asc' | 'desc') => void;
+  toggleSort: (columnId: string) => void;  // Click toggles asc/desc/off
 }
 
 export const useColumnStore = create<ColumnState>()(
   persist(
     (set) => ({
       columns: DEFAULT_COLUMNS,
+      sortBy: null,
+      sortOrder: 'asc',
 
       toggleColumn: (id: string) => {
         set((state) => ({
@@ -73,8 +80,34 @@ export const useColumnStore = create<ColumnState>()(
       },
 
       resetToDefaults: () => {
-        // Reset to defaults including clearing all custom widths
-        set({ columns: DEFAULT_COLUMNS.map(col => ({ ...col, width: null })) });
+        // Reset to defaults including clearing all custom widths and sort
+        set({
+          columns: DEFAULT_COLUMNS.map(col => ({ ...col, width: null })),
+          sortBy: null,
+          sortOrder: 'asc',
+        });
+      },
+
+      setSortBy: (columnId: string | null, order?: 'asc' | 'desc') => {
+        set((state) => ({
+          sortBy: columnId,
+          sortOrder: order ?? state.sortOrder,
+        }));
+      },
+
+      toggleSort: (columnId: string) => {
+        set((state) => {
+          if (state.sortBy !== columnId) {
+            // Clicking a new column: sort ascending
+            return { sortBy: columnId, sortOrder: 'asc' };
+          } else if (state.sortOrder === 'asc') {
+            // Clicking same column in asc: switch to desc
+            return { sortOrder: 'desc' };
+          } else {
+            // Clicking same column in desc: clear sort (back to default)
+            return { sortBy: null, sortOrder: 'asc' };
+          }
+        });
       },
     }),
     {
@@ -107,6 +140,9 @@ export const useColumnStore = create<ColumnState>()(
         return {
           ...currentState,
           columns: mergedColumns,
+          // Preserve persisted sort state
+          sortBy: persisted.sortBy ?? currentState.sortBy,
+          sortOrder: persisted.sortOrder ?? currentState.sortOrder,
         };
       },
     }

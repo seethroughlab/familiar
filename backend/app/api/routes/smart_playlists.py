@@ -288,6 +288,10 @@ async def get_available_fields() -> dict[str, Any]:
             {"name": "duration_seconds", "type": "number", "description": "Track duration in seconds"},
             {"name": "format", "type": "string", "description": "Audio format (mp3, flac, etc.)"},
             {"name": "created_at", "type": "date", "description": "Date added to library"},
+            {"name": "composer", "type": "string", "description": "Composer"},
+            {"name": "comment", "type": "string", "description": "Comment/notes"},
+            {"name": "grouping", "type": "string", "description": "Grouping"},
+            {"name": "file_path", "type": "string", "description": "File path"},
         ],
         "analysis_fields": [
             {"name": "bpm", "type": "number", "description": "Beats per minute", "range": [60, 200]},
@@ -308,10 +312,17 @@ async def get_available_fields() -> dict[str, Any]:
         "operators": {
             "string": ["equals", "not_equals", "contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"],
             "number": ["equals", "not_equals", "greater_than", "less_than", "greater_or_equal", "less_or_equal", "between"],
-            "date": ["within_days", "not_within_days", "is_empty", "is_not_empty"],
+            "date": [
+                "within_days", "not_within_days",  # Legacy (keep for compatibility)
+                "after", "before", "on",            # Absolute date operators
+                "in_the_last", "not_in_the_last",   # Relative date operators
+                "is_empty", "is_not_empty",
+            ],
             "boolean": ["equals"],
             "list": ["in", "not_in"],
         },
+        "date_keywords": ["today", "yesterday", "this_week", "last_week", "this_month", "last_month", "this_year", "last_year"],
+        "relative_units": ["days", "weeks", "months", "years"],
     }
 
 

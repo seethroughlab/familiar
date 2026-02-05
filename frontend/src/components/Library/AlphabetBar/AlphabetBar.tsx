@@ -134,9 +134,10 @@ export function AlphabetBar({
         </div>
       )}
 
-      {/* Hover zone - invisible area on right edge that triggers bar visibility */}
+      {/* Hover zone - invisible area on right edge that triggers bar visibility.
+         Use right-[15px] to avoid covering the native scrollbar (~15px wide at right-0). */}
       <div
-        className="fixed right-0 top-0 bottom-0 w-8 z-30 hidden md:block"
+        className="fixed right-[15px] top-0 bottom-0 w-4 z-30 hidden md:block"
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => !isDragging && setIsHovering(false)}
       />

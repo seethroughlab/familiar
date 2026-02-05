@@ -26,7 +26,34 @@ const OPERATOR_LABELS: Record<string, string> = {
   is_not_empty: 'is not empty',
   within_days: 'within last',
   not_within_days: 'not within last',
+  after: 'is after',
+  before: 'is before',
+  on: 'is on',
+  in_the_last: 'in the last',
+  not_in_the_last: 'not in the last',
 };
+
+const DATE_KEYWORD_LABELS: Record<string, string> = {
+  today: 'Today',
+  yesterday: 'Yesterday',
+  this_week: 'This week',
+  last_week: 'Last week',
+  this_month: 'This month',
+  last_month: 'Last month',
+  this_year: 'This year',
+  last_year: 'Last year',
+};
+
+const DATE_KEYWORDS = Object.keys(DATE_KEYWORD_LABELS);
+
+const RELATIVE_UNIT_LABELS: Record<string, string> = {
+  days: 'days',
+  weeks: 'weeks',
+  months: 'months',
+  years: 'years',
+};
+
+const RELATIVE_UNITS = Object.keys(RELATIVE_UNIT_LABELS);
 
 export function SmartPlaylistBuilder({ playlist, onClose, onSaved }: Props) {
   const queryClient = useQueryClient();
@@ -283,6 +310,11 @@ function RuleRow({ rule, fields, operators, fieldType, onFieldChange, onChange, 
   const isBetween = rule.operator === 'between';
   const isBoolean = fieldType === 'boolean';
   const isDateWithDays = ['within_days', 'not_within_days'].includes(rule.operator);
+  const isDateKeyword = ['after', 'before', 'on'].includes(rule.operator) && fieldType === 'date';
+  const isRelativeDate = ['in_the_last', 'not_in_the_last'].includes(rule.operator) && fieldType === 'date';
+
+  // Helper to check if the value is a standard value input (not special date handling)
+  const isStandardValueInput = needsValue && !isBetween && !isBoolean && !isDateWithDays && !isDateKeyword && !isRelativeDate;
 
   return (
     <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded-md">
@@ -324,17 +356,79 @@ function RuleRow({ rule, fields, operators, fieldType, onFieldChange, onChange, 
         </select>
       )}
 
-      {/* Value input */}
-      {needsValue && !isBetween && !isBoolean && (
+      {/* Date keyword selector for after/before/on */}
+      {isDateKeyword && (
+        <select
+          value={(rule.value as string) || 'today'}
+          onChange={(e) => onChange({ value: e.target.value })}
+          className="flex-1 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          {DATE_KEYWORDS.map((kw) => (
+            <option key={kw} value={kw}>
+              {DATE_KEYWORD_LABELS[kw]}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {/* Relative date inputs for in_the_last/not_in_the_last */}
+      {isRelativeDate && (
+        <>
+          <input
+            type="number"
+            min={1}
+            value={(rule.value as { amount: number; unit: string })?.amount || 1}
+            onChange={(e) => onChange({
+              value: {
+                amount: parseInt(e.target.value) || 1,
+                unit: (rule.value as { amount: number; unit: string })?.unit || 'days'
+              }
+            })}
+            className="w-16 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+          <select
+            value={(rule.value as { amount: number; unit: string })?.unit || 'days'}
+            onChange={(e) => onChange({
+              value: {
+                amount: (rule.value as { amount: number; unit: string })?.amount || 1,
+                unit: e.target.value
+              }
+            })}
+            className="w-24 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          >
+            {RELATIVE_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {RELATIVE_UNIT_LABELS[unit]}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      {/* Legacy date input (within_days/not_within_days) */}
+      {isDateWithDays && (
         <input
-          type={fieldType === 'number' || isDateWithDays ? 'number' : 'text'}
+          type="number"
           value={rule.value as string || ''}
           onChange={(e) => onChange({
-            value: fieldType === 'number' || isDateWithDays ? parseFloat(e.target.value) || '' : e.target.value
+            value: parseFloat(e.target.value) || ''
+          })}
+          placeholder="days"
+          min={1}
+          className="w-20 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
+      )}
+
+      {/* Standard value input */}
+      {isStandardValueInput && (
+        <input
+          type={fieldType === 'number' ? 'number' : 'text'}
+          value={rule.value as string || ''}
+          onChange={(e) => onChange({
+            value: fieldType === 'number' ? parseFloat(e.target.value) || '' : e.target.value
           })}
           placeholder="value"
-          step={fieldType === 'number' ? 0.1 : 1}
-          min={isDateWithDays ? 1 : undefined}
+          step={fieldType === 'number' ? 0.1 : undefined}
           className="flex-1 px-2 py-1.5 bg-zinc-700 border border-zinc-600 rounded text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500"
         />
       )}

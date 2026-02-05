@@ -14,7 +14,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Play, Pause, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc } from 'lucide-react';
+import { Play, Pause, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useSelectionStore } from '../../../stores/selectionStore';
@@ -23,7 +23,7 @@ import { useFavorites } from '../../../hooks/useFavorites';
 import { useArtworkPrefetchBatch } from '../../../hooks/useArtworkPrefetch';
 import { useLongPress } from '../../../hooks/useLongPress';
 import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
-import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns } from '../columnDefinitions';
+import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns, COLUMN_MAP } from '../columnDefinitions';
 import { useOfflineTrack } from '../../../hooks/useOfflineTrack';
 import { useOfflineAlbum } from '../../../hooks/useOfflineAlbum';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver'; // Still used for mobile view
@@ -431,6 +431,9 @@ export function TrackListBrowser({
   const selectRange = useSelectionStore((state) => state.selectRange);
   const columns = useColumnStore((state) => state.columns);
   const reorderColumns = useColumnStore((state) => state.reorderColumns);
+  const sortBy = useColumnStore((state) => state.sortBy);
+  const sortOrder = useColumnStore((state) => state.sortOrder);
+  const toggleSort = useColumnStore((state) => state.toggleSort);
   const { isFavorite, toggle } = useFavorites();
 
   // Context menu state
@@ -587,6 +590,15 @@ export function TrackListBrowser({
     }
   }, [resizing]);
 
+  // Get the sortField from column definition (may differ from column ID)
+  // 'title' is a special case since it's not in COLUMN_DEFINITIONS (always visible)
+  const sortField = useMemo(() => {
+    if (!sortBy) return undefined;
+    if (sortBy === 'title') return 'title';
+    const colDef = COLUMN_MAP.get(sortBy);
+    return colDef?.sortField;
+  }, [sortBy]);
+
   const {
     data,
     isLoading,
@@ -608,6 +620,8 @@ export function TrackListBrowser({
         valenceMin: filters.valenceMin,
         valenceMax: filters.valenceMax,
         include_features: needsFeatures,
+        sortBy: sortField,
+        sortOrder,
       },
     ],
     queryFn: ({ pageParam = 1 }) =>
@@ -624,6 +638,8 @@ export function TrackListBrowser({
         page: pageParam,
         page_size: PAGE_SIZE,
         include_features: needsFeatures,
+        sort_by: sortField,
+        sort_order: sortOrder,
       }),
     getNextPageParam: (lastPage) => {
       const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
@@ -669,6 +685,8 @@ export function TrackListBrowser({
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
         include_features: needsFeatures,
+        sort_by: sortField,
+        sort_order: sortOrder,
       });
 
       setSparsePages(prev => new Map(prev).set(pageNumber, result.items));
@@ -678,14 +696,16 @@ export function TrackListBrowser({
       console.error(`Failed to fetch page ${pageNumber}:`, error);
     }
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax, needsFeatures]);
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax, needsFeatures,
+      sortField, sortOrder]);
 
-  // Reset sparse pages and loaded tracking when filters change
+  // Reset sparse pages and loaded tracking when filters or sort changes
   useEffect(() => {
     loadedPagesRef.current = new Set([1]);
     setSparsePages(new Map());
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax]);
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      sortField, sortOrder]);
 
   // Track which pages came from infinite query
   useEffect(() => {
@@ -956,7 +976,9 @@ export function TrackListBrowser({
     energy_max: filters.energyMax,
     valence_min: filters.valenceMin,
     valence_max: filters.valenceMax,
-  }), [filters]);
+    sort_by: sortField,
+    sort_order: sortOrder,
+  }), [filters, sortField, sortOrder]);
 
   const handlePlayTrack = useCallback(
     async (track: Track, index: number) => {
@@ -1275,12 +1297,29 @@ export function TrackListBrowser({
           style={{ gridTemplateColumns: gridColumns }}
         >
           <div>#</div>
-          <div>Title</div>
+          <div
+            onClick={() => toggleSort('title')}
+            className={`cursor-pointer hover:text-white flex items-center gap-1 ${
+              sortBy === 'title' ? 'text-white' : ''
+            }`}
+            title="Click to sort by Title"
+          >
+            <span>Title</span>
+            {sortBy === 'title' && (
+              sortOrder === 'asc' ? (
+                <ChevronUp className="w-3 h-3 flex-shrink-0" />
+              ) : (
+                <ChevronDown className="w-3 h-3 flex-shrink-0" />
+              )
+            )}
+          </div>
           {visibleColumnIds.map((colId) => {
             const colDef = getColumnDef(colId);
             if (!colDef) return null;
             const isDragging = draggedColId === colId;
             const isDropTarget = dropTargetId === colId;
+            const isSortable = !!colDef.sortField;
+            const isSorted = sortBy === colId;
             return (
               <div key={colId} className="relative">
                 <div
@@ -1290,18 +1329,34 @@ export function TrackListBrowser({
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, colId)}
                   onDragEnd={handleDragEnd}
-                  className={`cursor-grab select-none truncate pr-2 ${
+                  onClick={(e) => {
+                    // Only sort on click, not drag
+                    if (isSortable && !draggedColId) {
+                      e.stopPropagation();
+                      toggleSort(colId);
+                    }
+                  }}
+                  className={`select-none truncate pr-2 flex items-center gap-1 ${
                     colDef.align === 'right'
-                      ? 'text-right'
+                      ? 'justify-end'
                       : colDef.align === 'center'
-                      ? 'text-center'
+                      ? 'justify-center'
                       : ''
                   } ${isDragging ? 'opacity-50' : ''} ${
                     isDropTarget ? 'border-l-2 border-green-500' : ''
+                  } ${isSortable ? 'cursor-pointer hover:text-white' : 'cursor-grab'} ${
+                    isSorted ? 'text-white' : ''
                   }`}
-                  title={`${colDef.label} (drag to reorder)`}
+                  title={isSortable ? `Click to sort by ${colDef.label}, drag to reorder` : `${colDef.label} (drag to reorder)`}
                 >
-                  {colDef.shortLabel || colDef.label}
+                  <span>{colDef.shortLabel || colDef.label}</span>
+                  {isSorted && (
+                    sortOrder === 'asc' ? (
+                      <ChevronUp className="w-3 h-3 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-3 h-3 flex-shrink-0" />
+                    )
+                  )}
                 </div>
 
                 {/* Resize handle */}

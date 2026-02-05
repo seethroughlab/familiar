@@ -266,3 +266,70 @@ class TestAvailableFields:
         )
         assert bpm_field is not None
         assert "range" in bpm_field
+
+    def test_new_track_fields_present(self, client: TestClient) -> None:
+        """Test that new metadata fields are present."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        field_names = {f["name"] for f in data["track_fields"]}
+        assert "composer" in field_names
+        assert "comment" in field_names
+        assert "grouping" in field_names
+        assert "file_path" in field_names
+
+    def test_new_track_fields_types(self, client: TestClient) -> None:
+        """Test that new metadata fields have correct types."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        field_types = {f["name"]: f["type"] for f in data["track_fields"]}
+        assert field_types["composer"] == "string"
+        assert field_types["comment"] == "string"
+        assert field_types["grouping"] == "string"
+        assert field_types["file_path"] == "string"
+
+    def test_new_date_operators_present(self, client: TestClient) -> None:
+        """Test that new date operators are present."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        date_operators = data["operators"]["date"]
+        # Legacy operators still present
+        assert "within_days" in date_operators
+        assert "not_within_days" in date_operators
+        # New absolute date operators
+        assert "after" in date_operators
+        assert "before" in date_operators
+        assert "on" in date_operators
+        # New relative date operators
+        assert "in_the_last" in date_operators
+        assert "not_in_the_last" in date_operators
+
+    def test_date_keywords_present(self, client: TestClient) -> None:
+        """Test that date keywords are returned."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        assert "date_keywords" in data
+        keywords = data["date_keywords"]
+        assert "today" in keywords
+        assert "yesterday" in keywords
+        assert "this_week" in keywords
+        assert "last_week" in keywords
+        assert "this_month" in keywords
+        assert "last_month" in keywords
+        assert "this_year" in keywords
+        assert "last_year" in keywords
+
+    def test_relative_units_present(self, client: TestClient) -> None:
+        """Test that relative time units are returned."""
+        response = client.get("/api/v1/smart-playlists/fields/available")
+        data = response.json()
+
+        assert "relative_units" in data
+        units = data["relative_units"]
+        assert "days" in units
+        assert "weeks" in units
+        assert "months" in units
+        assert "years" in units

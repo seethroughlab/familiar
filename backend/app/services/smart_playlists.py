@@ -14,13 +14,18 @@ TRACK_FIELDS = {
     "title", "artist", "album", "album_artist", "genre", "year",
     "track_number", "disc_number", "duration_seconds", "format",
     "created_at", "album_type",
+    # Additional metadata fields
+    "composer", "comment", "grouping", "file_path",
 }
 
 # Date/timestamp fields that need special handling
 DATE_FIELDS = {"created_at", "last_played_at"}
 
 # String fields that support ILIKE operations
-STRING_FIELDS = {"title", "artist", "album", "album_artist", "genre", "format", "album_type"}
+STRING_FIELDS = {
+    "title", "artist", "album", "album_artist", "genre", "format", "album_type",
+    "composer", "comment", "grouping", "file_path",
+}
 
 # Numeric fields
 NUMERIC_FIELDS = {"year", "track_number", "disc_number", "duration_seconds", "play_count", "total_play_seconds"}
@@ -50,9 +55,64 @@ OPERATORS = {
     "greater_than", "less_than", "greater_or_equal", "less_or_equal",
     "between", "in", "not_in",
     "is_empty", "is_not_empty",
-    "within_days",  # For date fields
-    "not_within_days",  # For date fields - not played in last N days
+    "within_days",  # For date fields (legacy)
+    "not_within_days",  # For date fields - not played in last N days (legacy)
+    # New date operators
+    "after",           # date > value (supports keywords: today, yesterday, this_week, etc.)
+    "before",          # date < value
+    "on",              # date == value (same day)
+    "in_the_last",     # relative: value = {"amount": 3, "unit": "weeks"}
+    "not_in_the_last", # not within relative time
 }
+
+# Date keywords for after/before/on operators
+DATE_KEYWORDS = {
+    "today": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0),
+    "yesterday": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1),
+    "this_week": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=datetime.utcnow().weekday()),
+    "last_week": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=datetime.utcnow().weekday() + 7),
+    "this_month": lambda: datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+    "last_month": lambda: (datetime.utcnow().replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+    "this_year": lambda: datetime.utcnow().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+    "last_year": lambda: datetime.utcnow().replace(year=datetime.utcnow().year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+}
+
+
+def resolve_date_value(value: Any) -> datetime | None:
+    """Resolve date value from keyword, ISO string, or datetime."""
+    if isinstance(value, str):
+        # Check for keyword
+        if value in DATE_KEYWORDS:
+            return DATE_KEYWORDS[value]()
+        # Try parsing as ISO date
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def resolve_relative_date(value: Any) -> datetime | None:
+    """Resolve relative date like {"amount": 3, "unit": "weeks"}."""
+    if not isinstance(value, dict):
+        return None
+    amount = value.get("amount", 0)
+    unit = value.get("unit", "days")
+
+    try:
+        amount = int(amount)
+    except (ValueError, TypeError):
+        return None
+
+    if unit == "days":
+        return datetime.utcnow() - timedelta(days=amount)
+    elif unit == "weeks":
+        return datetime.utcnow() - timedelta(weeks=amount)
+    elif unit == "months":
+        return datetime.utcnow() - timedelta(days=amount * 30)  # Approximate
+    elif unit == "years":
+        return datetime.utcnow() - timedelta(days=amount * 365)  # Approximate
+    return None
 
 
 class SmartPlaylistService:
@@ -190,7 +250,10 @@ class SmartPlaylistService:
         """Validate rule structure."""
         all_valid_fields = TRACK_FIELDS | ANALYSIS_FIELDS | PLAY_HISTORY_FIELDS
         string_operators = {"contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"}
-        date_operators = {"within_days", "not_within_days", "is_empty", "is_not_empty"}
+        date_operators = {
+            "within_days", "not_within_days", "is_empty", "is_not_empty",
+            "after", "before", "on", "in_the_last", "not_in_the_last",
+        }
 
         for rule in rules:
             if "field" not in rule:
@@ -327,7 +390,10 @@ class SmartPlaylistService:
             return None
 
         # Date fields only support date operators
-        date_operators = {"within_days", "not_within_days", "is_empty", "is_not_empty"}
+        date_operators = {
+            "within_days", "not_within_days", "is_empty", "is_not_empty",
+            "after", "before", "on", "in_the_last", "not_in_the_last",
+        }
         if field in DATE_FIELDS and operator not in date_operators:
             return None
 
@@ -394,6 +460,38 @@ class SmartPlaylistService:
                     return or_(column.is_(None), column < cutoff)
             except (ValueError, TypeError):
                 pass
+            return None
+        elif operator == "after":
+            # Date is after value (keyword, ISO string)
+            resolved = resolve_date_value(value)
+            if resolved:
+                return column > resolved
+            return None
+        elif operator == "before":
+            # Date is before value (keyword, ISO string)
+            resolved = resolve_date_value(value)
+            if resolved:
+                return column < resolved
+            return None
+        elif operator == "on":
+            # Date matches the same day as value
+            resolved = resolve_date_value(value)
+            if resolved:
+                start = resolved.replace(hour=0, minute=0, second=0, microsecond=0)
+                end = start + timedelta(days=1)
+                return and_(column >= start, column < end)
+            return None
+        elif operator == "in_the_last":
+            # Relative time: {"amount": 3, "unit": "weeks"}
+            cutoff = resolve_relative_date(value)
+            if cutoff:
+                return column >= cutoff
+            return None
+        elif operator == "not_in_the_last":
+            # Not within relative time (includes NULL)
+            cutoff = resolve_relative_date(value)
+            if cutoff:
+                return or_(column.is_(None), column < cutoff)
             return None
 
         return None

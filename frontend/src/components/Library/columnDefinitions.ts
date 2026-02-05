@@ -10,6 +10,7 @@ export interface ColumnDef {
   align?: 'left' | 'center' | 'right';
   format?: (value: unknown) => string;
   category: 'basic' | 'analysis';
+  sortField?: string;  // API field name for sorting, undefined = not sortable
 }
 
 // Format duration as MM:SS
@@ -66,6 +67,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '1fr',
     minWidth: '100px',
     category: 'basic',
+    sortField: 'artist',
   },
   {
     id: 'album',
@@ -74,6 +76,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '1fr',
     minWidth: '100px',
     category: 'basic',
+    sortField: 'album',
   },
   {
     id: 'duration',
@@ -84,6 +87,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatDuration,
     category: 'basic',
+    sortField: 'duration',
   },
   {
     id: 'year',
@@ -92,6 +96,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '4rem',
     align: 'center',
     category: 'basic',
+    sortField: 'year',
   },
   {
     id: 'genre',
@@ -100,6 +105,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '8rem',
     minWidth: '60px',
     category: 'basic',
+    sortField: 'genre',
   },
   {
     id: 'trackNum',
@@ -109,6 +115,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '3.5rem',
     align: 'center',
     category: 'basic',
+    sortField: 'trackNum',
   },
   {
     id: 'format',
@@ -118,6 +125,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '4rem',
     align: 'center',
     category: 'basic',
+    sortField: 'format',
   },
   {
     id: 'lastPlayed',
@@ -128,6 +136,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatRelativeDate,
     category: 'basic',
+    sortField: 'lastPlayed',
   },
 
   // Analysis columns
@@ -139,6 +148,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatBpm,
     category: 'analysis',
+    sortField: 'bpm',
   },
   {
     id: 'key',
@@ -147,6 +157,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     width: '4rem',
     align: 'center',
     category: 'analysis',
+    sortField: 'key',
   },
   {
     id: 'energy',
@@ -157,6 +168,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatPercent,
     category: 'analysis',
+    sortField: 'energy',
   },
   {
     id: 'danceability',
@@ -167,6 +179,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatPercent,
     category: 'analysis',
+    sortField: 'danceability',
   },
   {
     id: 'valence',
@@ -177,6 +190,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatPercent,
     category: 'analysis',
+    sortField: 'valence',
   },
   {
     id: 'acousticness',
@@ -187,6 +201,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatPercent,
     category: 'analysis',
+    sortField: 'acousticness',
   },
   {
     id: 'instrumentalness',
@@ -197,6 +212,7 @@ export const COLUMN_DEFINITIONS: ColumnDef[] = [
     align: 'right',
     format: formatPercent,
     category: 'analysis',
+    sortField: 'instrumentalness',
   },
 ];
 

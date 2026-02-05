@@ -71,6 +71,8 @@ export const tracksApi = {
     valence_min?: number;
     valence_max?: number;
     include_features?: boolean;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
   }): Promise<TrackListResponse> => {
     const { data } = await api.get('/tracks', { params });
     return data;
@@ -94,6 +96,8 @@ export const tracksApi = {
     energy_max?: number;
     valence_min?: number;
     valence_max?: number;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
   }): Promise<TrackIdsResponse> => {
     const { data } = await api.get('/tracks/ids', { params });
     return data;

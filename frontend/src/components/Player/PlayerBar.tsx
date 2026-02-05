@@ -30,6 +30,10 @@ function AlbumArt({ trackId }: { trackId: string }) {
   const [hasError, setHasError] = useState(false);
   const artworkUrl = tracksApi.getArtworkUrl(trackId);
 
+  useEffect(() => {
+    setHasError(false);
+  }, [trackId]);
+
   if (hasError) {
     return (
       <div className="w-12 h-12 bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">

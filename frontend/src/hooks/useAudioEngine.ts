@@ -314,6 +314,7 @@ export function useAudioEngine() {
     getNextTrack,
     advanceToNextTrack,
     setIsLoadingAudio,
+    isHydrated,
   } = usePlayerStore();
 
   const { crossfadeDuration, crossfadeEnabled } = useAudioSettingsStore();
@@ -789,9 +790,28 @@ export function useAudioEngine() {
   }, [playNext, setIsPlaying]);
 
   // --------------------------------------------------------------------------
+  // Persist position on page unload
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    const handleUnload = () => {
+      // Force immediate save on page close
+      const currentElement = getCurrentElement();
+      if (currentElement && currentElement.currentTime > 0) {
+        usePlayerStore.getState().setCurrentTime(currentElement.currentTime);
+      }
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, []);
+
+  // --------------------------------------------------------------------------
   // Load track
   // --------------------------------------------------------------------------
   useEffect(() => {
+    // Don't load tracks until player state is hydrated from IndexedDB
+    // This ensures currentTime is restored before we start loading
+    if (!isHydrated) return;
+
     const currentElement = getCurrentElement();
 
     if (!currentTrack) {
@@ -948,7 +968,7 @@ export function useAudioEngine() {
 
     loadTrack();
     updateMediaSession();
-  }, [currentTrack?.id, setDuration, updateMediaSession, setIsLoadingAudio, playNext]);
+  }, [currentTrack?.id, isHydrated, setDuration, updateMediaSession, setIsLoadingAudio, playNext]);
 
   // --------------------------------------------------------------------------
   // Play/pause
