@@ -278,22 +278,35 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
       return;
     }
 
-    const queueTracks = displayedTracks.map(t => ({
-      id: t.id,
-      file_path: '',
-      title: t.title || 'Unknown',
-      artist: t.artist || 'Unknown',
-      album: t.album || null,
-      album_artist: null,
-      album_type: 'album' as const,
-      track_number: null,
-      disc_number: null,
-      year: null,
-      genre: null,
-      duration_seconds: t.duration_seconds || null,
-      format: null,
-      analysis_version: 0,
-    }));
+    // Build queue tracks with external info for external tracks
+    const queueTracks = displayedTracks.map(t => {
+      // For external tracks with a matched local track, use the matched track ID
+      const trackId = t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id;
+
+      return {
+        id: trackId,
+        file_path: '',
+        title: t.title || 'Unknown',
+        artist: t.artist || 'Unknown',
+        album: t.album || null,
+        album_artist: null,
+        album_type: 'album' as const,
+        track_number: null,
+        disc_number: null,
+        year: null,
+        genre: null,
+        duration_seconds: t.duration_seconds || null,
+        format: null,
+        analysis_version: 0,
+        // Carry external info for the player to handle
+        _externalInfo: t.type === 'external' ? {
+          type: 'external' as const,
+          previewUrl: t.preview_url || null,
+          matchedTrackId: t.matched_track_id || null,
+          originalId: t.id,
+        } : undefined,
+      };
+    });
     setQueue(queueTracks, startIndex, { type: 'playlist', id: playlistId });
   };
 
@@ -713,35 +726,43 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                       <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
                       <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
                     </div>
-                    <Pause
-                      className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                      fill="currentColor"
-                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                    >
+                      <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                    </button>
                   </>
                 ) : currentTrack?.id === track.id ? (
                   <>
                     <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                    <Play
-                      className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                      fill="currentColor"
-                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                    >
+                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                    </button>
                   </>
                 ) : isExternal && hasPreview ? (
                   <>
                     <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                    <span title="Play preview">
-                      <Radio
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-amber-400"
-                      />
-                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                      title="Play preview"
+                    >
+                      <Radio className="w-4 h-4 mx-auto text-amber-400" />
+                    </button>
                   </>
                 ) : (
                   <>
                     <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                    <Play
-                      className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                      fill="currentColor"
-                    />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                    >
+                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                    </button>
                   </>
                 )}
               </div>

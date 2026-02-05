@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Maximize2, Shuffle, Repeat, Loader2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Maximize2, Shuffle, Repeat, Loader2, Radio } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
@@ -70,6 +70,7 @@ export function PlayerBar({
     repeat,
     toggleRepeat,
     addToQueue,
+    isPreviewMode,
   } = usePlayerStore();
 
   const { seek, togglePlayPause } = useAudioEngine();
@@ -136,7 +137,15 @@ export function PlayerBar({
           >
             <AlbumArt trackId={currentTrack.id} />
             <div className="min-w-0 flex-1">
-              <div data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</div>
+              <div className="flex items-center gap-2">
+                <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
+                {isPreviewMode && (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
+                    <Radio className="w-3 h-3" />
+                    Preview
+                  </span>
+                )}
+              </div>
               <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
             </div>
           </button>
@@ -183,7 +192,15 @@ export function PlayerBar({
         >
           <AlbumArt trackId={currentTrack.id} />
           <div className="min-w-0 flex-1">
-            <div data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</div>
+            <div className="flex items-center gap-2">
+              <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
+              {isPreviewMode && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
+                  <Radio className="w-3 h-3" />
+                  Preview
+                </span>
+              )}
+            </div>
             <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
           </div>
           <Maximize2 className="w-4 h-4 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />

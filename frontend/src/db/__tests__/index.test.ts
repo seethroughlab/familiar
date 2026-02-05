@@ -193,6 +193,7 @@ describe('Interface type validation', () => {
       currentTrackId: 'track-2',
       shuffleOrder: [1, 2, 0],
       shuffleIndex: 0,
+      currentTime: 42.5,
       updatedAt: new Date(),
     }
 
@@ -200,6 +201,7 @@ describe('Interface type validation', () => {
     expect(state.shuffle).toBe(true)
     expect(state.repeat).toBe('all')
     expect(state.queueTrackIds).toHaveLength(3)
+    expect(state.currentTime).toBe(42.5)
   })
 
   it('CachedPlaylist should have track IDs', () => {

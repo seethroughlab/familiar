@@ -274,6 +274,7 @@ export function GPUParticles({
         transparent
         opacity={opacity}
         toneMapped={false}
+        blending={THREE.AdditiveBlending}
       />
     </instancedMesh>
   );

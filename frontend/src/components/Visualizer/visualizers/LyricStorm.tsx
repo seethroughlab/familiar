@@ -1,11 +1,12 @@
 /**
- * Lyric Storm Visualizer - Enhanced with 3D particles and effects.
+ * Lyrics Visualizer - Karaoke-style lyrics with 3D particle effects.
  *
  * Features:
- * - Floating 3D word particles using instanced meshes
- * - Particle swarm background inspired by the examples
- * - Canvas 2D overlay for crisp text rendering
- * - Bloom, chromatic aberration, and film grain post-processing
+ * - Current line with exploding word particles from center
+ * - Next line preview (smaller, dimmer) below current line
+ * - Faded/blurred ambient floating words in background
+ * - 3D particle swarm background
+ * - Bloom and vignette post-processing
  */
 import { useRef, useEffect, useMemo, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
@@ -28,6 +29,7 @@ interface Word3D {
   life: number;
   maxLife: number;
   isCurrentLine: boolean;
+  shimmerPhase: number;  // Random phase offset for shimmer timing
 }
 
 let wordIdCounter = 0;
@@ -190,12 +192,13 @@ function WordParticles({
           life: 0,
           maxLife: 4 + Math.random() * 2,
           isCurrentLine: true,
+          shimmerPhase: 0,  // Not used for current line words
         });
       });
     }
 
-    // Spawn ambient words more frequently
-    if (Math.random() < 0.15 + bass * 0.3 && words.length > 0) {
+    // Spawn ambient words more frequently (faded/out of focus style)
+    if (Math.random() < 0.12 + bass * 0.2 && words.length > 0) {
       const word = words[Math.floor(Math.random() * words.length)];
       const edge = Math.floor(Math.random() * 4);
       const hw = viewport.width / 2 + 2;
@@ -212,20 +215,21 @@ function WordParticles({
       wordsRef.current.push({
         id: ++wordIdCounter,
         text: word,
-        position: new THREE.Vector3(x, y, -2 + Math.random() * 4),
-        velocity: new THREE.Vector3(vx, vy, 0),
+        position: new THREE.Vector3(x, y, -8 + Math.random() * 2), // Further back in z to avoid swarm particle overlap
+        velocity: new THREE.Vector3(vx * 0.7, vy * 0.7, 0), // Slower movement
         rotation: new THREE.Euler(Math.random() * 0.3, Math.random() * 0.3, 0),
         rotationSpeed: new THREE.Vector3(
-          (Math.random() - 0.5) * 0.1,
-          (Math.random() - 0.5) * 0.1,
-          (Math.random() - 0.5) * 0.1
+          (Math.random() - 0.5) * 0.05,
+          (Math.random() - 0.5) * 0.05,
+          (Math.random() - 0.5) * 0.05
         ),
-        scale: 0.25 + Math.random() * 0.2,
-        opacity: 0.85,
+        scale: 0.15 + Math.random() * 0.1, // Smaller scale for out-of-focus effect
+        opacity: 0.35, // Much more faded
         hue: 0.55 + Math.random() * 0.2,
         life: 0,
-        maxLife: 8 + Math.random() * 4,
+        maxLife: 10 + Math.random() * 5, // Longer life but faded
         isCurrentLine: false,
+        shimmerPhase: Math.random() * Math.PI * 2,  // Random starting phase for staggered shimmer
       });
     }
 
@@ -247,7 +251,7 @@ function WordParticles({
       const fadeAmount = lifeRatio > fadeStart ? (lifeRatio - fadeStart) / (1 - fadeStart) : 0;
       word.opacity = word.isCurrentLine
         ? Math.max(0, 1 - fadeAmount)
-        : Math.max(0, 0.9 - fadeAmount * 0.9);
+        : Math.max(0, 0.35 - fadeAmount * 0.35); // Ambient words stay faded
 
       return word.life < word.maxLife;
     });
@@ -259,23 +263,38 @@ function WordParticles({
     }
   });
 
+  // Calculate shimmer for ambient words - creates periodic brightness boost
+  const getShimmerBoost = (word: Word3D) => {
+    if (word.isCurrentLine) return 0;
+    const shimmer = Math.sin(timeRef.current * 2 + word.shimmerPhase) * 0.5 + 0.5;
+    // Only boost when shimmer is high (top ~15% of the wave)
+    return shimmer > 0.85 ? (shimmer - 0.85) * 4 : 0;
+  };
+
   return (
     <group ref={groupRef}>
-      {wordList.map((word) => (
-        <Text
-          key={word.id}
-          position={[word.position.x, word.position.y, word.position.z]}
-          rotation={[word.rotation.x, word.rotation.y, word.rotation.z]}
-          fontSize={word.scale * (word.isCurrentLine ? 1.5 : 1)}
-          color={new THREE.Color().setHSL(word.hue, 0.85, word.isCurrentLine ? 0.7 : 0.65)}
-          anchorX="center"
-          anchorY="middle"
-          font="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.woff"
-          fillOpacity={word.opacity}
-        >
-          {word.text}
-        </Text>
-      ))}
+      {wordList.map((word) => {
+        const shimmerBoost = getShimmerBoost(word);
+        return (
+          <Text
+            key={word.id}
+            position={[word.position.x, word.position.y, word.position.z]}
+            rotation={[word.rotation.x, word.rotation.y, word.rotation.z]}
+            fontSize={word.scale * (word.isCurrentLine ? 1.5 : 0.8)}
+            color={new THREE.Color().setHSL(
+              word.hue,
+              word.isCurrentLine ? 0.85 : 0.5 + shimmerBoost * 0.3,
+              word.isCurrentLine ? 0.7 : 0.4 + shimmerBoost * 0.4
+            )}
+            anchorX="center"
+            anchorY="middle"
+            font="https://cdn.jsdelivr.net/fontsource/fonts/inter@latest/latin-700-normal.woff"
+            fillOpacity={word.opacity + (word.isCurrentLine ? 0 : shimmerBoost * 0.3)}
+          >
+            {word.text}
+          </Text>
+        );
+      })}
     </group>
   );
 }
@@ -338,12 +357,14 @@ function LyricStormScene({
   );
 }
 
-// Canvas 2D overlay for crisp current line text
+// Canvas 2D overlay for crisp current and next line text (karaoke style)
 function TextOverlay({
   currentLine,
+  nextLine,
   audioData,
 }: {
   currentLine: string;
+  nextLine: string;
   audioData: ReturnType<typeof useAudioAnalyser>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -372,30 +393,44 @@ function TextOverlay({
       // Clear
       ctx.clearRect(0, 0, width, height);
 
+      const bass = audioData?.bass ?? 0;
+      const intensity = (audioData?.averageFrequency ?? 0) / 255;
+
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Draw current line (main, bright, at ~40% height)
       if (currentLine) {
-        const bass = audioData?.bass ?? 0;
-        const intensity = (audioData?.averageFrequency ?? 0) / 255;
-
-        ctx.save();
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
         const fontSize = (48 + bass * 16) * dpr;
         ctx.font = `bold ${fontSize}px system-ui, -apple-system, sans-serif`;
 
-        // Strong glow
+        // Strong purple glow
         ctx.shadowColor = `hsla(280, 100%, 60%, 0.9)`;
         ctx.shadowBlur = (30 + intensity * 40) * dpr;
         ctx.fillStyle = `hsla(280, 80%, ${70 + intensity * 20}%, 0.95)`;
 
-        ctx.fillText(currentLine, width / 2, height / 2);
+        ctx.fillText(currentLine, width / 2, height * 0.4);
 
         // Second pass for extra glow
         ctx.shadowBlur = (50 + bass * 30) * dpr;
-        ctx.fillText(currentLine, width / 2, height / 2);
-
-        ctx.restore();
+        ctx.fillText(currentLine, width / 2, height * 0.4);
       }
+
+      // Draw next line (smaller, dimmer, cyan, at ~60% height)
+      if (nextLine) {
+        const nextFontSize = (28 + bass * 8) * dpr;
+        ctx.font = `${nextFontSize}px system-ui, -apple-system, sans-serif`;
+
+        // Subtle cyan glow
+        ctx.shadowColor = `hsla(185, 100%, 50%, 0.6)`;
+        ctx.shadowBlur = (15 + intensity * 15) * dpr;
+        ctx.fillStyle = `hsla(185, 70%, 55%, 0.7)`;
+
+        ctx.fillText(nextLine, width / 2, height * 0.58);
+      }
+
+      ctx.restore();
 
       animationId = requestAnimationFrame(animate);
     };
@@ -406,7 +441,7 @@ function TextOverlay({
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, [currentLine, audioData]);
+  }, [currentLine, nextLine, audioData]);
 
   return (
     <canvas
@@ -436,9 +471,9 @@ export function LyricStorm({ lyrics, currentTime, track }: VisualizerProps) {
     return [...new Set(words)];
   }, [lyrics, track]);
 
-  // Find current line
-  const { currentLine, currentLineWords } = useMemo(() => {
-    if (!lyrics || lyrics.length === 0) return { currentLine: '', currentLineWords: [] };
+  // Find current line and next line for karaoke preview
+  const { currentLine, currentLineWords, nextLine } = useMemo(() => {
+    if (!lyrics || lyrics.length === 0) return { currentLine: '', currentLineWords: [], nextLine: '' };
 
     let idx = -1;
     for (let i = lyrics.length - 1; i >= 0; i--) {
@@ -448,11 +483,12 @@ export function LyricStorm({ lyrics, currentTime, track }: VisualizerProps) {
       }
     }
 
-    if (idx < 0) return { currentLine: '', currentLineWords: [] };
+    if (idx < 0) return { currentLine: '', currentLineWords: [], nextLine: '' };
 
     const line = lyrics[idx].text;
     const words = line.split(/\s+/).map(w => w.replace(/[^\w']/g, '')).filter(w => w.length > 0);
-    return { currentLine: line, currentLineWords: words };
+    const next = idx < lyrics.length - 1 ? lyrics[idx + 1].text : '';
+    return { currentLine: line, currentLineWords: words, nextLine: next };
   }, [lyrics, currentTime]);
 
   return (
@@ -468,7 +504,7 @@ export function LyricStorm({ lyrics, currentTime, track }: VisualizerProps) {
         />
       </Canvas>
 
-      <TextOverlay currentLine={currentLine} audioData={audioData} />
+      <TextOverlay currentLine={currentLine} nextLine={nextLine} audioData={audioData} />
     </div>
   );
 }
@@ -476,9 +512,9 @@ export function LyricStorm({ lyrics, currentTime, track }: VisualizerProps) {
 // Register the visualizer
 registerVisualizer(
   {
-    id: 'lyric-storm',
-    name: 'Lyric Storm',
-    description: 'Words fly through particle swarm',
+    id: 'lyrics',
+    name: 'Lyrics',
+    description: 'Karaoke-style lyrics with next-line preview',
     usesMetadata: true,
   },
   LyricStorm

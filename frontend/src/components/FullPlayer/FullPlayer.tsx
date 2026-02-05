@@ -15,6 +15,7 @@ import {
   Type,
   Compass,
   Loader2,
+  Radio,
 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -189,6 +190,7 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     repeat,
     toggleShuffle,
     toggleRepeat,
+    isPreviewMode,
   } = usePlayerStore();
 
   const { seek, togglePlayPause } = useAudioEngine();
@@ -417,7 +419,15 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
           className="text-center mb-6 cursor-context-menu"
           onContextMenu={handleContextMenu}
         >
-          <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
+          <div className="flex items-center justify-center gap-2">
+            <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
+            {isPreviewMode && (
+              <span className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
+                <Radio className="w-3 h-3" />
+                Preview
+              </span>
+            )}
+          </div>
           <p className="text-lg text-zinc-400">{currentTrack.artist || 'Unknown'}</p>
           <p className="text-sm text-zinc-500">{currentTrack.album || ''}</p>
         </div>

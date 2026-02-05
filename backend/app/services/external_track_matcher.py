@@ -14,7 +14,7 @@ from rapidfuzz import fuzz
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ExternalTrack, ExternalTrackSource, Track
+from app.db.models import ExternalTrack, ExternalTrackSource, PlaylistTrack, Track
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,39 @@ class ExternalTrackMatcher:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
+    async def _replace_in_playlists(self, external_track_id: UUID, local_track_id: UUID) -> int:
+        """Replace external track with local track in all playlists.
+
+        When an external track is matched to a local track, this updates all
+        PlaylistTrack entries that reference the external track to instead
+        reference the local track directly.
+
+        Args:
+            external_track_id: ID of the external track being replaced
+            local_track_id: ID of the local track to replace with
+
+        Returns:
+            Number of playlist entries updated
+        """
+        result = await self.db.execute(
+            select(PlaylistTrack).where(PlaylistTrack.external_track_id == external_track_id)
+        )
+        playlist_tracks = result.scalars().all()
+
+        count = 0
+        for pt in playlist_tracks:
+            pt.external_track_id = None
+            pt.track_id = local_track_id
+            count += 1
+
+        if count > 0:
+            logger.info(
+                f"Replaced external track {external_track_id} with local track {local_track_id} "
+                f"in {count} playlist entries"
+            )
+
+        return count
+
     async def match_external_track(
         self,
         external_track: ExternalTrack,
@@ -87,6 +120,9 @@ class ExternalTrackMatcher:
             external_track.matched_at = datetime.utcnow()
             external_track.match_method = method
             external_track.match_confidence = confidence
+
+            # Replace external track with local track in all playlists
+            await self._replace_in_playlists(external_track.id, match.id)
 
             if commit:
                 await self.db.commit()
@@ -164,6 +200,8 @@ class ExternalTrackMatcher:
                 ext.matched_at = datetime.utcnow()
                 ext.match_method = "isrc"
                 ext.match_confidence = 1.0
+                # Replace external track with local track in all playlists
+                await self._replace_in_playlists(ext.id, track.id)
                 matched_external.append(ext)
 
             if matched_external:
@@ -201,6 +239,8 @@ class ExternalTrackMatcher:
                     ext.matched_at = datetime.utcnow()
                     ext.match_method = "exact"
                     ext.match_confidence = 1.0
+                    # Replace external track with local track in all playlists
+                    await self._replace_in_playlists(ext.id, track.id)
                     matched_external.append(ext)
                     continue
 
@@ -214,6 +254,8 @@ class ExternalTrackMatcher:
                     ext.matched_at = datetime.utcnow()
                     ext.match_method = "fuzzy"
                     ext.match_confidence = combined / 100.0
+                    # Replace external track with local track in all playlists
+                    await self._replace_in_playlists(ext.id, track.id)
                     matched_external.append(ext)
 
         if matched_external and commit:
@@ -287,6 +329,9 @@ class ExternalTrackMatcher:
         external_track.match_method = "manual"
         external_track.match_confidence = 1.0
 
+        # Replace external track with local track in all playlists
+        await self._replace_in_playlists(external_track_id, track.id)
+
         await self.db.commit()
         await self.db.refresh(external_track)
 
@@ -323,6 +368,37 @@ class ExternalTrackMatcher:
         await self.db.refresh(external_track)
 
         return external_track
+
+    async def replace_all_matched_in_playlists(self) -> dict[str, int]:
+        """One-time migration: replace all matched external tracks in playlists.
+
+        Finds all external tracks that have been matched to local tracks and
+        replaces their references in playlists with the local track.
+
+        Returns:
+            Stats dict with external_tracks_processed and playlist_entries_replaced
+        """
+        result = await self.db.execute(
+            select(ExternalTrack).where(ExternalTrack.matched_track_id.isnot(None))
+        )
+        matched_externals = result.scalars().all()
+
+        total_replaced = 0
+        for ext in matched_externals:
+            count = await self._replace_in_playlists(ext.id, ext.matched_track_id)
+            total_replaced += count
+
+        await self.db.commit()
+
+        logger.info(
+            f"Migration completed: processed {len(matched_externals)} matched external tracks, "
+            f"replaced {total_replaced} playlist entries"
+        )
+
+        return {
+            "external_tracks_processed": len(matched_externals),
+            "playlist_entries_replaced": total_replaced,
+        }
 
     async def _find_match(
         self,

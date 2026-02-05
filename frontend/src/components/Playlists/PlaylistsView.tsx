@@ -71,7 +71,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   });
 
   // Fetch wishlist for count display
-  const { data: wishlist } = useQuery({
+  const { data: wishlist, isLoading: wishlistLoading } = useQuery({
     queryKey: ['wishlist'],
     queryFn: () => playlistsApi.getWishlist(),
     retry: isOffline ? false : 3,
@@ -270,7 +270,14 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   }
 
   // Show wishlist view (reuse PlaylistDetail with wishlist ID)
-  if (viewMode === 'wishlist' && wishlist?.id) {
+  if (viewMode === 'wishlist') {
+    if (wishlistLoading || !wishlist?.id) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+        </div>
+      );
+    }
     return (
       <PlaylistDetail
         playlistId={wishlist.id}

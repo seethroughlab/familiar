@@ -8,8 +8,6 @@
 import './CosmicOrb';
 import './FrequencyBars';
 import './AlbumKaleidoscope';
-import './ColorFlow';
-import './TypographyWave';
 import './LyricStorm';
 import './RainWindow';
 // NonPlaces moved to external plugin: familiar-plugin-non-places

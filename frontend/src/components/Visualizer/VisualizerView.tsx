@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Maximize2, Minimize2, Music } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
-import { tracksApi, type LyricLine } from '../../api/client';
+import { tracksApi } from '../../api/client';
 import { AudioVisualizer } from './AudioVisualizer';
 import { VisualizerPicker } from './VisualizerPicker';
 import { setVisualizerVisible } from '../../hooks/useAudioEngine';
@@ -11,12 +12,25 @@ import { setVisualizerVisible } from '../../hooks/useAudioEngine';
 export function VisualizerView() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
+  const [artworkLoaded, setArtworkLoaded] = useState(false);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore();
   const { visualizerId, setVisualizerId } = useVisualizerStore();
+
+  // Fetch lyrics using React Query (handles request cancellation and caching)
+  const { data: lyricsData } = useQuery({
+    queryKey: ['lyrics', currentTrack?.id],
+    queryFn: () => tracksApi.getLyrics(currentTrack!.id),
+    enabled: !!currentTrack,
+    staleTime: 1000 * 60 * 60, // Cache for 1 hour
+    retry: false,
+  });
+
+  const lyrics = lyricsData?.synced && lyricsData.lines.length > 0
+    ? lyricsData.lines
+    : null;
 
   // Notify audio engine when visualizer is visible (for iOS hybrid mode)
   useEffect(() => {
@@ -46,25 +60,6 @@ export function VisualizerView() {
       navigate(`?${paramString}${window.location.hash}`, { replace: true });
     }
   }, [visualizerId, searchParams, navigate]);
-
-  // Fetch lyrics for visualizer
-  useEffect(() => {
-    if (!currentTrack) {
-      setLyrics(null);
-      return;
-    }
-
-    tracksApi.getLyrics(currentTrack.id)
-      .then(response => {
-        if (response.synced && response.lines.length > 0) {
-          setLyrics(response.lines);
-        } else {
-          setLyrics(null);
-        }
-      })
-      .catch(() => setLyrics(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when track ID changes
-  }, [currentTrack?.id]);
 
   // Track fullscreen state changes
   useEffect(() => {
@@ -113,6 +108,14 @@ export function VisualizerView() {
 
   const artworkUrl = currentTrack ? tracksApi.getArtworkUrl(currentTrack.id) : null;
 
+  // Reset artwork loaded state when track changes
+  useEffect(() => {
+    setArtworkLoaded(false);
+  }, [currentTrack?.id]);
+
+  const handleArtworkLoad = useCallback(() => setArtworkLoaded(true), []);
+  const handleArtworkError = useCallback(() => setArtworkLoaded(false), []);
+
   // Show placeholder when no track is playing
   if (!currentTrack) {
     return (
@@ -152,7 +155,9 @@ export function VisualizerView() {
                 <img
                   src={artworkUrl}
                   alt="Album art"
-                  className="w-10 h-10 rounded shadow-lg flex-shrink-0"
+                  className={`w-10 h-10 rounded shadow-lg flex-shrink-0 ${artworkLoaded ? '' : 'hidden'}`}
+                  onLoad={handleArtworkLoad}
+                  onError={handleArtworkError}
                 />
               )}
               <div className="min-w-0">

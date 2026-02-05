@@ -73,13 +73,19 @@ export class DelayEffect extends BaseEffect {
    */
   set pingPong(value: boolean) {
     if (this._pingPong === value) return;
-    this._pingPong = value;
 
-    // Disconnect current wet path
-    this.inputNode.disconnect(this.monoDelay);
-    this.inputNode.disconnect(this.splitter);
-    this.monoDelay.disconnect(this.wetGain);
-    this.merger.disconnect(this.wetGain);
+    // Disconnect current wet path based on CURRENT state (before update)
+    if (this._pingPong) {
+      // Currently ping-pong, disconnect stereo path
+      this.inputNode.disconnect(this.splitter);
+      this.merger.disconnect(this.wetGain);
+    } else {
+      // Currently mono, disconnect mono path
+      this.inputNode.disconnect(this.monoDelay);
+      this.monoDelay.disconnect(this.wetGain);
+    }
+
+    this._pingPong = value;
 
     if (value) {
       // Use stereo ping-pong path

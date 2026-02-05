@@ -292,6 +292,34 @@ async def rematch_all(
         )
 
 
+class MigrateMatchedResponse(BaseModel):
+    """Response from migrate-matched operation."""
+
+    external_tracks_processed: int
+    playlist_entries_replaced: int
+
+
+@router.post("/migrate-matched", response_model=MigrateMatchedResponse)
+async def migrate_matched_to_local(
+    db: DbSession,
+    profile: RequiredProfile,
+) -> MigrateMatchedResponse:
+    """One-time migration to replace matched external tracks with local tracks in playlists.
+
+    This finds all external tracks that have been matched to local tracks and updates
+    all playlist entries that reference them to instead reference the local track directly.
+
+    This is useful for cleaning up playlists that were created before the automatic
+    replacement feature was added.
+    """
+    matcher = ExternalTrackMatcher(db)
+    stats = await matcher.replace_all_matched_in_playlists()
+    return MigrateMatchedResponse(
+        external_tracks_processed=stats["external_tracks_processed"],
+        playlist_entries_replaced=stats["playlist_entries_replaced"],
+    )
+
+
 def _external_track_to_response(track: ExternalTrack) -> ExternalTrackResponse:
     """Convert ExternalTrack model to response."""
     return ExternalTrackResponse(

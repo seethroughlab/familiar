@@ -83,6 +83,7 @@ function AppContent() {
           logger.info('[AppContent] Triple-tap recovery triggered');
           setShowFullPlayer(false);
           setShowMobileChat(false);
+          setShowChatPanel(false);
           setShowShortcutsHelp(false);
           tapCountRef.current = 0;
         }
@@ -118,11 +119,11 @@ function AppContent() {
     if (path === '/queue') return 'queue';
     if (path === '/visualizer' && isVisualizerAvailable()) return 'visualizer';
 
-    // Check for playlist-specific view params (downloads, favorites)
+    // Check for playlist-specific view params (downloads, favorites, wishlist)
     // These belong to the playlists tab even without the hash
     const searchParams = new URLSearchParams(window.location.search);
     const view = searchParams.get('view');
-    if (view === 'downloads' || view === 'favorites') {
+    if (view === 'downloads' || view === 'favorites' || view === 'wishlist') {
       return 'playlists';
     }
     // Also check for playlist or smartPlaylist params
@@ -170,6 +171,7 @@ function AppContent() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showMobileChat, setShowMobileChat] = useState(false);
   const [showQueuePanel, setShowQueuePanel] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(false);
   const [mobileSearchExpanded, setMobileSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -194,6 +196,8 @@ function AppContent() {
         setShowFullPlayer(false);
       } else if (showMobileChat) {
         setShowMobileChat(false);
+      } else if (showChatPanel) {
+        setShowChatPanel(false);
       }
     },
   });
@@ -234,8 +238,12 @@ function AppContent() {
       const detail = (e as CustomEvent).detail;
       if (detail?.message) {
         setPendingChatMessage(detail.message);
-        // On mobile, open the chat overlay
-        setShowMobileChat(true);
+        // Open the appropriate chat panel based on viewport
+        if (window.innerWidth >= 768) {
+          setShowChatPanel(true);
+        } else {
+          setShowMobileChat(true);
+        }
       }
     };
     window.addEventListener('trigger-chat', handleTriggerChat);
@@ -279,15 +287,29 @@ function AppContent() {
     <div className={`h-screen h-[100dvh] flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
       {/* Main content area - pb-24 on mobile accounts for fixed player bar + safe area */}
       <div className="flex-1 flex overflow-hidden pb-20 md:pb-20">
-        {/* Left panel - Chat (hidden on mobile, shown via overlay) */}
-        <div className={`hidden md:flex w-96 border-r ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'} flex-col`}>
-          <ErrorBoundary name="Chat">
-            <ChatPanel
-              pendingMessage={pendingChatMessage}
-              onPendingMessageConsumed={() => setPendingChatMessage(null)}
-            />
-          </ErrorBoundary>
-        </div>
+        {/* Left panel - Chat (hidden on mobile, shown via overlay; desktop slides in when toggled) */}
+        {showChatPanel && (
+          <div className={`hidden md:flex w-96 border-r ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} flex-col`}>
+            <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
+              <h2 className="font-semibold">AI Assistant</h2>
+              <button
+                onClick={() => setShowChatPanel(false)}
+                className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
+                aria-label="Close chat panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ErrorBoundary name="Chat">
+                <ChatPanel
+                  pendingMessage={pendingChatMessage}
+                  onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                />
+              </ErrorBoundary>
+            </div>
+          </div>
+        )}
 
         {/* Mobile chat overlay */}
         {showMobileChat && (
@@ -354,11 +376,22 @@ function AppContent() {
                 </div>
               ) : (
                 <>
-                  {/* Mobile chat toggle */}
+                  {/* Chat toggle - mobile opens overlay, desktop toggles slide-in panel */}
                   <button
-                    onClick={() => setShowMobileChat(true)}
-                    className="md:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/50"
-                    aria-label="Open chat"
+                    onClick={() => {
+                      if (window.innerWidth >= 768) {
+                        setShowChatPanel(!showChatPanel);
+                      } else {
+                        setShowMobileChat(true);
+                      }
+                    }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showChatPanel
+                        ? 'bg-zinc-700 text-white'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                    }`}
+                    aria-label={showChatPanel ? 'Close chat' : 'Open chat'}
+                    title="AI Assistant"
                   >
                     <MessageSquare className="w-5 h-5" />
                   </button>

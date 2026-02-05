@@ -153,25 +153,25 @@ const KaleidoscopeMaterial = shaderMaterial(
         color = vec4(r, g, b, 1.0);
       }
 
-      // Enhance colors based on audio
-      color.rgb *= 1.0 + uIntensity * 0.4;
+      // Enhance colors based on audio (reduced to prevent blowout)
+      color.rgb *= 0.85 + uIntensity * 0.15;
 
-      // Add shimmer effect
+      // Add subtle shimmer effect
       float shimmer = sin(kUv.x * 20.0 + uTime * 3.0) * sin(kUv.y * 20.0 - uTime * 2.0);
-      color.rgb += shimmer * 0.03 * uTreble;
+      color.rgb += shimmer * 0.015 * uTreble;
 
-      // Radial rainbow tint
+      // Radial rainbow tint (subtle)
       float dist = length(vUv - 0.5) * 2.0;
       vec3 rainbow = vec3(
         sin(dist * 3.0 + uTime) * 0.5 + 0.5,
         sin(dist * 3.0 + uTime + 2.094) * 0.5 + 0.5,
         sin(dist * 3.0 + uTime + 4.189) * 0.5 + 0.5
       );
-      color.rgb = mix(color.rgb, color.rgb * rainbow, 0.15 * uMid);
+      color.rgb = mix(color.rgb, color.rgb * rainbow, 0.08 * uMid);
 
-      // Edge glow (starts earlier, subtler intensity)
-      float edgeGlow = smoothstep(0.5, 1.0, dist) * (0.2 + uBass * 0.4);
-      color.rgb += vec3(0.6, 0.3, 0.9) * edgeGlow;
+      // Edge glow (subtle, only at edges)
+      float edgeGlow = smoothstep(0.7, 1.0, dist) * (0.1 + uBass * 0.15);
+      color.rgb += vec3(0.4, 0.2, 0.6) * edgeGlow;
 
       gl_FragColor = color;
     }
@@ -272,9 +272,9 @@ function SparkleParticles({ segments }: { segments: number }) {
       dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, dummy.matrix);
 
-      // Color based on segment - create rainbow effect
+      // Color based on segment - create rainbow effect (reduced brightness)
       const hue = (segmentIndices[i] / segments + time * 0.1) % 1;
-      const color = new THREE.Color().setHSL(hue, 0.9, 0.6 + lifetimes[i] * 0.3);
+      const color = new THREE.Color().setHSL(hue, 0.8, 0.4 + lifetimes[i] * 0.2);
       meshRef.current.setColorAt(i, color);
     }
 
@@ -316,9 +316,9 @@ function OuterRing() {
     const scale = 2.8 + bass * 0.2;
     meshRef.current.scale.setScalar(scale);
 
-    // Update material
+    // Update material (reduced opacity)
     const material = meshRef.current.material as THREE.MeshBasicMaterial;
-    material.opacity = 0.3 + bass * 0.3;
+    material.opacity = 0.15 + bass * 0.15;
   });
 
   return (
@@ -417,13 +417,13 @@ function KaleidoscopeScene({ artworkUrl }: { artworkUrl: string }) {
       <OuterRing />
       <SparkleParticles segments={12} />
 
-      {/* Post-processing */}
+      {/* Post-processing - reduced bloom to prevent white-out */}
       <AudioReactiveEffects
         enableBloom
         enableVignette
-        bloomIntensity={1.5}
-        bloomThreshold={0.4}
-        vignetteIntensity={0.3}
+        bloomIntensity={0.6}
+        bloomThreshold={0.7}
+        vignetteIntensity={0.4}
       />
     </>
   );

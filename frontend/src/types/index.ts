@@ -105,6 +105,12 @@ export interface LibraryStats {
 export interface QueueItem {
   track: Track;
   queueId: string;
+  // External track metadata (when track came from an external/suggested source)
+  externalInfo?: {
+    type: 'external';
+    previewUrl: string | null;
+    matchedTrackId: string | null;
+  };
 }
 
 // Playlist sharing (.familiar file format)

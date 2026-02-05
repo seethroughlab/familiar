@@ -206,6 +206,124 @@ async def create_playlist(
     )
 
 
+# ============================================================================
+# Wishlist Endpoints (must be defined before /{playlist_id} routes)
+# ============================================================================
+
+
+class WishlistAddRequest(BaseModel):
+    """Request to add an item to the wishlist."""
+
+    title: str
+    artist: str
+    album: str | None = None
+    spotify_id: str | None = None
+    preview_url: str | None = None
+    external_data: dict | None = None
+
+
+@router.get("/wishlist", response_model=PlaylistDetailResponse)
+async def get_wishlist(
+    db: DbSession,
+    profile: RequiredProfile,
+) -> PlaylistDetailResponse:
+    """Get the wishlist playlist for the current profile.
+
+    Creates the wishlist if it doesn't exist.
+    """
+    # Find or create wishlist
+    result = await db.execute(
+        select(Playlist).where(
+            Playlist.profile_id == profile.id,
+            Playlist.is_wishlist.is_(True),
+        )
+    )
+    wishlist = result.scalar_one_or_none()
+
+    if not wishlist:
+        # Create wishlist
+        wishlist = Playlist(
+            profile_id=profile.id,
+            name="Wishlist",
+            description="Tracks I want to add to my library",
+            is_wishlist=True,
+        )
+        db.add(wishlist)
+        await db.commit()
+        await db.refresh(wishlist)
+
+    return await get_playlist(wishlist.id, db, profile)
+
+
+@router.post("/wishlist/add", response_model=PlaylistDetailResponse)
+async def add_to_wishlist(
+    request: WishlistAddRequest,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> PlaylistDetailResponse:
+    """Add a track to the wishlist.
+
+    Creates an ExternalTrack and adds it to the wishlist playlist.
+    """
+    # Find or create wishlist
+    result = await db.execute(
+        select(Playlist).where(
+            Playlist.profile_id == profile.id,
+            Playlist.is_wishlist.is_(True),
+        )
+    )
+    wishlist = result.scalar_one_or_none()
+
+    if not wishlist:
+        wishlist = Playlist(
+            profile_id=profile.id,
+            name="Wishlist",
+            description="Tracks I want to add to my library",
+            is_wishlist=True,
+        )
+        db.add(wishlist)
+        await db.flush()
+
+    # Create external track
+    matcher = ExternalTrackMatcher(db)
+    external_track = await matcher.create_external_track(
+        title=request.title,
+        artist=request.artist,
+        album=request.album,
+        source=ExternalTrackSource.MANUAL,
+        spotify_id=request.spotify_id,
+        preview_url=request.preview_url,
+        preview_source="spotify" if request.preview_url else None,
+        external_data=request.external_data,
+        source_playlist_id=wishlist.id,
+        try_match=True,
+    )
+
+    # Get max position
+    max_pos = await db.scalar(
+        select(func.max(PlaylistTrack.position)).where(
+            PlaylistTrack.playlist_id == wishlist.id
+        )
+    ) or -1
+
+    # Add to wishlist
+    playlist_track = PlaylistTrack(
+        playlist_id=wishlist.id,
+        external_track_id=external_track.id,
+        position=max_pos + 1,
+    )
+    db.add(playlist_track)
+
+    await db.commit()
+
+    return await get_playlist(wishlist.id, db, profile)
+
+
+# ============================================================================
+# Playlist CRUD by ID
+# ============================================================================
+
+
 @router.get("/{playlist_id}", response_model=PlaylistDetailResponse)
 async def get_playlist(
     playlist_id: UUID,
@@ -573,119 +691,6 @@ async def remove_playlist_item(
         )
     )
     await db.commit()
-
-
-# ============================================================================
-# Wishlist Endpoints
-# ============================================================================
-
-
-class WishlistAddRequest(BaseModel):
-    """Request to add an item to the wishlist."""
-
-    title: str
-    artist: str
-    album: str | None = None
-    spotify_id: str | None = None
-    preview_url: str | None = None
-    external_data: dict | None = None
-
-
-@router.get("/wishlist", response_model=PlaylistDetailResponse)
-async def get_wishlist(
-    db: DbSession,
-    profile: RequiredProfile,
-) -> PlaylistDetailResponse:
-    """Get the wishlist playlist for the current profile.
-
-    Creates the wishlist if it doesn't exist.
-    """
-    # Find or create wishlist
-    result = await db.execute(
-        select(Playlist).where(
-            Playlist.profile_id == profile.id,
-            Playlist.is_wishlist.is_(True),
-        )
-    )
-    wishlist = result.scalar_one_or_none()
-
-    if not wishlist:
-        # Create wishlist
-        wishlist = Playlist(
-            profile_id=profile.id,
-            name="Wishlist",
-            description="Tracks I want to add to my library",
-            is_wishlist=True,
-        )
-        db.add(wishlist)
-        await db.commit()
-        await db.refresh(wishlist)
-
-    return await get_playlist(wishlist.id, db, profile)
-
-
-@router.post("/wishlist/add", response_model=PlaylistDetailResponse)
-async def add_to_wishlist(
-    request: WishlistAddRequest,
-    db: DbSession,
-    profile: RequiredProfile,
-) -> PlaylistDetailResponse:
-    """Add a track to the wishlist.
-
-    Creates an ExternalTrack and adds it to the wishlist playlist.
-    """
-    # Find or create wishlist
-    result = await db.execute(
-        select(Playlist).where(
-            Playlist.profile_id == profile.id,
-            Playlist.is_wishlist.is_(True),
-        )
-    )
-    wishlist = result.scalar_one_or_none()
-
-    if not wishlist:
-        wishlist = Playlist(
-            profile_id=profile.id,
-            name="Wishlist",
-            description="Tracks I want to add to my library",
-            is_wishlist=True,
-        )
-        db.add(wishlist)
-        await db.flush()
-
-    # Create external track
-    matcher = ExternalTrackMatcher(db)
-    external_track = await matcher.create_external_track(
-        title=request.title,
-        artist=request.artist,
-        album=request.album,
-        source=ExternalTrackSource.MANUAL,
-        spotify_id=request.spotify_id,
-        preview_url=request.preview_url,
-        preview_source="spotify" if request.preview_url else None,
-        external_data=request.external_data,
-        source_playlist_id=wishlist.id,
-        try_match=True,
-    )
-
-    # Get max position
-    max_pos = await db.scalar(
-        select(func.max(PlaylistTrack.position)).where(
-            PlaylistTrack.playlist_id == wishlist.id
-        )
-    ) or -1
-
-    # Add to wishlist
-    playlist_track = PlaylistTrack(
-        playlist_id=wishlist.id,
-        external_track_id=external_track.id,
-        position=max_pos + 1,
-    )
-    db.add(playlist_track)
-
-    await db.commit()
-
-    return await get_playlist(wishlist.id, db, profile)
 
 
 class RecommendedArtistResponse(BaseModel):

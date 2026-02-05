@@ -159,6 +159,7 @@ const persistState = () => {
     currentTrack: state.currentTrack,
     shuffleOrder: state.shuffleOrder,
     shuffleIndex: state.shuffleIndex,
+    currentTime: state.currentTime,
   });
 };
 
@@ -246,7 +247,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     persistState();
   },
   setIsPlaying: (playing) => set({ isPlaying: playing }),
-  setCurrentTime: (time) => set({ currentTime: time }),
+  setCurrentTime: (time) => {
+    set({ currentTime: time });
+    persistState(); // Debounced - will save at most every 500ms
+  },
   setDuration: (duration) => set({ duration: duration }),
   setVolume: (volume) => {
     set({ volume: Math.max(0, Math.min(1, volume)) });
@@ -506,10 +510,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setQueue: (tracks, startIndex = 0, source?: QueueSource) => {
     const { shuffle } = get();
-    const queueItems = tracks.map((track) => ({
-      track,
-      queueId: generateQueueId(),
-    }));
+    // Support tracks with _externalInfo metadata from playlist views
+    const queueItems = tracks.map((track) => {
+      // Extract _externalInfo if present (added by playlist handlePlay)
+      const trackWithMeta = track as Track & {
+        _externalInfo?: {
+          type: 'external';
+          previewUrl: string | null;
+          matchedTrackId: string | null;
+          originalId?: string;
+        };
+      };
+      const externalInfo = trackWithMeta._externalInfo;
+
+      return {
+        track,
+        queueId: generateQueueId(),
+        // Preserve external info for the audio engine to handle
+        externalInfo: externalInfo ? {
+          type: externalInfo.type,
+          previewUrl: externalInfo.previewUrl,
+          matchedTrackId: externalInfo.matchedTrackId,
+        } : undefined,
+      };
+    });
 
     // Generate shuffle order if shuffle is enabled
     let shuffleOrder: number[] = [];
@@ -762,6 +786,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         queue,
         queueIndex: persisted.queueIndex,
         currentTrack,
+        currentTime: persisted.currentTime ?? 0,
         isPlaying: false, // Don't auto-play on hydration
         isHydrated: true,
         shuffleOrder: persisted.shuffleOrder || [],

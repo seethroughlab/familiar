@@ -793,7 +793,7 @@ export function TrackListBrowser({
       userNavigatedRef.current = false;
     }, 2000);
 
-    virtualizer.scrollToIndex(index, { align: 'start', behavior: 'smooth' });
+    virtualizer.scrollToIndex(index, { align: 'start', behavior: 'auto' });
   }, [virtualizer]);
 
   // Track the current track ID we're scrolling to, for cancellation
@@ -842,7 +842,7 @@ export function TrackListBrowser({
       }
 
       if (localIndex >= 0) {
-        virtualizer.scrollToIndex(localIndex, { align: 'center', behavior: 'smooth' });
+        virtualizer.scrollToIndex(localIndex, { align: 'center', behavior: 'auto' });
         return; // Found locally, no API needed
       }
 
@@ -859,7 +859,7 @@ export function TrackListBrowser({
         if (scrollTargetRef.current !== targetId) return;
 
         if (index >= 0) {
-          virtualizer.scrollToIndex(index, { align: 'center', behavior: 'smooth' });
+          virtualizer.scrollToIndex(index, { align: 'center', behavior: 'auto' });
         }
       } catch {
         // Track might not match current filters - ignore silently

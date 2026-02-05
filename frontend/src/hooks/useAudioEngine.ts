@@ -9,7 +9,7 @@ import {
   revokeOfflineTrackUrl,
 } from '../services/offlineService';
 import { EffectsChain, initEffectsChain } from '../services/audioEffects';
-import { showError } from '../stores/toastStore';
+import { showError, showInfo } from '../stores/toastStore';
 
 // ============================================================================
 // Platform Detection
@@ -28,6 +28,13 @@ console.log('[AudioEngine] v5 - simplified mobile', {
   useDirectPlayback,
   useWebAudio,
 });
+
+// Debug flag - set to true to enable verbose logging for track ending issues
+const DEBUG_TRACK_ENDING = true;
+
+// Track last logged time to avoid spamming (log every 10 seconds)
+let lastDebugLogTime = 0;
+let lastLoggedTrackId: string | null = null;
 
 // ============================================================================
 // Exported functions
@@ -374,6 +381,17 @@ export function useAudioEngine() {
     const nextElement = getNextElement();
     if (!nextElement) return;
 
+    if (DEBUG_TRACK_ENDING) {
+      console.log('[AudioEngine] executeCrossfade called', {
+        crossfadeDuration: duration,
+        nextTrackId: nextTrack.id,
+        nextTrackTitle: nextTrack.title,
+        currentElementTime: currentElement?.currentTime,
+        currentElementDuration: currentElement?.duration,
+        nextElementReadyState: nextElement?.readyState,
+      });
+    }
+
     if (useDirectPlayback) {
       // Direct mode (mobile): animate audioElement.volume
       const startTime = performance.now();
@@ -446,6 +464,14 @@ export function useAudioEngine() {
   // Complete crossfade
   // --------------------------------------------------------------------------
   const completeCrossfade = useCallback(() => {
+    if (DEBUG_TRACK_ENDING) {
+      const { currentTrack: track } = usePlayerStore.getState();
+      console.log('[AudioEngine] completeCrossfade called', {
+        trackId: track?.id,
+        trackTitle: track?.title,
+      });
+    }
+
     const oldElement = getCurrentElement();
     cleanupElement(oldElement, currentOfflineUrl);
 
@@ -563,9 +589,40 @@ export function useAudioEngine() {
 
     // Setup ended handlers for elements
     const handleEnded = (isA: boolean) => () => {
-      if (queueTransition) return;
+      const element = isA
+        ? (useDirectPlayback ? directElementA : webAudioElementA)
+        : (useDirectPlayback ? directElementB : webAudioElementB);
+      const { currentTrack: track } = usePlayerStore.getState();
+
+      if (DEBUG_TRACK_ENDING) {
+        console.warn('[AudioEngine] 🔴 ENDED EVENT FIRED', {
+          elementIsA: isA,
+          currentElementIsA,
+          isCurrentElement: currentElementIsA === isA,
+          queueTransition,
+          crossfadeActive: crossfadeContext?.isActive,
+          trackId: track?.id,
+          trackTitle: track?.title,
+          elementCurrentTime: element?.currentTime,
+          elementDuration: element?.duration,
+          elementPaused: element?.paused,
+          elementEnded: element?.ended,
+          elementReadyState: element?.readyState,
+          elementNetworkState: element?.networkState,
+          elementSrc: element?.src?.slice(-50), // Last 50 chars of URL
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (queueTransition) {
+        if (DEBUG_TRACK_ENDING) console.log('[AudioEngine] Ignoring ended event - queueTransition active');
+        return;
+      }
       if (currentElementIsA === isA && !crossfadeContext?.isActive) {
+        if (DEBUG_TRACK_ENDING) console.log('[AudioEngine] Calling playNext() from ended handler');
         playNext();
+      } else {
+        if (DEBUG_TRACK_ENDING) console.log('[AudioEngine] Ignoring ended event - not current element or crossfade active');
       }
     };
 
@@ -635,17 +692,73 @@ export function useAudioEngine() {
     const endedA = handleEnded(true);
     const endedB = handleEnded(false);
 
+    // Debug handlers for buffering issues
+    const handleStalled = (label: string) => (e: Event) => {
+      if (!DEBUG_TRACK_ENDING) return;
+      const el = e.target as HTMLAudioElement;
+      const { currentTrack: track } = usePlayerStore.getState();
+      console.warn(`[AudioEngine] ⚠️ ${label} STALLED`, {
+        trackTitle: track?.title,
+        currentTime: el.currentTime,
+        duration: el.duration,
+        readyState: el.readyState,
+        networkState: el.networkState,
+      });
+    };
+
+    const handleWaiting = (label: string) => (e: Event) => {
+      if (!DEBUG_TRACK_ENDING) return;
+      const el = e.target as HTMLAudioElement;
+      const { currentTrack: track } = usePlayerStore.getState();
+      console.warn(`[AudioEngine] ⏳ ${label} WAITING (buffering)`, {
+        trackTitle: track?.title,
+        currentTime: el.currentTime,
+        duration: el.duration,
+        readyState: el.readyState,
+      });
+    };
+
+    const handleSeeked = (label: string) => (e: Event) => {
+      if (!DEBUG_TRACK_ENDING) return;
+      const el = e.target as HTMLAudioElement;
+      const { currentTrack: track } = usePlayerStore.getState();
+      console.log(`[AudioEngine] ⏩ ${label} SEEKED`, {
+        trackTitle: track?.title,
+        currentTime: el.currentTime,
+        duration: el.duration,
+      });
+    };
+
+    const stalledA = handleStalled('A');
+    const stalledB = handleStalled('B');
+    const waitingA = handleWaiting('A');
+    const waitingB = handleWaiting('B');
+    const seekedA = handleSeeked('A');
+    const seekedB = handleSeeked('B');
+
     // Add listeners only to the elements that exist for this platform
     if (useDirectPlayback) {
       directElementA?.addEventListener('ended', endedA);
       directElementB?.addEventListener('ended', endedB);
       directElementA?.addEventListener('error', handleError);
       directElementB?.addEventListener('error', handleError);
+      directElementA?.addEventListener('stalled', stalledA);
+      directElementB?.addEventListener('stalled', stalledB);
+      directElementA?.addEventListener('waiting', waitingA);
+      directElementB?.addEventListener('waiting', waitingB);
+      directElementA?.addEventListener('seeked', seekedA);
+      directElementB?.addEventListener('seeked', seekedB);
     } else {
       webAudioElementA?.addEventListener('ended', endedA);
       webAudioElementB?.addEventListener('ended', endedB);
       webAudioElementA?.addEventListener('error', handleError);
       webAudioElementB?.addEventListener('error', handleError);
+      webAudioElementA?.addEventListener('stalled', stalledA);
+      webAudioElementB?.addEventListener('stalled', stalledB);
+      webAudioElementA?.addEventListener('waiting', waitingA);
+      webAudioElementB?.addEventListener('waiting', waitingB);
+      webAudioElementA?.addEventListener('seeked', seekedA);
+      webAudioElementB?.addEventListener('seeked', seekedB);
     }
 
     return () => {
@@ -654,11 +767,23 @@ export function useAudioEngine() {
         directElementB?.removeEventListener('ended', endedB);
         directElementA?.removeEventListener('error', handleError);
         directElementB?.removeEventListener('error', handleError);
+        directElementA?.removeEventListener('stalled', stalledA);
+        directElementB?.removeEventListener('stalled', stalledB);
+        directElementA?.removeEventListener('waiting', waitingA);
+        directElementB?.removeEventListener('waiting', waitingB);
+        directElementA?.removeEventListener('seeked', seekedA);
+        directElementB?.removeEventListener('seeked', seekedB);
       } else {
         webAudioElementA?.removeEventListener('ended', endedA);
         webAudioElementB?.removeEventListener('ended', endedB);
         webAudioElementA?.removeEventListener('error', handleError);
         webAudioElementB?.removeEventListener('error', handleError);
+        webAudioElementA?.removeEventListener('stalled', stalledA);
+        webAudioElementB?.removeEventListener('stalled', stalledB);
+        webAudioElementA?.removeEventListener('waiting', waitingA);
+        webAudioElementB?.removeEventListener('waiting', waitingB);
+        webAudioElementA?.removeEventListener('seeked', seekedA);
+        webAudioElementB?.removeEventListener('seeked', seekedB);
       }
     };
   }, [playNext, setIsPlaying]);
@@ -684,6 +809,37 @@ export function useAudioEngine() {
 
     if (loadedTrackId === currentTrack.id) return;
     if (crossfadeContext?.isActive) return;
+
+    // Check if this track has external info (from playlist with suggested tracks)
+    const { queue, playPreview } = usePlayerStore.getState();
+    const queueItem = queue.find(q => q.track.id === currentTrack.id);
+    const externalInfo = queueItem?.externalInfo;
+
+    // Handle external tracks that don't have a matched local version
+    if (externalInfo && !externalInfo.matchedTrackId) {
+      if (externalInfo.previewUrl) {
+        // Play 30-second preview
+        loadedTrackId = currentTrack.id; // Mark as loaded to prevent re-triggering
+        setIsLoadingAudio(false);
+        playPreview({
+          id: currentTrack.id,
+          title: currentTrack.title || 'Unknown',
+          artist: currentTrack.artist || 'Unknown',
+          previewUrl: externalInfo.previewUrl,
+        });
+        return;
+      } else {
+        // No preview available - skip with clear message
+        loadedTrackId = currentTrack.id; // Mark as loaded to prevent re-triggering
+        setIsLoadingAudio(false);
+        showInfo('Track not in library', {
+          description: `"${currentTrack.title || 'Track'}" is a suggested track without a preview.`,
+        });
+        // Skip to next track after a short delay
+        setTimeout(() => playNext(), 100);
+        return;
+      }
+    }
 
     queueTransition = true;
     setIsLoadingAudio(true); // Show loading spinner on play button
@@ -721,6 +877,12 @@ export function useAudioEngine() {
           queueTransition = false;
           setIsLoadingAudio(false); // Audio is ready, hide spinner
 
+          // Restore position if we have one (from hydration)
+          const storedTime = usePlayerStore.getState().currentTime;
+          if (storedTime > 0 && currentElement.currentTime === 0) {
+            currentElement.currentTime = storedTime;
+          }
+
           const shouldPlay = usePlayerStore.getState().isPlaying;
           if (shouldPlay) {
             currentElement.play().catch((err) => {
@@ -732,6 +894,15 @@ export function useAudioEngine() {
 
         const handleMetadata = () => {
           if (currentLoadId !== thisLoadId) return;
+          if (DEBUG_TRACK_ENDING) {
+            const { currentTrack: track } = usePlayerStore.getState();
+            console.log('[AudioEngine] 📀 Track metadata loaded', {
+              trackId: trackIdToLoad,
+              trackTitle: track?.title,
+              duration: currentElement.duration,
+              readyState: currentElement.readyState,
+            });
+          }
           setDuration(currentElement.duration);
           loadedTrackId = trackIdToLoad;
           currentElement.removeEventListener('loadedmetadata', handleMetadata);
@@ -777,7 +948,7 @@ export function useAudioEngine() {
 
     loadTrack();
     updateMediaSession();
-  }, [currentTrack?.id, setDuration, updateMediaSession, setIsLoadingAudio]);
+  }, [currentTrack?.id, setDuration, updateMediaSession, setIsLoadingAudio, playNext]);
 
   // --------------------------------------------------------------------------
   // Play/pause
@@ -861,6 +1032,32 @@ export function useAudioEngine() {
       const effectiveCrossfade = crossfadeEnabled ? crossfadeDuration : 0;
       const preloadThreshold = effectiveCrossfade + 3;
 
+      // Periodic debug logging (every 10 seconds or on track change)
+      if (DEBUG_TRACK_ENDING) {
+        const now = Date.now();
+        const trackId = usePlayerStore.getState().currentTrack?.id;
+        const trackChanged = trackId !== lastLoggedTrackId;
+        if (trackChanged || now - lastDebugLogTime >= 10000) {
+          lastDebugLogTime = now;
+          lastLoggedTrackId = trackId ?? null;
+          console.log('[AudioEngine] 📊 Playback status', {
+            trackId,
+            currentTime: currentTime.toFixed(2),
+            duration: duration.toFixed(2),
+            timeRemaining: timeRemaining.toFixed(2),
+            crossfadeState,
+            nextTrackPreloaded,
+            effectiveCrossfade,
+            elementPaused: currentElement.paused,
+            elementReadyState: currentElement.readyState,
+            elementNetworkState: currentElement.networkState,
+            buffered: currentElement.buffered.length > 0
+              ? `${currentElement.buffered.start(0).toFixed(1)}-${currentElement.buffered.end(currentElement.buffered.length - 1).toFixed(1)}`
+              : 'none',
+          });
+        }
+      }
+
       if (hasNextTrack && crossfadeState === 'idle' && timeRemaining <= preloadThreshold && timeRemaining > effectiveCrossfade) {
         setCrossfadeState('preloading');
         preloadNextTrack(nextTrack.id).then((success) => {
@@ -870,6 +1067,16 @@ export function useAudioEngine() {
       }
 
       if (hasNextTrack && nextTrackPreloaded && crossfadeState === 'preloading' && timeRemaining <= effectiveCrossfade && timeRemaining > 0.1) {
+        if (DEBUG_TRACK_ENDING) {
+          console.log('[AudioEngine] 🔄 Starting crossfade', {
+            currentTime,
+            duration,
+            timeRemaining,
+            effectiveCrossfade,
+            nextTrackId: nextTrack.id,
+            nextTrackTitle: nextTrack.title,
+          });
+        }
         setCrossfadeState('crossfading');
         executeCrossfade(effectiveCrossfade, nextTrack);
       }
@@ -883,6 +1090,88 @@ export function useAudioEngine() {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, [isPlaying, setCurrentTime, crossfadeState, nextTrackPreloaded, crossfadeEnabled, crossfadeDuration, getNextTrack, setCrossfadeState, setNextTrackPreloaded, preloadNextTrack, executeCrossfade]);
+
+  // --------------------------------------------------------------------------
+  // Preview playback (for external tracks with preview URLs)
+  // --------------------------------------------------------------------------
+  const previewElementRef = useRef<HTMLAudioElement | null>(null);
+  const { isPreviewMode, previewTrack, stopPreview } = usePlayerStore();
+
+  useEffect(() => {
+    // Create preview element if needed
+    if (!previewElementRef.current) {
+      const el = new Audio();
+      el.preload = 'auto';
+      el.style.display = 'none';
+      document.body.appendChild(el);
+      previewElementRef.current = el;
+    }
+
+    const previewEl = previewElementRef.current;
+
+    if (isPreviewMode && previewTrack?.previewUrl) {
+      // Stop main playback
+      const currentElement = getCurrentElement();
+      if (currentElement) {
+        currentElement.pause();
+      }
+
+      // Start preview playback
+      previewEl.src = previewTrack.previewUrl;
+      previewEl.volume = currentMasterVolume;
+      previewEl.load();
+
+      const handleCanPlay = () => {
+        previewEl.play().catch(console.error);
+        setDuration(previewEl.duration || 30); // Previews are typically 30 seconds
+        previewEl.removeEventListener('canplay', handleCanPlay);
+      };
+
+      const handleEnded = () => {
+        // Preview ended - advance to next track
+        stopPreview();
+        playNext();
+      };
+
+      const handleTimeUpdate = () => {
+        setCurrentTime(previewEl.currentTime);
+      };
+
+      previewEl.addEventListener('canplay', handleCanPlay);
+      previewEl.addEventListener('ended', handleEnded);
+      previewEl.addEventListener('timeupdate', handleTimeUpdate);
+
+      return () => {
+        previewEl.removeEventListener('canplay', handleCanPlay);
+        previewEl.removeEventListener('ended', handleEnded);
+        previewEl.removeEventListener('timeupdate', handleTimeUpdate);
+      };
+    } else {
+      // Stop preview if it was playing
+      previewEl.pause();
+      previewEl.src = '';
+    }
+  }, [isPreviewMode, previewTrack, stopPreview, playNext, setDuration, setCurrentTime]);
+
+  // Handle play/pause for preview mode
+  useEffect(() => {
+    const previewEl = previewElementRef.current;
+    if (!previewEl || !isPreviewMode) return;
+
+    if (isPlaying) {
+      previewEl.play().catch(console.error);
+    } else {
+      previewEl.pause();
+    }
+  }, [isPlaying, isPreviewMode]);
+
+  // Handle volume changes for preview mode
+  useEffect(() => {
+    const previewEl = previewElementRef.current;
+    if (previewEl && isPreviewMode) {
+      previewEl.volume = currentMasterVolume;
+    }
+  }, [volume, isPreviewMode]);
 
   // --------------------------------------------------------------------------
   // Return

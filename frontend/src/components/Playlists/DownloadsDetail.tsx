@@ -280,26 +280,32 @@ export function DownloadsDetail({ onBack }: Props) {
                         <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
                         <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
                       </div>
-                      <Pause
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                        fill="currentColor"
-                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        className="hidden group-hover:block"
+                      >
+                        <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                      </button>
                     </>
                   ) : currentTrack?.id === track.id ? (
                     <>
                       <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                      <Play
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                        fill="currentColor"
-                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        className="hidden group-hover:block"
+                      >
+                        <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                      </button>
                     </>
                   ) : (
                     <>
                       <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                      <Play
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                        fill="currentColor"
-                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        className="hidden group-hover:block"
+                      >
+                        <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                      </button>
                     </>
                   )}
                 </div>

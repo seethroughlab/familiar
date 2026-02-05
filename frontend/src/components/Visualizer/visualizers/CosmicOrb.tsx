@@ -1,20 +1,25 @@
 /**
- * Cosmic Orb Visualizer - Enhanced with GPU particles and post-processing.
+ * Cosmic Orb Visualizer - Enhanced with album colors, reflective ground, and GPU particles.
  *
  * Features:
- * - 5000 GPU-instanced particles with curl noise motion
  * - Custom orb shader with Fresnel rim glow and vertex displacement
- * - Post-processing: bloom, chromatic aberration, noise, vignette
+ * - Colors extracted from album artwork
+ * - Reflective ground plane
  * - 256-segment circular waveform with glow
+ * - Starfield background
+ * - Post-processing: bloom, chromatic aberration, vignette
  */
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect, useState, memo } from 'react';
 import { Canvas, useFrame, extend } from '@react-three/fiber';
-import { OrbitControls, shaderMaterial } from '@react-three/drei';
+import { OrbitControls, shaderMaterial, MeshReflectorMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
+import { extractPalette } from '../../../utils/colorExtraction';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { GPUParticles } from '../effects/GPUParticles';
+
+const DEFAULT_PALETTE = ['#a855f7', '#06b6d4', '#22c55e', '#f59e0b', '#ec4899'];
 
 // Custom orb shader with Fresnel glow and vertex displacement
 const OrbMaterial = shaderMaterial(
@@ -147,8 +152,8 @@ const OrbMaterial = shaderMaterial(
       float emissiveStrength = 0.3 + uIntensity * 0.7 + uBass * 0.5;
       vec3 emissiveColor = uEmissive * emissiveStrength;
 
-      // Rim glow color (cyan)
-      vec3 rimColor = vec3(0.0, 1.0, 1.0) * fresnel * (1.0 + uBass);
+      // Rim glow color (uses emissive color)
+      vec3 rimColor = uEmissive * fresnel * (1.0 + uBass);
 
       // Combine
       vec3 finalColor = baseColor * 0.3 + emissiveColor + rimColor;
@@ -164,7 +169,7 @@ const OrbMaterial = shaderMaterial(
 extend({ OrbMaterial });
 
 // Enhanced circular waveform with glow
-function CircularWaveform() {
+function CircularWaveform({ color }: { color: string }) {
   const meshRef = useRef<THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>(null);
   useAudioAnalyser(true);
   const timeRef = useRef(0);
@@ -184,6 +189,10 @@ function CircularWaveform() {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return geo;
   }, []);
+
+  const material = useMemo(() => {
+    return new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
+  }, [color]);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -215,12 +224,12 @@ function CircularWaveform() {
   });
 
   return (
-    <primitive object={new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: '#00ffff', transparent: true, opacity: 0.9 }))} ref={meshRef} />
+    <primitive object={new THREE.Line(geometry, material)} ref={meshRef} />
   );
 }
 
 // Second waveform ring with phase offset
-function SecondaryWaveform() {
+function SecondaryWaveform({ color }: { color: string }) {
   const meshRef = useRef<THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>(null);
   useAudioAnalyser(true);
   const timeRef = useRef(0);
@@ -240,6 +249,10 @@ function SecondaryWaveform() {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return geo;
   }, []);
+
+  const material = useMemo(() => {
+    return new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
+  }, [color]);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -270,15 +283,20 @@ function SecondaryWaveform() {
   });
 
   return (
-    <primitive object={new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: '#a855f7', transparent: true, opacity: 0.6 }))} ref={meshRef} />
+    <primitive object={new THREE.Line(geometry, material)} ref={meshRef} />
   );
 }
 
 // Central orb with custom shader
-function ReactiveOrb() {
+function ReactiveOrb({ palette }: { palette: string[] }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   useAudioAnalyser(true);
+
+  const colors = useMemo(() => ({
+    base: new THREE.Color(palette[0]),
+    emissive: new THREE.Color(palette[1] || palette[0]),
+  }), [palette]);
 
   useFrame((_, delta) => {
     if (!materialRef.current) return;
@@ -295,6 +313,8 @@ function ReactiveOrb() {
     materialRef.current.uniforms.uMid.value = mid;
     materialRef.current.uniforms.uTreble.value = treble;
     materialRef.current.uniforms.uIntensity.value = intensity;
+    materialRef.current.uniforms.uColor.value = colors.base;
+    materialRef.current.uniforms.uEmissive.value = colors.emissive;
 
     // Scale based on bass
     if (meshRef.current) {
@@ -321,7 +341,7 @@ function ReactiveOrb() {
 }
 
 // Inner glowing core
-function GlowingCore() {
+function GlowingCore({ color }: { color: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
   useAudioAnalyser(true);
 
@@ -330,7 +350,7 @@ function GlowingCore() {
 
     const audioData = getAudioData();
     const bass = audioData?.bass ?? 0;
-    const scale = 0.4 + bass * 0.3; // Increased base size
+    const scale = 0.4 + bass * 0.3;
     meshRef.current.scale.setScalar(scale);
 
     const material = meshRef.current.material as THREE.MeshBasicMaterial;
@@ -341,7 +361,7 @@ function GlowingCore() {
     <mesh ref={meshRef}>
       <sphereGeometry args={[1, 32, 32]} />
       <meshBasicMaterial
-        color="#ffffff"
+        color={color}
         transparent
         opacity={0.6}
       />
@@ -364,7 +384,7 @@ function Starfield() {
       // Distribute stars on a large sphere
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const radius = 25 + Math.random() * 15; // Between 25-40 units away
+      const radius = 25 + Math.random() * 15;
 
       positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
@@ -388,7 +408,6 @@ function Starfield() {
     if (!starsRef.current) return;
     timeRef.current += delta;
 
-    // Subtle twinkle effect by modulating opacity
     const sizeAttr = starsRef.current.geometry.attributes.size;
     for (let i = 0; i < sizes.length; i++) {
       const twinkle = Math.sin(timeRef.current * 2 + twinklePhases[i]) * 0.3 + 0.7;
@@ -396,7 +415,6 @@ function Starfield() {
     }
     sizeAttr.needsUpdate = true;
 
-    // Very slow rotation
     starsRef.current.rotation.y += delta * 0.01;
   });
 
@@ -414,36 +432,81 @@ function Starfield() {
   );
 }
 
+// Reflective ground plane
+const ReflectiveGround = memo(function ReflectiveGround({ palette }: { palette: string[] }) {
+  const groundColor = useMemo(() => {
+    const color = new THREE.Color(palette[0]);
+    color.multiplyScalar(0.1);
+    return color;
+  }, [palette]);
+
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3, 0]}>
+      <planeGeometry args={[30, 30]} />
+      <MeshReflectorMaterial
+        blur={[400, 100]}
+        resolution={1024}
+        mixBlur={1}
+        mixStrength={0.5}
+        depthScale={1}
+        minDepthThreshold={0.85}
+        color={groundColor}
+        metalness={0.6}
+        roughness={0.4}
+        mirror={0.5}
+      />
+    </mesh>
+  );
+});
+
 // Main visualizer scene with all effects
-function CosmicOrbScene() {
+function CosmicOrbScene({ palette }: { palette: string[] }) {
   useAudioAnalyser(true);
+
+  const bgColor = useMemo(() => {
+    const color = new THREE.Color(palette[0]);
+    color.multiplyScalar(0.02);
+    return color;
+  }, [palette]);
+
+  const fogColor = useMemo(() => {
+    const color = new THREE.Color(palette[0]);
+    color.multiplyScalar(0.05);
+    return color;
+  }, [palette]);
 
   return (
     <>
-      <color attach="background" args={['#020208']} />
+      <color attach="background" args={[bgColor]} />
+      <fog attach="fog" args={[fogColor, 8, 30]} />
+
       <ambientLight intensity={0.2} />
-      <pointLight position={[10, 10, 10]} intensity={1} color="#a855f7" />
-      <pointLight position={[-10, -10, 5]} intensity={0.8} color="#06b6d4" />
+      <pointLight position={[10, 10, 10]} intensity={1} color={palette[0]} />
+      <pointLight position={[-10, -10, 5]} intensity={0.8} color={palette[1] || palette[0]} />
+      <pointLight position={[0, 5, 0]} intensity={0.5} color={palette[2] || palette[0]} />
 
       {/* Starfield for cosmic depth */}
       <Starfield />
 
-      <GlowingCore />
-      <ReactiveOrb />
-      <CircularWaveform />
-      <SecondaryWaveform />
+      <GlowingCore color={palette[2] || '#ffffff'} />
+      <ReactiveOrb palette={palette} />
+      <CircularWaveform color={palette[1] || '#00ffff'} />
+      <SecondaryWaveform color={palette[0]} />
 
-      {/* GPU Particles - reduced count, pushed outward for more empty space around orb */}
+      {/* Reflective ground */}
+      <ReflectiveGround palette={palette} />
+
+      {/* GPU Particles with album colors */}
       <GPUParticles
         count={3000}
-        size={0.012}
-        color="#a855f7"
-        secondaryColor="#06b6d4"
+        size={0.025}
+        color={palette[0]}
+        secondaryColor={palette[1] || palette[0]}
         spread={8}
         speed={0.6}
         audioData={null}
         behavior="orbit"
-        opacity={0.6}
+        opacity={0.8}
       />
 
       <OrbitControls
@@ -451,8 +514,8 @@ function CosmicOrbScene() {
         enablePan={false}
         autoRotate
         autoRotateSpeed={0.3}
-        maxPolarAngle={Math.PI / 1.5}
-        minPolarAngle={Math.PI / 3}
+        maxPolarAngle={Math.PI / 1.8}
+        minPolarAngle={Math.PI / 4}
       />
 
       {/* Post-processing effects */}
@@ -460,22 +523,32 @@ function CosmicOrbScene() {
         enableBloom
         enableVignette
         bloomIntensity={1.2}
-        bloomThreshold={0.6}
+        bloomThreshold={0.4}
         vignetteIntensity={0.4}
       />
     </>
   );
 }
 
-export function CosmicOrb(_props: VisualizerProps) {
+export function CosmicOrb({ artworkUrl }: VisualizerProps) {
+  const [palette, setPalette] = useState<string[]>(DEFAULT_PALETTE);
+
+  useEffect(() => {
+    if (artworkUrl) {
+      extractPalette(artworkUrl, 5).then(setPalette);
+    } else {
+      setPalette(DEFAULT_PALETTE);
+    }
+  }, [artworkUrl]);
+
   return (
     <div className="w-full h-full">
       <Canvas
-        camera={{ position: [0, 0, 6], fov: 60 }}
+        camera={{ position: [0, 1, 7], fov: 60 }}
         gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
         dpr={[1, 2]}
       >
-        <CosmicOrbScene />
+        <CosmicOrbScene palette={palette} />
       </Canvas>
     </div>
   );
@@ -486,8 +559,8 @@ registerVisualizer(
   {
     id: 'cosmic-orb',
     name: 'Cosmic Orb',
-    description: 'Enhanced orb with GPU particles and effects',
-    usesMetadata: false,
+    description: 'Glowing orb with album colors and reflective ground',
+    usesMetadata: true,
   },
   CosmicOrb
 );

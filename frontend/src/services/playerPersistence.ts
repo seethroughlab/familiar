@@ -19,6 +19,7 @@ export async function savePlayerState(state: {
   currentTrack: Track | null;
   shuffleOrder: number[];
   shuffleIndex: number;
+  currentTime: number;
 }): Promise<void> {
   const idbAvailable = await isIndexedDBAvailable();
   if (!idbAvailable) return;
@@ -39,6 +40,7 @@ export async function savePlayerState(state: {
       currentTrackId: state.currentTrack?.id || null,
       shuffleOrder: state.shuffleOrder,
       shuffleIndex: state.shuffleIndex,
+      currentTime: state.currentTime,
       updatedAt: new Date(),
     };
 
@@ -179,6 +181,7 @@ export function debouncedSavePlayerState(state: {
   currentTrack: Track | null;
   shuffleOrder: number[];
   shuffleIndex: number;
+  currentTime: number;
 }): void {
   if (saveTimeout) {
     clearTimeout(saveTimeout);

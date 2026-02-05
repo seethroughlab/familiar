@@ -156,6 +156,7 @@ export interface PersistedPlayerState {
   currentTrackId: string | null;
   shuffleOrder: number[]; // Randomized queue indices when shuffle is on
   shuffleIndex: number; // Current position in shuffleOrder (-1 when off)
+  currentTime: number; // Playback position in seconds
   updatedAt: Date;
 }
 
