@@ -162,6 +162,20 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
     }
   }, [selectedPlaylistId, onPlaylistViewed, setSelectedPlaylist]);
 
+  // Listen for navigation to specific ephemeral playlist (from LLM chat)
+  useEffect(() => {
+    const handleShowEphemeral = (e: CustomEvent<{ ephemeralId: string }>) => {
+      const { ephemeralId } = e.detail;
+      if (ephemeralId) {
+        setSelectedEphemeralId(ephemeralId);
+        setViewModeState('ephemeral-detail');
+      }
+    };
+
+    window.addEventListener('show-ephemeral-playlist', handleShowEphemeral as EventListener);
+    return () => window.removeEventListener('show-ephemeral-playlist', handleShowEphemeral as EventListener);
+  }, []);
+
   // Load cached playlist IDs to show offline availability indicators
   useEffect(() => {
     const loadCachedIds = async () => {
