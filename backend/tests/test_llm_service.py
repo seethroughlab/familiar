@@ -204,8 +204,8 @@ class TestLLMServiceChat:
             assert queue_events[0]["clear"] is True
 
     @pytest.mark.asyncio
-    async def test_chat_playlist_created_yields_event(self, service, mock_claude_client, mock_db):
-        """When tool executor saves a playlist, should yield playlist_created event."""
+    async def test_chat_ephemeral_playlist_created_yields_event(self, service, mock_claude_client, mock_db):
+        """When tool executor creates a playlist, should yield ephemeral_playlist_created event."""
         mock_claude_client.messages.create.return_value = FakeResponse(
             content=[FakeTextBlock("I created a playlist for you!")],
             stop_reason="end_turn",
@@ -215,10 +215,12 @@ class TestLLMServiceChat:
             mock_executor = MagicMock()
             mock_executor.get_queued_tracks.return_value = ([], True)
             mock_executor.get_auto_saved_playlist.return_value = {
-                "saved": True,
-                "playlist_id": "pl-123",
-                "playlist_name": "Jazz Mix",
-                "tracks_saved": 10,
+                "ephemeral": True,
+                "name": "Jazz Mix",
+                "generation_prompt": "create a jazz playlist",
+                "track_ids": ["track-1", "track-2"],
+                "tracks": [{"id": "track-1"}, {"id": "track-2"}],
+                "suggested_tracks": [],
             }
             mock_executor.get_playback_action.return_value = None
             mock_executor_class.return_value = mock_executor
@@ -227,10 +229,10 @@ class TestLLMServiceChat:
             async for event in service.chat("create a jazz playlist", [], mock_db):
                 events.append(event)
 
-            playlist_events = [e for e in events if e["type"] == "playlist_created"]
+            playlist_events = [e for e in events if e["type"] == "ephemeral_playlist_created"]
             assert len(playlist_events) == 1
-            assert playlist_events[0]["playlist_id"] == "pl-123"
-            assert playlist_events[0]["playlist_name"] == "Jazz Mix"
+            assert playlist_events[0]["name"] == "Jazz Mix"
+            assert playlist_events[0]["track_ids"] == ["track-1", "track-2"]
 
     @pytest.mark.asyncio
     async def test_chat_playback_action_yields_event(self, service, mock_claude_client, mock_db):

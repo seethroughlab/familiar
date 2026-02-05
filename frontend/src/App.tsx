@@ -231,6 +231,16 @@ function AppContent() {
     return () => window.removeEventListener('show-playlist', handleShowPlaylist);
   }, [setRightPanelTab]);
 
+  // Listen for show-ephemeral-playlist event when LLM creates an ephemeral playlist
+  useEffect(() => {
+    const handleShowEphemeralPlaylist = () => {
+      // Just switch to playlists tab - the unsaved section will show automatically
+      setRightPanelTab('playlists');
+    };
+    window.addEventListener('show-ephemeral-playlist', handleShowEphemeralPlaylist);
+    return () => window.removeEventListener('show-ephemeral-playlist', handleShowEphemeralPlaylist);
+  }, [setRightPanelTab]);
+
   // Listen for trigger-chat event from context menus (e.g., "Make Playlist From This Track")
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   useEffect(() => {

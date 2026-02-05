@@ -63,6 +63,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatically scrolls to show currently playing track
   - Centers track in viewport for better context
   - Works especially well with shuffle mode
+- **Ephemeral Playlists** - LLM-generated playlists are no longer auto-saved
+  - Playlists from chat appear in "Unsaved" section until explicitly saved
+  - Save button persists playlist to database
+  - Dismiss button removes ephemeral playlist without saving
+  - Ephemeral playlists stored in Zustand (survive page navigation, cleared on refresh)
+  - Reduces database clutter from experimental/throwaway requests
 
 ### Fixed
 

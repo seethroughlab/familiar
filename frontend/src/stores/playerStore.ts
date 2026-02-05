@@ -12,7 +12,7 @@ type RepeatMode = 'off' | 'all' | 'one';
 type CrossfadeState = 'idle' | 'preloading' | 'crossfading';
 
 // Queue source tracking - where the current queue originated from
-export type QueueSourceType = 'library' | 'album' | 'playlist' | 'artist' | 'other';
+export type QueueSourceType = 'library' | 'album' | 'playlist' | 'artist' | 'ephemeral' | 'other';
 
 export interface LibraryFilters {
   search?: string;

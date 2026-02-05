@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryViewStore } from '../../stores/libraryViewStore';
 import { useVisibleTracksStore } from '../../stores/visibleTracksStore';
+import { useEphemeralPlaylistStore, type EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { getOrCreateDeviceProfile } from '../../services/profileService';
 import * as chatService from '../../services/chatService';
@@ -389,16 +390,24 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
         break;
       }
 
-      case 'playlist_created': {
-        // Invalidate playlists query so the new playlist appears in the list
-        queryClient.invalidateQueries({ queryKey: ['playlists'] });
-        // Navigate to the playlists view and highlight the new playlist
+      case 'ephemeral_playlist_created': {
+        // Add to ephemeral store instead of saving to database
+        const tracks = (event.tracks as EphemeralTrack[]) || [];
+        const trackIds = (event.track_ids as string[]) || [];
+        const name = (event.name as string) || 'AI Playlist';
+        const generationPrompt = (event.generation_prompt as string) || '';
+
+        const ephemeralId = useEphemeralPlaylistStore.getState().addPlaylist({
+          name,
+          generationPrompt,
+          tracks,
+          trackIds,
+        });
+
+        // Navigate to the playlists view to show the unsaved section
         window.dispatchEvent(
-          new CustomEvent('show-playlist', {
-            detail: {
-              playlistId: event.playlist_id as string,
-              playlistName: event.playlist_name as string,
-            },
+          new CustomEvent('show-ephemeral-playlist', {
+            detail: { ephemeralId },
           })
         );
         break;

@@ -1,0 +1,227 @@
+import { useCallback } from 'react';
+import { ArrowLeft, Play, Pause, Clock, Save, Trash2, Loader2, Music } from 'lucide-react';
+import { usePlayerStore } from '../../stores/playerStore';
+import { useFavorites } from '../../hooks/useFavorites';
+import { Heart } from 'lucide-react';
+import type { EphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
+
+interface Props {
+  playlist: EphemeralPlaylist;
+  onBack: () => void;
+  onSave: () => Promise<void>;
+  onDelete: () => void;
+  isSaving: boolean;
+}
+
+export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, isSaving }: Props) {
+  const { currentTrack, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
+
+  const handlePlay = useCallback((startIndex = 0) => {
+    if (playlist.tracks.length === 0) return;
+
+    // If clicking on the currently playing track, toggle play/pause
+    const clickedTrack = playlist.tracks[startIndex];
+    if (clickedTrack && currentTrack?.id === clickedTrack.id) {
+      setIsPlaying(!isPlaying);
+      return;
+    }
+
+    const queueTracks = playlist.tracks.map((t) => ({
+      id: t.id,
+      file_path: '',
+      title: t.title || 'Unknown',
+      artist: t.artist || 'Unknown',
+      album: t.album || null,
+      album_artist: null,
+      album_type: 'album' as const,
+      track_number: null,
+      disc_number: null,
+      year: null,
+      genre: null,
+      duration_seconds: t.duration_seconds || null,
+      format: null,
+      analysis_version: 0,
+    }));
+    setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
+  }, [playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+
+  const formatDuration = (seconds: number | null) => {
+    if (!seconds) return '--:--';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const totalDuration = playlist.tracks.reduce(
+    (sum, t) => sum + (t.duration_seconds || 0),
+    0
+  );
+
+  return (
+    <div className="space-y-4 px-4 md:px-0">
+      {/* Header */}
+      <div className="space-y-4">
+        {/* Back button row */}
+        <button
+          onClick={onBack}
+          className="p-2 hover:bg-zinc-800 rounded-lg transition-colors -ml-2"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+
+        {/* Playlist info */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full border border-dashed border-amber-500/50">
+              Unsaved
+            </span>
+            <h2 className="text-xl font-bold truncate">{playlist.name}</h2>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-zinc-500">
+            <span>{playlist.tracks.length} tracks</span>
+            <span className="flex items-center gap-1">
+              <Clock className="w-4 h-4" />
+              {Math.floor(totalDuration / 60)} min
+            </span>
+            {playlist.generationPrompt && (
+              <span className="text-amber-400/70 truncate max-w-full sm:max-w-xs">
+                "{playlist.generationPrompt}"
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <button
+            onClick={() => handlePlay()}
+            disabled={playlist.tracks.length === 0}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 rounded-full transition-colors"
+          >
+            <Play className="w-4 h-4" fill="currentColor" />
+            Play
+          </button>
+
+          <button
+            onClick={onSave}
+            disabled={isSaving}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 rounded-full transition-colors"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Save Playlist
+          </button>
+
+          <button
+            onClick={onDelete}
+            disabled={isSaving}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-full transition-colors text-red-400"
+          >
+            <Trash2 className="w-4 h-4" />
+            Discard
+          </button>
+        </div>
+      </div>
+
+      {/* Track list */}
+      {playlist.tracks.length > 0 ? (
+        <div className="space-y-1">
+          {playlist.tracks.map((track, idx) => (
+            <div
+              key={track.id}
+              onClick={() => handlePlay(idx)}
+              className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
+                currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+              }`}
+            >
+              {/* Track number / Play button */}
+              <div className="w-8 text-center">
+                {currentTrack?.id === track.id && isPlaying ? (
+                  <>
+                    <div className="group-hover:hidden flex justify-center gap-0.5">
+                      <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
+                      <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
+                      <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                    >
+                      <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                    </button>
+                  </>
+                ) : currentTrack?.id === track.id ? (
+                  <>
+                    <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                    >
+                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                      className="hidden group-hover:block"
+                    >
+                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Track info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
+                    {track.title || 'Unknown Title'}
+                  </span>
+                </div>
+                <div className="text-sm text-zinc-400 truncate">
+                  {track.artist || 'Unknown Artist'}
+                  {track.album && (
+                    <span className="text-zinc-500"> • {track.album}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Favorite button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleFavorite(track.id);
+                }}
+                className={`p-1 transition-colors ${
+                  isFavorite(track.id)
+                    ? 'text-pink-500 hover:text-pink-400'
+                    : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                }`}
+                title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
+              </button>
+
+              {/* Duration */}
+              <div className="text-sm text-zinc-500">
+                {formatDuration(track.duration_seconds)}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12 text-zinc-500">
+          <Music className="w-12 h-12 mx-auto mb-3 opacity-50" />
+          <p>No tracks in this playlist</p>
+        </div>
+      )}
+    </div>
+  );
+}

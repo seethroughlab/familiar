@@ -3,22 +3,25 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
   Sparkles, Play, MoreVertical, Trash2, Loader2,
-  ChevronDown, ChevronUp, ListMusic, Heart, CloudOff, Download, HardDrive, Gift
+  ChevronDown, ChevronUp, ListMusic, Heart, CloudOff, Download, HardDrive, Gift,
+  Clock, X, Save
 } from 'lucide-react';
 import { playlistsApi, smartPlaylistsApi } from '../../api/client';
 import type { Playlist, SmartPlaylist } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { PlaylistDetail } from './PlaylistDetail';
+import { EphemeralPlaylistDetail } from './EphemeralPlaylistDetail';
 import { FavoritesDetail } from './FavoritesDetail';
 import { DownloadsDetail } from './DownloadsDetail';
 import { SmartPlaylistList, SmartPlaylistDetail } from '../SmartPlaylists';
 import { NewReleasesView } from '../NewReleases';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
+import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import * as playlistCache from '../../services/playlistCache';
 
-type ViewMode = 'list' | 'detail' | 'favorites' | 'downloads' | 'wishlist' | 'smart-detail';
+type ViewMode = 'list' | 'detail' | 'favorites' | 'downloads' | 'wishlist' | 'smart-detail' | 'ephemeral-detail';
 
 interface SelectedPlaylist {
   type: 'static' | 'smart';
@@ -39,6 +42,14 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const [searchParams, setSearchParams] = useSearchParams();
   const [cachedPlaylistIds, setCachedPlaylistIds] = useState<Set<string>>(new Set());
   const [usingCachedPlaylists, setUsingCachedPlaylists] = useState(false);
+  const [savingPlaylistId, setSavingPlaylistId] = useState<string | null>(null);
+  const [selectedEphemeralId, setSelectedEphemeralId] = useState<string | null>(null);
+
+  // Ephemeral playlists (unsaved)
+  const ephemeralPlaylists = useEphemeralPlaylistStore((state) => state.playlists);
+  const removeEphemeral = useEphemeralPlaylistStore((state) => state.removePlaylist);
+  const clearAllEphemeral = useEphemeralPlaylistStore((state) => state.clearAll);
+  const saveEphemeralPlaylist = useSaveEphemeralPlaylist();
 
   // Get playlist ID and view from URL
   const urlPlaylistId = searchParams.get('playlist');
@@ -255,6 +266,43 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
     playMutation.mutate(id);
   };
 
+  // Handle saving an ephemeral playlist
+  const handleSaveEphemeral = async (id: string) => {
+    setSavingPlaylistId(id);
+    try {
+      const savedId = await saveEphemeralPlaylist(id);
+      // Navigate to the saved playlist
+      setSelectedPlaylist({ type: 'static', id: savedId });
+    } catch (error) {
+      console.error('Failed to save playlist:', error);
+    } finally {
+      setSavingPlaylistId(null);
+    }
+  };
+
+  // Play an ephemeral playlist (queue the tracks)
+  const handlePlayEphemeral = (playlist: typeof ephemeralPlaylists[0]) => {
+    if (playlist.tracks.length > 0) {
+      const queueTracks = playlist.tracks.map((t) => ({
+        id: t.id,
+        file_path: '',
+        title: t.title || 'Unknown',
+        artist: t.artist || 'Unknown',
+        album: t.album || null,
+        album_artist: null,
+        album_type: 'album' as const,
+        track_number: null,
+        disc_number: null,
+        year: null,
+        genre: null,
+        duration_seconds: t.duration_seconds || null,
+        format: null,
+        analysis_version: 0,
+      }));
+      setQueue(queueTracks, 0, { type: 'ephemeral', id: playlist.id });
+    }
+  };
+
   // Show favorites view
   if (viewMode === 'favorites') {
     return (
@@ -294,6 +342,41 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
         onBack={() => {
           setSelectedSmartPlaylist(null);
         }}
+      />
+    );
+  }
+
+  // Show ephemeral playlist detail view
+  const selectedEphemeral = selectedEphemeralId
+    ? ephemeralPlaylists.find((p) => p.id === selectedEphemeralId)
+    : null;
+  if (viewMode === 'ephemeral-detail' && selectedEphemeral) {
+    return (
+      <EphemeralPlaylistDetail
+        playlist={selectedEphemeral}
+        onBack={() => {
+          setSelectedEphemeralId(null);
+          setViewMode('list');
+        }}
+        onSave={async () => {
+          setSavingPlaylistId(selectedEphemeralId);
+          try {
+            const savedId = await saveEphemeralPlaylist(selectedEphemeralId!);
+            setSelectedEphemeralId(null);
+            // Navigate to the saved playlist
+            setSelectedPlaylist({ type: 'static', id: savedId });
+          } catch (error) {
+            console.error('Failed to save playlist:', error);
+          } finally {
+            setSavingPlaylistId(null);
+          }
+        }}
+        onDelete={() => {
+          removeEphemeral(selectedEphemeralId!);
+          setSelectedEphemeralId(null);
+          setViewMode('list');
+        }}
+        isSaving={savingPlaylistId === selectedEphemeralId}
       />
     );
   }
@@ -366,6 +449,119 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
           </div>
         </div>
       </button>
+
+      {/* Unsaved Playlists Section - ephemeral, lost on refresh */}
+      {ephemeralPlaylists.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between px-2 py-2">
+            <div className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-amber-400" />
+              <span className="font-semibold">Unsaved</span>
+              <span className="text-xs text-zinc-500">(lost on refresh)</span>
+            </div>
+            <button
+              onClick={clearAllEphemeral}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Clear All
+            </button>
+          </div>
+
+          <div className="mt-2 space-y-2">
+            {ephemeralPlaylists.map((playlist) => {
+              const isNowPlaying = queueSource?.type === 'ephemeral' && queueSource?.id === playlist.id;
+              const isSaving = savingPlaylistId === playlist.id;
+              return (
+                <div
+                  key={playlist.id}
+                  className={`group flex items-center gap-3 p-3 rounded-lg border border-dashed transition-colors ${
+                    isNowPlaying
+                      ? 'bg-green-900/20 hover:bg-green-900/30 border-green-500/30'
+                      : 'bg-zinc-800/30 hover:bg-zinc-800/50 border-zinc-700'
+                  }`}
+                >
+                  {/* Now playing indicator or Play button */}
+                  {isNowPlaying && isPlaying ? (
+                    <div className="p-2 bg-green-600 rounded-full flex items-center justify-center">
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-0.5 h-3 bg-white animate-pulse" />
+                        <div className="w-0.5 h-3 bg-white animate-pulse [animation-delay:0.2s]" />
+                        <div className="w-0.5 h-3 bg-white animate-pulse [animation-delay:0.4s]" />
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePlayEphemeral(playlist);
+                      }}
+                      className={`p-2 rounded-full transition-opacity ${
+                        isNowPlaying
+                          ? 'bg-green-600 hover:bg-green-500 opacity-100'
+                          : 'bg-amber-600 hover:bg-amber-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                      }`}
+                    >
+                      <Play className="w-4 h-4" fill="currentColor" />
+                    </button>
+                  )}
+
+                  {/* Info - clickable to open detail */}
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => {
+                      setSelectedEphemeralId(playlist.id);
+                      setViewModeState('ephemeral-detail');
+                    }}
+                  >
+                    <div className={`font-medium truncate ${isNowPlaying ? 'text-green-400' : ''}`}>
+                      {playlist.name}
+                    </div>
+                    <div className="text-sm text-zinc-400 flex items-center gap-2">
+                      <span>{playlist.tracks.length} tracks</span>
+                      {playlist.generationPrompt && (
+                        <>
+                          <span className="text-zinc-600">|</span>
+                          <span className="truncate max-w-xs text-amber-400/70">
+                            "{playlist.generationPrompt}"
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSaveEphemeral(playlist.id);
+                    }}
+                    disabled={isSaving || isOffline}
+                    className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-500 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    title="Save playlist"
+                  >
+                    {isSaving ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Save className="w-3.5 h-3.5" />
+                    )}
+                    <span className="hidden sm:inline">Save</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeEphemeral(playlist.id);
+                    }}
+                    className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded-lg transition-colors"
+                    title="Dismiss"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* AI-Generated Playlists Section */}
       {hasAiPlaylists && (

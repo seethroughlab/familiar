@@ -610,12 +610,15 @@ Respond with ONLY the playlist name, nothing else."""
         clear_existing: bool = False,
         suggested_tracks: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        """Queue tracks for playback and auto-save as playlist.
+        """Queue tracks for playback and return ephemeral playlist metadata.
+
+        The playlist is NOT automatically saved - instead we return metadata
+        for the frontend to store ephemerally. User must explicitly save.
 
         Args:
             track_ids: List of local track UUIDs to queue for playback
             clear_existing: Whether to clear the current queue
-            suggested_tracks: External tracks to suggest (only added if discovery mode is 'suggest_missing')
+            suggested_tracks: External tracks to suggest (stored with ephemeral metadata)
         """
         logger.info(f"_queue_tracks called with {len(track_ids)} tracks, {len(suggested_tracks or [])} suggested")
 
@@ -626,91 +629,26 @@ Respond with ONLY the playlist name, nothing else."""
 
         self._queued_tracks = [self._track_to_dict(t) for t in tracks]
 
-        suggested_added = 0
-        suggested_tracks_info: list[dict[str, Any]] = []
-
+        # Generate playlist name for ephemeral metadata (no DB save)
+        playlist_name = ""
         if tracks and self.profile_id:
             playlist_name = await self._generate_playlist_name_llm(self._queued_tracks)
-            self._auto_saved_playlist = await self._save_as_playlist(
-                name=playlist_name,
-                track_ids=track_ids,
-                description=self.user_message,
-            )
 
-            # Handle suggested_tracks if discovery mode allows
-            if suggested_tracks and self._auto_saved_playlist.get("saved"):
-                settings = get_app_settings_service().get()
-                discovery_mode = settings.playlist_discovery_mode
-
-                if discovery_mode == "suggest_missing":
-                    playlist_id_str = self._auto_saved_playlist.get("playlist_id")
-                    if playlist_id_str:
-                        playlist_id = UUID(playlist_id_str)
-                        matcher = ExternalTrackMatcher(self.db)
-
-                        # Get current position count
-                        position = len(track_ids)
-
-                        for suggested in suggested_tracks:
-                            title = suggested.get("title", "").strip()
-                            artist = suggested.get("artist", "").strip()
-                            album = suggested.get("album", "").strip() if suggested.get("album") else None
-                            reason = suggested.get("reason", "")
-
-                            if not title or not artist:
-                                continue
-
-                            # Create external track
-                            external_track = await matcher.create_external_track(
-                                title=title,
-                                artist=artist,
-                                album=album,
-                                source=ExternalTrackSource.LLM_RECOMMENDATION,
-                                external_data={
-                                    "reason": reason,
-                                    "user_request": self.user_message,
-                                },
-                                source_playlist_id=playlist_id,
-                                try_match=True,  # Try to match to local library
-                            )
-
-                            # Check if matcher found a local match
-                            if external_track.matched_track_id:
-                                # Use the matched local track instead
-                                playlist_track = PlaylistTrack(
-                                    playlist_id=playlist_id,
-                                    track_id=external_track.matched_track_id,
-                                    position=position,
-                                )
-                            else:
-                                # Add as external/missing track
-                                playlist_track = PlaylistTrack(
-                                    playlist_id=playlist_id,
-                                    external_track_id=external_track.id,
-                                    position=position,
-                                )
-                                suggested_added += 1
-                                suggested_tracks_info.append({
-                                    "title": title,
-                                    "artist": artist,
-                                    "album": album,
-                                })
-
-                            self.db.add(playlist_track)
-                            position += 1
-
-                        await self.db.commit()
+        # Build ephemeral playlist metadata for frontend to store temporarily
+        self._auto_saved_playlist = {
+            "ephemeral": True,
+            "name": playlist_name,
+            "generation_prompt": self.user_message,
+            "track_ids": track_ids,
+            "tracks": self._queued_tracks,
+            "suggested_tracks": suggested_tracks or [],
+        }
 
         response: dict[str, Any] = {
             "queued": len(tracks),
             "clear_existing": clear_existing,
             "tracks": self._queued_tracks,
         }
-
-        if suggested_added > 0:
-            response["suggested_tracks_added"] = suggested_added
-            response["suggested_tracks"] = suggested_tracks_info
-            response["note"] = f"Added {suggested_added} suggested tracks to the saved playlist. These appear in the playlist as 'missing tracks' you might want to acquire."
 
         return response
 

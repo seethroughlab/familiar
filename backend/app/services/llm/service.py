@@ -164,13 +164,16 @@ class LLMService:
                 if queued:
                     yield {"type": "queue", "tracks": queued, "clear": clear_queue}
 
+                # Emit ephemeral playlist metadata for frontend to store temporarily
                 auto_playlist = tool_executor.get_auto_saved_playlist()
-                if auto_playlist and auto_playlist.get("saved"):
+                if auto_playlist and auto_playlist.get("ephemeral"):
                     yield {
-                        "type": "playlist_created",
-                        "playlist_id": auto_playlist.get("playlist_id"),
-                        "playlist_name": auto_playlist.get("playlist_name"),
-                        "track_count": auto_playlist.get("tracks_saved"),
+                        "type": "ephemeral_playlist_created",
+                        "name": auto_playlist.get("name"),
+                        "generation_prompt": auto_playlist.get("generation_prompt"),
+                        "track_ids": auto_playlist.get("track_ids"),
+                        "tracks": auto_playlist.get("tracks"),
+                        "suggested_tracks": auto_playlist.get("suggested_tracks", []),
                     }
 
                 action = tool_executor.get_playback_action()
