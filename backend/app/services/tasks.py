@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -339,6 +340,128 @@ def clear_sync_progress() -> None:
         logger.error(f"Failed to clear sync progress: {e}")
 
 
+# ---- Scan subprocess executor ----
+
+_scan_executor: ProcessPoolExecutor | None = None
+
+
+def _get_scan_executor() -> ProcessPoolExecutor:
+    """Lazy singleton ProcessPoolExecutor for library scanning.
+
+    Separate from the analysis executor — different failure mode, no circuit breaker.
+    """
+    global _scan_executor
+    if _scan_executor is None or _scan_executor._broken:
+        import multiprocessing as mp
+
+        _scan_executor = ProcessPoolExecutor(
+            max_workers=1,
+            mp_context=mp.get_context("spawn"),
+        )
+    return _scan_executor
+
+
+def _run_scan_in_process(
+    library_paths_str: list[str],
+    reread_unchanged: bool,
+    started_at: str,
+) -> dict[str, Any]:
+    """Run library scan in a subprocess — keeps main event loop free for HTTP.
+
+    This is a sync top-level function (must be picklable for ProcessPoolExecutor).
+    Pattern follows run_track_features().
+    """
+    import asyncio
+    import logging
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+
+    return asyncio.run(_async_scan_worker(library_paths_str, reread_unchanged, started_at))
+
+
+async def _async_scan_worker(
+    library_paths_str: list[str],
+    reread_unchanged: bool,
+    started_at: str,
+) -> dict[str, Any]:
+    """Async scan logic that runs inside the subprocess's own event loop.
+
+    Creates its own async engine + session and SyncProgressReporter.
+    """
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.services.scanner import LibraryScanner
+
+    results = {
+        "new": 0,
+        "updated": 0,
+        "unchanged": 0,
+        "deleted": 0,
+        "marked_missing": 0,
+        "still_missing": 0,
+        "relocated": 0,
+        "recovered": 0,
+        "compilation_albums": 0,
+        "compilation_tracks": 0,
+    }
+
+    # Build a SyncProgressReporter with the parent's started_at timestamp
+    progress = SyncProgressReporter.__new__(SyncProgressReporter)
+    progress.redis = get_redis()
+    progress.started_at = started_at
+    progress.errors = []
+
+    library_paths = [Path(p) for p in library_paths_str]
+
+    local_engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        future=True,
+    )
+    local_session_maker = async_sessionmaker(
+        local_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    try:
+        async with local_session_maker() as db:
+            scanner = LibraryScanner(
+                db,
+                scan_state=_SyncProgressAdapter(progress),
+            )
+
+            for library_path in library_paths:
+                scan_results = await scanner.scan(
+                    library_path,
+                    reread_unchanged=reread_unchanged,
+                    reanalyze_changed=True,
+                )
+                results["new"] += scan_results.get("new", 0)
+                results["updated"] += scan_results.get("updated", 0)
+                results["unchanged"] += scan_results.get("unchanged", 0)
+                results["deleted"] += scan_results.get("deleted", 0)
+                results["marked_missing"] += scan_results.get("marked_missing", 0)
+                results["still_missing"] += scan_results.get("still_missing", 0)
+                results["relocated"] += scan_results.get("relocated", 0)
+                results["recovered"] += scan_results.get("recovered", 0)
+
+            orphan_results = await scanner.cleanup_orphaned_tracks(library_paths)
+            results["marked_missing"] += orphan_results.get("orphaned", 0)
+
+            compilation_results = await scanner.detect_compilation_albums()
+            results["compilation_albums"] = compilation_results.get("albums_detected", 0)
+            results["compilation_tracks"] = compilation_results.get("tracks_updated", 0)
+
+        return {"status": "success", **results}
+
+    except Exception as e:
+        logger.error(f"Scan worker failed: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+    finally:
+        await local_engine.dispose()
+
+
 async def run_library_sync(
     reread_unchanged: bool = False,
 ) -> dict[str, Any]:
@@ -363,10 +486,34 @@ async def run_library_sync(
     progress = SyncProgressReporter()
 
     try:
-        # Phase 1 & 2: Run the scan (discovery + metadata reading)
-        scan_result = await _run_scan_for_sync(
-            reread_unchanged=reread_unchanged,
-            sync_progress=progress,
+        # Phase 1 & 2: Run the scan in a separate process so it doesn't
+        # block the main event loop (which serves HTTP/streaming requests).
+        library_paths = settings.music_library_paths
+        if not library_paths:
+            progress.error("No music library paths configured.")
+            return {"status": "error", "error": "No music library paths configured."}
+
+        valid_paths: list[Path] = []
+        for path in library_paths:
+            if path.exists() and path.is_dir():
+                try:
+                    if any(path.iterdir()):
+                        valid_paths.append(path)
+                except PermissionError:
+                    continue
+
+        if not valid_paths:
+            error_msg = f"No valid library paths found: {[str(p) for p in library_paths]}"
+            progress.error(error_msg)
+            return {"status": "error", "error": error_msg}
+
+        loop = asyncio.get_event_loop()
+        scan_result = await loop.run_in_executor(
+            _get_scan_executor(),
+            _run_scan_in_process,
+            [str(p) for p in valid_paths],
+            reread_unchanged,
+            progress.started_at,
         )
 
         if scan_result.get("status") == "error":
@@ -560,106 +707,6 @@ async def run_library_sync(
         logger.error(f"Library sync failed: {e}", exc_info=True)
         progress.error(str(e))
         return {"status": "error", "error": str(e)}
-
-
-async def _run_scan_for_sync(
-    reread_unchanged: bool,
-    sync_progress: SyncProgressReporter,
-) -> dict[str, Any]:
-    """Run library scan with unified sync progress reporting.
-
-    This is a modified version of run_library_scan that reports to the sync progress.
-    """
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-    from app.services.scanner import LibraryScanner
-
-    results = {
-        "new": 0,
-        "updated": 0,
-        "unchanged": 0,
-        "deleted": 0,
-        "marked_missing": 0,
-        "still_missing": 0,
-        "relocated": 0,
-        "recovered": 0,
-        "compilation_albums": 0,
-        "compilation_tracks": 0,
-    }
-
-    # Pre-scan validation
-    library_paths = settings.music_library_paths
-    if not library_paths:
-        error_msg = "No music library paths configured."
-        return {"status": "error", "error": error_msg}
-
-    valid_paths = []
-    for path in library_paths:
-        if path.exists() and path.is_dir():
-            try:
-                if any(path.iterdir()):
-                    valid_paths.append(path)
-            except PermissionError:
-                continue
-
-    if not valid_paths:
-        error_msg = f"No valid library paths found: {[str(p) for p in library_paths]}"
-        return {"status": "error", "error": error_msg}
-
-    # Create async engine
-    local_engine = create_async_engine(
-        settings.database_url,
-        echo=False,
-        future=True,
-    )
-    local_session_maker = async_sessionmaker(
-        local_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
-    try:
-        async with local_session_maker() as db:
-            # Create scanner with sync progress adapter
-            scanner = LibraryScanner(
-                db,
-                scan_state=_SyncProgressAdapter(sync_progress),
-            )
-
-            for library_path in valid_paths:
-                scan_results = await scanner.scan(
-                    library_path,
-                    reread_unchanged=reread_unchanged,
-                    reanalyze_changed=True,
-                )
-                results["new"] += scan_results.get("new", 0)
-                results["updated"] += scan_results.get("updated", 0)
-                results["unchanged"] += scan_results.get("unchanged", 0)
-                results["deleted"] += scan_results.get("deleted", 0)
-                results["marked_missing"] += scan_results.get("marked_missing", 0)
-                results["still_missing"] += scan_results.get("still_missing", 0)
-                results["relocated"] += scan_results.get("relocated", 0)
-                results["recovered"] += scan_results.get("recovered", 0)
-
-            # Cleanup orphans
-            orphan_results = await scanner.cleanup_orphaned_tracks(valid_paths)
-            results["marked_missing"] += orphan_results.get("orphaned", 0)
-
-            # Detect and set album_artist for compilation albums
-            compilation_results = await scanner.detect_compilation_albums()
-            results["compilation_albums"] = compilation_results.get("albums_detected", 0)
-            results["compilation_tracks"] = compilation_results.get("tracks_updated", 0)
-
-        # Analysis is queued by the sync loop via queue_tracks_for_features()
-        # and queue_tracks_for_embeddings() - no need to call deprecated function here
-
-        return {"status": "success", **results}
-
-    except Exception as e:
-        logger.error(f"Scan for sync failed: {e}", exc_info=True)
-        return {"status": "error", "error": str(e)}
-    finally:
-        await local_engine.dispose()
 
 
 class _SyncProgressAdapter:

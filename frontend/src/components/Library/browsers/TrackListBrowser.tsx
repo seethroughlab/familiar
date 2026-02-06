@@ -461,8 +461,7 @@ export function TrackListBrowser({
   const resetColumnWidth = useColumnStore((state) => state.resetColumnWidth);
   const [resizing, setResizing] = useState<{
     columnId: string;
-    startX: number;
-    startWidth: number;
+    headerEl: HTMLElement;
   } | null>(null);
 
   // Get visible column IDs in order
@@ -544,15 +543,10 @@ export function TrackListBrowser({
     e.preventDefault();
     e.stopPropagation();
 
-    // Get the current width of the column
     const headerEl = e.currentTarget.parentElement;
-    const currentWidth = headerEl?.getBoundingClientRect().width || 100;
+    if (!headerEl) return;
 
-    setResizing({
-      columnId,
-      startX: e.clientX,
-      startWidth: currentWidth,
-    });
+    setResizing({ columnId, headerEl });
   }, []);
 
   // Handle resize mouse move and mouse up
@@ -560,8 +554,8 @@ export function TrackListBrowser({
     if (!resizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const delta = e.clientX - resizing.startX;
-      const newWidth = Math.max(MIN_COLUMN_WIDTH, resizing.startWidth + delta);
+      const left = resizing.headerEl.getBoundingClientRect().left;
+      const newWidth = Math.max(MIN_COLUMN_WIDTH, e.clientX - left);
       setColumnWidth(resizing.columnId, newWidth);
     };
 
@@ -1484,8 +1478,10 @@ export function TrackListBrowser({
 
                 {/* Resize handle */}
                 <div
-                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize
-                             hover:bg-zinc-500/30 transition-colors"
+                  className={`absolute right-0 top-1 bottom-1 w-1.5 cursor-col-resize
+                             transition-colors border-r border-transparent
+                             hover:border-zinc-500 hover:bg-zinc-500/20
+                             ${resizing?.columnId === colId ? 'border-zinc-400 bg-zinc-500/30' : ''}`}
                   onMouseDown={(e) => handleResizeStart(colId, e)}
                   onDoubleClick={() => resetColumnWidth(colId)}
                   title="Drag to resize, double-click to reset"

@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Clock, Save, Trash2, Loader2, Music } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { ArrowLeft, Play, Pause, Clock, Save, Trash2, Loader2, Music, Search, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { Heart } from 'lucide-react';
@@ -16,18 +16,29 @@ interface Props {
 export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, isSaving }: Props) {
   const { currentTrack, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const [searchFilter, setSearchFilter] = useState('');
+
+  const filteredTracks = useMemo(() => {
+    if (!searchFilter) return playlist.tracks;
+    const q = searchFilter.toLowerCase();
+    return playlist.tracks.filter(t =>
+      (t.title?.toLowerCase().includes(q)) ||
+      (t.artist?.toLowerCase().includes(q)) ||
+      (t.album?.toLowerCase().includes(q))
+    );
+  }, [playlist.tracks, searchFilter]);
 
   const handlePlay = useCallback((startIndex = 0) => {
-    if (playlist.tracks.length === 0) return;
+    if (filteredTracks.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = playlist.tracks[startIndex];
+    const clickedTrack = filteredTracks[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = playlist.tracks.map((t) => ({
+    const queueTracks = filteredTracks.map((t) => ({
       id: t.id,
       file_path: '',
       title: t.title || 'Unknown',
@@ -44,7 +55,7 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
       analysis_version: 0,
     }));
     setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
-  }, [playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+  }, [filteredTracks, playlist.id, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '--:--';
@@ -128,12 +139,37 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <input
+          type="text"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+          placeholder="Search tracks..."
+          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+        />
+        {searchFilter && (
+          <button
+            onClick={() => setSearchFilter('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* Track list */}
-      {playlist.tracks.length > 0 ? (
+      {filteredTracks.length > 0 ? (
         <div className="space-y-1">
-          {playlist.tracks.map((track, idx) => (
+          {filteredTracks.map((track, idx) => (
             <div
               key={track.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/track-id', track.id);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
               onClick={() => handlePlay(idx)}
               className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
                 currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''

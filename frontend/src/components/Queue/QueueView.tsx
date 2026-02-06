@@ -38,6 +38,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   // Get reorder and jump actions from store
   const reorderQueue = usePlayerStore((state) => state.reorderQueue);
   const jumpToQueueIndex = usePlayerStore((state) => state.jumpToQueueIndex);
+  const jumpToLazyQueueIndex = usePlayerStore((state) => state.jumpToLazyQueueIndex);
 
   // Drag handlers for regular queue mode
   const handleDragStart = useCallback((index: number, e: React.DragEvent) => {
@@ -47,9 +48,19 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (targetIndex !== draggedIndex) {
+    // Internal reorder drag (regular mode only)
+    if (draggedIndex !== null) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (targetIndex !== draggedIndex) {
+        setDropTargetIndex(targetIndex);
+      }
+      return;
+    }
+    // External track drop — show position indicator
+    if (e.dataTransfer.types.includes('application/track-id')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
       setDropTargetIndex(targetIndex);
     }
   }, [draggedIndex]);
@@ -75,7 +86,35 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     setDropTargetIndex(null);
   }, []);
 
-  // Handle external track drops (from library)
+  // Handle external track drop at a specific queue position
+  const handleExternalDropAtPosition = useCallback(async (e: React.DragEvent, displayIndex: number) => {
+    e.preventDefault();
+    setDropTargetIndex(null);
+    setIsDragOver(false);
+
+    const trackId = e.dataTransfer.getData('application/track-id');
+    if (!trackId) return;
+
+    try {
+      const tracks = await tracksApi.getBatch([trackId]);
+      if (tracks.length > 0) {
+        let insertIdx: number;
+        if (isLazyMode) {
+          // displayIndex 0 = current track at lazyQueueIndex, insert after hovered item
+          insertIdx = lazyQueueIndex + displayIndex + 1;
+        } else {
+          // In regular mode, insert after the hovered item
+          insertIdx = displayIndex + 1;
+        }
+        addToQueue(tracks[0], insertIdx);
+        onTrackDropped?.(trackId);
+      }
+    } catch (error) {
+      console.error('Failed to add track to queue:', error);
+    }
+  }, [addToQueue, isLazyMode, lazyQueueIndex, queue, onTrackDropped]);
+
+  // Handle external track drops (from library) — fallback for empty space
   const handleExternalDragOver = useCallback((e: React.DragEvent) => {
     // Check if this is an external track drop (not internal reorder)
     if (e.dataTransfer.types.includes('application/track-id')) {
@@ -109,17 +148,19 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   }, [addToQueue, onTrackDropped]);
 
   // Handle clicking on a track to jump to it
-  const handleTrackClick = useCallback((index: number) => {
+  const handleTrackClick = useCallback((displayIndex: number) => {
     if (isLazyMode) {
-      // In lazy mode, we can't jump to arbitrary indices easily
-      // For now, just toggle play/pause if clicking current track
-      if (index === 0 && currentTrack) {
+      if (displayIndex === 0 && currentTrack) {
+        // Current track: toggle play/pause
         setIsPlaying(!isPlaying);
+      } else if (displayIndex > 0) {
+        // Upcoming track: jump to it
+        jumpToLazyQueueIndex(lazyQueueIndex + displayIndex);
       }
     } else {
-      jumpToQueueIndex(index);
+      jumpToQueueIndex(displayIndex);
     }
-  }, [isLazyMode, currentTrack, isPlaying, setIsPlaying, jumpToQueueIndex]);
+  }, [isLazyMode, currentTrack, isPlaying, setIsPlaying, jumpToQueueIndex, jumpToLazyQueueIndex, lazyQueueIndex]);
 
   // Handle removing a track from queue
   const handleRemoveTrack = useCallback((queueId: string, e: React.MouseEvent) => {
@@ -161,7 +202,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     }
 
     // Add prefetched upcoming tracks
-    for (let i = lazyQueueIndex + 1; i < Math.min(lazyQueueIndex + 4, lazyQueueIds.length); i++) {
+    for (let i = lazyQueueIndex + 1; i < Math.min(lazyQueueIndex + 11, lazyQueueIds.length); i++) {
       const trackId = lazyQueueIds[i];
       const prefetched = prefetchedTracks.get(trackId);
       if (prefetched) {
@@ -270,16 +311,23 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
               const { track, queueId, isCurrent } = item;
               const actualIndex = isLazyMode ? displayIndex : queue.findIndex(q => q.queueId === queueId);
               const isDragged = draggedIndex === actualIndex;
-              const isDropTarget = dropTargetIndex === actualIndex;
+              const isDropTarget = dropTargetIndex === displayIndex;
 
               return (
                 <div
                   key={queueId}
                   draggable={!isLazyMode}
                   onDragStart={(e) => !isLazyMode && handleDragStart(actualIndex, e)}
-                  onDragOver={(e) => !isLazyMode && handleDragOver(e, actualIndex)}
+                  onDragOver={(e) => handleDragOver(e, displayIndex)}
                   onDragLeave={handleDragLeave}
-                  onDrop={() => !isLazyMode && handleDrop(actualIndex)}
+                  onDrop={(e) => {
+                    if (draggedIndex !== null && !isLazyMode) {
+                      handleDrop(actualIndex);
+                    } else if (e.dataTransfer.types.includes('application/track-id')) {
+                      e.stopPropagation();
+                      handleExternalDropAtPosition(e, displayIndex);
+                    }
+                  }}
                   onDragEnd={handleDragEnd}
                   onClick={() => handleTrackClick(actualIndex)}
                   className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${

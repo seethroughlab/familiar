@@ -1,5 +1,6 @@
 """Track endpoints."""
 
+import logging
 from collections.abc import AsyncIterator, Iterator
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,8 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import CurrentProfile, DbSession, RequiredProfile
 from app.db.models import ProfilePlayHistory, Track, TrackAnalysis
 from app.services.artwork import compute_album_hash, get_artwork_path
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 
@@ -259,6 +262,10 @@ async def get_tracks_batch(
     query = select(Track).where(Track.id.in_(uuids))
     result = await db.execute(query)
     tracks_by_id = {str(t.id): t for t in result.scalars().all()}
+
+    if len(tracks_by_id) < len(uuids):
+        missing = [str(u) for u in uuids if str(u) not in tracks_by_id]
+        logger.warning("Batch: %d of %d tracks not found, missing=%s", len(missing), len(uuids), missing)
 
     # Fetch play history for current profile if available
     play_history_map: dict[UUID, ProfilePlayHistory] = {}
@@ -861,6 +868,7 @@ async def stream_track(
     track = result.scalar_one_or_none()
 
     if not track:
+        logger.warning("Stream request for unknown track_id=%s", track_id)
         raise HTTPException(status_code=404, detail="Track not found")
 
     # Trigger auto-enrichment in background if track has incomplete metadata
@@ -872,10 +880,12 @@ async def stream_track(
 
     file_path = Path(track.file_path)
     if not file_path.exists():
+        logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)
         raise HTTPException(status_code=404, detail="Audio file not found")
 
     file_size = file_path.stat().st_size
     mime_type = get_audio_mime_type(file_path)
+    logger.debug("Streaming track_id=%s path=%s type=%s size=%d", track_id, file_path, mime_type, file_size)
 
     # Parse range header for seeking support
     range_header = request.headers.get("range")
@@ -913,6 +923,7 @@ async def stream_track(
                 "Content-Range": f"bytes {start}-{end}/{file_size}",
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(content_length),
+                "Cache-Control": "private, max-age=3600",
             },
         )
     else:
@@ -929,6 +940,7 @@ async def stream_track(
             headers={
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(file_size),
+                "Cache-Control": "private, max-age=3600",
             },
         )
 

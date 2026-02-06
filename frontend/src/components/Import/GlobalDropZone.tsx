@@ -24,19 +24,20 @@ export function GlobalDropZone({ children, onFilesDropped, disabled }: GlobalDro
 
   // Track drag enter/leave with counter to handle nested elements
   const handleDragEnter = useCallback((e: DragEvent) => {
+    // Only intercept file drags, not internal track-to-queue drags
+    if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
 
     if (disabled) return;
 
-    // Check if dragging files
-    if (e.dataTransfer?.types.includes('Files')) {
-      setDragCounter(prev => prev + 1);
-      setIsDragging(true);
-    }
+    setDragCounter(prev => prev + 1);
+    setIsDragging(true);
   }, [disabled]);
 
   const handleDragLeave = useCallback((e: DragEvent) => {
+    // Only intercept file drags, not internal track-to-queue drags
+    if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -51,11 +52,15 @@ export function GlobalDropZone({ children, onFilesDropped, disabled }: GlobalDro
   }, []);
 
   const handleDragOver = useCallback((e: DragEvent) => {
+    // Only intercept file drags, not internal track-to-queue drags
+    if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
   const handleDrop = useCallback((e: DragEvent) => {
+    // Only intercept file drags, not internal track-to-queue drags
+    if (!e.dataTransfer?.types.includes('Files')) return;
     e.preventDefault();
     e.stopPropagation();
 

@@ -690,6 +690,11 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
             return (
             <div
               key={track.id}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/track-id', track.id);
+                e.dataTransfer.effectAllowed = 'copy';
+              }}
               onClick={(e) => handleTrackClick(track.id, idx, e)}
               onDoubleClick={() => handlePlayTrack(idx)}
               onMouseDown={(e) => {
@@ -841,6 +846,9 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
           }}
           onEditMetadata={() => {
             if (contextMenu.track) {
+              if (selectedTrackIds.size > 1 && selectedTrackIds.has(contextMenu.track.id)) {
+                useSelectionStore.getState().selectAll(Array.from(selectedTrackIds));
+              }
               useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
             }
           }}

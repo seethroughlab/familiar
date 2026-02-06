@@ -105,6 +105,7 @@ let currentMasterVolume = 1;
 let loadedTrackId: string | null = null;
 let currentLoadId = 0;
 let preloadingTrackId: string | null = null;
+let earlyPreloadedTrackId: string | null = null;
 let queueTransition = false;
 let errorCount = 0;
 let lastErrorTrackId: string | null = null;
@@ -485,6 +486,7 @@ export function useAudioEngine() {
     crossfadeContext = null;
 
     preloadingTrackId = null;
+    earlyPreloadedTrackId = null;
 
     const currentId = usePlayerStore.getState().currentTrack?.id;
     if (currentId) loadedTrackId = currentId;
@@ -532,6 +534,7 @@ export function useAudioEngine() {
     crossfadeContext = null;
 
     preloadingTrackId = null;
+    earlyPreloadedTrackId = null;
     setCrossfadeState('idle');
     setNextTrackPreloaded(false);
   }, [setCrossfadeState, setNextTrackPreloaded]);
@@ -861,6 +864,7 @@ export function useAudioEngine() {
       }
     }
 
+    earlyPreloadedTrackId = null;
     queueTransition = true;
     setIsLoadingAudio(true); // Show loading spinner on play button
     const thisLoadId = ++currentLoadId;
@@ -940,18 +944,18 @@ export function useAudioEngine() {
         currentElement.addEventListener('loadedmetadata', handleMetadata);
         currentElement.addEventListener('error', handleLoadError);
 
-        // iOS PWA load timeout detection - detect hung loads that never fire events
+        // Load timeout detection - recover from hung loads (NAS hang, missing file, iOS PWA suspension)
         const loadTimeout = setTimeout(() => {
           if (currentLoadId === thisLoadId && currentElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-            console.error('[Audio] Load timeout - iOS PWA may have suspended network');
-            window.dispatchEvent(
-              new CustomEvent('audio-load-timeout', {
-                detail: { trackId: trackIdToLoad },
-              })
-            );
-            // Don't auto-stop playback, but log for debugging
+            console.error('[Audio] Load timeout - track took too long to load, skipping');
+            queueTransition = false;
+            setIsLoadingAudio(false);
+            showError('Track took too long to load', {
+              description: `Skipping to next track.`,
+            });
+            playNext();
           }
-        }, 30000);
+        }, 15000);
 
         currentElement.addEventListener(
           'canplay',
@@ -966,7 +970,11 @@ export function useAudioEngine() {
       }
     };
 
-    loadTrack();
+    loadTrack().catch((err) => {
+      console.error('[Audio] Failed to load track:', err);
+      queueTransition = false;
+      setIsLoadingAudio(false);
+    });
     updateMediaSession();
   }, [currentTrack?.id, isHydrated, setDuration, updateMediaSession, setIsLoadingAudio, playNext]);
 
@@ -1078,6 +1086,35 @@ export function useAudioEngine() {
         }
       }
 
+      // Invalidate early preload if the next track changed (shuffle toggle, queue reorder, etc.)
+      if (earlyPreloadedTrackId && (!hasNextTrack || nextTrack.id !== earlyPreloadedTrackId)) {
+        const nextElement = getNextElement();
+        if (nextElement) {
+          cleanupElement(nextElement, nextOfflineUrl);
+          nextOfflineUrl = null;
+        }
+        earlyPreloadedTrackId = null;
+        preloadingTrackId = null;
+        if (crossfadeState === 'preloading') {
+          setCrossfadeState('idle');
+          setNextTrackPreloaded(false);
+        }
+      }
+
+      // Early preload: start buffering next track after 30s of playback (or immediately for short tracks)
+      if (hasNextTrack && crossfadeState === 'idle' && !earlyPreloadedTrackId && (currentTime >= 30 || duration < 60)) {
+        earlyPreloadedTrackId = nextTrack.id;
+        setCrossfadeState('preloading');
+        preloadNextTrack(nextTrack.id).then((success) => {
+          if (success) setNextTrackPreloaded(true);
+          else {
+            earlyPreloadedTrackId = null;
+            setCrossfadeState('idle');
+          }
+        });
+      }
+
+      // Fallback: preload near track end (won't fire if early preload already triggered)
       if (hasNextTrack && crossfadeState === 'idle' && timeRemaining <= preloadThreshold && timeRemaining > effectiveCrossfade) {
         setCrossfadeState('preloading');
         preloadNextTrack(nextTrack.id).then((success) => {

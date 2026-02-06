@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Heart, Clock, Music } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useFavorites } from '../../hooks/useFavorites';
@@ -18,6 +18,17 @@ export function FavoritesDetail({ onBack }: Props) {
   const { favorites, total, toggle } = useFavorites();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
+  const [searchFilter, setSearchFilter] = useState('');
+
+  const filteredFavorites = useMemo(() => {
+    if (!searchFilter) return favorites;
+    const q = searchFilter.toLowerCase();
+    return favorites.filter(t =>
+      (t.title?.toLowerCase().includes(q)) ||
+      (t.artist?.toLowerCase().includes(q)) ||
+      (t.album?.toLowerCase().includes(q))
+    );
+  }, [favorites, searchFilter]);
 
   // Context menu handlers
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
@@ -35,16 +46,16 @@ export function FavoritesDetail({ onBack }: Props) {
   }, []);
 
   const handlePlay = (startIndex = 0) => {
-    if (favorites.length === 0) return;
+    if (filteredFavorites.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = favorites[startIndex];
+    const clickedTrack = filteredFavorites[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = favorites.map(t => ({
+    const queueTracks = filteredFavorites.map(t => ({
       id: t.id,
       file_path: '',
       title: t.title || 'Unknown',
@@ -111,10 +122,30 @@ export function FavoritesDetail({ onBack }: Props) {
         </button>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <input
+          type="text"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+          placeholder="Search tracks..."
+          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+        />
+        {searchFilter && (
+          <button
+            onClick={() => setSearchFilter('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* Track list */}
-      {favorites.length > 0 ? (
+      {filteredFavorites.length > 0 ? (
         <div className="space-y-1">
-          {favorites.map((track, idx) => {
+          {filteredFavorites.map((track, idx) => {
             // Convert favorite track to full Track type for context menu
             const fullTrack: Track = {
               id: track.id,
@@ -135,6 +166,11 @@ export function FavoritesDetail({ onBack }: Props) {
             return (
               <div
                 key={track.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/track-id', track.id);
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
                 onClick={() => handlePlay(idx)}
                 onContextMenu={(e) => handleContextMenu(fullTrack, e)}
                 className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
@@ -223,7 +259,7 @@ export function FavoritesDetail({ onBack }: Props) {
           isSelected={false}
           onClose={closeContextMenu}
           onPlay={() => {
-            const idx = favorites.findIndex(t => t.id === contextMenu.track?.id);
+            const idx = filteredFavorites.findIndex(t => t.id === contextMenu.track?.id);
             if (idx !== -1) handlePlay(idx);
           }}
           onQueue={() => {

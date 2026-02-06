@@ -1,26 +1,26 @@
 /**
- * Mobile selection indicator pill.
+ * Selection indicator pill.
  *
- * Shows at the bottom of the screen on mobile when tracks are selected.
+ * Floating pill that appears when tracks are selected.
  * Displays count and provides a quick clear button.
  */
 import { X } from 'lucide-react';
 
-interface MobileSelectionIndicatorProps {
+interface SelectionIndicatorProps {
   selectedCount: number;
   onClear: () => void;
 }
 
-export function MobileSelectionIndicator({
+export function SelectionIndicator({
   selectedCount,
   onClear,
-}: MobileSelectionIndicatorProps) {
+}: SelectionIndicatorProps) {
   if (selectedCount === 0) {
     return null;
   }
 
   return (
-    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 md:hidden">
+    <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-40">
       <div className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-full shadow-lg">
         <span className="text-sm font-medium">
           {selectedCount} selected

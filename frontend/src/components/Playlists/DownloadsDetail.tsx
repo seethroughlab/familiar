@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Download, Music, Trash2, HardDrive, X } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { ArrowLeft, Play, Pause, Download, Music, Trash2, HardDrive, X, Search } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
@@ -20,6 +20,8 @@ export function DownloadsDetail({ onBack }: Props) {
   const { tracks, total, totalSizeFormatted, refresh } = useDownloadedTracks();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
+
+  const [searchFilter, setSearchFilter] = useState('');
 
   // Clear all confirmation state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -43,17 +45,27 @@ export function DownloadsDetail({ onBack }: Props) {
     setContextMenu(initialContextMenuState);
   }, []);
 
+  const filteredTracks = useMemo(() => {
+    if (!searchFilter) return tracks;
+    const q = searchFilter.toLowerCase();
+    return tracks.filter(t =>
+      (t.title?.toLowerCase().includes(q)) ||
+      (t.artist?.toLowerCase().includes(q)) ||
+      (t.album?.toLowerCase().includes(q))
+    );
+  }, [tracks, searchFilter]);
+
   const handlePlay = useCallback((startIndex = 0) => {
-    if (tracks.length === 0) return;
+    if (filteredTracks.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = tracks[startIndex];
+    const clickedTrack = filteredTracks[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = tracks.map(t => ({
+    const queueTracks = filteredTracks.map(t => ({
       id: t.id,
       file_path: '',
       title: t.title || 'Unknown',
@@ -70,7 +82,7 @@ export function DownloadsDetail({ onBack }: Props) {
       analysis_version: 0,
     }));
     setQueue(queueTracks, startIndex);
-  }, [tracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+  }, [filteredTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
   const handleRemoveFromDownloads = async (trackId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -101,10 +113,10 @@ export function DownloadsDetail({ onBack }: Props) {
   const handleTrackClick = useCallback((trackId: string, idx: number, e: React.MouseEvent) => {
     if (e.shiftKey && lastClickedId) {
       // Shift-click: select range
-      const lastIdx = tracks.findIndex(t => t.id === lastClickedId);
+      const lastIdx = filteredTracks.findIndex(t => t.id === lastClickedId);
       const currentIdx = idx;
       const [start, end] = [Math.min(lastIdx, currentIdx), Math.max(lastIdx, currentIdx)];
-      const rangeIds = tracks.slice(start, end + 1).map(t => t.id);
+      const rangeIds = filteredTracks.slice(start, end + 1).map(t => t.id);
       setSelectedTrackIds(new Set([...selectedTrackIds, ...rangeIds]));
     } else if (e.metaKey || e.ctrlKey) {
       // Cmd/Ctrl-click: toggle single selection
@@ -122,7 +134,7 @@ export function DownloadsDetail({ onBack }: Props) {
       setSelectedTrackIds(new Set());
       setLastClickedId(trackId);
     }
-  }, [tracks, lastClickedId, selectedTrackIds, handlePlay]);
+  }, [filteredTracks, lastClickedId, selectedTrackIds, handlePlay]);
 
   // Bulk delete handler
   const handleBulkDelete = async () => {
@@ -201,6 +213,26 @@ export function DownloadsDetail({ onBack }: Props) {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <input
+          type="text"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+          placeholder="Search tracks..."
+          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+        />
+        {searchFilter && (
+          <button
+            onClick={() => setSearchFilter('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* Bulk action toolbar */}
       {selectedTrackIds.size > 0 && (
         <div className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm p-3 rounded-lg flex items-center gap-3 border border-zinc-700">
@@ -226,9 +258,9 @@ export function DownloadsDetail({ onBack }: Props) {
       )}
 
       {/* Track list */}
-      {tracks.length > 0 ? (
+      {filteredTracks.length > 0 ? (
         <div className="space-y-1">
-          {tracks.map((track, idx) => {
+          {filteredTracks.map((track, idx) => {
             // Convert offline track to full Track type for context menu
             const fullTrack: Track = {
               id: track.id,
@@ -250,6 +282,11 @@ export function DownloadsDetail({ onBack }: Props) {
             return (
               <div
                 key={track.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/track-id', track.id);
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
                 onClick={(e) => handleTrackClick(track.id, idx, e)}
                 onContextMenu={(e) => handleContextMenu(fullTrack, e)}
                 className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
@@ -356,7 +393,7 @@ export function DownloadsDetail({ onBack }: Props) {
           isSelected={false}
           onClose={closeContextMenu}
           onPlay={() => {
-            const idx = tracks.findIndex(t => t.id === contextMenu.track?.id);
+            const idx = filteredTracks.findIndex(t => t.id === contextMenu.track?.id);
             if (idx !== -1) handlePlay(idx);
           }}
           onQueue={() => {
@@ -389,6 +426,9 @@ export function DownloadsDetail({ onBack }: Props) {
           }}
           onEditMetadata={() => {
             if (contextMenu.track) {
+              if (selectedTrackIds.size > 1 && selectedTrackIds.has(contextMenu.track.id)) {
+                useSelectionStore.getState().selectAll(Array.from(selectedTrackIds));
+              }
               useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
             }
           }}

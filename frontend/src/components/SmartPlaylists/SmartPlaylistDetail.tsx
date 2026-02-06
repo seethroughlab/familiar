@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, WifiOff, Heart, RefreshCw, CloudOff } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, WifiOff, Heart, RefreshCw, CloudOff, Search, X } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api/client';
 import type { SmartPlaylist } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -104,6 +104,7 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('');
 
   // Use global download store
   const { jobs, startDownload } = useDownloadStore();
@@ -164,10 +165,22 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
 
   const allTracks = tracksResponse?.tracks || [];
 
-  // Filter by downloaded tracks if showDownloadedOnly is enabled
-  const tracks = showDownloadedOnly
-    ? allTracks.filter(t => offlineTrackIds.has(t.id))
-    : allTracks;
+  // Filter by downloaded tracks and search query
+  const tracks = useMemo(() => {
+    let result = allTracks;
+    if (showDownloadedOnly) {
+      result = result.filter(t => offlineTrackIds.has(t.id));
+    }
+    if (searchFilter) {
+      const q = searchFilter.toLowerCase();
+      result = result.filter(t =>
+        (t.title?.toLowerCase().includes(q)) ||
+        (t.artist?.toLowerCase().includes(q)) ||
+        (t.album?.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [allTracks, showDownloadedOnly, offlineTrackIds, searchFilter]);
 
   // Fetch discovery data based on the first track in the playlist (not available offline)
   const firstTrackId = tracks[0]?.id;
@@ -455,6 +468,26 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <input
+          type="text"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+          placeholder="Search tracks..."
+          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
+        />
+        {searchFilter && (
+          <button
+            onClick={() => setSearchFilter('')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* Track list */}
       {tracks.length > 0 ? (
         <div className="space-y-1">
@@ -479,6 +512,11 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
             return (
               <div
                 key={track.id}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/track-id', track.id);
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
                 onClick={() => handlePlay(idx)}
                 onContextMenu={(e) => handleContextMenu(fullTrack, e)}
                 className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${

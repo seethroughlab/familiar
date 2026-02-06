@@ -5,16 +5,14 @@
  * Renders the selected browser with BrowserProps.
  * Persists view state in URL for reload support.
  */
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Download } from 'lucide-react';
-import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryViewStore } from '../../stores/libraryViewStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { BrowserPicker } from './BrowserPicker';
-import { SelectionToolbar } from './SelectionToolbar';
-import { MobileSelectionIndicator } from './MobileSelectionIndicator';
+import { SelectionIndicator } from './SelectionIndicator';
 import { ArtistDetail } from './ArtistDetail';
 import { AlbumDetail } from './AlbumDetail';
 import {
@@ -34,7 +32,6 @@ interface LibraryViewProps {
 }
 
 export function LibraryView({ initialSearch }: LibraryViewProps) {
-  const { setQueue } = usePlayerStore();
   const { selectedBrowserId, setSelectedBrowserId } = useLibraryViewStore();
   const {
     selectedIds: selectedTrackIds,
@@ -129,9 +126,6 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
     }
   }, [currentBrowserId, searchParams, setSearchParams]);
 
-  // Track selection - using selection store for global state
-  const [tracksCache] = useState<Map<string, import('../../types').Track>>(new Map());
-
   // Artist detail view state - read from URL
   const selectedArtist = searchParams.get('artistDetail');
 
@@ -161,17 +155,6 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
     // This would need track data from the browser - for now, it's a no-op
     // The browser can implement its own select-all
   }, []);
-
-  const getSelectedTracks = useCallback(() => {
-    const tracks: import('../../types').Track[] = [];
-    for (const id of selectedTrackIds) {
-      const track = tracksCache.get(id);
-      if (track) {
-        tracks.push(track);
-      }
-    }
-    return tracks;
-  }, [selectedTrackIds, tracksCache]);
 
   // Navigation handlers - switch to track list and apply filter
   // Note: Must update both filters AND view in a single setSearchParams call
@@ -353,14 +336,6 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
     setEditingTrackId(trackId);
   }, [setEditingTrackId]);
 
-  const handlePlaySelected = useCallback(() => {
-    const tracks = getSelectedTracks();
-    if (tracks.length > 0) {
-      setQueue(tracks, 0);
-      clearSelection();
-    }
-  }, [getSelectedTracks, setQueue, clearSelection]);
-
   // Get the current browser component
   const currentBrowser = getBrowser(currentBrowserId);
   const BrowserComponent = currentBrowser?.component;
@@ -407,14 +382,6 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
 
   return (
     <div className="flex flex-col md:h-full md:min-h-0">
-      {/* Selection toolbar (appears when tracks selected) */}
-      <SelectionToolbar
-        selectedCount={selectedTrackIds.size}
-        onClear={clearSelection}
-        onPlaySelected={handlePlaySelected}
-        getSelectedTracks={getSelectedTracks}
-      />
-
       {/* Browser picker toolbar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-800/50">
         <BrowserPicker
@@ -522,8 +489,8 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
         )}
       </div>
 
-      {/* Mobile selection indicator */}
-      <MobileSelectionIndicator
+      {/* Selection indicator pill */}
+      <SelectionIndicator
         selectedCount={selectedTrackIds.size}
         onClear={clearSelection}
       />
