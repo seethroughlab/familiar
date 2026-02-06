@@ -59,7 +59,7 @@ export class SaturationEffect extends BaseEffect {
           curve[i] = Math.tanh(x * drive);
           break;
 
-        case 'tape':
+        case 'tape': {
           // Tape-like compression with asymmetric saturation
           const k = drive * 2;
           if (x >= 0) {
@@ -70,8 +70,9 @@ export class SaturationEffect extends BaseEffect {
           // Add slight even harmonics (tape characteristic)
           curve[i] = curve[i] * 0.9 + (x * x * x) * 0.1 * drive;
           break;
+        }
 
-        case 'hard':
+        case 'hard': {
           // Harder clipping with more harmonics
           const hardX = x * drive;
           if (hardX > 0.5) {
@@ -84,6 +85,7 @@ export class SaturationEffect extends BaseEffect {
           // Normalize
           curve[i] = Math.max(-1, Math.min(1, curve[i]));
           break;
+        }
       }
     }
 

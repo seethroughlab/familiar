@@ -23,8 +23,9 @@ def upgrade() -> None:
     """Create all tables from SQLAlchemy models."""
     from app.db.models import Base
 
-    # Create pgvector extension
+    # Create required extensions
     op.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+    op.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
 
     # Create all tables from models
     bind = op.get_bind()

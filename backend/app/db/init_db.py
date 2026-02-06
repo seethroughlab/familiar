@@ -14,8 +14,9 @@ from app.db.session import engine
 async def init_db() -> None:
     """Drop all tables and recreate them."""
     async with engine.begin() as conn:
-        # Ensure pgvector extension is enabled
+        # Ensure required extensions are enabled
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
 
         # Drop all tables
         await conn.run_sync(Base.metadata.drop_all)
