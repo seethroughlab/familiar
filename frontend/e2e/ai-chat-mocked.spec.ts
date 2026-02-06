@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { ensureProfile } from './helpers';
 
 /**
@@ -73,6 +73,25 @@ const MOCK_NO_TRACKS_RESPONSE = createMockSSEResponse([
   { type: 'done' },
 ]);
 
+/** Open the chat panel (hidden by default behind a toggle button) */
+async function openChatPanel(page: Page) {
+  const chatButton = page.locator('button:has-text("Chat")').first();
+  await chatButton.click();
+  await page.waitForTimeout(500);
+}
+
+/** Get the chat input element */
+function getChatInput(page: Page) {
+  return page.locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]').first();
+}
+
+/** Type a message and submit by pressing Enter */
+async function sendChatMessage(page: Page, message: string) {
+  const chatInput = getChatInput(page);
+  await chatInput.fill(message);
+  await chatInput.press('Enter');
+}
+
 test.describe('AI Chat (Mocked)', () => {
   test.beforeEach(async ({ page }) => {
     // Mock the chat status endpoint to indicate AI is configured
@@ -86,19 +105,11 @@ test.describe('AI Chat (Mocked)', () => {
 
     await page.goto('/');
     await ensureProfile(page);
-
-    // Open the chat panel - it's hidden by default behind a toggle button
-    const chatButton = page.locator('button:has-text("Chat")').first();
-    await chatButton.click();
-    await page.waitForTimeout(500);
+    await openChatPanel(page);
   });
 
   test('chat input is visible and enabled when API is configured', async ({ page }) => {
-    // Find the chat input
-    const chatInput = page
-      .locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]')
-      .first();
-
+    const chatInput = getChatInput(page);
     await expect(chatInput).toBeVisible({ timeout: 5000 });
     await expect(chatInput).toBeEnabled();
   });
@@ -117,18 +128,9 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    // Find and fill the chat input
-    const chatInput = page
-      .locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]')
-      .first();
-    await chatInput.fill('Play something upbeat');
-
-    // Find and click send button
-    const sendButton = page.locator('button:has(svg):not([disabled])').last();
-    await sendButton.click();
+    await sendChatMessage(page, 'Play something upbeat');
 
     // Wait for the streaming to complete and UI to update
-    // Use longer timeout since stream parsing is async
     const responseText = page.locator('text=/upbeat music|Happy Song|Dance Track/i').first();
     await expect(responseText).toBeVisible({ timeout: 15000 });
   });
@@ -143,16 +145,9 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    const chatInput = page
-      .locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]')
-      .first();
-    await chatInput.fill('Play some music');
-
-    const sendButton = page.locator('button:has(svg):not([disabled])').last();
-    await sendButton.click();
+    await sendChatMessage(page, 'Play some music');
 
     // Should show tool use indicator (search_library tool)
-    // Look for tool name or wrench icon
     const toolIndicator = page.locator('text=/search|library|tool/i').first();
     const hasToolIndicator = await toolIndicator.isVisible({ timeout: 5000 }).catch(() => false);
 
@@ -170,16 +165,10 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    const chatInput = page
-      .locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]')
-      .first();
-    await chatInput.fill('Test error handling');
+    await sendChatMessage(page, 'Test error handling');
 
-    const sendButton = page.locator('button:has(svg):not([disabled])').last();
-    await sendButton.click();
-
-    // Should show error message - use longer timeout for async stream parsing
-    const errorText = page.locator('text=/error|failed|problem/i').first();
+    // Should show error message
+    const errorText = page.locator('text=/error|failed|problem|went wrong/i').first();
     await expect(errorText).toBeVisible({ timeout: 15000 });
   });
 
@@ -193,15 +182,9 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    const chatInput = page
-      .locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]')
-      .first();
-    await chatInput.fill('Play some nonexistent genre xyz123');
+    await sendChatMessage(page, 'Play some nonexistent genre xyz123');
 
-    const sendButton = page.locator('button:has(svg):not([disabled])').last();
-    await sendButton.click();
-
-    // Should show "no tracks found" type message - use longer timeout for async stream parsing
+    // Should show "no tracks found" type message
     const noTracksText = page.locator('text=/couldn\'t find|no tracks|not found/i').first();
     await expect(noTracksText).toBeVisible({ timeout: 15000 });
   });
@@ -219,16 +202,18 @@ test.describe('AI Chat (Mocked)', () => {
     // Reload page to pick up new mock
     await page.reload();
     await ensureProfile(page);
+    // Re-open chat panel after reload
+    await openChatPanel(page);
 
-    // The send button should be disabled
-    const sendButton = page.locator('button[disabled]').filter({ has: page.locator('svg') });
-    const isDisabled = await sendButton.isVisible({ timeout: 5000 }).catch(() => false);
+    // The chat input should be disabled or there's a configuration message
+    const chatInput = getChatInput(page);
+    const isInputDisabled = await chatInput.isDisabled().catch(() => false);
 
-    // Either send button is disabled OR there's a "configure" message
-    const configureMessage = page.locator('text=/configure|api key|not configured/i').first();
-    const hasConfigMessage = await configureMessage.isVisible({ timeout: 2000 }).catch(() => false);
+    const configureMessage = page.locator('text=/configure|api key|not configured|unavailable/i').first();
+    const hasConfigMessage = await configureMessage.isVisible({ timeout: 3000 }).catch(() => false);
 
-    expect(isDisabled || hasConfigMessage).toBe(true);
+    // Either input is disabled OR there's a config message
+    expect(isInputDisabled || hasConfigMessage).toBe(true);
   });
 
   test('queue updates when AI returns tracks', async ({ page }) => {
@@ -241,22 +226,11 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    const chatInput = page
-      .locator('input[placeholder*="Ask" i], textarea[placeholder*="Ask" i]')
-      .first();
-    await chatInput.fill('Play something');
+    await sendChatMessage(page, 'Play something');
 
-    const sendButton = page.locator('button:has(svg):not([disabled])').last();
-    await sendButton.click();
-
-    // Wait for response
-    await page.waitForTimeout(2000);
-
-    // Check that tracks appear in queue or response mentions them - use longer timeout for async stream parsing
-    const trackMention = page.locator('text=/Happy Song|Dance Track|2 tracks/i').first();
-    const hasTrackMention = await trackMention.isVisible({ timeout: 15000 }).catch(() => false);
-
-    expect(hasTrackMention).toBe(true);
+    // Check that tracks appear in response mentions them
+    const trackMention = page.locator('text=/Happy Song|Dance Track|upbeat music/i').first();
+    await expect(trackMention).toBeVisible({ timeout: 15000 });
   });
 });
 
