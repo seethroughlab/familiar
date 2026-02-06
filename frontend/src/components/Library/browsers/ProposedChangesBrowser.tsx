@@ -47,6 +47,12 @@ const SCOPE_LABELS: Record<ChangeScope, string> = {
   db_id3_files: 'DB + ID3 + Files',
 };
 
+const SCOPE_LABELS_SHORT: Record<ChangeScope, string> = {
+  db_only: 'DB',
+  db_and_id3: 'DB+ID3',
+  db_id3_files: 'DB+ID3+Files',
+};
+
 function formatValue(value: unknown): string {
   if (value === null || value === undefined) return '(empty)';
   if (typeof value === 'object') {
@@ -230,7 +236,7 @@ function ChangeCard({
       </div>
 
       {/* Metadata */}
-      <div className="flex items-center gap-4 text-xs text-zinc-500">
+      <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-500">
         <span>{SOURCE_LABELS[change.source] || change.source}</span>
         <span>{Math.round(change.confidence * 100)}% confidence</span>
         <span>{Array.isArray(change.target_ids) ? change.target_ids.length : 0} track(s)</span>
@@ -238,7 +244,7 @@ function ChangeCard({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-2 border-t border-zinc-700/50">
+      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-700/50">
         {/* Scope selector (for pending) */}
         {isPending && (
           <div className="relative">
@@ -246,7 +252,8 @@ function ChangeCard({
               onClick={() => setShowScopeDropdown(!showScopeDropdown)}
               className="flex items-center gap-1 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-sm transition-colors"
             >
-              {SCOPE_LABELS[selectedScope]}
+              <span className="sm:hidden">{SCOPE_LABELS_SHORT[selectedScope]}</span>
+              <span className="hidden sm:inline">{SCOPE_LABELS[selectedScope]}</span>
               <ChevronDown className="w-3 h-3" />
             </button>
             {showScopeDropdown && (
@@ -279,7 +286,7 @@ function ChangeCard({
           className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-sm transition-colors disabled:opacity-50"
         >
           <Eye className="w-4 h-4" />
-          Preview
+          <span className="hidden sm:inline">Preview</span>
         </button>
 
         {/* Status-specific actions */}
@@ -291,7 +298,7 @@ function ChangeCard({
               className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm transition-colors disabled:opacity-50"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-              Apply
+              <span className="hidden sm:inline">Apply</span>
             </button>
             <button
               onClick={onReject}
@@ -299,7 +306,7 @@ function ChangeCard({
               className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-600 hover:bg-zinc-500 rounded text-sm transition-colors disabled:opacity-50"
             >
               <X className="w-4 h-4" />
-              Reject
+              <span className="hidden sm:inline">Reject</span>
             </button>
           </>
         )}
@@ -311,7 +318,7 @@ function ChangeCard({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 rounded text-sm transition-colors disabled:opacity-50"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
-            Undo
+            <span className="hidden sm:inline">Undo</span>
           </button>
         )}
 
@@ -322,7 +329,7 @@ function ChangeCard({
             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors disabled:opacity-50"
           >
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Delete
+            <span className="hidden sm:inline">Delete</span>
           </button>
         )}
       </div>

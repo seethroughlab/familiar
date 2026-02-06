@@ -654,13 +654,6 @@ export function TrackListBrowser({
     }
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
-  // Mobile still uses intersection observer for infinite scroll
-  // Desktop uses virtualization which handles loading automatically
-  const mobileSentinelRef = useIntersectionObserver({
-    onIntersect: handleLoadMore,
-    enabled: hasNextPage && !isFetchingNextPage,
-  });
-
   // Track which pages we've loaded (either from infinite query or direct fetch)
   const loadedPagesRef = useRef<Set<number>>(new Set([1]));
   const [sparsePages, setSparsePages] = useState<Map<number, Track[]>>(new Map());
@@ -907,6 +900,7 @@ export function TrackListBrowser({
     activeLetter,
     isVisible: isAlphabetBarVisible,
     jumpToLetter,
+    setActiveLetter,
   } = useAlphabetBar({
     entityType: 'tracks',
     sortField: 'artist', // TrackListBrowser sorts by artist by default
@@ -921,6 +915,132 @@ export function TrackListBrowser({
     hasNextPage: hasNextPage ?? false,
     loadedItemCount: total, // With sparse loading, array length equals total
     scrollToIndex, // Use virtualizer's scrollToIndex for instant navigation
+  });
+
+  // Mobile jump-fetch state: when a letter is tapped on mobile, we fetch just that page
+  // and render from there instead of loading all pages from 1 to N.
+  const [mobileJump, setMobileJump] = useState<{
+    letter: string;
+    tracks: Track[];
+    nextPage: number;
+    hasMore: boolean;
+    isLoading: boolean;
+  } | null>(null);
+
+  const handleMobileJumpToLetter = useCallback(async (letter: string) => {
+    if (!letterIndex || !(letter in letterIndex)) return;
+
+    const targetIndex = letterIndex[letter];
+    const targetPage = Math.floor(targetIndex / PAGE_SIZE) + 1;
+
+    setActiveLetter(letter);
+    setMobileJump(prev => ({
+      letter,
+      tracks: prev?.tracks ?? [],
+      nextPage: targetPage + 1,
+      hasMore: true,
+      isLoading: true,
+    }));
+
+    try {
+      const result = await tracksApi.list({
+        page: targetPage,
+        page_size: PAGE_SIZE,
+        search: filters.search,
+        artist: filters.artist,
+        album: filters.album,
+        year_from: filters.yearFrom,
+        year_to: filters.yearTo,
+        energy_min: filters.energyMin,
+        energy_max: filters.energyMax,
+        valence_min: filters.valenceMin,
+        valence_max: filters.valenceMax,
+        include_features: needsFeatures,
+        sort_by: sortField,
+        sort_order: sortOrder,
+      });
+
+      const totalPages = Math.ceil(result.total / PAGE_SIZE);
+      setMobileJump({
+        letter,
+        tracks: result.items,
+        nextPage: targetPage + 1,
+        hasMore: targetPage < totalPages,
+        isLoading: false,
+      });
+
+      // Scroll mobile view to top
+      window.scrollTo({ top: 0 });
+    } catch (err) {
+      console.error('Failed to jump to letter:', err);
+      setMobileJump(null);
+    }
+  }, [letterIndex, filters, needsFeatures, sortField, sortOrder, setActiveLetter]);
+
+  const handleMobileJumpLoadMore = useCallback(async () => {
+    if (!mobileJump || mobileJump.isLoading || !mobileJump.hasMore) return;
+
+    setMobileJump(prev => prev ? { ...prev, isLoading: true } : null);
+
+    try {
+      const result = await tracksApi.list({
+        page: mobileJump.nextPage,
+        page_size: PAGE_SIZE,
+        search: filters.search,
+        artist: filters.artist,
+        album: filters.album,
+        year_from: filters.yearFrom,
+        year_to: filters.yearTo,
+        energy_min: filters.energyMin,
+        energy_max: filters.energyMax,
+        valence_min: filters.valenceMin,
+        valence_max: filters.valenceMax,
+        include_features: needsFeatures,
+        sort_by: sortField,
+        sort_order: sortOrder,
+      });
+
+      const totalPages = Math.ceil(result.total / PAGE_SIZE);
+      setMobileJump(prev => prev ? {
+        ...prev,
+        tracks: [...prev.tracks, ...result.items],
+        nextPage: prev.nextPage + 1,
+        hasMore: prev.nextPage < totalPages,
+        isLoading: false,
+      } : null);
+    } catch (err) {
+      console.error('Failed to load more jump tracks:', err);
+      setMobileJump(prev => prev ? { ...prev, isLoading: false } : null);
+    }
+  }, [mobileJump, filters, needsFeatures, sortField, sortOrder]);
+
+  // Letter select routing: mobile uses jump-fetch, desktop uses virtualizer
+  const handleLetterSelect = useCallback((letter: string) => {
+    if (window.innerWidth < 768) {
+      handleMobileJumpToLetter(letter);
+    } else {
+      jumpToLetter(letter);
+    }
+  }, [handleMobileJumpToLetter, jumpToLetter]);
+
+  // Reset mobileJump when filters/sort change
+  useEffect(() => {
+    setMobileJump(null);
+  }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      sortField, sortOrder]);
+
+  // Unified mobile rendering: use jump tracks or regular infinite query
+  const mobileTracks = mobileJump?.tracks ?? allTracksUnfiltered;
+  const mobileHasMore = mobileJump ? mobileJump.hasMore : (hasNextPage ?? false);
+  const mobileLoadMore = mobileJump ? handleMobileJumpLoadMore : handleLoadMore;
+  const mobileIsLoading = mobileJump?.isLoading ?? isFetchingNextPage;
+
+  // Mobile infinite scroll sentinel — uses unified values so it works in both
+  // normal mode and jump-fetch mode
+  const mobileSentinelRef = useIntersectionObserver({
+    onIntersect: mobileLoadMore,
+    enabled: mobileHasMore && !mobileIsLoading,
   });
 
   // Update visible tracks store when tracks change (for LLM context)
@@ -1247,9 +1367,9 @@ export function TrackListBrowser({
       )}
 
       {/* Mobile view - card layout (visible below md breakpoint) */}
-      {/* Mobile uses dense array (allTracksUnfiltered) since it doesn't support sparse loading */}
+      {/* Uses unified mobileTracks: either jump-fetched page or normal infinite query */}
       <div className="md:hidden">
-        {allTracksUnfiltered.map((track, index) => (
+        {mobileTracks.map((track, index) => (
           <MobileTrackCard
             key={track.id}
             track={track}
@@ -1276,16 +1396,19 @@ export function TrackListBrowser({
           />
         ))}
         {/* Loading indicator for infinite scroll */}
-        {isFetchingNextPage && (
+        {mobileIsLoading && (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
           </div>
         )}
-        {/* Sentinel for infinite scroll */}
-        {hasNextPage && <div ref={mobileSentinelRef} className="h-4" />}
+        {/* Sentinel for infinite scroll (both normal and jump mode) */}
+        {mobileHasMore && <div ref={mobileSentinelRef} className="h-4" />}
         {/* Mobile footer */}
         <div className="px-4 py-4 text-sm text-zinc-500">
-          {allTracksUnfiltered.length} of {total} tracks
+          {mobileJump
+            ? `Showing from ${mobileJump.letter} · ${mobileTracks.length} of ${total.toLocaleString()} tracks`
+            : `${mobileTracks.length} of ${total.toLocaleString()} tracks`
+          }
         </div>
       </div>
 
@@ -1545,7 +1668,7 @@ export function TrackListBrowser({
       <AlphabetBar
         letterIndex={letterIndex}
         activeLetter={activeLetter}
-        onLetterSelect={jumpToLetter}
+        onLetterSelect={handleLetterSelect}
         visible={isAlphabetBarVisible}
       />
     </div>

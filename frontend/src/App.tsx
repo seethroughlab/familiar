@@ -537,7 +537,7 @@ function AppContent() {
           {/* Content */}
           <main className={`flex-1 overflow-y-auto ${resolvedTheme === 'light' ? 'bg-gradient-to-b from-zinc-50 to-white' : 'bg-gradient-to-b from-zinc-900 to-black'}`}>
             {rightPanelTab === 'library' && (
-              <div className="h-full">
+              <div className="md:h-full md:min-h-0">
                 <LibraryView initialSearch={search || undefined} />
               </div>
             )}

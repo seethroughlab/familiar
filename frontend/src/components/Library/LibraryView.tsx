@@ -406,7 +406,7 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col md:h-full md:min-h-0">
       {/* Selection toolbar (appears when tracks selected) */}
       <SelectionToolbar
         selectedCount={selectedTrackIds.size}
@@ -489,7 +489,7 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
       )}
 
       {/* Browser content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
         {BrowserComponent ? (
           <BrowserComponent
             key={`browser-${currentBrowserId}`}

@@ -3,6 +3,7 @@
  *
  * Features:
  * - Hover to reveal on desktop (doesn't overlap scrollbar)
+ * - Always visible on mobile (iOS Contacts-style)
  * - Click to jump to a letter
  * - Touch-drag with haptic feedback (mobile)
  * - Floating letter bubble on drag
@@ -29,8 +30,17 @@ export function AlphabetBar({
   const [isDragging, setIsDragging] = useState(false);
   const [dragLetter, setDragLetter] = useState<string | null>(null);
   const [bubblePosition, setBubblePosition] = useState<{ y: number } | null>(null);
+  const [isMobile, setIsMobile] = useState(() => !window.matchMedia('(min-width: 768px)').matches);
   const barRef = useRef<HTMLDivElement>(null);
   const lastVibratedLetter = useRef<string | null>(null);
+
+  // Track isMobile via matchMedia listener
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 768px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(!e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
 
   // Get letter from Y coordinate relative to the bar
   const getLetterFromY = useCallback((clientY: number) => {
@@ -134,26 +144,26 @@ export function AlphabetBar({
         </div>
       )}
 
-      {/* Hover zone - invisible area on right edge that triggers bar visibility.
+      {/* Hover zone - invisible area on right edge that triggers bar visibility (desktop only).
          Use right-[15px] to avoid covering the native scrollbar (~15px wide at right-0). */}
-      <div
-        className="fixed right-[15px] top-0 bottom-0 w-4 z-30 hidden md:block"
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => !isDragging && setIsHovering(false)}
-      />
+      {!isMobile && (
+        <div
+          className="fixed right-[15px] top-0 bottom-0 w-4 z-30"
+          onMouseEnter={() => setIsHovering(true)}
+          onMouseLeave={() => !isDragging && setIsHovering(false)}
+        />
+      )}
 
-      {/* Alphabet bar - desktop: shows on hover, mobile: always visible */}
+      {/* Alphabet bar
+          Mobile: always visible at right edge, condensed sizing
+          Desktop: hover-to-reveal with slide animation */}
       <div
         ref={barRef}
-        className={`
-          fixed top-1/2 -translate-y-1/2 z-40 flex flex-col items-center justify-center py-2 select-none touch-none
-          transition-all duration-150 ease-out
-          ${showBar ? 'right-4 opacity-100' : 'right-0 opacity-0 pointer-events-none md:pointer-events-auto'}
-          md:${showBar ? 'right-4' : '-right-8'}
-        `}
+        className="fixed top-1/2 -translate-y-1/2 z-40 flex flex-col items-center justify-center py-2 select-none touch-none transition-all duration-150 ease-out"
         style={{
-          // On desktop: position based on hover state
-          right: showBar ? '16px' : '-32px',
+          right: isMobile ? '2px' : (showBar ? '16px' : '-32px'),
+          opacity: isMobile ? 0.8 : (showBar ? 1 : 0),
+          pointerEvents: isMobile ? 'auto' : (showBar ? 'auto' : 'none'),
         }}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => !isDragging && setIsHovering(false)}
@@ -166,7 +176,7 @@ export function AlphabetBar({
         <div className="absolute inset-0 bg-zinc-900/90 backdrop-blur-sm rounded-lg shadow-lg" />
 
         {/* Letters */}
-        <div className="relative flex flex-col items-center px-2">
+        <div className={`relative flex flex-col items-center ${isMobile ? 'px-1' : 'px-2'}`}>
           {ALPHABET.map((letter) => {
             const hasItems = letter in letterIndex;
             const isActive = currentLetter === letter;
@@ -177,7 +187,8 @@ export function AlphabetBar({
                 onClick={() => hasItems && handleLetterClick(letter)}
                 disabled={!hasItems}
                 className={`
-                  text-xs leading-tight py-0.5 px-1.5 transition-colors
+                  leading-tight transition-colors
+                  ${isMobile ? 'text-[10px] py-0 px-1' : 'text-xs py-0.5 px-1.5'}
                   ${isActive
                     ? 'text-green-500 font-bold scale-110'
                     : hasItems
@@ -192,15 +203,6 @@ export function AlphabetBar({
           })}
         </div>
       </div>
-
-      {/* Mobile: Always show a small indicator on right edge */}
-      <div
-        className="fixed right-0 top-1/2 -translate-y-1/2 w-1 h-32 bg-zinc-600/50 rounded-l md:hidden z-30"
-        onTouchStart={(e) => {
-          setIsHovering(true);
-          handleTouchStart(e);
-        }}
-      />
     </>
   );
 }
