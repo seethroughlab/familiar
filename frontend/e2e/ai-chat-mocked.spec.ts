@@ -86,6 +86,11 @@ test.describe('AI Chat (Mocked)', () => {
 
     await page.goto('/');
     await ensureProfile(page);
+
+    // Open the chat panel - it's hidden by default behind a toggle button
+    const chatButton = page.locator('button:has-text("Chat")').first();
+    await chatButton.click();
+    await page.waitForTimeout(500);
   });
 
   test('chat input is visible and enabled when API is configured', async ({ page }) => {
