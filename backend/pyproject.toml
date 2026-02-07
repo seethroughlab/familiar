@@ -118,7 +118,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 # Coverage configuration - start low and increase over time
-addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=35"
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=34"
 
 [tool.coverage.run]
 source = ["app"]

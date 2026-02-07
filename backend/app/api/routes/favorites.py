@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
+
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import ProfileFavorite, Track
 

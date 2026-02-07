@@ -10,7 +10,6 @@ Provides periodic backup of the entire Familiar installation to S3:
 Uses boto3 in a thread executor (synchronous I/O, runs in background).
 """
 
-import asyncio
 import gzip
 import hashlib
 import json
@@ -19,7 +18,7 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -402,7 +401,6 @@ class S3BackupService:
         6. Write updated manifest to S3 Standard
         """
         import boto3.s3.transfer
-        from botocore.exceptions import ClientError
         from sqlalchemy import create_engine, text
 
         cfg = self._get_settings()

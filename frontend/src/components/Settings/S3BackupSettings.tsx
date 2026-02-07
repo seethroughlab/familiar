@@ -205,7 +205,7 @@ export function S3BackupSettings() {
       } else {
         showError(result.error || 'Credential validation failed');
       }
-    } catch (error) {
+    } catch {
       showError('Failed to validate credentials');
     } finally {
       setIsValidating(false);
@@ -221,7 +221,7 @@ export function S3BackupSettings() {
       });
       showSuccess('S3 backup settings saved');
       loadSettings();
-    } catch (error) {
+    } catch {
       showError('Failed to save settings');
     } finally {
       setIsSaving(false);
@@ -242,7 +242,7 @@ export function S3BackupSettings() {
       } else if (result.status === 'already_running') {
         showWarning('A backup is already in progress');
       }
-    } catch (error) {
+    } catch {
       showError('Failed to start backup');
     }
   };
@@ -251,7 +251,7 @@ export function S3BackupSettings() {
     try {
       await s3BackupApi.cancelBackup();
       showSuccess('Backup cancellation requested');
-    } catch (error) {
+    } catch {
       showError('Failed to cancel backup');
     }
   };
@@ -265,7 +265,7 @@ export function S3BackupSettings() {
       ]);
       setManifest(m);
       setRestoreState(rs);
-    } catch (error) {
+    } catch {
       showError('Failed to load backup manifest');
     } finally {
       setIsLoadingManifest(false);
@@ -278,7 +278,7 @@ export function S3BackupSettings() {
       const result = await s3BackupApi.initiateRestore();
       setRestoreState(result);
       showSuccess('Glacier retrieval initiated. This typically takes 12-48 hours.');
-    } catch (error) {
+    } catch {
       showError('Failed to initiate restore');
     } finally {
       setIsInitiatingRestore(false);
@@ -292,7 +292,7 @@ export function S3BackupSettings() {
       if (result.status === 'available') {
         showSuccess('Files are available for download!');
       }
-    } catch (error) {
+    } catch {
       showError('Failed to check restore status');
     }
   };
@@ -305,7 +305,7 @@ export function S3BackupSettings() {
         setShowRestoreConfirm(false);
         startProgressPolling();
       }
-    } catch (error) {
+    } catch {
       showError('Failed to start restore');
     }
   };
