@@ -117,6 +117,7 @@ Most music players search by artist, album, or genre. Familiar searches by *how 
 - **Smart playlists** - Dynamic playlists with rules for BPM, key, energy, genre, and more
 - **Metadata editing** - Right-click to edit, AI-assisted corrections, duplicate artist detection
 - **AcoustID fingerprinting** - Identify unknown tracks
+- **Cloud backup** - S3 Glacier Deep Archive backup (~$1/TB/month) with scheduled backups and restore
 
 ### Mobile & Offline
 - **PWA support** - Install on mobile or desktop, works offline
@@ -167,6 +168,37 @@ Familiar includes an optional community cache that shares pre-computed audio ana
 - Your processing helps future users
 
 Configure in Admin (`/admin`) under Community Cache.
+
+## Cloud Backup
+
+Familiar can back up your entire music library and configuration to Amazon S3 Glacier Deep Archive for long-term archival storage at ~$1/TB/month.
+
+**What gets backed up:**
+- Audio files from all configured library paths
+- Database (tracks, playlists, analysis data)
+- Settings and configuration
+- Album artwork and music videos
+- User profiles and favorites
+
+**Setup:**
+
+1. **Set S3 credentials** in your `docker/.env` file:
+   ```bash
+   S3_BACKUP_ACCESS_KEY_ID=your-access-key
+   S3_BACKUP_SECRET_ACCESS_KEY=your-secret-key
+   S3_BACKUP_BUCKET=your-bucket-name
+   S3_BACKUP_REGION=us-east-1
+   S3_BACKUP_PREFIX=familiar/   # optional, organizes files in bucket
+   ```
+
+2. **Enable and configure** in Settings > Cloud Backup:
+   - Click "Validate Credentials" to verify your S3 access
+   - Enable scheduled backups (daily/weekly/monthly)
+   - Or run a manual backup immediately
+
+3. **Restore** from the same Settings panel - select a backup snapshot and restore specific components (database, settings, audio files, etc.)
+
+**Note:** Glacier Deep Archive has a 12-hour retrieval time for restores. Standard retrieval fees apply (~$0.02/GB).
 
 ## Quick Start
 
@@ -585,6 +617,11 @@ cp .env.example .env
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
 | `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
 | `FRONTEND_URL` | Base URL for OAuth callbacks | `http://localhost:4400` |
+| `S3_BACKUP_ACCESS_KEY_ID` | AWS access key for S3 backup | *(none)* |
+| `S3_BACKUP_SECRET_ACCESS_KEY` | AWS secret key for S3 backup | *(none)* |
+| `S3_BACKUP_BUCKET` | S3 bucket name for backups | *(none)* |
+| `S3_BACKUP_REGION` | AWS region for S3 bucket | `us-east-1` |
+| `S3_BACKUP_PREFIX` | Key prefix for backup objects in bucket | *(none)* |
 
 **Important:** If accessing Familiar from a remote machine (not localhost), update `FRONTEND_URL` to use your server's hostname or IP address:
 ```
