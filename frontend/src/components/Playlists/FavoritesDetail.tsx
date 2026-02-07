@@ -1,9 +1,15 @@
-import { useState, useCallback, useMemo } from 'react';
-import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw } from 'lucide-react';
+import { favoritesApi } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
+import { useDownloadStore } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { useAutoDownload } from '../../hooks/useAutoDownload';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
+import * as offlineService from '../../services/offlineService';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
@@ -14,11 +20,71 @@ interface Props {
 }
 
 export function FavoritesDetail({ onBack }: Props) {
+  const queryClient = useQueryClient();
   const { currentTrack, isPlaying, setQueue, addToQueue, setIsPlaying } = usePlayerStore();
   const { favorites, total, toggle } = useFavorites();
+  const { isOffline } = useOfflineStatus();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [searchFilter, setSearchFilter] = useState('');
+  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+
+  // Download state
+  const { jobs, startDownload } = useDownloadStore();
+  const jobId = 'favorites';
+  const downloadJob = jobs.get(jobId);
+  const isDownloading = downloadJob?.status === 'downloading' || downloadJob?.status === 'queued';
+  const downloadProgress = {
+    current: downloadJob ? downloadJob.completedIds.length + (downloadJob.currentProgress > 0 ? 1 : 0) : 0,
+    total: downloadJob?.trackIds.length ?? 0,
+  };
+
+  // Auto-download setting
+  const { data: autoDownloadSetting } = useQuery({
+    queryKey: ['favorites-auto-download'],
+    queryFn: () => favoritesApi.getAutoDownload(),
+    staleTime: 60000,
+    retry: isOffline ? false : 3,
+  });
+  const autoDownloadEnabled = autoDownloadSetting?.enabled ?? false;
+
+  // Check offline status
+  useEffect(() => {
+    const checkOfflineStatus = async () => {
+      const ids = await offlineService.getOfflineTrackIds();
+      setOfflineTrackIds(new Set(ids));
+    };
+    checkOfflineStatus();
+  }, []);
+
+  // Update offline track IDs when download job completes
+  useEffect(() => {
+    if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
+      offlineService.getOfflineTrackIds().then((ids) => {
+        setOfflineTrackIds(new Set(ids));
+      });
+    }
+  }, [downloadJob?.status]);
+
+  const favoriteTrackIds = useMemo(() => favorites.map(f => f.id), [favorites]);
+  const allTracksOffline = favorites.length > 0 && favorites.every(f => offlineTrackIds.has(f.id));
+  const offlineCount = favorites.filter(f => offlineTrackIds.has(f.id)).length;
+
+  // Auto-download new tracks when enabled
+  useAutoDownload({
+    enabled: autoDownloadEnabled,
+    jobId,
+    jobType: 'playlist',
+    jobName: 'Favorites',
+    trackIds: favoriteTrackIds,
+  });
+
+  const handleDownloadFavorites = () => {
+    if (favorites.length === 0) return;
+    const tracksToDownload = favorites.filter(f => !offlineTrackIds.has(f.id));
+    if (tracksToDownload.length === 0) return;
+    startDownload(jobId, 'playlist', 'Favorites', tracksToDownload.map(f => f.id));
+  };
 
   const filteredFavorites = useMemo(() => {
     if (!searchFilter) return favorites;
@@ -87,17 +153,17 @@ export function FavoritesDetail({ onBack }: Props) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-4 md:px-0">
       {/* Header */}
-      <div className="flex items-start gap-4">
+      <div className="space-y-4">
         <button
           onClick={onBack}
-          className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+          className="p-2 hover:bg-zinc-800 rounded-lg transition-colors -ml-2"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        <div className="flex-1">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Heart className="w-5 h-5 text-pink-500" fill="currentColor" />
             <h2 className="text-xl font-bold">Favorites</h2>
@@ -112,14 +178,63 @@ export function FavoritesDetail({ onBack }: Props) {
           </div>
         </div>
 
-        <button
-          onClick={() => handlePlay()}
-          disabled={favorites.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:hover:bg-pink-600 rounded-full transition-colors"
-        >
-          <Play className="w-4 h-4" fill="currentColor" />
-          Play
-        </button>
+        {/* Action buttons */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <button
+            onClick={() => handlePlay()}
+            disabled={favorites.length === 0}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:hover:bg-pink-600 rounded-full transition-colors"
+          >
+            <Play className="w-4 h-4" fill="currentColor" />
+            Play
+          </button>
+
+          <button
+            onClick={handleDownloadFavorites}
+            disabled={favorites.length === 0 || isDownloading || allTracksOffline || isOffline}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:hover:bg-zinc-700 rounded-full transition-colors"
+            title={isOffline ? 'Cannot download while offline' : allTracksOffline ? 'All tracks downloaded' : 'Download for offline'}
+          >
+            {isDownloading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">
+                  {downloadProgress.current}/{downloadProgress.total}
+                </span>
+              </>
+            ) : allTracksOffline ? (
+              <>
+                <Check className="w-4 h-4 text-green-400" />
+                <span>Offline</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span>
+                  {offlineCount > 0 ? `${offlineCount}/${favorites.length}` : 'Download'}
+                </span>
+              </>
+            )}
+          </button>
+
+          {/* Auto-download toggle */}
+          <button
+            onClick={async () => {
+              const newValue = !autoDownloadEnabled;
+              await favoritesApi.setAutoDownload(newValue);
+              queryClient.setQueryData(['favorites-auto-download'], { enabled: newValue });
+            }}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
+              autoDownloadEnabled
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-zinc-700 hover:bg-zinc-600'
+            }`}
+            title={autoDownloadEnabled ? 'Disable auto-download' : 'Auto-download new favorites'}
+          >
+            <RotateCw className="w-4 h-4" />
+            <span className="text-sm">Auto</span>
+          </button>
+        </div>
       </div>
 
       {/* Search */}

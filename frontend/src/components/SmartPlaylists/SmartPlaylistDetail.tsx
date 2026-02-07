@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, WifiOff, Heart, RefreshCw, CloudOff, Search, X } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, WifiOff, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api/client';
 import type { SmartPlaylist } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -9,6 +9,7 @@ import { useDownloadStore, getSmartPlaylistJobId } from '../../stores/downloadSt
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
+import { useAutoDownload } from '../../hooks/useAutoDownload';
 import * as offlineService from '../../services/offlineService';
 import * as playlistCache from '../../services/playlistCache';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
@@ -96,6 +97,7 @@ interface Props {
 }
 
 export function SmartPlaylistDetail({ playlist, onBack }: Props) {
+  const queryClient = useQueryClient();
   const { currentTrack, isPlaying, setQueue, addToQueue, setIsPlaying } = usePlayerStore();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { isOffline } = useOfflineStatus();
@@ -259,6 +261,16 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
 
   const allTracksOffline = allTracks.every(t => offlineTrackIds.has(t.id));
   const offlineCount = allTracks.filter(t => offlineTrackIds.has(t.id)).length;
+  const allTrackIds = useMemo(() => allTracks.map(t => t.id), [allTracks]);
+
+  // Auto-download new tracks when enabled
+  useAutoDownload({
+    enabled: playlist.auto_download,
+    jobId,
+    jobType: 'smart-playlist',
+    jobName: playlist.name,
+    trackIds: allTrackIds,
+  });
 
   const handlePlay = (startIndex = 0) => {
     if (tracks.length === 0) return;
@@ -446,6 +458,26 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
                 </span>
               </>
             )}
+          </button>
+
+          {/* Auto-download toggle */}
+          <button
+            onClick={async () => {
+              const newValue = !playlist.auto_download;
+              await smartPlaylistsApi.update(playlist.id, { auto_download: newValue });
+              queryClient.setQueryData<SmartPlaylist[]>(['smart-playlists'], (old) =>
+                old?.map((p) => (p.id === playlist.id ? { ...p, auto_download: newValue } : p))
+              );
+            }}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
+              playlist.auto_download
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-zinc-700 hover:bg-zinc-600'
+            }`}
+            title={playlist.auto_download ? 'Disable auto-download' : 'Auto-download new tracks'}
+          >
+            <RotateCw className="w-4 h-4" />
+            <span className="text-sm">Auto</span>
           </button>
 
           {/* Downloaded only filter toggle */}

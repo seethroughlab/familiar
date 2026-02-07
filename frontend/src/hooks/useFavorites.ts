@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { favoritesApi, type FavoriteTrack, type FavoritesListResponse } from '../api/client';
 import { useOfflineStatus } from './useOfflineStatus';
 import * as playlistCache from '../services/playlistCache';
+import * as offlineService from '../services/offlineService';
 import * as syncService from '../services/syncService';
 import { getSelectedProfileId } from '../services/profileService';
 
@@ -170,10 +171,24 @@ export function useFavorites(): UseFavoritesResult {
         queryClient.setQueryData(['favorites'], context.previous);
       }
     },
-    onSettled: () => {
+    onSettled: (_data, _error, trackId) => {
       // Refetch to ensure consistency (only when online)
       if (!isOffline) {
         queryClient.invalidateQueries({ queryKey: ['favorites'] });
+      }
+
+      // Auto-download the newly favorited track if auto-download is enabled
+      if (trackId && !isOffline) {
+        const wasAdded = !favoriteIds.has(trackId);
+        if (wasAdded) {
+          // Check if auto-download is enabled (best-effort, non-blocking)
+          const autoDownloadData = queryClient.getQueryData<{ enabled: boolean }>(['favorites-auto-download']);
+          if (autoDownloadData?.enabled) {
+            offlineService.downloadTrackForOffline(trackId).catch(() => {
+              // Best-effort: silently ignore download errors
+            });
+          }
+        }
       }
     },
   });

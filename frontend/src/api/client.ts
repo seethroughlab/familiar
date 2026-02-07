@@ -1134,6 +1134,7 @@ export interface SmartPlaylist {
   max_tracks: number | null;
   cached_track_count: number;
   last_refreshed_at: string | null;
+  auto_download: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1230,7 +1231,7 @@ export const smartPlaylistsApi = {
     return data;
   },
 
-  update: async (id: string, playlist: Partial<SmartPlaylistCreate>): Promise<SmartPlaylist> => {
+  update: async (id: string, playlist: Partial<SmartPlaylistCreate> & { auto_download?: boolean }): Promise<SmartPlaylist> => {
     const { data } = await api.put(`/smart-playlists/${id}`, playlist);
     return data;
   },
@@ -1268,6 +1269,7 @@ export interface Playlist {
   track_count: number;
   local_track_count: number;
   external_track_count: number;
+  auto_download: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1298,6 +1300,7 @@ export interface PlaylistDetail {
   is_wishlist: boolean;
   generation_prompt: string | null;
   tracks: PlaylistTrack[];
+  auto_download: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -1353,7 +1356,7 @@ export const playlistsApi = {
     return data;
   },
 
-  update: async (id: string, playlist: { name?: string; description?: string }): Promise<Playlist> => {
+  update: async (id: string, playlist: { name?: string; description?: string; auto_download?: boolean }): Promise<Playlist> => {
     const { data } = await api.put(`/playlists/${id}`, playlist);
     return data;
   },
@@ -1685,6 +1688,16 @@ export const favoritesApi = {
 
   toggle: async (trackId: string): Promise<FavoriteStatusResponse> => {
     const { data } = await api.post(`/favorites/${trackId}/toggle`);
+    return data;
+  },
+
+  getAutoDownload: async (): Promise<{ enabled: boolean }> => {
+    const { data } = await api.get('/favorites/auto-download');
+    return data;
+  },
+
+  setAutoDownload: async (enabled: boolean): Promise<{ enabled: boolean }> => {
+    const { data } = await api.put('/favorites/auto-download', { enabled });
     return data;
   },
 };

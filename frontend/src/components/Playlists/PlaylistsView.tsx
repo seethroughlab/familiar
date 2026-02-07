@@ -211,6 +211,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
               track_count: p.track_count,
               local_track_count: p.track_count,
               external_track_count: 0,
+              auto_download: false,
               created_at: '',
               updated_at: '',
             }));

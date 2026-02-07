@@ -59,6 +59,7 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
               max_tracks: p.max_tracks,
               cached_track_count: p.cached_track_count,
               last_refreshed_at: p.last_refreshed_at,
+              auto_download: false,
               created_at: '',
               updated_at: '',
             }));

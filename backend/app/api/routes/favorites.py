@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
-
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import ProfileFavorite, Track
 
@@ -80,6 +79,42 @@ async def list_favorites(
     ]
 
     return FavoritesListResponse(favorites=favorites, total=total)
+
+
+class AutoDownloadResponse(BaseModel):
+    """Response for favorites auto-download setting."""
+
+    enabled: bool
+
+
+class AutoDownloadUpdate(BaseModel):
+    """Request to update favorites auto-download setting."""
+
+    enabled: bool
+
+
+@router.get("/auto-download", response_model=AutoDownloadResponse)
+async def get_favorites_auto_download(
+    db: DbSession,
+    profile: RequiredProfile,
+) -> AutoDownloadResponse:
+    """Get the auto-download setting for favorites."""
+    enabled = (profile.settings or {}).get("favorites_auto_download", False)
+    return AutoDownloadResponse(enabled=enabled)
+
+
+@router.put("/auto-download", response_model=AutoDownloadResponse)
+async def set_favorites_auto_download(
+    request: AutoDownloadUpdate,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> AutoDownloadResponse:
+    """Set the auto-download setting for favorites."""
+    settings = dict(profile.settings or {})
+    settings["favorites_auto_download"] = request.enabled
+    profile.settings = settings
+    await db.commit()
+    return AutoDownloadResponse(enabled=request.enabled)
 
 
 @router.post("/{track_id}", status_code=status.HTTP_201_CREATED)

@@ -46,6 +46,7 @@ class SmartPlaylistUpdate(BaseModel):
     order_by: str | None = None
     order_direction: str | None = Field(None, pattern="^(asc|desc)$")
     max_tracks: int | None = Field(None, ge=1, le=10000)
+    auto_download: bool | None = None
 
 
 class SmartPlaylistResponse(BaseModel):
@@ -61,6 +62,7 @@ class SmartPlaylistResponse(BaseModel):
     max_tracks: int | None
     cached_track_count: int
     last_refreshed_at: str | None
+    auto_download: bool = False
     created_at: str
     updated_at: str
 
@@ -98,6 +100,7 @@ def playlist_to_response(playlist: Any) -> SmartPlaylistResponse:
         max_tracks=playlist.max_tracks,
         cached_track_count=playlist.cached_track_count,
         last_refreshed_at=playlist.last_refreshed_at.isoformat() if playlist.last_refreshed_at else None,
+        auto_download=playlist.auto_download,
         created_at=playlist.created_at.isoformat(),
         updated_at=playlist.updated_at.isoformat(),
     )

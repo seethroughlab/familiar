@@ -401,6 +401,7 @@ class Playlist(Base):
     is_auto_generated: Mapped[bool] = mapped_column(Boolean, default=False)
     is_wishlist: Mapped[bool] = mapped_column(Boolean, default=False)  # Special system playlist
     generation_prompt: Mapped[str | None] = mapped_column(Text)
+    auto_download: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
@@ -522,6 +523,8 @@ class SmartPlaylist(Base):
     # Cache
     cached_track_count: Mapped[int] = mapped_column(Integer, default=0)
     last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    auto_download: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

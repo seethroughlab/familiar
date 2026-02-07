@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Radio, Search } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Radio, Search, RotateCw } from 'lucide-react';
 import { playlistsApi, tracksApi } from '../../api/client';
 import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -9,6 +9,7 @@ import { useDownloadStore, getPlaylistJobId } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
+import { useAutoDownload } from '../../hooks/useAutoDownload';
 import { DiscoveryPanel, usePlaylistDiscovery, type DiscoveryItem } from '../Discovery';
 import * as offlineService from '../../services/offlineService';
 import * as playlistCache from '../../services/playlistCache';
@@ -257,8 +258,18 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
 
   // Count only local tracks for offline status
   const localTracks = playlist?.tracks.filter(t => t.type === 'local') ?? [];
+  const localTrackIds = useMemo(() => localTracks.map(t => t.id), [localTracks]);
   const allTracksOffline = localTracks.length > 0 && localTracks.every(t => offlineTrackIds.has(t.id));
   const offlineCount = localTracks.filter(t => offlineTrackIds.has(t.id)).length;
+
+  // Auto-download new tracks when enabled
+  useAutoDownload({
+    enabled: playlist?.auto_download ?? false,
+    jobId,
+    jobType: 'playlist',
+    jobName: playlist?.name ?? '',
+    trackIds: localTrackIds,
+  });
 
   // Filter by downloaded tracks and search query
   const displayedTracks = useMemo(() => {
@@ -620,6 +631,27 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                 </span>
               </>
             )}
+          </button>
+
+          {/* Auto-download toggle */}
+          <button
+            onClick={async () => {
+              if (!playlist) return;
+              const newValue = !playlist.auto_download;
+              await playlistsApi.update(playlist.id, { auto_download: newValue });
+              queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) =>
+                old ? { ...old, auto_download: newValue } : old
+              );
+            }}
+            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
+              playlist.auto_download
+                ? 'bg-blue-600 hover:bg-blue-500'
+                : 'bg-zinc-700 hover:bg-zinc-600'
+            }`}
+            title={playlist.auto_download ? 'Disable auto-download' : 'Auto-download new tracks'}
+          >
+            <RotateCw className="w-4 h-4" />
+            <span className="text-sm">Auto</span>
           </button>
 
           {/* Downloaded only filter toggle */}

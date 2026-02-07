@@ -29,6 +29,7 @@ class PlaylistUpdate(BaseModel):
 
     name: str | None = Field(None, min_length=1, max_length=255)
     description: str | None = None
+    auto_download: bool | None = None
 
 
 class TrackInPlaylist(BaseModel):
@@ -66,6 +67,7 @@ class PlaylistResponse(BaseModel):
     track_count: int
     local_track_count: int = 0
     external_track_count: int = 0
+    auto_download: bool = False
     created_at: str
     updated_at: str
 
@@ -80,6 +82,7 @@ class PlaylistDetailResponse(BaseModel):
     is_wishlist: bool = False
     generation_prompt: str | None
     tracks: list[TrackInPlaylist]
+    auto_download: bool = False
     created_at: str
     updated_at: str
 
@@ -136,6 +139,7 @@ async def list_playlists(
             track_count=total_count,
             local_track_count=local_count,
             external_track_count=external_count,
+            auto_download=playlist.auto_download,
             created_at=playlist.created_at.isoformat(),
             updated_at=playlist.updated_at.isoformat(),
         ))
@@ -201,6 +205,7 @@ async def create_playlist(
         is_auto_generated=playlist.is_auto_generated,
         generation_prompt=playlist.generation_prompt,
         tracks=tracks_added,
+        auto_download=playlist.auto_download,
         created_at=playlist.created_at.isoformat(),
         updated_at=playlist.updated_at.isoformat(),
     )
@@ -404,6 +409,7 @@ async def get_playlist(
         is_wishlist=playlist.is_wishlist,
         generation_prompt=playlist.generation_prompt,
         tracks=tracks,
+        auto_download=playlist.auto_download,
         created_at=playlist.created_at.isoformat(),
         updated_at=playlist.updated_at.isoformat(),
     )
@@ -429,6 +435,8 @@ async def update_playlist(
         playlist.name = request.name
     if request.description is not None:
         playlist.description = request.description
+    if request.auto_download is not None:
+        playlist.auto_download = request.auto_download
 
     await db.commit()
     await db.refresh(playlist)
@@ -457,6 +465,7 @@ async def update_playlist(
         track_count=total_count,
         local_track_count=local_count,
         external_track_count=total_count - local_count,
+        auto_download=playlist.auto_download,
         created_at=playlist.created_at.isoformat(),
         updated_at=playlist.updated_at.isoformat(),
     )
