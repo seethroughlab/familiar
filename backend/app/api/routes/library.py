@@ -2,7 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -2449,7 +2452,7 @@ async def _find_import_duplicate(
     Returns (matching_track, match_type) where match_type is one of:
     "exact", "normalized", "artist_title", or "" if no match.
     """
-    from sqlalchemy import func, or_, select
+    from sqlalchemy import func, select
 
     from app.db.models import Track
     from app.services.normalize import normalize_for_duplicate_matching
@@ -2526,9 +2529,6 @@ async def import_preview(
 
     Session expires after 24 hours if not executed.
     """
-    from sqlalchemy import func, select
-
-    from app.db.models import Track
     from app.services.import_service import (
         ImportPreviewService,
         MusicImportError,

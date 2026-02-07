@@ -1,8 +1,6 @@
 """Tests for normalize_for_duplicate_matching()."""
 
-import pytest
-
-from app.services.normalize import normalize_for_duplicate_matching, normalize_for_matching
+from app.services.normalize import normalize_for_duplicate_matching
 
 
 class TestNormalizeForDuplicateMatching:
