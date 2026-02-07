@@ -91,7 +91,9 @@ function SwarmParticles() {
         yFactor + Math.sin((t / 10) * factor) + (Math.cos(t * 2) * factor) / 10 + b * audioOffset,
         zFactor + Math.cos((t / 10) * factor) + (Math.sin(t * 3) * factor) / 10
       );
-      dummy.scale.setScalar(s * 0.3 * (1 + treble * 0.5));
+      const zDistFromCamera = 15 - dummy.position.z; // camera at z=15
+      const fadeFactor = zDistFromCamera < 8 ? zDistFromCamera / 8 : 1;
+      dummy.scale.setScalar(s * 0.3 * (1 + treble * 0.5) * fadeFactor);
       dummy.rotation.set(s * 5, s * 5, s * 5);
       dummy.updateMatrix();
       meshRef.current!.setMatrixAt(i, dummy.matrix);
@@ -120,6 +122,8 @@ function SwarmParticles() {
         <dodecahedronGeometry args={[1, 0]} />
         <meshStandardMaterial
           color="#1a0030"
+          emissive="#1a0030"
+          emissiveIntensity={0.3}
           roughness={0.5}
           toneMapped={false}
         />
@@ -338,6 +342,7 @@ function LyricStormScene({
       <ambientLight intensity={0.1} />
       <pointLight position={[10, 10, 10]} intensity={1} color="#8b5cf6" />
       <pointLight position={[-10, -10, 5]} intensity={0.5} color="#06b6d4" />
+      <pointLight position={[0, 0, 10]} intensity={0.4} color="#c4b5fd" distance={25} />
 
       <BackgroundPlane />
       <SwarmParticles />

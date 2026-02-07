@@ -893,6 +893,7 @@ export function TrackListBrowser({
     letterIndex,
     activeLetter,
     isVisible: isAlphabetBarVisible,
+    isJumping,
     jumpToLetter,
     setActiveLetter,
   } = useAlphabetBar({
@@ -1666,6 +1667,7 @@ export function TrackListBrowser({
         activeLetter={activeLetter}
         onLetterSelect={handleLetterSelect}
         visible={isAlphabetBarVisible}
+        isJumping={isJumping}
       />
     </div>
   );

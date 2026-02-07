@@ -77,6 +77,7 @@ export function ArtistList({
     letterIndex,
     activeLetter,
     isVisible: isAlphabetBarVisible,
+    isJumping,
     jumpToLetter,
   } = useAlphabetBar({
     entityType: 'artists',
@@ -176,6 +177,7 @@ export function ArtistList({
         activeLetter={activeLetter}
         onLetterSelect={jumpToLetter}
         visible={isAlphabetBarVisible}
+        isJumping={isJumping}
       />
     </div>
   );

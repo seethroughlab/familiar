@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import {
   Play,
   Pause,
@@ -11,152 +10,25 @@ import {
   Shuffle,
   Repeat,
   Music,
-  Video,
-  Type,
-  Compass,
   Loader2,
   Radio,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
+import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
-import { tracksApi, playlistsApi, type LyricLine } from '../../api/client';
+import { tracksApi, type LyricLine } from '../../api/client';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
-import { LyricsDisplay } from './LyricsDisplay';
-import { VideoPlayer } from './VideoPlayer';
 import { EffectsQuickAccess } from './EffectsQuickAccess';
-import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
-import type { Track } from '../../types';
-
-type ViewMode = 'visualizer' | 'video' | 'lyrics' | 'discover';
-
-// Discovery tab component using unified Discovery components
-function FullPlayerDiscoverTab({
-  discoverData,
-  loading,
-  onGoToArtist,
-  onPlayTrack,
-  onAddToWishlist,
-}: {
-  discoverData: {
-    similar_tracks: Array<{
-      id: string;
-      title: string | null;
-      artist: string | null;
-      album: string | null;
-    }>;
-    similar_artists: Array<{
-      name: string;
-      match_score: number;
-      in_library: boolean;
-      track_count: number | null;
-      image_url: string | null;
-      lastfm_url: string | null;
-      bandcamp_url: string | null;
-    }>;
-    bandcamp_artist_url: string | null;
-    bandcamp_track_url: string | null;
-    artist: string | null;
-  } | undefined;
-  loading: boolean;
-  onGoToArtist: (artistName: string) => void;
-  onPlayTrack: (item: DiscoveryItem) => void;
-  onAddToWishlist: (item: DiscoveryItem) => void;
-}) {
-  // Transform the discover data to match the hook's expected input
-  const trackDiscoveryInput = discoverData ? {
-    similarTracks: discoverData.similar_tracks,
-    similarArtists: discoverData.similar_artists,
-    getArtistImageUrl: () => '', // Not needed for this use case
-  } : undefined;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { sections, hasDiscovery } = useTrackDiscovery({ data: trackDiscoveryInput as any });
-
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
-
-  if (!hasDiscovery) {
-    return (
-      <div className="h-full overflow-y-auto p-6 pb-32">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center text-zinc-500 py-12">
-            <Music className="w-12 h-12 mx-auto mb-4 opacity-50" />
-            <p>No discovery data available for this track yet.</p>
-            <p className="text-sm mt-2">
-              Try playing a track that has been analyzed with audio embeddings.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const handleItemClick = (item: DiscoveryItem) => {
-    if (item.entityType === 'artist' && item.inLibrary) {
-      onGoToArtist(item.name);
-    }
-  };
-
-  const handleItemPlay = (item: DiscoveryItem) => {
-    if (item.entityType === 'track') {
-      onPlayTrack(item);
-    }
-  };
-
-  return (
-    <div className="h-full overflow-y-auto p-6 pb-32">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <DiscoveryPanel
-          sections={sections}
-          onItemClick={handleItemClick}
-          onItemPlay={handleItemPlay}
-          onAddToWishlist={onAddToWishlist}
-        />
-
-        {/* External Links for Current Track */}
-        {(discoverData?.bandcamp_artist_url || discoverData?.bandcamp_track_url) && (
-          <section className="pt-4 border-t border-zinc-800">
-            <h3 className="text-sm font-medium text-zinc-400 mb-3">Find on Bandcamp</h3>
-            <div className="flex gap-2">
-              {discoverData.bandcamp_track_url && (
-                <a
-                  href={discoverData.bandcamp_track_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-teal-600/20 text-teal-400 hover:bg-teal-600/30 rounded transition-colors text-sm"
-                >
-                  Search for this track
-                </a>
-              )}
-              {discoverData.bandcamp_artist_url && (
-                <a
-                  href={discoverData.bandcamp_artist_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-teal-600/20 text-teal-400 hover:bg-teal-600/30 rounded transition-colors text-sm"
-                >
-                  More by {discoverData.artist}
-                </a>
-              )}
-            </div>
-          </section>
-        )}
-      </div>
-    </div>
-  );
-}
+import { isMobile } from '../../utils/platform';
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -171,10 +43,13 @@ interface FullPlayerProps {
 }
 
 export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
-  const [viewMode, setViewMode] = useState<ViewMode>('visualizer');
   const [imageError, setImageError] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
 
   const {
@@ -195,8 +70,10 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   } = usePlayerStore();
 
   const { seek, togglePlayPause } = useAudioEngine();
-  const { addToQueue, setQueue } = usePlayerStore();
+  const { addToQueue } = usePlayerStore();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { visualizerId } = useVisualizerStore();
+  const isMusicVideo = visualizerId === 'music-video';
 
   // Prefetch artwork for the current track
   const prefetchArtwork = useArtworkPrefetch();
@@ -245,14 +122,6 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
     setImageError(false);
   }, [currentTrack?.id]);
 
-  // Fetch discovery data for the current track
-  const { data: discoverData, isLoading: discoverLoading } = useQuery({
-    queryKey: ['track-discover', currentTrack?.id],
-    queryFn: () => tracksApi.getDiscover(currentTrack!.id, 6, 8),
-    staleTime: 5 * 60 * 1000,
-    enabled: !!currentTrack?.id,
-  });
-
   // Swipe-down-to-close handler
   const touchStartRef = useRef<{ y: number; time: number } | null>(null);
   const handleHeaderTouchStart = useCallback((e: React.TouchEvent) => {
@@ -269,6 +138,50 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
     touchStartRef.current = null;
   }, [onClose]);
 
+  // Fullscreen toggle
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
+
+  // Sync isFullscreen state with browser fullscreen events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const fs = !!document.fullscreenElement;
+      setIsFullscreen(fs);
+      if (!fs) {
+        setControlsVisible(true);
+        if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, []);
+
+  // Auto-hide controls in fullscreen
+  const showControls = useCallback(() => {
+    if (!isFullscreen) return;
+    setControlsVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
+  }, [isFullscreen]);
+
+  // Start hide timer when entering fullscreen
+  useEffect(() => {
+    if (isFullscreen) {
+      hideTimerRef.current = setTimeout(() => setControlsVisible(false), 3000);
+    }
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [isFullscreen]);
+
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -284,10 +197,15 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const artworkUrl = tracksApi.getArtworkUrl(currentTrack.id);
 
   return (
-    <div className={`fixed inset-0 z-50 bg-black flex flex-col transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}>
+    <div
+      ref={containerRef}
+      onMouseMove={isFullscreen ? showControls : undefined}
+      onTouchStart={isFullscreen ? showControls : undefined}
+      className={`fixed inset-0 z-50 bg-black flex flex-col transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'} ${isFullscreen && !controlsVisible ? 'cursor-none' : ''}`}
+    >
       {/* Header - includes safe area padding for notch */}
       <div
-        className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 pt-safe bg-gradient-to-b from-black/80 to-transparent"
+        className={`absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 pt-safe bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
         onTouchStart={handleHeaderTouchStart}
         onTouchEnd={handleHeaderTouchEnd}
       >
@@ -299,125 +217,54 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           <ChevronDown className="w-6 h-6" />
         </button>
 
-        {/* Center: View mode toggle + visualizer picker */}
+        {/* Center: visualizer picker + effects */}
         <div className="flex items-center gap-3">
-          {/* View mode toggle */}
-          <div className="flex gap-1 bg-white/10 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('visualizer')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'visualizer'
-                  ? 'bg-white/20 text-white'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              title="Visualizer"
-            >
-              <Music className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('video')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'video'
-                  ? 'bg-white/20 text-white'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              title="Music Video"
-            >
-              <Video className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('lyrics')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'lyrics'
-                  ? 'bg-white/20 text-white'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              title="Lyrics"
-            >
-              <Type className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setViewMode('discover')}
-              className={`p-2 rounded-md transition-colors ${
-                viewMode === 'discover'
-                  ? 'bg-white/20 text-white'
-                  : 'text-zinc-400 hover:text-white'
-              }`}
-              title="Discover Similar"
-            >
-              <Compass className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Visualizer picker - only show in visualizer mode */}
-          {viewMode === 'visualizer' && <VisualizerPicker />}
-
-          {/* Effects quick access */}
+          <VisualizerPicker />
           <EffectsQuickAccess />
         </div>
 
-        <div className="w-10" /> {/* Spacer for balance */}
+        <button
+          onClick={toggleFullscreen}
+          className="p-2 hover:bg-white/10 rounded-full transition-colors"
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        >
+          {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+        </button>
       </div>
 
       {/* Main content area */}
       <div className="flex-1 relative overflow-hidden">
-        {viewMode === 'visualizer' && (
+        {isMobile() && !isMusicVideo ? (
+          <div className="absolute inset-0 flex items-center justify-center p-8">
+            {imageError ? (
+              <div className="w-72 h-72 sm:w-80 sm:h-80 bg-zinc-800 rounded-2xl flex items-center justify-center shadow-2xl">
+                <Music className="w-24 h-24 text-zinc-600" />
+              </div>
+            ) : (
+              <img
+                src={artworkUrl}
+                alt="Album art"
+                className="w-72 h-72 sm:w-80 sm:h-80 rounded-2xl shadow-2xl object-cover"
+                onError={() => setImageError(true)}
+              />
+            )}
+          </div>
+        ) : (
           <AudioVisualizer
             track={currentTrack}
             artworkUrl={artworkUrl}
             lyrics={lyrics}
             currentTime={currentTime}
+            duration={duration}
+            isPlaying={isPlaying}
             className="absolute inset-0"
           />
         )}
+      </div>
 
-        {viewMode === 'video' && (
-          <VideoPlayer trackId={currentTrack.id} />
-        )}
-
-        {viewMode === 'lyrics' && (
-          <LyricsDisplay trackId={currentTrack.id} />
-        )}
-
-        {viewMode === 'discover' && (
-          <FullPlayerDiscoverTab
-            discoverData={discoverData}
-            loading={discoverLoading}
-            onGoToArtist={(artistName) => {
-              navigateToArtist(artistName);
-              onClose();
-            }}
-            onPlayTrack={(item) => {
-              if (item.id) {
-                if (currentTrack?.id === item.id) {
-                  togglePlayPause();
-                  return;
-                }
-                // Find the track in similar_tracks to get all tracks for the queue
-                const trackIndex = discoverData?.similar_tracks.findIndex(t => t.id === item.id) ?? -1;
-                if (trackIndex !== -1 && discoverData) {
-                  setQueue(discoverData.similar_tracks as Track[], trackIndex);
-                }
-              }
-            }}
-            onAddToWishlist={async (item) => {
-              if (!item.inLibrary && item.name) {
-                try {
-                  await playlistsApi.addToWishlist({
-                    title: item.name,
-                    artist: item.subtitle || 'Unknown Artist',
-                    album: item.playbackContext?.album,
-                  });
-                } catch (err) {
-                  console.error('Failed to add to wishlist:', err);
-                }
-              }
-            }}
-          />
-        )}
-
-        {/* Album art overlay (bottom left) */}
-        <div className="absolute bottom-32 left-8 z-10">
+      {/* Album art thumbnail - z-20 to render above controls gradient */}
+      {!(isMobile() && !isMusicVideo) && !(isFullscreen && !controlsVisible) && (
+        <div className="absolute bottom-64 left-8 z-20">
           {imageError ? (
             <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">
               <Music className="w-12 h-12 text-zinc-600" />
@@ -431,10 +278,10 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             />
           )}
         </div>
-      </div>
+      )}
 
       {/* Bottom controls - includes safe area padding for home indicator */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 pb-safe">
+      <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 pb-safe transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* Track info - right-click for context menu */}
         <div
           className="text-center mb-6 cursor-context-menu"

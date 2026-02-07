@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Music Video visualizer** - Music Video moved from Full Player tab to the visualizer picker
+  - Now registered as a standard visualizer (`music-video`) alongside LyricStorm, CosmicOrb, etc.
+  - Selectable from the visualizer picker with a Video icon
+- **Fullscreen mode** in Full Player - click to enter fullscreen with auto-hiding controls
+  - Controls reappear on mouse move or touch, then hide after 3 seconds
+  - Mobile shows album artwork instead of visualizer (except for music video)
 - **Auto-Download Toggle** - Automatically download new tracks for offline use
   - Toggle on any playlist, smart playlist, or favorites to enable auto-download
   - New tracks added to enabled playlists are downloaded automatically
@@ -37,10 +43,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Full Player simplified** - removed 4-tab layout (visualizer/video/lyrics/discover), replaced with single visualizer view
+  - Lyrics now handled by LyricStorm/LyricPulse visualizers
+  - Discovery moved out of Full Player
+  - LyricsDisplay component removed
+- **LyricStorm visual improvements** - depth-based particle fade, emissive glow on swarm particles, added fill light
 - Refactored playlist import/export system
 
 ### Fixed
 
+- **AlphabetBar touch handling** - fixed stale closure bug where touch handlers read stale state
+  - Touch handlers now use refs instead of state for `isDragging` and `dragLetter`
+  - Replaced async while-loop page loading with reactive `useEffect`
+  - Added `MAX_PRELOAD_ITEMS = 2000` safety cap
+  - Scroll behavior changed from smooth to instant for faster jumps
+  - Active letter pulses during jump animation
 - **Video download bug fixes** - Resolved issues with music video downloads
 - **Mobile interface fixes** - Various mobile layout and interaction improvements
 - **External track UX fixes** - Improved display and interaction with external/discovery tracks

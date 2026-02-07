@@ -4,7 +4,7 @@
  * Dropdown/popup for selecting between visualizers.
  */
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, BarChart3, Image, Palette, Type, Music } from 'lucide-react';
+import { ChevronDown, Sparkles, BarChart3, Image, Palette, Type, Music, Video } from 'lucide-react';
 import { getVisualizers } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 
@@ -16,6 +16,7 @@ const visualizerIcons: Record<string, typeof Sparkles> = {
   'color-flow': Palette,
   'typography-wave': Type,
   'lyric-pulse': Music,
+  'music-video': Video,
 };
 
 export function VisualizerPicker() {

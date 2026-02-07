@@ -33,12 +33,16 @@ interface UseAlphabetBarResult {
   activeLetter: string | undefined;
   isVisible: boolean;
   isLoading: boolean;
+  isJumping: boolean;
   jumpToLetter: (letter: string) => void;
   setActiveLetter: (letter: string | undefined) => void;
 }
 
 // Minimum items before showing alphabet bar
 const MIN_ITEMS_THRESHOLD = 100;
+
+// Safety cap: don't preload more than this many items for a single jump
+const MAX_PRELOAD_ITEMS = 2000;
 
 // Sort fields that support alphabetic navigation
 const ALPHABETIC_SORT_FIELDS = ['artist', 'album', 'title', 'name'];
@@ -48,7 +52,7 @@ export function useAlphabetBar({
   sortField,
   filters,
   total,
-  pageSize,
+  pageSize: _pageSize,
   fetchNextPage,
   hasNextPage,
   loadedItemCount,
@@ -106,7 +110,7 @@ export function useAlphabetBar({
       );
 
       if (targetItem) {
-        targetItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        targetItem.scrollIntoView({ behavior: 'instant', block: 'start' });
         return true;
       }
 
@@ -162,26 +166,30 @@ export function useAlphabetBar({
         return;
       }
 
-      // Need to load more pages
+      // Safety cap: don't try to preload too many items
+      if (targetIdx > MAX_PRELOAD_ITEMS) {
+        return;
+      }
+
+      // Set pending scroll index — the reactive effect below will progressively load pages
       setPendingScrollIndex(targetIdx);
-
-      // Calculate and fetch needed pages
-      const fetchPages = async () => {
-        const targetPage = Math.floor(targetIdx / pageSize) + 1;
-        let currentPages = Math.ceil(loadedItemCountRef.current / pageSize);
-
-        while (currentPages < targetPage && hasNextPage) {
-          await fetchNextPage();
-          currentPages++;
-          // Update ref manually since state update is async
-          loadedItemCountRef.current = currentPages * pageSize;
-        }
-      };
-
-      fetchPages();
     },
-    [letterIndex, pageSize, hasNextPage, fetchNextPage, scrollToElement, scrollToIndex]
+    [letterIndex, scrollToElement, scrollToIndex]
   );
+
+  // Reactive effect to progressively load pages when pendingScrollIndex is set.
+  // Unlike the old async while loop, this reads hasNextPage/loadedItemCount from
+  // effect deps (always current) rather than stale closure captures.
+  useEffect(() => {
+    if (pendingScrollIndex === null || scrollToIndex) return;
+    if (loadedItemCount > pendingScrollIndex) return;
+    if (!hasNextPage) {
+      setPendingScrollIndex(null);
+      return;
+    }
+    const timer = setTimeout(() => { fetchNextPage(); }, 50);
+    return () => clearTimeout(timer);
+  }, [pendingScrollIndex, loadedItemCount, hasNextPage, fetchNextPage, scrollToIndex]);
 
   // Clear active letter when filters change
   useEffect(() => {
@@ -194,6 +202,7 @@ export function useAlphabetBar({
     activeLetter,
     isVisible,
     isLoading,
+    isJumping: pendingScrollIndex !== null,
     jumpToLetter,
     setActiveLetter,
   };

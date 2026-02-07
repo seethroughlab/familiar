@@ -1,3 +1,10 @@
+/**
+ * Music Video Visualizer.
+ *
+ * Displays a synced music video for the current track.
+ * Search, download, and playback of YouTube music videos,
+ * rendered as a standard visualizer in the picker.
+ */
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -8,12 +15,8 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
-import { videosApi, type VideoSearchResult } from '../../api/client';
-import { usePlayerStore } from '../../stores/playerStore';
-
-interface VideoPlayerProps {
-  trackId: string;
-}
+import { videosApi, type VideoSearchResult } from '../../../api/client';
+import { registerVisualizer, type VisualizerProps } from '../types';
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -21,18 +24,18 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function VideoPlayer({ trackId }: VideoPlayerProps) {
+function MusicVideo({ track, currentTime, isPlaying }: VisualizerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { currentTime, isPlaying } = usePlayerStore();
   const [showSearch, setShowSearch] = useState(false);
   const queryClient = useQueryClient();
+  const trackId = track?.id ?? null;
 
   // Get video status
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['video-status', trackId],
-    queryFn: () => videosApi.getStatus(trackId),
+    queryFn: () => videosApi.getStatus(trackId!),
+    enabled: !!trackId,
     refetchInterval: (query) => {
-      // Poll while downloading
       const dlStatus = query.state.data?.download_status;
       if (dlStatus === 'downloading' || dlStatus === 'pending') {
         return 1000;
@@ -48,14 +51,14 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     refetch: searchVideos,
   } = useQuery({
     queryKey: ['video-search', trackId],
-    queryFn: () => videosApi.search(trackId),
-    enabled: false, // Manual trigger only
+    queryFn: () => videosApi.search(trackId!),
+    enabled: false,
   });
 
   // Download video mutation
   const downloadMutation = useMutation({
     mutationFn: ({ videoUrl }: { videoUrl: string }) =>
-      videosApi.download(trackId, videoUrl),
+      videosApi.download(trackId!, videoUrl),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['video-status', trackId] });
       setShowSearch(false);
@@ -64,7 +67,7 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
 
   // Delete video mutation
   const deleteMutation = useMutation({
-    mutationFn: () => videosApi.delete(trackId),
+    mutationFn: () => videosApi.delete(trackId!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['video-status', trackId] });
     },
@@ -75,12 +78,10 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     if (videoRef.current && status?.has_video) {
       const video = videoRef.current;
 
-      // Sync time if more than 0.5s off
       if (Math.abs(video.currentTime - currentTime) > 0.5) {
         video.currentTime = currentTime;
       }
 
-      // Sync play/pause state
       if (isPlaying && video.paused) {
         video.play().catch(() => {});
       } else if (!isPlaying && !video.paused) {
@@ -103,10 +104,19 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     downloadMutation.mutate({ videoUrl: result.url });
   };
 
+  // No track playing
+  if (!trackId) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+        <Video className="w-16 h-16 text-zinc-600" />
+      </div>
+    );
+  }
+
   // Loading state
   if (statusLoading) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+      <div className="w-full h-full flex items-center justify-center bg-zinc-900">
         <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
       </div>
     );
@@ -115,12 +125,12 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
   // Video available - show player
   if (status?.has_video) {
     return (
-      <div className="absolute inset-0 bg-black">
+      <div className="w-full h-full bg-black relative">
         <video
           ref={videoRef}
           src={videosApi.getStreamUrl(trackId)}
           className="w-full h-full object-contain"
-          muted // Muted since audio plays from the audio engine
+          muted
           playsInline
         />
         <button
@@ -134,10 +144,10 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     );
   }
 
-  // Search results view (before error/downloading so "Try again" works)
+  // Search results view
   if (showSearch) {
     return (
-      <div className="absolute inset-0 bg-zinc-900 overflow-auto p-4 sm:p-6">
+      <div className="w-full h-full bg-zinc-900 overflow-auto p-4 sm:p-6">
         <div className="max-w-2xl mx-auto">
           <h3 className="text-xl font-bold mb-4">Select a music video</h3>
 
@@ -210,7 +220,7 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
   // Downloading state
   if (status?.download_status === 'downloading' || status?.download_status === 'pending') {
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
         <Loader2 className="w-12 h-12 animate-spin text-green-500 mb-4" />
         <p className="text-white text-lg">Downloading video...</p>
         <div className="w-48 sm:w-64 h-2 bg-zinc-700 rounded-full mt-4 overflow-hidden">
@@ -227,7 +237,7 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
   // Error state
   if (status?.download_status === 'error') {
     return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
         <Video className="w-16 h-16 text-red-500 mb-4 opacity-50" />
         <p className="text-red-400">Download failed</p>
         <p className="text-sm text-zinc-500 mt-2">{status.error}</p>
@@ -243,7 +253,7 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
 
   // No video - show search prompt
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
       <Video className="w-16 h-16 text-zinc-600 mb-4" />
       <p className="text-zinc-400 mb-4">No music video available</p>
       <button
@@ -259,3 +269,13 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     </div>
   );
 }
+
+registerVisualizer(
+  {
+    id: 'music-video',
+    name: 'Music Video',
+    description: 'Search and play synced music videos from YouTube',
+    usesMetadata: false,
+  },
+  MusicVideo,
+);

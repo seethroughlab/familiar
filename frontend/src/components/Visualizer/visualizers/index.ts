@@ -10,4 +10,5 @@ import './FrequencyBars';
 import './AlbumKaleidoscope';
 import './LyricStorm';
 import './RainWindow';
+import './MusicVideo';
 // NonPlaces moved to external plugin: familiar-plugin-non-places

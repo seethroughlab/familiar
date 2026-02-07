@@ -18,6 +18,7 @@ interface AlphabetBarProps {
   activeLetter?: string;
   onLetterSelect: (letter: string) => void;
   visible: boolean;
+  isJumping?: boolean;
 }
 
 export function AlphabetBar({
@@ -25,6 +26,7 @@ export function AlphabetBar({
   activeLetter,
   onLetterSelect,
   visible,
+  isJumping,
 }: AlphabetBarProps) {
   const [isHovering, setIsHovering] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -33,6 +35,10 @@ export function AlphabetBar({
   const [isMobile, setIsMobile] = useState(() => !window.matchMedia('(min-width: 768px)').matches);
   const barRef = useRef<HTMLDivElement>(null);
   const lastVibratedLetter = useRef<string | null>(null);
+  // Refs for touch handling — ensures handleTouchEnd reads latest values
+  // regardless of whether React has re-rendered between touchstart and touchend
+  const isDraggingRef = useRef(false);
+  const dragLetterRef = useRef<string | null>(null);
 
   // Track isMobile via matchMedia listener
   useEffect(() => {
@@ -61,11 +67,13 @@ export function AlphabetBar({
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault(); // Prevent page scroll
     setIsDragging(true);
+    isDraggingRef.current = true;
 
     const touch = e.touches[0];
     const letter = getLetterFromY(touch.clientY);
     if (letter) {
       setDragLetter(letter);
+      dragLetterRef.current = letter;
       setBubblePosition({ y: touch.clientY });
       lastVibratedLetter.current = letter;
 
@@ -78,14 +86,15 @@ export function AlphabetBar({
 
   // Handle touch move
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging) return;
+    if (!isDraggingRef.current) return;
     e.preventDefault();
 
     const touch = e.touches[0];
     const letter = getLetterFromY(touch.clientY);
 
-    if (letter && letter !== dragLetter) {
+    if (letter && letter !== dragLetterRef.current) {
       setDragLetter(letter);
+      dragLetterRef.current = letter;
       setBubblePosition({ y: touch.clientY });
 
       // Haptic feedback when changing letters
@@ -94,19 +103,21 @@ export function AlphabetBar({
         lastVibratedLetter.current = letter;
       }
     }
-  }, [isDragging, dragLetter, getLetterFromY]);
+  }, [getLetterFromY]);
 
-  // Handle touch end
+  // Handle touch end — reads refs to get latest values regardless of React render timing
   const handleTouchEnd = useCallback(() => {
-    if (isDragging && dragLetter) {
-      onLetterSelect(dragLetter);
+    if (isDraggingRef.current && dragLetterRef.current) {
+      onLetterSelect(dragLetterRef.current);
     }
 
     setIsDragging(false);
+    isDraggingRef.current = false;
     setDragLetter(null);
+    dragLetterRef.current = null;
     setBubblePosition(null);
     lastVibratedLetter.current = null;
-  }, [isDragging, dragLetter, onLetterSelect]);
+  }, [onLetterSelect]);
 
   // Handle click on a letter
   const handleLetterClick = useCallback((letter: string) => {
@@ -190,7 +201,7 @@ export function AlphabetBar({
                   leading-tight transition-colors
                   ${isMobile ? 'text-[10px] py-0 px-1' : 'text-xs py-0.5 px-1.5'}
                   ${isActive
-                    ? 'text-green-500 font-bold scale-110'
+                    ? `text-green-500 font-bold scale-110${isJumping ? ' animate-pulse' : ''}`
                     : hasItems
                       ? 'text-zinc-300 hover:text-white'
                       : 'text-zinc-600 cursor-default'
