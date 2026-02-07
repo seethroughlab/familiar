@@ -186,11 +186,12 @@ def _discover_files_sync(library_path: Path, progress_callback=None) -> list[Pat
     return sorted(files)
 
 
-def _get_file_info_sync(file_path: Path) -> tuple[str, datetime]:
-    """Get file hash and mtime (runs in thread pool)."""
+def _get_file_info_sync(file_path: Path) -> tuple[str, datetime, int]:
+    """Get file hash, mtime, and size (runs in thread pool)."""
+    stat = file_path.stat()
     file_hash = compute_file_hash(file_path)
-    file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
-    return file_hash, file_mtime
+    file_mtime = datetime.fromtimestamp(stat.st_mtime)
+    return file_hash, file_mtime, stat.st_size
 
 
 def _extract_metadata_sync(file_path: Path) -> dict[str, Any]:
@@ -314,7 +315,7 @@ class LibraryScanner:
                 logger.info(f"Progress: {processed}/{len(found_files)} files ({results['new']} new, {results['updated']} updated, {results['unchanged']} unchanged)")
 
             # Get file info in thread pool
-            file_hash, file_mtime = await loop.run_in_executor(
+            file_hash, file_mtime, file_size = await loop.run_in_executor(
                 _file_executor, _get_file_info_sync, file_path
             )
 
@@ -336,7 +337,7 @@ class LibraryScanner:
                 else:
                     # Truly new file
                     logger.info(f"NEW: {file_path.name}")
-                    track = await self._create_track(file_path, file_hash, file_mtime)
+                    track = await self._create_track(file_path, file_hash, file_mtime, file_size)
                     pending_analysis_ids.append(str(track.id))
                     new_tracks.append(track)
                     results["new"] += 1
@@ -360,13 +361,16 @@ class LibraryScanner:
                     # Only reset analysis if file content actually changed AND reanalyze_changed is True
                     reset_analysis = file_changed and reanalyze_changed
                     track = await self._update_track(
-                        existing, file_hash, file_mtime, reset_analysis=reset_analysis
+                        existing, file_hash, file_mtime, file_size, reset_analysis=reset_analysis
                     )
                     if reset_analysis:
                         pending_analysis_ids.append(str(track.id))
                         results["queued"] += 1
                     results["updated"] += 1
                 else:
+                    # Backfill file_size if missing (for tracks added before this column existed)
+                    if existing.file_size is None:
+                        existing.file_size = file_size
                     results["unchanged"] += 1
 
             # Commit periodically to make tracks visible and free memory
@@ -516,7 +520,7 @@ class LibraryScanner:
         return list(result.scalars().all())
 
     async def _create_track(
-        self, file_path: Path, file_hash: str, file_mtime: datetime
+        self, file_path: Path, file_hash: str, file_mtime: datetime, file_size: int | None = None
     ) -> Track:
         """Create a new track record, or update if it already exists (upsert)."""
         from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -531,6 +535,7 @@ class LibraryScanner:
         values = {
             "file_path": str(file_path),
             "file_hash": file_hash,
+            "file_size": file_size,
             "file_modified_at": file_mtime,
             "title": metadata.get("title"),
             "artist": metadata.get("artist"),
@@ -554,6 +559,7 @@ class LibraryScanner:
             index_elements=["file_path"],
             set_={
                 "file_hash": insert_stmt.excluded.file_hash,
+                "file_size": insert_stmt.excluded.file_size,
                 "file_modified_at": insert_stmt.excluded.file_modified_at,
                 "title": insert_stmt.excluded.title,
                 "artist": insert_stmt.excluded.artist,
@@ -645,6 +651,7 @@ class LibraryScanner:
         track: Track,
         file_hash: str,
         file_mtime: datetime,
+        file_size: int | None = None,
         reset_analysis: bool = True,
     ) -> Track:
         """Update an existing track record.
@@ -663,6 +670,7 @@ class LibraryScanner:
         )
 
         track.file_hash = file_hash
+        track.file_size = file_size
         track.file_modified_at = file_mtime
         track.title = metadata.get("title")
         track.artist = metadata.get("artist")

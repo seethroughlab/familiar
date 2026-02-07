@@ -46,6 +46,7 @@ class ProposedChangeResponse(BaseModel):
     status: str
     created_at: str
     applied_at: str | None
+    target_description: str | None = None
 
 
 class ChangePreviewResponse(BaseModel):
@@ -110,7 +111,9 @@ class BatchApplyRequest(BaseModel):
 # ============================================================================
 
 
-def _change_to_response(change) -> ProposedChangeResponse:
+def _change_to_response(
+    change, target_description: str | None = None
+) -> ProposedChangeResponse:
     """Convert ProposedChange model to response."""
     return ProposedChangeResponse(
         id=str(change.id),
@@ -128,6 +131,7 @@ def _change_to_response(change) -> ProposedChangeResponse:
         status=change.status.value if hasattr(change.status, "value") else change.status,
         created_at=change.created_at.isoformat() if change.created_at else None,
         applied_at=change.applied_at.isoformat() if change.applied_at else None,
+        target_description=target_description,
     )
 
 
@@ -194,7 +198,8 @@ async def list_changes(
     else:
         changes = await service.get_all(limit=limit, offset=offset)
 
-    return [_change_to_response(c) for c in changes]
+    descriptions = await service.enrich_with_descriptions(changes)
+    return [_change_to_response(c, descriptions.get(c.id)) for c in changes]
 
 
 @router.get("/stats", response_model=ChangeStatsResponse)

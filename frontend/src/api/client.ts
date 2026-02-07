@@ -609,9 +609,6 @@ export interface AppSettingsUpdate {
   playlist_discovery_mode?: string;
   // S3 Backup
   s3_backup_enabled?: boolean;
-  s3_backup_bucket?: string;
-  s3_backup_region?: string;
-  s3_backup_prefix?: string;
   s3_backup_schedule?: string;
 }
 
@@ -2084,6 +2081,7 @@ export interface ProposedChange {
   status: ChangeStatus;
   created_at: string;
   applied_at: string | null;
+  target_description: string | null;
 }
 
 export interface ChangePreview {

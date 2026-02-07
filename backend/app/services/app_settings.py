@@ -19,6 +19,8 @@ Settings by Source
 **Admin UI with env fallback**:
 - anthropic_api_key, spotify_client_id, spotify_client_secret
 - lastfm_api_key, lastfm_api_secret, acoustid_api_key
+- s3_backup_access_key_id, s3_backup_secret_access_key
+- s3_backup_bucket, s3_backup_region, s3_backup_prefix
 
 **Environment only (infrastructure)**:
 - database_url, redis_url, frontend_url
@@ -76,7 +78,7 @@ class AppSettings(BaseModel):
     # S3 Glacier Deep Archive backup
     s3_backup_enabled: bool = False
     s3_backup_bucket: str | None = None
-    s3_backup_region: str = "us-east-1"
+    s3_backup_region: str | None = None
     s3_backup_access_key_id: str | None = None
     s3_backup_secret_access_key: str | None = None
     s3_backup_prefix: str = ""
@@ -242,6 +244,9 @@ class AppSettingsService:
             "acoustid_api_key",
             "s3_backup_access_key_id",
             "s3_backup_secret_access_key",
+            "s3_backup_bucket",
+            "s3_backup_region",
+            "s3_backup_prefix",
         ]
 
         for key in dual_source_keys:

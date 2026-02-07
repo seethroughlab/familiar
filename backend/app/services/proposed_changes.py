@@ -191,6 +191,60 @@ class ProposedChangesService:
         logger.info(f"Rejected change {change_id}")
         return change
 
+    @staticmethod
+    def _build_target_description(change: ProposedChange, tracks: list[Track]) -> str:
+        """Build a human-readable description of a change's target."""
+        if change.target_type == "album" and tracks:
+            first_track = tracks[0]
+            return f"Album: {first_track.album} by {first_track.album_artist or first_track.artist}"
+        elif tracks:
+            if len(tracks) == 1:
+                t = tracks[0]
+                return f"Track: {t.title} by {t.artist}"
+            else:
+                return f"{len(tracks)} tracks"
+        else:
+            return f"{len(change.target_ids)} items"
+
+    async def enrich_with_descriptions(
+        self, changes: list[ProposedChange]
+    ) -> dict[UUID, str]:
+        """Batch-load tracks and build target descriptions for a list of changes.
+
+        Returns a dict mapping change ID -> target_description string.
+        """
+        if not changes:
+            return {}
+
+        # Collect all unique track IDs across all changes
+        all_track_ids: set[UUID] = set()
+        for change in changes:
+            for tid in change.target_ids:
+                all_track_ids.add(UUID(tid))
+
+        # Single batch query for all tracks
+        tracks_by_id: dict[UUID, Track] = {}
+        if all_track_ids:
+            result = await self.db.execute(
+                select(Track).where(Track.id.in_(list(all_track_ids)))
+            )
+            for track in result.scalars().all():
+                tracks_by_id[track.id] = track
+
+        # Build descriptions
+        descriptions: dict[UUID, str] = {}
+        for change in changes:
+            change_tracks = [
+                tracks_by_id[UUID(tid)]
+                for tid in change.target_ids
+                if UUID(tid) in tracks_by_id
+            ]
+            descriptions[change.id] = self._build_target_description(
+                change, change_tracks
+            )
+
+        return descriptions
+
     async def preview(self, change_id: UUID) -> ChangePreview | None:
         """Generate a preview of what applying a change would do."""
         change = await self.get_by_id(change_id)
@@ -204,18 +258,7 @@ class ProposedChangesService:
         )
         tracks = list(result.scalars().all())
 
-        # Build description
-        if change.target_type == "album" and tracks:
-            first_track = tracks[0]
-            description = f"Album: {first_track.album} by {first_track.album_artist or first_track.artist}"
-        elif tracks:
-            if len(tracks) == 1:
-                t = tracks[0]
-                description = f"Track: {t.title} by {t.artist}"
-            else:
-                description = f"{len(tracks)} tracks"
-        else:
-            description = f"{len(change.target_ids)} items"
+        description = self._build_target_description(change, tracks)
 
         return ChangePreview(
             change_id=change.id,

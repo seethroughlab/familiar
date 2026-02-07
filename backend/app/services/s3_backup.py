@@ -113,17 +113,18 @@ class S3BackupService:
     def _get_settings(self) -> dict[str, Any]:
         """Get S3 backup settings.
 
-        Credentials use get_effective() to support env var fallback.
+        Uses get_effective() for credentials and bucket/region/prefix
+        to support env var fallback (settings.json > env var > default).
         """
         svc = get_app_settings_service()
         s = svc.get()
         return {
             "enabled": s.s3_backup_enabled,
-            "bucket": s.s3_backup_bucket,
-            "region": s.s3_backup_region,
+            "bucket": svc.get_effective("s3_backup_bucket"),
+            "region": svc.get_effective("s3_backup_region") or "us-east-1",
             "access_key_id": svc.get_effective("s3_backup_access_key_id"),
             "secret_access_key": svc.get_effective("s3_backup_secret_access_key"),
-            "prefix": s.s3_backup_prefix,
+            "prefix": svc.get_effective("s3_backup_prefix") or "",
             "schedule": s.s3_backup_schedule,
         }
 
@@ -136,6 +137,26 @@ class S3BackupService:
             access_key_id=cfg["access_key_id"],
             secret_access_key=cfg["secret_access_key"],
         )
+
+    def _ensure_bucket(self, client: Any, bucket: str, region: str) -> None:
+        """Create S3 bucket if it doesn't exist."""
+        from botocore.exceptions import ClientError
+
+        try:
+            client.head_bucket(Bucket=bucket)
+        except ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchBucket"):
+                logger.info(f"Creating S3 bucket: {bucket} in {region}")
+                if region == "us-east-1":
+                    client.create_bucket(Bucket=bucket)
+                else:
+                    client.create_bucket(
+                        Bucket=bucket,
+                        CreateBucketConfiguration={"LocationConstraint": region},
+                    )
+            else:
+                raise
 
     # ── Phase 1: Validation & Cost Estimate ──────────────────────────
 
@@ -221,8 +242,11 @@ class S3BackupService:
             try:
                 client.get_object(Bucket=bucket, Key=test_key)
                 result["permissions"]["get"] = True
-            except ClientError:
-                pass
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                # InvalidObjectState means permission works, just can't GET from DEEP_ARCHIVE directly
+                if code == "InvalidObjectState":
+                    result["permissions"]["get"] = True
 
         # Test RestoreObject (will fail with InvalidObjectState since not in Glacier yet,
         # but a 403 would indicate missing permission)
@@ -269,8 +293,8 @@ class S3BackupService:
                     text("SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM tracks WHERE file_size IS NOT NULL")
                 ).fetchone()
                 if row:
-                    audio_count = row[0] or 0
-                    audio_size = row[1] or 0
+                    audio_count = int(row[0] or 0)
+                    audio_size = int(row[1] or 0)
             engine.dispose()
         except Exception as e:
             logger.warning(f"Failed to query track sizes: {e}")
@@ -399,6 +423,10 @@ class S3BackupService:
             client = self._get_client(cfg)
             bucket = cfg["bucket"]
             prefix = cfg["prefix"]
+            region = cfg["region"]
+
+            # Create bucket if it doesn't exist
+            self._ensure_bucket(client, bucket, region)
 
             # Load existing manifest
             progress.update(phase="manifest", status="running")

@@ -43,13 +43,6 @@ import {
 } from '../../api/client';
 import { showSuccess, showError, showWarning } from '../../stores/toastStore';
 
-const AWS_REGIONS = [
-  'us-east-1', 'us-east-2', 'us-west-1', 'us-west-2',
-  'eu-west-1', 'eu-west-2', 'eu-west-3', 'eu-central-1', 'eu-north-1',
-  'ap-southeast-1', 'ap-southeast-2', 'ap-northeast-1', 'ap-northeast-2',
-  'ap-south-1', 'sa-east-1', 'ca-central-1',
-];
-
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -81,9 +74,6 @@ function formatRelativeTime(isoStr: string): string {
 export function S3BackupSettings() {
   // Settings state
   const [settings, setSettings] = useState<AppSettingsResponse | null>(null);
-  const [bucket, setBucket] = useState('');
-  const [region, setRegion] = useState('us-east-1');
-  const [prefix, setPrefix] = useState('');
   const [schedule, setSchedule] = useState('weekly');
   const [enabled, setEnabled] = useState(false);
 
@@ -121,9 +111,6 @@ export function S3BackupSettings() {
     try {
       const data = await appSettingsApi.get();
       setSettings(data);
-      setBucket(data.s3_backup_bucket || '');
-      setRegion(data.s3_backup_region || 'us-east-1');
-      setPrefix(data.s3_backup_prefix || '');
       setSchedule(data.s3_backup_schedule || 'weekly');
       setEnabled(data.s3_backup_enabled);
     } catch (error) {
@@ -162,10 +149,10 @@ export function S3BackupSettings() {
   }, []);
 
   useEffect(() => {
-    if (enabled && bucket) {
+    if (enabled && settings?.s3_backup_bucket) {
       loadBackupStatus();
     }
-  }, [enabled, bucket, loadBackupStatus]);
+  }, [enabled, settings?.s3_backup_bucket, loadBackupStatus]);
 
   // Progress polling
   const startProgressPolling = useCallback(() => {
@@ -200,17 +187,17 @@ export function S3BackupSettings() {
 
   // Handlers
   const handleValidate = async () => {
-    if (!bucket) {
-      showWarning('Please enter a bucket name');
+    if (!settings?.s3_backup_bucket) {
+      showWarning('No bucket configured in environment');
       return;
     }
     setIsValidating(true);
     setValidation(null);
     try {
       const result = await s3BackupApi.validate({
-        bucket,
-        region,
-        prefix,
+        bucket: settings.s3_backup_bucket,
+        region: settings.s3_backup_region || 'us-east-1',
+        prefix: settings.s3_backup_prefix || '',
       });
       setValidation(result);
       if (result.valid) {
@@ -229,9 +216,6 @@ export function S3BackupSettings() {
     setIsSaving(true);
     try {
       await appSettingsApi.update({
-        s3_backup_bucket: bucket || undefined,
-        s3_backup_region: region,
-        s3_backup_prefix: prefix,
         s3_backup_schedule: schedule,
         s3_backup_enabled: enabled,
       });
@@ -345,42 +329,32 @@ export function S3BackupSettings() {
         {/* Cost Estimate (always visible) */}
         <CostEstimateCard estimate={costEstimate} isLoading={isEstimating} />
 
-        {/* Credentials */}
+        {/* Configuration Status (read-only from env) */}
         <div className="space-y-3 py-3 border-t border-zinc-700">
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">S3 Bucket</label>
-            <input
-              type="text"
-              value={bucket}
-              onChange={(e) => setBucket(e.target.value)}
-              placeholder="my-music-backup"
-              className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Region</label>
-              <select
-                value={region}
-                onChange={(e) => setRegion(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500"
-              >
-                {AWS_REGIONS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
+          <div className="bg-zinc-900/50 rounded-lg p-3 space-y-2">
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-zinc-500">Bucket</span>
+                <p className="text-zinc-300 font-mono mt-0.5">
+                  {settings?.s3_backup_bucket || <span className="text-zinc-600 italic">not set</span>}
+                </p>
+              </div>
+              <div>
+                <span className="text-zinc-500">Region</span>
+                <p className="text-zinc-300 font-mono mt-0.5">
+                  {settings?.s3_backup_region || <span className="text-zinc-600 italic">not set</span>}
+                </p>
+              </div>
+              <div>
+                <span className="text-zinc-500">Prefix</span>
+                <p className="text-zinc-300 font-mono mt-0.5">
+                  {settings?.s3_backup_prefix || <span className="text-zinc-600 italic">none</span>}
+                </p>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Key Prefix</label>
-              <input
-                type="text"
-                value={prefix}
-                onChange={(e) => setPrefix(e.target.value)}
-                placeholder="familiar/"
-                className="w-full bg-zinc-900 border border-zinc-700 rounded px-3 py-1.5 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500"
-              />
-            </div>
+            <p className="text-xs text-zinc-600">
+              Configure via <code className="bg-zinc-800 px-1 rounded">S3_BACKUP_BUCKET</code>, <code className="bg-zinc-800 px-1 rounded">S3_BACKUP_REGION</code>, <code className="bg-zinc-800 px-1 rounded">S3_BACKUP_PREFIX</code> in docker/.env
+            </p>
           </div>
 
           {/* AWS Credentials Status */}
@@ -406,7 +380,7 @@ export function S3BackupSettings() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleValidate}
-              disabled={isValidating || !bucket || !settings?.s3_backup_configured}
+              disabled={isValidating || !settings?.s3_backup_bucket || !settings?.s3_backup_configured}
               className="flex items-center gap-2 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm rounded transition-colors"
             >
               {isValidating ? (
@@ -439,7 +413,7 @@ export function S3BackupSettings() {
               </select>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer mt-4">
+            <label className="relative inline-flex items-center gap-2 cursor-pointer mt-4">
               <input
                 type="checkbox"
                 checked={enabled}
@@ -447,7 +421,7 @@ export function S3BackupSettings() {
                 disabled={!settings?.s3_backup_configured && !settings?.s3_backup_enabled}
                 className="sr-only peer"
               />
-              <div className="relative w-10 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-sky-600 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-disabled:opacity-50" />
+              <div className="w-11 h-6 bg-zinc-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-sky-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500 peer-disabled:opacity-50" />
               <span className="text-sm text-zinc-300">Enable</span>
             </label>
           </div>
@@ -463,7 +437,7 @@ export function S3BackupSettings() {
         </div>
 
         {/* Backup Controls (only when configured) */}
-        {enabled && bucket && (
+        {enabled && settings?.s3_backup_bucket && (
           <>
             <div className="py-3 border-t border-zinc-700 space-y-3">
               <div className="flex items-center justify-between">
@@ -746,9 +720,12 @@ function RestoreSection({
           ) : (
             <RefreshCw className="w-3.5 h-3.5" />
           )}
-          Load Manifest
+          Check Backup Contents
         </button>
       </div>
+      <p className="text-xs text-zinc-500">
+        Fetches the backup index from S3 to show what's available to restore.
+      </p>
 
       {manifest && (
         <div className="bg-zinc-900/50 rounded-lg p-3 space-y-2">

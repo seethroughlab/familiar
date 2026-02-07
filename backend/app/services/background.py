@@ -919,6 +919,20 @@ class BackgroundManager:
 
         return {"status": "started"}
 
+    async def _post_sync_backup(self) -> None:
+        """Trigger S3 backup after a successful library sync, if enabled."""
+        try:
+            from app.services.app_settings import get_app_settings_service
+
+            settings = get_app_settings_service().get()
+            if not settings.s3_backup_enabled or not settings.s3_backup_bucket:
+                return
+
+            logger.info("Post-sync S3 backup triggered")
+            await self.run_s3_backup()
+        except Exception as e:
+            logger.warning(f"Post-sync S3 backup failed (non-fatal): {e}")
+
     async def _do_sync(
         self,
         reread_unchanged: bool,
@@ -928,6 +942,8 @@ class BackgroundManager:
 
         try:
             result = await run_library_sync(reread_unchanged=reread_unchanged)
+            # Trigger S3 backup after successful sync
+            await self._post_sync_backup()
             return result
         except Exception as e:
             logger.error(f"Sync failed: {e}", exc_info=True)

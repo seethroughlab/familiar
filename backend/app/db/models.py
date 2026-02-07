@@ -207,6 +207,7 @@ class Track(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     file_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    file_size: Mapped[int | None] = mapped_column(BigInteger)
 
     # Basic metadata from tags (indexed for common queries)
     title: Mapped[str | None] = mapped_column(String(500))

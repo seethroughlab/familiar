@@ -70,6 +70,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     gosu \
     libcurl4-openssl-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python virtual environment from deps stage

@@ -112,9 +112,6 @@ class SettingsUpdateRequest(BaseModel):
 
     # S3 Backup
     s3_backup_enabled: bool | None = None
-    s3_backup_bucket: str | None = None
-    s3_backup_region: str | None = None
-    s3_backup_prefix: str | None = None
     s3_backup_schedule: str | None = None
 
 
@@ -168,6 +165,11 @@ async def get_settings() -> SettingsResponse:
     masked.pop("s3_backup_access_key_id", None)
     masked.pop("s3_backup_secret_access_key", None)
 
+    # Use effective values for S3 bucket/region/prefix (env var fallback)
+    masked["s3_backup_bucket"] = service.get_effective("s3_backup_bucket")
+    masked["s3_backup_region"] = service.get_effective("s3_backup_region") or "us-east-1"
+    masked["s3_backup_prefix"] = service.get_effective("s3_backup_prefix") or ""
+
     # Get CLAP status
     clap_status_data = service.get_clap_status()
 
@@ -202,12 +204,24 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
 
     service.update(**updates)
 
+    # Re-register S3 backup schedule if relevant settings changed
+    s3_schedule_keys = {"s3_backup_enabled", "s3_backup_schedule"}
+    if s3_schedule_keys & updates.keys():
+        from app.services.background import get_background_manager
+
+        get_background_manager()._register_s3_backup_schedule()
+
     masked = service.get_masked()
 
     # Remove fields not in the response model
     masked.pop("music_library_paths", None)
     masked.pop("s3_backup_access_key_id", None)
     masked.pop("s3_backup_secret_access_key", None)
+
+    # Use effective values for S3 bucket/region/prefix (env var fallback)
+    masked["s3_backup_bucket"] = service.get_effective("s3_backup_bucket")
+    masked["s3_backup_region"] = service.get_effective("s3_backup_region") or "us-east-1"
+    masked["s3_backup_prefix"] = service.get_effective("s3_backup_prefix") or ""
 
     # Get CLAP status
     clap_status_data = service.get_clap_status()

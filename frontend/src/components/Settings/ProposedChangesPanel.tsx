@@ -179,6 +179,9 @@ function ChangeCard({
               </span>
             )}
           </div>
+          {change.target_description && (
+            <p className="text-xs text-zinc-400 truncate">{change.target_description}</p>
+          )}
           {change.reason && <p className="text-sm text-zinc-400 mt-1">{change.reason}</p>}
         </div>
 
