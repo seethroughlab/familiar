@@ -22,6 +22,11 @@ const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
 const useDirectPlayback = isMobilePlatform;
 const useWebAudio = !isMobilePlatform;
 
+// Minimum transition overlap on mobile to keep audio session alive.
+// Without this, play() after the 'ended' event is rejected by iOS Safari
+// because the audio session has ended and there's no recent user gesture.
+const MOBILE_TRANSITION_OVERLAP = 0.3;
+
 // Log version and platform detection on load
 console.log('[AudioEngine] v5 - simplified mobile', {
   isMobilePlatform,
@@ -395,36 +400,48 @@ export function useAudioEngine() {
     }
 
     if (useDirectPlayback) {
-      // Direct mode (mobile): animate audioElement.volume
-      const startTime = performance.now();
-      const durationMs = duration * 1000;
+      if (duration <= MOBILE_TRANSITION_OVERLAP) {
+        // Gapless / instant transition: play next at full volume with brief overlap
+        nextElement.volume = currentMasterVolume;
+        nextElement.play().catch(console.error);
+        crossfadeContext = {
+          isActive: true,
+          startTime: performance.now(),
+          duration,
+          timeoutId: setTimeout(() => completeCrossfade(), duration * 1000),
+        };
+      } else {
+        // Direct mode (mobile): animate audioElement.volume
+        const startTime = performance.now();
+        const durationMs = duration * 1000;
 
-      nextElement.volume = 0;
-      nextElement.play().catch(console.error);
+        nextElement.volume = 0;
+        nextElement.play().catch(console.error);
 
-      const animateCrossfade = () => {
-        const elapsed = performance.now() - startTime;
-        const progress = Math.min(elapsed / durationMs, 1);
-        const currentVol = (1 - progress) * currentMasterVolume;
-        const nextVol = progress * currentMasterVolume;
+        const animateCrossfade = () => {
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(elapsed / durationMs, 1);
+          const currentVol = (1 - progress) * currentMasterVolume;
+          const nextVol = progress * currentMasterVolume;
 
-        if (currentElement) currentElement.volume = currentVol;
-        nextElement.volume = nextVol;
+          if (currentElement) currentElement.volume = currentVol;
+          nextElement.volume = nextVol;
 
-        if (progress < 1) {
-          crossfadeContext!.animationFrameId = requestAnimationFrame(animateCrossfade);
-        } else {
-          completeCrossfade();
-        }
-      };
+          if (progress < 1) {
+            crossfadeContext!.animationFrameId = requestAnimationFrame(animateCrossfade);
+          } else {
+            completeCrossfade();
+          }
+        };
 
-      crossfadeContext = {
-        isActive: true,
-        startTime: performance.now(),
-        duration,
-        timeoutId: null,
-        animationFrameId: requestAnimationFrame(animateCrossfade),
-      };
+        crossfadeContext = {
+          isActive: true,
+          startTime: performance.now(),
+          duration,
+          timeoutId: null,
+          animationFrameId: requestAnimationFrame(animateCrossfade),
+        };
+      }
     } else {
       // Web Audio mode: use gain nodes
       if (!globalAudioContext || !globalMasterGain) return;
@@ -570,7 +587,9 @@ export function useAudioEngine() {
 
     if (crossfadeContext?.isActive) {
       const duration = currentElement.duration;
-      const effectiveCrossfade = crossfadeEnabled ? crossfadeDuration : 0;
+      const effectiveCrossfade = crossfadeEnabled
+        ? (isMobilePlatform ? Math.max(crossfadeDuration, MOBILE_TRANSITION_OVERLAP) : crossfadeDuration)
+        : (isMobilePlatform ? MOBILE_TRANSITION_OVERLAP : 0);
       if (duration - time > effectiveCrossfade + 1) cancelCrossfade();
     }
 
@@ -910,7 +929,15 @@ export function useAudioEngine() {
           const shouldPlay = usePlayerStore.getState().isPlaying;
           if (shouldPlay) {
             currentElement.play().catch((err) => {
-              if (err.name !== 'AbortError') console.error('Play failed:', err);
+              if (err.name !== 'AbortError') {
+                console.error('Play failed:', err);
+                if (err.name === 'NotAllowedError') {
+                  usePlayerStore.getState().setIsPlaying(false);
+                  showError('Playback blocked', {
+                    description: 'Tap play to continue. Your browser requires user interaction.',
+                  });
+                }
+              }
             });
           }
           currentElement.removeEventListener('canplay', playWhenReady);
@@ -1057,7 +1084,9 @@ export function useAudioEngine() {
       const timeRemaining = duration - currentTime;
       const nextTrack = getNextTrack();
       const hasNextTrack = nextTrack !== null;
-      const effectiveCrossfade = crossfadeEnabled ? crossfadeDuration : 0;
+      const effectiveCrossfade = crossfadeEnabled
+        ? (isMobilePlatform ? Math.max(crossfadeDuration, MOBILE_TRANSITION_OVERLAP) : crossfadeDuration)
+        : (isMobilePlatform ? MOBILE_TRANSITION_OVERLAP : 0);
       const preloadThreshold = effectiveCrossfade + 3;
 
       // Periodic debug logging (every 10 seconds or on track change)

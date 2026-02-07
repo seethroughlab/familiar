@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { ListMusic, Play, Pause, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -27,6 +27,15 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   } = usePlayerStore();
 
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+
+  // Ref for auto-scrolling to the current track
+  const currentTrackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (currentTrackRef.current) {
+      currentTrackRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
+  }, [queueIndex, lazyQueueIndex]);
 
   // Drag-to-reorder state (only for regular queue mode)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -316,6 +325,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
               return (
                 <div
                   key={queueId}
+                  ref={isCurrent ? currentTrackRef : undefined}
                   draggable={!isLazyMode}
                   onDragStart={(e) => !isLazyMode && handleDragStart(actualIndex, e)}
                   onDragOver={(e) => handleDragOver(e, displayIndex)}
