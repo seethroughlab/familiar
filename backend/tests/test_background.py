@@ -6,6 +6,7 @@ Uses mocked Redis and ProcessPoolExecutor.
 
 import asyncio
 import json
+import time
 from concurrent.futures.process import BrokenProcessPool
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -297,6 +298,7 @@ class TestRunCpuBound:
     async def test_run_cpu_bound_disabled_executor_raises(self, manager):
         """Should raise when executor is disabled."""
         manager._executor_disabled = True
+        manager._executor_disabled_at = time.monotonic()
 
         def identity(x):
             return x
