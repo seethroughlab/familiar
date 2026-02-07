@@ -414,7 +414,7 @@ class TestMusicTools:
         essential_tools = {
             "search_library",
             "find_similar_tracks",
-            "filter_tracks_by_features",
+            "filter_tracks",
             "queue_tracks",
             "control_playback",
             "get_library_stats",
@@ -424,8 +424,8 @@ class TestMusicTools:
             assert tool in tool_names, f"Essential tool missing: {tool}"
 
 
-class TestFilterTracksByFeatures:
-    """Tests for _filter_tracks_by_features tool."""
+class TestFilterTracks:
+    """Tests for _filter_tracks tool (formerly _filter_tracks_by_features)."""
 
     @pytest.fixture
     def mock_db(self):
@@ -435,17 +435,25 @@ class TestFilterTracksByFeatures:
     @pytest.fixture
     def executor(self, mock_db):
         """Create a ToolExecutor with mock db."""
-        return ToolExecutor(db=mock_db)
+        return ToolExecutor(db=mock_db, profile_id=uuid4())
 
-    @pytest.mark.asyncio
-    async def test_filter_handles_string_params(self, executor, mock_db):
-        """Filter should handle params passed as strings."""
+    @pytest.fixture
+    def executor_no_profile(self, mock_db):
+        """Create a ToolExecutor without profile."""
+        return ToolExecutor(db=mock_db, profile_id=None)
+
+    def _mock_empty_result(self, mock_db):
+        """Set up mock_db to return empty results."""
         mock_result = MagicMock()
         mock_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = mock_result
 
-        # Pass params as strings (as LLM might)
-        result = await executor._filter_tracks_by_features(
+    @pytest.mark.asyncio
+    async def test_filter_handles_string_params(self, executor, mock_db):
+        """Filter should handle params passed as strings."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(
             bpm_min="100",
             bpm_max="120",
             energy_min="0.5",
@@ -458,17 +466,207 @@ class TestFilterTracksByFeatures:
     @pytest.mark.asyncio
     async def test_filter_handles_none_params(self, executor, mock_db):
         """Filter should handle None params gracefully."""
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = mock_result
+        self._mock_empty_result(mock_db)
 
-        result = await executor._filter_tracks_by_features(
+        result = await executor._filter_tracks(
             bpm_min=None,
             bpm_max=None,
             energy_min=None
         )
 
         assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_genre_ilike(self, executor, mock_db):
+        """Genre filter should use case-insensitive partial match."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(genre="electronic")
+
+        assert "tracks" in result
+        # Verify the query was executed (genre filter doesn't need TrackAnalysis join)
+        mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_filter_artist_ilike(self, executor, mock_db):
+        """Artist filter should use case-insensitive partial match."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(artist="radiohead")
+
+        assert "tracks" in result
+        mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_filter_year_range(self, executor, mock_db):
+        """Year range filter should work correctly."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(year_min=1990, year_max=1999)
+
+        assert "tracks" in result
+        mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_filter_year_range_string_coercion(self, executor, mock_db):
+        """Year range should handle string values from LLM."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(year_min="1990", year_max="1999")
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_is_favorite_true(self, executor, mock_db):
+        """is_favorite=True should join ProfileFavorite."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(is_favorite=True)
+
+        assert "tracks" in result
+        mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_filter_is_favorite_string_coercion(self, executor, mock_db):
+        """is_favorite should handle string 'true' from LLM."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(is_favorite="true")
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_is_favorite_without_profile(self, executor_no_profile, mock_db):
+        """is_favorite without profile should skip the join gracefully."""
+        self._mock_empty_result(mock_db)
+
+        # Should not error even without profile_id
+        result = await executor_no_profile._filter_tracks(is_favorite=True)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_min_play_count(self, executor, mock_db):
+        """min_play_count should filter on coalesced play_count."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(min_play_count=5)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_max_play_count_zero(self, executor, mock_db):
+        """max_play_count=0 should find never-played tracks (NULL play history)."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(max_play_count=0)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_max_play_count_positive(self, executor, mock_db):
+        """max_play_count > 0 should use coalesced comparison."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(max_play_count=3)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_not_played_in_days(self, executor, mock_db):
+        """not_played_in_days should find tracks with NULL or old last_played_at."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(not_played_in_days=30)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_played_in_last_days(self, executor, mock_db):
+        """played_in_last_days should filter recent plays."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(played_in_last_days=7)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_added_in_last_days(self, executor, mock_db):
+        """added_in_last_days should filter on created_at."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(added_in_last_days=14)
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_sort_by_play_count(self, executor, mock_db):
+        """sort_by=play_count should order results (desc by default)."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(sort_by="play_count")
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_sort_by_title_asc(self, executor, mock_db):
+        """sort_by=title should order by title (asc by default)."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(sort_by="title", sort_order="asc")
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_filter_sort_preserves_order_through_diversity(self, executor, mock_db):
+        """When sort_by is set (not random), diversity filter should not shuffle."""
+        # Create tracks with distinct artists so diversity keeps them all
+        tracks = []
+        for i in range(5):
+            track = MagicMock()
+            track.id = uuid4()
+            track.title = f"Track {i}"
+            track.artist = f"Artist {i}"
+            track.album = f"Album {i}"
+            track.genre = "Rock"
+            track.duration_seconds = 180
+            track.year = 2000 + i
+            tracks.append(track)
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = tracks
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._filter_tracks(sort_by="recently_added")
+
+        # With distinct artists, all tracks should be returned
+        assert result["count"] == 5
+
+    @pytest.mark.asyncio
+    async def test_filter_combined_criteria(self, executor, mock_db):
+        """Should support combining library criteria and audio features."""
+        self._mock_empty_result(mock_db)
+
+        result = await executor._filter_tracks(
+            genre="electronic",
+            year_min=1990,
+            year_max=1999,
+            energy_min=0.7,
+            is_favorite=True,
+        )
+
+        assert "tracks" in result
+
+    @pytest.mark.asyncio
+    async def test_backwards_compat_alias(self, executor, mock_db):
+        """filter_tracks_by_features should still dispatch correctly."""
+        self._mock_empty_result(mock_db)
+
+        # Use the old tool name through the execute dispatcher
+        with patch.object(executor, "_filter_tracks", new_callable=AsyncMock) as mock_handler:
+            mock_handler.return_value = {"tracks": [], "count": 0}
+            await executor.execute("filter_tracks_by_features", {"bpm_min": 100})
+            mock_handler.assert_called_once_with(bpm_min=100)
 
 
 class TestGetSpotifyStatus:

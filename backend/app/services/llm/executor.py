@@ -8,7 +8,7 @@ from uuid import UUID
 
 import anthropic
 import httpx
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -18,6 +18,8 @@ from app.db.models import (
     ExternalTrackSource,
     Playlist,
     PlaylistTrack,
+    ProfileFavorite,
+    ProfilePlayHistory,
     ProposedChange,
     SpotifyFavorite,
     SpotifyProfile,
@@ -60,7 +62,8 @@ class ToolExecutor:
             "search_library": self._search_library,
             "find_similar_tracks": self._find_similar_tracks,
             "semantic_search": self._semantic_search,
-            "filter_tracks_by_features": self._filter_tracks_by_features,
+            "filter_tracks": self._filter_tracks,
+            "filter_tracks_by_features": self._filter_tracks,  # backwards compat alias
             "get_library_stats": self._get_library_stats,
             "get_library_genres": self._get_library_genres,
             "queue_tracks": self._queue_tracks,
@@ -374,8 +377,22 @@ Respond with ONLY the playlist name, nothing else."""
             "note": f"Found {len(selected)} tracks matching '{description}' from {len(set(t.artist for t in selected))} artists",
         }
 
-    async def _filter_tracks_by_features(
+    async def _filter_tracks(
         self,
+        # Library criteria
+        genre: str | None = None,
+        artist: str | None = None,
+        year_min: int | None = None,
+        year_max: int | None = None,
+        added_in_last_days: int | None = None,
+        is_favorite: bool | None = None,
+        min_play_count: int | None = None,
+        max_play_count: int | None = None,
+        played_in_last_days: int | None = None,
+        not_played_in_days: int | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        # Audio feature criteria
         bpm_min: float | None = None,
         bpm_max: float | None = None,
         key: str | None = None,
@@ -388,8 +405,10 @@ Respond with ONLY the playlist name, nothing else."""
         instrumentalness_min: float | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
-        """Filter tracks by audio features stored in JSONB."""
-        # Convert string params to proper types (LLM tool calls may pass strings)
+        """Filter tracks by library criteria and/or audio features."""
+        from datetime import UTC, datetime, timedelta
+
+        # --- Type coercion helpers (LLM may pass strings) ---
         def to_float(v: Any) -> float | None:
             if v is None:
                 return None
@@ -398,14 +417,24 @@ Respond with ONLY the playlist name, nothing else."""
             except (ValueError, TypeError):
                 return None
 
-        def to_int(v: Any, default: int) -> int:
+        def to_int(v: Any, default: int | None = None) -> int | None:
             if v is None:
                 return default
             try:
-                return int(float(v))  # Handle "20.0" strings
+                return int(float(v))
             except (ValueError, TypeError):
                 return default
 
+        def to_bool(v: Any) -> bool | None:
+            if v is None:
+                return None
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, str):
+                return v.lower() in ("true", "1", "yes")
+            return bool(v)
+
+        # Coerce all params
         bpm_min = to_float(bpm_min)
         bpm_max = to_float(bpm_max)
         energy_min = to_float(energy_min)
@@ -415,11 +444,95 @@ Respond with ONLY the playlist name, nothing else."""
         valence_max = to_float(valence_max)
         acousticness_min = to_float(acousticness_min)
         instrumentalness_min = to_float(instrumentalness_min)
-        limit = to_int(limit, 20)
+        year_min = to_int(year_min)
+        year_max = to_int(year_max)
+        added_in_last_days = to_int(added_in_last_days)
+        is_favorite = to_bool(is_favorite)
+        min_play_count = to_int(min_play_count)
+        max_play_count = to_int(max_play_count)
+        played_in_last_days = to_int(played_in_last_days)
+        not_played_in_days = to_int(not_played_in_days)
+        limit = to_int(limit, 20) or 20
 
-        stmt = select(Track).join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        # --- Determine which joins are needed ---
+        has_audio_features = any(v is not None for v in [
+            bpm_min, bpm_max, key, energy_min, energy_max,
+            danceability_min, valence_min, valence_max,
+            acousticness_min, instrumentalness_min,
+        ])
+        needs_play_history = any(v is not None for v in [
+            min_play_count, max_play_count, played_in_last_days, not_played_in_days,
+        ]) or (sort_by in ("play_count", "last_played"))
+
+        # --- Build query ---
+        stmt = select(Track)
+
+        # Join TrackAnalysis only when audio feature filters are used
+        if has_audio_features:
+            stmt = stmt.join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+
+        # Join ProfileFavorite when is_favorite filter is used
+        if is_favorite and self.profile_id:
+            stmt = stmt.join(
+                ProfileFavorite,
+                and_(
+                    ProfileFavorite.track_id == Track.id,
+                    ProfileFavorite.profile_id == self.profile_id,
+                ),
+            )
+
+        # Left outer join ProfilePlayHistory when play history filters/sort are used
+        if needs_play_history and self.profile_id:
+            stmt = stmt.outerjoin(
+                ProfilePlayHistory,
+                and_(
+                    ProfilePlayHistory.track_id == Track.id,
+                    ProfilePlayHistory.profile_id == self.profile_id,
+                ),
+            )
 
         conditions = []
+
+        # --- Library criteria ---
+        if genre is not None:
+            conditions.append(Track.genre.ilike(f"%{genre}%"))
+        if artist is not None:
+            conditions.append(Track.artist.ilike(f"%{artist}%"))
+        if year_min is not None:
+            conditions.append(Track.year >= year_min)
+        if year_max is not None:
+            conditions.append(Track.year <= year_max)
+        if added_in_last_days is not None:
+            cutoff = datetime.now(UTC) - timedelta(days=added_in_last_days)
+            conditions.append(Track.created_at >= cutoff)
+
+        # Play count filters (require profile + play history join)
+        if needs_play_history and self.profile_id:
+            if min_play_count is not None:
+                conditions.append(
+                    func.coalesce(ProfilePlayHistory.play_count, 0) >= min_play_count
+                )
+            if max_play_count is not None:
+                if max_play_count == 0:
+                    # Never played = no play history row at all
+                    conditions.append(ProfilePlayHistory.track_id.is_(None))
+                else:
+                    conditions.append(
+                        func.coalesce(ProfilePlayHistory.play_count, 0) <= max_play_count
+                    )
+            if played_in_last_days is not None:
+                cutoff = datetime.now(UTC) - timedelta(days=played_in_last_days)
+                conditions.append(ProfilePlayHistory.last_played_at >= cutoff)
+            if not_played_in_days is not None:
+                cutoff = datetime.now(UTC) - timedelta(days=not_played_in_days)
+                conditions.append(
+                    or_(
+                        ProfilePlayHistory.last_played_at.is_(None),
+                        ProfilePlayHistory.last_played_at < cutoff,
+                    )
+                )
+
+        # --- Audio feature criteria ---
         if bpm_min is not None:
             conditions.append(
                 text("(features->>'bpm')::float >= :bpm_min").bindparams(bpm_min=bpm_min)
@@ -429,21 +542,16 @@ Respond with ONLY the playlist name, nothing else."""
                 text("(features->>'bpm')::float <= :bpm_max").bindparams(bpm_max=bpm_max)
             )
         if key is not None:
-            # Normalize key input - handle "F", "F major", "F minor", "F#", "F sharp", etc.
             key_normalized = key.strip().upper()
-            # Extract just the note (e.g., "F MAJOR" -> "F", "F# MINOR" -> "F#", "F SHARP" -> "F#")
-            key_root = key_normalized.split()[0].rstrip("M")  # Remove trailing M from "FM"
-            # Handle "SHARP" and "FLAT" in the input
+            key_root = key_normalized.split()[0].rstrip("M")
             if "SHARP" in key_normalized:
                 key_root = key_root.rstrip("#") + "#"
             elif "FLAT" in key_normalized or "B" in key_normalized.split()[-1:]:
-                # Convert flats to sharps: Bb -> A#, Eb -> D#, etc.
                 flat_to_sharp = {"BB": "A#", "EB": "D#", "AB": "G#", "DB": "C#", "GB": "F#"}
                 if key_root + "B" in flat_to_sharp:
                     key_root = flat_to_sharp[key_root + "B"]
                 elif key_root in flat_to_sharp:
                     key_root = flat_to_sharp[key_root]
-            # Exact match for the key
             conditions.append(
                 text("features->>'key' = :key_value").bindparams(key_value=key_root)
             )
@@ -493,12 +601,41 @@ Respond with ONLY the playlist name, nothing else."""
         for condition in conditions:
             stmt = stmt.where(condition)
 
+        # --- Sorting ---
+        use_random = sort_by is None or sort_by == "random"
+
+        if not use_random:
+            # Default sort directions per sort_by
+            default_desc = {"play_count", "last_played", "recently_added"}
+            effective_order = sort_order or ("desc" if sort_by in default_desc else "asc")
+            is_desc = effective_order == "desc"
+
+            sort_column = None
+            if sort_by == "play_count" and self.profile_id:
+                sort_column = func.coalesce(ProfilePlayHistory.play_count, 0)
+            elif sort_by == "last_played" and self.profile_id:
+                sort_column = ProfilePlayHistory.last_played_at
+            elif sort_by == "recently_added":
+                sort_column = Track.created_at
+            elif sort_by == "title":
+                sort_column = Track.title
+            elif sort_by == "artist":
+                sort_column = Track.artist
+            elif sort_by == "year":
+                sort_column = Track.year
+
+            if sort_column is not None:
+                stmt = stmt.order_by(sort_column.desc() if is_desc else sort_column.asc())
+
         stmt = stmt.limit(limit * 5)
         result = await self.db.execute(stmt)
         all_tracks = list(result.scalars().all())
 
         diverse_tracks = self._apply_diversity(all_tracks, max_per_artist=2, max_per_album=3)
-        random.shuffle(diverse_tracks)
+
+        if use_random:
+            random.shuffle(diverse_tracks)
+
         selected = diverse_tracks[:limit]
 
         return {

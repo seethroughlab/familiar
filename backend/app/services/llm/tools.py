@@ -62,11 +62,33 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "filter_tracks_by_features",
-        "description": "Filter tracks by audio features like BPM, energy, danceability, or musical key. Use for requests like 'upbeat songs', 'something around 120 BPM', or 'songs in the key of F'.",
+        "name": "filter_tracks",
+        "description": "Filter tracks by library criteria (favorites, play history, genre, artist, year, recently added) and/or audio features (BPM, energy, key). Use for requests like 'play my favorites', 'what have I been listening to', 'electronic tracks from the 90s', 'upbeat songs', 'something around 120 BPM'.",
         "input_schema": {
             "type": "object",
             "properties": {
+                # Library criteria
+                "genre": {"type": "string", "description": "Genre filter (case-insensitive partial match, e.g. 'electronic', 'jazz')"},
+                "artist": {"type": "string", "description": "Artist filter (case-insensitive partial match)"},
+                "year_min": {"type": "integer", "description": "Minimum release year"},
+                "year_max": {"type": "integer", "description": "Maximum release year"},
+                "added_in_last_days": {"type": "integer", "description": "Only tracks added to library within N days"},
+                "is_favorite": {"type": "boolean", "description": "Only favorited tracks (requires profile)"},
+                "min_play_count": {"type": "integer", "description": "Minimum play count"},
+                "max_play_count": {"type": "integer", "description": "Maximum play count (0 = never played)"},
+                "played_in_last_days": {"type": "integer", "description": "Only tracks played within N days"},
+                "not_played_in_days": {"type": "integer", "description": "Tracks not played within N days (includes never-played)"},
+                "sort_by": {
+                    "type": "string",
+                    "enum": ["random", "play_count", "last_played", "recently_added", "title", "artist", "year"],
+                    "description": "Sort order (default: random)"
+                },
+                "sort_order": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "Sort direction (default depends on sort_by)"
+                },
+                # Audio feature criteria
                 "bpm_min": {"type": "number", "description": "Minimum BPM"},
                 "bpm_max": {"type": "number", "description": "Maximum BPM"},
                 "key": {"type": "string", "description": "Musical key to filter by (e.g., 'C', 'F', 'G#', 'Bb', 'F minor', 'C major')"},
@@ -665,13 +687,27 @@ can preview or purchase. The current setting is shown at the end of these instru
 4. Search for tracks by those similar artists, then queue_tracks (with suggested_tracks if applicable)
 5. IMPORTANT: If the artist isn't in the library, include the Bandcamp link from the tool result in your response so the user can discover/purchase it
 
+**"Play my favorites"** or **"What have I been listening to?"**:
+1. filter_tracks(is_favorite=true) for favorites
+2. filter_tracks(sort_by="play_count") or filter_tracks(played_in_last_days=7) for recent listening
+3. queue_tracks immediately
+
+**"Something I haven't heard in a while"** or **"Play something new"**:
+1. filter_tracks(not_played_in_days=30) for unheard tracks
+2. filter_tracks(added_in_last_days=14) for recently added
+3. queue_tracks immediately
+
+**"Electronic tracks from the 90s"** or other genre+era combos:
+1. filter_tracks(genre="electronic", year_min=1990, year_max=1999)
+2. queue_tracks immediately
+
 **"Play something [abstract mood/vibe]"** (e.g., "dreamy", "ethereal", "aggressive", "gloomy with Eastern influences"):
 1. semantic_search with the description
-2. If unavailable, fall back to filter_tracks_by_features or search_library
+2. If unavailable, fall back to filter_tracks or search_library
 3. queue_tracks immediately (include suggested_tracks if discovery_mode is "suggest_missing")
 
 **"Play something chill/upbeat/etc"** (simple mood words that map to audio features):
-1. filter_tracks_by_features with appropriate values
+1. filter_tracks with appropriate energy/valence values
 2. queue_tracks immediately
 
 **"More like this"**:
