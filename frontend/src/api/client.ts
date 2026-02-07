@@ -585,6 +585,13 @@ export interface AppSettingsResponse {
   clap_status: ClapStatus;
   // Playlist generation
   playlist_discovery_mode: string;
+  // S3 Backup
+  s3_backup_enabled: boolean;
+  s3_backup_bucket: string | null;
+  s3_backup_region: string;
+  s3_backup_prefix: string;
+  s3_backup_schedule: string;
+  s3_backup_configured: boolean;
 }
 
 export interface AppSettingsUpdate {
@@ -600,6 +607,12 @@ export interface AppSettingsUpdate {
   clap_embeddings_enabled?: boolean | null;
   // Playlist generation
   playlist_discovery_mode?: string;
+  // S3 Backup
+  s3_backup_enabled?: boolean;
+  s3_backup_bucket?: string;
+  s3_backup_region?: string;
+  s3_backup_prefix?: string;
+  s3_backup_schedule?: string;
 }
 
 export const appSettingsApi = {
@@ -2742,6 +2755,167 @@ export const backupApi = {
     const { data } = await api.post('/export-import/restore/execute', request, {
       timeout: 600000, // 10 minutes for large restores
     });
+    return data;
+  },
+};
+
+// ============================================================================
+// S3 Backup API
+// ============================================================================
+
+export interface S3ValidateRequest {
+  bucket: string;
+  region: string;
+  prefix?: string;
+}
+
+export interface S3ValidateResponse {
+  valid: boolean;
+  permissions: {
+    put: boolean;
+    get: boolean;
+    list: boolean;
+    restore: boolean;
+  };
+  error: string | null;
+}
+
+export interface S3CostEstimate {
+  storage_gb: number;
+  monthly_cost: number;
+  initial_upload_cost: number;
+  estimated_restore_cost: number;
+  by_category: Record<string, {
+    file_count?: number;
+    size_bytes: number;
+    size_gb: number;
+    monthly_cost: number;
+  }>;
+}
+
+export interface S3BackupStatus {
+  enabled: boolean;
+  bucket: string | null;
+  region: string | null;
+  schedule: string | null;
+  is_running: boolean;
+  last_backup: {
+    timestamp: string;
+    duration_seconds: number;
+    files_uploaded: number;
+    files_skipped: number;
+    bytes_uploaded: number;
+    status: string;
+    error?: string;
+  } | null;
+  progress: S3BackupProgress | null;
+}
+
+export interface S3BackupProgress {
+  status: string;
+  phase: string;
+  files_total: number;
+  files_uploaded: number;
+  files_skipped: number;
+  bytes_uploaded: number;
+  current_file: string | null;
+  started_at: string | null;
+  error: string | null;
+}
+
+export interface S3ManifestSummary {
+  last_backup_at: string | null;
+  database: { s3_key: string; size_bytes: number; checksum: string } | null;
+  settings: { s3_key: string; size_bytes: number } | null;
+  file_count: number;
+  total_size_bytes: number;
+  by_category: Record<string, { count: number; size_bytes: number }>;
+}
+
+export interface S3RestoreState {
+  status: 'none' | 'retrieving' | 'available' | 'downloading' | 'complete' | 'error';
+  initiated_at?: string;
+  total_files?: number;
+  files_requested?: number;
+  files_available?: number;
+  errors?: number;
+  categories?: string[];
+  completed_at?: string;
+}
+
+export interface S3BackupHistoryEntry {
+  timestamp: string;
+  duration_seconds: number;
+  files_uploaded: number;
+  files_skipped: number;
+  bytes_uploaded: number;
+  status: string;
+  error?: string;
+}
+
+export const s3BackupApi = {
+  validate: async (request: S3ValidateRequest): Promise<S3ValidateResponse> => {
+    const { data } = await api.post('/s3-backup/validate', request);
+    return data;
+  },
+
+  getEstimate: async (): Promise<S3CostEstimate> => {
+    const { data } = await api.get('/s3-backup/estimate');
+    return data;
+  },
+
+  getStatus: async (): Promise<S3BackupStatus> => {
+    const { data } = await api.get('/s3-backup/status');
+    return data;
+  },
+
+  runBackup: async (): Promise<{ status: string; message: string }> => {
+    const { data } = await api.post('/s3-backup/run');
+    return data;
+  },
+
+  getProgress: async (): Promise<S3BackupProgress> => {
+    const { data } = await api.get('/s3-backup/progress');
+    return data;
+  },
+
+  cancelBackup: async (): Promise<{ status: string; message: string }> => {
+    const { data } = await api.post('/s3-backup/cancel');
+    return data;
+  },
+
+  getHistory: async (): Promise<S3BackupHistoryEntry[]> => {
+    const { data } = await api.get('/s3-backup/history');
+    return data;
+  },
+
+  getManifest: async (): Promise<S3ManifestSummary> => {
+    const { data } = await api.get('/s3-backup/manifest');
+    return data;
+  },
+
+  initiateRestore: async (categories?: string[]): Promise<S3RestoreState> => {
+    const { data } = await api.post('/s3-backup/restore', { categories });
+    return data;
+  },
+
+  getRestoreStatus: async (): Promise<S3RestoreState> => {
+    const { data } = await api.get('/s3-backup/restore/status');
+    return data;
+  },
+
+  checkRestoreAvailability: async (): Promise<S3RestoreState> => {
+    const { data } = await api.post('/s3-backup/restore/check');
+    return data;
+  },
+
+  downloadAndRestore: async (confirm: boolean): Promise<{ status: string; message: string }> => {
+    const { data } = await api.post('/s3-backup/restore/download', { confirm });
+    return data;
+  },
+
+  getRestoreProgress: async (): Promise<S3BackupProgress> => {
+    const { data } = await api.get('/s3-backup/restore/progress');
     return data;
   },
 };

@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.services.artwork_fetcher import get_artwork_fetch_progress
+from app.services.s3_backup import get_s3_backup_service
 from app.services.tasks import (
     get_new_releases_progress,
     get_spotify_sync_progress,
@@ -215,6 +216,34 @@ async def get_background_jobs() -> BackgroundJobsResponse:
         status = artwork_progress.get("status", "idle")
         if status == "running":
             jobs.append(_build_artwork_fetch_job(artwork_progress))
+
+    # Check S3 backup
+    s3_progress = get_s3_backup_service().get_backup_progress()
+    if s3_progress and s3_progress.get("status") == "running":
+        phase = s3_progress.get("phase", "starting")
+        job_progress = None
+        total = s3_progress.get("files_total", 0)
+        uploaded = s3_progress.get("files_uploaded", 0)
+        if total > 0:
+            job_progress = JobProgress(current=uploaded, total=total)
+        phase_messages = {
+            "starting": "Starting backup...",
+            "database": "Backing up database...",
+            "settings": "Backing up settings...",
+            "audio": "Uploading audio files...",
+            "artwork": "Uploading artwork...",
+            "videos": "Uploading videos...",
+            "manifest": "Writing manifest...",
+        }
+        jobs.append(BackgroundJob(
+            type="s3_backup",
+            status="running",
+            phase=phase,
+            progress=job_progress,
+            message=phase_messages.get(phase, "Running S3 backup..."),
+            current_item=s3_progress.get("current_file"),
+            started_at=s3_progress.get("started_at"),
+        ))
 
     return BackgroundJobsResponse(
         jobs=jobs,

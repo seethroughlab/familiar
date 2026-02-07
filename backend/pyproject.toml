@@ -41,6 +41,8 @@ dependencies = [
     "trafilatura>=1.6.0",
     "curl_cffi>=0.7.0",
     "musicbrainzngs>=0.7.1",
+    # S3 backup
+    "boto3>=1.34.0",
     # Database migrations
     "alembic>=1.13.0",
     # System monitoring

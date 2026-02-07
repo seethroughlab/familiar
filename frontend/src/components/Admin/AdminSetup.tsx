@@ -21,6 +21,8 @@ import {
   Database,
 } from 'lucide-react';
 
+import { S3BackupSettings } from '../Settings/S3BackupSettings';
+
 interface SettingsData {
   spotify_configured: boolean;
   lastfm_configured: boolean;
@@ -253,6 +255,11 @@ export function AdminSetup() {
                 Helps speed up analysis for everyone in the community.
               </p>
             </div>
+          </section>
+
+          {/* Cloud Backup */}
+          <section>
+            <S3BackupSettings />
           </section>
 
           {/* Info */}

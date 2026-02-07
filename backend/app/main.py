@@ -38,6 +38,7 @@ from app.api.routes import (
     plugins,
     profiles,
     proposed_changes,
+    s3_backup,
     sessions,
     smart_playlists,
     spotify,
@@ -283,6 +284,7 @@ app.include_router(diagnostics.router, prefix="/api/v1")
 app.include_router(plugins.router, prefix="/api/v1")
 app.include_router(external_tracks.router, prefix="/api/v1")
 app.include_router(export_import.router, prefix="/api/v1")
+app.include_router(s3_backup.router, prefix="/api/v1")
 
 
 # Serve frontend static files in production

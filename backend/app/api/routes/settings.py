@@ -65,11 +65,19 @@ class SettingsResponse(BaseModel):
     # Playlist generation
     playlist_discovery_mode: str  # "library_only" or "suggest_missing"
 
+    # S3 Backup
+    s3_backup_enabled: bool
+    s3_backup_bucket: str | None
+    s3_backup_region: str
+    s3_backup_prefix: str
+    s3_backup_schedule: str
+
     # Computed status fields
     spotify_configured: bool
     lastfm_configured: bool
     anthropic_configured: bool
     acoustid_configured: bool
+    s3_backup_configured: bool
     music_library_configured: bool
 
 
@@ -101,6 +109,13 @@ class SettingsUpdateRequest(BaseModel):
 
     # Playlist generation
     playlist_discovery_mode: str | None = None  # "library_only" or "suggest_missing"
+
+    # S3 Backup
+    s3_backup_enabled: bool | None = None
+    s3_backup_bucket: str | None = None
+    s3_backup_region: str | None = None
+    s3_backup_prefix: str | None = None
+    s3_backup_schedule: str | None = None
 
 
 def _get_library_status() -> LibraryStatus:
@@ -148,8 +163,10 @@ async def get_settings() -> SettingsResponse:
     service = get_app_settings_service()
     masked = service.get_masked()
 
-    # Remove deprecated music_library_paths from response
+    # Remove fields not in the response model
     masked.pop("music_library_paths", None)
+    masked.pop("s3_backup_access_key_id", None)
+    masked.pop("s3_backup_secret_access_key", None)
 
     # Get CLAP status
     clap_status_data = service.get_clap_status()
@@ -162,6 +179,7 @@ async def get_settings() -> SettingsResponse:
         lastfm_configured=service.has_lastfm_credentials(),
         anthropic_configured=service.has_anthropic_key(),
         acoustid_configured=service.has_acoustid_key(),
+        s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
     )
 
@@ -186,8 +204,10 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
 
     masked = service.get_masked()
 
-    # Remove deprecated music_library_paths from response
+    # Remove fields not in the response model
     masked.pop("music_library_paths", None)
+    masked.pop("s3_backup_access_key_id", None)
+    masked.pop("s3_backup_secret_access_key", None)
 
     # Get CLAP status
     clap_status_data = service.get_clap_status()
@@ -200,6 +220,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         lastfm_configured=service.has_lastfm_credentials(),
         anthropic_configured=service.has_anthropic_key(),
         acoustid_configured=service.has_acoustid_key(),
+        s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
     )
 

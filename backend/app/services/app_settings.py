@@ -73,6 +73,15 @@ class AppSettings(BaseModel):
     # "suggest_missing" - Include local + suggest missing tracks user might acquire (DEFAULT)
     playlist_discovery_mode: str = "suggest_missing"
 
+    # S3 Glacier Deep Archive backup
+    s3_backup_enabled: bool = False
+    s3_backup_bucket: str | None = None
+    s3_backup_region: str = "us-east-1"
+    s3_backup_access_key_id: str | None = None
+    s3_backup_secret_access_key: str | None = None
+    s3_backup_prefix: str = ""
+    s3_backup_schedule: str = "weekly"  # daily, weekly, monthly
+
 
 class AppSettingsService:
     """Service for managing user-configurable app settings."""
@@ -138,7 +147,8 @@ class AppSettingsService:
         secret_keys = {
             "spotify_client_id", "spotify_client_secret",
             "lastfm_api_key", "lastfm_api_secret",
-            "anthropic_api_key", "acoustid_api_key"
+            "anthropic_api_key", "acoustid_api_key",
+            "s3_backup_access_key_id", "s3_backup_secret_access_key",
         }
 
         # Mask only secret values
@@ -172,6 +182,12 @@ class AppSettingsService:
     def has_acoustid_key(self) -> bool:
         """Check if AcoustID API key is configured (from settings.json or env vars)."""
         return bool(self.get_effective("acoustid_api_key"))
+
+    def has_s3_credentials(self) -> bool:
+        """Check if S3 backup credentials are configured (from settings.json or env vars)."""
+        access_key = self.get_effective("s3_backup_access_key_id")
+        secret_key = self.get_effective("s3_backup_secret_access_key")
+        return bool(access_key and secret_key)
 
     def has_music_library_configured(self) -> bool:
         """Check if the music library is accessible at /music."""
@@ -224,6 +240,8 @@ class AppSettingsService:
             "lastfm_api_key",
             "lastfm_api_secret",
             "acoustid_api_key",
+            "s3_backup_access_key_id",
+            "s3_backup_secret_access_key",
         ]
 
         for key in dual_source_keys:

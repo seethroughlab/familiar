@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
 
+    # S3 Backup credentials
+    s3_backup_access_key_id: str | None = None
+    s3_backup_secret_access_key: str | None = None
+
     # WebRTC TURN server (optional, for NAT traversal in corporate networks)
     turn_server_url: str | None = None  # e.g. "turn:turn.example.com:3478"
     turn_server_username: str | None = None
