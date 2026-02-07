@@ -298,8 +298,11 @@ class TestRunCpuBound:
         """Should raise when executor is disabled."""
         manager._executor_disabled = True
 
+        def identity(x):
+            return x
+
         with pytest.raises(RuntimeError, match="disabled"):
-            await manager.run_cpu_bound(lambda x: x, 1)
+            await manager.run_cpu_bound(identity, 1)
 
     @pytest.mark.asyncio
     async def test_run_cpu_bound_handles_broken_pool(self, manager):

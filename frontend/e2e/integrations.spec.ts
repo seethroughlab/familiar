@@ -41,7 +41,7 @@ test.describe('Admin Panel Integrations', () => {
 
   test('all service cards show status indicators', async ({ page }) => {
     // Each service card should have either a green check or grey X icon
-    const statusGrid = page.locator('.grid-cols-2');
+    const statusGrid = page.locator('.grid-cols-2').first();
     await expect(statusGrid).toBeVisible({ timeout: 5000 });
 
     // There should be 4 service cards
