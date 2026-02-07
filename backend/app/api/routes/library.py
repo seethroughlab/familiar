@@ -561,7 +561,7 @@ async def get_artist_detail(
         lastfm_url=lastfm_data.lastfm_url if lastfm_data else None,
         listeners=lastfm_data.listeners if lastfm_data else None,
         playcount=lastfm_data.playcount if lastfm_data else None,
-        tags=lastfm_data.tags if lastfm_data else [],
+        tags=(lastfm_data.tags or []) if lastfm_data else [],
         similar_artists=enriched_similar,
         albums=albums,
         tracks=tracks,

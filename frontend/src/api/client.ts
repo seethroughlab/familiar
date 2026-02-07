@@ -7,6 +7,15 @@ const api = axios.create({
   baseURL: '/api/v1',
 });
 
+/**
+ * Encode a value for use in a URL path segment.
+ * Double-encodes slashes so they survive the server's automatic URL decode
+ * (e.g. "ATB/York" → "ATB%252FYork" → server decodes to "ATB%2FYork" → handler unquote gives "ATB/York")
+ */
+function encodePathSegment(value: string): string {
+  return encodeURIComponent(value).replace(/%2F/gi, '%252F');
+}
+
 // Add X-Profile-ID header to all requests (if a profile is selected)
 api.interceptors.request.use(async (config) => {
   try {
@@ -932,7 +941,7 @@ export const libraryApi = {
     refreshLastfm = false
   ): Promise<ArtistDetailResponse> => {
     const { data } = await api.get(
-      `/library/artists/${encodeURIComponent(artistName)}`,
+      `/library/artists/${encodePathSegment(artistName)}`,
       { params: { refresh_lastfm: refreshLastfm } }
     );
     return data;
@@ -955,7 +964,7 @@ export const libraryApi = {
     similarLimit = 8
   ): Promise<AlbumDetailResponse> => {
     const { data } = await api.get(
-      `/library/albums/${encodeURIComponent(artistName)}/${encodeURIComponent(albumName)}`,
+      `/library/albums/${encodePathSegment(artistName)}/${encodePathSegment(albumName)}`,
       { params: { similar_limit: similarLimit } }
     );
     return data;
@@ -1061,7 +1070,7 @@ export const libraryApi = {
   ): string => {
     // Cache version param to bust browser cache when image sources change
     const cacheVersion = 'v2';
-    return `/api/v1/library/artists/${encodeURIComponent(artistName)}/image?size=${size}&_cv=${cacheVersion}`;
+    return `/api/v1/library/artists/${encodePathSegment(artistName)}/image?size=${size}&_cv=${cacheVersion}`;
   },
 
   getLetterIndex: async (params: {
@@ -2024,7 +2033,7 @@ export const artworkApi = {
    */
   checkExists: async (artist: string, album: string): Promise<boolean> => {
     try {
-      await api.head(`/artwork/check/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`);
+      await api.head(`/artwork/check/${encodePathSegment(artist)}/${encodePathSegment(album)}`);
       return true;
     } catch {
       return false;

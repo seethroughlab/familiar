@@ -490,7 +490,7 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
             )}
 
             {/* Tags */}
-            {artist.tags.length > 0 && (
+            {artist.tags?.length > 0 && (
               <div className="flex flex-wrap justify-center sm:justify-start gap-1 mt-2">
                 {artist.tags.slice(0, 5).map((tag) => (
                   <button
@@ -508,7 +508,7 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
             <div className="hidden sm:flex items-center gap-2 mt-3">
               <button
                 onClick={handlePlayAll}
-                disabled={artist.tracks.length === 0}
+                disabled={!artist.tracks?.length}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded-full transition-colors"
               >
                 <Play className="w-4 h-4" fill="currentColor" />
@@ -545,7 +545,7 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
         <div className="flex sm:hidden items-center justify-center gap-3">
           <button
             onClick={handlePlayAll}
-            disabled={artist.tracks.length === 0}
+            disabled={!artist.tracks?.length}
             className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-500 disabled:opacity-50 rounded-full transition-colors"
           >
             <Play className="w-5 h-5" fill="currentColor" />
@@ -604,7 +604,7 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
       )}
 
       {/* Albums section */}
-      {artist.albums.length > 0 && (
+      {artist.albums?.length > 0 && (
         <div>
           <h3 className="text-lg font-semibold mb-3">Albums in Library</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
@@ -662,14 +662,14 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold">All Tracks</h3>
-          {artist.tracks.length > COLLAPSED_TRACK_COUNT && (
+          {(artist.tracks?.length ?? 0) > COLLAPSED_TRACK_COUNT && (
             <span className="text-sm text-zinc-400">
               {artist.tracks.length} tracks
             </span>
           )}
         </div>
         <div className="space-y-1">
-          {(showAllTracks ? artist.tracks : artist.tracks.slice(0, COLLAPSED_TRACK_COUNT)).map((track, idx) => {
+          {(showAllTracks ? (artist.tracks ?? []) : (artist.tracks ?? []).slice(0, COLLAPSED_TRACK_COUNT)).map((track, idx) => {
             // Convert to full Track type for context menu
             const fullTrack: Track = {
               id: track.id,
@@ -770,7 +770,7 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
         </div>
 
         {/* Show all/less toggle */}
-        {artist.tracks.length > COLLAPSED_TRACK_COUNT && (
+        {(artist.tracks?.length ?? 0) > COLLAPSED_TRACK_COUNT && (
           <button
             onClick={() => setShowAllTracks(!showAllTracks)}
             className="flex items-center gap-2 mt-3 px-4 py-2 w-full justify-center text-sm text-zinc-400 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors"
