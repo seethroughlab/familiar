@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Auto-Download Toggle** - Automatically download new tracks for offline use
+  - Toggle on any playlist, smart playlist, or favorites to enable auto-download
+  - New tracks added to enabled playlists are downloaded automatically
+  - Favorites: newly favorited tracks auto-download from any page in the app
+  - New `useAutoDownload` hook for reusable download trigger logic
+  - Backend: `auto_download` column on playlists and smart_playlists tables
+  - Backend: favorites auto-download setting stored in profile settings
+- **Ephemeral Playlists** - LLM-generated playlists are no longer auto-saved
+  - Playlists from chat appear in "Unsaved" section until explicitly saved
+  - Save button persists playlist to database
+  - Dismiss button removes ephemeral playlist without saving
+  - Ephemeral playlists stored in Zustand (survive page navigation, cleared on refresh)
+  - Reduces database clutter from experimental/throwaway requests
+- **5 New Audio Effects** - Expanded real-time audio effects system
+  - **Stereo Width**: Mono to extra wide (200%) stereo image control
+  - **Saturation**: Warm/tape/hard modes with drive and mix controls
+  - **Chorus**: 2-3 voices with rate/depth for thickness
+  - **Tremolo**: Sine/triangle/square LFO shapes
+  - **Bitcrusher**: Bit depth (1-16) and sample rate reduction
+- **15 New Audio Presets** using new and existing effects
+  - Lo-Fi, Late Night, Club, Telephone, Underwater, 80s Gated, Spoken Word
+  - Wide Stereo, Analog Warmth, Retro 8-Bit, Thick & Lush, Vintage Amp, Psychedelic, Synthwave, Broken Radio
+  - Enhanced classic presets: Warm Vinyl (tape saturation), Live Concert (stereo width), Studio Polish (warm saturation), Dreamy (chorus + stereo width)
+- **Sortable Columns** in track list view
+- **Library Scan in Separate Process** - Library scanning now runs in its own process for better stability
+
+### Changed
+
+- Refactored playlist import/export system
+
+### Fixed
+
+- **Video download bug fixes** - Resolved issues with music video downloads
+- **Mobile interface fixes** - Various mobile layout and interaction improvements
+- **External track UX fixes** - Improved display and interaction with external/discovery tracks
+- **CI failures** - pg_trgm extension properly initialized, lint errors resolved
+- **E2E test reliability** - Chat panel and library view selectors updated for current DOM structure
+
+## [0.1.0-alpha.8] - 2026-02-04
+
+Library Migration & UX Polish
+
+### Added
+
 - **Library Export/Import for Migration** - Export complete library data for migrating to a new machine
   - **Export includes**: metadata, analysis features, audio embeddings, fingerprints, user overrides
   - **Intelligent matching**: Matches tracks by file_hash (exact), acoustid (fingerprint), ISRC, MusicBrainz ID, or fuzzy title/artist
@@ -63,12 +107,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatically scrolls to show currently playing track
   - Centers track in viewport for better context
   - Works especially well with shuffle mode
-- **Ephemeral Playlists** - LLM-generated playlists are no longer auto-saved
-  - Playlists from chat appear in "Unsaved" section until explicitly saved
-  - Save button persists playlist to database
-  - Dismiss button removes ephemeral playlist without saving
-  - Ephemeral playlists stored in Zustand (survive page navigation, cleared on refresh)
-  - Reduces database clutter from experimental/throwaway requests
 
 ### Fixed
 
@@ -490,7 +528,9 @@ First alpha release of Familiar - an LLM-powered local music player.
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - MoodMap accuracy depends on proper key detection
 
-[Unreleased]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.5...HEAD
+[Unreleased]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.8...HEAD
+[0.1.0-alpha.8]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
+[0.1.0-alpha.7]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.5...v0.1.0-alpha.7
 [0.1.0-alpha.5]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
