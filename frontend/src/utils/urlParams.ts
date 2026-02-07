@@ -5,7 +5,7 @@
  * This ensures consistent parameter handling across navigation.
  */
 
-export type AppTab = 'library' | 'playlists' | 'queue' | 'visualizer' | 'settings';
+export type AppTab = 'library' | 'playlists' | 'queue' | 'settings';
 
 /**
  * Whitelist of URL parameters that are valid for each tab.
@@ -37,7 +37,6 @@ export const TAB_PARAM_WHITELIST: Record<AppTab, string[]> = {
   ],
   playlists: ['playlist', 'smartPlaylist', 'view'],
   queue: [],
-  visualizer: ['type'],
   settings: [],
 };
 
@@ -77,5 +76,5 @@ export function getConflictingParams(filterGroup: keyof typeof FILTER_GROUPS): s
  * Check if a tab is valid
  */
 export function isValidTab(tab: string): tab is AppTab {
-  return tab === 'library' || tab === 'playlists' || tab === 'queue' || tab === 'visualizer' || tab === 'settings';
+  return tab === 'library' || tab === 'playlists' || tab === 'queue' || tab === 'settings';
 }

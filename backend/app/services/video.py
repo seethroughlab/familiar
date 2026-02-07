@@ -39,6 +39,14 @@ class VideoService:
         self.videos_dir.mkdir(parents=True, exist_ok=True)
         self._downloads: dict[str, VideoDownloadStatus] = {}
 
+    @staticmethod
+    def _base_ytdlp_args() -> list[str]:
+        """Common yt-dlp args for browser impersonation and YouTube compatibility."""
+        return [
+            "--extractor-args", "youtube:player_client=web",
+            "--impersonate", "chrome",
+        ]
+
     async def search(
         self,
         query: str,
@@ -52,6 +60,7 @@ class VideoService:
             # Use yt-dlp to search YouTube
             cmd = [
                 "yt-dlp",
+                *self._base_ytdlp_args(),
                 "--dump-json",
                 "--flat-playlist",
                 "--no-warnings",
@@ -162,6 +171,7 @@ class VideoService:
             # Use yt-dlp to download
             cmd = [
                 "yt-dlp",
+                *self._base_ytdlp_args(),
                 "-f", "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best",
                 "--merge-output-format", "mp4",
                 "--no-playlist",

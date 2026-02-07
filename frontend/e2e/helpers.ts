@@ -43,7 +43,7 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
 /**
  * Navigate to a specific tab in the main UI
  */
-export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Visualizer' | 'Settings') {
+export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Settings') {
   // The tab buttons contain the text directly
   const tabButton = page.locator(`button:has-text("${tabName}")`).first();
   await tabButton.click();

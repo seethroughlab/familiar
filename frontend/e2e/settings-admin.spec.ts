@@ -110,47 +110,6 @@ test.describe('Admin Panel', () => {
   });
 });
 
-test.describe('Visualizer', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await ensureProfile(page);
-  });
-
-  test('visualizer tab opens', async ({ page }) => {
-    await navigateToTab(page, 'Visualizer');
-
-    // Wait for visualizer content to mount - give it more time
-    await page.waitForTimeout(1000);
-
-    // Without a track playing, visualizer shows placeholder
-    // Either shows "No track playing" or a canvas if track is playing
-    const noTrack = page.getByText('No track playing');
-    const canvas = page.locator('canvas');
-
-    // Use longer timeouts to account for component mount time
-    const hasNoTrack = await noTrack.isVisible({ timeout: 5000 }).catch(() => false);
-    const hasCanvas = await canvas.isVisible({ timeout: 2000 }).catch(() => false);
-
-    // At least one should be visible
-    expect(hasNoTrack || hasCanvas).toBe(true);
-  });
-
-  test('visualizer has fullscreen button when track playing', async ({ page }) => {
-    await navigateToTab(page, 'Visualizer');
-
-    // If no track is playing, there's no fullscreen button (just placeholder)
-    const noTrack = page.getByText('No track playing');
-    if (await noTrack.isVisible({ timeout: 2000 }).catch(() => false)) {
-      test.skip(true, 'No track playing - fullscreen button only shows with track');
-      return;
-    }
-
-    // With track playing, fullscreen button should exist
-    const fullscreenBtn = page.locator('button[aria-label*="fullscreen" i], button:has(svg)').first();
-    await expect(fullscreenBtn).toBeVisible({ timeout: 3000 });
-  });
-});
-
 test.describe('UI Elements', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -201,7 +160,7 @@ test.describe('UI Elements', () => {
 
   test('main navigation tabs work', async ({ page }) => {
     // Test all main tabs are accessible
-    const tabs = ['Library', 'Playlists', 'Visualizer', 'Settings'] as const;
+    const tabs = ['Library', 'Playlists', 'Settings'] as const;
 
     for (const tab of tabs) {
       await navigateToTab(page, tab);

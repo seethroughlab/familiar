@@ -52,7 +52,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv && \
     uv sync --frozen --no-dev --extra analysis && \
     uv pip install torch --index-url https://download.pytorch.org/whl/cpu && \
-    uv pip install yt-dlp
+    uv pip install 'yt-dlp[default]'
 
 # =============================================================================
 # Stage 4: Production image
@@ -65,13 +65,19 @@ RUN echo "${VERSION}" > /app/VERSION
 
 # Install runtime dependencies
 # libcurl4-openssl-dev is required for curl_cffi (TLS fingerprint impersonation)
+# curl + unzip needed for Deno install
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     ffmpeg \
     gosu \
     libcurl4-openssl-dev \
     postgresql-client \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Deno - required by yt-dlp for YouTube JS challenge solving
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
 
 # Copy Python virtual environment from deps stage
 COPY --from=python-deps /app/.venv /app/.venv

@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, Maximize2, Shuffle, Repeat, Loader2, Radio } from 'lucide-react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, Radio } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
@@ -119,6 +119,22 @@ export function PlayerBar({
     setVolume(parseFloat(e.target.value));
   };
 
+  // Swipe-up-to-expand handler for mobile
+  const touchStartRef = useRef<{ y: number; time: number } | null>(null);
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
+  }, []);
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current || !onExpandClick) return;
+    const deltaY = touchStartRef.current.y - e.changedTouches[0].clientY;
+    const elapsed = Date.now() - touchStartRef.current.time;
+    const velocity = deltaY / elapsed;
+    if (deltaY > 50 || velocity > 0.3) {
+      onExpandClick();
+    }
+    touchStartRef.current = null;
+  }, [onExpandClick]);
+
   if (!currentTrack) {
     return (
       <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 z-20 flex items-center justify-center text-zinc-500 h-20 pb-safe-bottom">
@@ -130,9 +146,17 @@ export function PlayerBar({
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 z-20 pb-safe-bottom">
       {/* Mobile layout: two rows - track info + play, then progress bar */}
-      <div className="sm:hidden">
-        {/* Row 1: Album art + Track info + Play/Pause */}
-        <div className="flex items-center gap-3 px-4 pt-2 pb-1">
+      <div
+        className="sm:hidden"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Drag handle pill */}
+        <div className="flex justify-center pt-1.5">
+          <div className="w-8 h-1 bg-zinc-600 rounded-full" />
+        </div>
+        {/* Row 1: Album art + Track info + ChevronUp + Play/Pause */}
+        <div className="flex items-center gap-3 px-4 pt-1 pb-1">
           <button
             onClick={onExpandClick}
             onContextMenu={handleContextMenu}
@@ -153,6 +177,10 @@ export function PlayerBar({
               <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
             </div>
           </button>
+          <ChevronUp
+            className="w-5 h-5 text-zinc-500 flex-shrink-0"
+            onClick={onExpandClick}
+          />
           <button
             data-testid="play-pause-mobile"
             onClick={togglePlayPause}
@@ -207,7 +235,16 @@ export function PlayerBar({
             </div>
             <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
           </div>
-          <Maximize2 className="w-4 h-4 text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+
+        {/* Standalone expand button */}
+        <button
+          onClick={onExpandClick}
+          className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-white"
+          aria-label="Expand player"
+          title="Expand player (F)"
+        >
+          <ChevronUp className="w-5 h-5" />
         </button>
 
         {/* Controls */}

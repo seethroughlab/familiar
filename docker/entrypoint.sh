@@ -4,6 +4,9 @@ set -e
 # Fix permissions for mounted volumes (runs as root initially)
 chown -R familiar:familiar /app/data /data/art /data/videos 2>/dev/null || true
 
+# Auto-update yt-dlp to pick up latest YouTube 403 fixes
+gosu familiar uv pip install -U 'yt-dlp[default]' -q || true
+
 # Initialize database on first run (only for API container, not worker)
 if [[ "$1" == "uvicorn"* ]] || [[ "$*" == *"uvicorn"* ]]; then
     echo "Checking database setup..."

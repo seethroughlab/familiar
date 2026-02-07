@@ -32,7 +32,6 @@ const MOBILE_VIEWPORTS = {
 const SCREENS = [
   { name: 'library', tab: 'Library', wait: 1000 },
   { name: 'playlists', tab: 'Playlists', wait: 500 },
-  { name: 'visualizer', tab: 'Visualizer', wait: 500 },
   { name: 'settings', tab: 'Settings', wait: 500 },
 ];
 
@@ -94,7 +93,7 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
       }
 
       // Expand to full player
-      const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
+      const expandButton = page.locator('button[aria-label="Expand player"]').first();
       if (await expandButton.isVisible()) {
         await expandButton.click();
         await page.waitForTimeout(500);

@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Play,
   Pause,
   SkipBack,
   SkipForward,
-  X,
+  ChevronDown,
   Volume2,
   VolumeX,
   Shuffle,
@@ -166,10 +166,11 @@ function formatTime(seconds: number): string {
 }
 
 interface FullPlayerProps {
+  isOpen: boolean;
   onClose: () => void;
 }
 
-export function FullPlayer({ onClose }: FullPlayerProps) {
+export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('visualizer');
   const [imageError, setImageError] = useState(false);
   const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
@@ -252,6 +253,22 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
     enabled: !!currentTrack?.id,
   });
 
+  // Swipe-down-to-close handler
+  const touchStartRef = useRef<{ y: number; time: number } | null>(null);
+  const handleHeaderTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
+  }, []);
+  const handleHeaderTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
+    const elapsed = Date.now() - touchStartRef.current.time;
+    const velocity = deltaY / elapsed;
+    if (deltaY > 50 || velocity > 0.3) {
+      onClose();
+    }
+    touchStartRef.current = null;
+  }, [onClose]);
+
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -267,15 +284,19 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
   const artworkUrl = tracksApi.getArtworkUrl(currentTrack.id);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className={`fixed inset-0 z-50 bg-black flex flex-col transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}>
       {/* Header - includes safe area padding for notch */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 pt-safe bg-gradient-to-b from-black/80 to-transparent">
+      <div
+        className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 pt-safe bg-gradient-to-b from-black/80 to-transparent"
+        onTouchStart={handleHeaderTouchStart}
+        onTouchEnd={handleHeaderTouchEnd}
+      >
         <button
           onClick={onClose}
           className="p-2 hover:bg-white/10 rounded-full transition-colors"
           aria-label="Close player"
         >
-          <X className="w-6 h-6" />
+          <ChevronDown className="w-6 h-6" />
         </button>
 
         {/* Center: View mode toggle + visualizer picker */}

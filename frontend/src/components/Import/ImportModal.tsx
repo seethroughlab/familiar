@@ -47,6 +47,7 @@ interface TrackPreview {
   // Duplicate detection
   duplicate_of: string | null;
   duplicate_info: string | null;
+  duplicate_match_type: 'exact' | 'normalized' | 'artist_title' | null;
   // Quality comparison (for duplicates)
   trump_status: 'trumps' | 'trumped_by' | 'equal' | null;
   trump_reason: string | null;
@@ -528,6 +529,29 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
                         {tracks.filter((t) => t.trump_status === 'equal').length} same
                       </span>
                     )}
+                    {/* Bulk actions */}
+                    <div className="ml-auto flex items-center gap-2">
+                      {tracks.some((t) => t.trump_status === 'trumps') && (
+                        <button
+                          onClick={() => setTracks(prev => prev.map(t =>
+                            t.trump_status === 'trumps' ? { ...t, action: 'replace' as const } : t
+                          ))}
+                          className="px-2 py-0.5 text-xs bg-green-600/20 text-green-400 hover:bg-green-600/40 rounded transition-colors"
+                        >
+                          Replace all upgrades
+                        </button>
+                      )}
+                      {tracks.some((t) => t.trump_status === 'trumped_by' || t.trump_status === 'equal') && (
+                        <button
+                          onClick={() => setTracks(prev => prev.map(t =>
+                            (t.trump_status === 'trumped_by' || t.trump_status === 'equal') ? { ...t, action: 'skip' as const } : t
+                          ))}
+                          className="px-2 py-0.5 text-xs bg-zinc-600/20 text-zinc-400 hover:bg-zinc-600/40 rounded transition-colors"
+                        >
+                          Skip all downgrades
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Duplicate tracks with quality comparison */}
@@ -570,6 +594,11 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
                             </div>
                             {track.trump_reason && (
                               <p className="text-xs text-zinc-500 mt-0.5">{track.trump_reason}</p>
+                            )}
+                            {track.duplicate_match_type === 'artist_title' && track.duplicate_info && (
+                              <p className="text-xs text-amber-400/80 mt-0.5">
+                                Matched by artist + title only (different album: {track.duplicate_info.split(' - ')[1] || 'unknown'})
+                              </p>
                             )}
                           </div>
 

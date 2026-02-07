@@ -166,8 +166,8 @@ test.describe('Screenshot Capture', () => {
     });
   });
 
-  test('06 - Visualizer', async ({ page }) => {
-    // First switch to Track List and play a track so the visualizer has something to show
+  test('06 - Full Player', async ({ page }) => {
+    // First switch to Track List and play a track so the full player has something to show
     await navigateToTab(page, 'Library');
     await selectBrowser(page, 'Tracks');
     await page.waitForTimeout(1500);
@@ -186,12 +186,15 @@ test.describe('Screenshot Capture', () => {
       }
     }
 
-    // Now go to visualizer
-    await navigateToTab(page, 'Visualizer');
-    await page.waitForTimeout(2000); // Give visualizer time to render
+    // Expand to full player via the ChevronUp button
+    const expandButton = page.locator('button[aria-label="Expand player"]').first();
+    if (await expandButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await expandButton.click();
+      await page.waitForTimeout(2000); // Give full player time to animate in
+    }
 
     await page.screenshot({
-      path: path.join(SCREENSHOT_DIR, '06-visualizer.png'),
+      path: path.join(SCREENSHOT_DIR, '06-full-player.png'),
       fullPage: false,
     });
   });
@@ -394,7 +397,7 @@ test.describe('Mobile Screenshots', () => {
     }
 
     // Expand to full player
-    const expandButton = page.locator('button:has(svg.lucide-maximize2)').first();
+    const expandButton = page.locator('button[aria-label="Expand player"]').first();
     if (await expandButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       await expandButton.click();
       await page.waitForTimeout(1500);

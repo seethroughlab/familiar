@@ -2379,6 +2379,7 @@ class ImportTrackPreview(BaseModel):
     trump_reason: str | None = None  # Human-readable comparison reason
     incoming_quality: dict | None = None  # Quality info for incoming track
     existing_quality: dict | None = None  # Quality info for existing track
+    duplicate_match_type: str | None = None  # "exact", "normalized", "artist_title"
 
 
 class ImportPreviewResponse(BaseModel):
@@ -2437,6 +2438,82 @@ class ImportExecuteResponse(BaseModel):
     queue_analysis: bool
 
 
+async def _find_import_duplicate(
+    db: "AsyncSession",
+    artist: str,
+    album: str,
+    title: str,
+) -> tuple["Track | None", str]:
+    """Multi-phase duplicate detection for import preview.
+
+    Returns (matching_track, match_type) where match_type is one of:
+    "exact", "normalized", "artist_title", or "" if no match.
+    """
+    from sqlalchemy import func, or_, select
+
+    from app.db.models import Track
+    from app.services.normalize import normalize_for_duplicate_matching
+
+    # Phase 1: Exact case-insensitive match (artist + album + title)
+    if album:
+        stmt = (
+            select(Track)
+            .where(
+                func.lower(Track.artist) == artist.lower(),
+                func.lower(Track.album) == album.lower(),
+                func.lower(Track.title) == title.lower(),
+            )
+            .limit(1)
+        )
+        existing = (await db.execute(stmt)).scalar_one_or_none()
+        if existing:
+            return existing, "exact"
+
+    # Phase 2: Fetch candidates by artist variants for fuzzy matching
+    artist_lower = artist.lower()
+    artist_variants = [artist_lower]
+
+    # Add with/without leading articles
+    for article in ("the ", "a ", "an "):
+        if artist_lower.startswith(article):
+            artist_variants.append(artist_lower[len(article):])
+        else:
+            artist_variants.append(article + artist_lower)
+
+    stmt = (
+        select(Track)
+        .where(func.lower(Track.artist).in_(artist_variants))
+    )
+    candidates = (await db.execute(stmt)).scalars().all()
+
+    if not candidates:
+        return None, ""
+
+    # Phase 3: Normalized artist + album + title
+    norm_artist = normalize_for_duplicate_matching(artist, strip_articles=True)
+    norm_album = normalize_for_duplicate_matching(album)
+    norm_title = normalize_for_duplicate_matching(title)
+
+    if norm_album:
+        for candidate in candidates:
+            if (
+                normalize_for_duplicate_matching(candidate.artist, strip_articles=True) == norm_artist
+                and normalize_for_duplicate_matching(candidate.album) == norm_album
+                and normalize_for_duplicate_matching(candidate.title) == norm_title
+            ):
+                return candidate, "normalized"
+
+    # Phase 4: Artist + title only (no album requirement)
+    for candidate in candidates:
+        if (
+            normalize_for_duplicate_matching(candidate.artist, strip_articles=True) == norm_artist
+            and normalize_for_duplicate_matching(candidate.title) == norm_title
+        ):
+            return candidate, "artist_title"
+
+    return None, ""
+
+
 @router.post("/import/preview", response_model=ImportPreviewResponse)
 async def import_preview(
     db: DbSession,
@@ -2486,23 +2563,17 @@ async def import_preview(
             title = track.get("detected_title") or ""
 
             # Only check if we have enough metadata to match
-            if artist and album and title:
-                stmt = (
-                    select(Track)
-                    .where(
-                        func.lower(Track.artist) == artist.lower(),
-                        func.lower(Track.album) == album.lower(),
-                        func.lower(Track.title) == title.lower(),
-                    )
-                    .limit(1)
+            if artist and title:
+                existing, match_type = await _find_import_duplicate(
+                    db, artist, album, title
                 )
-                existing = (await db.execute(stmt)).scalar_one_or_none()
 
                 if existing:
                     track["duplicate_of"] = str(existing.id)
                     track["duplicate_info"] = (
                         f"{existing.artist} - {existing.album} - {existing.title}"
                     )
+                    track["duplicate_match_type"] = match_type
 
                     # Calculate quality scores and compare
                     incoming_score = calculate_quality_score(

@@ -3,8 +3,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { TAB_PARAM_WHITELIST, type AppTab } from './utils/urlParams';
-import { Search, Library, Settings, Zap, Activity, MessageSquare, X, Loader2, ListMusic } from 'lucide-react';
-import { isVisualizerAvailable } from './hooks/useAudioEngine';
+import { Search, Library, Settings, Zap, MessageSquare, X, Loader2, ListMusic } from 'lucide-react';
 import { logger } from './utils/logger';
 import { PlayerBar } from './components/Player/PlayerBar';
 import { LibraryView } from './components/Library';
@@ -27,7 +26,6 @@ const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ de
 const FullPlayer = lazy(() => import('./components/FullPlayer').then(m => ({ default: m.FullPlayer })));
 const PlaylistsView = lazy(() => import('./components/Playlists').then(m => ({ default: m.PlaylistsView })));
 const QueueView = lazy(() => import('./components/Queue').then(m => ({ default: m.QueueView })));
-const VisualizerView = lazy(() => import('./components/Visualizer').then(m => ({ default: m.VisualizerView })));
 const AdminSetup = lazy(() => import('./components/Admin').then(m => ({ default: m.AdminSetup })));
 
 // Loading spinner for lazy components
@@ -107,17 +105,12 @@ function AppContent() {
     if (hash === 'settings' || hash === 'playlists' || hash === 'library' || hash === 'queue') {
       return hash;
     }
-    // Visualizer only available on desktop
-    if (hash === 'visualizer' && isVisualizerAvailable()) {
-      return 'visualizer';
-    }
     // Fall back to pathname (e.g., /settings from OAuth callback)
     const path = window.location.pathname;
     logger.debug('[AppContent] getTabFromUrl, hash:', hash, 'path:', path);
     if (path === '/settings') return 'settings';
     if (path === '/playlists') return 'playlists';
     if (path === '/queue') return 'queue';
-    if (path === '/visualizer' && isVisualizerAvailable()) return 'visualizer';
 
     // Check for playlist-specific view params (downloads, favorites, wishlist)
     // These belong to the playlists tab even without the hash
@@ -166,6 +159,15 @@ function AppContent() {
     setRightPanelTabState(tab);
   }, [location]);
   const [showFullPlayer, setShowFullPlayer] = useState(false);
+  const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
+
+  // Mount FullPlayer on first open, keep mounted for slide animation
+  useEffect(() => {
+    if (showFullPlayer && !fullPlayerMounted) {
+      setFullPlayerMounted(true);
+    }
+  }, [showFullPlayer, fullPlayerMounted]);
+
   // Listening sessions disabled for v0.1.0
   // const [showSessionPanel, setShowSessionPanel] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -452,20 +454,6 @@ function AppContent() {
                       <ListMusic className="w-4 h-4 inline-block sm:mr-1.5" />
                       <span className="hidden sm:inline">Queue</span>
                     </button>
-                    {isVisualizerAvailable() && (
-                      <button
-                        onClick={() => setRightPanelTab('visualizer')}
-                        className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                          rightPanelTab === 'visualizer'
-                            ? 'bg-zinc-800 text-white'
-                            : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                        }`}
-                        aria-label="Visualizer"
-                      >
-                        <Activity className="w-4 h-4 inline-block sm:mr-1.5" />
-                        <span className="hidden sm:inline">Visualizer</span>
-                      </button>
-                    )}
                     <button
                       onClick={() => setRightPanelTab('settings')}
                       className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
@@ -559,13 +547,6 @@ function AppContent() {
                 </Suspense>
               </div>
             )}
-            {rightPanelTab === 'visualizer' && (
-              <ErrorBoundary name="Visualizer">
-                <Suspense fallback={<LazyLoadSpinner />}>
-                  <VisualizerView />
-                </Suspense>
-              </ErrorBoundary>
-            )}
             {rightPanelTab === 'settings' && (
               <Suspense fallback={<LazyLoadSpinner />}>
                 <SettingsPanel />
@@ -604,15 +585,15 @@ function AppContent() {
         />
       </ErrorBoundary>
 
-      {/* Full player overlay */}
-      {showFullPlayer && (
+      {/* Full player overlay - mounted once, slides up/down */}
+      {fullPlayerMounted && (
         <ErrorBoundary name="Full Player" fullscreen>
           <Suspense fallback={
             <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
           }>
-            <FullPlayer onClose={() => setShowFullPlayer(false)} />
+            <FullPlayer isOpen={showFullPlayer} onClose={() => setShowFullPlayer(false)} />
           </Suspense>
         </ErrorBoundary>
       )}
