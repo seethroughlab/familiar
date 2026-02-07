@@ -33,7 +33,8 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     queryFn: () => videosApi.getStatus(trackId),
     refetchInterval: (query) => {
       // Poll while downloading
-      if (query.state.data?.download_status === 'downloading') {
+      const dlStatus = query.state.data?.download_status;
+      if (dlStatus === 'downloading' || dlStatus === 'pending') {
         return 1000;
       }
       return false;
@@ -88,6 +89,11 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     }
   }, [currentTime, isPlaying, status?.has_video]);
 
+  // Reset search view when switching tracks
+  useEffect(() => {
+    setShowSearch(false);
+  }, [trackId]);
+
   const handleSearchClick = () => {
     setShowSearch(true);
     searchVideos();
@@ -128,41 +134,7 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
     );
   }
 
-  // Downloading state
-  if (status?.download_status === 'downloading') {
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
-        <Loader2 className="w-12 h-12 animate-spin text-green-500 mb-4" />
-        <p className="text-white text-lg">Downloading video...</p>
-        <div className="w-48 sm:w-64 h-2 bg-zinc-700 rounded-full mt-4 overflow-hidden">
-          <div
-            className="h-full bg-green-500 transition-all duration-300"
-            style={{ width: `${status.progress || 0}%` }}
-          />
-        </div>
-        <p className="text-zinc-400 mt-2">{Math.round(status.progress || 0)}%</p>
-      </div>
-    );
-  }
-
-  // Error state
-  if (status?.download_status === 'error') {
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
-        <Video className="w-16 h-16 text-red-500 mb-4 opacity-50" />
-        <p className="text-red-400">Download failed</p>
-        <p className="text-sm text-zinc-500 mt-2">{status.error}</p>
-        <button
-          onClick={handleSearchClick}
-          className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
-        >
-          Try again
-        </button>
-      </div>
-    );
-  }
-
-  // Search results view
+  // Search results view (before error/downloading so "Try again" works)
   if (showSearch) {
     return (
       <div className="absolute inset-0 bg-zinc-900 overflow-auto p-4 sm:p-6">
@@ -231,6 +203,40 @@ export function VideoPlayer({ trackId }: VideoPlayerProps) {
             Cancel
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Downloading state
+  if (status?.download_status === 'downloading' || status?.download_status === 'pending') {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+        <Loader2 className="w-12 h-12 animate-spin text-green-500 mb-4" />
+        <p className="text-white text-lg">Downloading video...</p>
+        <div className="w-48 sm:w-64 h-2 bg-zinc-700 rounded-full mt-4 overflow-hidden">
+          <div
+            className="h-full bg-green-500 transition-all duration-300"
+            style={{ width: `${status.progress || 0}%` }}
+          />
+        </div>
+        <p className="text-zinc-400 mt-2">{Math.round(status.progress || 0)}%</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (status?.download_status === 'error') {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900">
+        <Video className="w-16 h-16 text-red-500 mb-4 opacity-50" />
+        <p className="text-red-400">Download failed</p>
+        <p className="text-sm text-zinc-500 mt-2">{status.error}</p>
+        <button
+          onClick={handleSearchClick}
+          className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
+        >
+          Try again
+        </button>
       </div>
     );
   }

@@ -110,6 +110,25 @@ class VideoService:
         """Get the status of a video download."""
         return self._downloads.get(track_id)
 
+    @staticmethod
+    def _extract_video_id(video_url: str) -> str:
+        """Extract YouTube video ID from a URL."""
+        if "v=" in video_url:
+            return video_url.split("v=")[1].split("&")[0]
+        elif "youtu.be/" in video_url:
+            return video_url.split("youtu.be/")[1].split("?")[0]
+        return ""
+
+    def set_pending(self, track_id: str, video_url: str) -> None:
+        """Set a track's download status to pending immediately."""
+        video_id = self._extract_video_id(video_url)
+        self._downloads[track_id] = VideoDownloadStatus(
+            track_id=track_id,
+            video_id=video_id,
+            status='pending',
+            progress=0,
+        )
+
     async def download(
         self,
         track_id: str,
@@ -126,12 +145,7 @@ class VideoService:
             if status.status == 'downloading':
                 return status
 
-        # Extract video ID from URL
-        video_id = ""
-        if "v=" in video_url:
-            video_id = video_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in video_url:
-            video_id = video_url.split("youtu.be/")[1].split("?")[0]
+        video_id = self._extract_video_id(video_url)
 
         output_path = self.videos_dir / f"{track_id}.mp4"
         temp_path = self.videos_dir / f"{track_id}.temp.mp4"
@@ -164,6 +178,7 @@ class VideoService:
             )
 
             # Read progress from stdout
+            error_lines: list[str] = []
             if process.stdout:
                 while True:
                     line = await process.stdout.readline()
@@ -171,8 +186,11 @@ class VideoService:
                         break
 
                     line_str = line.decode().strip()
+                    # Capture error lines from yt-dlp
+                    if line_str.startswith('ERROR:'):
+                        error_lines.append(line_str.removeprefix('ERROR:').strip())
                     # Parse progress from yt-dlp output
-                    if '[download]' in line_str and '%' in line_str:
+                    elif '[download]' in line_str and '%' in line_str:
                         try:
                             # Extract percentage from output like "[download]  50.0% of ..."
                             parts = line_str.split('%')[0].split()[-1]
@@ -193,7 +211,9 @@ class VideoService:
                 status.file_path = str(output_path)
             else:
                 status.status = 'error'
-                status.error = 'Download failed'
+                # Use the last (most specific) yt-dlp error, or generic fallback
+                error_msg = error_lines[-1] if error_lines else 'Download failed'
+                status.error = error_msg[:300]
                 if temp_path.exists():
                     temp_path.unlink()
 

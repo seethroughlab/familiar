@@ -162,6 +162,9 @@ async def download_video(
             track_id=track_id_str
         )
 
+    # Set pending status immediately so the frontend sees it before the background task starts
+    video_service.set_pending(track_id_str, request.video_url)
+
     # Start download in background
     background_tasks.add_task(
         video_service.download,
