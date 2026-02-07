@@ -473,6 +473,7 @@ class LibraryScanner:
                     results["external_matched"] = total_matched
             except Exception as e:
                 logger.warning(f"External track matching failed (non-fatal): {e}")
+                await self.db.rollback()
 
         return results
 
