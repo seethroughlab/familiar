@@ -4,6 +4,10 @@ import { getSelectedProfileId, getProfile, clearSelectedProfile, type Profile } 
 import { profilesApi } from '../../api/client';
 import { showError, showWarning } from '../../stores/toastStore';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ProfileSettings');
+
 export function ProfileSettings() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +32,7 @@ export function ProfileSettings() {
         }
       }
     } catch (err) {
-      console.error('Failed to load profile:', err);
+      log.error('Failed to load profile:', err);
     } finally {
       setLoading(false);
     }
@@ -62,7 +66,7 @@ export function ProfileSettings() {
       setProfile(updated);
       setIsEditing(false);
     } catch (err) {
-      console.error('Failed to update profile:', err);
+      log.error('Failed to update profile:', err);
     } finally {
       setIsSaving(false);
     }
@@ -93,7 +97,7 @@ export function ProfileSettings() {
       const updated = await profilesApi.uploadAvatar(profile.id, file);
       setProfile(updated);
     } catch (err) {
-      console.error('Failed to upload avatar:', err);
+      log.error('Failed to upload avatar:', err);
       showError('Failed to upload avatar', {
         description: 'Please try again',
       });

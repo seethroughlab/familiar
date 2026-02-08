@@ -4,6 +4,9 @@
  * Stores device profile info, chat history, and offline data.
  */
 import Dexie, { type Table } from 'dexie';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DB');
 
 export interface DeviceProfile {
   id: 'device-profile'; // Single record with fixed ID
@@ -188,7 +191,7 @@ export async function isIndexedDBAvailable(): Promise<boolean> {
     indexedDBAvailable = true;
     return true;
   } catch {
-    console.warn('[DB] IndexedDB not available (private browsing or disabled)');
+    log.warn('IndexedDB not available (private browsing or disabled)');
     indexedDBAvailable = false;
     return false;
   }

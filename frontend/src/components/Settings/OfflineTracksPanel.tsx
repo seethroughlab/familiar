@@ -11,6 +11,10 @@ import {
 import * as offlineService from '../../services/offlineService';
 import type { OfflineTrackInfo } from '../../services/offlineService';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('OfflineTracksPanel');
+
 type SortField = 'title' | 'artist' | 'album' | 'size' | 'date';
 type SortDirection = 'asc' | 'desc';
 
@@ -33,7 +37,7 @@ export function OfflineTracksPanel({ onTracksChanged }: Props) {
       const info = await offlineService.getOfflineTracksWithInfo();
       setTracks(info);
     } catch (error) {
-      console.error('Failed to load offline tracks:', error);
+      log.error('Failed to load offline tracks:', error);
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +54,7 @@ export function OfflineTracksPanel({ onTracksChanged }: Props) {
       setTracks((prev) => prev.filter((t) => t.id !== trackId));
       onTracksChanged?.();
     } catch (error) {
-      console.error('Failed to remove track:', error);
+      log.error('Failed to remove track:', error);
     } finally {
       setRemovingIds((prev) => {
         const next = new Set(prev);
@@ -70,7 +74,7 @@ export function OfflineTracksPanel({ onTracksChanged }: Props) {
       setTracks([]);
       onTracksChanged?.();
     } catch (error) {
-      console.error('Failed to clear offline tracks:', error);
+      log.error('Failed to clear offline tracks:', error);
     } finally {
       setIsLoading(false);
     }

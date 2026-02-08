@@ -3,6 +3,9 @@
  *
  * Extracts dominant colors from images using canvas sampling.
  */
+import { createLogger } from './logger';
+
+const log = createLogger('ColorExtraction');
 
 // Cache extracted palettes by URL
 const paletteCache = new Map<string, string[]>();
@@ -164,7 +167,7 @@ export async function extractPalette(
 
     return colors;
   } catch (error) {
-    console.warn('Failed to extract palette:', error);
+    log.warn('Failed to extract palette:', error);
     // Return default palette on error
     return ['#4a00e0', '#8e2de2', '#00ffff', '#ff00ff', '#ffff00'];
   }

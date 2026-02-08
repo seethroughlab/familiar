@@ -33,6 +33,10 @@ import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
 
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('TrackListBrowser');
+
 const PAGE_SIZE = 50;
 const ROW_HEIGHT = 40; // Height of each track row in pixels (desktop view)
 
@@ -680,7 +684,7 @@ export function TrackListBrowser({
     } catch (error) {
       // Remove from loaded set so it can be retried
       loadedPagesRef.current.delete(pageNumber);
-      console.error(`Failed to fetch page ${pageNumber}:`, error);
+      log.error(`Failed to fetch page ${pageNumber}:`, error);
     }
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
       filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax, needsFeatures,
@@ -967,7 +971,7 @@ export function TrackListBrowser({
       // Scroll mobile view to top
       window.scrollTo({ top: 0 });
     } catch (err) {
-      console.error('Failed to jump to letter:', err);
+      log.error('Failed to jump to letter:', err);
       setMobileJump(null);
     }
   }, [letterIndex, filters, needsFeatures, sortField, sortOrder, setActiveLetter]);
@@ -1004,7 +1008,7 @@ export function TrackListBrowser({
         isLoading: false,
       } : null);
     } catch (err) {
-      console.error('Failed to load more jump tracks:', err);
+      log.error('Failed to load more jump tracks:', err);
       setMobileJump(prev => prev ? { ...prev, isLoading: false } : null);
     }
   }, [mobileJump, filters, needsFeatures, sortField, sortOrder]);
@@ -1119,7 +1123,7 @@ export function TrackListBrowser({
             });
           }
         } catch (error) {
-          console.error('Failed to play track:', error);
+          log.error('Failed to play track:', error);
         } finally {
           setIsLoadingPlayAll(false);
         }
@@ -1194,7 +1198,7 @@ export function TrackListBrowser({
           });
         }
       } catch (error) {
-        console.error('Failed to play all tracks:', error);
+        log.error('Failed to play all tracks:', error);
       } finally {
         setIsLoadingPlayAll(false);
       }

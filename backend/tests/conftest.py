@@ -9,8 +9,22 @@ from collections.abc import Generator
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.config import settings
+from app.db.models import (
+    ExternalTrack,
+    Playlist,
+    PlaylistTrack,
+    ProfilePlayHistory,
+    ProposedChange,
+    SmartPlaylist,
+    Track,
+    TrackAnalysis,
+)
 from app.main import app
 
 
@@ -58,3 +72,55 @@ def test_profile(client: TestClient) -> dict:
 def make_profile_headers(profile: dict) -> dict[str, str]:
     """Create headers with profile ID for authenticated requests."""
     return {"X-Profile-ID": str(profile["id"])}
+
+
+# ---------------------------------------------------------------------------
+# Shared async DB fixture for integration tests
+# ---------------------------------------------------------------------------
+
+# Tables to clean in correct FK order (children before parents)
+_CLEANUP_TABLES = [
+    PlaylistTrack,
+    Playlist,
+    SmartPlaylist,
+    ProposedChange,
+    ProfilePlayHistory,
+    TrackAnalysis,
+    ExternalTrack,
+    Track,
+]
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_db():
+    """Provide a per-test async DB session against the real PostgreSQL database.
+
+    Creates its own engine per test to avoid event-loop binding conflicts with
+    the session-scoped TestClient. Cleans integration-test tables before and
+    after each test.
+    """
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        pool_pre_ping=True,
+    )
+    session_maker = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with session_maker() as session:
+        # Clean before test
+        for model in _CLEANUP_TABLES:
+            await session.execute(delete(model))
+        await session.commit()
+
+        yield session
+
+        # Clean after test
+        for model in _CLEANUP_TABLES:
+            await session.execute(delete(model))
+        await session.commit()
+
+    await engine.dispose()

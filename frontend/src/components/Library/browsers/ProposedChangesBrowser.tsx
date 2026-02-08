@@ -27,6 +27,10 @@ import {
 } from '../../../api/client';
 import { registerBrowser, type BrowserProps } from '../types';
 
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('ProposedChangesBrowser');
+
 const STATUS_LABELS: Record<ChangeStatus, string> = {
   pending: 'Pending',
   rejected: 'Rejected',
@@ -402,7 +406,7 @@ function ProposedChangesBrowser(_props: BrowserProps) {
       const preview = await proposedChangesApi.preview(changeId);
       setPreviewData(preview);
     } catch (error) {
-      console.error('Failed to fetch preview:', error);
+      log.error('Failed to fetch preview:', error);
     } finally {
       setLoadingChangeId(null);
     }

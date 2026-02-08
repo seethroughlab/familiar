@@ -10,6 +10,9 @@ import {
 } from '../services/offlineService';
 import { EffectsChain, initEffectsChain } from '../services/audioEffects';
 import { showError, showInfo } from '../stores/toastStore';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('AudioEngine');
 
 // ============================================================================
 // Platform Detection
@@ -28,7 +31,7 @@ const useWebAudio = !isMobilePlatform;
 const MOBILE_TRANSITION_OVERLAP = 0.3;
 
 // Log version and platform detection on load
-console.log('[AudioEngine] v5 - simplified mobile', {
+log.info('v5 - simplified mobile', {
   isMobilePlatform,
   useDirectPlayback,
   useWebAudio,
@@ -187,7 +190,7 @@ function initializeAudioGraph(): boolean {
       if (!directElementB) {
         directElementB = createAudioElement();
       }
-      console.log('[AudioEngine] Initialized in direct playback mode (mobile)');
+      log.info('Initialized in direct playback mode (mobile)');
     } else {
       // Desktop: create Web Audio graph with visualizer and effects support
       if (!globalAudioContext) {
@@ -239,12 +242,12 @@ function initializeAudioGraph(): boolean {
         globalMasterGain.connect(globalAnalyser);
       }
       globalAnalyser.connect(globalAudioContext.destination);
-      console.log('[AudioEngine] Initialized in Web Audio mode (desktop)');
+      log.info('Initialized in Web Audio mode (desktop)');
     }
 
     return true;
   } catch (e) {
-    console.error('Failed to initialize audio graph:', e);
+    log.error('Failed to initialize audio graph:', e);
     // Only show error toast once per session
     if (!hasShownInitError) {
       hasShownInitError = true;
@@ -374,7 +377,7 @@ export function useAudioEngine() {
         nextElement.addEventListener('error', onError);
       });
     } catch (e) {
-      console.error('Error preloading track:', e);
+      log.error('Error preloading track:', e);
       preloadingTrackId = null;
       return false;
     }
@@ -389,7 +392,7 @@ export function useAudioEngine() {
     if (!nextElement) return;
 
     if (DEBUG_TRACK_ENDING) {
-      console.log('[AudioEngine] executeCrossfade called', {
+      log.info('executeCrossfade called', {
         crossfadeDuration: duration,
         nextTrackId: nextTrack.id,
         nextTrackTitle: nextTrack.title,
@@ -403,7 +406,7 @@ export function useAudioEngine() {
       if (duration <= MOBILE_TRANSITION_OVERLAP) {
         // Gapless / instant transition: play next at full volume with brief overlap
         nextElement.volume = currentMasterVolume;
-        nextElement.play().catch(console.error);
+        nextElement.play().catch(log.error);
         crossfadeContext = {
           isActive: true,
           startTime: performance.now(),
@@ -416,7 +419,7 @@ export function useAudioEngine() {
         const durationMs = duration * 1000;
 
         nextElement.volume = 0;
-        nextElement.play().catch(console.error);
+        nextElement.play().catch(log.error);
 
         const animateCrossfade = () => {
           const elapsed = performance.now() - startTime;
@@ -458,13 +461,13 @@ export function useAudioEngine() {
       if (duration === 0) {
         currentGain.gain.setValueAtTime(0, now);
         nextGain.gain.setValueAtTime(1, now);
-        nextElement.play().catch(console.error);
+        nextElement.play().catch(log.error);
       } else {
         currentGain.gain.setValueAtTime(1, now);
         currentGain.gain.linearRampToValueAtTime(0, now + duration);
         nextGain.gain.setValueAtTime(0, now);
         nextGain.gain.linearRampToValueAtTime(1, now + duration);
-        nextElement.play().catch(console.error);
+        nextElement.play().catch(log.error);
       }
 
       crossfadeContext = {
@@ -485,7 +488,7 @@ export function useAudioEngine() {
   const completeCrossfade = useCallback(() => {
     if (DEBUG_TRACK_ENDING) {
       const { currentTrack: track } = usePlayerStore.getState();
-      console.log('[AudioEngine] completeCrossfade called', {
+      log.info('completeCrossfade called', {
         trackId: track?.id,
         trackTitle: track?.title,
       });
@@ -618,7 +621,7 @@ export function useAudioEngine() {
       const { currentTrack: track } = usePlayerStore.getState();
 
       if (DEBUG_TRACK_ENDING) {
-        console.warn('[AudioEngine] 🔴 ENDED EVENT FIRED', {
+        log.warn('🔴 ENDED EVENT FIRED', {
           elementIsA: isA,
           currentElementIsA,
           isCurrentElement: currentElementIsA === isA,
@@ -638,14 +641,14 @@ export function useAudioEngine() {
       }
 
       if (queueTransition) {
-        if (DEBUG_TRACK_ENDING) console.log('[AudioEngine] Ignoring ended event - queueTransition active');
+        if (DEBUG_TRACK_ENDING) log.info('Ignoring ended event - queueTransition active');
         return;
       }
       if (currentElementIsA === isA && !crossfadeContext?.isActive) {
-        if (DEBUG_TRACK_ENDING) console.log('[AudioEngine] Calling playNext() from ended handler');
+        if (DEBUG_TRACK_ENDING) log.info('Calling playNext() from ended handler');
         playNext();
       } else {
-        if (DEBUG_TRACK_ENDING) console.log('[AudioEngine] Ignoring ended event - not current element or crossfade active');
+        if (DEBUG_TRACK_ENDING) log.info('Ignoring ended event - not current element or crossfade active');
       }
     };
 
@@ -662,7 +665,7 @@ export function useAudioEngine() {
       const isDecodeError = errorCode === MediaError.MEDIA_ERR_DECODE;
       const isUnsupported = errorCode === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED;
 
-      console.error('Audio error:', e, 'code:', errorCode, 'message:', mediaError?.message);
+      log.error('Audio error:', e, 'code:', errorCode, 'message:', mediaError?.message);
 
       const { currentTrack: track, isPlaying: playing } = usePlayerStore.getState();
       const currentId = track?.id;
@@ -720,7 +723,7 @@ export function useAudioEngine() {
       if (!DEBUG_TRACK_ENDING) return;
       const el = e.target as HTMLAudioElement;
       const { currentTrack: track } = usePlayerStore.getState();
-      console.warn(`[AudioEngine] ⚠️ ${label} STALLED`, {
+      log.warn(`${label} STALLED`, {
         trackTitle: track?.title,
         currentTime: el.currentTime,
         duration: el.duration,
@@ -733,7 +736,7 @@ export function useAudioEngine() {
       if (!DEBUG_TRACK_ENDING) return;
       const el = e.target as HTMLAudioElement;
       const { currentTrack: track } = usePlayerStore.getState();
-      console.warn(`[AudioEngine] ⏳ ${label} WAITING (buffering)`, {
+      log.warn(`${label} WAITING (buffering)`, {
         trackTitle: track?.title,
         currentTime: el.currentTime,
         duration: el.duration,
@@ -745,7 +748,7 @@ export function useAudioEngine() {
       if (!DEBUG_TRACK_ENDING) return;
       const el = e.target as HTMLAudioElement;
       const { currentTrack: track } = usePlayerStore.getState();
-      console.log(`[AudioEngine] ⏩ ${label} SEEKED`, {
+      log.info(`${label} SEEKED`, {
         trackTitle: track?.title,
         currentTime: el.currentTime,
         duration: el.duration,
@@ -930,7 +933,7 @@ export function useAudioEngine() {
           if (shouldPlay) {
             currentElement.play().catch((err) => {
               if (err.name !== 'AbortError') {
-                console.error('Play failed:', err);
+                log.error('Play failed:', err);
                 if (err.name === 'NotAllowedError') {
                   usePlayerStore.getState().setIsPlaying(false);
                   showError('Playback blocked', {
@@ -947,7 +950,7 @@ export function useAudioEngine() {
           if (currentLoadId !== thisLoadId) return;
           if (DEBUG_TRACK_ENDING) {
             const { currentTrack: track } = usePlayerStore.getState();
-            console.log('[AudioEngine] 📀 Track metadata loaded', {
+            log.info('📀 Track metadata loaded', {
               trackId: trackIdToLoad,
               trackTitle: track?.title,
               duration: currentElement.duration,
@@ -974,7 +977,7 @@ export function useAudioEngine() {
         // Load timeout detection - recover from hung loads (NAS hang, missing file, iOS PWA suspension)
         const loadTimeout = setTimeout(() => {
           if (currentLoadId === thisLoadId && currentElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-            console.error('[Audio] Load timeout - track took too long to load, skipping');
+            log.error('Load timeout - track took too long to load, skipping');
             queueTransition = false;
             setIsLoadingAudio(false);
             showError('Track took too long to load', {
@@ -998,7 +1001,7 @@ export function useAudioEngine() {
     };
 
     loadTrack().catch((err) => {
-      console.error('[Audio] Failed to load track:', err);
+      log.error('Failed to load track:', err);
       queueTransition = false;
       setIsLoadingAudio(false);
     });
@@ -1025,7 +1028,7 @@ export function useAudioEngine() {
       if (hasValidSource && isReady) {
         currentElement.play().catch((err) => {
           if (err.name !== 'AbortError') {
-            console.error('Play failed:', err);
+            log.error('Play failed:', err);
             if (err.name === 'NotAllowedError') {
               setIsPlaying(false);
               // Notify user about autoplay policy block
@@ -1038,7 +1041,7 @@ export function useAudioEngine() {
       }
 
       if (crossfadeContext?.isActive) {
-        getNextElement()?.play().catch(console.error);
+        getNextElement()?.play().catch(log.error);
       }
 
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
@@ -1097,7 +1100,7 @@ export function useAudioEngine() {
         if (trackChanged || now - lastDebugLogTime >= 10000) {
           lastDebugLogTime = now;
           lastLoggedTrackId = trackId ?? null;
-          console.log('[AudioEngine] 📊 Playback status', {
+          log.info('📊 Playback status', {
             trackId,
             currentTime: currentTime.toFixed(2),
             duration: duration.toFixed(2),
@@ -1154,7 +1157,7 @@ export function useAudioEngine() {
 
       if (hasNextTrack && nextTrackPreloaded && crossfadeState === 'preloading' && timeRemaining <= effectiveCrossfade && timeRemaining > 0.1) {
         if (DEBUG_TRACK_ENDING) {
-          console.log('[AudioEngine] 🔄 Starting crossfade', {
+          log.info('🔄 Starting crossfade', {
             currentTime,
             duration,
             timeRemaining,
@@ -1208,7 +1211,7 @@ export function useAudioEngine() {
       previewEl.load();
 
       const handleCanPlay = () => {
-        previewEl.play().catch(console.error);
+        previewEl.play().catch(log.error);
         setDuration(previewEl.duration || 30); // Previews are typically 30 seconds
         previewEl.removeEventListener('canplay', handleCanPlay);
       };
@@ -1245,7 +1248,7 @@ export function useAudioEngine() {
     if (!previewEl || !isPreviewMode) return;
 
     if (isPlaying) {
-      previewEl.play().catch(console.error);
+      previewEl.play().catch(log.error);
     } else {
       previewEl.pause();
     }

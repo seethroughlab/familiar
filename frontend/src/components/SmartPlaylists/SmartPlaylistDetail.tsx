@@ -18,6 +18,10 @@ import { initialContextMenuState } from '../Library/types';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SmartPlaylistDetail');
+
 // Discovery section component
 function SmartPlaylistDiscoverySection({
   sections,
@@ -71,7 +75,7 @@ function SmartPlaylistDiscoverySection({
           });
         }
       } catch (err) {
-        console.error('Failed to add to wishlist:', err);
+        log.error('Failed to add to wishlist:', err);
       }
     }
   };

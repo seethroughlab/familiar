@@ -6,11 +6,14 @@
  * When offline, it returns cached data.
  */
 import { useState, useCallback, useEffect } from 'react';
+import { createLogger } from '../utils/logger';
 import {
   useQuery,
   type UseQueryOptions,
 } from '@tanstack/react-query';
 import { useOfflineStatus } from './useOfflineStatus';
+
+const log = createLogger('OfflineQuery');
 
 export type CacheStatus = 'fresh' | 'stale' | 'offline' | 'none';
 
@@ -83,14 +86,14 @@ export function useOfflineQuery<TData, TError = Error>(
         // Cache the successful response
         if (cacheData) {
           await cacheData(data).catch((err) => {
-            console.warn('Failed to cache data:', err);
+            log.warn('Failed to cache data:', err);
           });
         }
 
         return data;
       } catch (error) {
         // Network failed, try cache even if "online"
-        console.warn('Network request failed, trying cache:', error);
+        log.warn('Network request failed, trying cache:', error);
       }
     }
 

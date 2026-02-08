@@ -5,6 +5,10 @@ import { useThemeStore } from '../../stores/themeStore';
 import { tracksApi } from '../../api/client';
 import type { Track } from '../../types';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('QueueView');
+
 interface QueueViewProps {
   onTrackDropped?: (trackId: string) => void;
 }
@@ -119,7 +123,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
         onTrackDropped?.(trackId);
       }
     } catch (error) {
-      console.error('Failed to add track to queue:', error);
+      log.error('Failed to add track to queue:', error);
     }
   }, [addToQueue, isLazyMode, lazyQueueIndex, queue, onTrackDropped]);
 
@@ -151,7 +155,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           onTrackDropped?.(trackId);
         }
       } catch (error) {
-        console.error('Failed to add track to queue:', error);
+        log.error('Failed to add track to queue:', error);
       }
     }
   }, [addToQueue, onTrackDropped]);

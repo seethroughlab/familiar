@@ -19,6 +19,10 @@ import { initialContextMenuState } from '../Library/types';
 import type { Track } from '../../types';
 import type { PlaylistDetail as PlaylistDetailType } from '../../api/client';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('PlaylistDetail');
+
 // Playlist Discovery Section using unified components
 function PlaylistDiscoverySection({
   recommendations,
@@ -88,7 +92,7 @@ function PlaylistDiscoverySection({
           });
         }
       } catch (err) {
-        console.error('Failed to add to wishlist:', err);
+        log.error('Failed to add to wishlist:', err);
         showError('Failed to add to wishlist');
       }
     }
@@ -371,7 +375,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
           setQueue(response.items, 0);
         }
       } catch (error) {
-        console.error('Failed to fetch artist tracks:', error);
+        log.error('Failed to fetch artist tracks:', error);
         showError('Failed to load artist tracks');
       }
     }
@@ -431,7 +435,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
     try {
       await playlistsApi.reorderItems(playlistId, tracks.map(t => t.playlist_track_id));
     } catch (error) {
-      console.error('Failed to reorder tracks:', error);
+      log.error('Failed to reorder tracks:', error);
       showError('Failed to reorder tracks');
       // Revert on error
       queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
@@ -513,7 +517,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
     try {
       await playlistsApi.reorderTracks(playlistId, remainingTracks.map(t => t.id));
     } catch (error) {
-      console.error('Failed to remove tracks:', error);
+      log.error('Failed to remove tracks:', error);
       showError('Failed to remove tracks');
       queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
     }

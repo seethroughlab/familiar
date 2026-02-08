@@ -23,6 +23,10 @@ import {
 
 import { S3BackupSettings } from '../Settings/S3BackupSettings';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('AdminSetup');
+
 interface SettingsData {
   spotify_configured: boolean;
   lastfm_configured: boolean;
@@ -54,7 +58,7 @@ export function AdminSetup() {
         setSettings(data);
       }
     } catch (err) {
-      console.error('Failed to load settings:', err);
+      log.error('Failed to load settings:', err);
     } finally {
       setLoading(false);
     }

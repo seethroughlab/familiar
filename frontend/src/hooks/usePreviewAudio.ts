@@ -7,6 +7,9 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { tracksApi } from '../api/client';
 import { usePlayerStore } from '../stores/playerStore';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('PreviewAudio');
 
 // Configuration
 const DEBOUNCE_MS = 400; // Wait before starting preview
@@ -238,7 +241,7 @@ export function usePreviewAudio() {
           })
           .catch((err) => {
             // Autoplay blocked or other error - silently ignore
-            console.debug('Preview play failed:', err.message);
+            log.debug('Preview play failed:', err.message);
           });
       }, DEBOUNCE_MS);
     },

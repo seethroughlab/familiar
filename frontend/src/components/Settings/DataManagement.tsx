@@ -18,6 +18,10 @@ import {
   type RestoreExecuteResponse,
 } from '../../api/client';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('DataManagement');
+
 type BackupState = 'idle' | 'exporting' | 'success' | 'error';
 type RestoreState = 'idle' | 'uploading' | 'previewing' | 'ready' | 'restoring' | 'success' | 'error';
 
@@ -126,7 +130,7 @@ export function DataManagement() {
       setBackupState('success');
       setTimeout(() => setBackupState('idle'), 3000);
     } catch (error) {
-      console.error('Backup failed:', error);
+      log.error('Backup failed:', error);
       setBackupError(error instanceof Error ? error.message : 'Backup failed');
       setBackupState('error');
     }
@@ -162,7 +166,7 @@ export function DataManagement() {
       setRestorePreview(preview);
       setRestoreState('ready');
     } catch (error) {
-      console.error('Restore preview failed:', error);
+      log.error('Restore preview failed:', error);
       setRestoreError(error instanceof Error ? error.message : 'Failed to read file');
       setRestoreState('error');
     }
@@ -214,7 +218,7 @@ export function DataManagement() {
       setRestoreResult(result);
       setRestoreState('success');
     } catch (error) {
-      console.error('Restore failed:', error);
+      log.error('Restore failed:', error);
       setRestoreError(error instanceof Error ? error.message : 'Restore failed');
       setRestoreState('error');
     }

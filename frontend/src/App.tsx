@@ -4,7 +4,9 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-ro
 import { Toaster } from 'sonner';
 import { TAB_PARAM_WHITELIST, type AppTab } from './utils/urlParams';
 import { Search, Library, Settings, Zap, MessageSquare, X, Loader2, ListMusic } from 'lucide-react';
-import { logger } from './utils/logger';
+import { createLogger } from './utils/logger';
+
+const log = createLogger('App');
 import { PlayerBar } from './components/Player/PlayerBar';
 import { LibraryView } from './components/Library';
 import { ChatPanel } from './components/Chat';
@@ -31,7 +33,7 @@ const AdminSetup = lazy(() => import('./components/Admin').then(m => ({ default:
 // Loading spinner for lazy components
 function LazyLoadSpinner() {
   return (
-    <div className="flex items-center justify-center py-20">
+    <div role="status" aria-label="Loading" className="flex items-center justify-center py-20">
       <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
     </div>
   );
@@ -78,7 +80,7 @@ function AppContent() {
         tapCountRef.current++;
         if (tapCountRef.current >= 3) {
           // Triple tap detected - close all overlays
-          logger.info('[AppContent] Triple-tap recovery triggered');
+          log.info('[AppContent] Triple-tap recovery triggered');
           setShowFullPlayer(false);
           setShowMobileChat(false);
           setShowChatPanel(false);
@@ -107,7 +109,7 @@ function AppContent() {
     }
     // Fall back to pathname (e.g., /settings from OAuth callback)
     const path = window.location.pathname;
-    logger.debug('[AppContent] getTabFromUrl, hash:', hash, 'path:', path);
+    log.debug('[AppContent] getTabFromUrl, hash:', hash, 'path:', path);
     if (path === '/settings') return 'settings';
     if (path === '/playlists') return 'playlists';
     if (path === '/queue') return 'queue';
@@ -129,7 +131,7 @@ function AppContent() {
 
   const [rightPanelTab, setRightPanelTabState] = useState<RightPanelTab>(() => {
     const tab = getTabFromUrl();
-    logger.debug('[AppContent] Initial tab set to:', tab);
+    log.debug('[AppContent] Initial tab set to:', tab);
     return tab;
   });
 
@@ -589,7 +591,7 @@ function AppContent() {
       {fullPlayerMounted && (
         <ErrorBoundary name="Full Player" fullscreen>
           <Suspense fallback={
-            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+            <div role="status" aria-label="Loading" className="fixed inset-0 z-50 bg-black flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
           }>
@@ -632,7 +634,7 @@ function AppContent() {
 
 // PWA Reset utility - clears all persisted state
 function resetPWAState() {
-  logger.info('[App] Resetting PWA state');
+  log.info('[App] Resetting PWA state');
   // Clear all localStorage keys for this app
   const keysToRemove = Object.keys(localStorage).filter(
     (k) => k.startsWith('familiar-') || k.startsWith('zustand-')
@@ -680,7 +682,7 @@ function App() {
       // Add timeout to prevent hanging on iOS when IndexedDB/Dexie gets stuck
       const timeoutPromise = new Promise<null>((resolve) => {
         setTimeout(() => {
-          logger.warn('[App] Profile initialization timed out - IndexedDB may be unavailable');
+          log.warn('[App] Profile initialization timed out - IndexedDB may be unavailable');
           resolve(null);
         }, 5000);
       });
@@ -691,7 +693,7 @@ function App() {
       ]);
       setProfile(p);
     } catch (err) {
-      console.error('Failed to check profile:', err);
+      log.error('Failed to check profile:', err);
       setProfile(null);
     } finally {
       setCheckingProfile(false);
@@ -719,14 +721,14 @@ function App() {
 
     // Load all enabled plugins
     pluginLoader.loadAllPlugins().catch((err) => {
-      console.error('Failed to load plugins:', err);
+      log.error('Failed to load plugins:', err);
     });
   }, []);
 
   // Show loading spinner while checking profile
   if (checkingProfile) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <div role="status" aria-label="Loading" className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );

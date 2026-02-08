@@ -32,6 +32,10 @@ import { getOfflineTrackIds, removeOfflineTrack } from '../../services/offlineSe
 import type { Track } from '../../types';
 import { DiscoveryPanel, useArtistDiscovery, type DiscoveryItem } from '../Discovery';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ArtistDetail');
+
 function OfflineButton({ trackId }: { trackId: string }) {
   const { isOffline, isDownloading, downloadProgress, download, remove } = useOfflineTrack(trackId);
 
@@ -139,7 +143,7 @@ function ArtistDiscoverySection({
           artist: item.name,
         });
       } catch (err) {
-        console.error('Failed to add to wishlist:', err);
+        log.error('Failed to add to wishlist:', err);
       }
     }
   };
@@ -273,7 +277,7 @@ export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onG
           await setLazyQueue(response.ids);
         }
       } catch (error) {
-        console.error('Failed to get track IDs for artist:', error);
+        log.error('Failed to get track IDs for artist:', error);
       }
       return;
     }

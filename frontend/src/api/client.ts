@@ -2,6 +2,9 @@ import axios from 'axios';
 import type { Track, TrackListResponse, LibraryStats } from '../types';
 import { getSelectedProfileId, clearSelectedProfile } from '../services/profileService';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ApiClient');
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -25,7 +28,7 @@ api.interceptors.request.use(async (config) => {
     }
   } catch (error) {
     // Log but don't block requests if profile check fails
-    console.error('Failed to get profile ID:', error);
+    log.error('Failed to get profile ID:', error);
   }
   return config;
 });

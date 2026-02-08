@@ -22,6 +22,10 @@ import { OfflineTracksPanel } from './OfflineTracksPanel';
 import { StorageQuotaDisplay } from './StorageQuotaDisplay';
 import { showWarning, showSuccess, showError } from '../../stores/toastStore';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('OfflineSettings');
+
 export function OfflineSettings() {
   const { isOnline, isOffline } = useOfflineStatus();
 
@@ -56,7 +60,7 @@ export function OfflineSettings() {
       setPlaylistCacheInfo(playlistStats);
       setPendingCount(pending);
     } catch (error) {
-      console.error('Failed to load offline stats:', error);
+      log.error('Failed to load offline stats:', error);
     }
   };
 
@@ -70,7 +74,7 @@ export function OfflineSettings() {
       await libraryCache.cacheLibrary();
       await loadStats();
     } catch (error) {
-      console.error('Failed to cache library:', error);
+      log.error('Failed to cache library:', error);
     } finally {
       setIsLoading((prev) => ({ ...prev, cacheLibrary: false }));
     }
@@ -85,7 +89,7 @@ export function OfflineSettings() {
       await libraryCache.clearLibraryCache();
       await loadStats();
     } catch (error) {
-      console.error('Failed to clear cache:', error);
+      log.error('Failed to clear cache:', error);
     } finally {
       setIsLoading((prev) => ({ ...prev, clearCache: false }));
     }
@@ -100,7 +104,7 @@ export function OfflineSettings() {
       await playlistCache.clearAllPlaylistCaches();
       await loadStats();
     } catch (error) {
-      console.error('Failed to clear playlist caches:', error);
+      log.error('Failed to clear playlist caches:', error);
     } finally {
       setIsLoading((prev) => ({ ...prev, clearPlaylistCache: false }));
     }
@@ -123,7 +127,7 @@ export function OfflineSettings() {
         }
       }
     } catch (error) {
-      console.error('Failed to sync pending actions:', error);
+      log.error('Failed to sync pending actions:', error);
       showError('Failed to sync pending actions');
     } finally {
       setIsLoading((prev) => ({ ...prev, syncPending: false }));

@@ -6,6 +6,9 @@
  */
 import { useCallback, useRef, useEffect } from 'react';
 import { artworkApi, type ArtworkQueueRequest } from '../api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ArtworkPrefetch');
 
 // Global set of album keys we've already processed this session
 // Persists across component unmounts to avoid re-checking
@@ -31,7 +34,7 @@ async function flushBatchQueue() {
     await artworkApi.queueBatch(items);
   } catch (error) {
     // Silent failure - artwork prefetch is best-effort
-    console.debug('Artwork prefetch batch failed:', error);
+    log.debug('Artwork prefetch batch failed:', error);
   }
 
   // If there are more items, schedule another flush

@@ -6,6 +6,9 @@ import { create } from 'zustand';
 import * as offlineService from '../services/offlineService';
 import { db, type PersistedDownloadJob } from '../db';
 import { showSuccess, showError, showWarning } from './toastStore';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Download');
 
 export type DownloadJobStatus = 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
 
@@ -134,7 +137,7 @@ export async function restoreDownloadQueue(): Promise<void> {
 
     if (persistedJobs.length === 0) return;
 
-    console.log('[Download] Restoring', persistedJobs.length, 'jobs from IndexedDB');
+    log.info('Restoring', persistedJobs.length, 'jobs from IndexedDB');
 
     const jobs = new Map<string, DownloadJob>();
 
@@ -172,12 +175,12 @@ export async function restoreDownloadQueue(): Promise<void> {
 
     if (jobs.size > 0) {
       useDownloadStore.setState({ jobs });
-      console.log('[Download] Restored', jobs.size, 'jobs, starting queue processing');
+      log.info('Restored', jobs.size, 'jobs, starting queue processing');
       // Auto-resume downloads
       processNextJob();
     }
   } catch (error) {
-    console.error('[Download] Failed to restore queue from IndexedDB:', error);
+    log.error('Failed to restore queue from IndexedDB:', error);
   }
 }
 
@@ -188,12 +191,12 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   startDownload: (id, type, name, trackIds) => {
     const state = get();
 
-    console.log('[Download] startDownload called:', id, 'with', trackIds.length, 'tracks');
+    log.info('startDownload called:', id, 'with', trackIds.length, 'tracks');
 
     // If this job already exists and is downloading, don't start another
     const existingJob = state.jobs.get(id);
     if (existingJob && (existingJob.status === 'downloading' || existingJob.status === 'queued')) {
-      console.log('[Download] Job already in progress, skipping');
+      log.info('Job already in progress, skipping');
       return;
     }
 
@@ -218,7 +221,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
     // Persist to IndexedDB for iOS resilience
     persistJob(job).catch((err) =>
-      console.error('[Download] Failed to persist new job:', err)
+      log.error('Failed to persist new job:', err)
     );
 
     // If no active job, start processing
@@ -255,7 +258,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
       // Also remove from IndexedDB
       await removePersistedJob(id).catch((err) =>
-        console.error('[Download] Failed to remove cancelled job:', err)
+        log.error('Failed to remove cancelled job:', err)
       );
     }, 2000);
 
@@ -302,7 +305,7 @@ async function processNextJob() {
     return;
   }
 
-  console.log('[Download] Starting job:', nextJob.id, 'with', nextJob.trackIds.length, 'tracks');
+  log.info('Starting job:', nextJob.id, 'with', nextJob.trackIds.length, 'tracks');
 
   // Set as active
   useDownloadStore.setState({ activeJobId: nextJob.id });
@@ -311,11 +314,11 @@ async function processNextJob() {
   const offlineIds = new Set(await offlineService.getOfflineTrackIds());
   const tracksToDownload = nextJob.trackIds.filter(id => !offlineIds.has(id));
 
-  console.log('[Download] Already offline:', offlineIds.size, 'To download:', tracksToDownload.length);
+  log.info('Already offline:', offlineIds.size, 'To download:', tracksToDownload.length);
 
   // If all tracks already downloaded, mark as complete
   if (tracksToDownload.length === 0) {
-    console.log('[Download] All tracks already offline, marking job as complete');
+    log.info('All tracks already offline, marking job as complete');
     updateJob(nextJob.id, {
       status: 'completed',
       completedIds: nextJob.trackIds,
@@ -351,14 +354,14 @@ async function processNextJob() {
     });
 
     try {
-      console.log('[Download] Downloading track', i + 1, 'of', tracksToDownload.length, ':', trackId);
+      log.info('Downloading track', i + 1, 'of', tracksToDownload.length, ':', trackId);
       await offlineService.downloadTrackForOffline(trackId, (progress) => {
         // Use throttled update to avoid state update storms
         throttledProgressUpdate(nextJob.id, progress.percentage);
       });
 
       succeeded++;
-      console.log('[Download] Track completed:', trackId);
+      log.info('Track completed:', trackId);
 
       // Update completed IDs
       const currentJob = useDownloadStore.getState().jobs.get(nextJob.id);
@@ -369,7 +372,7 @@ async function processNextJob() {
       }
     } catch (error) {
       if (!abortSignal.aborted) {
-        console.error(`[Download] Failed to download track ${trackId}:`, error);
+        log.error(`Failed to download track ${trackId}:`, error);
         failed++;
 
         const currentJob = useDownloadStore.getState().jobs.get(nextJob.id);
@@ -388,7 +391,7 @@ async function processNextJob() {
   const finalJob = useDownloadStore.getState().jobs.get(nextJob.id);
   if (finalJob && finalJob.status !== 'cancelled') {
     const finalStatus = failed > 0 && succeeded === 0 ? 'failed' : 'completed';
-    console.log('[Download] Job finished:', nextJob.id, 'status:', finalStatus, 'succeeded:', succeeded, 'failed:', failed);
+    log.info('Job finished:', nextJob.id, 'status:', finalStatus, 'succeeded:', succeeded, 'failed:', failed);
 
     updateJob(nextJob.id, {
       status: finalStatus,
@@ -435,7 +438,7 @@ function updateJob(id: string, updates: Partial<DownloadJob>) {
   // Persist significant status changes to IndexedDB (not progress updates)
   if (updates.status || updates.completedIds || updates.failedIds) {
     persistJob(updatedJob).catch((err) =>
-      console.error('[Download] Failed to persist job:', err)
+      log.error('Failed to persist job:', err)
     );
   }
 }
@@ -452,7 +455,7 @@ function scheduleJobRemoval(id: string) {
 
       // Also remove from IndexedDB
       await removePersistedJob(id).catch((err) =>
-        console.error('[Download] Failed to remove persisted job:', err)
+        log.error('Failed to remove persisted job:', err)
       );
     }
   }, 5000);

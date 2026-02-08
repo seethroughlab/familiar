@@ -479,7 +479,7 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
         <div className="flex-1 overflow-y-auto p-6">
           {/* Uploading state */}
           {state === 'uploading' && (
-            <div className="text-center py-12">
+            <div role="status" aria-label="Scanning files" className="text-center py-12">
               <Loader2 className="w-12 h-12 mx-auto mb-4 text-green-400 animate-spin" />
               <p className="text-white mb-2">Scanning files...</p>
               <div className="w-full max-w-xs mx-auto bg-zinc-800 rounded-full h-2">
@@ -1038,7 +1038,7 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
 
           {/* Importing state */}
           {state === 'importing' && (
-            <div className="text-center py-12">
+            <div role="status" aria-label="Importing tracks" className="text-center py-12">
               <Loader2 className="w-12 h-12 mx-auto mb-4 text-green-400 animate-spin" />
               <p className="text-white mb-2">
                 Importing {tracks.length} track{tracks.length !== 1 ? 's' : ''}...

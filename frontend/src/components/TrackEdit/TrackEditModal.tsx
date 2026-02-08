@@ -24,6 +24,10 @@ import { AnalysisTab } from './tabs/AnalysisTab';
 import { ArtworkTab } from './tabs/ArtworkTab';
 import { BulkAutoPopulatePanel } from './BulkAutoPopulatePanel';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('TrackEditModal');
+
 type TabId = 'basic' | 'extended' | 'sort' | 'artwork' | 'lyrics' | 'analysis' | 'auto-populate';
 
 interface Tab {
@@ -139,7 +143,7 @@ export function TrackEditModal() {
         queryClient.invalidateQueries({ queryKey: ['tracks'] });
         queryClient.invalidateQueries({ queryKey: ['track-metadata', targetTrackId] });
       } catch (error) {
-        console.error(`Failed to update track ${targetTrackId}:`, error);
+        log.error(`Failed to update track ${targetTrackId}:`, error);
       }
     },
     [writeToFile, queryClient]

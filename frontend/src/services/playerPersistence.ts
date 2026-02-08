@@ -6,6 +6,9 @@
 import { db, isIndexedDBAvailable, type PersistedPlayerState } from '../db';
 import { getSelectedProfileId } from './profileService';
 import type { Track, QueueItem } from '../types';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('PlayerPersistence');
 
 /**
  * Save player state to IndexedDB for the current profile.
@@ -46,7 +49,7 @@ export async function savePlayerState(state: {
 
     await db.playerState.put(persistedState);
   } catch (error) {
-    console.warn('[PlayerPersistence] Failed to save player state:', error);
+    log.warn('Failed to save player state:', error);
   }
 }
 
@@ -66,7 +69,7 @@ export async function loadPlayerState(): Promise<PersistedPlayerState | null> {
     const state = await db.playerState.get(profileId);
     return state || null;
   } catch (error) {
-    console.warn('[PlayerPersistence] Failed to load player state:', error);
+    log.warn('Failed to load player state:', error);
     return null;
   }
 }
@@ -82,7 +85,7 @@ export async function loadPlayerStateForProfile(profileId: string): Promise<Pers
     const state = await db.playerState.get(profileId);
     return state || null;
   } catch (error) {
-    console.warn('[PlayerPersistence] Failed to load player state for profile:', error);
+    log.warn('Failed to load player state for profile:', error);
     return null;
   }
 }
@@ -105,12 +108,12 @@ export async function fetchTracksByIds(trackIds: string[]): Promise<Track[]> {
         }
       } catch {
         // Skip tracks that can't be fetched
-        console.warn(`Failed to fetch track ${id}`);
+        log.warn(`Failed to fetch track ${id}`);
       }
     }
     return tracks;
   } catch (error) {
-    console.error('Failed to fetch tracks:', error);
+    log.error('Failed to fetch tracks:', error);
     return [];
   }
 }
@@ -130,7 +133,7 @@ export async function clearPlayerState(): Promise<void> {
   try {
     await db.playerState.delete(profileId);
   } catch (error) {
-    console.warn('[PlayerPersistence] Failed to clear player state:', error);
+    log.warn('Failed to clear player state:', error);
   }
 }
 
@@ -163,7 +166,7 @@ export async function migrateOldPlayerState(): Promise<void> {
       await db.playerState.delete('player-state');
     }
   } catch (error) {
-    console.warn('[PlayerPersistence] Failed to migrate old player state:', error);
+    log.warn('Failed to migrate old player state:', error);
   }
 }
 
@@ -188,7 +191,7 @@ export function debouncedSavePlayerState(state: {
   }
 
   saveTimeout = setTimeout(() => {
-    savePlayerState(state).catch(console.error);
+    savePlayerState(state).catch(log.error);
     saveTimeout = null;
   }, 500); // Debounce by 500ms
 }

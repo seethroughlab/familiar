@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Download, X, Share, CheckCircle, Monitor, Smartphone } from 'lucide-react';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('InstallPrompt');
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
@@ -118,7 +122,7 @@ export function InstallPrompt() {
         setShowPrompt(false);
       }
     } catch (err) {
-      console.error('Install error:', err);
+      log.error('Install error:', err);
     } finally {
       setInstalling(false);
       setDeferredPrompt(null);
@@ -287,7 +291,7 @@ export function InstallStatus() {
         setInstallState('installed');
       }
     } catch (err) {
-      console.error('Install error:', err);
+      log.error('Install error:', err);
     } finally {
       setInstalling(false);
       setDeferredPrompt(null);

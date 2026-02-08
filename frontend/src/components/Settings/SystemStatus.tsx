@@ -26,6 +26,10 @@ import {
   type DiagnosticsExport,
 } from '../../api/client';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SystemStatus');
+
 export function SystemStatus() {
   const [health, setHealth] = useState<SystemHealth | null>(null);
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus | null>(null);
@@ -48,7 +52,7 @@ export function SystemStatus() {
       setWorkerStatus(workerData);
     } catch (err) {
       setError('Failed to fetch system status');
-      console.error('Failed to fetch system health:', err);
+      log.error('Failed to fetch system health:', err);
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +73,7 @@ export function SystemStatus() {
       const data = await diagnosticsApi.export();
       setDiagnostics(data);
     } catch (err) {
-      console.error('Failed to fetch diagnostics:', err);
+      log.error('Failed to fetch diagnostics:', err);
     } finally {
       setIsLoadingDiagnostics(false);
     }

@@ -11,6 +11,10 @@ import { initialContextMenuState } from '../Library/types';
 import type { Track } from '../../types';
 import { showError, showSuccess } from '../../stores/toastStore';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('DownloadsDetail');
+
 interface Props {
   onBack: () => void;
 }
@@ -90,7 +94,7 @@ export function DownloadsDetail({ onBack }: Props) {
       await removeOfflineTrack(trackId);
       await refresh();
     } catch (error) {
-      console.error('Failed to remove track from downloads:', error);
+      log.error('Failed to remove track from downloads:', error);
       showError('Failed to remove track from downloads');
     }
   };
@@ -104,7 +108,7 @@ export function DownloadsDetail({ onBack }: Props) {
       setSelectedTrackIds(new Set());
       showSuccess('Downloads cleared');
     } catch (error) {
-      console.error('Failed to clear downloads:', error);
+      log.error('Failed to clear downloads:', error);
       showError('Failed to clear downloads');
     }
   };
@@ -147,7 +151,7 @@ export function DownloadsDetail({ onBack }: Props) {
       setSelectedTrackIds(new Set());
       showSuccess(`Removed ${count} track${count !== 1 ? 's' : ''} from downloads`);
     } catch (error) {
-      console.error('Failed to remove selected tracks:', error);
+      log.error('Failed to remove selected tracks:', error);
       showError('Failed to remove selected tracks');
     }
   };
@@ -438,7 +442,7 @@ export function DownloadsDetail({ onBack }: Props) {
                 await removeOfflineTrack(contextMenu.track.id);
                 await refresh();
               } catch (error) {
-                console.error('Failed to remove track from downloads:', error);
+                log.error('Failed to remove track from downloads:', error);
                 showError('Failed to remove track from downloads');
               }
             }

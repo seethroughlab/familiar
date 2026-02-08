@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, CheckCircle, AlertCircle, Loader2, Music, FolderSearch, FileText, Cpu, Sparkles } from 'lucide-react';
 import { libraryApi, type SyncStatus, type SyncPhase } from '../../api/client';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('LibrarySync');
+
 export function LibrarySync() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -12,7 +16,7 @@ export function LibrarySync() {
       setSyncStatus(data);
       return data.status === 'running';
     } catch (error) {
-      console.error('Failed to fetch sync status:', error);
+      log.error('Failed to fetch sync status:', error);
       return false;
     }
   }, []);
@@ -36,7 +40,7 @@ export function LibrarySync() {
       await libraryApi.sync({ rereadUnchanged });
       await fetchStatus();
     } catch (error) {
-      console.error('Failed to start sync:', error);
+      log.error('Failed to start sync:', error);
     } finally {
       setIsStarting(false);
     }
@@ -47,7 +51,7 @@ export function LibrarySync() {
       await libraryApi.cancelSync();
       await fetchStatus();
     } catch (error) {
-      console.error('Failed to cancel sync:', error);
+      log.error('Failed to cancel sync:', error);
     }
   };
 

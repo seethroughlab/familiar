@@ -5,6 +5,10 @@ import type { SpotifyStatus } from '../../api/client';
 import { Music2, RefreshCw, LogOut, ExternalLink, CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { MissingTracks } from '../Library/MissingTracks';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('SpotifySettings');
+
 interface SyncProgress {
   phase: string;
   tracks_fetched: number;
@@ -56,7 +60,7 @@ export function SpotifySettings() {
       setSyncStatus(response);
       return response.status === 'running';
     } catch (error) {
-      console.error('Failed to fetch sync status:', error);
+      log.error('Failed to fetch sync status:', error);
     }
     return false;
   }, []);

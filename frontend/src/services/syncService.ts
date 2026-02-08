@@ -4,8 +4,10 @@
  */
 import { db, isIndexedDBAvailable, type PendingAction } from '../db';
 import { getSelectedProfileId } from './profileService';
-import { logger } from '../utils/logger';
+import { createLogger } from '../utils/logger';
 import { showSuccess, showWarning } from '../stores/toastStore';
+
+const log = createLogger('SyncService');
 
 type ActionType = 'scrobble' | 'now_playing' | 'sync_spotify' | 'favorite_toggle';
 
@@ -19,13 +21,13 @@ export async function queueAction(
 ): Promise<void> {
   const idbAvailable = await isIndexedDBAvailable();
   if (!idbAvailable) {
-    console.warn('[SyncService] Cannot queue action - IndexedDB not available');
+    log.warn('Cannot queue action - IndexedDB not available');
     return;
   }
 
   const profileId = await getSelectedProfileId();
   if (!profileId) {
-    console.warn('Cannot queue action without a selected profile');
+    log.warn('Cannot queue action without a selected profile');
     return;
   }
 
@@ -40,7 +42,7 @@ export async function queueAction(
 
     await db.pendingActions.add(action);
   } catch (error) {
-    console.warn('[SyncService] Failed to queue action:', error);
+    log.warn('Failed to queue action:', error);
   }
 }
 
@@ -54,7 +56,7 @@ export async function getPendingCount(): Promise<number> {
   try {
     return await db.pendingActions.count();
   } catch (error) {
-    console.warn('[SyncService] Failed to get pending count:', error);
+    log.warn('Failed to get pending count:', error);
     return 0;
   }
 }
@@ -69,7 +71,7 @@ export async function getPendingActions(): Promise<PendingAction[]> {
   try {
     return await db.pendingActions.orderBy('createdAt').toArray();
   } catch (error) {
-    console.warn('[SyncService] Failed to get pending actions:', error);
+    log.warn('Failed to get pending actions:', error);
     return [];
   }
 }
@@ -95,11 +97,11 @@ export async function processPendingActions(): Promise<{
       try {
         await db.pendingActions.delete(action.id!);
       } catch (e) {
-        console.warn('[SyncService] Failed to delete processed action:', e);
+        log.warn('Failed to delete processed action:', e);
       }
       processed++;
     } catch (error) {
-      console.error(`Failed to process action ${action.type}:`, error);
+      log.error(`Failed to process action ${action.type}:`, error);
 
       try {
         // Increment retry count
@@ -113,7 +115,7 @@ export async function processPendingActions(): Promise<{
           failed++;
         }
       } catch (e) {
-        console.warn('[SyncService] Failed to update action retries:', e);
+        log.warn('Failed to update action retries:', e);
       }
     }
   }
@@ -139,7 +141,7 @@ async function executeAction(action: PendingAction): Promise<void> {
       await executeFavoriteToggle(action.profileId, action.payload as FavoriteTogglePayload);
       break;
     default:
-      console.warn(`Unknown action type: ${action.type}`);
+      log.warn(`Unknown action type: ${action.type}`);
   }
 }
 
@@ -225,7 +227,7 @@ export async function clearPendingActions(): Promise<void> {
   try {
     await db.pendingActions.clear();
   } catch (error) {
-    console.warn('[SyncService] Failed to clear pending actions:', error);
+    log.warn('Failed to clear pending actions:', error);
   }
 }
 
@@ -235,9 +237,9 @@ export async function clearPendingActions(): Promise<void> {
  */
 export function initSyncListeners(): () => void {
   const handleOnline = async () => {
-    logger.log('Back online, processing pending actions...');
+    log.info('Back online, processing pending actions...');
     const result = await processPendingActions();
-    logger.log(`Processed ${result.processed} actions, ${result.failed} failed`);
+    log.info(`Processed ${result.processed} actions, ${result.failed} failed`);
 
     // Show toast for sync results if there were pending actions
     if (result.processed > 0 || result.failed > 0) {
@@ -253,7 +255,7 @@ export function initSyncListeners(): () => void {
 
   // Process any pending actions on startup if online
   if (navigator.onLine) {
-    processPendingActions().catch(console.error);
+    processPendingActions().catch(log.error);
   }
 
   // Return cleanup function

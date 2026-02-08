@@ -11,6 +11,10 @@ import { newReleasesApi, type NewRelease, type NewReleasesStatus } from '../../a
 import { NewReleaseCard } from './NewReleaseCard';
 import { showError } from '../../stores/toastStore';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('NewReleases');
+
 interface NewReleasesViewProps {
   defaultExpanded?: boolean;
 }
@@ -34,7 +38,7 @@ export function NewReleasesView({ defaultExpanded = false }: NewReleasesViewProp
       setReleases(releasesData.releases);
       setStatus(statusData);
     } catch (err) {
-      console.error('Failed to load new releases:', err);
+      log.error('Failed to load new releases:', err);
       setError('Failed to load new releases');
     } finally {
       setIsLoading(false);
@@ -67,7 +71,7 @@ export function NewReleasesView({ defaultExpanded = false }: NewReleasesViewProp
           setReleases(releasesData.releases);
         }
       } catch (err) {
-        console.error('Failed to poll status:', err);
+        log.error('Failed to poll status:', err);
       }
     }, 2000);
 
@@ -81,7 +85,7 @@ export function NewReleasesView({ defaultExpanded = false }: NewReleasesViewProp
       await newReleasesApi.check({ days_back: 90 });
       // Start polling for status
     } catch (err) {
-      console.error('Failed to check for new releases:', err);
+      log.error('Failed to check for new releases:', err);
       setError('Failed to start check');
       setIsChecking(false);
     }
@@ -92,7 +96,7 @@ export function NewReleasesView({ defaultExpanded = false }: NewReleasesViewProp
       await newReleasesApi.dismiss(releaseId);
       setReleases((prev) => prev.filter((r) => r.id !== releaseId));
     } catch (err) {
-      console.error('Failed to dismiss release:', err);
+      log.error('Failed to dismiss release:', err);
       showError('Failed to dismiss release');
     }
   };

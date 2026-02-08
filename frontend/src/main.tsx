@@ -2,15 +2,18 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { createLogger } from './utils/logger';
+
+const log = createLogger('App');
 
 // Version for debugging cache issues
 const APP_VERSION = 'v3-ios-fix-2024-01-23';
-console.log(`[Familiar] ${APP_VERSION} loaded`);
+log.info(`${APP_VERSION} loaded`);
 
 // Global handler for unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
   // Log the error for debugging
-  console.error('[Unhandled Promise Rejection]', event.reason);
+  log.error('Unhandled Promise Rejection:', event.reason);
 
   // Prevent the default browser behavior (console error)
   // but still log it for debugging
@@ -32,7 +35,7 @@ window.addEventListener('unhandledrejection', (event) => {
     }
   }).catch(() => {
     // If we can't even import the toast store, just log it
-    console.error('Failed to show error toast');
+    log.error('Failed to show error toast');
   });
 });
 
@@ -40,9 +43,9 @@ window.addEventListener('unhandledrejection', (event) => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistration().then((reg) => {
     if (reg) {
-      console.log('[SW] Checking for updates...');
+      log.info('SW: Checking for updates...');
       reg.update().then(() => {
-        console.log('[SW] Update check complete');
+        log.info('SW: Update check complete');
       });
     }
   });

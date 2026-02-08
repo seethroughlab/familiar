@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { healthApi, type SystemHealth, type ServiceStatus } from '../api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Health');
 
 type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'loading' | 'error';
 
@@ -64,7 +67,7 @@ export const useHealthStore = create<HealthState>((set, get) => ({
         workerAlertDismissed: nowWorkersHealthy ? false : workerAlertDismissed,
       });
     } catch (error) {
-      console.error('Failed to check health:', error);
+      log.error('Failed to check health:', error);
       set({
         status: 'error',
         warnings: ['Unable to check system status'],

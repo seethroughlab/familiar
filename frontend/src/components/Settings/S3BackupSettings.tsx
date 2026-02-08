@@ -43,6 +43,10 @@ import {
 } from '../../api/client';
 import { showSuccess, showError, showWarning } from '../../stores/toastStore';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('S3BackupSettings');
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
@@ -114,7 +118,7 @@ export function S3BackupSettings() {
       setSchedule(data.s3_backup_schedule || 'weekly');
       setEnabled(data.s3_backup_enabled);
     } catch (error) {
-      console.error('Failed to load settings:', error);
+      log.error('Failed to load settings:', error);
     }
   };
 
@@ -124,7 +128,7 @@ export function S3BackupSettings() {
       const data = await s3BackupApi.getEstimate();
       setCostEstimate(data);
     } catch (error) {
-      console.error('Failed to load cost estimate:', error);
+      log.error('Failed to load cost estimate:', error);
     } finally {
       setIsEstimating(false);
     }
@@ -144,7 +148,7 @@ export function S3BackupSettings() {
         startProgressPolling();
       }
     } catch (error) {
-      console.error('Failed to load backup status:', error);
+      log.error('Failed to load backup status:', error);
     }
   }, []);
 
@@ -171,7 +175,7 @@ export function S3BackupSettings() {
           }
         }
       } catch (error) {
-        console.error('Failed to poll progress:', error);
+        log.error('Failed to poll progress:', error);
       }
     }, 2000);
   }, []);

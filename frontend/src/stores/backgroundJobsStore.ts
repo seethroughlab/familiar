@@ -1,5 +1,8 @@
 import { create } from 'zustand';
 import { backgroundApi, type BackgroundJob } from '../api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('BackgroundJobs');
 
 interface BackgroundJobsState {
   jobs: BackgroundJob[];
@@ -49,7 +52,7 @@ export const useBackgroundJobsStore = create<BackgroundJobsState>((set, get) => 
         }
       }
     } catch (error) {
-      console.error('Failed to check background jobs:', error);
+      log.error('Failed to check background jobs:', error);
     }
   },
 

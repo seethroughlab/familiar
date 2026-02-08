@@ -457,4 +457,347 @@ describe('playerStore', () => {
       expect(state.history[49].id).toBe('58')
     })
   })
+
+  describe('reorderQueue', () => {
+    it('should move track from one position to another', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue, reorderQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      reorderQueue(0, 2)
+
+      const state = usePlayerStore.getState()
+      expect(state.queue[0].track.id).toBe('2')
+      expect(state.queue[1].track.id).toBe('3')
+      expect(state.queue[2].track.id).toBe('1')
+    })
+
+    it('should update queueIndex to keep current track selected', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue, reorderQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0) // playing track '1'
+
+      // Move track '1' from index 0 to index 2
+      reorderQueue(0, 2)
+
+      const state = usePlayerStore.getState()
+      // queueIndex should point to where track '1' is now
+      expect(state.queueIndex).toBe(2)
+      expect(state.currentTrack?.id).toBe('1')
+    })
+
+    it('should ignore out-of-bounds indices', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, reorderQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      reorderQueue(-1, 0)
+      expect(usePlayerStore.getState().queue[0].track.id).toBe('1') // unchanged
+
+      reorderQueue(0, 5)
+      expect(usePlayerStore.getState().queue[0].track.id).toBe('1') // unchanged
+    })
+  })
+
+  describe('jumpToQueueIndex', () => {
+    it('should jump to specified queue index', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue, jumpToQueueIndex } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      jumpToQueueIndex(2)
+
+      const state = usePlayerStore.getState()
+      expect(state.queueIndex).toBe(2)
+      expect(state.currentTrack?.id).toBe('3')
+      expect(state.isPlaying).toBe(true)
+      expect(state.currentTime).toBe(0)
+    })
+
+    it('should add current track to history', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, jumpToQueueIndex } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      jumpToQueueIndex(1)
+
+      const state = usePlayerStore.getState()
+      expect(state.history).toHaveLength(1)
+      expect(state.history[0].id).toBe('1')
+    })
+
+    it('should ignore out-of-bounds index', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, jumpToQueueIndex } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      jumpToQueueIndex(5)
+
+      expect(usePlayerStore.getState().queueIndex).toBe(0) // unchanged
+    })
+
+    it('should ignore negative index', () => {
+      const tracks = [createMockTrack('1')]
+      const { setQueue, jumpToQueueIndex } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      jumpToQueueIndex(-1)
+
+      expect(usePlayerStore.getState().queueIndex).toBe(0) // unchanged
+    })
+  })
+
+  describe('addToQueue (with insertIndex)', () => {
+    it('should insert track at specific position', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('3')]
+      const { setQueue, addToQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      addToQueue(createMockTrack('2'), 1)
+
+      const state = usePlayerStore.getState()
+      expect(state.queue).toHaveLength(3)
+      expect(state.queue[1].track.id).toBe('2')
+    })
+
+    it('should adjust queueIndex when inserting before current track', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, addToQueue } = usePlayerStore.getState()
+      setQueue(tracks, 1) // playing track '2' at index 1
+
+      addToQueue(createMockTrack('0'), 0) // insert before current
+
+      const state = usePlayerStore.getState()
+      expect(state.queueIndex).toBe(2) // shifted from 1 to 2
+    })
+
+    it('should not adjust queueIndex when inserting after current track', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, addToQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0) // playing track '1' at index 0
+
+      addToQueue(createMockTrack('3'), 2) // insert after current
+
+      expect(usePlayerStore.getState().queueIndex).toBe(0) // unchanged
+    })
+  })
+
+  describe('removeFromQueue', () => {
+    it('should remove track by queueId', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue, removeFromQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      const queueId = usePlayerStore.getState().queue[1].queueId
+      removeFromQueue(queueId)
+
+      const state = usePlayerStore.getState()
+      expect(state.queue).toHaveLength(2)
+      expect(state.queue.find((q) => q.track.id === '2')).toBeUndefined()
+    })
+
+    it('should not remove anything for unknown queueId', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, removeFromQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      removeFromQueue('nonexistent-id')
+
+      expect(usePlayerStore.getState().queue).toHaveLength(2)
+    })
+  })
+
+  describe('preview mode', () => {
+    it('should enter preview mode and stop regular playback', () => {
+      const track = createMockTrack('1')
+      const { setQueue, playPreview } = usePlayerStore.getState()
+      setQueue([track], 0) // starts playing
+
+      playPreview({
+        id: 'preview-1',
+        title: 'Preview Song',
+        artist: 'Preview Artist',
+        previewUrl: 'https://example.com/preview.mp3',
+      })
+
+      const state = usePlayerStore.getState()
+      expect(state.isPlaying).toBe(false)
+      expect(state.isPreviewMode).toBe(true)
+      expect(state.previewTrack?.id).toBe('preview-1')
+      expect(state.previewTrack?.previewUrl).toBe('https://example.com/preview.mp3')
+    })
+
+    it('should exit preview mode', () => {
+      const { playPreview, stopPreview } = usePlayerStore.getState()
+
+      playPreview({
+        id: 'preview-1',
+        title: 'Preview Song',
+        artist: 'Preview Artist',
+        previewUrl: 'https://example.com/preview.mp3',
+      })
+      stopPreview()
+
+      const state = usePlayerStore.getState()
+      expect(state.isPreviewMode).toBe(false)
+      expect(state.previewTrack).toBeNull()
+    })
+  })
+
+  describe('setQueue with source', () => {
+    it('should track queue source', () => {
+      const tracks = [createMockTrack('1')]
+      const { setQueue } = usePlayerStore.getState()
+
+      setQueue(tracks, 0, { type: 'playlist', id: 'playlist-123' })
+
+      expect(usePlayerStore.getState().queueSource).toEqual({
+        type: 'playlist',
+        id: 'playlist-123',
+      })
+    })
+
+    it('should clear queue source when none provided', () => {
+      const tracks = [createMockTrack('1')]
+      const { setQueue } = usePlayerStore.getState()
+
+      // First set with source
+      setQueue(tracks, 0, { type: 'album', id: 'album-1' })
+      // Then set without
+      setQueue(tracks, 0)
+
+      expect(usePlayerStore.getState().queueSource).toBeNull()
+    })
+
+    it('should exit lazy mode when setting regular queue', () => {
+      // Simulate lazy mode
+      usePlayerStore.setState({
+        lazyQueueIds: ['a', 'b', 'c'],
+        lazyQueueIndex: 1,
+      })
+
+      const { setQueue } = usePlayerStore.getState()
+      setQueue([createMockTrack('1')], 0)
+
+      const state = usePlayerStore.getState()
+      expect(state.lazyQueueIds).toBeNull()
+      expect(state.lazyQueueIndex).toBe(-1)
+    })
+  })
+
+  describe('playNext with empty queue', () => {
+    it('should stop playing when queue is empty', () => {
+      usePlayerStore.setState({ isPlaying: true })
+      usePlayerStore.getState().playNext()
+
+      expect(usePlayerStore.getState().isPlaying).toBe(false)
+    })
+  })
+
+  describe('playNext reshuffle on repeat all', () => {
+    it('should reshuffle when reaching end of shuffle order with repeat all', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue, toggleShuffle, toggleRepeat } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+      toggleShuffle()
+      toggleRepeat() // 'all'
+
+      const { shuffleOrder } = usePlayerStore.getState()
+      // Advance through all shuffle positions
+      for (let i = 0; i < shuffleOrder.length; i++) {
+        usePlayerStore.getState().playNext()
+      }
+
+      // Should still be playing (repeat all reshuffles)
+      const state = usePlayerStore.getState()
+      expect(state.isPlaying).toBe(true)
+      expect(state.shuffleIndex).toBe(0) // Reset to beginning of new shuffle
+    })
+  })
+
+  describe('crossfade', () => {
+    it('should manage crossfade state', () => {
+      const { setCrossfadeState } = usePlayerStore.getState()
+
+      setCrossfadeState('preloading')
+      expect(usePlayerStore.getState().crossfadeState).toBe('preloading')
+
+      setCrossfadeState('crossfading')
+      expect(usePlayerStore.getState().crossfadeState).toBe('crossfading')
+
+      setCrossfadeState('idle')
+      expect(usePlayerStore.getState().crossfadeState).toBe('idle')
+    })
+
+    it('should manage next track preloaded state', () => {
+      const { setNextTrackPreloaded } = usePlayerStore.getState()
+
+      setNextTrackPreloaded(true)
+      expect(usePlayerStore.getState().nextTrackPreloaded).toBe(true)
+
+      setNextTrackPreloaded(false)
+      expect(usePlayerStore.getState().nextTrackPreloaded).toBe(false)
+    })
+  })
+
+  describe('advanceToNextTrack', () => {
+    it('should advance to specified track and reset crossfade', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue, advanceToNextTrack } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      advanceToNextTrack(tracks[1])
+
+      const state = usePlayerStore.getState()
+      expect(state.currentTrack?.id).toBe('2')
+      expect(state.queueIndex).toBe(1)
+      expect(state.currentTime).toBe(0)
+      expect(state.crossfadeState).toBe('idle')
+      expect(state.nextTrackPreloaded).toBe(false)
+    })
+
+    it('should add previous track to history', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2')]
+      const { setQueue, advanceToNextTrack } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      advanceToNextTrack(tracks[1])
+
+      expect(usePlayerStore.getState().history).toHaveLength(1)
+      expect(usePlayerStore.getState().history[0].id).toBe('1')
+    })
+  })
+
+  describe('audio loading', () => {
+    it('should track loading state', () => {
+      const { setIsLoadingAudio } = usePlayerStore.getState()
+
+      setIsLoadingAudio(true)
+      expect(usePlayerStore.getState().isLoadingAudio).toBe(true)
+
+      setIsLoadingAudio(false)
+      expect(usePlayerStore.getState().isLoadingAudio).toBe(false)
+    })
+  })
+
+  describe('exitLazyMode', () => {
+    it('should clear all lazy queue state', () => {
+      usePlayerStore.setState({
+        lazyQueueIds: ['a', 'b', 'c'],
+        lazyQueueIndex: 1,
+        prefetchedTracks: new Map([['a', createMockTrack('a')]]),
+        isFetchingTrack: true,
+        queueSource: { type: 'library' },
+      })
+
+      usePlayerStore.getState().exitLazyMode()
+
+      const state = usePlayerStore.getState()
+      expect(state.lazyQueueIds).toBeNull()
+      expect(state.lazyQueueIndex).toBe(-1)
+      expect(state.prefetchedTracks.size).toBe(0)
+      expect(state.isFetchingTrack).toBe(false)
+      expect(state.queueSource).toBeNull()
+    })
+  })
 })

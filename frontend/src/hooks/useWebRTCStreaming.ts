@@ -5,6 +5,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAudioEngine } from './useAudioEngine';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('WebRTC');
 
 interface PeerConnection {
   peerId: string;
@@ -67,7 +70,7 @@ export function useWebRTCStreaming({
 
     const audioContext = audioEngine.getContext();
     if (!audioContext) {
-      console.error('No audio context available');
+      log.error('No audio context available');
       return null;
     }
 
@@ -79,7 +82,7 @@ export function useWebRTCStreaming({
     if (outputNode) {
       outputNode.connect(destination);
     } else {
-      console.warn('No output node available from audio engine');
+      log.warn('No output node available from audio engine');
       return null;
     }
 
@@ -89,7 +92,7 @@ export function useWebRTCStreaming({
 
   // Create a peer connection for a guest (host only)
   const createPeerConnection = useCallback((userId: string, peerId: string): RTCPeerConnection => {
-    console.log(`Creating peer connection for guest ${userId} (${peerId})`);
+    log.info(`Creating peer connection for guest ${userId} (${peerId})`);
 
     const pc = new RTCPeerConnection(rtcConfig);
 
@@ -114,7 +117,7 @@ export function useWebRTCStreaming({
 
     // Handle connection state changes
     pc.onconnectionstatechange = () => {
-      console.log(`Peer ${userId} connection state: ${pc.connectionState}`);
+      log.info(`Peer ${userId} connection state: ${pc.connectionState}`);
 
       const peerData = peersRef.current.get(userId);
       if (peerData) {
@@ -136,7 +139,7 @@ export function useWebRTCStreaming({
   const createOfferForGuest = useCallback(async (userId: string, peerId: string) => {
     if (!isHost) return;
 
-    console.log(`Creating WebRTC offer for guest ${userId}`);
+    log.info(`Creating WebRTC offer for guest ${userId}`);
 
     const pc = createPeerConnection(userId, peerId);
     peersRef.current.set(userId, {
@@ -158,7 +161,7 @@ export function useWebRTCStreaming({
         sdp: pc.localDescription,
       });
     } catch (error) {
-      console.error('Failed to create offer:', error);
+      log.error('Failed to create offer:', error);
     }
   }, [isHost, createPeerConnection, onSendMessage]);
 
@@ -168,16 +171,16 @@ export function useWebRTCStreaming({
 
     const peer = peersRef.current.get(fromUserId);
     if (!peer) {
-      console.warn(`No peer found for user ${fromUserId}`);
+      log.warn(`No peer found for user ${fromUserId}`);
       return;
     }
 
-    console.log(`Received WebRTC answer from ${fromUserId}`);
+    log.info(`Received WebRTC answer from ${fromUserId}`);
 
     try {
       await peer.connection.setRemoteDescription(new RTCSessionDescription(sdp));
     } catch (error) {
-      console.error('Failed to set remote description:', error);
+      log.error('Failed to set remote description:', error);
     }
   }, [isHost]);
 
@@ -193,14 +196,14 @@ export function useWebRTCStreaming({
     }
 
     if (!pc) {
-      console.warn('No peer connection for ICE candidate');
+      log.warn('No peer connection for ICE candidate');
       return;
     }
 
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (error) {
-      console.error('Failed to add ICE candidate:', error);
+      log.error('Failed to add ICE candidate:', error);
     }
   }, [isHost]);
 
@@ -208,7 +211,7 @@ export function useWebRTCStreaming({
   const handleOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
     if (isHost) return;
 
-    console.log('Received WebRTC offer from host');
+    log.info('Received WebRTC offer from host');
 
     // Create peer connection for receiving
     const pc = new RTCPeerConnection(rtcConfig);
@@ -216,7 +219,7 @@ export function useWebRTCStreaming({
 
     // Handle incoming audio track
     pc.ontrack = (event) => {
-      console.log('Received audio track from host');
+      log.info('Received audio track from host');
 
       // Create audio element to play the stream
       const audio = new Audio();
@@ -226,7 +229,7 @@ export function useWebRTCStreaming({
 
       // Handle audio playback
       audio.play().catch(error => {
-        console.error('Failed to play audio:', error);
+        log.error('Failed to play audio:', error);
         // May need user interaction to play
       });
 
@@ -245,7 +248,7 @@ export function useWebRTCStreaming({
 
     // Handle connection state changes
     pc.onconnectionstatechange = () => {
-      console.log(`Guest connection state: ${pc.connectionState}`);
+      log.info(`Guest connection state: ${pc.connectionState}`);
 
       if (pc.connectionState === 'connected') {
         onSendMessage({ type: 'webrtc_connected', connected: true });
@@ -264,7 +267,7 @@ export function useWebRTCStreaming({
         sdp: pc.localDescription,
       });
     } catch (error) {
-      console.error('Failed to handle offer:', error);
+      log.error('Failed to handle offer:', error);
     }
   }, [isHost, rtcConfig, onSendMessage]);
 
@@ -272,7 +275,7 @@ export function useWebRTCStreaming({
   const requestStream = useCallback(() => {
     if (isHost) return;
 
-    console.log('Requesting WebRTC stream from host');
+    log.info('Requesting WebRTC stream from host');
     onSendMessage({ type: 'webrtc_request' });
   }, [isHost, onSendMessage]);
 

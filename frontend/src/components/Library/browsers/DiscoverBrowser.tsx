@@ -24,6 +24,10 @@ import {
   type DiscoveryItem,
 } from '../../Discovery';
 
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('DiscoverBrowser');
+
 // Register this browser
 registerBrowser(
   {
@@ -113,7 +117,7 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
           });
         }
       } catch (err) {
-        console.error('Failed to add to wishlist:', err);
+        log.error('Failed to add to wishlist:', err);
       }
     }
   };

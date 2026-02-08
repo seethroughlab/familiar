@@ -8,6 +8,10 @@ import { Download, X, Check, AlertCircle, Loader2, ChevronDown, ChevronUp, Smart
 import { useDownloadStore, type DownloadJob, restoreDownloadQueue } from '../stores/downloadStore';
 import { isIOS } from '../utils/platform';
 
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DownloadIndicator');
+
 function JobProgress({ job }: { job: DownloadJob }) {
   const { cancelDownload } = useDownloadStore();
 
@@ -79,7 +83,7 @@ export function DownloadIndicator() {
   // Restore download queue from IndexedDB on mount
   useEffect(() => {
     restoreDownloadQueue().catch((error) => {
-      console.error('[Download] Failed to restore queue:', error);
+      log.error('Failed to restore queue:', error);
     });
   }, []);
 

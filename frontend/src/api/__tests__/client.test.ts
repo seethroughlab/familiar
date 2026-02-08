@@ -243,9 +243,9 @@ describe('libraryApi', () => {
 
       await libraryApi.getArtist('Artist / Name')
 
-      // Should encode the slash
+      // Should encode the slash (encodePathSegment double-encodes %2F → %252F)
       expect(mockApiInstance.get).toHaveBeenCalledWith(
-        expect.stringContaining(encodeURIComponent('Artist / Name')),
+        expect.stringContaining('Artist%20%252F%20Name'),
         expect.any(Object)
       )
     })

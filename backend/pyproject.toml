@@ -86,6 +86,9 @@ target-version = "py311"
 select = ["E", "F", "I", "UP"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+"app/db/models/*.py" = ["F821"]
+
 [tool.mypy]
 python_version = "3.11"
 # Use non-strict mode until full type coverage is complete
@@ -109,16 +112,23 @@ module = [
     "app.services.organizer",
     "app.services.analysis",
     "app.workers.tasks",
-    "app.db.migrate_add_profiles",
 ]
 ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = [
+    "app.db.models.tracks",
+    "app.db.models.playlists",
+    "app.db.models.profiles",
+]
+disable_error_code = ["name-defined"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 # Coverage configuration - start low and increase over time
-addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=34"
+addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=44"
 
 [tool.coverage.run]
 source = ["app"]

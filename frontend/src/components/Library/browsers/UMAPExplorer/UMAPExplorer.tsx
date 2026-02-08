@@ -16,6 +16,10 @@ import type { BrowserProps } from '../../types';
 import { ArtistPoints, POSITION_SCALE } from './ArtistPoints';
 import { usePreviewAudio } from '../../../../hooks/usePreviewAudio';
 
+import { createLogger } from '../../../../utils/logger';
+
+const log = createLogger('UMAPExplorer');
+
 // Progress state from SSE
 interface LoadProgress {
   phase: string;
@@ -248,7 +252,7 @@ function use3DMapStream() {
         const progressData = JSON.parse(event.data);
         setProgress(progressData);
       } catch (e) {
-        console.error('Failed to parse progress:', e);
+        log.error('Failed to parse progress:', e);
       }
     });
 
@@ -262,7 +266,7 @@ function use3DMapStream() {
         sessionStorage.setItem('music-map-3d', JSON.stringify(mapData));
         eventSource.close();
       } catch (e) {
-        console.error('Failed to parse map data:', e);
+        log.error('Failed to parse map data:', e);
         setError('Failed to parse map data');
         setIsLoading(false);
         eventSource.close();
@@ -291,7 +295,7 @@ function use3DMapStream() {
       } else if (eventSource.readyState === EventSource.CONNECTING) {
         // Still trying to connect - EventSource will auto-retry
         // Don't set error yet, let it retry
-        console.warn('3D map SSE connection interrupted, retrying...');
+        log.warn('3D map SSE connection interrupted, retrying...');
       } else {
         // Unknown error state
         if (!receivedDataRef.current) {

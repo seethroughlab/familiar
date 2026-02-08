@@ -15,6 +15,10 @@ import {
 } from '../../services/profileService';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ProfileSelector');
+
 // Default profile colors
 const PROFILE_COLORS = [
   '#3B82F6', // Blue
@@ -56,7 +60,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
           await selectProfile(profile.id);
           onProfileSelected(profile);
         } catch (err) {
-          console.error('Failed to auto-select profile:', err);
+          log.error('Failed to auto-select profile:', err);
         }
       }
     }
@@ -82,7 +86,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
       } else {
         setError('Failed to load profiles');
       }
-      console.error(err);
+      log.error(err);
     } finally {
       setLoading(false);
     }
@@ -94,7 +98,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
       onProfileSelected(profile);
     } catch (err) {
       setError('Failed to select profile');
-      console.error(err);
+      log.error(err);
     }
   }
 
@@ -111,7 +115,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
       onProfileSelected(profile);
     } catch (err) {
       setError('Failed to create profile');
-      console.error(err);
+      log.error(err);
     } finally {
       setCreating(false);
     }
@@ -119,7 +123,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+      <div role="status" aria-label="Loading profiles" className="min-h-screen bg-zinc-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );

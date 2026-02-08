@@ -7,6 +7,9 @@ import {
   migrateOldPlayerState,
 } from '../services/playerPersistence';
 import { tracksApi } from '../api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Player');
 
 type RepeatMode = 'off' | 'all' | 'one';
 type CrossfadeState = 'idle' | 'preloading' | 'crossfading';
@@ -210,7 +213,7 @@ const prefetchUpcomingTracks = async (
 
       return newPrefetched;
     } catch (error) {
-      console.error('Failed to prefetch tracks:', error);
+      log.error('Failed to prefetch tracks:', error);
     }
   }
   return prefetchedTracks;
@@ -288,7 +291,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         }
         persistState();
       } catch (error) {
-        console.error('Failed to refresh lazy queue with new shuffle state:', error);
+        log.error('Failed to refresh lazy queue with new shuffle state:', error);
         // Rollback shuffle state on failure
         set({ shuffle: previousShuffle });
       }
@@ -414,7 +417,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
       // Validate that the track ID exists (bounds check)
       if (!nextTrackId) {
-        console.warn('[Player] Lazy queue index out of bounds:', nextLazyIndex, 'of', lazyQueueIds.length);
+        log.warn('Lazy queue index out of bounds:', nextLazyIndex, 'of', lazyQueueIds.length);
         // Can't recover - stop playback to avoid infinite loop
         set({ isPlaying: false });
         return;
@@ -434,7 +437,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             set({ prefetchedTracks: newPrefetched });
           }
         } catch (error) {
-          console.error('Failed to fetch next track:', error);
+          log.error('Failed to fetch next track:', error);
           set({ isFetchingTrack: false });
           return;
         }
@@ -684,7 +687,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         set({ isFetchingTrack: false });
       }
     } catch (error) {
-      console.error('Failed to start lazy queue:', error);
+      log.error('Failed to start lazy queue:', error);
       set({
         lazyQueueIds: null,
         lazyQueueIndex: -1,
@@ -718,7 +721,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           set({ prefetchedTracks: newPrefetched });
         }
       } catch (error) {
-        console.error('Failed to fetch track for lazy jump:', error);
+        log.error('Failed to fetch track for lazy jump:', error);
         set({ isFetchingTrack: false });
         return;
       }
@@ -875,7 +878,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         shuffleIndex: persisted.shuffleIndex ?? -1,
       });
     } catch (error) {
-      console.error('Failed to hydrate player state:', error);
+      log.error('Failed to hydrate player state:', error);
       set({ isHydrated: true });
     }
   },

@@ -24,6 +24,10 @@ import { initialContextMenuState } from './types';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useAlbumDiscovery, type DiscoveryItem } from '../Discovery';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('AlbumDetail');
+
 function OfflineButton({ trackId }: { trackId: string }) {
   const { isOffline, isDownloading, downloadProgress, download, remove } = useOfflineTrack(trackId);
 
@@ -214,7 +218,7 @@ function AlbumDiscoverySection({
           artist: item.subtitle || 'Unknown Artist',
         });
       } catch (err) {
-        console.error('Failed to add to wishlist:', err);
+        log.error('Failed to add to wishlist:', err);
       }
     }
   };
@@ -370,7 +374,7 @@ export function AlbumDetail({
       }));
       setQueue(queueTracks, 0);
     } catch (error) {
-      console.error('Failed to play album:', error);
+      log.error('Failed to play album:', error);
     }
   };
 

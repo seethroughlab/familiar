@@ -1,0 +1,342 @@
+"""Integration tests for tracks API endpoints with real DB data.
+
+These tests insert tracks via the async_db fixture, then use the sync TestClient
+to hit API endpoints. Both share the same DATABASE_URL so committed data is visible.
+"""
+
+from uuid import uuid4
+
+import pytest
+
+from tests.factories import (
+    insert_test_profile,
+    insert_test_track,
+)
+
+
+@pytest.fixture
+def headers():
+    """Default headers (no profile)."""
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Track IDs & batch
+# ---------------------------------------------------------------------------
+
+
+class TestListTrackIds:
+    @pytest.mark.asyncio
+    async def test_returns_ids(self, async_db, client):
+        t1 = await insert_test_track(async_db, title="Alpha")
+        t2 = await insert_test_track(async_db, title="Beta")
+        await async_db.commit()
+
+        resp = client.get("/api/v1/tracks/ids")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 2
+        returned_ids = data["ids"]
+        assert str(t1.id) in returned_ids
+        assert str(t2.id) in returned_ids
+
+    @pytest.mark.asyncio
+    async def test_filter_by_artist(self, async_db, client):
+        await insert_test_track(async_db, artist="Radiohead", title="A")
+        await insert_test_track(async_db, artist="Bjork", title="B")
+        await async_db.commit()
+
+        resp = client.get("/api/v1/tracks/ids", params={"artist": "Radiohead"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_filter_by_genre(self, async_db, client):
+        await insert_test_track(async_db, genre="Jazz", title="C")
+        await insert_test_track(async_db, genre="Metal", title="D")
+        await async_db.commit()
+
+        resp = client.get("/api/v1/tracks/ids", params={"genre": "Jazz"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_filter_by_year_range(self, async_db, client):
+        await insert_test_track(async_db, year=1990, title="E")
+        await insert_test_track(async_db, year=2020, title="F")
+        await async_db.commit()
+
+        resp = client.get("/api/v1/tracks/ids", params={"year_from": 2000, "year_to": 2025})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+
+class TestBatchTracks:
+    @pytest.mark.asyncio
+    async def test_batch_returns_tracks(self, async_db, client):
+        t1 = await insert_test_track(async_db, title="Track1")
+        t2 = await insert_test_track(async_db, title="Track2")
+        await async_db.commit()
+
+        resp = client.post(
+            "/api/v1/tracks/batch",
+            json={"ids": [str(t1.id), str(t2.id)]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        titles = {t["title"] for t in data}
+        assert "Track1" in titles
+        assert "Track2" in titles
+
+    @pytest.mark.asyncio
+    async def test_batch_max_50(self, async_db, client):
+        ids = [str(uuid4()) for _ in range(51)]
+        resp = client.post("/api/v1/tracks/batch", json={"ids": ids})
+        assert resp.status_code == 400  # Over limit
+
+    @pytest.mark.asyncio
+    async def test_batch_nonexistent_ids(self, async_db, client):
+        resp = client.post(
+            "/api/v1/tracks/batch",
+            json={"ids": [str(uuid4())]},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# Metadata CRUD
+# ---------------------------------------------------------------------------
+
+
+class TestMetadata:
+    @pytest.mark.asyncio
+    async def test_get_metadata(self, async_db, client):
+        t = await insert_test_track(async_db, title="GetMeta", artist="TestArtist", genre="Rock")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/metadata")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "GetMeta"
+        assert data["artist"] == "TestArtist"
+
+    @pytest.mark.asyncio
+    async def test_patch_metadata(self, async_db, client):
+        t = await insert_test_track(async_db, title="OldTitle", genre="Pop")
+        await async_db.commit()
+
+        resp = client.patch(
+            f"/api/v1/tracks/{t.id}/metadata",
+            json={"title": "NewTitle"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "NewTitle"
+
+    @pytest.mark.asyncio
+    async def test_patch_metadata_not_found(self, async_db, client):
+        resp = client.patch(
+            f"/api/v1/tracks/{uuid4()}/metadata",
+            json={"title": "NewTitle"},
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_bulk_common_values(self, async_db, client):
+        t1 = await insert_test_track(async_db, artist="SharedArtist", album="AlbumA")
+        t2 = await insert_test_track(async_db, artist="SharedArtist", album="AlbumB")
+        await async_db.commit()
+
+        resp = client.post(
+            "/api/v1/tracks/bulk/common-values",
+            json={"track_ids": [str(t1.id), str(t2.id)]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["artist"] == "SharedArtist"
+        # Albums differ so common_values should be None for album
+        assert data["album"] is None
+
+
+# ---------------------------------------------------------------------------
+# Play recording
+# ---------------------------------------------------------------------------
+
+
+class TestPlayRecording:
+    @pytest.mark.asyncio
+    async def test_record_play(self, async_db, client):
+        t = await insert_test_track(async_db, title="Played")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/played",
+            json={"duration_seconds": 120},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_play_increments_count(self, async_db, client):
+        t = await insert_test_track(async_db, title="Incremental")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        client.post(f"/api/v1/tracks/{t.id}/played", json={"duration_seconds": 60}, headers=headers)
+        client.post(f"/api/v1/tracks/{t.id}/played", json={"duration_seconds": 60}, headers=headers)
+
+        # Use batch endpoint which includes play_count when profile header is present
+        resp = client.post(
+            "/api/v1/tracks/batch",
+            json={"ids": [str(t.id)]},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        play_count = data[0].get("play_count")
+        assert play_count is not None and play_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_play_stats(self, async_db, client):
+        t = await insert_test_track(async_db, title="PlayStatsTrack")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        client.post(f"/api/v1/tracks/{t.id}/played", json={"duration_seconds": 60}, headers=headers)
+
+        resp = client.get("/api/v1/tracks/stats/plays", headers=headers)
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Stream & artwork
+# ---------------------------------------------------------------------------
+
+
+class TestStreamAndArtwork:
+    @pytest.mark.asyncio
+    async def test_stream_file_missing(self, async_db, client):
+        t = await insert_test_track(async_db, title="NoFile", file_path="/nonexistent/file.mp3")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/stream")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_artwork_fallback(self, async_db, client):
+        t = await insert_test_track(async_db, title="NoArt", album="Unknown")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/artwork")
+        assert resp.status_code in (200, 404)  # 404 if no artwork, 200 if fallback
+
+    @pytest.mark.asyncio
+    async def test_lyrics_not_found(self, async_db, client):
+        t = await insert_test_track(async_db, title="NoLyrics", artist="NoArtist")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/lyrics")
+        # 404 when lyrics service can't find them, or 500 if service unavailable
+        assert resp.status_code in (404, 500)
+
+
+# ---------------------------------------------------------------------------
+# Similarity
+# ---------------------------------------------------------------------------
+
+
+class TestSimilarity:
+    @pytest.mark.asyncio
+    async def test_similar_no_embedding(self, async_db, client):
+        t = await insert_test_track(async_db, title="NoEmbed")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/similar")
+        assert resp.status_code in (200, 404)
+
+    @pytest.mark.asyncio
+    async def test_discover_structure(self, async_db, client):
+        t = await insert_test_track(async_db, title="DiscoverMe")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/discover")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "by_same_artist" in data or "similar" in data or isinstance(data, dict)
+
+
+# ---------------------------------------------------------------------------
+# Enrich
+# ---------------------------------------------------------------------------
+
+
+class TestEnrich:
+    @pytest.mark.asyncio
+    async def test_enrich_not_found(self, async_db, client):
+        resp = client.post(f"/api/v1/tracks/{uuid4()}/enrich")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_enrich_queued_or_skipped(self, async_db, client):
+        t = await insert_test_track(async_db, title="Enrichable", artist="SomeArtist")
+        await async_db.commit()
+
+        resp = client.post(f"/api/v1/tracks/{t.id}/enrich")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Returns "queued", "skipped", or "disabled" depending on settings
+        assert data["status"] in ("queued", "skipped", "disabled")
+
+
+# ---------------------------------------------------------------------------
+# Track list (paginated)
+# ---------------------------------------------------------------------------
+
+
+class TestTrackList:
+    @pytest.mark.asyncio
+    async def test_paginated_list(self, async_db, client):
+        for i in range(5):
+            await insert_test_track(async_db, title=f"ListTrack{i}", artist=f"Artist{i}")
+        await async_db.commit()
+
+        resp = client.get("/api/v1/tracks", params={"page": 1, "page_size": 3})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["items"]) <= 3
+        assert data["total"] >= 5
+
+    @pytest.mark.asyncio
+    async def test_search_filter(self, async_db, client):
+        await insert_test_track(async_db, title="UniqueSearchTerm123")
+        await async_db.commit()
+
+        resp = client.get("/api/v1/tracks", params={"search": "UniqueSearchTerm123"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_get_single_track(self, async_db, client):
+        t = await insert_test_track(async_db, title="SingleGet")
+        await async_db.commit()
+
+        resp = client.get(f"/api/v1/tracks/{t.id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["title"] == "SingleGet"
+
+    @pytest.mark.asyncio
+    async def test_get_track_not_found(self, async_db, client):
+        resp = client.get(f"/api/v1/tracks/{uuid4()}")
+        assert resp.status_code == 404

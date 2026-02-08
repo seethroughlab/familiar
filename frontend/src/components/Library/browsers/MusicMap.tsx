@@ -13,6 +13,10 @@ import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Users, Disc, Music
 import { tracksApi, type MapNode, type MusicMapResponse } from '../../../api/client';
 import { registerBrowser, type BrowserProps } from '../types';
 
+import { createLogger } from '../../../utils/logger';
+
+const log = createLogger('MusicMap');
+
 interface MapProgress {
   phase: string;
   progress: number;
@@ -161,7 +165,7 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
         }
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
-        console.error('MusicMap SSE error:', err);
+        log.error('MusicMap SSE error:', err);
         setError(err instanceof Error ? err.message : 'Failed to load map');
         setIsLoading(false);
         setProgress(null);

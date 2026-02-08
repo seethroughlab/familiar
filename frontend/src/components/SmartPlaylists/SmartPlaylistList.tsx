@@ -138,7 +138,7 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
+      <div role="status" aria-label="Loading playlists" className="flex items-center justify-center p-8">
         <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
       </div>
     );

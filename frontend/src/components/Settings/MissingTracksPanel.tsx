@@ -11,6 +11,10 @@ import {
   Clock,
 } from 'lucide-react';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('MissingTracksPanel');
+
 interface MissingTrack {
   id: string;
   title: string | null;
@@ -52,7 +56,7 @@ export function MissingTracksPanel() {
         setTotalPending(data.total_pending_deletion);
       }
     } catch (error) {
-      console.error('Failed to fetch missing tracks:', error);
+      log.error('Failed to fetch missing tracks:', error);
     } finally {
       setLoading(false);
     }

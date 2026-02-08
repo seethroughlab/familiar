@@ -5,6 +5,9 @@
  * No passwords needed - protected by Tailscale.
  */
 import { db, type DeviceProfile, type CachedProfile, isIndexedDBAvailable } from '../db';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ProfileService');
 
 export interface Profile {
   id: string;
@@ -57,7 +60,7 @@ export async function cacheProfile(profile: Profile): Promise<void> {
     };
     await db.cachedProfiles.put(cached);
   } catch (error) {
-    console.warn('[ProfileService] Failed to cache profile:', error);
+    log.warn('Failed to cache profile:', error);
   }
 }
 
@@ -74,7 +77,7 @@ export async function getCachedProfile(profileId: string): Promise<CachedProfile
   try {
     return await db.cachedProfiles.get(profileId);
   } catch (error) {
-    console.warn('[ProfileService] Failed to get cached profile:', error);
+    log.warn('Failed to get cached profile:', error);
     return undefined;
   }
 }
@@ -92,7 +95,7 @@ export async function getCachedProfiles(): Promise<CachedProfile[]> {
   try {
     return await db.cachedProfiles.toArray();
   } catch (error) {
-    console.warn('[ProfileService] Failed to get cached profiles:', error);
+    log.warn('Failed to get cached profiles:', error);
     return [];
   }
 }
@@ -109,7 +112,7 @@ export async function clearCachedProfile(profileId: string): Promise<void> {
   try {
     await db.cachedProfiles.delete(profileId);
   } catch (error) {
-    console.warn('[ProfileService] Failed to clear cached profile:', error);
+    log.warn('Failed to clear cached profile:', error);
   }
 }
 
@@ -144,7 +147,7 @@ export async function getSelectedProfileId(): Promise<string | null> {
   // Check if IndexedDB is available (fails on iOS private browsing)
   const idbAvailable = await isIndexedDBAvailable();
   if (!idbAvailable) {
-    console.warn('[ProfileService] IndexedDB not available, using memory-only mode');
+    log.warn('IndexedDB not available, using memory-only mode');
     return null;
   }
 
@@ -155,7 +158,7 @@ export async function getSelectedProfileId(): Promise<string | null> {
       return existing.profileId;
     }
   } catch (error) {
-    console.warn('[ProfileService] Failed to read from IndexedDB:', error);
+    log.warn('Failed to read from IndexedDB:', error);
     return null;
   }
 
@@ -173,7 +176,7 @@ export async function selectProfile(profileId: string): Promise<void> {
   // Try to persist to IndexedDB
   const idbAvailable = await isIndexedDBAvailable();
   if (!idbAvailable) {
-    console.warn('[ProfileService] IndexedDB not available, profile selection is session-only');
+    log.warn('IndexedDB not available, profile selection is session-only');
     return;
   }
 
@@ -186,7 +189,7 @@ export async function selectProfile(profileId: string): Promise<void> {
     };
     await db.deviceProfile.put(profile);
   } catch (error) {
-    console.warn('[ProfileService] Failed to persist profile to IndexedDB:', error);
+    log.warn('Failed to persist profile to IndexedDB:', error);
   }
 }
 
@@ -205,7 +208,7 @@ export async function clearSelectedProfile(): Promise<void> {
   try {
     await db.deviceProfile.delete('device-profile');
   } catch (error) {
-    console.warn('[ProfileService] Failed to clear profile from IndexedDB:', error);
+    log.warn('Failed to clear profile from IndexedDB:', error);
   }
 }
 

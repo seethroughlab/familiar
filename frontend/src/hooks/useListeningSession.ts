@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioEngine } from './useAudioEngine';
 import { useWebRTCStreaming } from './useWebRTCStreaming';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ListeningSession');
 
 export interface SessionParticipant {
   user_id: string;
@@ -226,7 +229,7 @@ export function useListeningSession({ userId, username }: UseListeningSessionOpt
 
         // Exponential backoff: 3s, 6s, 12s, 24s, 48s, max 60s
         const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current - 1), 60000);
-        console.log(`[Session] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+        log.info(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
 
         reconnectTimeoutRef.current = window.setTimeout(() => {
           connect();

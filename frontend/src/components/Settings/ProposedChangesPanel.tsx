@@ -20,6 +20,10 @@ import {
   type ChangePreview,
 } from '../../api/client';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ProposedChangesPanel');
+
 const STATUS_LABELS: Record<ChangeStatus, string> = {
   pending: 'Pending',
   rejected: 'Rejected',
@@ -376,7 +380,7 @@ export function ProposedChangesPanel() {
       const preview = await proposedChangesApi.preview(changeId);
       setPreviewData(preview);
     } catch (error) {
-      console.error('Failed to fetch preview:', error);
+      log.error('Failed to fetch preview:', error);
     } finally {
       setLoadingChangeId(null);
     }

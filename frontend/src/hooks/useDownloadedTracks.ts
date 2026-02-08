@@ -8,6 +8,9 @@ import {
   formatBytes,
   type OfflineTrackInfo,
 } from '../services/offlineService';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('DownloadedTracks');
 
 interface UseDownloadedTracksResult {
   tracks: OfflineTrackInfo[];
@@ -38,7 +41,7 @@ export function useDownloadedTracks(): UseDownloadedTracksResult {
       setTracks(tracksInfo);
       setTotalSize(storageInfo.sizeBytes);
     } catch (error) {
-      console.error('Failed to load downloaded tracks:', error);
+      log.error('Failed to load downloaded tracks:', error);
     } finally {
       setIsLoading(false);
     }

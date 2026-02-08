@@ -5,7 +5,7 @@ Tests cover the SyncProgressReporter, sync flow, progress reporting, and failure
 
 import json
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -291,3 +291,342 @@ class TestProgressPersistence:
                 # Should not raise
                 data = json.loads(json_str)
                 assert isinstance(data, dict)
+
+
+class TestSpotifySyncProgressReporter:
+    """Tests for SpotifySyncProgressReporter class."""
+
+    @pytest.fixture
+    def mock_redis(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def reporter(self, mock_redis):
+        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+            from app.services.tasks import SpotifySyncProgressReporter
+            return SpotifySyncProgressReporter(profile_id="test-profile-123")
+
+    def test_init_sets_connecting_phase(self, reporter, mock_redis):
+        """Should set initial connecting phase on init."""
+        mock_redis.set.assert_called()
+        call_args = mock_redis.set.call_args
+        progress_data = json.loads(call_args[0][1])
+
+        assert progress_data["status"] == "running"
+        assert progress_data["phase"] == "connecting"
+        assert progress_data["profile_id"] == "test-profile-123"
+        assert progress_data["tracks_fetched"] == 0
+
+    def test_set_fetching(self, reporter, mock_redis):
+        """Should update to fetching phase."""
+        reporter.set_fetching(fetched=50, message="Fetching...")
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["phase"] == "fetching"
+        assert progress_data["tracks_fetched"] == 50
+        assert progress_data["message"] == "Fetching..."
+
+    def test_set_matching(self, reporter, mock_redis):
+        """Should update matching progress with percentage."""
+        reporter.set_matching(processed=50, total=100, new=10, matched=40, unmatched=10, current="Some Track")
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["phase"] == "matching"
+        assert progress_data["tracks_processed"] == 50
+        assert progress_data["matched"] == 40
+        assert "50%" in progress_data["message"]
+        assert progress_data["current_track"] == "Some Track"
+
+    def test_complete(self, reporter, mock_redis):
+        """Should mark sync as complete."""
+        reporter.complete(fetched=200, new=50, matched=150, unmatched=50)
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["status"] == "completed"
+        assert progress_data["phase"] == "complete"
+        assert progress_data["matched"] == 150
+
+    def test_error(self, reporter, mock_redis):
+        """Should set error status."""
+        # Mock _get_current to return initial state
+        mock_redis.get.return_value = json.dumps({
+            "status": "running",
+            "phase": "fetching",
+            "errors": [],
+        }).encode()
+
+        reporter.error("Connection failed")
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["status"] == "error"
+        assert "Connection failed" in progress_data["errors"]
+
+    def test_error_preserves_existing_data(self, reporter, mock_redis):
+        """Error should preserve existing progress data."""
+        mock_redis.get.return_value = json.dumps({
+            "status": "running",
+            "phase": "matching",
+            "matched": 50,
+            "errors": ["previous error"],
+        }).encode()
+
+        reporter.error("New error")
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["matched"] == 50
+        assert len(progress_data["errors"]) == 2
+
+
+class TestNewReleasesProgressReporter:
+    """Tests for NewReleasesProgressReporter class."""
+
+    @pytest.fixture
+    def mock_redis(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def reporter(self, mock_redis):
+        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+            from app.services.tasks import NewReleasesProgressReporter
+            return NewReleasesProgressReporter(profile_id="test-profile")
+
+    def test_init_sets_starting_phase(self, reporter, mock_redis):
+        """Should set initial starting phase."""
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["status"] == "running"
+        assert progress_data["phase"] == "starting"
+        assert progress_data["artists_checked"] == 0
+
+    def test_set_checking(self, reporter, mock_redis):
+        """Should update checking progress."""
+        reporter.set_checking(checked=25, total=100, found=5, new=3, current_artist="Radiohead")
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["phase"] == "checking"
+        assert progress_data["artists_checked"] == 25
+        assert progress_data["releases_new"] == 3
+        assert progress_data["current_artist"] == "Radiohead"
+
+    def test_complete(self, reporter, mock_redis):
+        """Should mark complete."""
+        reporter.complete(checked=100, found=10, new=5)
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["status"] == "completed"
+        assert progress_data["releases_new"] == 5
+
+    def test_error(self, reporter, mock_redis):
+        """Should set error status."""
+        mock_redis.get.return_value = json.dumps({
+            "status": "running",
+            "phase": "checking",
+            "errors": [],
+        }).encode()
+
+        reporter.error("API rate limited")
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert progress_data["status"] == "error"
+        assert "API rate limited" in progress_data["errors"]
+
+    def test_percentage_calculation(self, reporter, mock_redis):
+        """Should calculate percentage correctly."""
+        reporter.set_checking(checked=50, total=200, found=0, new=0)
+
+        progress_data = json.loads(mock_redis.set.call_args[0][1])
+
+        assert "25%" in progress_data["message"]
+
+
+class TestGetSyncProgress:
+    """Tests for get_sync_progress function."""
+
+    def test_returns_data(self):
+        """Should return parsed progress data."""
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = json.dumps({"status": "running", "phase": "reading"}).encode()
+
+        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+            from app.services.tasks import get_sync_progress
+            result = get_sync_progress()
+
+        assert result is not None
+        assert result["status"] == "running"
+
+    def test_handles_redis_error(self):
+        """Should return None on Redis error."""
+        mock_redis = MagicMock()
+        mock_redis.get.side_effect = Exception("Redis down")
+
+        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+            from app.services.tasks import get_sync_progress
+            result = get_sync_progress()
+
+        assert result is None
+
+
+class TestGetSpotifySyncProgress:
+    """Tests for get_spotify_sync_progress function."""
+
+    def test_returns_data(self):
+        """Should return parsed Spotify sync progress."""
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = json.dumps({"status": "running", "matched": 50}).encode()
+
+        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+            from app.services.tasks import get_spotify_sync_progress
+            result = get_spotify_sync_progress()
+
+        assert result is not None
+        assert result["matched"] == 50
+
+
+class TestGetNewReleasesProgress:
+    """Tests for get_new_releases_progress function."""
+
+    def test_returns_data(self):
+        """Should return parsed new releases progress."""
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = json.dumps({"status": "completed", "releases_new": 3}).encode()
+
+        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+            from app.services.tasks import get_new_releases_progress
+            result = get_new_releases_progress()
+
+        assert result is not None
+        assert result["releases_new"] == 3
+
+
+class TestGetMemoryMb:
+    """Tests for get_memory_mb function."""
+
+    def test_returns_float(self):
+        """Should return memory as float."""
+        from app.services.tasks import get_memory_mb
+        result = get_memory_mb()
+        assert isinstance(result, float)
+        assert result >= 0
+
+    def test_returns_positive_on_success(self):
+        """Should return positive value on macOS/Linux."""
+        from app.services.tasks import get_memory_mb
+        result = get_memory_mb()
+        # On any real system running tests, memory should be > 0
+        assert result > 0
+
+
+class TestLogMemory:
+    """Tests for log_memory function."""
+
+    def test_calls_get_memory_and_logs(self):
+        """Should log memory usage with label."""
+        with patch("app.services.tasks.get_memory_mb", return_value=256.5), \
+             patch("app.services.tasks.logger") as mock_logger:
+            from app.services.tasks import log_memory
+            log_memory("test phase")
+
+            mock_logger.info.assert_called_once()
+            call_msg = mock_logger.info.call_args[0][0]
+            assert "256.5" in call_msg
+            assert "test phase" in call_msg
+
+
+class TestQueueTracksForFeatures:
+    """Tests for queue_tracks_for_features function."""
+
+    @pytest.mark.asyncio
+    async def test_queues_tracks(self):
+        """Should queue tracks needing feature extraction."""
+        track_id = "12345678-1234-1234-1234-123456789abc"
+
+        mock_db = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [(track_id,)]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        mock_manager = MagicMock()
+        mock_manager.run_analysis = AsyncMock()
+
+        with patch("app.db.session.async_session_maker", return_value=mock_session), \
+             patch("app.services.background.get_background_manager", return_value=mock_manager):
+            from app.services.tasks import queue_tracks_for_features
+            queued = await queue_tracks_for_features(limit=10)
+
+        assert queued == 1
+        mock_manager.run_analysis.assert_called_once_with(track_id, phase="features")
+
+    @pytest.mark.asyncio
+    async def test_empty_queue(self):
+        """Should return 0 when no tracks need analysis."""
+        mock_db = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = []
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.db.session.async_session_maker", return_value=mock_session):
+            from app.services.tasks import queue_tracks_for_features
+            queued = await queue_tracks_for_features()
+
+        assert queued == 0
+
+
+class TestQueueTracksForEmbeddings:
+    """Tests for queue_tracks_for_embeddings function."""
+
+    @pytest.mark.asyncio
+    async def test_queues_tracks(self):
+        """Should queue tracks needing embeddings."""
+        track_id = "12345678-1234-1234-1234-123456789abc"
+
+        mock_db = MagicMock()
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = [(track_id,)]
+        mock_db.execute = AsyncMock(return_value=mock_result)
+
+        mock_session = MagicMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_session.__aexit__ = AsyncMock(return_value=False)
+
+        mock_manager = MagicMock()
+        mock_manager.run_analysis = AsyncMock()
+
+        mock_settings = MagicMock()
+        mock_settings.is_clap_embeddings_enabled.return_value = (True, "enabled")
+
+        with patch("app.db.session.async_session_maker", return_value=mock_session), \
+             patch("app.services.background.get_background_manager", return_value=mock_manager), \
+             patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings):
+            from app.services.tasks import queue_tracks_for_embeddings
+            queued = await queue_tracks_for_embeddings(limit=10)
+
+        assert queued == 1
+        mock_manager.run_analysis.assert_called_once_with(track_id, phase="embedding")
+
+    @pytest.mark.asyncio
+    async def test_disabled_clap(self):
+        """Should return 0 when CLAP is disabled."""
+        mock_settings = MagicMock()
+        mock_settings.is_clap_embeddings_enabled.return_value = (False, "disabled")
+
+        with patch("app.services.app_settings.get_app_settings_service", return_value=mock_settings):
+            from app.services.tasks import queue_tracks_for_embeddings
+            queued = await queue_tracks_for_embeddings()
+
+        assert queued == 0

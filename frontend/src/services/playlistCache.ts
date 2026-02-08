@@ -12,6 +12,9 @@ import {
   type CachedTrack,
 } from '../db';
 import type { PlaylistDetail, SmartPlaylist } from '../api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('PlaylistCache');
 
 // =====================
 // Regular Playlists
@@ -38,7 +41,7 @@ export async function cachePlaylist(playlist: PlaylistDetail): Promise<void> {
 
     await db.cachedPlaylists.put(cached);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to cache playlist:', error);
+    log.warn('Failed to cache playlist:', error);
   }
 }
 
@@ -54,7 +57,7 @@ export async function getCachedPlaylist(
   try {
     return await db.cachedPlaylists.get(id);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get cached playlist:', error);
+    log.warn('Failed to get cached playlist:', error);
     return undefined;
   }
 }
@@ -69,7 +72,7 @@ export async function getCachedPlaylists(): Promise<CachedPlaylist[]> {
   try {
     return await db.cachedPlaylists.toArray();
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get cached playlists:', error);
+    log.warn('Failed to get cached playlists:', error);
     return [];
   }
 }
@@ -84,7 +87,7 @@ export async function deleteCachedPlaylist(id: string): Promise<void> {
   try {
     await db.cachedPlaylists.delete(id);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to delete cached playlist:', error);
+    log.warn('Failed to delete cached playlist:', error);
   }
 }
 
@@ -98,7 +101,7 @@ export async function clearPlaylistCache(): Promise<void> {
   try {
     await db.cachedPlaylists.clear();
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to clear playlist cache:', error);
+    log.warn('Failed to clear playlist cache:', error);
   }
 }
 
@@ -126,7 +129,7 @@ export async function getPlaylistCacheInfo(): Promise<{
       lastCached: playlist?.cachedAt || null,
     };
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get playlist cache info:', error);
+    log.warn('Failed to get playlist cache info:', error);
     return { count: 0, lastCached: null };
   }
 }
@@ -163,7 +166,7 @@ export async function cacheSmartPlaylist(
 
     await db.cachedSmartPlaylists.put(cached);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to cache smart playlist:', error);
+    log.warn('Failed to cache smart playlist:', error);
   }
 }
 
@@ -179,7 +182,7 @@ export async function getCachedSmartPlaylist(
   try {
     return await db.cachedSmartPlaylists.get(id);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get cached smart playlist:', error);
+    log.warn('Failed to get cached smart playlist:', error);
     return undefined;
   }
 }
@@ -194,7 +197,7 @@ export async function getCachedSmartPlaylists(): Promise<CachedSmartPlaylist[]> 
   try {
     return await db.cachedSmartPlaylists.toArray();
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get cached smart playlists:', error);
+    log.warn('Failed to get cached smart playlists:', error);
     return [];
   }
 }
@@ -209,7 +212,7 @@ export async function deleteCachedSmartPlaylist(id: string): Promise<void> {
   try {
     await db.cachedSmartPlaylists.delete(id);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to delete cached smart playlist:', error);
+    log.warn('Failed to delete cached smart playlist:', error);
   }
 }
 
@@ -223,7 +226,7 @@ export async function clearSmartPlaylistCache(): Promise<void> {
   try {
     await db.cachedSmartPlaylists.clear();
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to clear smart playlist cache:', error);
+    log.warn('Failed to clear smart playlist cache:', error);
   }
 }
 
@@ -251,7 +254,7 @@ export async function getSmartPlaylistCacheInfo(): Promise<{
       lastCached: playlist?.cachedAt || null,
     };
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get smart playlist cache info:', error);
+    log.warn('Failed to get smart playlist cache info:', error);
     return { count: 0, lastCached: null };
   }
 }
@@ -279,7 +282,7 @@ export async function cacheFavorites(
 
     await db.cachedFavorites.put(cached);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to cache favorites:', error);
+    log.warn('Failed to cache favorites:', error);
   }
 }
 
@@ -295,7 +298,7 @@ export async function getCachedFavorites(
   try {
     return await db.cachedFavorites.get(profileId);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get cached favorites:', error);
+    log.warn('Failed to get cached favorites:', error);
     return undefined;
   }
 }
@@ -310,7 +313,7 @@ export async function deleteCachedFavorites(profileId: string): Promise<void> {
   try {
     await db.cachedFavorites.delete(profileId);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to delete cached favorites:', error);
+    log.warn('Failed to delete cached favorites:', error);
   }
 }
 
@@ -324,7 +327,7 @@ export async function clearFavoritesCache(): Promise<void> {
   try {
     await db.cachedFavorites.clear();
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to clear favorites cache:', error);
+    log.warn('Failed to clear favorites cache:', error);
   }
 }
 
@@ -352,7 +355,7 @@ export async function getFavoritesCacheInfo(): Promise<{
       lastCached: favorites?.cachedAt || null,
     };
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get favorites cache info:', error);
+    log.warn('Failed to get favorites cache info:', error);
     return { count: 0, lastCached: null };
   }
 }
@@ -386,7 +389,7 @@ export async function resolveTrackIds(
       .map((id) => tracksMap.get(id))
       .filter((t): t is CachedTrack => t !== undefined);
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to resolve track IDs:', error);
+    log.warn('Failed to resolve track IDs:', error);
     return [];
   }
 }
@@ -404,7 +407,7 @@ export async function getAvailableTrackIds(
     const tracks = await db.cachedTracks.where('id').anyOf(trackIds).toArray();
     return new Set(tracks.map((t) => t.id));
   } catch (error) {
-    console.warn('[PlaylistCache] Failed to get available track IDs:', error);
+    log.warn('Failed to get available track IDs:', error);
     return new Set();
   }
 }

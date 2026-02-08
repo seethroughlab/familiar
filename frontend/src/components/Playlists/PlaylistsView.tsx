@@ -21,6 +21,10 @@ import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import * as playlistCache from '../../services/playlistCache';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('PlaylistsView');
+
 type ViewMode = 'list' | 'detail' | 'favorites' | 'downloads' | 'wishlist' | 'smart-detail' | 'ephemeral-detail';
 
 interface SelectedPlaylist {
@@ -289,7 +293,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
       // Navigate to the saved playlist
       setSelectedPlaylist({ type: 'static', id: savedId });
     } catch (error) {
-      console.error('Failed to save playlist:', error);
+      log.error('Failed to save playlist:', error);
     } finally {
       setSavingPlaylistId(null);
     }
@@ -381,7 +385,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
             // Navigate to the saved playlist
             setSelectedPlaylist({ type: 'static', id: savedId });
           } catch (error) {
-            console.error('Failed to save playlist:', error);
+            log.error('Failed to save playlist:', error);
           } finally {
             setSavingPlaylistId(null);
           }

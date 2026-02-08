@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff } from 'lucide-react';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('ChatPanel');
 import { useQueryClient } from '@tanstack/react-query';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useLibraryViewStore } from '../../stores/libraryViewStore';
@@ -58,7 +61,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
           }
         }
       } catch (error) {
-        console.error('Failed to initialize chat:', error);
+        log.error('Failed to initialize chat:', error);
         notifyError(error, { operation: 'initialize chat' });
       }
     };
@@ -79,7 +82,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
         setLlmError(null);
       })
       .catch((error) => {
-        console.error('Failed to check LLM status:', error);
+        log.error('Failed to check LLM status:', error);
         // Distinguish network errors from config errors
         setLlmError('network');
         setLlmStatus(null);
@@ -248,7 +251,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
         }
       }
     } catch (error) {
-      console.error('Chat error:', error);
+      log.error('Chat error:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -373,7 +376,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
 
       case 'error': {
         const errorContent = event.content as string || event.message as string || 'An error occurred';
-        console.error('LLM error:', errorContent);
+        log.error('LLM error:', errorContent);
         await chatService.updateLastMessage(sessionId, {
           content: `**Error:** ${errorContent}`,
         });
@@ -486,7 +489,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
+        <div role="log" aria-label="Chat messages" className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-4">
           {/* Offline warning */}
           {isOffline && (
             <div className="p-3 bg-amber-900/20 border border-amber-800 rounded-lg flex items-start gap-2">
@@ -562,7 +565,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
 
                 {/* Streaming indicator */}
                 {message.role === 'assistant' && !message.content && isLoading && (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 role="status" aria-label="Generating response" className="w-4 h-4 animate-spin" />
                 )}
               </div>
             </div>
@@ -580,11 +583,13 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
               onChange={(e) => setInput(e.target.value)}
               placeholder={isOffline ? 'Chat unavailable offline' : 'Ask Familiar...'}
               disabled={isLoading || isOffline}
+              aria-label="Chat message"
               className="flex-1 bg-zinc-800 border border-zinc-700 rounded-full px-4 py-2 text-base placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50"
             />
             <button
               type="submit"
               disabled={!input.trim() || isLoading || isOffline}
+              aria-label={isLoading ? 'Sending message' : 'Send message'}
               className="p-2 bg-green-600 text-white rounded-full hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 transition-colors"
             >
               {isLoading ? (

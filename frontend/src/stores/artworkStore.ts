@@ -6,6 +6,9 @@
  */
 import { create } from 'zustand';
 import { computeAlbumHash } from '../utils/albumHash';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Artwork');
 
 // API types
 interface QueueBatchResponse {
@@ -156,7 +159,7 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
         get().startPolling();
       }
     } catch (error) {
-      console.error('Failed to request artwork:', error);
+      log.error('Failed to request artwork:', error);
       // Mark all as missing on error
       const newStatus = new Map(get().status);
       for (const album of newAlbums) {
@@ -243,7 +246,7 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
           get().stopPolling();
         }
       } catch (error) {
-        console.error('Failed to poll artwork status:', error);
+        log.error('Failed to poll artwork status:', error);
       }
     }, POLL_INTERVAL_MS);
 

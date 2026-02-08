@@ -11,6 +11,9 @@ import * as THREE from 'three';
 import * as ReactThreeFiber from '@react-three/fiber';
 import * as Drei from '@react-three/drei';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('PluginLoader');
 
 // Visualizer API
 import { registerVisualizer } from '../components/Visualizer/types';
@@ -174,7 +177,7 @@ class PluginLoaderService {
     };
 
     this.initialized = true;
-    console.log('[PluginLoader] Global Familiar API initialized');
+    log.info('Global Familiar API initialized');
   }
 
   /**
@@ -192,13 +195,13 @@ class PluginLoaderService {
       );
 
       const plugins = response.data.plugins;
-      console.log(`[PluginLoader] Loading ${plugins.length} plugin(s)`);
+      log.info(`Loading ${plugins.length} plugin(s)`);
 
       for (const plugin of plugins) {
         await this.loadPlugin(plugin);
       }
     } catch (error) {
-      console.warn('[PluginLoader] Failed to fetch plugins:', error);
+      log.warn('Failed to fetch plugins:', error);
     }
   }
 
@@ -210,12 +213,12 @@ class PluginLoaderService {
 
     // Skip if already loaded
     if (this.loadedPlugins.has(pluginId)) {
-      console.log(`[PluginLoader] Plugin ${pluginId} already loaded`);
+      log.info(`Plugin ${pluginId} already loaded`);
       return true;
     }
 
     try {
-      console.log(`[PluginLoader] Loading plugin: ${plugin.name} (${pluginId})`);
+      log.info(`Loading plugin: ${plugin.name} (${pluginId})`);
 
       // Fetch bundle from backend
       const response = await api.get<string>(
@@ -235,7 +238,7 @@ class PluginLoaderService {
         this.loadedPlugins.add(pluginId);
         this.loadErrors.delete(pluginId);
 
-        console.log(`[PluginLoader] Successfully loaded plugin: ${plugin.name}`);
+        log.info(`Successfully loaded plugin: ${plugin.name}`);
         return true;
       } catch (execError) {
         const errorMessage = execError instanceof Error ? execError.message : String(execError);
@@ -243,7 +246,7 @@ class PluginLoaderService {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[PluginLoader] Failed to load plugin ${pluginId}:`, errorMessage);
+      log.error(`Failed to load plugin ${pluginId}:`, errorMessage);
 
       this.loadErrors.set(pluginId, errorMessage);
 

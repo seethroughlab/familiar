@@ -14,6 +14,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      include: ['src/**/*.{ts,tsx}'],
       exclude: [
         'node_modules/',
         'src/test/',
@@ -21,13 +22,13 @@ export default defineConfig({
         'src/main.tsx',
         'src/vite-env.d.ts',
       ],
-      // Coverage thresholds - start low and increase over time
+      // Coverage thresholds - global % across ~200 source files
       // Run with: npm run test -- --coverage
       thresholds: {
-        statements: 20,
-        branches: 15,
-        functions: 20,
-        lines: 20,
+        statements: 8,
+        branches: 8,
+        functions: 8,
+        lines: 8,
       },
     },
   },

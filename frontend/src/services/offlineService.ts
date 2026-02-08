@@ -9,6 +9,9 @@ import {
   type PartialDownload,
 } from '../db';
 import { computeAlbumHash } from '../utils/albumHash';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('Offline');
 
 /**
  * Fetch and cache track metadata from the API.
@@ -25,7 +28,7 @@ async function ensureTrackMetadataCached(trackId: string): Promise<CachedTrack |
   try {
     const response = await fetch(`/api/v1/tracks/${trackId}`);
     if (!response.ok) {
-      console.warn('[Offline] Could not fetch track metadata:', trackId);
+      log.warn('Could not fetch track metadata:', trackId);
       return null;
     }
 
@@ -45,10 +48,10 @@ async function ensureTrackMetadataCached(trackId: string): Promise<CachedTrack |
     };
 
     await db.cachedTracks.put(cachedTrack);
-    console.log('[Offline] Cached track metadata:', trackId);
+    log.info('Cached track metadata:', trackId);
     return cachedTrack;
   } catch (error) {
-    console.warn('[Offline] Failed to cache track metadata:', trackId, error);
+    log.warn('Failed to cache track metadata:', trackId, error);
     return null;
   }
 }
@@ -108,7 +111,7 @@ export async function downloadTrackForOffline(
   // Check if already downloaded
   const existing = await db.offlineTracks.get(trackId);
   if (existing) {
-    console.log('[Offline] Track already exists in IndexedDB:', trackId);
+    log.info('Track already exists in IndexedDB:', trackId);
     onProgress?.({ loaded: 1, total: 1, percentage: 100 });
     return;
   }
@@ -122,7 +125,7 @@ export async function downloadTrackForOffline(
   const headers: HeadersInit = {};
   if (resumeFrom > 0) {
     headers['Range'] = `bytes=${resumeFrom}-`;
-    console.log('[Offline] Resuming download from byte:', resumeFrom);
+    log.info('Resuming download from byte:', resumeFrom);
   }
 
   // Set up abort controller with timeout for iOS PWA resilience
@@ -130,7 +133,7 @@ export async function downloadTrackForOffline(
   const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
 
   // Fetch the audio file with progress tracking
-  console.log('[Offline] Fetching track:', trackId, resumeFrom > 0 ? '(resuming)' : '');
+  log.info('Fetching track:', trackId, resumeFrom > 0 ? '(resuming)' : '');
   let response: Response;
   try {
     response = await fetch(`/api/v1/tracks/${trackId}/stream`, {
@@ -142,7 +145,7 @@ export async function downloadTrackForOffline(
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       const message = 'Download timed out - please try again';
-      console.error('[Offline] Download timeout:', trackId);
+      log.error('Download timeout:', trackId);
       window.dispatchEvent(
         new CustomEvent('offline-download-error', {
           detail: { trackId, error: message },
@@ -161,7 +164,7 @@ export async function downloadTrackForOffline(
 
   // Check for successful response (200 OK or 206 Partial Content)
   if (!response.ok && response.status !== 206) {
-    console.error('[Offline] Fetch failed:', response.status, response.statusText);
+    log.error('Fetch failed:', response.status, response.statusText);
     throw new Error(`Failed to download track: ${response.statusText}`);
   }
 
@@ -177,12 +180,12 @@ export async function downloadTrackForOffline(
     } else {
       total = partial?.totalBytes || 0;
     }
-    console.log('[Offline] Resume response, total size:', total);
+    log.info('Resume response, total size:', total);
   } else {
     // Full response
     const contentLength = response.headers.get('content-length');
     total = contentLength ? parseInt(contentLength, 10) : 0;
-    console.log('[Offline] Full response, content-length:', total);
+    log.info('Full response, content-length:', total);
   }
 
   let blob: Blob;
@@ -222,7 +225,7 @@ export async function downloadTrackForOffline(
     } catch (error) {
       // Save progress before throwing so we can resume later
       if (chunks.length > existingChunks.length && total > 0) {
-        console.log('[Offline] Saving partial progress before error:', loaded, 'bytes');
+        log.info('Saving partial progress before error:', loaded, 'bytes');
         await savePartialProgress(trackId, loaded, total, chunks);
       }
       throw error;
@@ -242,7 +245,7 @@ export async function downloadTrackForOffline(
     cachedAt: new Date(),
   };
 
-  console.log('[Offline] Storing track in IndexedDB:', trackId, 'size:', blob.size);
+  log.info('Storing track in IndexedDB:', trackId, 'size:', blob.size);
 
   try {
     await db.offlineTracks.put(offlineTrack);
@@ -256,7 +259,7 @@ export async function downloadTrackForOffline(
         error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
 
     if (isQuotaError) {
-      console.error('[Offline] Storage quota exceeded:', trackId);
+      log.error('Storage quota exceeded:', trackId);
       // Dispatch event for UI to show "Storage full" message
       window.dispatchEvent(
         new CustomEvent('offline-storage-full', {
@@ -276,7 +279,7 @@ export async function downloadTrackForOffline(
 
   // Clear partial download record on success
   await clearPartialDownload(trackId);
-  console.log('[Offline] Track stored successfully:', trackId);
+  log.info('Track stored successfully:', trackId);
 
   // Ensure track metadata is cached for display in Downloads view
   const trackInfo = await ensureTrackMetadataCached(trackId);
@@ -512,7 +515,7 @@ export async function getOfflineTracksWithInfo(): Promise<OfflineTrackInfo[]> {
     .map((t) => t.id);
 
   if (missingIds.length > 0) {
-    console.log('[Offline] Fetching missing metadata for', missingIds.length, 'tracks');
+    log.info('Fetching missing metadata for', missingIds.length, 'tracks');
     // Fetch metadata in parallel (limit concurrency to avoid overwhelming the API)
     const fetchPromises = missingIds.slice(0, 10).map(async (id) => {
       const info = await ensureTrackMetadataCached(id);
@@ -568,7 +571,7 @@ export async function downloadTracksForOffline(
       });
       succeeded++;
     } catch (error) {
-      console.error(`Failed to download track ${trackId}:`, error);
+      log.error(`Failed to download track ${trackId}:`, error);
       failed++;
     }
   }

@@ -1,5 +1,8 @@
 import { Component, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('ErrorBoundary');
 
 interface Props {
   children: ReactNode;
@@ -32,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log error for debugging
-    console.error(`[ErrorBoundary${this.props.name ? `:${this.props.name}` : ''}]`, error, errorInfo);
+    log.error(`${this.props.name ? `[${this.props.name}]` : ''}`, error, errorInfo);
 
     // Call optional error handler
     this.props.onError?.(error, errorInfo);
@@ -110,7 +113,7 @@ export class SilentErrorBoundary extends Component<SilentErrorBoundaryProps, { h
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('[SilentErrorBoundary]', error, errorInfo);
+    log.error('[Silent]', error, errorInfo);
   }
 
   handleRetry = () => {

@@ -734,3 +734,687 @@ class TestPlaylistNameGeneration:
         executor = ToolExecutor(db=AsyncMock(), profile_id=uuid4(), user_message="")
         name = executor._generate_playlist_name_fallback()
         assert "AI Playlist" in name
+
+
+class TestGetLibraryGenres:
+    """Tests for _get_library_genres tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db)
+
+    @pytest.mark.asyncio
+    async def test_returns_genres_with_counts(self, executor, mock_db):
+        """Should return genre list with track counts."""
+        mock_result = MagicMock()
+        mock_result.all.return_value = [("Rock", 500), ("Jazz", 300), ("Electronic", 150)]
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_library_genres()
+
+        assert result["total"] == 3
+        assert result["genres"][0] == {"genre": "Rock", "count": 500}
+        assert result["genres"][1] == {"genre": "Jazz", "count": 300}
+        assert "hint" in result
+
+    @pytest.mark.asyncio
+    async def test_string_limit_coercion(self, executor, mock_db):
+        """Should handle limit passed as string."""
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_library_genres(limit="25")
+
+        assert result["total"] == 0
+        assert result["genres"] == []
+
+
+class TestGetVisibleTracks:
+    """Tests for _get_visible_tracks tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_empty_visible_ids(self, mock_db):
+        """Should return empty when no visible track IDs."""
+        executor = ToolExecutor(db=mock_db, visible_track_ids=[])
+        result = await executor._get_visible_tracks()
+
+        assert result["tracks"] == []
+        assert result["count"] == 0
+        assert "No tracks" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_returns_tracks_in_order(self, mock_db):
+        """Should return tracks in same order as visible_track_ids."""
+        id1, id2, id3 = uuid4(), uuid4(), uuid4()
+
+        tracks = []
+        for uid, title in [(id1, "First"), (id2, "Second"), (id3, "Third")]:
+            t = MagicMock()
+            t.id = uid
+            t.title = title
+            t.artist = "Artist"
+            t.album = "Album"
+            t.duration_seconds = 180
+            t.genre = "Rock"
+            tracks.append(t)
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = tracks
+        mock_db.execute.return_value = mock_result
+
+        # Request in reverse order
+        executor = ToolExecutor(
+            db=mock_db, visible_track_ids=[str(id3), str(id1), str(id2)]
+        )
+        result = await executor._get_visible_tracks()
+
+        assert result["count"] == 3
+        assert result["tracks"][0]["title"] == "Third"
+        assert result["tracks"][1]["title"] == "First"
+        assert result["tracks"][2]["title"] == "Second"
+
+    @pytest.mark.asyncio
+    async def test_skips_missing_ids(self, mock_db):
+        """Should skip IDs not found in database."""
+        id1 = uuid4()
+        t = MagicMock()
+        t.id = id1
+        t.title = "Found"
+        t.artist = "Artist"
+        t.album = "Album"
+        t.duration_seconds = 180
+        t.genre = "Rock"
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [t]
+        mock_db.execute.return_value = mock_result
+
+        executor = ToolExecutor(
+            db=mock_db, visible_track_ids=[str(id1), str(uuid4())]
+        )
+        result = await executor._get_visible_tracks()
+
+        assert result["count"] == 1
+        assert result["tracks"][0]["title"] == "Found"
+
+
+class TestGetTrackDetails:
+    """Tests for _get_track_details tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db)
+
+    @pytest.mark.asyncio
+    async def test_found_with_analysis(self, executor, mock_db):
+        """Should return track with features when analysis exists."""
+        track_id = uuid4()
+        mock_track = MagicMock()
+        mock_track.id = track_id
+        mock_track.title = "Test"
+        mock_track.artist = "Artist"
+        mock_track.album = "Album"
+        mock_track.genre = "Rock"
+        mock_track.duration_seconds = 200
+        mock_track.year = 2020
+
+        mock_analysis = MagicMock()
+        mock_analysis.features = {"bpm": 120, "key": "C"}
+
+        # First call: track lookup, second: analysis lookup
+        mock_db.execute.side_effect = [
+            MagicMock(scalar_one_or_none=MagicMock(return_value=mock_track)),
+            MagicMock(scalar_one_or_none=MagicMock(return_value=mock_analysis)),
+        ]
+
+        result = await executor._get_track_details(str(track_id))
+
+        assert result["title"] == "Test"
+        assert result["features"] == {"bpm": 120, "key": "C"}
+
+    @pytest.mark.asyncio
+    async def test_not_found(self, executor, mock_db):
+        """Should return error when track not found."""
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None)
+        )
+
+        result = await executor._get_track_details(str(uuid4()))
+
+        assert "error" in result
+        assert "not found" in result["error"]
+
+
+class TestGetAlbumTracks:
+    """Tests for _get_album_tracks tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db)
+
+    @pytest.mark.asyncio
+    async def test_returns_album_info(self, executor, mock_db):
+        """Should return album metadata with tracks."""
+        tracks = []
+        for i in range(3):
+            t = MagicMock()
+            t.id = uuid4()
+            t.title = f"Track {i + 1}"
+            t.artist = "Artist"
+            t.album = "Test Album"
+            t.album_artist = "Artist"
+            t.track_number = i + 1
+            t.disc_number = 1
+            tracks.append(t)
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = tracks
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_album_tracks("Test Album")
+
+        assert result["album"] == "Test Album"
+        assert result["count"] == 3
+        assert result["album_artist"] == "Artist"
+        assert result["is_multi_artist"] is False
+        assert len(result["track_ids"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_with_artist_filter(self, executor, mock_db):
+        """Should filter by artist when provided."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_album_tracks("Album", artist="Specific Artist")
+
+        assert result["count"] == 0
+        mock_db.execute.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_empty_album(self, executor, mock_db):
+        """Should return empty when no tracks found."""
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_album_tracks("Nonexistent Album")
+
+        assert result["count"] == 0
+        assert result["tracks"] == []
+
+
+class TestFindDuplicateArtists:
+    """Tests for _find_duplicate_artists tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db)
+
+    @pytest.mark.asyncio
+    async def test_no_duplicates(self, executor, mock_db):
+        """Should report no duplicates found."""
+        mock_result = MagicMock()
+        mock_result.all.return_value = [
+            MagicMock(artist="Artist A", track_count=10),
+            MagicMock(artist="Artist B", track_count=5),
+        ]
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._find_duplicate_artists()
+
+        assert result["found"] == 0
+
+    @pytest.mark.asyncio
+    async def test_finds_case_variants(self, executor, mock_db):
+        """Should find case-variant duplicates."""
+        mock_result = MagicMock()
+        mock_result.all.return_value = [
+            MagicMock(artist="Radiohead", track_count=50),
+            MagicMock(artist="radiohead", track_count=3),
+            MagicMock(artist="Other Band", track_count=10),
+        ]
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._find_duplicate_artists()
+
+        assert result["found"] == 1
+        assert result["duplicates"][0]["canonical"] == "Radiohead"
+        assert len(result["duplicates"][0]["variants"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_artist_hint_filter(self, executor, mock_db):
+        """Should only include groups matching artist_hint."""
+        mock_result = MagicMock()
+        mock_result.all.return_value = [
+            MagicMock(artist="Radiohead", track_count=50),
+            MagicMock(artist="radiohead", track_count=3),
+            MagicMock(artist="The Beatles", track_count=30),
+            MagicMock(artist="the beatles", track_count=2),
+        ]
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._find_duplicate_artists(artist_hint="radiohead")
+
+        assert result["found"] == 1
+        assert result["duplicates"][0]["canonical"] == "Radiohead"
+
+
+class TestMergeDuplicateArtists:
+    """Tests for _merge_duplicate_artists tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db, profile_id=uuid4())
+
+    @pytest.mark.asyncio
+    async def test_creates_proposed_change(self, executor, mock_db):
+        """Should create a proposed change to merge artists."""
+        track = MagicMock()
+        track.id = uuid4()
+        track.artist = "radiohead"
+
+        # First: merge query, second: propose_metadata_change track lookup
+        mock_db.execute.side_effect = [
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[track])))),
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[track])))),
+        ]
+
+        result = await executor._merge_duplicate_artists(
+            source_artist="radiohead",
+            target_artist="Radiohead",
+            reason="Normalize capitalization",
+        )
+
+        assert result["status"] == "proposed"
+        assert result["field"] == "artist"
+        mock_db.add.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_source_not_found(self, executor, mock_db):
+        """Should return error when source artist has no tracks."""
+        mock_db.execute.return_value = MagicMock(
+            scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+        )
+
+        result = await executor._merge_duplicate_artists(
+            source_artist="nonexistent",
+            target_artist="Target",
+            reason="test",
+        )
+
+        assert "error" in result
+
+
+class TestMarkAlbumAsCompilation:
+    """Tests for _mark_album_as_compilation tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db, profile_id=uuid4())
+
+    @pytest.mark.asyncio
+    async def test_creates_change(self, executor, mock_db):
+        """Should propose album_artist change for compilation."""
+        track = MagicMock()
+        track.id = uuid4()
+        track.title = "Track 1"
+        track.artist = "Artist 1"
+        track.album = "Various Artists"
+        track.album_artist = None
+        track.track_number = 1
+        track.disc_number = 1
+
+        # First: get_album_tracks, second: propose_metadata_change track lookup
+        mock_db.execute.side_effect = [
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[track])))),
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[track])))),
+        ]
+
+        result = await executor._mark_album_as_compilation(
+            album="Various Artists",
+            album_artist="Various Artists",
+            reason="Compilation album",
+        )
+
+        assert result["status"] == "proposed"
+        assert result["field"] == "album_artist"
+
+    @pytest.mark.asyncio
+    async def test_empty_album(self, executor, mock_db):
+        """Should return error when album has no tracks."""
+        mock_db.execute.return_value = MagicMock(
+            scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+        )
+
+        result = await executor._mark_album_as_compilation(
+            album="nonexistent",
+            album_artist="VA",
+            reason="test",
+        )
+
+        assert "error" in result
+
+
+class TestProposeMetadataChange:
+    """Tests for _propose_metadata_change tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db, profile_id=uuid4())
+
+    @pytest.mark.asyncio
+    async def test_valid_field(self, executor, mock_db):
+        """Should create change for valid field."""
+        track = MagicMock()
+        track.id = uuid4()
+        track.genre = "Rock"
+
+        mock_db.execute.return_value = MagicMock(
+            scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[track])))
+        )
+
+        result = await executor._propose_metadata_change(
+            track_ids=[str(track.id)],
+            field="genre",
+            new_value="Alternative Rock",
+            reason="More specific genre",
+        )
+
+        assert result["status"] == "proposed"
+        assert result["field"] == "genre"
+        assert result["tracks_affected"] == 1
+        assert "_navigate" in result
+
+    @pytest.mark.asyncio
+    async def test_invalid_field(self, executor, mock_db):
+        """Should reject invalid field names."""
+        result = await executor._propose_metadata_change(
+            track_ids=[str(uuid4())],
+            field="invalid_field",
+            new_value="test",
+            reason="test",
+        )
+
+        assert "error" in result
+        assert "Invalid field" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_empty_ids(self, executor, mock_db):
+        """Should reject empty track IDs."""
+        result = await executor._propose_metadata_change(
+            track_ids=[],
+            field="genre",
+            new_value="test",
+            reason="test",
+        )
+
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_year_coercion(self, executor, mock_db):
+        """Should convert year field to int."""
+        track = MagicMock()
+        track.id = uuid4()
+        track.year = 2020
+
+        mock_db.execute.return_value = MagicMock(
+            scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[track])))
+        )
+
+        result = await executor._propose_metadata_change(
+            track_ids=[str(track.id)],
+            field="year",
+            new_value="2021",
+            reason="Wrong year",
+        )
+
+        assert result["status"] == "proposed"
+        assert result["new_value"] == 2021
+
+
+class TestGetSpotifyFavorites:
+    """Tests for _get_spotify_favorites tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_returns_matched_tracks(self, mock_db):
+        """Should return Spotify favorites matched to local library."""
+        executor = ToolExecutor(db=mock_db, profile_id=uuid4())
+
+        fav = MagicMock()
+        fav.added_at = MagicMock()
+        fav.added_at.isoformat.return_value = "2024-01-15T10:00:00"
+
+        track = MagicMock()
+        track.id = uuid4()
+        track.title = "Test"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.genre = "Rock"
+        track.duration_seconds = 200
+        track.year = 2024
+
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(fav, track)]
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_spotify_favorites()
+
+        assert result["count"] == 1
+        assert result["tracks"][0]["title"] == "Test"
+        assert "spotify_added_at" in result["tracks"][0]
+
+    @pytest.mark.asyncio
+    async def test_no_profile(self, mock_db):
+        """Should return empty when no profile."""
+        executor = ToolExecutor(db=mock_db, profile_id=None)
+
+        result = await executor._get_spotify_favorites()
+
+        assert result["count"] == 0
+        assert result["tracks"] == []
+
+
+class TestGetUnmatchedSpotifyFavorites:
+    """Tests for _get_unmatched_spotify_favorites tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_returns_unmatched(self, mock_db):
+        """Should return unmatched Spotify favorites."""
+        executor = ToolExecutor(db=mock_db, profile_id=uuid4())
+
+        fav = MagicMock()
+        fav.spotify_track_id = "sp_123"
+        fav.track_data = {"name": "Missing Song", "artist": "Some Artist", "album": "Album", "external_url": "https://open.spotify.com/track/123"}
+        fav.added_at = MagicMock()
+        fav.added_at.isoformat.return_value = "2024-01-15"
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [fav]
+        mock_db.execute.return_value = mock_result
+
+        result = await executor._get_unmatched_spotify_favorites()
+
+        assert result["count"] == 1
+        assert result["tracks"][0]["name"] == "Missing Song"
+        assert result["tracks"][0]["spotify_id"] == "sp_123"
+
+    @pytest.mark.asyncio
+    async def test_no_profile(self, mock_db):
+        """Should return empty when no profile."""
+        executor = ToolExecutor(db=mock_db, profile_id=None)
+
+        result = await executor._get_unmatched_spotify_favorites()
+
+        assert result["count"] == 0
+
+
+class TestGetSpotifySyncStats:
+    """Tests for _get_spotify_sync_stats tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        return AsyncMock()
+
+    @pytest.mark.asyncio
+    async def test_with_data(self, mock_db):
+        """Should return sync stats with match rate."""
+        executor = ToolExecutor(db=mock_db, profile_id=uuid4())
+
+        profile = MagicMock()
+        profile.last_sync_at = MagicMock()
+        profile.last_sync_at.isoformat.return_value = "2024-01-15T10:00:00"
+
+        # total count, matched count, profile query
+        mock_db.scalar.side_effect = [100, 75]
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=profile)
+        )
+
+        result = await executor._get_spotify_sync_stats()
+
+        assert result["total_favorites"] == 100
+        assert result["matched"] == 75
+        assert result["unmatched"] == 25
+        assert result["match_rate"] == 75.0
+        assert result["connected"] is True
+
+    @pytest.mark.asyncio
+    async def test_no_profile(self, mock_db):
+        """Should return zeros when no profile."""
+        executor = ToolExecutor(db=mock_db, profile_id=None)
+
+        result = await executor._get_spotify_sync_stats()
+
+        assert result["total_favorites"] == 0
+        assert result["connected"] is False
+
+
+class TestSaveAsPlaylist:
+    """Tests for _save_as_playlist tool."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db, profile_id=uuid4(), user_message="test")
+
+    @pytest.mark.asyncio
+    async def test_creates_playlist_with_tracks(self, executor, mock_db):
+        """Should create playlist and add tracks."""
+        track_id = uuid4()
+        mock_track = MagicMock()
+        mock_track.id = track_id
+
+        mock_db.get = AsyncMock(return_value=mock_track)
+
+        result = await executor._save_as_playlist(
+            name="My Playlist",
+            track_ids=[str(track_id)],
+            description="A test playlist",
+        )
+
+        assert result["saved"] is True
+        assert result["playlist_name"] == "My Playlist"
+        assert result["tracks_saved"] == 1
+
+    @pytest.mark.asyncio
+    async def test_no_profile(self, mock_db):
+        """Should fail without profile."""
+        executor = ToolExecutor(db=mock_db, profile_id=None)
+
+        result = await executor._save_as_playlist(
+            name="Test", track_ids=[str(uuid4())]
+        )
+
+        assert result["saved"] is False
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_empty_tracks(self, mock_db):
+        """Should fail with empty track list."""
+        executor = ToolExecutor(db=mock_db, profile_id=uuid4())
+
+        result = await executor._save_as_playlist(name="Test", track_ids=[])
+
+        assert result["saved"] is False
+
+
+class TestNormalizeArtistForComparison:
+    """Tests for _normalize_artist_for_comparison helper."""
+
+    @pytest.fixture
+    def executor(self):
+        return ToolExecutor(db=AsyncMock())
+
+    def test_normalizes_case_and_conjunctions(self, executor):
+        """Should normalize &, +, case, and whitespace."""
+        assert executor._normalize_artist_for_comparison("Simon & Garfunkel") == "simon and garfunkel"
+        assert executor._normalize_artist_for_comparison("Simon + Garfunkel") == "simon and garfunkel"
+        assert executor._normalize_artist_for_comparison("SIMON  &  GARFUNKEL") == "simon and garfunkel"
+
+    def test_normalizes_separators(self, executor):
+        """Should normalize underscores and hyphens."""
+        assert executor._normalize_artist_for_comparison("My_Artist-Name") == "my artist name"
+
+    def test_empty_string(self, executor):
+        """Should handle empty artist string."""
+        assert executor._normalize_artist_for_comparison("") == ""

@@ -509,3 +509,733 @@ class TestImportExternalTracks:
 
         assert result == existing_track
         mock_db.add.assert_not_called()
+
+
+class TestRefToKey:
+    """Tests for ImportService._ref_to_key."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        db.commit = AsyncMock()
+        db.flush = AsyncMock()
+        db.scalar = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ImportService(mock_db)
+
+    def test_lowercase_normalization(self, service):
+        """Should lowercase all components."""
+        ref = {"isrc": "USRC123", "title": "Test Song", "artist": "Artist"}
+        key = service._ref_to_key(ref)
+        assert key == "usrc123:test song:artist"
+
+    def test_missing_fields(self, service):
+        """Should handle missing fields gracefully."""
+        ref = {"title": "Song"}
+        key = service._ref_to_key(ref)
+        assert key == ":song:"
+
+
+class TestBuildExternalTrackRef:
+    """Tests for ExportImportService._build_external_track_ref."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ExportImportService(mock_db)
+
+    def test_maps_all_fields(self, service):
+        """Should map all ExternalTrack fields correctly."""
+        ext = MagicMock(spec=ExternalTrack)
+        ext.title = "External Song"
+        ext.artist = "External Artist"
+        ext.album = "External Album"
+        ext.duration_seconds = 200
+        ext.track_number = 3
+        ext.year = 2023
+        ext.isrc = "ISRC123"
+        ext.spotify_id = "sp_456"
+        ext.musicbrainz_recording_id = "mb_789"
+        ext.deezer_id = "dz_101"
+        ext.preview_url = "https://preview.example.com"
+        ext.preview_source = "spotify"
+        ext.external_data = {"key": "value"}
+        ext.source = MagicMock()
+        ext.source.value = "spotify_playlist"
+
+        ref = service._build_external_track_ref(ext)
+
+        assert ref["title"] == "External Song"
+        assert ref["spotify_id"] == "sp_456"
+        assert ref["source"] == "spotify_playlist"
+        assert ref["external_data"] == {"key": "value"}
+
+
+class TestExportPlayHistory:
+    """Tests for ExportImportService._export_play_history."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ExportImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_exports_play_history(self, service, mock_db):
+        """Should format play history with track refs."""
+        ph = MagicMock()
+        ph.play_count = 15
+        ph.last_played_at = datetime(2024, 6, 15, 10, 0, 0)
+        ph.total_play_seconds = 2700
+
+        track = MagicMock(spec=Track)
+        track.isrc = "ISRC1"
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 180
+
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(ph, track)]
+        mock_db.execute.return_value = mock_result
+
+        result = await service._export_play_history(uuid4())
+
+        assert len(result) == 1
+        assert result[0]["play_count"] == 15
+        assert result[0]["total_play_seconds"] == 2700
+        assert "Z" in result[0]["last_played_at"]
+        assert result[0]["track_ref"]["title"] == "Song"
+
+
+class TestExportFavorites:
+    """Tests for ExportImportService._export_favorites."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ExportImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_exports_favorites(self, service, mock_db):
+        """Should format favorites with track refs."""
+        fav = MagicMock()
+        fav.favorited_at = datetime(2024, 3, 1, 12, 0, 0)
+
+        track = MagicMock(spec=Track)
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Fav Song"
+        track.artist = "Fav Artist"
+        track.album = "Fav Album"
+        track.duration_seconds = 240
+
+        mock_result = MagicMock()
+        mock_result.all.return_value = [(fav, track)]
+        mock_db.execute.return_value = mock_result
+
+        result = await service._export_favorites(uuid4())
+
+        assert len(result) == 1
+        assert result[0]["track_ref"]["title"] == "Fav Song"
+        assert "Z" in result[0]["favorited_at"]
+
+
+class TestExportPlaylists:
+    """Tests for ExportImportService._export_playlists."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        db.get = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ExportImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_exports_local_tracks(self, service, mock_db):
+        """Should export playlists with local track refs."""
+        playlist = MagicMock()
+        playlist.id = uuid4()
+        playlist.name = "My Playlist"
+        playlist.description = "desc"
+        playlist.is_auto_generated = False
+        playlist.is_wishlist = False
+        playlist.generation_prompt = None
+        playlist.created_at = datetime(2024, 1, 1)
+
+        pt = MagicMock()
+        pt.track_id = uuid4()
+        pt.external_track_id = None
+        pt.position = 0
+
+        track = MagicMock(spec=Track)
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Track 1"
+        track.artist = "Artist 1"
+        track.album = "Album 1"
+        track.duration_seconds = 180
+
+        # First: playlists, second: playlist tracks
+        mock_db.execute.side_effect = [
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[playlist])))),
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[pt])))),
+        ]
+        mock_db.get.return_value = track
+
+        result = await service._export_playlists(uuid4())
+
+        assert len(result) == 1
+        assert result[0]["name"] == "My Playlist"
+        assert len(result[0]["tracks"]) == 1
+        assert result[0]["tracks"][0]["type"] == "local"
+
+    @pytest.mark.asyncio
+    async def test_exports_external_tracks(self, service, mock_db):
+        """Should export playlists with external track refs."""
+        playlist = MagicMock()
+        playlist.id = uuid4()
+        playlist.name = "Mixed"
+        playlist.description = None
+        playlist.is_auto_generated = True
+        playlist.is_wishlist = False
+        playlist.generation_prompt = "test"
+        playlist.created_at = None
+
+        pt = MagicMock()
+        pt.track_id = None
+        pt.external_track_id = uuid4()
+        pt.position = 0
+
+        ext_track = MagicMock(spec=ExternalTrack)
+        ext_track.title = "Ext Song"
+        ext_track.artist = "Ext Artist"
+        ext_track.album = None
+        ext_track.duration_seconds = 200
+        ext_track.track_number = None
+        ext_track.year = None
+        ext_track.isrc = None
+        ext_track.spotify_id = "sp_1"
+        ext_track.musicbrainz_recording_id = None
+        ext_track.deezer_id = None
+        ext_track.preview_url = None
+        ext_track.preview_source = None
+        ext_track.external_data = None
+        ext_track.source = MagicMock()
+        ext_track.source.value = "spotify_playlist"
+
+        mock_db.execute.side_effect = [
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[playlist])))),
+            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[pt])))),
+        ]
+        mock_db.get.return_value = ext_track
+
+        result = await service._export_playlists(uuid4())
+
+        assert result[0]["tracks"][0]["type"] == "external"
+
+
+class TestExportSmartPlaylists:
+    """Tests for ExportImportService._export_smart_playlists."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ExportImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_preserves_rules(self, service, mock_db):
+        """Should export smart playlists with rules preserved."""
+        sp = MagicMock()
+        sp.name = "High Energy"
+        sp.description = "Energetic tracks"
+        sp.rules = [{"field": "energy", "operator": ">=", "value": 0.8}]
+        sp.match_mode = "all"
+        sp.order_by = "energy"
+        sp.order_direction = "desc"
+        sp.max_tracks = 50
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [sp]
+        mock_db.execute.return_value = mock_result
+
+        result = await service._export_smart_playlists(uuid4())
+
+        assert len(result) == 1
+        assert result[0]["name"] == "High Energy"
+        assert result[0]["rules"] == [{"field": "energy", "operator": ">=", "value": 0.8}]
+        assert result[0]["max_tracks"] == 50
+
+
+class TestImportFavorites:
+    """Tests for ImportService._import_favorites."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        db.commit = AsyncMock()
+        db.flush = AsyncMock()
+        db.scalar = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_creates_new_favorite(self, service, mock_db):
+        """Should create new favorite when not existing."""
+        profile_id = uuid4()
+        track_id = uuid4()
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_db.execute.return_value = mock_result
+
+        favorites = [
+            {"track_ref": {"title": "Song", "artist": "Artist"}, "favorited_at": "2024-01-15T12:00:00Z"}
+        ]
+        track_id_lookup = {":song:artist": track_id}
+
+        result = await service._import_favorites(profile_id, favorites, track_id_lookup, mode="merge")
+
+        assert result["imported"] == 1
+        assert result["skipped"] == 0
+        mock_db.add.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_skips_existing_favorite(self, service, mock_db):
+        """Should skip existing favorites in merge mode."""
+        profile_id = uuid4()
+        track_id = uuid4()
+
+        existing_fav = MagicMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_fav
+        mock_db.execute.return_value = mock_result
+
+        favorites = [
+            {"track_ref": {"title": "Song", "artist": "Artist"}}
+        ]
+        track_id_lookup = {":song:artist": track_id}
+
+        result = await service._import_favorites(profile_id, favorites, track_id_lookup, mode="merge")
+
+        assert result["imported"] == 0
+        assert result["skipped"] == 1
+
+
+class TestImportPlaylists:
+    """Tests for ImportService._import_playlists."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        db.commit = AsyncMock()
+        db.flush = AsyncMock()
+        db.scalar = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_creates_with_tracks(self, service, mock_db):
+        """Should create playlist with local tracks."""
+        profile_id = uuid4()
+        track_id = uuid4()
+
+        # No existing playlist
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None)
+        )
+
+        playlists = [{
+            "name": "New Playlist",
+            "description": "Test",
+            "is_wishlist": False,
+            "is_auto_generated": False,
+            "tracks": [
+                {
+                    "type": "local",
+                    "track_ref": {"title": "Song", "artist": "Artist"},
+                    "position": 0,
+                },
+            ],
+        }]
+        track_id_lookup = {":song:artist": track_id}
+
+        result = await service._import_playlists(profile_id, playlists, track_id_lookup, mode="merge")
+
+        assert result["imported"] == 1
+        # Should have added playlist + track
+        assert mock_db.add.call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_merge_skips_existing(self, service, mock_db):
+        """Should skip existing playlists in merge mode."""
+        profile_id = uuid4()
+
+        existing_playlist = MagicMock()
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=existing_playlist)
+        )
+
+        playlists = [{"name": "Existing Playlist", "is_wishlist": False, "tracks": []}]
+
+        result = await service._import_playlists(profile_id, playlists, {}, mode="merge")
+
+        assert result["skipped"] == 1
+        assert result["imported"] == 0
+
+    @pytest.mark.asyncio
+    async def test_wishlist_creates_if_not_exists(self, service, mock_db):
+        """Should create wishlist if one doesn't exist."""
+        profile_id = uuid4()
+
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None)
+        )
+
+        playlists = [{"name": "Wishlist", "is_wishlist": True, "tracks": []}]
+
+        result = await service._import_playlists(profile_id, playlists, {}, mode="merge")
+
+        assert result["imported"] == 1
+
+
+class TestImportSmartPlaylists:
+    """Tests for ImportService._import_smart_playlists."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        db.commit = AsyncMock()
+        db.flush = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        return ImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_creates_new(self, service, mock_db):
+        """Should create new smart playlist."""
+        profile_id = uuid4()
+
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None)
+        )
+
+        smart_playlists = [{
+            "name": "High Energy",
+            "description": "Energetic tracks",
+            "rules": [{"field": "energy", "operator": ">=", "value": 0.8}],
+            "match_mode": "all",
+            "order_by": "energy",
+            "order_direction": "desc",
+            "max_tracks": 50,
+        }]
+
+        result = await service._import_smart_playlists(profile_id, smart_playlists, mode="merge")
+
+        assert result["imported"] == 1
+        mock_db.add.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_merge_skips_existing(self, service, mock_db):
+        """Should skip existing smart playlists in merge mode."""
+        profile_id = uuid4()
+
+        existing_sp = MagicMock()
+        mock_db.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=existing_sp)
+        )
+
+        smart_playlists = [{"name": "Existing", "rules": []}]
+
+        result = await service._import_smart_playlists(profile_id, smart_playlists, mode="merge")
+
+        assert result["skipped"] == 1
+        assert result["imported"] == 0
+
+
+class TestLibraryExportBuildTrackExport:
+    """Tests for LibraryExportService._build_track_export."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        from app.services.export_import import LibraryExportService
+        return LibraryExportService(mock_db)
+
+    def test_basic_track(self, service):
+        """Should export basic track metadata."""
+        track = MagicMock(spec=Track)
+        track.file_hash = "abc123"
+        track.isrc = "ISRC1"
+        track.musicbrainz_track_id = "mb1"
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = "Artist"
+        track.track_number = 1
+        track.disc_number = 1
+        track.year = 2020
+        track.genre = "Rock"
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        result = service._build_track_export(track, None, include_embeddings=True, include_acoustid=True)
+
+        assert result["file_hash"] == "abc123"
+        assert result["title"] == "Song"
+        assert result["metadata"]["year"] == 2020
+        assert "analysis" not in result
+
+    def test_with_analysis(self, service):
+        """Should include analysis features when available."""
+        track = MagicMock(spec=Track)
+        track.file_hash = None
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = None
+        track.track_number = None
+        track.disc_number = None
+        track.year = None
+        track.genre = None
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        analysis = MagicMock()
+        analysis.version = 5
+        analysis.features = {"bpm": 120}
+        analysis.embedding = None
+        analysis.acoustid = "fingerprint_data_abc"
+        analysis.acoustid_lookup = {"recording_id": "mb123"}
+
+        result = service._build_track_export(track, analysis, include_embeddings=True, include_acoustid=True)
+
+        assert result["analysis"]["version"] == 5
+        assert result["analysis"]["features"] == {"bpm": 120}
+        assert result["analysis"]["acoustid"] == "fingerprint_data_abc"
+
+    def test_with_embedding(self, service):
+        """Should include embedding when requested."""
+        track = MagicMock(spec=Track)
+        track.file_hash = None
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = None
+        track.track_number = None
+        track.disc_number = None
+        track.year = None
+        track.genre = None
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        analysis = MagicMock()
+        analysis.version = 5
+        analysis.features = {}
+        analysis.embedding = MagicMock()
+        analysis.embedding.tolist.return_value = [0.1, 0.2, 0.3]
+        analysis.acoustid = None
+        analysis.acoustid_lookup = None
+
+        result = service._build_track_export(track, analysis, include_embeddings=True, include_acoustid=False)
+
+        assert result["analysis"]["embedding"] == [0.1, 0.2, 0.3]
+
+
+class TestLibraryImportBuildLocalIndexes:
+    """Tests for LibraryImportService._build_local_indexes."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        from app.services.export_import import LibraryImportService
+        return LibraryImportService(mock_db)
+
+    @pytest.mark.asyncio
+    async def test_builds_all_indexes(self, service, mock_db):
+        """Should build file_hash, isrc, musicbrainz, exact, and acoustid indexes."""
+        track_id = uuid4()
+
+        track_row = MagicMock()
+        track_row.id = track_id
+        track_row.file_hash = "hash123"
+        track_row.isrc = "ISRC1"
+        track_row.musicbrainz_track_id = "mb1"
+        track_row.title = "Song"
+        track_row.artist = "Artist"
+        track_row.duration_seconds = 200.5
+
+        analysis_row = MagicMock()
+        analysis_row.track_id = track_id
+        analysis_row.acoustid = "a" * 150  # Long fingerprint
+
+        mock_db.execute.side_effect = [
+            MagicMock(all=MagicMock(return_value=[track_row])),
+            MagicMock(all=MagicMock(return_value=[analysis_row])),
+        ]
+
+        indexes = await service._build_local_indexes()
+
+        assert indexes["file_hash"]["hash123"] == track_id
+        assert indexes["isrc"]["ISRC1"] == track_id
+        assert indexes["musicbrainz"]["mb1"] == track_id
+        assert indexes["exact"]["song:artist:200"] == track_id
+        assert indexes["acoustid"]["a" * 100] == track_id
+
+
+class TestLibraryImportMatchTrack:
+    """Tests for LibraryImportService._match_track."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = MagicMock()
+        db.execute = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def service(self, mock_db):
+        from app.services.export_import import LibraryImportService
+        return LibraryImportService(mock_db)
+
+    @pytest.fixture
+    def indexes(self):
+        track_id = uuid4()
+        # acoustid key is first 100 chars of fingerprint
+        acoustid_fp = "a" * 100
+        return {
+            "file_hash": {"hash123": track_id},
+            "acoustid": {acoustid_fp: track_id},
+            "isrc": {"ISRC1": track_id},
+            "musicbrainz": {"mb1": track_id},
+            "exact": {"song:artist:200": track_id},
+            "_track_id": track_id,  # helper for assertions
+            "_acoustid_fp": acoustid_fp,
+        }
+
+    @pytest.mark.asyncio
+    async def test_match_by_file_hash(self, service, indexes):
+        """Should match by file_hash with confidence 1.0."""
+        export_track = {"file_hash": "hash123", "title": "Song", "artist": "Artist"}
+        tid, method, conf = await service._match_track(export_track, indexes)
+        assert tid == indexes["_track_id"]
+        assert method == "file_hash"
+        assert conf == 1.0
+
+    @pytest.mark.asyncio
+    async def test_match_by_acoustid(self, service, indexes):
+        """Should match by acoustid with confidence 0.95."""
+        # Full fingerprint is longer, but _match_track takes first 100 chars
+        full_fp = indexes["_acoustid_fp"] + "extra_data_beyond_100"
+        export_track = {"analysis": {"acoustid": full_fp}, "title": "Song", "artist": "Artist"}
+        tid, method, conf = await service._match_track(export_track, indexes)
+        assert tid == indexes["_track_id"]
+        assert method == "acoustid"
+        assert conf == 0.95
+
+    @pytest.mark.asyncio
+    async def test_match_by_isrc(self, service, indexes):
+        """Should match by ISRC with confidence 0.95."""
+        export_track = {"isrc": "ISRC1", "title": "Song", "artist": "Artist"}
+        tid, method, conf = await service._match_track(export_track, indexes)
+        assert tid == indexes["_track_id"]
+        assert method == "isrc"
+        assert conf == 0.95
+
+    @pytest.mark.asyncio
+    async def test_match_by_musicbrainz(self, service, indexes):
+        """Should match by MusicBrainz ID with confidence 0.95."""
+        export_track = {"musicbrainz_track_id": "mb1", "title": "Song", "artist": "Artist"}
+        tid, method, conf = await service._match_track(export_track, indexes)
+        assert tid == indexes["_track_id"]
+        assert method == "musicbrainz"
+        assert conf == 0.95
+
+    @pytest.mark.asyncio
+    async def test_match_by_exact_with_duration(self, service, indexes):
+        """Should match by title+artist+duration with confidence 0.90."""
+        export_track = {"title": "Song", "artist": "Artist", "duration_seconds": 200}
+        tid, method, conf = await service._match_track(export_track, indexes)
+        assert tid == indexes["_track_id"]
+        assert method == "exact_with_duration"
+        assert conf == 0.90
+
+    @pytest.mark.asyncio
+    async def test_no_match(self, service, indexes):
+        """Should return None when no match found."""
+        export_track = {"title": "Unknown", "artist": "Unknown"}
+        # Mock fuzzy match returning nothing
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
+        service.db.execute.return_value = mock_result
+
+        tid, method, conf = await service._match_track(export_track, indexes)
+        assert tid is None
+        assert method is None

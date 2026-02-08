@@ -6,6 +6,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Radio, Volume2, VolumeX, Users, Music2, Loader2 } from 'lucide-react';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('GuestListener');
+
 interface SessionInfo {
   id: string;
   code: string;
@@ -69,7 +73,7 @@ export function GuestListener() {
 
   // Handle WebRTC offer from host
   const handleOffer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
-    console.log('Received WebRTC offer from host');
+    log.info('Received WebRTC offer from host');
 
     const rtcConfig: RTCConfiguration = {
       iceServers: iceServers.length > 0 ? iceServers : [
@@ -83,7 +87,7 @@ export function GuestListener() {
 
     // Handle incoming audio track
     pc.ontrack = (event) => {
-      console.log('Received audio track from host');
+      log.info('Received audio track from host');
       setIsReceivingAudio(true);
 
       if (!audioRef.current) {
@@ -93,7 +97,7 @@ export function GuestListener() {
 
       audioRef.current.srcObject = event.streams[0];
       audioRef.current.volume = isMuted ? 0 : volume;
-      audioRef.current.play().catch(console.error);
+      audioRef.current.play().catch(log.error);
     };
 
     // Handle ICE candidates
@@ -108,7 +112,7 @@ export function GuestListener() {
 
     // Handle connection state
     pc.onconnectionstatechange = () => {
-      console.log(`WebRTC connection state: ${pc.connectionState}`);
+      log.info(`WebRTC connection state: ${pc.connectionState}`);
       if (pc.connectionState === 'connected') {
         send({ type: 'webrtc_connected', connected: true });
       } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
@@ -127,7 +131,7 @@ export function GuestListener() {
         sdp: pc.localDescription,
       });
     } catch (err) {
-      console.error('Failed to handle WebRTC offer:', err);
+      log.error('Failed to handle WebRTC offer:', err);
       setError('Failed to establish audio connection');
     }
   }, [iceServers, volume, isMuted, send]);
@@ -138,7 +142,7 @@ export function GuestListener() {
       try {
         await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error('Failed to add ICE candidate:', err);
+        log.error('Failed to add ICE candidate:', err);
       }
     }
   }, []);
@@ -266,7 +270,7 @@ export function GuestListener() {
 
         // Exponential backoff: 3s, 6s, 12s, 24s, 48s, max 60s
         const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current - 1), 60000);
-        console.log(`[Guest] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+        log.info(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
         setError(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...`);
 
         reconnectTimeoutRef.current = window.setTimeout(() => {

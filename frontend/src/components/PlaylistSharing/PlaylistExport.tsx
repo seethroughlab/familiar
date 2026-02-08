@@ -4,6 +4,10 @@ import { smartPlaylistsApi } from '../../api/client';
 import type { SmartPlaylist } from '../../api/client';
 import type { FamiliarPlaylist } from '../../types';
 
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('PlaylistExport');
+
 interface Props {
   playlist: SmartPlaylist;
   onExport?: () => void;
@@ -57,7 +61,7 @@ export function PlaylistExport({ playlist, onExport }: Props) {
       setTimeout(() => setExported(false), 2000);
       onExport?.();
     } catch (error) {
-      console.error('Export failed:', error);
+      log.error('Export failed:', error);
     } finally {
       setExporting(false);
     }

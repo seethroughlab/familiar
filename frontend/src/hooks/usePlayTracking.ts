@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
 import { playTrackingApi } from '../api/client';
+import { createLogger } from '../utils/logger';
+
+const log = createLogger('PlayTracking');
 
 /**
  * Hook for tracking local play history.
@@ -82,7 +85,7 @@ export function usePlayTracking() {
       // Record the play with duration
       playTrackingApi.recordPlay(currentTrack.id, accumulatedTimeRef.current).catch((err) => {
         // Reset so we can retry on next threshold check
-        console.error('Failed to record play:', err);
+        log.error('Failed to record play:', err);
         recordedTrackRef.current = null;
       });
     }
