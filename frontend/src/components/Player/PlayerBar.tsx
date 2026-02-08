@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, Radio } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, Radio, ListX } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
@@ -73,6 +73,8 @@ export function PlayerBar({
     toggleShuffle,
     repeat,
     toggleRepeat,
+    consume,
+    toggleConsume,
     addToQueue,
     isPreviewMode,
   } = usePlayerStore();
@@ -302,6 +304,17 @@ export function PlayerBar({
               {repeat === 'one' && (
                 <span className="absolute -top-0.5 -right-0.5 text-[8px] font-bold">1</span>
               )}
+            </button>
+            <button
+              onClick={toggleConsume}
+              className={`p-2 rounded-full transition-colors ${
+                consume ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+              }`}
+              aria-label={consume ? 'Disable consume mode' : 'Enable consume mode'}
+              aria-pressed={consume}
+              title="Consume: remove tracks after playing"
+            >
+              <ListX className="w-4 h-4" />
             </button>
           </div>
 

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, CheckCircle, AlertCircle, Loader2, Music, FolderSearch, FileText, Cpu, Sparkles } from 'lucide-react';
 import { libraryApi, type SyncStatus, type SyncPhase } from '../../api/client';
 
+import { showError } from '../../stores/toastStore';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('LibrarySync');
@@ -41,6 +42,7 @@ export function LibrarySync() {
       await fetchStatus();
     } catch (error) {
       log.error('Failed to start sync:', error);
+      showError('Failed to start library sync');
     } finally {
       setIsStarting(false);
     }
@@ -52,6 +54,7 @@ export function LibrarySync() {
       await fetchStatus();
     } catch (error) {
       log.error('Failed to cancel sync:', error);
+      showError('Failed to cancel sync');
     }
   };
 

@@ -17,6 +17,7 @@ export async function savePlayerState(state: {
   volume: number;
   shuffle: boolean;
   repeat: 'off' | 'all' | 'one';
+  consume: boolean;
   queue: QueueItem[];
   queueIndex: number;
   currentTrack: Track | null;
@@ -38,6 +39,7 @@ export async function savePlayerState(state: {
       volume: state.volume,
       shuffle: state.shuffle,
       repeat: state.repeat,
+      consume: state.consume,
       queueTrackIds: state.queue.map((item) => item.track.id),
       queueIndex: state.queueIndex,
       currentTrackId: state.currentTrack?.id || null,
@@ -179,6 +181,7 @@ export function debouncedSavePlayerState(state: {
   volume: number;
   shuffle: boolean;
   repeat: 'off' | 'all' | 'one';
+  consume: boolean;
   queue: QueueItem[];
   queueIndex: number;
   currentTrack: Track | null;

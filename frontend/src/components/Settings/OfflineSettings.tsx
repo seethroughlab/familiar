@@ -61,6 +61,7 @@ export function OfflineSettings() {
       setPendingCount(pending);
     } catch (error) {
       log.error('Failed to load offline stats:', error);
+      showError('Failed to load offline storage info');
     }
   };
 
@@ -75,6 +76,7 @@ export function OfflineSettings() {
       await loadStats();
     } catch (error) {
       log.error('Failed to cache library:', error);
+      showError('Failed to cache library for offline use');
     } finally {
       setIsLoading((prev) => ({ ...prev, cacheLibrary: false }));
     }
@@ -90,6 +92,7 @@ export function OfflineSettings() {
       await loadStats();
     } catch (error) {
       log.error('Failed to clear cache:', error);
+      showError('Failed to clear library cache');
     } finally {
       setIsLoading((prev) => ({ ...prev, clearCache: false }));
     }
@@ -105,6 +108,7 @@ export function OfflineSettings() {
       await loadStats();
     } catch (error) {
       log.error('Failed to clear playlist caches:', error);
+      showError('Failed to clear playlist caches');
     } finally {
       setIsLoading((prev) => ({ ...prev, clearPlaylistCache: false }));
     }

@@ -14,6 +14,7 @@ import {
   Radio,
   Maximize,
   Minimize,
+  ListX,
 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -64,8 +65,10 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
     playPrevious,
     shuffle,
     repeat,
+    consume,
     toggleShuffle,
     toggleRepeat,
+    toggleConsume,
     isPreviewMode,
   } = usePlayerStore();
 
@@ -373,6 +376,18 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             aria-pressed={repeat !== 'off'}
           >
             <Repeat className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={toggleConsume}
+            className={`p-3 rounded-full transition-colors ${
+              consume ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+            }`}
+            aria-label={consume ? 'Disable consume mode' : 'Enable consume mode'}
+            aria-pressed={consume}
+            title="Consume: remove tracks after playing"
+          >
+            <ListX className="w-5 h-5" />
           </button>
         </div>
 

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ListMusic, Play, Pause, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
+import { ListMusic, ListX, Play, Pause, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { tracksApi } from '../../api/client';
@@ -20,6 +20,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     currentTrack,
     isPlaying,
     shuffle,
+    consume,
     lazyQueueIds,
     lazyQueueIndex,
     prefetchedTracks,
@@ -28,6 +29,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     removeFromQueue,
     exitLazyMode,
     addToQueue,
+    toggleConsume,
   } = usePlayerStore();
 
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -41,9 +43,19 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     }
   }, [queueIndex, lazyQueueIndex]);
 
-  // Drag-to-reorder state (only for regular queue mode)
+  // Pointer-event drag-to-reorder state (works on both mouse and touch)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [pointerDeltaY, setPointerDeltaY] = useState(0);
+  const dragStartY = useRef(0);
+  const itemRectsRef = useRef<DOMRect[]>([]);
+  const rowRefsRef = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Flag to suppress the synthetic click that fires after a pointer-event drag reorder
+  const didDragRef = useRef(false);
+
+  // External HTML5 DnD state (library → queue drops only)
+  const [externalDropTargetIndex, setExternalDropTargetIndex] = useState<number | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
 
   const isLazyMode = lazyQueueIds && lazyQueueIds.length > 0;
@@ -53,56 +65,73 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const jumpToQueueIndex = usePlayerStore((state) => state.jumpToQueueIndex);
   const jumpToLazyQueueIndex = usePlayerStore((state) => state.jumpToLazyQueueIndex);
 
-  // Drag handlers for regular queue mode
-  const handleDragStart = useCallback((index: number, e: React.DragEvent) => {
+  // Pointer-event drag handlers for reorder (works on touch + mouse)
+  const handlePointerDown = useCallback((index: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    dragStartY.current = e.clientY;
     setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+    setPointerDeltaY(0);
+    // Snapshot all row bounding rects for hit-testing
+    itemRectsRef.current = rowRefsRef.current.map(el => el?.getBoundingClientRect() ?? new DOMRect());
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent, targetIndex: number) => {
-    // Internal reorder drag (regular mode only)
-    if (draggedIndex !== null) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (targetIndex !== draggedIndex) {
-        setDropTargetIndex(targetIndex);
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (draggedIndex === null) return;
+    const deltaY = e.clientY - dragStartY.current;
+    setPointerDeltaY(deltaY);
+
+    // Hit-test: which row's vertical midpoint has the pointer crossed?
+    const rects = itemRectsRef.current;
+    for (let i = 0; i < rects.length; i++) {
+      const mid = rects[i].top + rects[i].height / 2;
+      if (e.clientY < mid) {
+        setDropTargetIndex(i !== draggedIndex ? i : null);
+        return;
       }
-      return;
     }
-    // External track drop — show position indicator
-    if (e.dataTransfer.types.includes('application/track-id')) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-      setDropTargetIndex(targetIndex);
+    // Past the last item
+    const lastIdx = rects.length - 1;
+    if (lastIdx >= 0 && lastIdx !== draggedIndex) {
+      setDropTargetIndex(lastIdx);
     }
   }, [draggedIndex]);
 
-  const handleDragLeave = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    if (draggedIndex !== null && dropTargetIndex !== null && draggedIndex !== dropTargetIndex) {
+      reorderQueue(draggedIndex, dropTargetIndex);
+      didDragRef.current = true;
+    }
+    setDraggedIndex(null);
     setDropTargetIndex(null);
+    setPointerDeltaY(0);
+  }, [draggedIndex, dropTargetIndex, reorderQueue]);
+
+  const handlePointerCancel = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setDraggedIndex(null);
+    setDropTargetIndex(null);
+    setPointerDeltaY(0);
   }, []);
 
-  const handleDrop = useCallback((targetIndex: number) => {
-    if (draggedIndex === null || draggedIndex === targetIndex) {
-      setDraggedIndex(null);
-      setDropTargetIndex(null);
-      return;
+  // Per-row handlers for external HTML5 DnD drops (library → queue)
+  const handleRowDragOver = useCallback((e: React.DragEvent, targetIndex: number) => {
+    if (e.dataTransfer.types.includes('application/track-id')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      setExternalDropTargetIndex(targetIndex);
     }
+  }, []);
 
-    reorderQueue(draggedIndex, targetIndex);
-    setDraggedIndex(null);
-    setDropTargetIndex(null);
-  }, [draggedIndex, reorderQueue]);
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedIndex(null);
-    setDropTargetIndex(null);
+  const handleRowDragLeave = useCallback(() => {
+    setExternalDropTargetIndex(null);
   }, []);
 
   // Handle external track drop at a specific queue position
   const handleExternalDropAtPosition = useCallback(async (e: React.DragEvent, displayIndex: number) => {
     e.preventDefault();
-    setDropTargetIndex(null);
+    setExternalDropTargetIndex(null);
     setIsDragOver(false);
 
     const trackId = e.dataTransfer.getData('application/track-id');
@@ -162,6 +191,10 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
 
   // Handle clicking on a track to jump to it
   const handleTrackClick = useCallback((displayIndex: number) => {
+    if (didDragRef.current) {
+      didDragRef.current = false;
+      return;
+    }
     if (isLazyMode) {
       if (displayIndex === 0 && currentTrack) {
         // Current track: toggle play/pause
@@ -264,19 +297,36 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
             </div>
           </div>
 
-          {!isEmpty && (
+          <div className="flex items-center gap-2">
             <button
-              onClick={handleClearAll}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                resolvedTheme === 'light'
-                  ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
-                  : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+              onClick={toggleConsume}
+              className={`p-2 rounded-lg transition-colors ${
+                consume
+                  ? 'text-green-500'
+                  : resolvedTheme === 'light'
+                    ? 'text-zinc-400 hover:text-zinc-700'
+                    : 'text-zinc-400 hover:text-zinc-200'
               }`}
+              aria-label={consume ? 'Disable consume mode' : 'Enable consume mode'}
+              aria-pressed={consume}
+              title="Consume: remove tracks after playing"
             >
-              <Trash2 className="w-4 h-4" />
-              Clear All
+              <ListX className="w-5 h-5" />
             </button>
-          )}
+            {!isEmpty && (
+              <button
+                onClick={handleClearAll}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  resolvedTheme === 'light'
+                    ? 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700'
+                    : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                }`}
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear All
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Lazy mode info banner */}
@@ -324,27 +374,29 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
               const { track, queueId, isCurrent } = item;
               const actualIndex = isLazyMode ? displayIndex : queue.findIndex(q => q.queueId === queueId);
               const isDragged = draggedIndex === actualIndex;
-              const isDropTarget = dropTargetIndex === displayIndex;
+              const isReorderTarget = dropTargetIndex === displayIndex && draggedIndex !== null;
+              const isExtDropTarget = externalDropTargetIndex === displayIndex;
 
               return (
                 <div
                   key={queueId}
-                  ref={isCurrent ? currentTrackRef : undefined}
-                  draggable={!isLazyMode}
-                  onDragStart={(e) => !isLazyMode && handleDragStart(actualIndex, e)}
-                  onDragOver={(e) => handleDragOver(e, displayIndex)}
-                  onDragLeave={handleDragLeave}
+                  ref={(el) => {
+                    rowRefsRef.current[displayIndex] = el;
+                    if (isCurrent) (currentTrackRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+                  }}
+                  onDragOver={(e) => handleRowDragOver(e, displayIndex)}
+                  onDragLeave={handleRowDragLeave}
                   onDrop={(e) => {
-                    if (draggedIndex !== null && !isLazyMode) {
-                      handleDrop(actualIndex);
-                    } else if (e.dataTransfer.types.includes('application/track-id')) {
+                    if (e.dataTransfer.types.includes('application/track-id')) {
                       e.stopPropagation();
                       handleExternalDropAtPosition(e, displayIndex);
                     }
                   }}
-                  onDragEnd={handleDragEnd}
                   onClick={() => handleTrackClick(actualIndex)}
-                  className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
+                  style={isDragged ? { transform: `translateY(${pointerDeltaY}px)`, zIndex: 10, position: 'relative' } : undefined}
+                  className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                    isDragged ? 'shadow-lg' : ''
+                  } ${
                     isCurrent
                       ? resolvedTheme === 'light'
                         ? 'bg-green-50 border border-green-200'
@@ -352,13 +404,20 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                       : resolvedTheme === 'light'
                         ? 'hover:bg-zinc-100'
                         : 'hover:bg-zinc-800/50'
-                  } ${isDragged ? 'opacity-50' : ''} ${isDropTarget ? 'border-t-2 border-green-500' : ''}`}
+                  } ${isDragged ? 'opacity-75' : ''} ${isReorderTarget || isExtDropTarget ? 'border-t-2 border-green-500' : ''}`}
                 >
-                  {/* Drag handle (regular mode only) */}
+                  {/* Drag handle (regular mode only) — uses pointer events for touch+mouse reorder */}
                   {!isLazyMode && (
-                    <div className={`flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
-                      'opacity-0 group-hover:opacity-50 hover:!opacity-100'
-                    }`}>
+                    <div
+                      className={`flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
+                        'opacity-0 group-hover:opacity-50 hover:!opacity-100'
+                      } ${isDragged ? '!opacity-100' : ''}`}
+                      style={{ touchAction: 'none' }}
+                      onPointerDown={(e) => handlePointerDown(actualIndex, e)}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={handlePointerUp}
+                      onPointerCancel={handlePointerCancel}
+                    >
                       <GripVertical className="w-4 h-4 text-zinc-500" />
                     </div>
                   )}

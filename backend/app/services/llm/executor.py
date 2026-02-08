@@ -102,12 +102,22 @@ class ToolExecutor:
         }
 
         handler = handlers.get(tool_name)
-        if handler:
+        if not handler:
+            return {"error": f"Unknown tool: {tool_name}"}
+
+        try:
             # Handle methods that take no args vs those that do
             if tool_name in ("get_library_stats", "get_spotify_status", "get_spotify_sync_stats", "get_visible_tracks"):
                 return await handler()  # type: ignore[operator]
             return await handler(**tool_input)  # type: ignore[operator]
-        return {"error": f"Unknown tool: {tool_name}"}
+        except Exception as e:
+            logger.exception(f"Tool {tool_name} failed")
+            try:
+                await self.db.rollback()
+            except Exception:
+                pass
+            error_detail = str(e)[:200] if str(e) else "no details"
+            return {"error": f"Tool '{tool_name}' failed ({type(e).__name__}): {error_detail}"}
 
     def get_queued_tracks(self) -> tuple[list[dict[str, Any]], bool]:
         """Get tracks that were queued during this conversation turn.
@@ -125,6 +135,16 @@ class ToolExecutor:
         return self._auto_saved_playlist
 
     # --- Helper methods ---
+
+    def _safe_parse_uuids(self, ids: list[str]) -> list[UUID]:
+        """Parse a list of string IDs to UUIDs, skipping invalid ones."""
+        valid = []
+        for id_str in ids:
+            try:
+                valid.append(UUID(id_str))
+            except (ValueError, AttributeError):
+                logger.warning(f"Skipping invalid UUID: {id_str!r}")
+        return valid
 
     async def _generate_playlist_name_llm(self, tracks: list[dict[str, Any]]) -> str:
         """Generate a creative playlist name using the LLM."""
@@ -760,7 +780,10 @@ Respond with ONLY the playlist name, nothing else."""
         logger.info(f"_queue_tracks called with {len(track_ids)} tracks, {len(suggested_tracks or [])} suggested")
 
         # Get local tracks for playback queue
-        stmt = select(Track).where(Track.id.in_([UUID(tid) for tid in track_ids]))
+        valid_uuids = self._safe_parse_uuids(track_ids)
+        if not valid_uuids:
+            return {"queued": 0, "clear_existing": clear_existing, "tracks": [], "note": "No valid track IDs provided"}
+        stmt = select(Track).where(Track.id.in_(valid_uuids))
         result = await self.db.execute(stmt)
         tracks = result.scalars().all()
 
@@ -1144,7 +1167,10 @@ Respond with ONLY the playlist name, nothing else."""
         if not track_ids:
             return {"tracks": [], "count": 0, "note": "No tracks provided"}
 
-        stmt = select(Track).where(Track.id.in_([UUID(tid) for tid in track_ids]))
+        valid_uuids = self._safe_parse_uuids(track_ids)
+        if not valid_uuids:
+            return {"tracks": [], "count": 0, "note": "No valid track IDs provided"}
+        stmt = select(Track).where(Track.id.in_(valid_uuids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 
@@ -1230,7 +1256,10 @@ Respond with ONLY the playlist name, nothing else."""
             return {"error": f"Invalid field. Must be one of: {', '.join(valid_fields)}"}
 
         # Get current values for all tracks
-        stmt = select(Track).where(Track.id.in_([UUID(tid) for tid in track_ids]))
+        valid_uuids = self._safe_parse_uuids(track_ids)
+        if not valid_uuids:
+            return {"error": "No valid track IDs provided"}
+        stmt = select(Track).where(Track.id.in_(valid_uuids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 

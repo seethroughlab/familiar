@@ -1418,3 +1418,136 @@ class TestNormalizeArtistForComparison:
     def test_empty_string(self, executor):
         """Should handle empty artist string."""
         assert executor._normalize_artist_for_comparison("") == ""
+
+
+class TestSafeParseUuids:
+    """Tests for _safe_parse_uuids helper."""
+
+    @pytest.fixture
+    def executor(self):
+        return ToolExecutor(db=AsyncMock())
+
+    def test_valid_uuids(self, executor):
+        """Should parse valid UUIDs."""
+        id1, id2 = uuid4(), uuid4()
+        result = executor._safe_parse_uuids([str(id1), str(id2)])
+        assert result == [id1, id2]
+
+    def test_skips_invalid_uuids(self, executor):
+        """Should skip invalid strings and return only valid UUIDs."""
+        valid_id = uuid4()
+        result = executor._safe_parse_uuids([str(valid_id), "not-a-uuid", "12345"])
+        assert len(result) == 1
+        assert result[0] == valid_id
+
+    def test_all_invalid_returns_empty(self, executor):
+        """Should return empty list when all IDs are invalid."""
+        result = executor._safe_parse_uuids(["bad", "also-bad", "123"])
+        assert result == []
+
+    def test_empty_list(self, executor):
+        """Should handle empty input."""
+        assert executor._safe_parse_uuids([]) == []
+
+
+class TestInvalidUuidHandling:
+    """Tests that tool methods handle invalid UUIDs gracefully."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        db.commit = AsyncMock()
+        db.refresh = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db, profile_id=uuid4(), user_message="test")
+
+    @pytest.mark.asyncio
+    async def test_queue_tracks_invalid_uuids(self, executor, mock_db):
+        """queue_tracks should handle invalid UUIDs without crashing."""
+        result = await executor._queue_tracks(["not-a-uuid", "also-bad"])
+        assert result["queued"] == 0
+        # Should NOT have hit the database
+        mock_db.execute.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_select_diverse_tracks_invalid_uuids(self, executor):
+        """select_diverse_tracks should handle invalid UUIDs without crashing."""
+        result = await executor._select_diverse_tracks(["bad-id", "worse-id"])
+        assert result["count"] == 0
+        assert result["tracks"] == []
+
+    @pytest.mark.asyncio
+    async def test_propose_metadata_change_invalid_uuids(self, executor):
+        """propose_metadata_change should handle invalid UUIDs without crashing."""
+        result = await executor._propose_metadata_change(
+            track_ids=["not-a-uuid"],
+            field="genre",
+            new_value="Rock",
+            reason="test",
+        )
+        assert "error" in result
+
+    @pytest.mark.asyncio
+    async def test_queue_tracks_mixed_valid_invalid(self, executor, mock_db):
+        """queue_tracks should use only valid UUIDs when mixed with invalid."""
+        valid_id = uuid4()
+        mock_track = MagicMock()
+        mock_track.id = valid_id
+        mock_track.title = "Test"
+        mock_track.artist = "Artist"
+        mock_track.album = "Album"
+        mock_track.genre = "Rock"
+        mock_track.duration_seconds = 180
+        mock_track.year = 2024
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_track]
+        mock_db.execute.return_value = mock_result
+        mock_db.get = AsyncMock(return_value=mock_track)
+
+        with patch.object(executor, "_generate_playlist_name_llm", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = "Test Playlist"
+            result = await executor._queue_tracks([str(valid_id), "invalid-id"])
+
+        assert result["queued"] == 1
+
+
+class TestExecuteExceptionHandling:
+    """Tests that execute() catches exceptions and rolls back."""
+
+    @pytest.fixture
+    def mock_db(self):
+        db = AsyncMock()
+        db.rollback = AsyncMock()
+        return db
+
+    @pytest.fixture
+    def executor(self, mock_db):
+        return ToolExecutor(db=mock_db, profile_id=uuid4())
+
+    @pytest.mark.asyncio
+    async def test_execute_catches_handler_exception(self, executor, mock_db):
+        """execute() should catch exceptions and return error dict."""
+        with patch.object(executor, "_search_library", new_callable=AsyncMock) as mock_handler:
+            mock_handler.side_effect = RuntimeError("something broke")
+            result = await executor.execute("search_library", {"query": "test"})
+
+        assert "error" in result
+        assert "RuntimeError" in result["error"]
+        mock_db.rollback.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_handles_rollback_failure(self, executor, mock_db):
+        """execute() should not crash even if rollback fails."""
+        mock_db.rollback.side_effect = Exception("rollback failed too")
+
+        with patch.object(executor, "_search_library", new_callable=AsyncMock) as mock_handler:
+            mock_handler.side_effect = RuntimeError("something broke")
+            result = await executor.execute("search_library", {"query": "test"})
+
+        assert "error" in result
+        assert "RuntimeError" in result["error"]

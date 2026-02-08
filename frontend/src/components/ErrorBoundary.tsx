@@ -65,8 +65,8 @@ export class ErrorBoundary extends Component<Props, State> {
           </h2>
           <p className="text-sm text-zinc-400 mb-4 max-w-md">
             {this.props.name
-              ? `The ${this.props.name} encountered an error.`
-              : 'An unexpected error occurred.'}
+              ? `The ${this.props.name} encountered an error. Try again, or reload the page if it persists.`
+              : 'An unexpected error occurred. Try again, or reload the page if it persists.'}
           </p>
           <button
             onClick={this.handleRetry}

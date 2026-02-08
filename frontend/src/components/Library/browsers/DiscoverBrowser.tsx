@@ -24,6 +24,7 @@ import {
   type DiscoveryItem,
 } from '../../Discovery';
 
+import { showError } from '../../../stores/toastStore';
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('DiscoverBrowser');
@@ -45,7 +46,7 @@ registerBrowser(
 export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
   const [, setSearchParams] = useSearchParams();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['library-discover'],
     queryFn: () =>
       libraryApi.getDiscover({
@@ -72,10 +73,24 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
     );
   }
 
-  if (error || !data) {
+  if (error) {
     return (
-      <div className="h-full flex items-center justify-center text-zinc-500">
-        <p>Unable to load discovery data</p>
+      <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-3">
+        <p>Unable to load discovery data. Check your connection and try again.</p>
+        <button
+          onClick={() => refetch()}
+          className="px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 rounded-md text-zinc-300"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
       </div>
     );
   }
@@ -118,6 +133,7 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
         }
       } catch (err) {
         log.error('Failed to add to wishlist:', err);
+        showError('Failed to add to wishlist');
       }
     }
   };

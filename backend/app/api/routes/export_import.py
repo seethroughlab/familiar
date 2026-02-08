@@ -171,10 +171,10 @@ async def preview_import(
             )
 
         import_data = json.loads(content.decode("utf-8"))
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid JSON file: {e}",
+            detail="The uploaded file is not valid JSON. Make sure you're uploading a Familiar export file.",
         )
     except UnicodeDecodeError:
         raise HTTPException(
@@ -248,7 +248,7 @@ async def execute_import(
         logger.error(f"Import failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Import failed. Please check the file format and try again.",
+            detail=sanitize_error_for_client(e, "Import failed unexpectedly. The file may be corrupted or from an incompatible version."),
         )
 
     return ImportExecuteResponse(
@@ -414,10 +414,10 @@ async def preview_library_import(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid gzip file",
         )
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid JSON file: {e}",
+            detail="The uploaded file is not valid JSON. Make sure you're uploading a Familiar library export file.",
         )
     except UnicodeDecodeError:
         raise HTTPException(
@@ -486,7 +486,7 @@ async def execute_library_import(
         logger.error(f"Library import failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Import failed. Please check the file format and try again.",
+            detail=sanitize_error_for_client(e, "Library import failed unexpectedly. The file may be corrupted or from an incompatible version."),
         )
 
     return LibraryImportExecuteResponse(
@@ -676,10 +676,10 @@ async def preview_restore(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid gzip file",
         )
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid JSON file: {e}",
+            detail="The uploaded file is not valid JSON. Make sure you're uploading a Familiar backup file.",
         )
     except UnicodeDecodeError:
         raise HTTPException(
@@ -770,7 +770,7 @@ async def execute_restore(
         logger.error(f"Restore failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Restore failed. Please check the file format and try again.",
+            detail=sanitize_error_for_client(e, "Restore failed unexpectedly. The backup file may be corrupted or from an incompatible version."),
         )
 
     return RestoreExecuteResponse(

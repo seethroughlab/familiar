@@ -59,6 +59,7 @@ interface PlayerState {
   // Playback modes
   shuffle: boolean;
   repeat: RepeatMode;
+  consume: boolean;
 
   // Queue
   queue: QueueItem[];
@@ -96,6 +97,7 @@ interface PlayerState {
   setVolume: (volume: number) => void;
   toggleShuffle: () => void | Promise<void>;
   toggleRepeat: () => void;
+  toggleConsume: () => void;
 
   // Queue actions
   addToQueue: (track: Track, insertIndex?: number) => void;
@@ -158,6 +160,7 @@ const persistState = () => {
     volume: state.volume,
     shuffle: state.shuffle,
     repeat: state.repeat,
+    consume: state.consume,
     queue: state.queue,
     queueIndex: state.queueIndex,
     currentTrack: state.currentTrack,
@@ -228,6 +231,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   volume: 1,
   shuffle: false,
   repeat: 'off',
+  consume: false,
   queue: [],
   queueIndex: -1,
   history: [],
@@ -316,6 +320,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }));
     persistState();
   },
+  toggleConsume: () => {
+    set((state) => ({ consume: !state.consume }));
+    persistState();
+  },
 
   // Queue actions
   addToQueue: (track, insertIndex) => {
@@ -362,9 +370,36 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   removeFromQueue: (queueId) => {
-    set((state) => ({
-      queue: state.queue.filter((item) => item.queueId !== queueId),
-    }));
+    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex } = get();
+    const removedIndex = queue.findIndex((item) => item.queueId === queueId);
+    if (removedIndex === -1) return;
+
+    const newQueue = queue.filter((item) => item.queueId !== queueId);
+    let newQueueIndex = queueIndex;
+    if (removedIndex < queueIndex) {
+      newQueueIndex = queueIndex - 1;
+    }
+
+    // Adjust shuffle order if shuffle is on
+    let newShuffleOrder = shuffleOrder;
+    let newShuffleIndex = shuffleIndex;
+    if (shuffle && shuffleOrder.length > 0) {
+      newShuffleOrder = shuffleOrder
+        .filter(i => i !== removedIndex)
+        .map(i => i > removedIndex ? i - 1 : i);
+      // Find current position in the new shuffle order
+      const currentShufflePos = shuffleOrder.indexOf(queueIndex);
+      if (currentShufflePos >= 0) {
+        newShuffleIndex = newShuffleOrder.indexOf(newQueueIndex);
+      }
+    }
+
+    set({
+      queue: newQueue,
+      queueIndex: newQueueIndex,
+      shuffleOrder: newShuffleOrder,
+      shuffleIndex: newShuffleIndex,
+    });
     persistState();
   },
 
@@ -390,9 +425,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: async () => {
-    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, currentTrack, lazyQueueIds, lazyQueueIndex, prefetchedTracks, isFetchingTrack } = get();
+    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, consume, currentTrack, lazyQueueIds, lazyQueueIndex, prefetchedTracks, isFetchingTrack } = get();
 
-    // Handle lazy queue mode
+    // Handle lazy queue mode (consume is ignored in lazy mode)
     if (lazyQueueIds && lazyQueueIds.length > 0) {
       if (isFetchingTrack) return; // Prevent concurrent fetches
 
@@ -508,6 +543,50 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           return;
         }
       }
+    }
+
+    // Consume mode: remove the finished track from the queue
+    // Skip when repeat-one is active (repeat-one wins)
+    if (consume && repeat !== 'one') {
+      const removedIndex = queueIndex;
+      const newQueue = [...queue];
+      newQueue.splice(removedIndex, 1);
+
+      if (newQueue.length === 0) {
+        set({ queue: [], queueIndex: -1, currentTrack: null, isPlaying: false, shuffleOrder: [], shuffleIndex: -1 });
+        persistState();
+        return;
+      }
+
+      // Adjust nextQueueIndex since we removed an item
+      if (nextQueueIndex > removedIndex) {
+        nextQueueIndex -= 1;
+      } else if (nextQueueIndex === removedIndex && nextQueueIndex >= newQueue.length) {
+        // Wrapped around or was at end
+        nextQueueIndex = 0;
+      }
+
+      // Adjust shuffle order: remove the old index and shift down
+      if (shuffle) {
+        newShuffleOrder = newShuffleOrder
+          .filter(i => i !== removedIndex)
+          .map(i => i > removedIndex ? i - 1 : i);
+        // Re-find shuffleIndex pointing to our next track
+        const posInShuffle = newShuffleOrder.indexOf(nextQueueIndex);
+        newShuffleIndex = posInShuffle >= 0 ? posInShuffle : 0;
+      }
+
+      set({
+        queue: newQueue,
+        queueIndex: nextQueueIndex,
+        currentTrack: newQueue[nextQueueIndex].track,
+        isPlaying: true,
+        currentTime: 0,
+        shuffleIndex: newShuffleIndex,
+        shuffleOrder: newShuffleOrder,
+      });
+      persistState();
+      return;
     }
 
     set({
@@ -811,7 +890,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   advanceToNextTrack: (track) => {
-    const { queueIndex, shuffle, shuffleIndex, currentTrack, queue } = get();
+    const { queueIndex, shuffle, shuffleIndex, shuffleOrder, repeat, consume, currentTrack, queue, lazyQueueIds } = get();
 
     // Add current track to history
     if (currentTrack) {
@@ -822,7 +901,49 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     // Find the queue index for the advanced track
     const trackIndex = queue.findIndex(item => item.track.id === track.id);
-    const newQueueIndex = trackIndex >= 0 ? trackIndex : queueIndex + 1;
+    let newQueueIndex = trackIndex >= 0 ? trackIndex : queueIndex + 1;
+
+    // Consume mode: remove the finished track (skip for repeat-one and lazy mode)
+    const isLazyMode = lazyQueueIds && lazyQueueIds.length > 0;
+    if (consume && repeat !== 'one' && !isLazyMode && queueIndex >= 0 && queueIndex < queue.length) {
+      const removedIndex = queueIndex;
+      const newQueue = [...queue];
+      newQueue.splice(removedIndex, 1);
+
+      if (newQueue.length === 0) {
+        set({ queue: [], queueIndex: -1, currentTrack: null, isPlaying: false, crossfadeState: 'idle', nextTrackPreloaded: false, shuffleOrder: [], shuffleIndex: -1 });
+        persistState();
+        return;
+      }
+
+      // Re-find the new track in the modified queue
+      const newTrackIndex = newQueue.findIndex(item => item.track.id === track.id);
+      newQueueIndex = newTrackIndex >= 0 ? newTrackIndex : 0;
+
+      // Adjust shuffle order
+      let newShuffleOrder = shuffleOrder;
+      let newShuffleIndex = shuffleIndex;
+      if (shuffle) {
+        newShuffleOrder = shuffleOrder
+          .filter(i => i !== removedIndex)
+          .map(i => i > removedIndex ? i - 1 : i);
+        const posInShuffle = newShuffleOrder.indexOf(newQueueIndex);
+        newShuffleIndex = posInShuffle >= 0 ? posInShuffle : 0;
+      }
+
+      set({
+        queue: newQueue,
+        currentTrack: track,
+        queueIndex: newQueueIndex,
+        currentTime: 0,
+        crossfadeState: 'idle',
+        nextTrackPreloaded: false,
+        shuffleIndex: newShuffleIndex,
+        shuffleOrder: newShuffleOrder,
+      });
+      persistState();
+      return;
+    }
 
     set({
       currentTrack: track,
@@ -868,6 +989,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         volume: persisted.volume,
         shuffle: persisted.shuffle,
         repeat: persisted.repeat,
+        consume: persisted.consume ?? false,
         queue,
         queueIndex: persisted.queueIndex,
         currentTrack,
@@ -893,6 +1015,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       volume: 1,
       shuffle: false,
       repeat: 'off',
+      consume: false,
       queue: [],
       queueIndex: -1,
       history: [],
