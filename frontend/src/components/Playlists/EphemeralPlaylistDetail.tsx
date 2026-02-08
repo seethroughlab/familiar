@@ -1,9 +1,15 @@
 import { useState, useCallback, useMemo } from 'react';
 import { ArrowLeft, Play, Pause, Clock, Save, Trash2, Loader2, Music, Search, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
+import { useSelectionStore } from '../../stores/selectionStore';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { Heart } from 'lucide-react';
-import type { EphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
+import { TrackContextMenu } from '../Library/TrackContextMenu';
+import type { ContextMenuState } from '../Library/types';
+import { initialContextMenuState } from '../Library/types';
+import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
+import type { Track } from '../../types';
 
 interface Props {
   playlist: EphemeralPlaylist;
@@ -13,12 +19,34 @@ interface Props {
   isSaving: boolean;
 }
 
+function toFullTrack(t: EphemeralTrack): Track {
+  return {
+    id: t.id,
+    file_path: '',
+    title: t.title || 'Unknown',
+    artist: t.artist || 'Unknown',
+    album: t.album || null,
+    album_artist: null,
+    album_type: 'album' as const,
+    track_number: null,
+    disc_number: null,
+    year: null,
+    genre: null,
+    duration_seconds: t.duration_seconds || null,
+    format: null,
+    analysis_version: 0,
+  };
+}
+
 export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, isSaving }: Props) {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [searchFilter, setSearchFilter] = useState('');
 
   const filteredTracks = useMemo(() => {
@@ -41,24 +69,20 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
       return;
     }
 
-    const queueTracks = filteredTracks.map((t) => ({
-      id: t.id,
-      file_path: '',
-      title: t.title || 'Unknown',
-      artist: t.artist || 'Unknown',
-      album: t.album || null,
-      album_artist: null,
-      album_type: 'album' as const,
-      track_number: null,
-      disc_number: null,
-      year: null,
-      genre: null,
-      duration_seconds: t.duration_seconds || null,
-      format: null,
-      analysis_version: 0,
-    }));
+    const queueTracks = filteredTracks.map(toFullTrack);
     setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
   }, [filteredTracks, playlist.id, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+
+  // Context menu handlers
+  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ isOpen: true, track, position: { x: e.clientX, y: e.clientY } });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(initialContextMenuState);
+  }, []);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '--:--';
@@ -73,7 +97,7 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
   );
 
   return (
-    <div className="space-y-4 px-4 md:px-0">
+    <div className="space-y-4">
       {/* Header */}
       <div className="space-y-4">
         {/* Back button row */}
@@ -174,6 +198,7 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
                 e.dataTransfer.effectAllowed = 'copy';
               }}
               onClick={() => handlePlay(idx)}
+              onContextMenu={(e) => handleContextMenu(toFullTrack(track), e)}
               className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
                 currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
               }`}
@@ -260,6 +285,49 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
           <Music className="w-12 h-12 mx-auto mb-3 opacity-50" />
           <p>No tracks in this playlist</p>
         </div>
+      )}
+
+      {/* Context menu */}
+      {contextMenu.isOpen && contextMenu.track && (
+        <TrackContextMenu
+          track={contextMenu.track}
+          position={contextMenu.position}
+          isSelected={false}
+          onClose={closeContextMenu}
+          onPlay={() => {
+            const idx = filteredTracks.findIndex(t => t.id === contextMenu.track?.id);
+            if (idx !== -1) handlePlay(idx);
+          }}
+          onQueue={() => {
+            if (contextMenu.track) addToQueue(contextMenu.track);
+          }}
+          onGoToArtist={() => {
+            if (contextMenu.track?.artist) navigateToArtist(contextMenu.track.artist);
+          }}
+          onGoToAlbum={() => {
+            if (contextMenu.track?.artist && contextMenu.track?.album) {
+              navigateToAlbum(contextMenu.track.artist, contextMenu.track.album);
+            }
+          }}
+          onToggleSelect={() => {}}
+          onAddToPlaylist={() => {}}
+          onMakePlaylist={() => {
+            if (contextMenu.track) {
+              const track = contextMenu.track;
+              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
+              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+            }
+          }}
+          onEditMetadata={() => {
+            if (contextMenu.track) {
+              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
+            }
+          }}
+          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
+          onToggleFavorite={() => {
+            if (contextMenu.track) toggleFavorite(contextMenu.track.id);
+          }}
+        />
       )}
     </div>
   );

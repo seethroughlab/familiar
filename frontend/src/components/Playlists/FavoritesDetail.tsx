@@ -157,7 +157,7 @@ export function FavoritesDetail({ onBack }: Props) {
   );
 
   return (
-    <div className="space-y-4 px-4 md:px-0">
+    <div className="space-y-4">
       {/* Header */}
       <div className="space-y-4">
         <button

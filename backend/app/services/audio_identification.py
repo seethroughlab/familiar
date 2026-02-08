@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import ANALYSIS_VERSION
 from app.db.models import Track, TrackAnalysis
-from app.services.analysis import AcoustIDError, lookup_acoustid_candidates
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +149,9 @@ class AudioIdentificationService:
 
         # If no cache hit, fetch from AcoustID API
         if acoustid_candidates is None:
+            # Lazy import to avoid loading librosa/torch in API process
+            from app.services.analysis import AcoustIDError, lookup_acoustid_candidates
+
             try:
                 acoustid_candidates = lookup_acoustid_candidates(
                     file_path,

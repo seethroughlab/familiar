@@ -15,6 +15,7 @@ import {
   Maximize,
   Minimize,
   ListX,
+  EllipsisVertical,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -200,7 +201,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
       ref={containerRef}
       onMouseMove={isFullscreen ? showControls : undefined}
       onTouchStart={isFullscreen ? showControls : undefined}
-      className={`fixed inset-0 z-50 bg-black flex flex-col transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'} ${isFullscreen && !controlsVisible ? 'cursor-none' : ''}`}
+      className={`fixed inset-0 z-50 bg-black flex flex-col overflow-hidden transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'} ${isFullscreen && !controlsVisible ? 'cursor-none' : ''}`}
     >
       {/* Header - includes safe area padding for notch */}
       <div
@@ -222,13 +223,15 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           <EffectsQuickAccess />
         </div>
 
-        <button
-          onClick={toggleFullscreen}
-          className="p-2 hover:bg-white/10 rounded-full transition-colors"
-          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-        </button>
+        {!isMobile() && (
+          <button
+            onClick={toggleFullscreen}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
+            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+          </button>
+        )}
       </div>
 
       {/* Main content area */}
@@ -280,10 +283,10 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
       )}
 
       {/* Bottom controls - includes safe area padding for home indicator */}
-      <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 pb-safe transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* Track info - right-click for context menu */}
         <div
-          className="text-center mb-3 sm:mb-6 cursor-context-menu"
+          className="text-center mb-3 sm:mb-6"
           onContextMenu={handleContextMenu}
         >
           <div className="flex items-center justify-center gap-2">
@@ -294,9 +297,32 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
                 Preview
               </span>
             )}
+            <button
+              onClick={handleContextMenu}
+              className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0"
+              aria-label="More options"
+            >
+              <EllipsisVertical className="w-5 h-5" />
+            </button>
           </div>
-          <p className="text-lg text-zinc-400">{currentTrack.artist || 'Unknown'}</p>
-          <p className="text-sm text-zinc-500">{currentTrack.album || ''}</p>
+          {currentTrack.artist ? (
+            <button
+              onClick={() => { onClose(); navigateToArtist(currentTrack.artist!); }}
+              className="text-lg text-zinc-400 hover:text-zinc-200 hover:underline transition-colors"
+            >
+              {currentTrack.artist}
+            </button>
+          ) : (
+            <p className="text-lg text-zinc-400">Unknown</p>
+          )}
+          {currentTrack.album ? (
+            <button
+              onClick={() => { onClose(); navigateToAlbum(currentTrack.artist!, currentTrack.album!); }}
+              className="text-sm text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
+            >
+              {currentTrack.album}
+            </button>
+          ) : null}
         </div>
 
         {/* Progress bar */}
@@ -374,17 +400,19 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             <Repeat className="w-5 h-5" />
           </button>
 
-          <button
-            onClick={toggleConsume}
-            className={`p-3 rounded-full transition-colors ${
-              consume ? 'text-green-500' : 'text-zinc-400 hover:text-white'
-            }`}
-            aria-label={consume ? 'Disable consume mode' : 'Enable consume mode'}
-            aria-pressed={consume}
-            title="Consume: remove tracks after playing"
-          >
-            <ListX className="w-5 h-5" />
-          </button>
+          {!isMobile() && (
+            <button
+              onClick={toggleConsume}
+              className={`p-3 rounded-full transition-colors ${
+                consume ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+              }`}
+              aria-label={consume ? 'Disable consume mode' : 'Enable consume mode'}
+              aria-pressed={consume}
+              title="Consume: remove tracks after playing"
+            >
+              <ListX className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* Volume - hidden on mobile where hardware buttons control volume */}

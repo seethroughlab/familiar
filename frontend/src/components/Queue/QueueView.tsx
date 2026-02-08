@@ -3,7 +3,13 @@ import { ListMusic, ListX, Play, Pause, GripVertical, X, Shuffle, Trash2, Music,
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useSelectionStore } from '../../stores/selectionStore';
+import { useAppNavigation } from '../../hooks/useAppNavigation';
+import { useFavorites } from '../../hooks/useFavorites';
 import { tracksApi } from '../../api/client';
+import { TrackContextMenu } from '../Library/TrackContextMenu';
+import type { ContextMenuState } from '../Library/types';
+import { initialContextMenuState } from '../Library/types';
 import type { Track } from '../../types';
 
 import { createLogger } from '../../utils/logger';
@@ -30,6 +36,9 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const toggleConsume = usePlayerStore((s) => s.toggleConsume);
 
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
+  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
 
   // Ref for auto-scrolling to the current track
   const currentTrackRef = useRef<HTMLDivElement>(null);
@@ -220,6 +229,17 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     }
   }, [isLazyMode, exitLazyMode, clearQueue]);
 
+  // Context menu handlers
+  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ isOpen: true, track, position: { x: e.clientX, y: e.clientY } });
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(initialContextMenuState);
+  }, []);
+
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '--:--';
     const mins = Math.floor(seconds / 60);
@@ -366,7 +386,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
             )}
           </div>
         ) : (
-          <div className="p-2 space-y-1">
+          <div className="py-1 space-y-1">
             {displayTracks.map((item, displayIndex) => {
               const { track, queueId, isCurrent } = item;
               const actualIndex = isLazyMode ? displayIndex : queue.findIndex(q => q.queueId === queueId);
@@ -390,6 +410,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                     }
                   }}
                   onClick={() => handleTrackClick(actualIndex)}
+                  onContextMenu={(e) => handleContextMenu(track, e)}
                   style={isDragged ? { transform: `translateY(${pointerDeltaY}px)`, zIndex: 10, position: 'relative' } : undefined}
                   className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                     isDragged ? 'shadow-lg' : ''
@@ -490,6 +511,51 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           </div>
         )}
       </div>
+
+      {/* Context menu */}
+      {contextMenu.isOpen && contextMenu.track && (
+        <TrackContextMenu
+          track={contextMenu.track}
+          position={contextMenu.position}
+          isSelected={false}
+          onClose={closeContextMenu}
+          onPlay={() => {
+            if (contextMenu.track) {
+              const idx = displayTracks.findIndex(dt => dt.track.id === contextMenu.track?.id);
+              if (idx !== -1) handleTrackClick(isLazyMode ? idx : queue.findIndex(q => q.queueId === displayTracks[idx].queueId));
+            }
+          }}
+          onQueue={() => {
+            if (contextMenu.track) addToQueue(contextMenu.track);
+          }}
+          onGoToArtist={() => {
+            if (contextMenu.track?.artist) navigateToArtist(contextMenu.track.artist);
+          }}
+          onGoToAlbum={() => {
+            if (contextMenu.track?.artist && contextMenu.track?.album) {
+              navigateToAlbum(contextMenu.track.artist, contextMenu.track.album);
+            }
+          }}
+          onToggleSelect={() => {}}
+          onAddToPlaylist={() => {}}
+          onMakePlaylist={() => {
+            if (contextMenu.track) {
+              const track = contextMenu.track;
+              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
+              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+            }
+          }}
+          onEditMetadata={() => {
+            if (contextMenu.track) {
+              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
+            }
+          }}
+          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
+          onToggleFavorite={() => {
+            if (contextMenu.track) toggleFavorite(contextMenu.track.id);
+          }}
+        />
+      )}
     </div>
   );
 }

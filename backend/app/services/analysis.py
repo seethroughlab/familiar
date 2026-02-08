@@ -1,27 +1,18 @@
 """Audio analysis service using CLAP embeddings and librosa features."""
 
+import importlib.util
 import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import acoustid
-import librosa
 import numpy as np
 
-# Conditionally import torch - try to import, but handle gracefully if unavailable
-# The actual decision to use CLAP is made at runtime via AppSettingsService
-_torch_available = False
-_torch_import_error: str | None = None
-try:
-    import torch
-    _torch_available = True
-except ImportError as e:
-    _torch_import_error = str(e)
-
-if TYPE_CHECKING:
-    import torch  # For type hints only
+# Check torch availability without importing it (~0 memory cost)
+# The actual torch import happens lazily inside functions that need it
+_torch_available = importlib.util.find_spec("torch") is not None
+_torch_import_error: str | None = "torch package not installed" if not _torch_available else None
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +55,8 @@ def get_device() -> str:
     # MPS doesn't work reliably in subprocesses, so use CPU
     if os.environ.get("FORKED_BY_MULTIPROCESSING"):
         return "cpu"
+
+    import torch
 
     if torch.cuda.is_available():
         return "cuda"
@@ -164,6 +157,9 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
         return None
 
     try:
+        import librosa
+        import torch
+
         # Load audio file
         audio, sr = librosa.load(file_path, sr=target_sr, mono=True)
 
@@ -223,6 +219,8 @@ def extract_text_embedding(text: str) -> list[float] | None:
         return None
 
     try:
+        import torch
+
         model, processor = load_clap_model()
         device = get_device()
 
