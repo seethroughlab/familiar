@@ -74,6 +74,7 @@ function createMockState() {
     volume: 0.8,
     shuffle: true,
     repeat: 'all' as const,
+    consume: false,
     queue: [queueItem],
     queueIndex: 0,
     currentTrack: track,
