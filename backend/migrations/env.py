@@ -24,6 +24,16 @@ if config.config_file_name is not None:
 # Add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
 
+# Indexes managed manually via migrations (alembic autogenerate can't diff them)
+_MANUAL_INDEXES = {"ix_track_analysis_embedding_hnsw"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    """Exclude manually-managed indexes from autogenerate comparison."""
+    if type_ == "index" and name in _MANUAL_INDEXES:
+        return False
+    return True
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -41,6 +51,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -49,7 +60,11 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations using the provided connection."""
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=include_object,
+    )
 
     with context.begin_transaction():
         context.run_migrations()

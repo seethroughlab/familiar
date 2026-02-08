@@ -385,7 +385,7 @@ class TrackAnalysis(Base):
 
     __tablename__ = "track_analysis"
     # NOTE: HNSW index on embedding is managed by migration (20260209_hnsw_embedding_index.py)
-    # because alembic autogenerate cannot properly diff pgvector HNSW indexes.
+    # and excluded from autogenerate in env.py (alembic can't diff pgvector HNSW indexes).
     __table_args__ = (UniqueConstraint("track_id", "version", name="uq_track_analysis_version"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
