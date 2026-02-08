@@ -15,6 +15,7 @@ import {
   Type,
   Compass,
   Loader2,
+  MoreVertical,
 } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -409,14 +410,29 @@ export function FullPlayer({ onClose }: FullPlayerProps) {
 
       {/* Bottom controls - includes safe area padding for home indicator */}
       <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 pb-safe">
-        {/* Track info - right-click for context menu */}
+        {/* Track info - right-click for context menu on desktop, button on mobile */}
         <div
-          className="text-center mb-6 cursor-context-menu"
+          className="text-center mb-6 cursor-context-menu relative"
           onContextMenu={handleContextMenu}
         >
-          <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
+          <h2 className="text-xl sm:text-2xl font-bold truncate px-10">{currentTrack.title || 'Unknown'}</h2>
           <p className="text-lg text-zinc-400">{currentTrack.artist || 'Unknown'}</p>
           <p className="text-sm text-zinc-500">{currentTrack.album || ''}</p>
+          {/* Context menu button - always visible but especially useful on mobile */}
+          <button
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setContextMenu({
+                isOpen: true,
+                track: currentTrack,
+                position: { x: rect.left + rect.width / 2, y: rect.bottom + 8 },
+              });
+            }}
+            className="absolute right-0 top-0 p-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+            aria-label="Track options"
+          >
+            <MoreVertical className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Progress bar */}
