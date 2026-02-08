@@ -11,7 +11,7 @@ Phase 3: discovery (genre browse), scrobbling.
 
 import hashlib
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -1280,7 +1280,7 @@ async def scrobble(request: Request, db: DbSession, profile: SubsonicProfile):
     )
     history = existing.scalar_one_or_none()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if history:
         history.play_count += 1
         history.last_played_at = now

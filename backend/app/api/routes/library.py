@@ -1326,7 +1326,7 @@ async def get_mood_distribution(
 
     Uses SQL aggregation instead of loading all tracks into Python.
     """
-    from sqlalchemy import Integer, cast, literal_column, text
+    from sqlalchemy import Integer, cast, literal_column
     from sqlalchemy.dialects.postgresql import array_agg
 
     cell_size = 1.0 / grid_size

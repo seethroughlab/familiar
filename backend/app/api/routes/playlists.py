@@ -8,7 +8,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
-from app.db.models import ExternalTrack, ExternalTrackSource, Playlist, PlaylistTrack, Track
+from app.db.models import ExternalTrackSource, Playlist, PlaylistTrack, Track
 from app.services.external_track_matcher import ExternalTrackMatcher
 from app.services.recommendations import RecommendationsService
 

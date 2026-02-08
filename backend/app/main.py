@@ -1,12 +1,12 @@
 """Familiar API - Main FastAPI application."""
 
 import logging
+import multiprocessing
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-import multiprocessing
 
 # Set start method to spawn for better compatibility with PyTorch (MPS) and cleaner memory usage on Linux
 try:

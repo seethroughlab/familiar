@@ -1,6 +1,5 @@
 """Tests for atomic file write utilities."""
 
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
