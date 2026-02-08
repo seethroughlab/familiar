@@ -491,7 +491,7 @@ Respond with ONLY the playlist name, nothing else."""
                 ),
             )
 
-        conditions = []
+        conditions: list[Any] = []
 
         # --- Library criteria ---
         if genre is not None:
@@ -610,7 +610,7 @@ Respond with ONLY the playlist name, nothing else."""
             effective_order = sort_order or ("desc" if sort_by in default_desc else "asc")
             is_desc = effective_order == "desc"
 
-            sort_column = None
+            sort_column: Any = None
             if sort_by == "play_count" and self.profile_id:
                 sort_column = func.coalesce(ProfilePlayHistory.play_count, 0)
             elif sort_by == "last_played" and self.profile_id:
