@@ -332,7 +332,6 @@ async def get_license(request: Request, profile: SubsonicProfile):
 @router.get("/getMusicFolders.view")
 @router.get("/getMusicFolders")
 async def get_music_folders(request: Request, profile: SubsonicProfile):
-    from sqlalchemy import func as sa_func
     from app.config import MUSIC_LIBRARY_PATH
     from app.services.app_settings import get_app_settings_service
 

@@ -1,7 +1,7 @@
 """Track endpoints."""
 
 import logging
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any

@@ -4,7 +4,6 @@ import hashlib
 import xml.etree.ElementTree as ET
 from uuid import uuid4
 
-import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes.subsonic import (
@@ -17,7 +16,6 @@ from app.api.routes.subsonic import (
     track_to_child,
 )
 from tests.conftest import make_profile_headers
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for helpers (no DB needed)
@@ -155,8 +153,8 @@ class TestTrackToChild:
 
     def _make_track(self, **kwargs):
         """Create a mock Track object."""
-        from unittest.mock import MagicMock
         from datetime import datetime
+        from unittest.mock import MagicMock
 
         track = MagicMock()
         track.id = kwargs.get("id", uuid4())
