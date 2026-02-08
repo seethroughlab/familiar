@@ -10,7 +10,7 @@
  *
  * Wraps TrackList with BrowserProps interface for the pluggable browser system.
  */
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -930,7 +930,15 @@ export function TrackListBrowser({
     nextPage: number;
     hasMore: boolean;
     isLoading: boolean;
+    prevPage: number;
+    hasPrevious: boolean;
+    isLoadingPrev: boolean;
   } | null>(null);
+
+  // Guard: after a jump, don't fire the top sentinel until user scrolls down past threshold
+  const [prevSentinelReady, setPrevSentinelReady] = useState(false);
+  // For scroll position maintenance when prepending tracks
+  const prevLoadScrollRef = useRef<number | null>(null);
 
   const handleMobileJumpToLetter = useCallback(async (letter: string) => {
     if (!letterIndex || !(letter in letterIndex)) return;
@@ -939,12 +947,16 @@ export function TrackListBrowser({
     const targetPage = Math.floor(targetIndex / PAGE_SIZE) + 1;
 
     setActiveLetter(letter);
+    setPrevSentinelReady(false);
     setMobileJump(prev => ({
       letter,
       tracks: prev?.tracks ?? [],
       nextPage: targetPage + 1,
       hasMore: true,
       isLoading: true,
+      prevPage: targetPage - 1,
+      hasPrevious: targetPage > 1,
+      isLoadingPrev: false,
     }));
 
     try {
@@ -972,6 +984,9 @@ export function TrackListBrowser({
         nextPage: targetPage + 1,
         hasMore: targetPage < totalPages,
         isLoading: false,
+        prevPage: targetPage - 1,
+        hasPrevious: targetPage > 1,
+        isLoadingPrev: false,
       });
 
       // Scroll mobile view to top
@@ -1019,6 +1034,71 @@ export function TrackListBrowser({
     }
   }, [mobileJump, filters, needsFeatures, sortField, sortOrder]);
 
+  // Load previous pages when scrolling up after a mobile jump
+  const handleMobileJumpLoadPrevious = useCallback(async () => {
+    if (!mobileJump || mobileJump.isLoadingPrev || !mobileJump.hasPrevious) return;
+
+    setMobileJump(prev => prev ? { ...prev, isLoadingPrev: true } : null);
+
+    // Save scroll height before prepending so we can maintain position
+    prevLoadScrollRef.current = document.documentElement.scrollHeight;
+
+    try {
+      const result = await tracksApi.list({
+        page: mobileJump.prevPage,
+        page_size: PAGE_SIZE,
+        search: filters.search,
+        artist: filters.artist,
+        album: filters.album,
+        year_from: filters.yearFrom,
+        year_to: filters.yearTo,
+        energy_min: filters.energyMin,
+        energy_max: filters.energyMax,
+        valence_min: filters.valenceMin,
+        valence_max: filters.valenceMax,
+        include_features: needsFeatures,
+        sort_by: sortField,
+        sort_order: sortOrder,
+      });
+
+      setMobileJump(prev => prev ? {
+        ...prev,
+        tracks: [...result.items, ...prev.tracks],
+        prevPage: prev.prevPage - 1,
+        hasPrevious: prev.prevPage > 1,
+        isLoadingPrev: false,
+      } : null);
+    } catch (err) {
+      log.error('Failed to load previous jump tracks:', err);
+      setMobileJump(prev => prev ? { ...prev, isLoadingPrev: false } : null);
+    }
+  }, [mobileJump, filters, needsFeatures, sortField, sortOrder]);
+
+  // After prepending tracks, adjust scroll position so user doesn't jump
+  useLayoutEffect(() => {
+    if (prevLoadScrollRef.current !== null) {
+      const heightAfter = document.documentElement.scrollHeight;
+      const diff = heightAfter - prevLoadScrollRef.current;
+      if (diff > 0) window.scrollBy(0, diff);
+      prevLoadScrollRef.current = null;
+    }
+  });
+
+  // Arm the top sentinel only after user scrolls down past threshold (avoids
+  // immediate trigger right after a jump scrolls to top)
+  useEffect(() => {
+    if (!mobileJump?.hasPrevious || prevSentinelReady) return;
+
+    const handleScroll = () => {
+      if (window.scrollY > 200) {
+        setPrevSentinelReady(true);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [mobileJump?.hasPrevious, prevSentinelReady]);
+
   // Letter select routing: mobile uses jump-fetch, desktop uses virtualizer
   const handleLetterSelect = useCallback((letter: string) => {
     if (window.innerWidth < 768) {
@@ -1031,6 +1111,7 @@ export function TrackListBrowser({
   // Reset mobileJump when filters/sort change
   useEffect(() => {
     setMobileJump(null);
+    setPrevSentinelReady(false);
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
       filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
       sortField, sortOrder]);
@@ -1046,6 +1127,12 @@ export function TrackListBrowser({
   const mobileSentinelRef = useIntersectionObserver({
     onIntersect: mobileLoadMore,
     enabled: mobileHasMore && !mobileIsLoading,
+  });
+
+  // Top sentinel for loading earlier pages after a mobile jump
+  const mobilePrevSentinelRef = useIntersectionObserver({
+    onIntersect: handleMobileJumpLoadPrevious,
+    enabled: prevSentinelReady && !!mobileJump?.hasPrevious && !mobileJump?.isLoadingPrev,
   });
 
   // Update visible tracks store when tracks change (for LLM context)
@@ -1374,6 +1461,14 @@ export function TrackListBrowser({
       {/* Mobile view - card layout (visible below md breakpoint) */}
       {/* Uses unified mobileTracks: either jump-fetched page or normal infinite query */}
       <div className="md:hidden">
+        {mobileJump?.hasPrevious && (
+          <div ref={mobilePrevSentinelRef} className="h-4" />
+        )}
+        {mobileJump?.isLoadingPrev && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
+          </div>
+        )}
         {mobileTracks.map((track, index) => (
           <MobileTrackCard
             key={track.id}
