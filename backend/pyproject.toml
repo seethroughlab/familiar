@@ -30,6 +30,8 @@ dependencies = [
     "greenlet>=3.0.0",
     # Rate limiting
     "slowapi>=0.1.9",
+    # Password hashing (for Subsonic API auth)
+    "bcrypt>=4.0.0",
     # Utilities
     "python-multipart>=0.0.6",
     "anthropic>=0.75.0",
@@ -69,6 +71,7 @@ analysis = [
     "transformers>=4.30.0", # For CLAP model
     "soundfile>=0.12.0", # Audio file loading
     "umap-learn>=0.5.0", # Dimensionality reduction for music map
+    "pyloudnorm>=0.1.0", # EBU R128 loudness measurement
 ]
 
 [build-system]

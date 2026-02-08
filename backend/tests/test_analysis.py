@@ -41,6 +41,9 @@ class TestExtractFeatures:
             "instrumentalness",
             "valence",
             "speechiness",
+            "loudness_lufs",
+            "track_peak",
+            "replaygain_track_gain",
         }
         assert set(features.keys()) == expected_keys
 

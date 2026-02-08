@@ -248,6 +248,79 @@ def extract_text_embedding(text: str) -> list[float] | None:
         return None
 
 
+def read_replaygain_tags(file_path: Path) -> dict[str, float | None]:
+    """Read existing ReplayGain tags from audio file metadata.
+
+    Checks ID3 (MP3) and Vorbis Comment (FLAC/OGG) formats.
+
+    Returns:
+        Dict with loudness_lufs, track_peak, replaygain_track_gain if found.
+    """
+    import mutagen
+
+    result: dict[str, float | None] = {
+        "loudness_lufs": None,
+        "track_peak": None,
+        "replaygain_track_gain": None,
+    }
+
+    try:
+        audio = mutagen.File(file_path)
+        if audio is None:
+            return result
+
+        gain_value: str | None = None
+        peak_value: str | None = None
+
+        # ID3 tags (MP3)
+        if hasattr(audio, "tags") and audio.tags:
+            tags = audio.tags
+            # TXXX:replaygain_track_gain
+            for key in ["TXXX:replaygain_track_gain", "TXXX:REPLAYGAIN_TRACK_GAIN"]:
+                if key in tags:
+                    gain_value = str(tags[key])
+                    break
+            for key in ["TXXX:replaygain_track_peak", "TXXX:REPLAYGAIN_TRACK_PEAK"]:
+                if key in tags:
+                    peak_value = str(tags[key])
+                    break
+
+            # Vorbis comments (FLAC, OGG)
+            for key in ["replaygain_track_gain", "REPLAYGAIN_TRACK_GAIN"]:
+                if key in tags:
+                    val = tags[key]
+                    gain_value = val[0] if isinstance(val, list) else str(val)
+                    break
+            for key in ["replaygain_track_peak", "REPLAYGAIN_TRACK_PEAK"]:
+                if key in tags:
+                    val = tags[key]
+                    peak_value = val[0] if isinstance(val, list) else str(val)
+                    break
+
+        if gain_value:
+            # Parse "X.XX dB" format
+            gain_str = gain_value.replace("dB", "").replace("db", "").strip()
+            try:
+                gain_db = float(gain_str)
+                result["replaygain_track_gain"] = gain_db
+                # ReplayGain reference level is -18 LUFS
+                # gain_db = -18 - loudness_lufs => loudness_lufs = -18 - gain_db
+                result["loudness_lufs"] = -18.0 - gain_db
+            except ValueError:
+                pass
+
+        if peak_value:
+            try:
+                result["track_peak"] = float(peak_value.strip())
+            except ValueError:
+                pass
+
+    except Exception as e:
+        logger.debug(f"Could not read ReplayGain tags from {file_path}: {e}")
+
+    return result
+
+
 def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
     """Internal implementation of feature extraction.
 
@@ -384,6 +457,47 @@ def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
     zcr_mean = np.mean(zcr)
     # Speech typically has high ZCR and moderate spectral flatness
     features["speechiness"] = float(min(1, zcr_mean * 2))
+
+    # Loudness / ReplayGain measurement
+    # First try reading existing ReplayGain tags (fast path)
+    rg_tags = read_replaygain_tags(file_path)
+    if rg_tags["loudness_lufs"] is not None:
+        features["loudness_lufs"] = rg_tags["loudness_lufs"]
+        features["track_peak"] = rg_tags["track_peak"]
+        features["replaygain_track_gain"] = rg_tags["replaygain_track_gain"]
+    else:
+        # Measure loudness using pyloudnorm (EBU R128)
+        try:
+            import pyloudnorm as pyln
+            import soundfile as sf
+
+            # Load at native sample rate for accurate loudness measurement
+            data, rate = sf.read(file_path_str)
+            # Convert to mono if needed for peak measurement
+            if data.ndim > 1:
+                peak = float(np.max(np.abs(data)))
+            else:
+                peak = float(np.max(np.abs(data)))
+
+            meter = pyln.Meter(rate)
+            loudness = meter.integrated_loudness(data)
+
+            # pyloudnorm returns -inf for silence
+            if np.isfinite(loudness):
+                features["loudness_lufs"] = float(loudness)
+                features["track_peak"] = peak
+                # ReplayGain = reference - loudness (reference = -18 LUFS for RG2)
+                features["replaygain_track_gain"] = float(-18.0 - loudness)
+            else:
+                features["loudness_lufs"] = None
+                features["track_peak"] = peak
+                features["replaygain_track_gain"] = None
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Loudness measurement failed: {e}")
+            features["loudness_lufs"] = None
+            features["track_peak"] = None
+            features["replaygain_track_gain"] = None
 
     return features
 

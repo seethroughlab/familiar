@@ -81,7 +81,8 @@ class Settings(BaseSettings):
 # v3: Fixed energy normalization (dB scale) and valence (key-aware chroma)
 # v4: Improved valence with multi-feature approach (mode, brightness, tempo, contrast, dynamics)
 # v5: Re-extract CLAP embeddings (psutil fix enabled proper RAM detection)
-ANALYSIS_VERSION = 5
+# v6: Added loudness measurement (EBU R128 / ReplayGain) for volume normalization
+ANALYSIS_VERSION = 6
 
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}

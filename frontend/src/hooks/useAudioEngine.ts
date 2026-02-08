@@ -83,6 +83,8 @@ let globalMediaSourceA: MediaElementAudioSourceNode | null = null;
 let globalMediaSourceB: MediaElementAudioSourceNode | null = null;
 let globalGainA: GainNode | null = null;
 let globalGainB: GainNode | null = null;
+let globalNormGainA: GainNode | null = null;
+let globalNormGainB: GainNode | null = null;
 
 // Direct playback elements (NOT connected to Web Audio - for background playback)
 let directElementA: HTMLAudioElement | null = null;
@@ -164,6 +166,63 @@ function getNextGain(): GainNode | null {
   return currentElementIsA ? globalGainB : globalGainA;
 }
 
+function getCurrentNormGain(): GainNode | null {
+  if (!useWebAudio) return null;
+  return currentElementIsA ? globalNormGainA : globalNormGainB;
+}
+
+function getNextNormGain(): GainNode | null {
+  if (!useWebAudio) return null;
+  return currentElementIsA ? globalNormGainB : globalNormGainA;
+}
+
+/**
+ * Compute the normalization gain (linear) for a track based on its loudness data
+ * and the current normalization settings.
+ */
+function computeNormalizationGain(track: Track | null): number {
+  if (!track?.features?.loudness_lufs) return 1;
+
+  const settings = useAudioSettingsStore.getState();
+  if (!settings.normalizationEnabled) return 1;
+
+  const lufs = track.features.loudness_lufs;
+  const targetLufs = settings.normalizationTargetLufs;
+  const preamp = settings.normalizationPreamp;
+
+  // gain_db = target - measured + preamp
+  let gainDb = targetLufs - lufs + preamp;
+
+  // Prevent clipping: limit gain so peak * gain <= 1.0
+  if (settings.normalizationPreventClipping && track.features.track_peak) {
+    const maxGainDb = -20 * Math.log10(track.features.track_peak + 1e-10);
+    gainDb = Math.min(gainDb, maxGainDb);
+  }
+
+  // Convert dB to linear
+  return Math.pow(10, gainDb / 20);
+}
+
+/**
+ * Apply normalization gain to the appropriate gain node for a track.
+ */
+function applyNormalizationGain(track: Track | null, isCurrent: boolean): void {
+  if (!useWebAudio) return;
+  const normGain = isCurrent ? getCurrentNormGain() : getNextNormGain();
+  if (!normGain) return;
+
+  const linearGain = computeNormalizationGain(track);
+  normGain.gain.value = linearGain;
+
+  if (linearGain !== 1) {
+    log.info('Normalization gain applied', {
+      trackTitle: track?.title,
+      gainDb: (20 * Math.log10(linearGain)).toFixed(1),
+      linearGain: linearGain.toFixed(3),
+    });
+  }
+}
+
 // ============================================================================
 // Audio Graph Initialization
 // ============================================================================
@@ -212,6 +271,15 @@ function initializeAudioGraph(): boolean {
         globalMediaSourceB = globalAudioContext.createMediaElementSource(webAudioElementB);
       }
 
+      if (!globalNormGainA) {
+        globalNormGainA = globalAudioContext.createGain();
+        globalNormGainA.gain.value = 1;
+      }
+      if (!globalNormGainB) {
+        globalNormGainB = globalAudioContext.createGain();
+        globalNormGainB.gain.value = 1;
+      }
+
       if (!globalGainA) {
         globalGainA = globalAudioContext.createGain();
         globalGainA.gain.value = 1;
@@ -229,9 +297,12 @@ function initializeAudioGraph(): boolean {
         globalEffectsChain = initEffectsChain(globalAudioContext);
       }
 
-      // Connect the Web Audio graph
-      globalMediaSourceA!.connect(globalGainA);
-      globalMediaSourceB!.connect(globalGainB);
+      // Connect the Web Audio graph:
+      // MediaSource → NormGain → CrossfadeGain → MasterGain → Effects → Analyser → Destination
+      globalMediaSourceA!.connect(globalNormGainA);
+      globalMediaSourceB!.connect(globalNormGainB);
+      globalNormGainA.connect(globalGainA);
+      globalNormGainB.connect(globalGainB);
       globalGainA.connect(globalMasterGain);
       globalGainB.connect(globalMasterGain);
 
@@ -401,6 +472,9 @@ export function useAudioEngine() {
         nextElementReadyState: nextElement?.readyState,
       });
     }
+
+    // Apply normalization gain for the incoming track before crossfade
+    applyNormalizationGain(nextTrack, false);
 
     if (useDirectPlayback) {
       if (duration <= MOBILE_TRANSITION_OVERLAP) {
@@ -923,6 +997,9 @@ export function useAudioEngine() {
           queueTransition = false;
           setIsLoadingAudio(false); // Audio is ready, hide spinner
 
+          // Apply volume normalization gain for this track
+          applyNormalizationGain(usePlayerStore.getState().currentTrack, true);
+
           // Restore position if we have one (from hydration)
           const storedTime = usePlayerStore.getState().currentTime;
           if (storedTime > 0 && currentElement.currentTime === 0) {
@@ -1064,6 +1141,31 @@ export function useAudioEngine() {
       if (globalMasterGain) globalMasterGain.gain.value = volume;
     }
   }, [volume]);
+
+  // --------------------------------------------------------------------------
+  // Normalization settings reactivity
+  // --------------------------------------------------------------------------
+  const {
+    normalizationEnabled,
+    normalizationTargetLufs,
+    normalizationPreamp,
+    normalizationPreventClipping,
+    normalizationMode,
+  } = useAudioSettingsStore();
+
+  useEffect(() => {
+    // Re-apply normalization gain when settings or track change
+    if (currentTrack && useWebAudio) {
+      applyNormalizationGain(currentTrack, true);
+    }
+  }, [
+    currentTrack,
+    normalizationEnabled,
+    normalizationTargetLufs,
+    normalizationPreamp,
+    normalizationPreventClipping,
+    normalizationMode,
+  ]);
 
   // --------------------------------------------------------------------------
   // Time update loop

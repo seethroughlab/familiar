@@ -75,6 +75,13 @@ class AppSettings(BaseModel):
     # "suggest_missing" - Include local + suggest missing tracks user might acquire (DEFAULT)
     playlist_discovery_mode: str = "suggest_missing"
 
+    # Volume normalization
+    normalization_enabled: bool = False
+    normalization_mode: str = "track"  # "track", "album", "auto"
+    normalization_target_lufs: float = -14.0
+    normalization_preamp: float = 0.0  # dB
+    normalization_prevent_clipping: bool = True
+
     # S3 Glacier Deep Archive backup
     s3_backup_enabled: bool = False
     s3_backup_bucket: str | None = None

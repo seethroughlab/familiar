@@ -33,6 +33,9 @@ class TrackFeaturesResponse(BaseModel):
     acousticness: float | None = None
     instrumentalness: float | None = None
     speechiness: float | None = None
+    loudness_lufs: float | None = None
+    track_peak: float | None = None
+    replaygain_track_gain: float | None = None
 
 
 class TrackResponse(BaseModel):
@@ -497,6 +500,9 @@ async def list_tracks(
                     acousticness=latest.features.get("acousticness"),
                     instrumentalness=latest.features.get("instrumentalness"),
                     speechiness=latest.features.get("speechiness"),
+                    loudness_lufs=latest.features.get("loudness_lufs"),
+                    track_peak=latest.features.get("track_peak"),
+                    replaygain_track_gain=latest.features.get("replaygain_track_gain"),
                 )
         # Add play history if available
         if track.id in play_history_map:
@@ -609,9 +615,102 @@ async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
                 acousticness=latest.features.get("acousticness"),
                 instrumentalness=latest.features.get("instrumentalness"),
                 speechiness=latest.features.get("speechiness"),
+                loudness_lufs=latest.features.get("loudness_lufs"),
+                track_peak=latest.features.get("track_peak"),
+                replaygain_track_gain=latest.features.get("replaygain_track_gain"),
             )
 
     return response
+
+
+class AlbumGainResponse(BaseModel):
+    """Album-level loudness/gain data."""
+
+    album_gain_db: float | None = None
+    album_peak: float | None = None
+    track_count: int = 0
+
+
+@router.get("/{track_id}/album-gain", response_model=AlbumGainResponse)
+async def get_album_gain(
+    db: DbSession,
+    track_id: UUID,
+) -> AlbumGainResponse:
+    """Compute average LUFS for all tracks sharing the same album_artist + album.
+
+    Returns album-level gain (dB relative to -14 LUFS target) and peak.
+    Used for album-mode volume normalization.
+    """
+    from sqlalchemy import Float, cast
+
+    # Get the track to find its album_artist and album
+    track = await db.get(Track, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    if not track.album:
+        return AlbumGainResponse()
+
+    # Find all tracks with same album_artist (or artist) and album
+    album_artist = track.album_artist or track.artist
+    if not album_artist:
+        return AlbumGainResponse()
+
+    # Get loudness_lufs for all tracks in this album from their latest analysis
+    analysis_subq = (
+        select(
+            TrackAnalysis.track_id,
+            func.max(TrackAnalysis.version).label("max_version"),
+        )
+        .where(TrackAnalysis.features.isnot(None))
+        .group_by(TrackAnalysis.track_id)
+        .subquery()
+    )
+
+    album_query = (
+        select(
+            cast(TrackAnalysis.features["loudness_lufs"].astext, Float).label("lufs"),
+            cast(TrackAnalysis.features["track_peak"].astext, Float).label("peak"),
+        )
+        .join(Track, Track.id == TrackAnalysis.track_id)
+        .join(
+            analysis_subq,
+            (TrackAnalysis.track_id == analysis_subq.c.track_id)
+            & (TrackAnalysis.version == analysis_subq.c.max_version),
+        )
+        .where(
+            Track.album == track.album,
+            (Track.album_artist == album_artist) | (Track.artist == album_artist),
+            TrackAnalysis.features["loudness_lufs"].astext != "null",
+        )
+    )
+
+    result = await db.execute(album_query)
+    rows = result.all()
+
+    if not rows:
+        return AlbumGainResponse()
+
+    lufs_values = [r.lufs for r in rows if r.lufs is not None]
+    peak_values = [r.peak for r in rows if r.peak is not None]
+
+    if not lufs_values:
+        return AlbumGainResponse(track_count=len(rows))
+
+    # Average LUFS across album tracks
+    import numpy as np
+
+    avg_lufs = float(np.mean(lufs_values))
+    max_peak = float(max(peak_values)) if peak_values else None
+
+    # Album gain = target - average loudness (target defaults to -14 LUFS)
+    album_gain_db = -14.0 - avg_lufs
+
+    return AlbumGainResponse(
+        album_gain_db=album_gain_db,
+        album_peak=max_peak,
+        track_count=len(lufs_values),
+    )
 
 
 @router.get("/{track_id}/similar")
@@ -883,66 +982,11 @@ async def stream_track(
         logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)
         raise HTTPException(status_code=404, detail="Audio file not found")
 
-    file_size = file_path.stat().st_size
     mime_type = get_audio_mime_type(file_path)
-    logger.debug("Streaming track_id=%s path=%s type=%s size=%d", track_id, file_path, mime_type, file_size)
+    logger.debug("Streaming track_id=%s path=%s type=%s", track_id, file_path, mime_type)
 
-    # Parse range header for seeking support
-    range_header = request.headers.get("range")
-
-    if range_header:
-        # Parse "bytes=start-end" format
-        range_spec = range_header.replace("bytes=", "")
-        range_parts = range_spec.split("-")
-        start = int(range_parts[0]) if range_parts[0] else 0
-        end = int(range_parts[1]) if range_parts[1] else file_size - 1
-
-        # Clamp to file size
-        start = max(0, min(start, file_size - 1))
-        end = max(start, min(end, file_size - 1))
-        content_length = end - start + 1
-
-        async def stream_range() -> AsyncIterator[bytes]:
-            with open(file_path, "rb") as f:
-                f.seek(start)
-                remaining = content_length
-                chunk_size = 64 * 1024  # 64KB chunks
-                while remaining > 0:
-                    read_size = min(chunk_size, remaining)
-                    data = f.read(read_size)
-                    if not data:
-                        break
-                    remaining -= len(data)
-                    yield data
-
-        return StreamingResponse(
-            stream_range(),  # type: ignore[no-untyped-call]
-            status_code=206,  # Partial Content
-            media_type=mime_type,
-            headers={
-                "Content-Range": f"bytes {start}-{end}/{file_size}",
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(content_length),
-                "Cache-Control": "private, max-age=3600",
-            },
-        )
-    else:
-        # Full file request
-        async def stream_full() -> AsyncIterator[bytes]:
-            with open(file_path, "rb") as f:
-                chunk_size = 64 * 1024  # 64KB chunks
-                while chunk := f.read(chunk_size):
-                    yield chunk
-
-        return StreamingResponse(
-            stream_full(),  # type: ignore[no-untyped-call]
-            media_type=mime_type,
-            headers={
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(file_size),
-                "Cache-Control": "private, max-age=3600",
-            },
-        )
+    from app.api.streaming import stream_file
+    return await stream_file(file_path, request, mime_type)
 
 
 @router.get("/{track_id}/artwork")
@@ -1499,6 +1543,9 @@ async def update_track_metadata(
                 "acousticness": latest.features.get("acousticness"),
                 "instrumentalness": latest.features.get("instrumentalness"),
                 "speechiness": latest.features.get("speechiness"),
+                "loudness_lufs": latest.features.get("loudness_lufs"),
+                "track_peak": latest.features.get("track_peak"),
+                "replaygain_track_gain": latest.features.get("replaygain_track_gain"),
             }
             # Apply user overrides
             if track.user_overrides:
@@ -1574,6 +1621,9 @@ async def get_track_metadata(
                 "acousticness": latest.features.get("acousticness"),
                 "instrumentalness": latest.features.get("instrumentalness"),
                 "speechiness": latest.features.get("speechiness"),
+                "loudness_lufs": latest.features.get("loudness_lufs"),
+                "track_peak": latest.features.get("track_peak"),
+                "replaygain_track_gain": latest.features.get("replaygain_track_gain"),
             }
             # Apply user overrides
             if track.user_overrides:

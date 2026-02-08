@@ -28,6 +28,9 @@ export interface TrackFeatures {
   acousticness: number | null;
   instrumentalness: number | null;
   speechiness: number | null;
+  loudness_lufs: number | null;
+  track_peak: number | null;
+  replaygain_track_gain: number | null;
 }
 
 // External/Missing tracks (tracks user wants but doesn't have locally)
