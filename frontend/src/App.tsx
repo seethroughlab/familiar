@@ -46,6 +46,7 @@ import { useMetadataEnrichment } from './hooks/useMetadataEnrichment';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { initSyncListeners } from './services/syncService';
 import { pluginLoader } from './services/pluginLoader';
+import { useAudioEngine } from './hooks/useAudioEngine';
 import { usePlayerStore } from './stores/playerStore';
 import { useSelectionStore } from './stores/selectionStore';
 import { useThemeStore } from './stores/themeStore';
@@ -179,6 +180,9 @@ function AppContent() {
   const [mobileSearchExpanded, setMobileSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  // Initialize Audio Engine (must be here to persist across navigation)
+  useAudioEngine();
+
   // Initialize Last.fm scrobbling
   useScrobbling();
 
@@ -297,337 +301,332 @@ function AppContent() {
 
   return (
     <GlobalDropZone onFilesDropped={setImportFiles}>
-    {/* Use h-dvh for iOS dynamic viewport, fallback to h-screen */}
-    <div className={`h-screen h-[100dvh] flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
-      {/* Main content area - pb-24 on mobile accounts for fixed player bar + safe area */}
-      <div className="flex-1 flex overflow-hidden pb-20 md:pb-20">
-        {/* Left panel - Chat (hidden on mobile, shown via overlay; desktop slides in when toggled) */}
-        {showChatPanel && (
-          <div className={`hidden md:flex w-96 border-r ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} flex-col`}>
-            <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
-              <h2 className="font-semibold">AI Assistant</h2>
-              <button
-                onClick={() => setShowChatPanel(false)}
-                className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
-                aria-label="Close chat panel"
-              >
-                <X className="w-4 h-4" />
-              </button>
+      {/* Use h-dvh for iOS dynamic viewport, fallback to h-screen */}
+      <div className={`h-screen h-[100dvh] flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
+        {/* Main content area - pb-24 on mobile accounts for fixed player bar + safe area */}
+        <div className="flex-1 flex overflow-hidden pb-20 md:pb-20">
+          {/* Left panel - Chat (hidden on mobile, shown via overlay; desktop slides in when toggled) */}
+          {showChatPanel && (
+            <div className={`hidden md:flex w-96 border-r ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} flex-col`}>
+              <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
+                <h2 className="font-semibold">AI Assistant</h2>
+                <button
+                  onClick={() => setShowChatPanel(false)}
+                  className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
+                  aria-label="Close chat panel"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <ErrorBoundary name="Chat">
+                  <ChatPanel
+                    pendingMessage={pendingChatMessage}
+                    onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                  />
+                </ErrorBoundary>
+              </div>
             </div>
-            <div className="flex-1 overflow-hidden">
-              <ErrorBoundary name="Chat">
-                <ChatPanel
-                  pendingMessage={pendingChatMessage}
-                  onPendingMessageConsumed={() => setPendingChatMessage(null)}
-                />
-              </ErrorBoundary>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Mobile chat overlay */}
-        {showMobileChat && (
-          <div className="md:hidden fixed inset-0 z-50 flex">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setShowMobileChat(false)}
-            />
-            {/* Chat panel - includes safe area padding */}
-            <div className={`relative w-full max-w-md ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} flex flex-col pt-safe pb-safe`}>
-              <button
+          {/* Mobile chat overlay */}
+          {showMobileChat && (
+            <div className="md:hidden fixed inset-0 z-50 flex">
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/50"
                 onClick={() => setShowMobileChat(false)}
-                className="absolute top-3 right-3 p-2 rounded-lg hover:bg-zinc-800/50 z-10 mt-safe touch-target"
-                aria-label="Close chat"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              <ErrorBoundary name="Chat">
-                <ChatPanel
-                  pendingMessage={pendingChatMessage}
-                  onPendingMessageConsumed={() => setPendingChatMessage(null)}
-                />
-              </ErrorBoundary>
+              />
+              {/* Chat panel - includes safe area padding */}
+              <div className={`relative w-full max-w-md ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} flex flex-col pt-safe pb-safe`}>
+                <button
+                  onClick={() => setShowMobileChat(false)}
+                  className="absolute top-3 right-3 p-2 rounded-lg hover:bg-zinc-800/50 z-10 mt-safe touch-target"
+                  aria-label="Close chat"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <ErrorBoundary name="Chat">
+                  <ChatPanel
+                    pendingMessage={pendingChatMessage}
+                    onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                  />
+                </ErrorBoundary>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Right panel - Library/Context */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header with tabs - includes safe area padding for notch */}
-          <header className={`relative z-30 backdrop-blur-md border-b pt-safe ${resolvedTheme === 'light' ? 'bg-white/80 border-zinc-200' : 'bg-zinc-900/80 border-zinc-800'}`}>
-            <div className="px-4 py-3 flex items-center gap-2 md:gap-4">
-              {/* Mobile search expanded state - takes over header */}
-              {mobileSearchExpanded ? (
-                <div className="flex-1 flex items-center gap-2 md:hidden">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                    <input
-                      ref={searchInputRef}
-                      type="search"
-                      inputMode="search"
-                      placeholder="Search tracks..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      onBlur={() => {
-                        // Delay to allow tap on X button
-                        setTimeout(() => setMobileSearchExpanded(false), 150);
-                      }}
-                      className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-full text-base placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                      autoFocus
-                    />
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSearch('');
-                      setMobileSearchExpanded(false);
-                    }}
-                    className="p-2 rounded-lg text-zinc-400 hover:text-white"
-                    aria-label="Cancel search"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {/* Chat toggle - mobile opens overlay, desktop toggles slide-in panel */}
-                  <button
-                    onClick={() => {
-                      if (window.innerWidth >= 768) {
-                        setShowChatPanel(!showChatPanel);
-                      } else {
-                        setShowMobileChat(true);
-                      }
-                    }}
-                    className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                      showChatPanel
-                        ? 'bg-zinc-800 text-white'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                    }`}
-                    aria-label={showChatPanel ? 'Close chat' : 'Open chat'}
-                    title="AI Assistant"
-                  >
-                    <MessageSquare className="w-4 h-4 inline-block sm:mr-1.5" />
-                    <span className="hidden sm:inline">Chat</span>
-                  </button>
-
-                  {/* Tabs */}
-                  <div className="flex gap-1 overflow-x-auto">
-                    <button
-                      onClick={() => setRightPanelTab('library')}
-                      className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                        rightPanelTab === 'library'
-                          ? 'bg-zinc-800 text-white'
-                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                      }`}
-                      aria-label="Library"
-                    >
-                      <Library className="w-4 h-4 inline-block sm:mr-1.5" />
-                      <span className="hidden sm:inline">Library</span>
-                    </button>
-                    <button
-                      onClick={() => setRightPanelTab('playlists')}
-                      className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                        rightPanelTab === 'playlists'
-                          ? 'bg-zinc-800 text-white'
-                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                      }`}
-                      aria-label="Playlists"
-                    >
-                      <Zap className="w-4 h-4 inline-block sm:mr-1.5" />
-                      <span className="hidden sm:inline">Playlists</span>
-                    </button>
+          {/* Right panel - Library/Context */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Header with tabs - includes safe area padding for notch */}
+            <header className={`relative z-30 backdrop-blur-md border-b pt-safe ${resolvedTheme === 'light' ? 'bg-white/80 border-zinc-200' : 'bg-zinc-900/80 border-zinc-800'}`}>
+              <div className="px-4 py-3 flex items-center gap-2 md:gap-4">
+                {/* Mobile search expanded state - takes over header */}
+                {mobileSearchExpanded ? (
+                  <div className="flex-1 flex items-center gap-2 md:hidden">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                      <input
+                        ref={searchInputRef}
+                        type="search"
+                        inputMode="search"
+                        placeholder="Search tracks..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onBlur={() => {
+                          // Delay to allow tap on X button
+                          setTimeout(() => setMobileSearchExpanded(false), 150);
+                        }}
+                        className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-full text-base placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        autoFocus
+                      />
+                    </div>
                     <button
                       onClick={() => {
-                        // Desktop: toggle docked panel; Mobile: use tab
+                        setSearch('');
+                        setMobileSearchExpanded(false);
+                      }}
+                      className="p-2 rounded-lg text-zinc-400 hover:text-white"
+                      aria-label="Cancel search"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Chat toggle - mobile opens overlay, desktop toggles slide-in panel */}
+                    <button
+                      onClick={() => {
                         if (window.innerWidth >= 768) {
-                          setShowQueuePanel(!showQueuePanel);
+                          setShowChatPanel(!showChatPanel);
                         } else {
-                          setRightPanelTab('queue');
+                          setShowMobileChat(true);
                         }
                       }}
-                      className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                        rightPanelTab === 'queue' || showQueuePanel
+                      className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${showChatPanel
+                        ? 'bg-zinc-800 text-white'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                        }`}
+                      aria-label={showChatPanel ? 'Close chat' : 'Open chat'}
+                      title="AI Assistant"
+                    >
+                      <MessageSquare className="w-4 h-4 inline-block sm:mr-1.5" />
+                      <span className="hidden sm:inline">Chat</span>
+                    </button>
+
+                    {/* Tabs */}
+                    <div className="flex gap-1 overflow-x-auto">
+                      <button
+                        onClick={() => setRightPanelTab('library')}
+                        className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${rightPanelTab === 'library'
                           ? 'bg-zinc-800 text-white'
                           : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                      }`}
-                      aria-label="Queue"
-                    >
-                      <ListMusic className="w-4 h-4 inline-block sm:mr-1.5" />
-                      <span className="hidden sm:inline">Queue</span>
-                    </button>
-                    <button
-                      onClick={() => setRightPanelTab('settings')}
-                      className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${
-                        rightPanelTab === 'settings'
+                          }`}
+                        aria-label="Library"
+                      >
+                        <Library className="w-4 h-4 inline-block sm:mr-1.5" />
+                        <span className="hidden sm:inline">Library</span>
+                      </button>
+                      <button
+                        onClick={() => setRightPanelTab('playlists')}
+                        className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${rightPanelTab === 'playlists'
                           ? 'bg-zinc-800 text-white'
                           : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
-                      }`}
-                      aria-label="Settings"
-                    >
-                      <Settings className="w-4 h-4 inline-block sm:mr-1.5" />
-                      <span className="hidden sm:inline">Settings</span>
-                    </button>
-                  </div>
+                          }`}
+                        aria-label="Playlists"
+                      >
+                        <Zap className="w-4 h-4 inline-block sm:mr-1.5" />
+                        <span className="hidden sm:inline">Playlists</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          // Desktop: toggle docked panel; Mobile: use tab
+                          if (window.innerWidth >= 768) {
+                            setShowQueuePanel(!showQueuePanel);
+                          } else {
+                            setRightPanelTab('queue');
+                          }
+                        }}
+                        className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${rightPanelTab === 'queue' || showQueuePanel
+                          ? 'bg-zinc-800 text-white'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                          }`}
+                        aria-label="Queue"
+                      >
+                        <ListMusic className="w-4 h-4 inline-block sm:mr-1.5" />
+                        <span className="hidden sm:inline">Queue</span>
+                      </button>
+                      <button
+                        onClick={() => setRightPanelTab('settings')}
+                        className={`px-2 sm:px-3 py-1.5 text-sm rounded-md transition-colors whitespace-nowrap ${rightPanelTab === 'settings'
+                          ? 'bg-zinc-800 text-white'
+                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50'
+                          }`}
+                        aria-label="Settings"
+                      >
+                        <Settings className="w-4 h-4 inline-block sm:mr-1.5" />
+                        <span className="hidden sm:inline">Settings</span>
+                      </button>
+                    </div>
 
-                  {/* Mobile search icon (library view only) */}
-                  {rightPanelTab === 'library' && (
-                    <button
-                      onClick={() => {
-                        setMobileSearchExpanded(true);
-                        // Focus will happen via autoFocus
-                      }}
-                      className="md:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/50"
-                      aria-label="Search"
-                    >
-                      <Search className="w-5 h-5" />
-                    </button>
-                  )}
+                    {/* Mobile search icon (library view only) */}
+                    {rightPanelTab === 'library' && (
+                      <button
+                        onClick={() => {
+                          setMobileSearchExpanded(true);
+                          // Focus will happen via autoFocus
+                        }}
+                        className="md:hidden p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/50"
+                        aria-label="Search"
+                      >
+                        <Search className="w-5 h-5" />
+                      </button>
+                    )}
 
-                  {/* Desktop search and column selector (only in library view) */}
-                  {rightPanelTab === 'library' && (
-                    <>
-                      <div className="hidden md:block flex-1 max-w-md">
-                        <div className="relative">
-                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                          <input
-                            type="search"
-                            placeholder="Search tracks..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-full text-base placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                          />
+                    {/* Desktop search and column selector (only in library view) */}
+                    {rightPanelTab === 'library' && (
+                      <>
+                        <div className="hidden md:block flex-1 max-w-md">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                            <input
+                              type="search"
+                              placeholder="Search tracks..."
+                              value={search}
+                              onChange={(e) => setSearch(e.target.value)}
+                              className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-full text-base placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                            />
+                          </div>
                         </div>
-                      </div>
-                      <div className="hidden md:block">
-                        <ColumnSelector />
-                      </div>
-                    </>
-                  )}
+                        <div className="hidden md:block">
+                          <ColumnSelector />
+                        </div>
+                      </>
+                    )}
 
-                  {/* Spacer to push indicators right */}
-                  <div className="flex-1" />
+                    {/* Spacer to push indicators right */}
+                    <div className="flex-1" />
 
-                  {/* Download progress indicator - shows when downloads are in progress */}
-                  <DownloadIndicator />
+                    {/* Download progress indicator - shows when downloads are in progress */}
+                    <DownloadIndicator />
 
-                  {/* Proposed changes indicator - shows when changes need review */}
-                  <ProposedChangesIndicator />
+                    {/* Proposed changes indicator - shows when changes need review */}
+                    <ProposedChangesIndicator />
 
-                  {/* Background jobs indicator - shows when jobs are running */}
-                  <BackgroundJobsIndicator />
+                    {/* Background jobs indicator - shows when jobs are running */}
+                    <BackgroundJobsIndicator />
 
-                  {/* Health indicator - only shows when issues detected */}
-                  <HealthIndicator />
-                </>
+                    {/* Health indicator - only shows when issues detected */}
+                    <HealthIndicator />
+                  </>
+                )}
+              </div>
+            </header>
+
+            {/* Content */}
+            <main className={`flex-1 overflow-y-auto ${resolvedTheme === 'light' ? 'bg-gradient-to-b from-zinc-50 to-white' : 'bg-gradient-to-b from-zinc-900 to-black'}`}>
+              {rightPanelTab === 'library' && (
+                <div className="md:h-full md:min-h-0">
+                  <LibraryView initialSearch={search || undefined} />
+                </div>
               )}
-            </div>
-          </header>
-
-          {/* Content */}
-          <main className={`flex-1 overflow-y-auto ${resolvedTheme === 'light' ? 'bg-gradient-to-b from-zinc-50 to-white' : 'bg-gradient-to-b from-zinc-900 to-black'}`}>
-            {rightPanelTab === 'library' && (
-              <div className="md:h-full md:min-h-0">
-                <LibraryView initialSearch={search || undefined} />
-              </div>
-            )}
-            {rightPanelTab === 'playlists' && (
-              <div className="px-4 py-6">
+              {rightPanelTab === 'playlists' && (
+                <div className="px-4 py-6">
+                  <Suspense fallback={<LazyLoadSpinner />}>
+                    <PlaylistsView
+                      selectedPlaylistId={selectedPlaylistId}
+                      onPlaylistViewed={() => setSelectedPlaylistId(null)}
+                    />
+                  </Suspense>
+                </div>
+              )}
+              {/* Queue tab content - only show on mobile; desktop uses docked panel */}
+              {rightPanelTab === 'queue' && (
+                <div className="h-full md:hidden">
+                  <Suspense fallback={<LazyLoadSpinner />}>
+                    <QueueView />
+                  </Suspense>
+                </div>
+              )}
+              {rightPanelTab === 'settings' && (
                 <Suspense fallback={<LazyLoadSpinner />}>
-                  <PlaylistsView
-                    selectedPlaylistId={selectedPlaylistId}
-                    onPlaylistViewed={() => setSelectedPlaylistId(null)}
-                  />
+                  <SettingsPanel />
                 </Suspense>
+              )}
+            </main>
+          </div>
+
+          {/* Right panel - Queue (desktop only, docked) */}
+          {showQueuePanel && (
+            <div className={`hidden md:flex w-80 border-l ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} flex-col`}>
+              <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
+                <h2 className="font-semibold">Queue</h2>
+                <button
+                  onClick={() => setShowQueuePanel(false)}
+                  className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
+                  aria-label="Close queue panel"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            )}
-            {/* Queue tab content - only show on mobile; desktop uses docked panel */}
-            {rightPanelTab === 'queue' && (
-              <div className="h-full md:hidden">
+              <div className="flex-1 overflow-hidden">
                 <Suspense fallback={<LazyLoadSpinner />}>
                   <QueueView />
                 </Suspense>
               </div>
-            )}
-            {rightPanelTab === 'settings' && (
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <SettingsPanel />
-              </Suspense>
-            )}
-          </main>
+            </div>
+          )}
         </div>
 
-        {/* Right panel - Queue (desktop only, docked) */}
-        {showQueuePanel && (
-          <div className={`hidden md:flex w-80 border-l ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'} flex-col`}>
-            <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
-              <h2 className="font-semibold">Queue</h2>
-              <button
-                onClick={() => setShowQueuePanel(false)}
-                className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
-                aria-label="Close queue panel"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <QueueView />
-              </Suspense>
-            </div>
-          </div>
+        {/* Player bar - fixed at bottom */}
+        <ErrorBoundary name="Player">
+          <PlayerBar
+            onExpandClick={() => setShowFullPlayer(true)}
+          // Listening sessions disabled for v0.1.0
+          />
+        </ErrorBoundary>
+
+        {/* Full player overlay - mounted once, slides up/down */}
+        {fullPlayerMounted && (
+          <ErrorBoundary name="Full Player" fullscreen>
+            <Suspense fallback={
+              <div role="status" aria-label="Loading" className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+              </div>
+            }>
+              <FullPlayer isOpen={showFullPlayer} onClose={() => setShowFullPlayer(false)} />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
+        {/* PWA install prompt */}
+        <InstallPrompt />
+
+        {/* Offline indicator */}
+        <OfflineIndicator />
+
+        {/* Listening sessions disabled for v0.1.0 - re-enable when signaling server is ready */}
+
+        {/* Keyboard shortcuts help */}
+        {showShortcutsHelp && (
+          <ShortcutsHelp onClose={() => setShowShortcutsHelp(false)} />
+        )}
+
+        {/* Track edit modal */}
+        {editingTrackId && <TrackEditModal />}
+
+        {/* Import modal */}
+        {importFiles && (
+          <ImportModal
+            files={importFiles}
+            onClose={() => {
+              setImportFiles(null);
+              // Refetch tracks after modal closes
+              queryClient.refetchQueries({ queryKey: ['tracks'] });
+            }}
+          />
         )}
       </div>
-
-      {/* Player bar - fixed at bottom */}
-      <ErrorBoundary name="Player">
-        <PlayerBar
-          onExpandClick={() => setShowFullPlayer(true)}
-          // Listening sessions disabled for v0.1.0
-        />
-      </ErrorBoundary>
-
-      {/* Full player overlay - mounted once, slides up/down */}
-      {fullPlayerMounted && (
-        <ErrorBoundary name="Full Player" fullscreen>
-          <Suspense fallback={
-            <div role="status" aria-label="Loading" className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
-            </div>
-          }>
-            <FullPlayer isOpen={showFullPlayer} onClose={() => setShowFullPlayer(false)} />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-
-      {/* PWA install prompt */}
-      <InstallPrompt />
-
-      {/* Offline indicator */}
-      <OfflineIndicator />
-
-      {/* Listening sessions disabled for v0.1.0 - re-enable when signaling server is ready */}
-
-      {/* Keyboard shortcuts help */}
-      {showShortcutsHelp && (
-        <ShortcutsHelp onClose={() => setShowShortcutsHelp(false)} />
-      )}
-
-      {/* Track edit modal */}
-      {editingTrackId && <TrackEditModal />}
-
-      {/* Import modal */}
-      {importFiles && (
-        <ImportModal
-          files={importFiles}
-          onClose={() => {
-            setImportFiles(null);
-            // Refetch tracks after modal closes
-            queryClient.refetchQueries({ queryKey: ['tracks'] });
-          }}
-        />
-      )}
-    </div>
     </GlobalDropZone>
   );
 }

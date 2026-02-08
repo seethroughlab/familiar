@@ -68,7 +68,7 @@ export function useWebRTCStreaming({
       return mediaStreamRef.current;
     }
 
-    const audioContext = audioEngine.getContext();
+    const audioContext = audioEngine.audioGraph.audioContext;
     if (!audioContext) {
       log.error('No audio context available');
       return null;
@@ -77,8 +77,8 @@ export function useWebRTCStreaming({
     // Create a media stream destination from the audio context
     const destination = audioContext.createMediaStreamDestination();
 
-    // Get the audio engine's output node and connect it to the destination
-    const outputNode = audioEngine.getOutputNode();
+    // Get the audio engine's output node (master gain) and connect it to the destination
+    const outputNode = audioEngine.audioGraph.masterGain;
     if (outputNode) {
       outputNode.connect(destination);
     } else {

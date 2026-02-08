@@ -382,7 +382,16 @@ class TrackAnalysis(Base):
     """Versioned audio analysis with JSONB features and vector embedding."""
 
     __tablename__ = "track_analysis"
-    __table_args__ = (UniqueConstraint("track_id", "version", name="uq_track_analysis_version"),)
+    __table_args__ = (
+        UniqueConstraint("track_id", "version", name="uq_track_analysis_version"),
+        Index(
+            "ix_track_analysis_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     track_id: Mapped[UUID] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), index=True)

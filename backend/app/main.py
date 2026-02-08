@@ -6,6 +6,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+import multiprocessing
+
+# Set start method to spawn for better compatibility with PyTorch (MPS) and cleaner memory usage on Linux
+try:
+    multiprocessing.set_start_method("spawn", force=True)
+except RuntimeError:
+    pass  # Context already set
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError

@@ -429,45 +429,76 @@ describe('playerPersistence', () => {
   });
 
   describe('debouncedSavePlayerState', () => {
-    it('should debounce saves by 500ms', async () => {
+    it('should throttle saves with leading + trailing edges', async () => {
       const state = createMockState();
 
+      // First call saves immediately (leading edge, since >500ms since last save)
       debouncedSavePlayerState(state);
-      debouncedSavePlayerState(state);
-      debouncedSavePlayerState(state);
+      await vi.runAllTimersAsync();
+      expect(mockPlayerState.put).toHaveBeenCalledTimes(1);
 
-      // Nothing should have been saved yet
-      expect(mockPlayerState.put).not.toHaveBeenCalled();
+      // Rapid subsequent calls within 500ms schedule a trailing save
+      debouncedSavePlayerState(state);
+      debouncedSavePlayerState(state);
+      expect(mockPlayerState.put).toHaveBeenCalledTimes(1);
 
-      // Advance past debounce delay
+      // Advance past throttle window to trigger trailing save
       vi.advanceTimersByTime(600);
-
-      // Allow the async savePlayerState to run
       await vi.runAllTimersAsync();
 
-      // Should have saved only once
-      expect(mockPlayerState.put).toHaveBeenCalledTimes(1);
+      expect(mockPlayerState.put).toHaveBeenCalledTimes(2);
     });
 
-    it('should use latest state when debouncing', async () => {
+    it('should use latest state for trailing save', async () => {
       const state1 = createMockState();
       state1.volume = 0.3;
 
       const state2 = createMockState();
       state2.volume = 0.9;
 
+      // First call saves immediately with state1
       debouncedSavePlayerState(state1);
+      await vi.runAllTimersAsync();
+
+      // Second call schedules trailing save with state2
       debouncedSavePlayerState(state2);
 
       vi.advanceTimersByTime(600);
       await vi.runAllTimersAsync();
 
-      // Should have saved with the last state's volume
-      expect(mockPlayerState.put).toHaveBeenCalledWith(
+      // Last save should have state2's volume
+      const lastCall = mockPlayerState.put.mock.calls[mockPlayerState.put.mock.calls.length - 1];
+      expect(lastCall[0]).toEqual(
         expect.objectContaining({
           volume: 0.9,
         })
       );
+    });
+
+    it('should save during continuous rapid calls (e.g. playback position updates)', async () => {
+      const state = createMockState();
+
+      // Simulate rapid calls like setCurrentTime during playback (~16ms apart)
+      // With the old debounce, saves would NEVER fire. With throttle, they do.
+      for (let i = 0; i < 10; i++) {
+        state.currentTime = i;
+        debouncedSavePlayerState(state);
+        vi.advanceTimersByTime(16);
+      }
+
+      await vi.runAllTimersAsync();
+
+      // Should have saved at least once (leading edge)
+      expect(mockPlayerState.put.mock.calls.length).toBeGreaterThanOrEqual(1);
+
+      // Advance to flush any trailing save
+      vi.advanceTimersByTime(600);
+      await vi.runAllTimersAsync();
+
+      // Total saves should be reasonable (not 0, not 10)
+      const totalSaves = mockPlayerState.put.mock.calls.length;
+      expect(totalSaves).toBeGreaterThanOrEqual(1);
+      expect(totalSaves).toBeLessThanOrEqual(3);
     });
   });
 });

@@ -1,13 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bug, RefreshCw, Trash2, Download, AlertCircle } from 'lucide-react';
 import { getApiUrl } from '../../api/base';
-import {
-  getAudioContext,
-  getAudioAnalyser,
-  areAudioEffectsAvailable,
-  getCurrentMode,
-  isVisualizerAvailable,
-} from '../../hooks/useAudioEngine';
+import { useAudioEngineContext } from '../../contexts/AudioEngineContext';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import * as offlineService from '../../services/offlineService';
@@ -68,6 +62,7 @@ export function DebugSettings() {
   const [apiErrors, setApiErrors] = useState<TrackedError[]>([]);
   const { isPlaying, currentTrack } = usePlayerStore();
   const { jobs, activeJobId } = useDownloadStore();
+  const { audioGraph, platform } = useAudioEngineContext();
 
   // Subscribe to API errors
   useEffect(() => {
@@ -97,11 +92,11 @@ export function DebugSettings() {
     return () => clearInterval(interval);
   }, [expanded]);
 
-  const audioContext = getAudioContext();
-  const analyser = getAudioAnalyser();
-  const effectsAvailable = areAudioEffectsAvailable();
-  const visualizerAvailable = isVisualizerAvailable();
-  const currentMode = getCurrentMode();
+  const audioContext = audioGraph.current.audioContext;
+  const analyser = audioGraph.current.analyser;
+  const effectsAvailable = platform.useWebAudio;
+  const visualizerAvailable = platform.useWebAudio;
+  const currentMode = platform.useDirectPlayback ? 'hybrid' : 'webaudio';
 
   // Platform detection
   const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
@@ -238,13 +233,12 @@ export function DebugSettings() {
                   <div key={job.id} className="bg-zinc-800 rounded p-2 text-xs font-mono">
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-zinc-300 font-medium truncate">{job.name}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${
-                        job.status === 'downloading' ? 'bg-blue-500/20 text-blue-400' :
+                      <span className={`px-1.5 py-0.5 rounded text-xs ${job.status === 'downloading' ? 'bg-blue-500/20 text-blue-400' :
                         job.status === 'queued' ? 'bg-yellow-500/20 text-yellow-400' :
-                        job.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                        job.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                        'bg-zinc-500/20 text-zinc-400'
-                      }`}>
+                          job.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                            job.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                              'bg-zinc-500/20 text-zinc-400'
+                        }`}>
                         {job.status}
                       </span>
                     </div>
@@ -290,27 +284,25 @@ export function DebugSettings() {
                 apiErrors.slice(0, 20).map((err) => (
                   <div
                     key={err.id}
-                    className={`p-2 rounded ${
-                      err.severity === 'error'
-                        ? 'bg-red-900/30 border border-red-800/50'
-                        : err.severity === 'warning'
+                    className={`p-2 rounded ${err.severity === 'error'
+                      ? 'bg-red-900/30 border border-red-800/50'
+                      : err.severity === 'warning'
                         ? 'bg-yellow-900/30 border border-yellow-800/50'
                         : 'bg-zinc-800/50 border border-zinc-700/50'
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-start mb-1">
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] ${
-                          err.category === 'network'
-                            ? 'bg-orange-500/20 text-orange-400'
-                            : err.category === 'auth'
+                        className={`px-1.5 py-0.5 rounded text-[10px] ${err.category === 'network'
+                          ? 'bg-orange-500/20 text-orange-400'
+                          : err.category === 'auth'
                             ? 'bg-red-500/20 text-red-400'
                             : err.category === 'server'
-                            ? 'bg-red-500/20 text-red-400'
-                            : err.category === 'external'
-                            ? 'bg-yellow-500/20 text-yellow-400'
-                            : 'bg-zinc-500/20 text-zinc-400'
-                        }`}
+                              ? 'bg-red-500/20 text-red-400'
+                              : err.category === 'external'
+                                ? 'bg-yellow-500/20 text-yellow-400'
+                                : 'bg-zinc-500/20 text-zinc-400'
+                          }`}
                       >
                         {err.category}
                         {err.statusCode && ` (${err.statusCode})`}
@@ -412,7 +404,7 @@ export function DebugSettings() {
               </button>
               <button
                 onClick={() => {
-                  const ctx = getAudioContext();
+                  const ctx = audioGraph.current.audioContext;
                   if (ctx) {
                     console.log('[Test] AudioContext state:', ctx.state);
                     if (ctx.state === 'suspended') {

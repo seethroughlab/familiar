@@ -119,21 +119,28 @@ def validate_library_path(library_path: Path) -> LibraryValidation:
 logger = logging.getLogger(__name__)
 
 # Thread pool for blocking file I/O operations
-_file_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="scanner-io")
+# Configurable via SCANNER_THREADS env var (default 4 for safety on NAS)
+_scanner_threads = int(os.environ.get("SCANNER_THREADS", "4"))
+_file_executor = ThreadPoolExecutor(max_workers=_scanner_threads, thread_name_prefix="scanner-io")
+
 
 # Lowercase extensions for fast lookup
 _AUDIO_EXT_LOWER = {ext.lower() for ext in AUDIO_EXTENSIONS}
 
 
-def compute_file_hash(path: Path, chunk_size: int = 8192) -> str:
+
+def compute_file_hash(path: Path | str, chunk_size: int = 8192, file_size: int | None = None) -> str:
     """Compute SHA-256 hash of file for change detection.
 
     Uses first and last chunks plus file size for speed on large files.
     """
-    file_size = path.stat().st_size
+    path_obj = Path(path)
+    if file_size is None:
+        file_size = path_obj.stat().st_size
+        
     hasher = hashlib.sha256()
 
-    with open(path, "rb") as f:
+    with open(path_obj, "rb") as f:
         # Hash first chunk
         hasher.update(f.read(chunk_size))
 
@@ -148,50 +155,96 @@ def compute_file_hash(path: Path, chunk_size: int = 8192) -> str:
     return hasher.hexdigest()
 
 
-def _discover_files_sync(library_path: Path, progress_callback=None) -> list[Path]:
-    """Synchronous file discovery using single-pass os.walk (runs in thread pool).
 
-    Much faster than multiple rglob calls, especially on network volumes.
-    Logs progress every 500 directories scanned.
+def _discover_files_sync(library_path: Path, progress_callback=None) -> list[tuple[Path, os.stat_result]]:
+    """Synchronous file discovery using os.scandir (runs in thread pool).
 
-    Args:
-        library_path: Root directory to scan
-        progress_callback: Optional callable(dirs_scanned, files_found) for progress updates
+    Returns list of (Path, stat_result) tuples.
+    Preserves stat info from directory listing to avoid extra syscalls.
     """
-    files: list[Path] = []
+    files: list[tuple[Path, os.stat_result]] = []
     dirs_scanned = 0
 
-    logger.info(f"Starting single-pass directory walk of {library_path}")
+    logger.info(f"Starting optimized directory scan of {library_path}")
 
-    for root, dirs, filenames in os.walk(library_path):
+    # Use a stack for iterative traversal to avoid recursion limits
+    stack = [str(library_path)]
+
+    while stack:
+        current_dir = stack.pop()
         dirs_scanned += 1
-
-        # Log and report progress every 25 directories (more frequent for slow network mounts)
-        if dirs_scanned % 25 == 0:
-            logger.info(f"Discovery progress: scanned {dirs_scanned} directories, found {len(files)} audio files so far...")
-            if progress_callback:
+        
+        if dirs_scanned % 50 == 0:
+             if progress_callback:
                 progress_callback(dirs_scanned, len(files))
 
-        # Check each file in this directory
-        for filename in filenames:
-            # Fast extension check (case-insensitive)
-            ext = os.path.splitext(filename)[1].lower()
-            if ext in _AUDIO_EXT_LOWER:
-                files.append(Path(root) / filename)
+        try:
+            with os.scandir(current_dir) as it:
+                for entry in it:
+                    if entry.is_symlink(): # Skip symlinks to avoid loops
+                         continue
+                         
+                    if entry.is_dir():
+                        stack.append(entry.path)
+                    elif entry.is_file():
+                        ext = os.path.splitext(entry.name)[1].lower()
+                        if ext in _AUDIO_EXT_LOWER:
+                            # entry.stat() is often cached from the directory entry
+                            files.append((Path(entry.path), entry.stat()))
+                            
+        except PermissionError:
+            logger.warning(f"Permission denied scanning directory: {current_dir}")
+        except OSError as e:
+            logger.warning(f"Error scanning directory {current_dir}: {e}")
 
     logger.info(f"Discovery complete: scanned {dirs_scanned} directories, found {len(files)} audio files")
-    # Final progress update
     if progress_callback:
         progress_callback(dirs_scanned, len(files))
-    return sorted(files)
+        
+    # Sort by path for consistent ordering
+    files.sort(key=lambda x: str(x[0]))
+    return files
 
 
-def _get_file_info_sync(file_path: Path) -> tuple[str, datetime, int]:
-    """Get file hash, mtime, and size (runs in thread pool)."""
-    stat = file_path.stat()
-    file_hash = compute_file_hash(file_path)
-    file_mtime = datetime.fromtimestamp(stat.st_mtime)
-    return file_hash, file_mtime, stat.st_size
+def _get_file_info_sync(
+    file_path: Path, 
+    stat_info: os.stat_result, 
+    expected_mtime: float | None = None, 
+    expected_size: int | None = None
+) -> tuple[str | None, datetime, int]:
+    """Get file hash, mtime, and size (runs in thread pool).
+    
+    Args:
+        file_path: Path to the file
+        stat_info: Pre-fetched stat info
+        expected_mtime: Timestamp to match for skipping hash
+        expected_size: File size to match for skipping hash
+        
+    Returns:
+        (file_hash, file_mtime, file_size). 
+        file_hash is None if it matches expected_mtime and expected_size.
+    """
+    # Use pre-fetched stat info
+    file_size = stat_info.st_size
+    mtime_timestamp = stat_info.st_mtime
+    file_mtime = datetime.fromtimestamp(mtime_timestamp)
+    
+    # Check if we can skip hashing
+    # We use a small epsilon for float comparison of mtimes just in case of precision issues,
+    # though usually they are exact from the fs.
+    force_rehash = os.environ.get("FORCE_REHASH", "0") == "1"
+    
+    if (not force_rehash and 
+        expected_mtime is not None and 
+        expected_size is not None and 
+        file_size == expected_size and 
+        abs(mtime_timestamp - expected_mtime) < 0.001):
+        
+        return None, file_mtime, file_size
+        
+    # Compute hash if new or changed
+    file_hash = compute_file_hash(file_path, file_size=file_size)
+    return file_hash, file_mtime, file_size
 
 
 def _extract_metadata_sync(file_path: Path) -> dict[str, Any]:
@@ -268,10 +321,12 @@ class LibraryScanner:
             if self.scan_state:
                 self.scan_state.set_discovery(dirs_scanned, files_found)
 
-        found_files = await loop.run_in_executor(
+        found_files_with_stats = await loop.run_in_executor(
             _file_executor, _discover_files_sync, library_path, discovery_progress
         )
-        found_paths = {str(p) for p in found_files}
+        found_paths = {str(p) for p, _ in found_files_with_stats}
+        # Create list of just paths for compatibility with existing logic
+        found_files = [p for p, _ in found_files_with_stats]
         logger.info(f"Discovered {len(found_files)} audio files")
 
         results = {
@@ -294,7 +349,7 @@ class LibraryScanner:
 
         # Process found files
         processed = 0
-        for file_path in found_files:
+        for file_path, file_stat in found_files_with_stats:
             path_str = str(file_path)
             processed += 1
 
@@ -302,7 +357,7 @@ class LibraryScanner:
             if self.scan_state and processed % 10 == 0:
                 self.scan_state.set_processing(
                     processed=processed,
-                    total=len(found_files),
+                    total=len(found_files_with_stats),
                     new=results["new"],
                     updated=results["updated"],
                     unchanged=results["unchanged"],
@@ -312,12 +367,31 @@ class LibraryScanner:
 
             # Log progress every 100 files
             if processed % 100 == 0:
-                logger.info(f"Progress: {processed}/{len(found_files)} files ({results['new']} new, {results['updated']} updated, {results['unchanged']} unchanged)")
+                logger.info(f"Progress: {processed}/{len(found_files_with_stats)} files ({results['new']} new, {results['updated']} updated, {results['unchanged']} unchanged)")
 
             # Get file info in thread pool
+            # Prepare expected mtime/size if track exists to skip hashing
+            expected_mtime = None
+            expected_size = None
+            if path_str in existing_paths:
+                 existing_track = existing_paths[path_str]
+                 if existing_track.file_modified_at and existing_track.file_size is not None:
+                     expected_mtime = existing_track.file_modified_at.timestamp()
+                     expected_size = existing_track.file_size
+
             file_hash, file_mtime, file_size = await loop.run_in_executor(
-                _file_executor, _get_file_info_sync, file_path
+                _file_executor, 
+                _get_file_info_sync, 
+                file_path, 
+                file_stat,
+                expected_mtime,
+                expected_size
             )
+            
+            # If hash is None, it matched the expectation (optimization)
+            if file_hash is None:
+                # We know it exists because we passed expected_mtime
+                file_hash = existing_paths[path_str].file_hash
 
             if path_str not in existing_paths:
                 # Path not found - check if same file exists at different path (by hash)
@@ -374,7 +448,7 @@ class LibraryScanner:
                     results["unchanged"] += 1
 
             # Commit periodically to make tracks visible and free memory
-            if processed % 50 == 0:
+            if processed % 200 == 0:
                 await self.db.commit()
                 # Note: Analysis is now queued after scan completes via queue_unanalyzed_tracks
                 pending_analysis_ids = []

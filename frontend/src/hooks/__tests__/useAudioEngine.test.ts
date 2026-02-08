@@ -5,15 +5,8 @@
  * direct playback (mobile) and Web Audio (desktop). These tests
  * mock the necessary browser APIs.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import {
-  areAudioEffectsAvailable,
-  isVisualizerAvailable,
-  getCurrentMode,
-  getAudioAnalyser,
-  getAudioContext,
-  getAudioEffectsChain,
-} from '../useAudioEngine'
+import { describe, it, expect, vi } from 'vitest'
+// Imports removed
 
 // Mock the player store
 const mockPlayerStore = {
@@ -77,64 +70,10 @@ vi.mock('../../services/audioEffects', () => ({
     input: {},
     output: { connect: vi.fn() },
   })),
-  EffectsChain: class {},
+  EffectsChain: class { },
 }))
 
-describe('useAudioEngine exports', () => {
-  beforeEach(() => {
-    // Reset navigator.userAgent to desktop by default
-    Object.defineProperty(navigator, 'userAgent', {
-      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      configurable: true,
-    })
-  })
-
-  describe('areAudioEffectsAvailable', () => {
-    it('should return true on desktop', () => {
-      // Note: The module was loaded before we could change userAgent,
-      // so this test verifies the exported function exists and returns boolean
-      const result = areAudioEffectsAvailable()
-      expect(typeof result).toBe('boolean')
-    })
-  })
-
-  describe('isVisualizerAvailable', () => {
-    it('should return true on desktop', () => {
-      const result = isVisualizerAvailable()
-      expect(typeof result).toBe('boolean')
-    })
-  })
-
-  describe('getCurrentMode', () => {
-    it('should return either "direct" or "webaudio"', () => {
-      const mode = getCurrentMode()
-      expect(['direct', 'webaudio']).toContain(mode)
-    })
-  })
-
-  describe('getAudioAnalyser', () => {
-    it('should return AnalyserNode or null', () => {
-      const analyser = getAudioAnalyser()
-      // Before initialization, should be null
-      expect(analyser === null || analyser instanceof Object).toBe(true)
-    })
-  })
-
-  describe('getAudioContext', () => {
-    it('should return AudioContext or null', () => {
-      const ctx = getAudioContext()
-      expect(ctx === null || ctx instanceof Object).toBe(true)
-    })
-  })
-
-  describe('getAudioEffectsChain', () => {
-    it('should return effects chain or null', () => {
-      const chain = getAudioEffectsChain()
-      // Can be null if not initialized or on mobile
-      expect(chain === null || typeof chain === 'object').toBe(true)
-    })
-  })
-})
+// Deprecated export tests removed
 
 describe('Audio element creation', () => {
   it('should create audio elements with correct attributes', () => {

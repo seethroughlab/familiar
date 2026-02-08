@@ -5,10 +5,13 @@ native Subsonic clients (Symfonium, play:Sub, Amperfy, etc.) to browse,
 search, and stream from Familiar.
 
 Phase 1: browse, search, stream, artwork.
+Phase 2: playlists, favorites.
+Phase 3: discovery (genre browse), scrobbling.
 """
 
 import hashlib
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -16,13 +19,22 @@ from uuid import UUID
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, get_db
 from app.api.streaming import stream_file
-from app.db.models import Profile, SubsonicCredential, Track, TrackStatus
+from app.db.models import (
+    Playlist,
+    PlaylistTrack,
+    Profile,
+    ProfileFavorite,
+    ProfilePlayHistory,
+    SubsonicCredential,
+    Track,
+    TrackStatus,
+)
 from app.services.artwork import compute_album_hash, get_artwork_path
 
 router = APIRouter(tags=["subsonic"])
@@ -741,14 +753,475 @@ async def get_cover_art(
 @router.get("/getStarred2")
 @router.get("/getStarred.view")
 @router.get("/getStarred")
-async def get_starred(request: Request, profile: SubsonicProfile):
-    return subsonic_response({"starred2": {}}, _get_format(request))
+async def get_starred(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Return all starred/favorited items."""
+    fmt = _get_format(request)
+
+    result = await db.execute(
+        select(Track, ProfileFavorite.favorited_at)
+        .join(ProfileFavorite, ProfileFavorite.track_id == Track.id)
+        .where(
+            ProfileFavorite.profile_id == profile.id,
+            Track.status == TrackStatus.ACTIVE,
+        )
+        .order_by(ProfileFavorite.favorited_at.desc())
+    )
+
+    songs = []
+    for track, favorited_at in result.all():
+        child = track_to_child(track)
+        if favorited_at:
+            child["starred"] = favorited_at.isoformat()
+        songs.append(child)
+
+    return subsonic_response({
+        "starred2": {"artist": [], "album": [], "song": songs}
+    }, fmt)
 
 
 @router.get("/getPlaylists.view")
 @router.get("/getPlaylists")
-async def get_playlists(request: Request, profile: SubsonicProfile):
-    return subsonic_response({"playlists": {}}, _get_format(request))
+async def get_playlists(request: Request, db: DbSession, profile: SubsonicProfile):
+    """List all playlists for this profile (excludes wishlists)."""
+    from sqlalchemy import func as sa_func
+
+    fmt = _get_format(request)
+
+    result = await db.execute(
+        select(
+            Playlist,
+            sa_func.count(PlaylistTrack.id).label("song_count"),
+            sa_func.coalesce(
+                sa_func.sum(Track.duration_seconds), 0
+            ).label("duration"),
+        )
+        .outerjoin(PlaylistTrack, PlaylistTrack.playlist_id == Playlist.id)
+        .outerjoin(Track, PlaylistTrack.track_id == Track.id)
+        .where(Playlist.profile_id == profile.id, Playlist.is_wishlist.is_(False))
+        .group_by(Playlist.id)
+        .order_by(Playlist.name)
+    )
+
+    playlists = []
+    for row in result.all():
+        pl = row[0]
+        playlists.append({
+            "id": str(pl.id),
+            "name": pl.name,
+            "songCount": str(row.song_count),
+            "duration": str(int(row.duration)),
+            "owner": profile.name,
+            "public": "false",
+            **({"comment": pl.description} if pl.description else {}),
+            **({"created": pl.created_at.isoformat()} if pl.created_at else {}),
+            **({"changed": pl.updated_at.isoformat()} if pl.updated_at else {}),
+        })
+
+    return subsonic_response({"playlists": {"playlist": playlists}}, fmt)
+
+
+@router.get("/getPlaylist.view")
+@router.get("/getPlaylist")
+async def get_playlist(request: Request, db: DbSession, profile: SubsonicProfile, id: str):
+    """Get a single playlist with its tracks."""
+    fmt = _get_format(request)
+
+    try:
+        playlist = await db.get(Playlist, UUID(id))
+    except ValueError:
+        return subsonic_error(70, "Playlist not found", fmt)
+
+    if not playlist or playlist.profile_id != profile.id:
+        return subsonic_error(70, "Playlist not found", fmt)
+
+    # Get tracks ordered by position, only local tracks (track_id IS NOT NULL)
+    tracks_result = await db.execute(
+        select(Track)
+        .join(PlaylistTrack, PlaylistTrack.track_id == Track.id)
+        .where(
+            PlaylistTrack.playlist_id == playlist.id,
+            PlaylistTrack.track_id.isnot(None),
+        )
+        .order_by(PlaylistTrack.position)
+    )
+    tracks = tracks_result.scalars().all()
+    songs = [track_to_child(t) for t in tracks]
+
+    total_duration = int(sum(t.duration_seconds or 0 for t in tracks))
+
+    data = {
+        "id": str(playlist.id),
+        "name": playlist.name,
+        "songCount": str(len(songs)),
+        "duration": str(total_duration),
+        "owner": profile.name,
+        "public": "false",
+        **({"comment": playlist.description} if playlist.description else {}),
+        **({"created": playlist.created_at.isoformat()} if playlist.created_at else {}),
+        **({"changed": playlist.updated_at.isoformat()} if playlist.updated_at else {}),
+        "entry": songs,
+    }
+    return subsonic_response({"playlist": data}, fmt)
+
+
+@router.get("/createPlaylist.view")
+@router.get("/createPlaylist")
+@router.post("/createPlaylist.view")
+@router.post("/createPlaylist")
+async def create_playlist(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Create a playlist or add songs to an existing one.
+
+    Subsonic overloads this endpoint:
+    - If `playlistId` is given, adds `songId` entries to that playlist.
+    - If `name` is given (without playlistId), creates a new playlist with those songs.
+    """
+    fmt = _get_format(request)
+    params = dict(request.query_params)
+
+    playlist_id_str = params.get("playlistId")
+    name = params.get("name")
+    # songId can appear multiple times — use getlist on the raw query string
+    song_ids = request.query_params.getlist("songId")
+
+    if playlist_id_str:
+        # Add songs to existing playlist
+        try:
+            playlist = await db.get(Playlist, UUID(playlist_id_str))
+        except ValueError:
+            return subsonic_error(70, "Playlist not found", fmt)
+        if not playlist or playlist.profile_id != profile.id:
+            return subsonic_error(70, "Playlist not found", fmt)
+
+        if name:
+            playlist.name = name
+    elif name:
+        # Create new playlist
+        playlist = Playlist(
+            profile_id=profile.id,
+            name=name,
+            is_auto_generated=False,
+        )
+        db.add(playlist)
+        await db.flush()
+    else:
+        return subsonic_error(10, "Missing required parameter: name or playlistId", fmt)
+
+    if song_ids:
+        # Find current max position
+        max_pos_result = await db.execute(
+            select(PlaylistTrack.position)
+            .where(PlaylistTrack.playlist_id == playlist.id)
+            .order_by(PlaylistTrack.position.desc())
+            .limit(1)
+        )
+        max_pos = max_pos_result.scalar_one_or_none() or -1
+
+        for i, sid in enumerate(song_ids):
+            try:
+                track_uuid = UUID(sid)
+            except ValueError:
+                continue
+            track = await db.get(Track, track_uuid)
+            if track:
+                db.add(PlaylistTrack(
+                    playlist_id=playlist.id,
+                    track_id=track_uuid,
+                    position=max_pos + 1 + i,
+                ))
+
+    await db.commit()
+    # Return the updated playlist (per Subsonic spec)
+    return await get_playlist(request, db, profile, str(playlist.id))
+
+
+@router.get("/updatePlaylist.view")
+@router.get("/updatePlaylist")
+@router.post("/updatePlaylist.view")
+@router.post("/updatePlaylist")
+async def update_playlist(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Update a playlist: rename, add tracks, remove tracks by index."""
+    fmt = _get_format(request)
+    params = dict(request.query_params)
+
+    playlist_id_str = params.get("playlistId")
+    if not playlist_id_str:
+        return subsonic_error(10, "Missing required parameter: playlistId", fmt)
+
+    try:
+        playlist = await db.get(Playlist, UUID(playlist_id_str))
+    except ValueError:
+        return subsonic_error(70, "Playlist not found", fmt)
+
+    if not playlist or playlist.profile_id != profile.id:
+        return subsonic_error(70, "Playlist not found", fmt)
+
+    # Update name/comment
+    new_name = params.get("name")
+    comment = params.get("comment")
+    if new_name:
+        playlist.name = new_name
+    if comment is not None:
+        playlist.description = comment if comment else None
+
+    # Remove tracks by position index (must process before adding)
+    indices_to_remove = request.query_params.getlist("songIndexToRemove")
+    if indices_to_remove:
+        remove_positions = set()
+        for idx_str in indices_to_remove:
+            try:
+                remove_positions.add(int(idx_str))
+            except ValueError:
+                continue
+
+        if remove_positions:
+            # Get all playlist tracks ordered by position
+            all_entries = await db.execute(
+                select(PlaylistTrack)
+                .where(PlaylistTrack.playlist_id == playlist.id)
+                .order_by(PlaylistTrack.position)
+            )
+            entries = all_entries.scalars().all()
+            for i, entry in enumerate(entries):
+                if i in remove_positions:
+                    await db.delete(entry)
+
+            # Reindex remaining after flush
+            await db.flush()
+            remaining = await db.execute(
+                select(PlaylistTrack)
+                .where(PlaylistTrack.playlist_id == playlist.id)
+                .order_by(PlaylistTrack.position)
+            )
+            for new_pos, entry in enumerate(remaining.scalars().all()):
+                entry.position = new_pos
+
+    # Add new tracks
+    song_ids_to_add = request.query_params.getlist("songIdToAdd")
+    if song_ids_to_add:
+        max_pos_result = await db.execute(
+            select(PlaylistTrack.position)
+            .where(PlaylistTrack.playlist_id == playlist.id)
+            .order_by(PlaylistTrack.position.desc())
+            .limit(1)
+        )
+        max_pos = max_pos_result.scalar_one_or_none() or -1
+
+        for i, sid in enumerate(song_ids_to_add):
+            try:
+                track_uuid = UUID(sid)
+            except ValueError:
+                continue
+            track = await db.get(Track, track_uuid)
+            if track:
+                db.add(PlaylistTrack(
+                    playlist_id=playlist.id,
+                    track_id=track_uuid,
+                    position=max_pos + 1 + i,
+                ))
+
+    await db.commit()
+    return subsonic_response(None, fmt)
+
+
+@router.get("/deletePlaylist.view")
+@router.get("/deletePlaylist")
+@router.post("/deletePlaylist.view")
+@router.post("/deletePlaylist")
+async def delete_playlist(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Delete a playlist. Refuses to delete wishlists."""
+    fmt = _get_format(request)
+    params = dict(request.query_params)
+
+    playlist_id_str = params.get("id")
+    if not playlist_id_str:
+        return subsonic_error(10, "Missing required parameter: id", fmt)
+
+    try:
+        playlist = await db.get(Playlist, UUID(playlist_id_str))
+    except ValueError:
+        return subsonic_error(70, "Playlist not found", fmt)
+
+    if not playlist or playlist.profile_id != profile.id:
+        return subsonic_error(70, "Playlist not found", fmt)
+
+    if playlist.is_wishlist:
+        return subsonic_error(50, "Cannot delete system playlist", fmt)
+
+    await db.delete(playlist)
+    await db.commit()
+    return subsonic_response(None, fmt)
+
+
+# ---------------------------------------------------------------------------
+# Favorites (star/unstar)
+# ---------------------------------------------------------------------------
+
+@router.get("/star.view")
+@router.get("/star")
+@router.post("/star.view")
+@router.post("/star")
+async def star(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Star (favorite) tracks, albums, or artists.
+
+    Parameters: id (track UUID), albumId, artistId — can appear multiple times.
+    For albums/artists, we star all matching tracks since Familiar models
+    favorites at the track level only.
+    """
+    from sqlalchemy import func as sa_func
+
+    fmt = _get_format(request)
+    track_ids = request.query_params.getlist("id")
+    album_ids = request.query_params.getlist("albumId")
+    artist_ids = request.query_params.getlist("artistId")
+
+    if not track_ids and not album_ids and not artist_ids:
+        return subsonic_error(10, "Missing required parameter: id, albumId, or artistId", fmt)
+
+    tracks_to_star: list[UUID] = []
+
+    # Direct track IDs
+    for tid in track_ids:
+        try:
+            tracks_to_star.append(UUID(tid))
+        except ValueError:
+            continue
+
+    # Resolve album IDs to tracks
+    for al_id in album_ids:
+        album_info = await resolve_album(db, al_id)
+        if album_info:
+            artist_name, album_name = album_info
+            album_artist_col = sa_func.coalesce(sa_func.nullif(Track.album_artist, ""), Track.artist)
+            result = await db.execute(
+                select(Track.id).where(
+                    sa_func.lower(album_artist_col) == artist_name.lower(),
+                    sa_func.lower(Track.album) == album_name.lower(),
+                    Track.status == TrackStatus.ACTIVE,
+                )
+            )
+            tracks_to_star.extend(r[0] for r in result.all())
+
+    # Resolve artist IDs to tracks
+    for art_id in artist_ids:
+        name = await resolve_artist_name(db, art_id)
+        if name:
+            result = await db.execute(
+                select(Track.id).where(
+                    sa_func.lower(sa_func.trim(Track.artist)) == name.lower().strip(),
+                    Track.status == TrackStatus.ACTIVE,
+                )
+            )
+            tracks_to_star.extend(r[0] for r in result.all())
+
+    # Create favorites (skip duplicates)
+    for track_uuid in set(tracks_to_star):
+        existing = await db.execute(
+            select(ProfileFavorite).where(
+                ProfileFavorite.profile_id == profile.id,
+                ProfileFavorite.track_id == track_uuid,
+            )
+        )
+        if not existing.scalar_one_or_none():
+            db.add(ProfileFavorite(
+                profile_id=profile.id,
+                track_id=track_uuid,
+            ))
+
+    await db.commit()
+    return subsonic_response(None, fmt)
+
+
+@router.get("/unstar.view")
+@router.get("/unstar")
+@router.post("/unstar.view")
+@router.post("/unstar")
+async def unstar(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Remove star (favorite) from tracks, albums, or artists."""
+    from sqlalchemy import func as sa_func
+
+    fmt = _get_format(request)
+    track_ids = request.query_params.getlist("id")
+    album_ids = request.query_params.getlist("albumId")
+    artist_ids = request.query_params.getlist("artistId")
+
+    if not track_ids and not album_ids and not artist_ids:
+        return subsonic_error(10, "Missing required parameter: id, albumId, or artistId", fmt)
+
+    tracks_to_unstar: list[UUID] = []
+
+    for tid in track_ids:
+        try:
+            tracks_to_unstar.append(UUID(tid))
+        except ValueError:
+            continue
+
+    for al_id in album_ids:
+        album_info = await resolve_album(db, al_id)
+        if album_info:
+            artist_name, album_name = album_info
+            album_artist_col = sa_func.coalesce(sa_func.nullif(Track.album_artist, ""), Track.artist)
+            result = await db.execute(
+                select(Track.id).where(
+                    sa_func.lower(album_artist_col) == artist_name.lower(),
+                    sa_func.lower(Track.album) == album_name.lower(),
+                    Track.status == TrackStatus.ACTIVE,
+                )
+            )
+            tracks_to_unstar.extend(r[0] for r in result.all())
+
+    for art_id in artist_ids:
+        name = await resolve_artist_name(db, art_id)
+        if name:
+            result = await db.execute(
+                select(Track.id).where(
+                    sa_func.lower(sa_func.trim(Track.artist)) == name.lower().strip(),
+                    Track.status == TrackStatus.ACTIVE,
+                )
+            )
+            tracks_to_unstar.extend(r[0] for r in result.all())
+
+    if tracks_to_unstar:
+        await db.execute(
+            delete(ProfileFavorite).where(
+                ProfileFavorite.profile_id == profile.id,
+                ProfileFavorite.track_id.in_(set(tracks_to_unstar)),
+            )
+        )
+        await db.commit()
+
+    return subsonic_response(None, fmt)
+
+
+# ---------------------------------------------------------------------------
+# Discovery
+# ---------------------------------------------------------------------------
+
+@router.get("/getSongsByGenre.view")
+@router.get("/getSongsByGenre")
+async def get_songs_by_genre(
+    request: Request, db: DbSession, profile: SubsonicProfile,
+    genre: str = "",
+    count: int = 10,
+    offset: int = 0,
+):
+    """Return songs matching a genre."""
+    fmt = _get_format(request)
+    if not genre:
+        return subsonic_error(10, "Missing required parameter: genre", fmt)
+
+    count = min(count, 500)
+
+    result = await db.execute(
+        select(Track)
+        .where(Track.genre.ilike(genre), Track.status == TrackStatus.ACTIVE)
+        .order_by(Track.title)
+        .offset(offset)
+        .limit(count)
+    )
+    tracks = result.scalars().all()
+    songs = [track_to_child(t) for t in tracks]
+
+    return subsonic_response({"songsByGenre": {"song": songs}}, fmt)
 
 
 @router.get("/getUser.view")
@@ -758,7 +1231,7 @@ async def get_user(request: Request, profile: SubsonicProfile, username: str = "
         "user": {
             "username": username or "familiar",
             "email": "",
-            "scrobblingEnabled": "false",
+            "scrobblingEnabled": "true",
             "adminRole": "false",
             "settingsRole": "false",
             "downloadRole": "true",
@@ -780,9 +1253,50 @@ async def get_user(request: Request, profile: SubsonicProfile, username: str = "
 @router.get("/scrobble")
 @router.post("/scrobble.view")
 @router.post("/scrobble")
-async def scrobble(request: Request, profile: SubsonicProfile):
-    """Accept scrobble requests silently (Phase 2)."""
-    return subsonic_response(None, _get_format(request))
+async def scrobble(request: Request, db: DbSession, profile: SubsonicProfile):
+    """Log a play to ProfilePlayHistory."""
+    fmt = _get_format(request)
+    params = dict(request.query_params)
+
+    track_id_str = params.get("id")
+    if not track_id_str:
+        return subsonic_error(10, "Missing required parameter: id", fmt)
+
+    try:
+        track_uuid = UUID(track_id_str)
+    except ValueError:
+        return subsonic_error(70, "Song not found", fmt)
+
+    track = await db.get(Track, track_uuid)
+    if not track:
+        return subsonic_error(70, "Song not found", fmt)
+
+    # Upsert play history
+    existing = await db.execute(
+        select(ProfilePlayHistory).where(
+            ProfilePlayHistory.profile_id == profile.id,
+            ProfilePlayHistory.track_id == track_uuid,
+        )
+    )
+    history = existing.scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if history:
+        history.play_count += 1
+        history.last_played_at = now
+        history.total_play_seconds += track.duration_seconds or 0
+    else:
+        history = ProfilePlayHistory(
+            profile_id=profile.id,
+            track_id=track_uuid,
+            play_count=1,
+            last_played_at=now,
+            total_play_seconds=track.duration_seconds or 0,
+        )
+        db.add(history)
+
+    await db.commit()
+    return subsonic_response(None, fmt)
 
 
 @router.get("/getRandomSongs.view")

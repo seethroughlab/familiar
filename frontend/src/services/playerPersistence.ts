@@ -173,9 +173,14 @@ export async function migrateOldPlayerState(): Promise<void> {
 }
 
 /**
- * Debounced save function to avoid too many writes.
+ * Throttled save function to avoid too many writes.
+ * Uses leading+trailing throttle: saves immediately if 500ms has elapsed
+ * since the last save, and schedules a trailing save to capture final state.
+ * This ensures state changes (shuffle, repeat, volume) persist even while
+ * setCurrentTime fires every ~16ms during playback.
  */
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+let lastSaveTime = 0;
 
 export function debouncedSavePlayerState(state: {
   volume: number;
@@ -189,12 +194,23 @@ export function debouncedSavePlayerState(state: {
   shuffleIndex: number;
   currentTime: number;
 }): void {
+  const now = Date.now();
+
   if (saveTimeout) {
     clearTimeout(saveTimeout);
   }
 
+  // If enough time has passed, save immediately
+  if (now - lastSaveTime >= 500) {
+    lastSaveTime = now;
+    savePlayerState(state).catch(log.error);
+    return;
+  }
+
+  // Otherwise schedule a trailing save
   saveTimeout = setTimeout(() => {
+    lastSaveTime = Date.now();
     savePlayerState(state).catch(log.error);
     saveTimeout = null;
-  }, 500); // Debounce by 500ms
+  }, 500);
 }

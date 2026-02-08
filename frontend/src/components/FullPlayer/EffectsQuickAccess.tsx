@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Sliders } from 'lucide-react';
 import { useAudioEffectsStore } from '../../stores/audioEffectsStore';
-import { areAudioEffectsAvailable } from '../../hooks/useAudioEngine';
+import { useAudioEngineContext } from '../../contexts/AudioEngineContext';
 
 /**
  * Quick access button for audio effects in the FullPlayer header.
@@ -11,7 +11,8 @@ export function EffectsQuickAccess() {
   const [isOpen, setIsOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const effectsAvailable = areAudioEffectsAvailable();
+  const { platform } = useAudioEngineContext();
+  const effectsAvailable = platform.useWebAudio;
 
   const {
     masterEnabled,
@@ -58,11 +59,10 @@ export function EffectsQuickAccess() {
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={`p-2 rounded-md transition-colors ${
-          masterEnabled
+        className={`p-2 rounded-md transition-colors ${masterEnabled
             ? 'bg-purple-500/20 text-purple-400'
             : 'text-zinc-400 hover:text-white hover:bg-white/10'
-        }`}
+          }`}
         title="Audio Effects"
       >
         <Sliders className="w-5 h-5" />
@@ -101,11 +101,10 @@ export function EffectsQuickAccess() {
                         loadPreset(preset.name);
                         setIsOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                        activePresetName === preset.name
+                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activePresetName === preset.name
                           ? 'bg-purple-500/20 text-purple-400'
                           : 'text-zinc-300 hover:bg-zinc-800'
-                      }`}
+                        }`}
                     >
                       {preset.name}
                     </button>
@@ -126,11 +125,10 @@ export function EffectsQuickAccess() {
                             loadPreset(preset.name);
                             setIsOpen(false);
                           }}
-                          className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${
-                            activePresetName === preset.name
+                          className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors ${activePresetName === preset.name
                               ? 'bg-purple-500/20 text-purple-400'
                               : 'text-zinc-300 hover:bg-zinc-800'
-                          }`}
+                            }`}
                         >
                           {preset.name}
                         </button>

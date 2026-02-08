@@ -67,9 +67,8 @@ def get_device() -> str:
 
     if torch.cuda.is_available():
         return "cuda"
-    # Skip MPS for now due to fork issues
-    # elif torch.backends.mps.is_available():
-    #     return "mps"
+    elif torch.backends.mps.is_available():
+        return "mps"
     return "cpu"
 
 

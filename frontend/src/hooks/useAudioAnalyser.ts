@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { getAudioAnalyser, getAudioContext } from './useAudioEngine';
+import { useAudioEngineContext } from '../contexts/AudioEngineContext';
 
 export interface AudioAnalysisData {
   frequencyData: Uint8Array;
@@ -19,6 +19,7 @@ export function getAudioData(): AudioAnalysisData | null {
 }
 
 export function useAudioAnalyser(enabled: boolean = true): AudioAnalysisData | null {
+  const { audioGraph } = useAudioEngineContext();
   const [data, setData] = useState<AudioAnalysisData | null>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -27,8 +28,8 @@ export function useAudioAnalyser(enabled: boolean = true): AudioAnalysisData | n
   const timeDomainDataRef = useRef<any>(null);
 
   const analyse = useCallback(() => {
-    const analyser = getAudioAnalyser();
-    const context = getAudioContext();
+    const analyser = audioGraph.current.analyser;
+    const context = audioGraph.current.audioContext;
 
     if (!analyser || !context || context.state !== 'running') {
       animationFrameRef.current = requestAnimationFrame(analyse);
@@ -97,7 +98,7 @@ export function useAudioAnalyser(enabled: boolean = true): AudioAnalysisData | n
     setData(newData);
 
     animationFrameRef.current = requestAnimationFrame(analyse);
-  }, []);
+  }, [audioGraph]);
 
   useEffect(() => {
     if (enabled) {
