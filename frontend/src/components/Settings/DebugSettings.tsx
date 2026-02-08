@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Bug, RefreshCw, Trash2, Download, AlertCircle } from 'lucide-react';
+import { getApiUrl } from '../../api/base';
 import {
   getAudioContext,
   getAudioAnalyser,
@@ -399,7 +400,7 @@ export function DebugSettings() {
                   console.log('[Test] Testing track stream API...');
                   try {
                     // Try to fetch headers only for a test track
-                    const response = await fetch('/api/v1/tracks/test-id/stream', { method: 'HEAD' });
+                    const response = await fetch(getApiUrl('/tracks/test-id/stream'), { method: 'HEAD' });
                     console.log('[Test] Stream API response:', response.status, response.statusText);
                   } catch (e) {
                     console.error('[Test] Stream API error:', e);

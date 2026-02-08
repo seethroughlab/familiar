@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import { S3BackupSettings } from '../Settings/S3BackupSettings';
+import { getApiUrl } from '../../api/base';
 
 import { createLogger } from '../../utils/logger';
 
@@ -52,7 +53,7 @@ export function AdminSetup() {
   async function loadSettings() {
     try {
       setLoading(true);
-      const response = await fetch('/api/v1/settings');
+      const response = await fetch(getApiUrl('/settings'));
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
@@ -197,7 +198,7 @@ export function AdminSetup() {
                     onChange={async (e) => {
                       setSavingCommunityCache(true);
                       try {
-                        const response = await fetch('/api/v1/settings', {
+                        const response = await fetch(getApiUrl('/settings'), {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ community_cache_enabled: e.target.checked }),
@@ -233,7 +234,7 @@ export function AdminSetup() {
                     onChange={async (e) => {
                       setSavingCommunityCache(true);
                       try {
-                        const response = await fetch('/api/v1/settings', {
+                        const response = await fetch(getApiUrl('/settings'), {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ community_cache_contribute: e.target.checked }),

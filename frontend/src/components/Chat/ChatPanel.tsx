@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff } from 'lucide-react';
+import { getApiUrl } from '../../api/base';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ChatPanel');
@@ -72,7 +73,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
   // Track network vs config errors separately
   const [llmError, setLlmError] = useState<'network' | null>(null);
   useEffect(() => {
-    fetch('/api/v1/chat/status')
+    fetch(getApiUrl('/chat/status'))
       .then((r) => {
         if (!r.ok) throw new Error('Failed to check LLM status');
         return r.json();
@@ -202,7 +203,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
       const visibleTracksState = useVisibleTracksStore.getState();
       const visibleTrackIds = visibleTracksState.trackIds.slice(0, 100); // Limit to 100
 
-      const response = await fetch('/api/v1/chat/stream', {
+      const response = await fetch(getApiUrl('/chat/stream'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

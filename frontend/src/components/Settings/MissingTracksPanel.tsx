@@ -10,6 +10,7 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react';
+import { getApiUrl } from '../../api/base';
 
 import { createLogger } from '../../utils/logger';
 
@@ -48,7 +49,7 @@ export function MissingTracksPanel() {
 
   const fetchMissingTracks = async () => {
     try {
-      const response = await fetch('/api/v1/library/missing');
+      const response = await fetch(getApiUrl('/library/missing'));
       if (response.ok) {
         const data: MissingTracksResponse = await response.json();
         setTracks(data.tracks);
@@ -73,7 +74,7 @@ export function MissingTracksPanel() {
     setStatus(null);
 
     try {
-      const response = await fetch('/api/v1/library/missing/relocate', {
+      const response = await fetch(getApiUrl('/library/missing/relocate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ search_path: searchPath.trim() }),
@@ -104,7 +105,7 @@ export function MissingTracksPanel() {
     if (!newPath.trim()) return;
 
     try {
-      const response = await fetch(`/api/v1/library/missing/${trackId}/locate`, {
+      const response = await fetch(getApiUrl(`/library/missing/${trackId}/locate`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_path: newPath.trim() }),
@@ -130,7 +131,7 @@ export function MissingTracksPanel() {
     setDeletingIds((prev) => new Set(prev).add(trackId));
 
     try {
-      const response = await fetch(`/api/v1/library/missing/${trackId}`, {
+      const response = await fetch(getApiUrl(`/library/missing/${trackId}`), {
         method: 'DELETE',
       });
 
@@ -164,7 +165,7 @@ export function MissingTracksPanel() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch('/api/v1/library/missing/batch', {
+      const response = await fetch(getApiUrl('/library/missing/batch'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ track_ids: Array.from(selectedTracks) }),

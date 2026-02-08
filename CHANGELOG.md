@@ -43,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Centralized API URLs** - All frontend `fetch()`, `<img src>`, `EventSource`, and XHR URLs now use `getApiUrl()` helper from `api/base.ts`
+  - Preparation for Capacitor iOS integration (switching to absolute URLs is a one-line change)
+  - Updated 14+ call sites across 11 component/API files
+  - Added CORS `expose_headers` for cross-origin Range requests
+  - No behavior change - `getApiOrigin()` returns empty string for same-origin
 - **Full Player simplified** - removed 4-tab layout (visualizer/video/lyrics/discover), replaced with single visualizer view
   - Lyrics now handled by LyricStorm/LyricPulse visualizers
   - Discovery moved out of Full Player

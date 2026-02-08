@@ -1,5 +1,5 @@
 import type { Track, TrackListResponse } from '../types';
-import api from './base';
+import api, { getApiUrl } from './base';
 
 // Track IDs response (lightweight for shuffle-all)
 export interface TrackIdsResponse {
@@ -76,11 +76,11 @@ export const tracksApi = {
   },
 
   getStreamUrl: (id: string): string => {
-    return `/api/v1/tracks/${id}/stream`;
+    return getApiUrl(`/tracks/${id}/stream`);
   },
 
   getArtworkUrl: (id: string, size: 'full' | 'thumb' = 'full'): string => {
-    return `/api/v1/tracks/${id}/artwork?size=${size}`;
+    return getApiUrl(`/tracks/${id}/artwork?size=${size}`);
   },
 
   getLyrics: async (id: string): Promise<LyricsResponse> => {

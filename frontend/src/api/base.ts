@@ -5,6 +5,16 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('ApiBase');
 
+/** Base origin for non-axios URLs (stream, artwork, etc). Empty string for same-origin. */
+export function getApiOrigin(): string {
+  return '';  // Future: return configured backend URL for Capacitor
+}
+
+/** Build a full API URL path, e.g. getApiUrl('/tracks/123/stream') → '/api/v1/tracks/123/stream' */
+export function getApiUrl(path: string): string {
+  return `${getApiOrigin()}/api/v1${path}`;
+}
+
 const api = axios.create({
   baseURL: '/api/v1',
 });

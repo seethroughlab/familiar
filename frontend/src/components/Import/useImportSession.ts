@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { getApiUrl } from '../../api/base';
 import type {
   EditableTrack,
   EditableField,
@@ -90,7 +91,7 @@ export function useImportSession({ files, onImportComplete }: UseImportSessionOp
         xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
       });
 
-      xhr.open('POST', '/api/v1/library/import/preview');
+      xhr.open('POST', getApiUrl('/library/import/preview'));
       xhr.send(formData);
 
       const response = await uploadPromise;
@@ -265,7 +266,7 @@ export function useImportSession({ files, onImportComplete }: UseImportSessionOp
     setImportErrors([]);
 
     try {
-      const response = await fetch('/api/v1/library/import/execute', {
+      const response = await fetch(getApiUrl('/library/import/execute'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

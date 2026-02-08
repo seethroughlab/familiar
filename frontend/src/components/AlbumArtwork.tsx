@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Disc } from 'lucide-react';
 import { useArtworkStore } from '../stores/artworkStore';
+import { getApiUrl } from '../api/base';
 
 interface AlbumArtworkProps {
   artist: string | null | undefined;
@@ -44,13 +45,13 @@ export function AlbumArtwork({
   const hash = hashesMap.get(cacheKey);
 
   // Compute artwork URL from local state
-  const artworkUrl = (hash && status === 'ready') ? `/api/v1/artwork/${hash}/${size}` : null;
+  const artworkUrl = (hash && status === 'ready') ? getApiUrl(`/artwork/${hash}/${size}`) : null;
 
   // Determine what to show
   const showPlaceholder = !artist || !album || status === 'unknown' || status === 'checking' || status === 'pending' || status === 'missing' || imageError;
 
   // For backwards compatibility, try the old track-based URL if we have a fallback
-  const fallbackUrl = fallbackTrackId ? `/api/v1/tracks/${fallbackTrackId}/artwork?size=${size}` : null;
+  const fallbackUrl = fallbackTrackId ? getApiUrl(`/tracks/${fallbackTrackId}/artwork?size=${size}`) : null;
 
   // Request artwork immediately on mount if status is unknown
   // This ensures artwork is fetched even for elements already in view

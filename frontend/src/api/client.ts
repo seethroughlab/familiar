@@ -3,6 +3,7 @@ import type { Track, TrackListResponse, LibraryStats } from '../types';
 import { getSelectedProfileId, clearSelectedProfile } from '../services/profileService';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
+import { getApiUrl } from './base';
 
 const log = createLogger('ApiClient');
 
@@ -137,11 +138,11 @@ export const tracksApi = {
   },
 
   getStreamUrl: (id: string): string => {
-    return `/api/v1/tracks/${id}/stream`;
+    return getApiUrl(`/tracks/${id}/stream`);
   },
 
   getArtworkUrl: (id: string, size: 'full' | 'thumb' = 'full'): string => {
-    return `/api/v1/tracks/${id}/artwork?size=${size}`;
+    return getApiUrl(`/tracks/${id}/artwork?size=${size}`);
   },
 
   getLyrics: async (id: string): Promise<LyricsResponse> => {
@@ -520,7 +521,7 @@ export const videosApi = {
   },
 
   getStreamUrl: (trackId: string): string => {
-    return `/api/v1/videos/${trackId}/stream`;
+    return getApiUrl(`/videos/${trackId}/stream`);
   },
 
   delete: async (trackId: string): Promise<{ status: string }> => {
@@ -568,6 +569,31 @@ export const lastfmApi = {
       track_id: trackId,
       timestamp,
     });
+    return data;
+  },
+};
+
+// Subsonic API credential management
+export interface SubsonicCredentialStatus {
+  configured: boolean;
+  username?: string;
+  password?: string;
+  created_at?: string;
+}
+
+export const subsonicApi = {
+  getStatus: async (): Promise<SubsonicCredentialStatus> => {
+    const { data } = await api.get('/subsonic/credentials');
+    return data;
+  },
+
+  generateCredentials: async (): Promise<SubsonicCredentialStatus> => {
+    const { data } = await api.post('/subsonic/credentials');
+    return data;
+  },
+
+  deleteCredentials: async (): Promise<SubsonicCredentialStatus> => {
+    const { data } = await api.delete('/subsonic/credentials');
     return data;
   },
 };
@@ -1073,7 +1099,7 @@ export const libraryApi = {
   ): string => {
     // Cache version param to bust browser cache when image sources change
     const cacheVersion = 'v2';
-    return `/api/v1/library/artists/${encodePathSegment(artistName)}/image?size=${size}&_cv=${cacheVersion}`;
+    return getApiUrl(`/library/artists/${encodePathSegment(artistName)}/image?size=${size}&_cv=${cacheVersion}`);
   },
 
   getLetterIndex: async (params: {
@@ -1661,7 +1687,7 @@ export const profilesApi = {
   },
 
   getAvatarUrl: (id: string): string => {
-    return `/api/v1/profiles/${id}/avatar`;
+    return getApiUrl(`/profiles/${id}/avatar`);
   },
 };
 

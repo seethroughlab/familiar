@@ -9,6 +9,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { RotateCcw, Info, Volume2, VolumeX, Music } from 'lucide-react';
 import * as THREE from 'three';
+import { getApiUrl } from '../../../../api/base';
 import { tracksApi } from '../../../../api/client';
 import type { MapNode3D, MusicMap3DResponse } from '../../../../api/client';
 import { registerBrowser } from '../../types';
@@ -245,7 +246,7 @@ function use3DMapStream() {
     }
 
     // Start SSE connection
-    const eventSource = new EventSource('/api/v1/library/map/3d/stream?entity_type=artists');
+    const eventSource = new EventSource(getApiUrl('/library/map/3d/stream?entity_type=artists'));
 
     eventSource.addEventListener('progress', (event) => {
       try {

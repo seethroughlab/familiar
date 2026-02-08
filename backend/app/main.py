@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -42,6 +42,8 @@ from app.api.routes import (
     sessions,
     smart_playlists,
     spotify,
+    subsonic,
+    subsonic_credentials,
     tracks,
     videos,
 )
@@ -190,6 +192,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
 )
 
 
@@ -247,6 +250,14 @@ async def familiar_exception_handler(
     )
 
 
+@app.exception_handler(subsonic.SubsonicAuthError)
+async def subsonic_auth_exception_handler(
+    request: Request, exc: subsonic.SubsonicAuthError
+) -> Response:
+    """Handle Subsonic authentication errors with proper Subsonic error format."""
+    return subsonic.subsonic_error(exc.code, exc.message, exc.fmt)
+
+
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Catch-all handler for unhandled exceptions."""
@@ -285,6 +296,10 @@ app.include_router(plugins.router, prefix="/api/v1")
 app.include_router(external_tracks.router, prefix="/api/v1")
 app.include_router(export_import.router, prefix="/api/v1")
 app.include_router(s3_backup.router, prefix="/api/v1")
+app.include_router(subsonic_credentials.router, prefix="/api/v1")
+
+# Subsonic API mounted at /rest (Subsonic clients expect this path)
+app.include_router(subsonic.router, prefix="/rest")
 
 
 # Serve frontend static files in production
@@ -323,7 +338,7 @@ if STATIC_DIR.exists():
     async def spa_fallback(full_path: str) -> FileResponse | dict[str, Any]:
         """Serve index.html for SPA routing (catches all non-API routes)."""
         # Don't catch API or docs routes
-        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "health")):
+        if full_path.startswith(("api/", "rest/", "docs", "redoc", "openapi.json", "health")):
             return {"detail": "Not found"}
         return FileResponse(STATIC_DIR / "index.html")
 else:

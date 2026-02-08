@@ -16,6 +16,7 @@ import {
   Minus,
   RefreshCw,
 } from 'lucide-react';
+import { getApiUrl } from '../../api/base';
 
 // Quality info from backend
 interface QualityInfo {
@@ -202,7 +203,7 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
         xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
       });
 
-      xhr.open('POST', '/api/v1/library/import/preview');
+      xhr.open('POST', getApiUrl('/library/import/preview'));
       xhr.send(formData);
 
       const response = await uploadPromise;
@@ -370,7 +371,7 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
     setImportErrors([]);
 
     try {
-      const response = await fetch('/api/v1/library/import/execute', {
+      const response = await fetch(getApiUrl('/library/import/execute'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
