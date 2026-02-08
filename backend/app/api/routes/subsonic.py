@@ -207,7 +207,7 @@ async def authenticate_subsonic(
     if request.method == "POST":
         body = await request.form()
         for k, v in body.items():
-            if k not in params:
+            if k not in params and isinstance(v, str):
                 params[k] = v
 
     username = params.get("u")
