@@ -339,17 +339,11 @@ function AppContent() {
               />
               {/* Chat panel - includes safe area padding */}
               <div className={`relative w-full max-w-md ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} flex flex-col pt-safe pb-safe`}>
-                <button
-                  onClick={() => setShowMobileChat(false)}
-                  className="absolute top-3 right-3 p-2 rounded-lg hover:bg-zinc-800/50 z-10 mt-safe touch-target"
-                  aria-label="Close chat"
-                >
-                  <X className="w-5 h-5" />
-                </button>
                 <ErrorBoundary name="Chat">
                   <ChatPanel
                     pendingMessage={pendingChatMessage}
                     onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                    onClose={() => setShowMobileChat(false)}
                   />
                 </ErrorBoundary>
               </div>

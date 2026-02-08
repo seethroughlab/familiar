@@ -47,7 +47,8 @@ export function AlbumGrid({
   const [sortBy, setSortBy] = useState<'name' | 'year' | 'artist' | 'track_count'>('name');
   const [albumContextMenu, setAlbumContextMenu] = useState<AlbumContextMenuState>(initialAlbumContextMenuState);
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
-  const { setQueue, addToQueue } = usePlayerStore();
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
   const { startDownload } = useDownloadStore();
   const queryClient = useQueryClient();
 

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import ProfileFavorite, Track
@@ -58,12 +58,12 @@ async def list_favorites(
     )
     rows = result.all()
 
-    # Get total count
-    count_result = await db.execute(
-        select(ProfileFavorite)
-        .where(ProfileFavorite.profile_id == profile.id)
-    )
-    total = len(count_result.scalars().all())
+    # Get total count efficiently with COUNT instead of loading all rows
+    total = await db.scalar(
+        select(func.count()).select_from(ProfileFavorite).where(
+            ProfileFavorite.profile_id == profile.id
+        )
+    ) or 0
 
     favorites = [
         FavoriteTrackResponse(

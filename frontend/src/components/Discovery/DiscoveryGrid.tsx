@@ -23,7 +23,9 @@ export function DiscoveryGrid({
   onAddToWishlist,
   className = '',
 }: DiscoveryGridProps) {
-  const { currentTrack, isPlaying, setIsPlaying } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
 
   const isItemPlaying = (item: DiscoveryItem): boolean => {
     return !!(item.id && currentTrack?.id === item.id && isPlaying);

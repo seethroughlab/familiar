@@ -173,7 +173,13 @@ const LAZY_QUEUE_THRESHOLD = 50;
 const COLLAPSED_TRACK_COUNT = 15;
 
 export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onGoToYear }: Props) {
-  const { currentTrack, isPlaying, shuffle, setQueue, addToQueue, setIsPlaying, setLazyQueue } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const setLazyQueue = usePlayerStore((s) => s.setLazyQueue);
   const { startDownload } = useDownloadStore();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [showFullBio, setShowFullBio] = useState(false);

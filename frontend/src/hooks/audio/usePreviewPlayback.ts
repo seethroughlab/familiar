@@ -15,7 +15,9 @@ export function usePreviewPlayback(
   playNext: () => void,
 ) {
   const previewElementRef = useRef<HTMLAudioElement | null>(null);
-  const { isPreviewMode, previewTrack, stopPreview } = usePlayerStore();
+  const isPreviewMode = usePlayerStore((s) => s.isPreviewMode);
+  const previewTrack = usePlayerStore((s) => s.previewTrack);
+  const stopPreview = usePlayerStore((s) => s.stopPreview);
 
   useEffect(() => {
     // Create preview element if needed

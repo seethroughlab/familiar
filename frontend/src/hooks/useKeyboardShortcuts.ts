@@ -2,6 +2,7 @@
  * Global keyboard shortcuts for the music player.
  */
 import { useEffect, useCallback, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 
 interface ShortcutHandlers {
@@ -33,18 +34,15 @@ export const SHORTCUTS: Record<string, ShortcutDefinition> = {
 };
 
 export function useKeyboardShortcuts(handlers: ShortcutHandlers = {}) {
-  const {
-    isPlaying,
-    setIsPlaying,
-    volume,
-    setVolume,
-    currentTime,
-    duration,
-    playNext,
-    playPrevious,
-    toggleShuffle,
-    toggleRepeat,
-  } = usePlayerStore();
+  const { isPlaying, volume, currentTime, duration } = usePlayerStore(
+    useShallow((s) => ({ isPlaying: s.isPlaying, volume: s.volume, currentTime: s.currentTime, duration: s.duration }))
+  );
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
 
   // Store previous volume for mute toggle
   const previousVolumeRef = useRef(volume > 0 ? volume : 1);

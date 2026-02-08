@@ -112,9 +112,11 @@ class AppSettingsService:
         return AppSettings()
 
     def _save(self, settings: AppSettings) -> None:
-        """Save settings to file."""
-        with open(self.settings_path, "w") as f:
-            json.dump(settings.model_dump(), f, indent=2)
+        """Save settings to file atomically."""
+        from app.utils.atomic_write import atomic_write_text
+
+        json_str = json.dumps(settings.model_dump(), indent=2)
+        atomic_write_text(self.settings_path, json_str)
 
     def get(self) -> AppSettings:
         """Get current settings.

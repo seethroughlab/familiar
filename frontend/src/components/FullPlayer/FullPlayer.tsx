@@ -16,6 +16,7 @@ import {
   Minimize,
   ListX,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
@@ -53,27 +54,22 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
 
-  const {
-    currentTrack,
-    isPlaying,
-    isLoadingAudio,
-    currentTime,
-    duration,
-    volume,
-    setVolume,
-    playNext,
-    playPrevious,
-    shuffle,
-    repeat,
-    consume,
-    toggleShuffle,
-    toggleRepeat,
-    toggleConsume,
-    isPreviewMode,
-  } = usePlayerStore();
+  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreviewMode } = usePlayerStore(
+    useShallow((s) => ({
+      currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
+      currentTime: s.currentTime, duration: s.duration, volume: s.volume,
+      shuffle: s.shuffle, repeat: s.repeat, consume: s.consume, isPreviewMode: s.isPreviewMode,
+    }))
+  );
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
+  const toggleConsume = usePlayerStore((s) => s.toggleConsume);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
 
   const { seek, togglePlayPause } = useAudioEngine();
-  const { addToQueue } = usePlayerStore();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { visualizerId } = useVisualizerStore();
   const isMusicVideo = visualizerId === 'music-video';
@@ -222,7 +218,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
         {/* Center: visualizer picker + effects */}
         <div className="flex items-center gap-3">
-          <VisualizerPicker />
+          {!isMobile() && <VisualizerPicker />}
           <EffectsQuickAccess />
         </div>
 
@@ -238,7 +234,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
       {/* Main content area */}
       <div className="flex-1 relative overflow-hidden">
         {isMobile() && !isMusicVideo ? (
-          <div className="absolute inset-0 flex items-center justify-center p-8">
+          <div className="absolute inset-0 flex items-center justify-center p-8 pb-48">
             {imageError ? (
               <div className="w-72 h-72 sm:w-80 sm:h-80 bg-zinc-800 rounded-2xl flex items-center justify-center shadow-2xl">
                 <Music className="w-24 h-24 text-zinc-600" />
@@ -287,7 +283,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
       <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 pb-safe transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         {/* Track info - right-click for context menu */}
         <div
-          className="text-center mb-6 cursor-context-menu"
+          className="text-center mb-3 sm:mb-6 cursor-context-menu"
           onContextMenu={handleContextMenu}
         >
           <div className="flex items-center justify-center gap-2">
@@ -304,7 +300,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
         </div>
 
         {/* Progress bar */}
-        <div className="mb-6">
+        <div className="mb-3 sm:mb-6">
           <div
             className="py-3 cursor-pointer group"
             onClick={handleSeek}
@@ -325,7 +321,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
         </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-center gap-6">
+        <div className="flex items-center justify-center gap-3 sm:gap-6">
           <button
             onClick={toggleShuffle}
             className={`p-3 rounded-full transition-colors ${
@@ -391,30 +387,32 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           </button>
         </div>
 
-        {/* Volume */}
-        <div className="flex items-center justify-center gap-3 mt-6">
-          <button
-            onClick={() => setVolume(volume > 0 ? 0 : 1)}
-            className="p-2 text-zinc-400 hover:text-white transition-colors"
-            aria-label={volume === 0 ? 'Unmute' : 'Mute'}
-          >
-            {volume === 0 ? (
-              <VolumeX className="w-5 h-5" />
-            ) : (
-              <Volume2 className="w-5 h-5" />
-            )}
-          </button>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={volume}
-            onChange={(e) => setVolume(parseFloat(e.target.value))}
-            className="w-24 sm:w-32 accent-white"
-            aria-label="Volume"
-          />
-        </div>
+        {/* Volume - hidden on mobile where hardware buttons control volume */}
+        {!isMobile() && (
+          <div className="flex items-center justify-center gap-3 mt-6">
+            <button
+              onClick={() => setVolume(volume > 0 ? 0 : 1)}
+              className="p-2 text-zinc-400 hover:text-white transition-colors"
+              aria-label={volume === 0 ? 'Unmute' : 'Mute'}
+            >
+              {volume === 0 ? (
+                <VolumeX className="w-5 h-5" />
+              ) : (
+                <Volume2 className="w-5 h-5" />
+              )}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={volume}
+              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              className="w-24 sm:w-32 accent-white"
+              aria-label="Volume"
+            />
+          </div>
+        )}
       </div>
 
       {/* Context menu */}

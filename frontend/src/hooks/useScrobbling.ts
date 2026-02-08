@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { lastfmApi } from '../api/client';
 
@@ -12,7 +13,9 @@ import { lastfmApi } from '../api/client';
  * - Each track should only be scrobbled once per play
  */
 export function useScrobbling() {
-  const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore();
+  const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore(
+    useShallow((s) => ({ currentTrack: s.currentTrack, currentTime: s.currentTime, duration: s.duration, isPlaying: s.isPlaying }))
+  );
 
   const scrobbledTrackRef = useRef<string | null>(null);
   const nowPlayingTrackRef = useRef<string | null>(null);

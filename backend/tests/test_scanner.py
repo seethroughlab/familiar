@@ -35,7 +35,7 @@ import pytest_asyncio
 from sqlalchemy import delete, select
 
 from app.db.models import Track, TrackStatus
-from app.services.scanner import LibraryScanner, compute_file_hash
+from app.services.scanner import LibraryScanner, compute_file_hash, compute_full_hash
 
 # Path to test audio fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "audio"
@@ -101,6 +101,34 @@ class TestComputeFileHash:
         file1 = FIXTURES_DIR / "electronic_short.mp3"
         file2 = FIXTURES_DIR / "artist2" / "album1" / "comedy_intro.mp3"
         assert compute_file_hash(file1) != compute_file_hash(file2)
+
+    def test_full_hash_differs_for_same_partial_hash(self):
+        """Two files with identical first/last 8KB and size but different middles
+        should have the same partial hash but different full hashes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+
+            # Build two files that share the same first 8KB, last 8KB, and total
+            # size but differ in the middle.
+            chunk = 8192
+            head = b"\x00" * chunk
+            tail = b"\xff" * chunk
+            middle_size = chunk * 4  # enough to sit between head and tail
+
+            file_a = tmp / "a.bin"
+            file_b = tmp / "b.bin"
+
+            file_a.write_bytes(head + (b"\xaa" * middle_size) + tail)
+            file_b.write_bytes(head + (b"\xbb" * middle_size) + tail)
+
+            # Sanity: same size
+            assert file_a.stat().st_size == file_b.stat().st_size
+
+            # Partial hashes MUST match (same head + tail + size)
+            assert compute_file_hash(file_a) == compute_file_hash(file_b)
+
+            # Full hashes MUST differ
+            assert compute_full_hash(file_a) != compute_full_hash(file_b)
 
 
 class TestMetadataExtraction:

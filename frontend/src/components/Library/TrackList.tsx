@@ -256,7 +256,10 @@ interface TrackListProps {
 }
 
 export function TrackList({ search, artist, album }: TrackListProps) {
-  const { currentTrack, isPlaying, setIsPlaying, setQueue } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const setQueue = usePlayerStore((s) => s.setQueue);
   const columns = useColumnStore((state) => state.columns);
   const reorderColumns = useColumnStore((state) => state.reorderColumns);
 

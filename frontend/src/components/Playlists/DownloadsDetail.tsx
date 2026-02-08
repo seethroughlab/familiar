@@ -20,7 +20,11 @@ interface Props {
 }
 
 export function DownloadsDetail({ onBack }: Props) {
-  const { currentTrack, isPlaying, setQueue, addToQueue, setIsPlaying } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { tracks, total, totalSizeFormatted, refresh } = useDownloadedTracks();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);

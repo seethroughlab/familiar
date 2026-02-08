@@ -39,7 +39,9 @@ interface Props {
 
 export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = {}) {
   const queryClient = useQueryClient();
-  const { setQueue, queueSource, isPlaying } = usePlayerStore();
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const queueSource = usePlayerStore((s) => s.queueSource);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
   const { total: favoritesCount } = useFavorites();
   const { total: downloadsCount, totalSizeFormatted: downloadsTotalSize } = useDownloadedTracks();
   const { isOffline } = useOfflineStatus();

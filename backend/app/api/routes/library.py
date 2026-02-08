@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import Float, String, func, select
 
 from app.api.deps import DbSession
 from app.api.exceptions import sanitize_error_for_client
@@ -1323,65 +1323,85 @@ async def get_mood_distribution(
 
     Divides the 0-1 × 0-1 space into a grid and counts tracks per cell.
     Returns sample track IDs per cell for preview/playback.
+
+    Uses SQL aggregation instead of loading all tracks into Python.
     """
-    from sqlalchemy.orm import selectinload
+    from sqlalchemy import Integer, cast, literal_column, text
+    from sqlalchemy.dialects.postgresql import array_agg
 
-    # Fetch all tracks with analysis
-    tracks_query = (
-        select(Track)
-        .options(selectinload(Track.analyses))
-        .where(Track.status == TrackStatus.ACTIVE)
-    )
-    result = await db.execute(tracks_query)
-    tracks = result.scalars().all()
-
-    # Build grid
     cell_size = 1.0 / grid_size
-    cells: dict[tuple[int, int], list[str]] = {}
 
-    total_with_mood = 0
-    total_without_mood = 0
-
-    for track in tracks:
-        # Get latest analysis
-        if not track.analyses:
-            total_without_mood += 1
-            continue
-
-        latest = max(track.analyses, key=lambda a: a.version)
-        features = latest.features or {}
-
-        energy = features.get("energy")
-        valence = features.get("valence")
-
-        if energy is None or valence is None:
-            total_without_mood += 1
-            continue
-
-        total_with_mood += 1
-
-        # Determine cell
-        energy_cell = min(int(energy * grid_size), grid_size - 1)
-        valence_cell = min(int(valence * grid_size), grid_size - 1)
-        key = (energy_cell, valence_cell)
-
-        if key not in cells:
-            cells[key] = []
-        cells[key].append(str(track.id))
-
-    # Build response
-    mood_cells = []
-    for (e_cell, v_cell), track_ids in cells.items():
-        mood_cells.append(
-            MoodCell(
-                energy_min=e_cell * cell_size,
-                energy_max=(e_cell + 1) * cell_size,
-                valence_min=v_cell * cell_size,
-                valence_max=(v_cell + 1) * cell_size,
-                track_count=len(track_ids),
-                sample_track_ids=track_ids[:5],  # Keep up to 5 samples
+    # Subquery: latest analysis per track (highest version)
+    latest_analysis = (
+        select(
+            TrackAnalysis.track_id,
+            TrackAnalysis.features,
+            func.row_number()
+            .over(
+                partition_by=TrackAnalysis.track_id,
+                order_by=TrackAnalysis.version.desc(),
             )
+            .label("rn"),
         )
+        .subquery("latest_analysis")
+    )
+
+    # Extract energy/valence from JSONB as floats
+    energy_expr = latest_analysis.c.features.op("->>")("energy").cast(Float)
+    valence_expr = latest_analysis.c.features.op("->>")("valence").cast(Float)
+
+    # Bin into grid cells, clamped to [0, grid_size-1]
+    energy_cell = func.least(
+        cast(func.floor(energy_expr * grid_size), Integer),
+        grid_size - 1,
+    )
+    valence_cell = func.least(
+        cast(func.floor(valence_expr * grid_size), Integer),
+        grid_size - 1,
+    )
+
+    # Aggregate: count and sample track IDs per cell
+    grid_query = (
+        select(
+            energy_cell.label("e_cell"),
+            valence_cell.label("v_cell"),
+            func.count().label("cnt"),
+            # Collect up to 5 sample track IDs per cell
+            array_agg(cast(latest_analysis.c.track_id, String)).label("sample_ids"),
+        )
+        .select_from(latest_analysis)
+        .join(Track, Track.id == latest_analysis.c.track_id)
+        .where(
+            latest_analysis.c.rn == 1,
+            Track.status == TrackStatus.ACTIVE,
+            energy_expr.isnot(None),
+            valence_expr.isnot(None),
+        )
+        .group_by(literal_column("e_cell"), literal_column("v_cell"))
+    )
+
+    result = await db.execute(grid_query)
+    rows = result.all()
+
+    # Count tracks with/without mood data
+    total_with_mood = sum(row.cnt for row in rows)
+
+    total_active = await db.scalar(
+        select(func.count(Track.id)).where(Track.status == TrackStatus.ACTIVE)
+    ) or 0
+    total_without_mood = total_active - total_with_mood
+
+    mood_cells = [
+        MoodCell(
+            energy_min=row.e_cell * cell_size,
+            energy_max=(row.e_cell + 1) * cell_size,
+            valence_min=row.v_cell * cell_size,
+            valence_max=(row.v_cell + 1) * cell_size,
+            track_count=row.cnt,
+            sample_track_ids=row.sample_ids[:5] if row.sample_ids else [],
+        )
+        for row in rows
+    ]
 
     return MoodDistributionResponse(
         cells=mood_cells,
@@ -1794,41 +1814,34 @@ async def get_ego_centric_map(
 
 @router.get("/stats", response_model=LibraryStats)
 async def get_library_stats(db: DbSession) -> LibraryStats:
-    """Get library statistics."""
-    # Total tracks
-    total_tracks = await db.scalar(select(func.count(Track.id))) or 0
+    """Get library statistics in a single query using conditional aggregation."""
+    from sqlalchemy import case
 
-    # Unique albums
-    total_albums = await db.scalar(select(func.count(func.distinct(Track.album)))) or 0
-
-    # Unique artists
-    total_artists = await db.scalar(select(func.count(func.distinct(Track.artist)))) or 0
-
-    # By album type
-    albums = await db.scalar(
-        select(func.count(Track.id)).where(Track.album_type == AlbumType.ALBUM)
-    ) or 0
-    compilations = await db.scalar(
-        select(func.count(Track.id)).where(Track.album_type == AlbumType.COMPILATION)
-    ) or 0
-    soundtracks = await db.scalar(
-        select(func.count(Track.id)).where(Track.album_type == AlbumType.SOUNDTRACK)
-    ) or 0
-
-    # Analysis status - count only tracks at current analysis version
     from app.config import ANALYSIS_VERSION
 
-    analyzed_tracks = await db.scalar(
-        select(func.count(Track.id)).where(Track.analysis_version >= ANALYSIS_VERSION)
-    ) or 0
+    result = await db.execute(
+        select(
+            func.count(Track.id).label("total_tracks"),
+            func.count(func.distinct(Track.album)).label("total_albums"),
+            func.count(func.distinct(Track.artist)).label("total_artists"),
+            func.sum(case((Track.album_type == AlbumType.ALBUM, 1), else_=0)).label("albums"),
+            func.sum(case((Track.album_type == AlbumType.COMPILATION, 1), else_=0)).label("compilations"),
+            func.sum(case((Track.album_type == AlbumType.SOUNDTRACK, 1), else_=0)).label("soundtracks"),
+            func.sum(case((Track.analysis_version >= ANALYSIS_VERSION, 1), else_=0)).label("analyzed"),
+        )
+    )
+    row = result.one()
+
+    total_tracks = row.total_tracks or 0
+    analyzed_tracks = row.analyzed or 0
 
     return LibraryStats(
         total_tracks=total_tracks,
-        total_albums=total_albums,
-        total_artists=total_artists,
-        albums=albums,
-        compilations=compilations,
-        soundtracks=soundtracks,
+        total_albums=row.total_albums or 0,
+        total_artists=row.total_artists or 0,
+        albums=row.albums or 0,
+        compilations=row.compilations or 0,
+        soundtracks=row.soundtracks or 0,
         analyzed_tracks=analyzed_tracks,
         pending_analysis=total_tracks - analyzed_tracks,
     )
@@ -2627,13 +2640,13 @@ async def import_execute(
     Uses session_id from preview to access uploaded files.
     Applies user-edited metadata and conversion options.
     """
-    import hashlib
     from pathlib import Path
     from uuid import UUID
 
     from app.db.models import Track
     from app.services.import_service import ImportExecuteService, MusicImportError
     from app.services.metadata import extract_metadata
+    from app.services.scanner import compute_file_hash
 
     try:
         execute_service = ImportExecuteService()
@@ -2665,9 +2678,8 @@ async def import_execute(
                 # Update track with new file info
                 existing.file_path = str(new_file_path)
 
-                # Calculate new file hash
-                with open(new_file_path, "rb") as f:
-                    existing.file_hash = hashlib.sha256(f.read()).hexdigest()
+                # Calculate new file hash (must match scanner's partial-hash scheme)
+                existing.file_hash = compute_file_hash(new_file_path)
 
                 # Extract metadata from new file
                 metadata = extract_metadata(new_file_path)

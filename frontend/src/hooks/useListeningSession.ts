@@ -59,7 +59,10 @@ export function useListeningSession({ userId, username }: UseListeningSessionOpt
   const reconnectAttemptsRef = useRef<number>(0);
   const maxReconnectAttempts = 10;
 
-  const { setIsPlaying, currentTrack, isPlaying, currentTime } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const audioEngine = useAudioEngine();
 
   // Send message helper (defined early for WebRTC hook)

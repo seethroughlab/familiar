@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff } from 'lucide-react';
+import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff, X } from 'lucide-react';
 import { getApiUrl } from '../../api/base';
 import { createLogger } from '../../utils/logger';
 
@@ -28,9 +28,11 @@ interface ChatPanelProps {
   pendingMessage?: string | null;
   /** Called after pending message is consumed */
   onPendingMessageConsumed?: () => void;
+  /** Called when close button is clicked (renders inline X in header) */
+  onClose?: () => void;
 }
 
-export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPanelProps = {}) {
+export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }: ChatPanelProps = {}) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [input, setInput] = useState('');
@@ -42,7 +44,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
   const inputRef = useRef<HTMLInputElement>(null);
 
   const queryClient = useQueryClient();
-  const { setQueue } = usePlayerStore();
+  const setQueue = usePlayerStore((s) => s.setQueue);
   const { isOffline } = useOfflineStatus();
 
   // Load profile and sessions on mount
@@ -480,13 +482,24 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed }: ChatPane
               </p>
             </div>
           </div>
-          <button
-            onClick={createNewSession}
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-            title="New chat"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={createNewSession}
+              className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+              title="New chat"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+                aria-label="Close chat"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Messages */}

@@ -218,17 +218,18 @@ class PluginService:
             bundle_content = await self.fetch_bundle(user, repo, ref, manifest.main)
             bundle_hash = hashlib.sha256(bundle_content).hexdigest()
 
+            from app.utils.atomic_write import atomic_write_bytes, atomic_write_text
+
             # Create local directory
             plugin_dir = self.plugins_path / manifest.id
             plugin_dir.mkdir(parents=True, exist_ok=True)
 
-            # Write bundle
+            # Write bundle and manifest atomically
             bundle_path = plugin_dir / "bundle.js"
-            bundle_path.write_bytes(bundle_content)
+            atomic_write_bytes(bundle_path, bundle_content)
 
-            # Write manifest for reference
             manifest_path = plugin_dir / "manifest.json"
-            manifest_path.write_text(manifest.model_dump_json(indent=2))
+            atomic_write_text(manifest_path, manifest.model_dump_json(indent=2))
 
             # Create database record
             plugin = Plugin(
@@ -248,7 +249,13 @@ class PluginService:
                 manifest=manifest.model_dump(),
             )
             db.add(plugin)
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception:
+                # DB commit failed — remove written files so we don't leave
+                # orphaned plugin files with no matching DB record.
+                shutil.rmtree(plugin_dir, ignore_errors=True)
+                raise
 
             return PluginInstallResult(success=True, plugin_id=manifest.id)
 
@@ -302,13 +309,15 @@ class PluginService:
             if bundle_hash == plugin.bundle_hash:
                 return PluginInstallResult(success=True, plugin_id=plugin_id)
 
-            # Update local files
+            from app.utils.atomic_write import atomic_write_bytes, atomic_write_text
+
+            # Update local files atomically
             plugin_dir = self.plugins_path / plugin_id
             bundle_path = plugin_dir / "bundle.js"
-            bundle_path.write_bytes(bundle_content)
+            atomic_write_bytes(bundle_path, bundle_content)
 
             manifest_path = plugin_dir / "manifest.json"
-            manifest_path.write_text(manifest.model_dump_json(indent=2))
+            atomic_write_text(manifest_path, manifest.model_dump_json(indent=2))
 
             # Update database record
             plugin.version = manifest.version

@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioSettingsStore } from '../stores/audioSettingsStore';
 import { tracksApi } from '../api/client';
@@ -81,19 +82,17 @@ export function useAudioEngine() {
   const { audioGraph, isInitialized, initializeAudioGraph, platform } = useAudioEngineContext();
   const { useDirectPlayback, useWebAudio } = platform;
 
-  const {
-    currentTrack,
-    isPlaying,
-    volume,
-    setCurrentTime,
-    setDuration,
-    setIsPlaying,
-    playNext,
-    setCrossfadeState,
-    setNextTrackPreloaded,
-    advanceToNextTrack,
-    setIsLoadingAudio,
-  } = usePlayerStore();
+  const { currentTrack, isPlaying, volume } = usePlayerStore(
+    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume }))
+  );
+  const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
+  const setDuration = usePlayerStore((s) => s.setDuration);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const setCrossfadeState = usePlayerStore((s) => s.setCrossfadeState);
+  const setNextTrackPreloaded = usePlayerStore((s) => s.setNextTrackPreloaded);
+  const advanceToNextTrack = usePlayerStore((s) => s.advanceToNextTrack);
+  const setIsLoadingAudio = usePlayerStore((s) => s.setIsLoadingAudio);
 
   const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
 

@@ -30,7 +30,9 @@ class Track(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     file_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    # Partial hash (first/last 8KB + size) for fast change detection; see compute_file_hash()
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    full_file_hash: Mapped[str | None] = mapped_column(String(64))
     file_size: Mapped[int | None] = mapped_column(BigInteger)
 
     # Basic metadata from tags (indexed for common queries)

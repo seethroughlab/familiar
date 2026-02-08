@@ -121,7 +121,11 @@ interface Props {
 
 export function PlaylistDetail({ playlistId, onBack }: Props) {
   const queryClient = useQueryClient();
-  const { currentTrack, isPlaying, setQueue, addToQueue, setIsPlaying } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { playTrackingApi } from '../api/client';
 import { createLogger } from '../utils/logger';
@@ -15,7 +16,9 @@ const log = createLogger('PlayTracking');
  * This follows the same rules as Last.fm scrobbling.
  */
 export function usePlayTracking() {
-  const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore();
+  const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore(
+    useShallow((s) => ({ currentTrack: s.currentTrack, currentTime: s.currentTime, duration: s.duration, isPlaying: s.isPlaying }))
+  );
 
   const recordedTrackRef = useRef<string | null>(null);
   const accumulatedTimeRef = useRef<number>(0);

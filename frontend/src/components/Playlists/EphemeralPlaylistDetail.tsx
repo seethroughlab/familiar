@@ -14,7 +14,10 @@ interface Props {
 }
 
 export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, isSaving }: Props) {
-  const { currentTrack, isPlaying, setQueue, setIsPlaying } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const [searchFilter, setSearchFilter] = useState('');
 

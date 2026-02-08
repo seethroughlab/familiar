@@ -155,6 +155,18 @@ def compute_file_hash(path: Path | str, chunk_size: int = 8192, file_size: int |
     return hasher.hexdigest()
 
 
+def compute_full_hash(path: Path | str) -> str:
+    """Compute SHA-256 hash of the entire file contents.
+
+    Used to disambiguate files that have the same partial hash
+    (identical first/last 8KB + size) but differ in the middle.
+    """
+    hasher = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
 
 def _discover_files_sync(library_path: Path, progress_callback=None) -> list[tuple[Path, os.stat_result]]:
     """Synchronous file discovery using os.scandir (runs in thread pool).
@@ -396,18 +408,52 @@ class LibraryScanner:
             if path_str not in existing_paths:
                 # Path not found - check if same file exists at different path (by hash)
                 if file_hash in existing_hashes:
-                    # Found by hash - this is a relocated file, update its path
                     existing = existing_hashes[file_hash]
                     old_path = existing.file_path
-                    logger.info(f"RELOCATED (by hash): {Path(old_path).name} -> {path_str}")
-                    existing.file_path = path_str
-                    existing.status = TrackStatus.ACTIVE
-                    existing.missing_since = None
-                    results["relocated"] += 1
-                    # Update path lookup so we don't process old path as missing
-                    existing_paths[path_str] = existing
-                    if old_path in existing_paths:
-                        del existing_paths[old_path]
+
+                    # Check if the existing track's file still exists on disk.
+                    # If it does, this could be a partial-hash collision (two different
+                    # files with identical first/last 8KB + size).  Compute full hashes
+                    # to be sure.
+                    old_file_exists = Path(old_path).exists()
+                    is_collision = False
+                    if old_file_exists:
+                        full_hash_new = await loop.run_in_executor(
+                            _file_executor, compute_full_hash, file_path
+                        )
+                        full_hash_old = await loop.run_in_executor(
+                            _file_executor, compute_full_hash, Path(old_path)
+                        )
+                        if full_hash_new != full_hash_old:
+                            is_collision = True
+                            # Store full hashes for future reference
+                            existing.full_file_hash = full_hash_old
+                            logger.info(
+                                f"HASH COLLISION: {file_path.name} and {Path(old_path).name} "
+                                f"share partial hash {file_hash[:12]}… but differ in full content"
+                            )
+
+                    if is_collision:
+                        # Different files that happen to share a partial hash.
+                        # Treat the new file as truly new.
+                        logger.info(f"NEW (collision): {file_path.name}")
+                        track = await self._create_track(file_path, file_hash, file_mtime, file_size)
+                        track.full_file_hash = full_hash_new
+                        pending_analysis_ids.append(str(track.id))
+                        new_tracks.append(track)
+                        results["new"] += 1
+                        results["queued"] += 1
+                    else:
+                        # Genuine relocation (old file gone, or full hashes match)
+                        logger.info(f"RELOCATED (by hash): {Path(old_path).name} -> {path_str}")
+                        existing.file_path = path_str
+                        existing.status = TrackStatus.ACTIVE
+                        existing.missing_since = None
+                        results["relocated"] += 1
+                        # Update path lookup so we don't process old path as missing
+                        existing_paths[path_str] = existing
+                        if old_path in existing_paths:
+                            del existing_paths[old_path]
                 else:
                     # Truly new file
                     logger.info(f"NEW: {file_path.name}")

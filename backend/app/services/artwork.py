@@ -199,6 +199,8 @@ def save_artwork(
             rgb_img = img.convert("RGB")
             img = rgb_img
 
+        from app.utils.atomic_write import atomic_write_via
+
         for size_name, max_dim in sizes.items():
             output_path = get_artwork_path(album_hash, size_name)
 
@@ -206,8 +208,11 @@ def save_artwork(
             img_copy = img.copy()
             img_copy.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
 
-            # Save as JPEG
-            img_copy.save(output_path, "JPEG", quality=85, optimize=True)
+            # Save as JPEG atomically
+            atomic_write_via(
+                output_path,
+                lambda p, _img=img_copy: _img.save(p, "JPEG", quality=85, optimize=True),
+            )
             saved_paths[size_name] = output_path
 
     except Exception as e:

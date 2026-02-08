@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import ExternalTrack, ExternalTrackSource, Playlist, PlaylistTrack, Track
@@ -109,24 +110,25 @@ async def list_playlists(
     result = await db.execute(query)
     playlists = result.scalars().all()
 
-    # Get track counts (separate local and external)
+    # Batch all track counts in a single GROUP BY query instead of 2N queries
+    playlist_ids = [p.id for p in playlists]
+    counts: dict[UUID, tuple[int, int]] = {}
+    if playlist_ids:
+        count_result = await db.execute(
+            select(
+                PlaylistTrack.playlist_id,
+                func.count(PlaylistTrack.id).label("total"),
+                func.count(PlaylistTrack.track_id).label("local"),  # count() ignores NULLs
+            )
+            .where(PlaylistTrack.playlist_id.in_(playlist_ids))
+            .group_by(PlaylistTrack.playlist_id)
+        )
+        for row in count_result.all():
+            counts[row.playlist_id] = (row.total, row.local)
+
     responses = []
     for playlist in playlists:
-        # Count total tracks
-        total_count = await db.scalar(
-            select(func.count(PlaylistTrack.id)).where(
-                PlaylistTrack.playlist_id == playlist.id
-            )
-        ) or 0
-
-        # Count local tracks
-        local_count = await db.scalar(
-            select(func.count(PlaylistTrack.id)).where(
-                PlaylistTrack.playlist_id == playlist.id,
-                PlaylistTrack.track_id.isnot(None),
-            )
-        ) or 0
-
+        total_count, local_count = counts.get(playlist.id, (0, 0))
         external_count = total_count - local_count
 
         responses.append(PlaylistResponse(
@@ -347,59 +349,59 @@ async def get_playlist(
             detail="Playlist not found",
         )
 
-    # Get all playlist tracks ordered by position
+    # Eagerly load related tracks in 3 queries (1 playlist_tracks + 1 tracks + 1 external_tracks)
+    # instead of N+1 individual SELECTs per track
     result = await db.execute(
         select(PlaylistTrack)
         .where(PlaylistTrack.playlist_id == playlist_id)
         .order_by(PlaylistTrack.position)
+        .options(
+            selectinload(PlaylistTrack.track),
+            selectinload(PlaylistTrack.external_track),
+        )
     )
     playlist_tracks = result.scalars().all()
 
     tracks = []
     for pt in playlist_tracks:
-        if pt.track_id:
-            # Local track
-            track = await db.get(Track, pt.track_id)
-            if track:
-                tracks.append(TrackInPlaylist(
-                    id=str(track.id),
-                    playlist_track_id=str(pt.id),
-                    type="local",
-                    title=track.title,
-                    artist=track.artist,
-                    album=track.album,
-                    duration_seconds=track.duration_seconds,
-                    position=pt.position,
-                    is_matched=False,
-                    matched_track_id=None,
-                    match_confidence=None,
-                    preview_url=None,
-                    external_links={},
-                ))
-        elif pt.external_track_id:
-            # External track
-            ext = await db.get(ExternalTrack, pt.external_track_id)
-            if ext:
-                external_links = {}
-                if ext.external_data:
-                    if ext.external_data.get("spotify_url"):
-                        external_links["spotify"] = ext.external_data["spotify_url"]
+        if pt.track_id and pt.track:
+            tracks.append(TrackInPlaylist(
+                id=str(pt.track.id),
+                playlist_track_id=str(pt.id),
+                type="local",
+                title=pt.track.title,
+                artist=pt.track.artist,
+                album=pt.track.album,
+                duration_seconds=pt.track.duration_seconds,
+                position=pt.position,
+                is_matched=False,
+                matched_track_id=None,
+                match_confidence=None,
+                preview_url=None,
+                external_links={},
+            ))
+        elif pt.external_track_id and pt.external_track:
+            ext = pt.external_track
+            external_links = {}
+            if ext.external_data:
+                if ext.external_data.get("spotify_url"):
+                    external_links["spotify"] = ext.external_data["spotify_url"]
 
-                tracks.append(TrackInPlaylist(
-                    id=str(ext.id),
-                    playlist_track_id=str(pt.id),
-                    type="external",
-                    title=ext.title,
-                    artist=ext.artist,
-                    album=ext.album,
-                    duration_seconds=ext.duration_seconds,
-                    position=pt.position,
-                    is_matched=ext.matched_track_id is not None,
-                    matched_track_id=str(ext.matched_track_id) if ext.matched_track_id else None,
-                    match_confidence=ext.match_confidence,
-                    preview_url=ext.preview_url,
-                    external_links=external_links,
-                ))
+            tracks.append(TrackInPlaylist(
+                id=str(ext.id),
+                playlist_track_id=str(pt.id),
+                type="external",
+                title=ext.title,
+                artist=ext.artist,
+                album=ext.album,
+                duration_seconds=ext.duration_seconds,
+                position=pt.position,
+                is_matched=ext.matched_track_id is not None,
+                matched_track_id=str(ext.matched_track_id) if ext.matched_track_id else None,
+                match_confidence=ext.match_confidence,
+                preview_url=ext.preview_url,
+                external_links=external_links,
+            ))
 
     return PlaylistDetailResponse(
         id=str(playlist.id),

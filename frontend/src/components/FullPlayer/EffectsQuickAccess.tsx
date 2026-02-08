@@ -14,13 +14,11 @@ export function EffectsQuickAccess() {
   const { platform } = useAudioEngineContext();
   const effectsAvailable = platform.useWebAudio;
 
-  const {
-    masterEnabled,
-    setMasterEnabled,
-    presets,
-    activePresetName,
-    loadPreset,
-  } = useAudioEffectsStore();
+  const masterEnabled = useAudioEffectsStore((s) => s.masterEnabled);
+  const setMasterEnabled = useAudioEffectsStore((s) => s.setMasterEnabled);
+  const presets = useAudioEffectsStore((s) => s.presets);
+  const activePresetName = useAudioEffectsStore((s) => s.activePresetName);
+  const loadPreset = useAudioEffectsStore((s) => s.loadPreset);
 
   // Close on click outside
   useEffect(() => {

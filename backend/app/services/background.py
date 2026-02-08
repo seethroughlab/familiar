@@ -7,6 +7,7 @@ Key features:
 """
 
 import asyncio
+import atexit
 import json
 import logging
 import multiprocessing as mp
@@ -69,6 +70,9 @@ class BackgroundManager:
         # Track current work for crash diagnostics
         self._current_track_id: str | None = None
         self._crashed_track_ids: set[str] = set()  # Tracks that have caused crashes
+        # Zombie process protection
+        self._atexit_registered: bool = False
+        self._last_task_started_at: float | None = None
 
     @property
     def redis(self) -> ResilientRedisClient:
@@ -93,6 +97,12 @@ class BackgroundManager:
             initializer=_analysis_worker_init,  # Run workers at lower priority
         )
         logger.info("ProcessPoolExecutor initialized with spawn context (1 worker, nice=10)")
+
+        # Register atexit handler once so workers are cleaned up even if
+        # the FastAPI lifespan shutdown() never runs (e.g. SIGKILL, crash).
+        if not self._atexit_registered:
+            atexit.register(self._atexit_cleanup)
+            self._atexit_registered = True
 
     def _reset_executor(self) -> bool:
         """Reset the executor after a crash. Creates a fresh process pool.
@@ -191,13 +201,53 @@ class BackgroundManager:
 
     def get_executor_status(self) -> dict[str, Any]:
         """Get current executor circuit breaker status."""
+        task_duration = None
+        if self._last_task_started_at is not None:
+            task_duration = time.monotonic() - self._last_task_started_at
         return {
             "disabled": self._executor_disabled,
             "consecutive_failures": self._consecutive_executor_failures,
             "max_failures": EXECUTOR_MAX_CONSECUTIVE_FAILURES,
             "crashed_track_ids": list(self._crashed_track_ids),
             "last_reset_ago": time.monotonic() - self._last_executor_reset if self._last_executor_reset else None,
+            "worker_healthy": self._check_worker_health(),
+            "current_task_duration": task_duration,
         }
+
+    def _atexit_cleanup(self) -> None:
+        """Last-resort cleanup when the process exits without proper shutdown."""
+        if self._executor is not None:
+            try:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+
+    def _check_worker_health(self) -> bool:
+        """Return False if a task has been running longer than 10 minutes."""
+        if self._last_task_started_at is None:
+            return True
+        return (time.monotonic() - self._last_task_started_at) < 600
+
+    async def _check_and_recover_worker(self) -> None:
+        """Periodic health check: if a task is stuck, restart the executor."""
+        if self._check_worker_health():
+            return
+
+        duration = time.monotonic() - (self._last_task_started_at or 0)
+        logger.warning(
+            f"Worker appears stuck (task running for {duration:.0f}s, "
+            f"track: {self._current_track_id}). Restarting executor."
+        )
+
+        if self._executor is not None:
+            try:
+                self._executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+            self._executor = None
+
+        self._last_task_started_at = None
+        self._create_executor()
 
     def _cleanup_stale_redis_state(self) -> None:
         """Clean up stale Redis state from previous runs.
@@ -242,6 +292,7 @@ class BackgroundManager:
         try:
             from apscheduler.schedulers.asyncio import AsyncIOScheduler
             from apscheduler.triggers.cron import CronTrigger
+            from apscheduler.triggers.interval import IntervalTrigger
 
             self._scheduler = AsyncIOScheduler()
 
@@ -258,6 +309,14 @@ class BackgroundManager:
                 self._daily_new_releases_check,
                 CronTrigger(hour=3, minute=0),
                 id="daily_new_releases",
+                replace_existing=True,
+            )
+
+            # Worker health check every 5 minutes (detects stuck tasks)
+            self._scheduler.add_job(
+                self._check_and_recover_worker,
+                IntervalTrigger(minutes=5),
+                id="worker_health_check",
                 replace_existing=True,
             )
 
@@ -585,6 +644,7 @@ class BackgroundManager:
         task_key = f"{track_id}:features"
         try:
             self._current_track_id = track_id
+            self._last_task_started_at = time.monotonic()
             result = await self.run_cpu_bound(run_track_features, track_id)
             return result
         except Exception as e:
@@ -592,6 +652,7 @@ class BackgroundManager:
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None
+            self._last_task_started_at = None
             self._analysis_tasks.pop(task_key, None)
 
     async def _do_embedding(self, track_id: str) -> dict[str, Any]:
@@ -614,6 +675,7 @@ class BackgroundManager:
                 return {"status": "skipped", "embedding_generated": False}
 
             self._current_track_id = track_id
+            self._last_task_started_at = time.monotonic()
             result = await self.run_cpu_bound(run_track_embedding, track_id)
             return result
         except Exception as e:
@@ -621,6 +683,7 @@ class BackgroundManager:
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None
+            self._last_task_started_at = None
             self._analysis_tasks.pop(task_key, None)
 
     async def _do_analysis(self, track_id: str) -> dict[str, Any]:
@@ -641,6 +704,7 @@ class BackgroundManager:
         task_key = f"{track_id}:full"
         try:
             self._current_track_id = track_id
+            self._last_task_started_at = time.monotonic()
 
             # Phase 1: Extract features (librosa, artwork, fingerprint)
             features_result = await self.run_cpu_bound(run_track_features, track_id)
@@ -673,6 +737,7 @@ class BackgroundManager:
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None
+            self._last_task_started_at = None
             self._analysis_tasks.pop(task_key, None)
 
     async def run_spotify_sync(

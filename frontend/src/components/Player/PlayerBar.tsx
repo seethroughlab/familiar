@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, Radio, ListX } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAudioEngine } from '../../hooks/useAudioEngine';
@@ -59,25 +60,20 @@ export function PlayerBar({
   // isInSession = false,
   // sessionParticipantCount = 0,
 }: PlayerBarProps) {
-  const {
-    currentTrack,
-    isPlaying,
-    isLoadingAudio,
-    currentTime,
-    duration,
-    volume,
-    setVolume,
-    playNext,
-    playPrevious,
-    shuffle,
-    toggleShuffle,
-    repeat,
-    toggleRepeat,
-    consume,
-    toggleConsume,
-    addToQueue,
-    isPreviewMode,
-  } = usePlayerStore();
+  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreviewMode } = usePlayerStore(
+    useShallow((s) => ({
+      currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
+      currentTime: s.currentTime, duration: s.duration, volume: s.volume,
+      shuffle: s.shuffle, repeat: s.repeat, consume: s.consume, isPreviewMode: s.isPreviewMode,
+    }))
+  );
+  const setVolume = usePlayerStore((s) => s.setVolume);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const toggleShuffle = usePlayerStore((s) => s.toggleShuffle);
+  const toggleRepeat = usePlayerStore((s) => s.toggleRepeat);
+  const toggleConsume = usePlayerStore((s) => s.toggleConsume);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
 
   const { seek, togglePlayPause } = useAudioEngine();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();

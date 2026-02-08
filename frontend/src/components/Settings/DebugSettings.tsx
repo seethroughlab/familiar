@@ -60,7 +60,8 @@ export function DebugSettings() {
   const [logs, setLogs] = useState<typeof logBuffer>([]);
   const [offlineCount, setOfflineCount] = useState<number | null>(null);
   const [apiErrors, setApiErrors] = useState<TrackedError[]>([]);
-  const { isPlaying, currentTrack } = usePlayerStore();
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
   const { jobs, activeJobId } = useDownloadStore();
   const { audioGraph, platform } = useAudioEngineContext();
 

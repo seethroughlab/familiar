@@ -13,7 +13,8 @@ import { tracksApi } from '../api/client';
  * and fetches from MusicBrainz/AcoustID if needed.
  */
 export function useMetadataEnrichment() {
-  const { currentTrack, isPlaying } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
 
   // Track which tracks we've already requested enrichment for this session
   const enrichedTracksRef = useRef<Set<string>>(new Set());

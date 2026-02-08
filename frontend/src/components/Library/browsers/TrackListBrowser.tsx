@@ -431,7 +431,13 @@ export function TrackListBrowser({
   offlineTrackIds,
 }: BrowserProps) {
   const [, setSearchParams] = useSearchParams();
-  const { currentTrack, isPlaying, shuffle, setIsPlaying, setQueue, setLazyQueue, lazyQueueIds } = usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const shuffle = usePlayerStore((s) => s.shuffle);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setLazyQueue = usePlayerStore((s) => s.setLazyQueue);
+  const lazyQueueIds = usePlayerStore((s) => s.lazyQueueIds);
   const selectRange = useSelectionStore((state) => state.selectRange);
   const columns = useColumnStore((state) => state.columns);
   const reorderColumns = useColumnStore((state) => state.reorderColumns);

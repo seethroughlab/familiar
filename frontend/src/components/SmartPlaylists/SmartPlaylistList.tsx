@@ -22,7 +22,7 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
   const [cachedPlaylistIds, setCachedPlaylistIds] = useState<Set<string>>(new Set());
   const [usingCachedData, setUsingCachedData] = useState(false);
 
-  const { setQueue } = usePlayerStore();
+  const setQueue = usePlayerStore((s) => s.setQueue);
   const { isOffline } = useOfflineStatus();
 
   // Load cached playlist IDs for offline indicators

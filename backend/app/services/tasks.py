@@ -343,6 +343,16 @@ def clear_sync_progress() -> None:
 # ---- Scan subprocess executor ----
 
 _scan_executor: ProcessPoolExecutor | None = None
+_scan_atexit_registered: bool = False
+
+
+def _cleanup_scan_executor() -> None:
+    """atexit handler: terminate scan worker if the process exits uncleanly."""
+    if _scan_executor is not None:
+        try:
+            _scan_executor.shutdown(wait=False, cancel_futures=True)
+        except Exception:
+            pass
 
 
 def _get_scan_executor() -> ProcessPoolExecutor:
@@ -350,14 +360,19 @@ def _get_scan_executor() -> ProcessPoolExecutor:
 
     Separate from the analysis executor — different failure mode, no circuit breaker.
     """
-    global _scan_executor
+    global _scan_executor, _scan_atexit_registered
     if _scan_executor is None or _scan_executor._broken:
+        import atexit
         import multiprocessing as mp
 
         _scan_executor = ProcessPoolExecutor(
             max_workers=1,
             mp_context=mp.get_context("spawn"),
         )
+
+        if not _scan_atexit_registered:
+            atexit.register(_cleanup_scan_executor)
+            _scan_atexit_registered = True
     return _scan_executor
 
 

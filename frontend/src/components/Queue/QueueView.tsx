@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ListMusic, ListX, Play, Pause, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { tracksApi } from '../../api/client';
@@ -14,23 +15,19 @@ interface QueueViewProps {
 }
 
 export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
-  const {
-    queue,
-    queueIndex,
-    currentTrack,
-    isPlaying,
-    shuffle,
-    consume,
-    lazyQueueIds,
-    lazyQueueIndex,
-    prefetchedTracks,
-    setIsPlaying,
-    clearQueue,
-    removeFromQueue,
-    exitLazyMode,
-    addToQueue,
-    toggleConsume,
-  } = usePlayerStore();
+  const { queue, queueIndex, currentTrack, isPlaying, shuffle, consume, lazyQueueIds, lazyQueueIndex, prefetchedTracks } = usePlayerStore(
+    useShallow((s) => ({
+      queue: s.queue, queueIndex: s.queueIndex, currentTrack: s.currentTrack,
+      isPlaying: s.isPlaying, shuffle: s.shuffle, consume: s.consume,
+      lazyQueueIds: s.lazyQueueIds, lazyQueueIndex: s.lazyQueueIndex, prefetchedTracks: s.prefetchedTracks,
+    }))
+  );
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const clearQueue = usePlayerStore((s) => s.clearQueue);
+  const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
+  const exitLazyMode = usePlayerStore((s) => s.exitLazyMode);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const toggleConsume = usePlayerStore((s) => s.toggleConsume);
 
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
 
