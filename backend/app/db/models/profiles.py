@@ -43,6 +43,9 @@ class Profile(Base):
     lastfm_profile: Mapped["LastfmProfile | None"] = relationship(
         back_populates="profile", cascade="all, delete"
     )
+    subsonic_credentials: Mapped[list["SubsonicCredential"]] = relationship(
+        back_populates="profile", cascade="all, delete"
+    )
     playlists: Mapped[list["Playlist"]] = relationship(
         back_populates="profile", cascade="all, delete"
     )
@@ -75,6 +78,29 @@ class LastfmProfile(Base):
 
     # Relationships
     profile: Mapped["Profile"] = relationship(back_populates="lastfm_profile")
+
+
+class SubsonicCredential(Base):
+    """Subsonic API credentials mapped to a Familiar profile.
+
+    Stores both bcrypt hash (for direct password auth) and plaintext password
+    (for Subsonic token auth which requires md5(password+salt) verification).
+    The password is auto-generated random string, not user-chosen.
+    """
+
+    __tablename__ = "subsonic_credentials"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), index=True
+    )
+    username: Mapped[str] = mapped_column(String(100), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))  # bcrypt for direct auth
+    password_token: Mapped[str] = mapped_column(String(255))  # plaintext for token auth
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Relationships
+    profile: Mapped["Profile"] = relationship(back_populates="subsonic_credentials")
 
 
 class SpotifyProfile(Base):

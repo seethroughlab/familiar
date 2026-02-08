@@ -14,6 +14,7 @@ import { InstallStatus } from '../PWA/InstallPrompt';
 import { DebugSettings } from './DebugSettings';
 import { AISettings } from './AISettings';
 import { DataManagement } from './DataManagement';
+import { SubsonicSettings } from './SubsonicSettings';
 
 export function SettingsPanel() {
   return (
@@ -107,6 +108,7 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <SpotifySettings />
             <LastfmSettings />
+            <SubsonicSettings />
           </div>
         </section>
 
