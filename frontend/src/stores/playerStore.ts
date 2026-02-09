@@ -72,9 +72,7 @@ interface PlayerState {
 
   // Lazy queue state (for shuffle-all with large libraries)
   lazyQueueIds: string[] | null;  // Track IDs only, null when not in lazy mode
-  lazyQueueIndex: number;         // Current position in lazy queue
-  prefetchedTracks: Map<string, Track>;  // Cache of fetched track metadata
-  isFetchingTrack: boolean;       // Loading state for track fetches
+  lazyQueueIndex: number;         // Current position in lazy queue (next ID to materialize)
 
   // Queue source tracking
   queueSource: QueueSource | null;  // Where the current queue originated from
@@ -112,7 +110,6 @@ interface PlayerState {
 
   // Lazy queue actions
   setLazyQueue: (ids: string[], source?: QueueSource) => Promise<void>;
-  jumpToLazyQueueIndex: (index: number) => Promise<void>;
   exitLazyMode: () => void;
 
   // Crossfade actions
@@ -170,56 +167,66 @@ const persistState = () => {
   });
 };
 
-// Maximum prefetch cache size to prevent unbounded memory growth
-const MAX_PREFETCH_CACHE_SIZE = 50;
+// Lazy reservoir constants
+const WINDOW_SIZE = 50;        // Initial materialization from reservoir
+const REFILL_THRESHOLD = 10;   // Refill when this many tracks remain ahead
+const REFILL_BATCH = 20;       // How many to fetch per refill
 
-// Helper to prefetch upcoming tracks in lazy mode
-const prefetchUpcomingTracks = async (
-  ids: string[],
-  currentIndex: number,
-  prefetchedTracks: Map<string, Track>,
-  count: number = 10
-) => {
-  const idsToFetch: string[] = [];
-  for (let i = 1; i <= count && currentIndex + i < ids.length; i++) {
-    const id = ids[currentIndex + i];
-    if (id && !prefetchedTracks.has(id)) {
-      idsToFetch.push(id);
-    }
-  }
+// Concurrency guard for reservoir refills
+let isRefilling = false;
 
-  if (idsToFetch.length > 0) {
-    try {
-      const tracks = await tracksApi.getBatch(idsToFetch);
-      const newPrefetched = new Map(prefetchedTracks);
-      tracks.forEach(track => {
-        newPrefetched.set(track.id, track);
-      });
+// Helper to refill queue from the lazy reservoir.
+// Self-contained: checks threshold internally, so callers can call unconditionally.
+const refillFromReservoir = async () => {
+  if (isRefilling) return;
 
-      // Evict oldest entries if cache exceeds max size (simple LRU)
-      if (newPrefetched.size > MAX_PREFETCH_CACHE_SIZE) {
-        // Get track IDs that are "near" current position (keep these)
-        const nearbyIds = new Set<string>();
-        for (let i = Math.max(0, currentIndex - 5); i <= Math.min(ids.length - 1, currentIndex + 15); i++) {
-          if (ids[i]) nearbyIds.add(ids[i]);
-        }
+  const { lazyQueueIds, lazyQueueIndex, queue, queueIndex } = usePlayerStore.getState();
+  if (!lazyQueueIds || lazyQueueIndex >= lazyQueueIds.length) return;
 
-        // Remove oldest entries that aren't nearby
-        const entries = Array.from(newPrefetched.entries());
-        for (const [id] of entries) {
-          if (newPrefetched.size <= MAX_PREFETCH_CACHE_SIZE) break;
-          if (!nearbyIds.has(id)) {
-            newPrefetched.delete(id);
-          }
-        }
+  // Check if refill is actually needed
+  const remaining = queue.length - 1 - queueIndex;
+  if (remaining > REFILL_THRESHOLD) return;
+
+  isRefilling = true;
+  try {
+    const batchIds = lazyQueueIds.slice(lazyQueueIndex, lazyQueueIndex + REFILL_BATCH);
+    if (batchIds.length === 0) return;
+
+    const tracks = await tracksApi.getBatch(batchIds);
+    if (tracks.length === 0) return;
+
+    const newItems: QueueItem[] = tracks.map(track => ({
+      track,
+      queueId: generateQueueId(),
+    }));
+
+    // Re-read state after async gap
+    const currentState = usePlayerStore.getState();
+    const newQueue = [...currentState.queue, ...newItems];
+
+    // If shuffle is on, insert new queue indices at random positions after current shuffleIndex
+    let newShuffleOrder = currentState.shuffleOrder;
+    if (currentState.shuffle && newShuffleOrder.length > 0) {
+      newShuffleOrder = [...newShuffleOrder];
+      const startIdx = currentState.queue.length;
+      for (let i = 0; i < newItems.length; i++) {
+        // Insert at random position after current shuffleIndex
+        const insertPos = currentState.shuffleIndex + 1 + Math.floor(Math.random() * (newShuffleOrder.length - currentState.shuffleIndex));
+        newShuffleOrder.splice(insertPos, 0, startIdx + i);
       }
-
-      return newPrefetched;
-    } catch (error) {
-      log.error('Failed to prefetch tracks:', error);
     }
+
+    usePlayerStore.setState({
+      queue: newQueue,
+      lazyQueueIndex: currentState.lazyQueueIndex + batchIds.length,
+      shuffleOrder: newShuffleOrder,
+    });
+    persistState();
+  } catch (error) {
+    log.error('Failed to refill from reservoir:', error);
+  } finally {
+    isRefilling = false;
   }
-  return prefetchedTracks;
 };
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -239,8 +246,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   shuffleIndex: -1,
   lazyQueueIds: null,
   lazyQueueIndex: -1,
-  prefetchedTracks: new Map(),
-  isFetchingTrack: false,
   queueSource: null,
   crossfadeState: 'idle',
   nextTrackPreloaded: false,
@@ -269,7 +274,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const newShuffle = !shuffle;
     const previousShuffle = shuffle;
 
-    // Handle lazy queue mode with library source - re-fetch IDs from server
+    // Handle lazy queue mode with library source - re-fetch IDs from server and re-materialize
     if (lazyQueueIds && lazyQueueIds.length > 0 && queueSource?.type === 'library') {
       // Optimistic update - show new shuffle state immediately
       set({ shuffle: newShuffle });
@@ -283,15 +288,42 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         });
 
         if (response.ids.length > 0) {
-          // Find current track's position in new order (should be 0 due to start_with)
-          const newIndex = currentTrack
-            ? response.ids.findIndex(id => id === currentTrack.id)
-            : 0;
+          // Materialize a new window of tracks from the new ID order
+          const windowIds = response.ids.slice(0, WINDOW_SIZE);
+          const tracks = await tracksApi.getBatch(windowIds);
 
-          set({
-            lazyQueueIds: response.ids,
-            lazyQueueIndex: newIndex >= 0 ? newIndex : 0,
-          });
+          if (tracks.length > 0) {
+            const queueItems: QueueItem[] = tracks.map(track => ({
+              track,
+              queueId: generateQueueId(),
+            }));
+
+            // Keep current track at position 0 if present
+            const currentIdx = currentTrack
+              ? queueItems.findIndex(item => item.track.id === currentTrack.id)
+              : -1;
+            if (currentIdx > 0) {
+              const [item] = queueItems.splice(currentIdx, 1);
+              queueItems.unshift(item);
+            }
+
+            let shuffleOrder: number[] = [];
+            let shuffleIndex = -1;
+            if (newShuffle && queueItems.length > 1) {
+              shuffleOrder = generateShuffleOrder(queueItems.length, 0);
+              shuffleIndex = 0;
+            }
+
+            set({
+              lazyQueueIds: response.ids,
+              lazyQueueIndex: windowIds.length,
+              queue: queueItems,
+              queueIndex: 0,
+              currentTrack: queueItems[0].track,
+              shuffleOrder,
+              shuffleIndex,
+            });
+          }
         }
         persistState();
       } catch (error) {
@@ -327,26 +359,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   // Queue actions
   addToQueue: (track, insertIndex) => {
-    const { queue, queueIndex, shuffle, shuffleOrder, lazyQueueIds, lazyQueueIndex, prefetchedTracks } = get();
+    const { queue, queueIndex, shuffle, shuffleOrder } = get();
 
-    // Lazy mode: insert into lazyQueueIds
-    if (lazyQueueIds && lazyQueueIds.length > 0) {
-      const idx = insertIndex ?? (lazyQueueIndex + 1);
-      const newIds = [...lazyQueueIds];
-      newIds.splice(idx, 0, track.id);
-      const newPrefetched = new Map(prefetchedTracks);
-      newPrefetched.set(track.id, track);
-      set({
-        lazyQueueIds: newIds,
-        prefetchedTracks: newPrefetched,
-        // Adjust lazyQueueIndex if inserting before or at current position
-        lazyQueueIndex: idx <= lazyQueueIndex ? lazyQueueIndex + 1 : lazyQueueIndex,
-      });
-      persistState();
-      return;
-    }
-
-    // Regular queue mode
     const insertAt = insertIndex ?? queue.length;
     const newQueue = [...queue];
     newQueue.splice(insertAt, 0, { track, queueId: generateQueueId() });
@@ -404,7 +418,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   clearQueue: () => {
-    set({ queue: [], queueIndex: -1 });
+    set({ queue: [], queueIndex: -1, lazyQueueIds: null, lazyQueueIndex: -1, queueSource: null });
     persistState();
   },
 
@@ -425,80 +439,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: async () => {
-    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, consume, currentTrack, lazyQueueIds, lazyQueueIndex, prefetchedTracks, isFetchingTrack } = get();
+    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, consume, currentTrack } = get();
 
-    // Handle lazy queue mode (consume is ignored in lazy mode)
-    if (lazyQueueIds && lazyQueueIds.length > 0) {
-      if (isFetchingTrack) return; // Prevent concurrent fetches
-
-      // Add current track to history
-      if (currentTrack) {
-        set((s) => ({
-          history: [...s.history.slice(-49), s.currentTrack!],
-        }));
-      }
-
-      let nextLazyIndex = lazyQueueIndex + 1;
-      if (nextLazyIndex >= lazyQueueIds.length) {
-        if (repeat === 'all') {
-          nextLazyIndex = 0;
-        } else {
-          set({ isPlaying: false });
-          return;
-        }
-      }
-
-      const nextTrackId = lazyQueueIds[nextLazyIndex];
-
-      // Validate that the track ID exists (bounds check)
-      if (!nextTrackId) {
-        log.warn('Lazy queue index out of bounds:', nextLazyIndex, 'of', lazyQueueIds.length);
-        // Can't recover - stop playback to avoid infinite loop
-        set({ isPlaying: false });
-        return;
-      }
-
-      let nextTrack = prefetchedTracks.get(nextTrackId);
-
-      // Fetch track if not prefetched
-      if (!nextTrack) {
-        set({ isFetchingTrack: true });
-        try {
-          const tracks = await tracksApi.getBatch([nextTrackId]);
-          if (tracks.length > 0) {
-            nextTrack = tracks[0];
-            const newPrefetched = new Map(prefetchedTracks);
-            newPrefetched.set(nextTrackId, nextTrack);
-            set({ prefetchedTracks: newPrefetched });
-          }
-        } catch (error) {
-          log.error('Failed to fetch next track:', error);
-          set({ isFetchingTrack: false });
-          return;
-        }
-        set({ isFetchingTrack: false });
-      }
-
-      if (nextTrack) {
-        set({
-          lazyQueueIndex: nextLazyIndex,
-          currentTrack: nextTrack,
-          isPlaying: true,
-          currentTime: 0,
-        });
-
-        // Prefetch upcoming tracks in background
-        prefetchUpcomingTracks(lazyQueueIds, nextLazyIndex, get().prefetchedTracks, 10)
-          .then(newPrefetched => {
-            if (newPrefetched !== get().prefetchedTracks) {
-              set({ prefetchedTracks: newPrefetched });
-            }
-          });
-      }
-      return;
-    }
-
-    // Standard queue mode
     if (queue.length === 0) {
       set({ isPlaying: false });
       return;
@@ -586,6 +528,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         shuffleOrder: newShuffleOrder,
       });
       persistState();
+      refillFromReservoir();
       return;
     }
 
@@ -598,6 +541,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       shuffleOrder: newShuffleOrder,
     });
     persistState();
+    refillFromReservoir();
   },
 
   playPrevious: () => {
@@ -668,7 +612,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       // Exit lazy mode when setting a regular queue
       lazyQueueIds: null,
       lazyQueueIndex: -1,
-      prefetchedTracks: new Map(),
       queueSource: source || null,
     });
     persistState();
@@ -726,113 +669,59 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setLazyQueue: async (ids: string[], source?: QueueSource) => {
     if (ids.length === 0) return;
 
-    // Clear regular queue state and enter lazy mode
+    const { shuffle } = get();
+    const windowIds = ids.slice(0, WINDOW_SIZE);
+
+    // Set up lazy state immediately (loading state)
     set({
       queue: [],
       queueIndex: -1,
       shuffleOrder: [],
       shuffleIndex: -1,
       lazyQueueIds: ids,
-      lazyQueueIndex: 0,
-      prefetchedTracks: new Map(),
-      isFetchingTrack: true,
+      lazyQueueIndex: windowIds.length,
       queueSource: source || null,
     });
 
-    // Fetch the first track and start playback
+    // Fetch the initial window of tracks
     try {
-      const firstTrackId = ids[0];
-      const tracks = await tracksApi.getBatch([firstTrackId]);
+      const tracks = await tracksApi.getBatch(windowIds);
       if (tracks.length > 0) {
-        const firstTrack = tracks[0];
-        const prefetched = new Map<string, Track>();
-        prefetched.set(firstTrackId, firstTrack);
+        const queueItems: QueueItem[] = tracks.map(track => ({
+          track,
+          queueId: generateQueueId(),
+        }));
 
-        // Fetch next few tracks for prefetching
-        const prefetchIds = ids.slice(1, 11);
-        if (prefetchIds.length > 0) {
-          const prefetchTracks = await tracksApi.getBatch(prefetchIds);
-          prefetchTracks.forEach(t => prefetched.set(t.id, t));
+        // Generate shuffle order if shuffle is enabled
+        let shuffleOrder: number[] = [];
+        let shuffleIndex = -1;
+        if (shuffle && queueItems.length > 1) {
+          shuffleOrder = generateShuffleOrder(queueItems.length, 0);
+          shuffleIndex = 0;
         }
 
         set({
-          currentTrack: firstTrack,
+          queue: queueItems,
+          queueIndex: 0,
+          currentTrack: queueItems[0].track,
           isPlaying: true,
           currentTime: 0,
-          prefetchedTracks: prefetched,
-          isFetchingTrack: false,
+          shuffleOrder,
+          shuffleIndex,
         });
-      } else {
-        set({ isFetchingTrack: false });
+        persistState();
       }
     } catch (error) {
       log.error('Failed to start lazy queue:', error);
       set({
         lazyQueueIds: null,
         lazyQueueIndex: -1,
-        isFetchingTrack: false,
       });
-    }
-  },
-
-  jumpToLazyQueueIndex: async (index: number) => {
-    const { lazyQueueIds, prefetchedTracks, isFetchingTrack, currentTrack } = get();
-    if (!lazyQueueIds || index < 0 || index >= lazyQueueIds.length || isFetchingTrack) return;
-
-    // Add current track to history
-    if (currentTrack) {
-      set((s) => ({
-        history: [...s.history.slice(-49), s.currentTrack!],
-      }));
-    }
-
-    const targetId = lazyQueueIds[index];
-    let targetTrack = prefetchedTracks.get(targetId);
-
-    if (!targetTrack) {
-      set({ isFetchingTrack: true });
-      try {
-        const tracks = await tracksApi.getBatch([targetId]);
-        if (tracks.length > 0) {
-          targetTrack = tracks[0];
-          const newPrefetched = new Map(prefetchedTracks);
-          newPrefetched.set(targetId, targetTrack);
-          set({ prefetchedTracks: newPrefetched });
-        }
-      } catch (error) {
-        log.error('Failed to fetch track for lazy jump:', error);
-        set({ isFetchingTrack: false });
-        return;
-      }
-      set({ isFetchingTrack: false });
-    }
-
-    if (targetTrack) {
-      set({
-        lazyQueueIndex: index,
-        currentTrack: targetTrack,
-        isPlaying: true,
-        currentTime: 0,
-      });
-
-      // Prefetch upcoming tracks from new position
-      prefetchUpcomingTracks(lazyQueueIds, index, get().prefetchedTracks, 10)
-        .then(newPrefetched => {
-          if (newPrefetched !== get().prefetchedTracks) {
-            set({ prefetchedTracks: newPrefetched });
-          }
-        });
     }
   },
 
   exitLazyMode: () => {
-    set({
-      lazyQueueIds: null,
-      lazyQueueIndex: -1,
-      prefetchedTracks: new Map(),
-      isFetchingTrack: false,
-      queueSource: null,
-    });
+    set({ lazyQueueIds: null, lazyQueueIndex: -1, queueSource: null });
   },
 
   // Crossfade actions
@@ -843,23 +732,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   setIsLoadingAudio: (isLoadingAudio) => set({ isLoadingAudio }),
 
   getNextTrack: () => {
-    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, lazyQueueIds, lazyQueueIndex, prefetchedTracks } = get();
+    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat } = get();
 
-    // Handle lazy queue mode
-    if (lazyQueueIds && lazyQueueIds.length > 0) {
-      let nextLazyIndex = lazyQueueIndex + 1;
-      if (nextLazyIndex >= lazyQueueIds.length) {
-        if (repeat === 'all') {
-          nextLazyIndex = 0;
-        } else {
-          return null;
-        }
-      }
-      const nextTrackId = lazyQueueIds[nextLazyIndex];
-      return prefetchedTracks.get(nextTrackId) || null;
-    }
-
-    // Standard queue mode
     if (queue.length === 0) return null;
 
     let nextQueueIndex: number;
@@ -890,7 +764,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   advanceToNextTrack: (track) => {
-    const { queueIndex, shuffle, shuffleIndex, shuffleOrder, repeat, consume, currentTrack, queue, lazyQueueIds } = get();
+    const { queueIndex, shuffle, shuffleIndex, shuffleOrder, repeat, consume, currentTrack, queue } = get();
 
     // Add current track to history
     if (currentTrack) {
@@ -903,9 +777,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const trackIndex = queue.findIndex(item => item.track.id === track.id);
     let newQueueIndex = trackIndex >= 0 ? trackIndex : queueIndex + 1;
 
-    // Consume mode: remove the finished track (skip for repeat-one and lazy mode)
-    const isLazyMode = lazyQueueIds && lazyQueueIds.length > 0;
-    if (consume && repeat !== 'one' && !isLazyMode && queueIndex >= 0 && queueIndex < queue.length) {
+    // Consume mode: remove the finished track (skip for repeat-one)
+    if (consume && repeat !== 'one' && queueIndex >= 0 && queueIndex < queue.length) {
       const removedIndex = queueIndex;
       const newQueue = [...queue];
       newQueue.splice(removedIndex, 1);
@@ -942,6 +815,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         shuffleOrder: newShuffleOrder,
       });
       persistState();
+      refillFromReservoir();
       return;
     }
 
@@ -954,6 +828,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       shuffleIndex: shuffle ? shuffleIndex + 1 : shuffleIndex,
     });
     persistState();
+    refillFromReservoir();
   },
 
   // Hydrate state from IndexedDB
@@ -1023,8 +898,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       shuffleIndex: -1,
       lazyQueueIds: null,
       lazyQueueIndex: -1,
-      prefetchedTracks: new Map(),
-      isFetchingTrack: false,
       queueSource: null,
       crossfadeState: 'idle',
       nextTrackPreloaded: false,

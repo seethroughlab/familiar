@@ -21,14 +21,13 @@ interface QueueViewProps {
 }
 
 export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
-  const { queue, queueIndex, currentTrack, isPlaying, shuffle, consume, lazyQueueIds, lazyQueueIndex, prefetchedTracks } = usePlayerStore(
+  const { queue, queueIndex, isPlaying, shuffle, consume, lazyQueueIds } = usePlayerStore(
     useShallow((s) => ({
-      queue: s.queue, queueIndex: s.queueIndex, currentTrack: s.currentTrack,
+      queue: s.queue, queueIndex: s.queueIndex,
       isPlaying: s.isPlaying, shuffle: s.shuffle, consume: s.consume,
-      lazyQueueIds: s.lazyQueueIds, lazyQueueIndex: s.lazyQueueIndex, prefetchedTracks: s.prefetchedTracks,
+      lazyQueueIds: s.lazyQueueIds,
     }))
   );
-  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const clearQueue = usePlayerStore((s) => s.clearQueue);
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
   const exitLazyMode = usePlayerStore((s) => s.exitLazyMode);
@@ -47,7 +46,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     if (currentTrackRef.current) {
       currentTrackRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
     }
-  }, [queueIndex, lazyQueueIndex]);
+  }, [queueIndex]);
 
   // Pointer-event drag-to-reorder state (works on both mouse and touch)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -69,7 +68,6 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   // Get reorder and jump actions from store
   const reorderQueue = usePlayerStore((state) => state.reorderQueue);
   const jumpToQueueIndex = usePlayerStore((state) => state.jumpToQueueIndex);
-  const jumpToLazyQueueIndex = usePlayerStore((state) => state.jumpToLazyQueueIndex);
 
   // Pointer-event drag handlers for reorder (works on touch + mouse)
   const handlePointerDown = useCallback((index: number, e: React.PointerEvent) => {
@@ -146,21 +144,14 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     try {
       const tracks = await tracksApi.getBatch([trackId]);
       if (tracks.length > 0) {
-        let insertIdx: number;
-        if (isLazyMode) {
-          // displayIndex 0 = current track at lazyQueueIndex, insert after hovered item
-          insertIdx = lazyQueueIndex + displayIndex + 1;
-        } else {
-          // In regular mode, insert after the hovered item
-          insertIdx = displayIndex + 1;
-        }
-        addToQueue(tracks[0], insertIdx);
+        // Insert after the hovered item
+        addToQueue(tracks[0], displayIndex + 1);
         onTrackDropped?.(trackId);
       }
     } catch (error) {
       log.error('Failed to add track to queue:', error);
     }
-  }, [addToQueue, isLazyMode, lazyQueueIndex, queue, onTrackDropped]);
+  }, [addToQueue, onTrackDropped]);
 
   // Handle external track drops (from library) — fallback for empty space
   const handleExternalDragOver = useCallback((e: React.DragEvent) => {
@@ -196,23 +187,13 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   }, [addToQueue, onTrackDropped]);
 
   // Handle clicking on a track to jump to it
-  const handleTrackClick = useCallback((displayIndex: number) => {
+  const handleTrackClick = useCallback((index: number) => {
     if (didDragRef.current) {
       didDragRef.current = false;
       return;
     }
-    if (isLazyMode) {
-      if (displayIndex === 0 && currentTrack) {
-        // Current track: toggle play/pause
-        setIsPlaying(!isPlaying);
-      } else if (displayIndex > 0) {
-        // Upcoming track: jump to it
-        jumpToLazyQueueIndex(lazyQueueIndex + displayIndex);
-      }
-    } else {
-      jumpToQueueIndex(displayIndex);
-    }
-  }, [isLazyMode, currentTrack, isPlaying, setIsPlaying, jumpToQueueIndex, jumpToLazyQueueIndex, lazyQueueIndex]);
+    jumpToQueueIndex(index);
+  }, [jumpToQueueIndex]);
 
   // Handle removing a track from queue
   const handleRemoveTrack = useCallback((queueId: string, e: React.MouseEvent) => {
@@ -224,9 +205,8 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const handleClearAll = useCallback(() => {
     if (isLazyMode) {
       exitLazyMode();
-    } else {
-      clearQueue();
     }
+    clearQueue();
   }, [isLazyMode, exitLazyMode, clearQueue]);
 
   // Context menu handlers
@@ -247,44 +227,13 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Build display tracks based on mode
-  let displayTracks: { track: Track; queueId: string; isCurrent: boolean }[] = [];
-  let totalCount = 0;
-
-  if (isLazyMode) {
-    // In lazy mode, show current track + prefetched tracks
-    totalCount = lazyQueueIds.length;
-
-    // Add current track if available
-    if (currentTrack) {
-      displayTracks.push({
-        track: currentTrack,
-        queueId: `lazy-${lazyQueueIndex}`,
-        isCurrent: true,
-      });
-    }
-
-    // Add prefetched upcoming tracks
-    for (let i = lazyQueueIndex + 1; i < Math.min(lazyQueueIndex + 11, lazyQueueIds.length); i++) {
-      const trackId = lazyQueueIds[i];
-      const prefetched = prefetchedTracks.get(trackId);
-      if (prefetched) {
-        displayTracks.push({
-          track: prefetched,
-          queueId: `lazy-${i}`,
-          isCurrent: false,
-        });
-      }
-    }
-  } else {
-    // Regular queue mode - show all tracks
-    totalCount = queue.length;
-    displayTracks = queue.map((item, index) => ({
-      track: item.track,
-      queueId: item.queueId,
-      isCurrent: index === queueIndex,
-    }));
-  }
+  // Build display tracks — always from queue[] (lazy mode materializes into queue[])
+  const totalCount = isLazyMode ? lazyQueueIds.length : queue.length;
+  const displayTracks = queue.map((item, index) => ({
+    track: item.track,
+    queueId: item.queueId,
+    isCurrent: index === queueIndex,
+  }));
 
   const isEmpty = totalCount === 0;
 
@@ -346,7 +295,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           </div>
         </div>
 
-        {/* Lazy mode info banner */}
+        {/* Library playback info banner */}
         {isLazyMode && (
           <div className={`mt-3 px-3 py-2 rounded-lg text-sm ${
             resolvedTheme === 'light'
@@ -355,11 +304,8 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           }`}>
             <div className="flex items-center gap-2">
               <Shuffle className="w-4 h-4" />
-              <span>Shuffling {totalCount.toLocaleString()} tracks from your library</span>
+              <span>Playing from library ({totalCount.toLocaleString()} tracks) — showing next {queue.length}</span>
             </div>
-            <p className="mt-1 text-xs opacity-75">
-              Showing current track and next {displayTracks.length - 1} upcoming tracks
-            </p>
           </div>
         )}
       </div>
@@ -389,7 +335,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           <div className="py-1 space-y-1">
             {displayTracks.map((item, displayIndex) => {
               const { track, queueId, isCurrent } = item;
-              const actualIndex = isLazyMode ? displayIndex : queue.findIndex(q => q.queueId === queueId);
+              const actualIndex = queue.findIndex(q => q.queueId === queueId);
               const isDragged = draggedIndex === actualIndex;
               const isReorderTarget = dropTargetIndex === displayIndex && draggedIndex !== null;
               const isExtDropTarget = externalDropTargetIndex === displayIndex;
@@ -424,21 +370,19 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                         : 'hover:bg-zinc-800/50'
                   } ${isDragged ? 'opacity-75' : ''} ${isReorderTarget || isExtDropTarget ? 'border-t-2 border-green-500' : ''}`}
                 >
-                  {/* Drag handle (regular mode only) — uses pointer events for touch+mouse reorder */}
-                  {!isLazyMode && (
-                    <div
-                      className={`flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
-                        'opacity-0 group-hover:opacity-50 hover:!opacity-100'
-                      } ${isDragged ? '!opacity-100' : ''}`}
-                      style={{ touchAction: 'none' }}
-                      onPointerDown={(e) => handlePointerDown(actualIndex, e)}
-                      onPointerMove={handlePointerMove}
-                      onPointerUp={handlePointerUp}
-                      onPointerCancel={handlePointerCancel}
-                    >
-                      <GripVertical className="w-4 h-4 text-zinc-500" />
-                    </div>
-                  )}
+                  {/* Drag handle — uses pointer events for touch+mouse reorder */}
+                  <div
+                    className={`flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
+                      'opacity-50 sm:opacity-0 sm:group-hover:opacity-50 hover:!opacity-100'
+                    } ${isDragged ? '!opacity-100' : ''}`}
+                    style={{ touchAction: 'none' }}
+                    onPointerDown={(e) => handlePointerDown(actualIndex, e)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerCancel}
+                  >
+                    <GripVertical className="w-4 h-4 text-zinc-500" />
+                  </div>
 
                   {/* Play indicator / number */}
                   <div className="w-8 text-center flex-shrink-0">
@@ -457,7 +401,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                     ) : isCurrent ? (
                       <>
                         <span className="group-hover:hidden text-sm text-green-500 font-medium">
-                          {isLazyMode ? '•' : displayIndex + 1}
+                          {displayIndex + 1}
                         </span>
                         <Play
                           className="hidden group-hover:block w-4 h-4 mx-auto text-green-500"
@@ -467,7 +411,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                     ) : (
                       <>
                         <span className="group-hover:hidden text-sm text-zinc-500">
-                          {isLazyMode ? '•' : displayIndex + 1}
+                          {displayIndex + 1}
                         </span>
                         <Play
                           className="hidden group-hover:block w-4 h-4 mx-auto"
@@ -495,16 +439,14 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                     {formatDuration(track.duration_seconds)}
                   </div>
 
-                  {/* Remove button (regular mode only) */}
-                  {!isLazyMode && (
-                    <button
-                      onClick={(e) => handleRemoveTrack(queueId, e)}
-                      className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-zinc-700/50"
-                      title="Remove from queue"
-                    >
-                      <X className="w-4 h-4 text-zinc-400 hover:text-red-400" />
-                    </button>
-                  )}
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => handleRemoveTrack(queueId, e)}
+                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-zinc-700/50"
+                    title="Remove from queue"
+                  >
+                    <X className="w-4 h-4 text-zinc-400 hover:text-red-400" />
+                  </button>
                 </div>
               );
             })}
@@ -521,8 +463,8 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           onClose={closeContextMenu}
           onPlay={() => {
             if (contextMenu.track) {
-              const idx = displayTracks.findIndex(dt => dt.track.id === contextMenu.track?.id);
-              if (idx !== -1) handleTrackClick(isLazyMode ? idx : queue.findIndex(q => q.queueId === displayTracks[idx].queueId));
+              const idx = queue.findIndex(q => q.track.id === contextMenu.track?.id);
+              if (idx !== -1) handleTrackClick(idx);
             }
           }}
           onQueue={() => {

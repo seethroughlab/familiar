@@ -243,6 +243,26 @@ describe('playerStore', () => {
       expect(state.queue).toEqual([])
       expect(state.queueIndex).toBe(-1)
     })
+
+    it('should clear lazy state when in lazy mode', () => {
+      const mockTrack = createMockTrack('a')
+      usePlayerStore.setState({
+        lazyQueueIds: ['a', 'b', 'c', 'd', 'e'],
+        lazyQueueIndex: 2,
+        queue: [{ track: mockTrack, queueId: 'q1' }],
+        queueIndex: 0,
+        queueSource: { type: 'library' },
+      })
+
+      usePlayerStore.getState().clearQueue()
+
+      const state = usePlayerStore.getState()
+      expect(state.queue).toEqual([])
+      expect(state.queueIndex).toBe(-1)
+      expect(state.lazyQueueIds).toBeNull()
+      expect(state.lazyQueueIndex).toBe(-1)
+      expect(state.queueSource).toBeNull()
+    })
   })
 
   describe('playNext', () => {
@@ -781,12 +801,12 @@ describe('playerStore', () => {
   })
 
   describe('exitLazyMode', () => {
-    it('should clear all lazy queue state', () => {
+    it('should clear lazy reservoir but keep queue intact', () => {
+      const mockTrack = createMockTrack('a');
       usePlayerStore.setState({
         lazyQueueIds: ['a', 'b', 'c'],
         lazyQueueIndex: 1,
-        prefetchedTracks: new Map([['a', createMockTrack('a')]]),
-        isFetchingTrack: true,
+        queue: [{ track: mockTrack, queueId: 'q1' }],
         queueSource: { type: 'library' },
       })
 
@@ -795,9 +815,9 @@ describe('playerStore', () => {
       const state = usePlayerStore.getState()
       expect(state.lazyQueueIds).toBeNull()
       expect(state.lazyQueueIndex).toBe(-1)
-      expect(state.prefetchedTracks.size).toBe(0)
-      expect(state.isFetchingTrack).toBe(false)
       expect(state.queueSource).toBeNull()
+      // Queue should remain intact
+      expect(state.queue).toHaveLength(1)
     })
   })
 })
