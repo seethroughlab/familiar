@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-02-08
+
+Subsonic API, Volume Normalization & Queue Unification
+
 ### Added
 
 - **Music Video visualizer** - Music Video moved from Full Player tab to the visualizer picker
@@ -40,6 +44,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced classic presets: Warm Vinyl (tape saturation), Live Concert (stereo width), Studio Polish (warm saturation), Dreamy (chorus + stereo width)
 - **Sortable Columns** in track list view
 - **Library Scan in Separate Process** - Library scanning now runs in its own process for better stability
+- **Subsonic API for CarPlay and native music app support** - Subsonic/OpenSubsonic REST API at `/rest`
+  - Enables native music apps (play:Sub, Amperfy, Symfonium) with CarPlay/Android Auto
+  - SubsonicCredential model with bcrypt + token auth
+  - Credential management UI in Settings > Integrations
+  - Endpoints: ping, getLicense, getMusicFolders, getArtists, getArtist, getAlbum, getSong, stream, getCoverArt, search3, getAlbumList2, getRandomSongs, getStarred2, star/unstar
+- **Volume Normalization with EBU R128 loudness measurement**
+  - Backend: extract loudness_lufs, track_peak, replaygain_track_gain during analysis
+  - Reads existing ReplayGain tags first, falls back to pyloudnorm measurement
+  - Album-mode normalization endpoint: `/tracks/{id}/album-gain`
+  - Frontend: normalization gain nodes in audio graph
+  - Settings UI: track/album/auto modes, target LUFS, preamp, clipping prevention
+  - ANALYSIS_VERSION bumped to 6
+- **LLM tool for library searches** - New tool enabling Claude to search the library more effectively
+- **S3 Backup improvements** - Backup feature moved to global admin
+  - Read-only config from env vars (no longer editable in UI)
+  - Fix validate failing on GetObject with DEEP_ARCHIVE objects
+  - Fix enable toggle rendering
+  - File size tracking on scan
+- **Documentation restructured** - README slimmed down, installation/configuration/setup docs moved to `docs/`
 
 ### Changed
 
@@ -54,6 +77,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - LyricsDisplay component removed
 - **LyricStorm visual improvements** - depth-based particle fade, emissive glow on swarm particles, added fill light
 - Refactored playlist import/export system
+- **Unified queue system for all playback types** - Lazy queue (library shuffle-all) now materializes tracks into `queue[]`
+  - All queue operations (playNext, addToQueue, removeFromQueue, reorderQueue, jumpToQueueIndex) work identically regardless of playback source
+  - QueueView uses single code path with no lazy-mode branching for interaction
+  - Concurrency guard prevents duplicate track fetches during rapid skipping
+  - Refill threshold check consolidated into single self-contained function
+- Performance optimizations
 
 ### Fixed
 
@@ -68,6 +97,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **External track UX fixes** - Improved display and interaction with external/discovery tracks
 - **CI failures** - pg_trgm extension properly initialized, lint errors resolved
 - **E2E test reliability** - Chat panel and library view selectors updated for current DOM structure
+- **Library sync failure after external track matching error** - DB session rollback after external track matching failure (e.g., missing pg_trgm)
+  - Previously left session in failed transaction state, blocking subsequent operations
+- **Queue "Clear All" in lazy mode** - Previously only cleared the reservoir, leaving materialized tracks playing; now clears both reservoir and queue
+- **Backwards mobile scroll** - Fixed reverse scroll direction on mobile devices
+- **FullPlayer fixes** - Various Full Player layout and interaction fixes
+- **HNSW index / Alembic autogenerate** - Alembic env.py now skips manually-managed pgvector indexes during autogenerate
 
 ## [0.1.0-alpha.8] - 2026-02-04
 
@@ -550,7 +585,8 @@ First alpha release of Familiar - an LLM-powered local music player.
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - MoodMap accuracy depends on proper key detection
 
-[Unreleased]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.8...HEAD
+[Unreleased]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.9...HEAD
+[0.1.0-alpha.9]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.5...v0.1.0-alpha.7
 [0.1.0-alpha.5]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
