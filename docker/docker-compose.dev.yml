@@ -51,6 +51,7 @@ services:
       # Mount code for quick updates (rsync + restart)
       - /opt/familiar/backend/app:/app/app:ro
       - /opt/familiar/frontend/dist:/app/static:ro
+      - /opt/familiar/backend/migrations:/app/migrations:ro
       # Data persistence (app reads from /app/data relative to workdir)
       - /opt/familiar/data:/app/data
       # Music library - OMV default path (override with MUSIC_LIBRARY_PATH env var)
@@ -64,6 +65,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:4400}
       - LASTFM_API_KEY=${LASTFM_API_KEY:-}
       - LASTFM_API_SECRET=${LASTFM_API_SECRET:-}
+      - MUSIC_LIBRARY_PATH=/music
     depends_on:
       postgres:
         condition: service_healthy
