@@ -445,6 +445,67 @@ export interface UnmatchedTrack {
   search_links: Record<string, StoreSearchLink>;
 }
 
+export interface SpotifyExportPreview {
+  session_id: string;
+  files_found: string[];
+  library_tracks: {
+    total: number;
+    matched: number;
+    unmatched: number;
+    match_rate: number;
+  };
+  playlists: {
+    total: number;
+    details: Array<{
+      name: string;
+      total_tracks: number;
+      matched: number;
+      match_rate: number;
+    }>;
+  };
+  streaming_history: {
+    total_tracks: number;
+    matched: number;
+    total_streams: number;
+  };
+}
+
+export interface SpotifyExportDetailedPreview {
+  session_id: string;
+  summary: SpotifyExportPreview;
+  matched_tracks: Array<{
+    track: string;
+    artist: string;
+    album: string;
+    local_track_id: string;
+    match_method: string;
+  }>;
+  unmatched_tracks: Array<{
+    track: string;
+    artist: string;
+    album: string;
+  }>;
+  playlists: Array<{
+    name: string;
+    total_tracks: number;
+    matched: number;
+    match_rate: number;
+  }>;
+}
+
+export interface SpotifyExportImportOptions {
+  import_favorites: boolean;
+  import_playlists: boolean;
+  favorite_matched: boolean;
+}
+
+export interface SpotifyExportImportResult {
+  favorites_imported: number;
+  playlists_created: number;
+  tracks_favorited: number;
+  errors: string[];
+}
+
 export const spotifyApi = {
   getStatus: async (): Promise<SpotifyStatus> => {
     const { data } = await api.get('/spotify/status');
@@ -479,6 +540,27 @@ export const spotifyApi = {
     sort_by?: 'added_at';
   }): Promise<UnmatchedTrack[]> => {
     const { data } = await api.get('/spotify/unmatched', { params });
+    return data;
+  },
+
+  // Spotify data export import
+  uploadExport: async (file: File): Promise<SpotifyExportPreview> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post('/spotify/import/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000, // 2 minute timeout for large files
+    });
+    return data;
+  },
+
+  getImportPreview: async (sessionId: string): Promise<SpotifyExportDetailedPreview> => {
+    const { data } = await api.get(`/spotify/import/preview/${sessionId}`);
+    return data;
+  },
+
+  executeImport: async (sessionId: string, options: SpotifyExportImportOptions): Promise<SpotifyExportImportResult> => {
+    const { data } = await api.post(`/spotify/import/execute/${sessionId}`, options);
     return data;
   },
 };

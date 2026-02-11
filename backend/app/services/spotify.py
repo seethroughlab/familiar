@@ -175,7 +175,9 @@ class SpotifyService:
                 logger.error(f"No refresh token available for {profile_id}")
                 return None
 
-        return spotipy.Spotify(auth=spotify_profile.access_token, requests_timeout=30)
+        from app.services.spotify_compat import SpotifyCompat
+
+        return SpotifyCompat(spotipy.Spotify(auth=spotify_profile.access_token, requests_timeout=30))
 
     async def _refresh_token(
         self,
@@ -590,7 +592,7 @@ class SpotifyPlaylistService:
         playlist_info = client.playlist(spotify_playlist_id, fields="name,description")
 
         # Get tracks
-        results = client.playlist_tracks(spotify_playlist_id, limit=limit)
+        results = client.playlist_items(spotify_playlist_id, limit=limit)
         tracks = []
         in_library = 0
 
@@ -678,7 +680,7 @@ class SpotifyPlaylistService:
         position = 0
 
         while True:
-            results = client.playlist_tracks(
+            results = client.playlist_items(
                 spotify_playlist_id,
                 limit=limit,
                 offset=offset

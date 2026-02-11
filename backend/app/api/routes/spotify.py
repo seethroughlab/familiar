@@ -1,9 +1,10 @@
 """Spotify integration endpoints."""
 
 import logging
+import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import delete
@@ -557,3 +558,150 @@ async def import_spotify_playlist(
     except Exception as e:
         logger.error(f"Error importing Spotify playlist: {e}")
         raise HTTPException(status_code=500, detail="Failed to import playlist")
+
+
+# ============================================================================
+# Spotify Data Export Import
+# ============================================================================
+
+
+class SpotifyExportImportOptions(BaseModel):
+    """Options for executing a Spotify export import."""
+    import_favorites: bool = True
+    import_playlists: bool = True
+    favorite_matched: bool = False
+
+
+@router.post("/import/upload")
+async def upload_spotify_export(
+    file: UploadFile,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> dict[str, Any]:
+    """Upload a Spotify data export file (zip or JSON).
+
+    Accepts:
+    - .zip files from Spotify's "Download your data" feature
+    - Individual .json files (YourLibrary.json, Playlist*.json, Streaming_History_Audio_*.json)
+
+    Returns a session_id and preview summary.
+    Max file size: 50MB.
+    """
+    from app.services.spotify_import import (
+        SpotifyExportImporter,
+        SpotifyExportParser,
+        save_upload_to_temp,
+    )
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    filename = file.filename.lower()
+    if not (filename.endswith(".zip") or filename.endswith(".json")):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be a .zip or .json file",
+        )
+
+    # Read file content (limit to 50MB)
+    content = await file.read()
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 50MB)")
+
+    try:
+        if filename.endswith(".zip"):
+            suffix = ".zip"
+        else:
+            suffix = ".json"
+
+        temp_path = save_upload_to_temp(content, suffix)
+
+        try:
+            # Parse the file
+            if filename.endswith(".zip"):
+                parsed_data = SpotifyExportParser.parse_zip(temp_path)
+            else:
+                parsed_data = SpotifyExportParser.parse_json_file(
+                    temp_path, file.filename or ""
+                )
+
+            if not any([
+                parsed_data.get("library_tracks"),
+                parsed_data.get("playlists"),
+                parsed_data.get("streaming_history"),
+            ]):
+                raise HTTPException(
+                    status_code=400,
+                    detail="No recognizable Spotify data found in file",
+                )
+
+            # Create preview session
+            importer = SpotifyExportImporter(db)
+            session_id, summary = await importer.create_preview_session(
+                parsed_data, str(profile.id)
+            )
+
+            return summary
+        finally:
+            # Clean up temp file
+            os.unlink(temp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing Spotify export: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process Spotify export file",
+        )
+
+
+@router.get("/import/preview/{session_id}")
+async def get_spotify_import_preview(
+    session_id: str,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> dict[str, Any]:
+    """Get detailed preview for a Spotify export import session.
+
+    Returns matched and unmatched tracks, playlist details.
+    """
+    from app.services.spotify_import import SpotifyExportImporter
+
+    importer = SpotifyExportImporter(db)
+
+    try:
+        return await importer.get_preview(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/import/execute/{session_id}")
+async def execute_spotify_import(
+    session_id: str,
+    db: DbSession,
+    profile: RequiredProfile,
+    options: SpotifyExportImportOptions | None = None,
+) -> dict[str, Any]:
+    """Execute a Spotify export import from a previewed session.
+
+    Options control what gets imported:
+    - import_favorites: Create SpotifyFavorite records for library tracks
+    - import_playlists: Create playlists from export playlists
+    - favorite_matched: Add matched tracks to local favorites
+    """
+    from app.services.spotify_import import SpotifyExportImporter
+
+    importer = SpotifyExportImporter(db)
+    opts = options or SpotifyExportImportOptions()
+
+    try:
+        return await importer.execute_import(session_id, opts.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error executing Spotify import: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to execute import",
+        )
