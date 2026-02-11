@@ -1,5 +1,6 @@
 """Library management endpoints."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -374,7 +375,10 @@ async def get_artist_detail(
     if cached and not refresh_lastfm:
         cache_age = datetime.utcnow() - cached.fetched_at
         # Auto-refresh if similar_artists is empty (stale cache from before feature)
-        needs_similar_refresh = not cached.similar_artists and not cached.fetch_error
+        needs_similar_refresh = not cached.fetch_error and (
+            not cached.similar_artists
+            or "match" not in (cached.similar_artists[0] if cached.similar_artists else {})
+        )
         if cache_age < cache_max_age and not needs_similar_refresh:
             lastfm_fetched = True
             lastfm_data = cached
@@ -385,7 +389,10 @@ async def get_artist_detail(
         lastfm_service = get_lastfm_service()
         if lastfm_service.is_configured():
             try:
-                info = await lastfm_service.get_artist_info(artist_name)
+                info, similar_from_api = await asyncio.gather(
+                    lastfm_service.get_artist_info(artist_name),
+                    lastfm_service.get_similar_artists(artist_name, limit=20),
+                )
                 if info:
                     # Extract image URL (prefer extralarge)
                     # Filter out Last.fm's default placeholder image (star icon)
@@ -396,8 +403,8 @@ async def get_artist_detail(
                         if img.get("#text") and "2a96cbd8b46e442fc41c2b86b821562f" not in img.get("#text", "")
                     }
 
-                    # Extract similar artists
-                    similar = info.get("similar", {}).get("artist", [])
+                    # Extract similar artists (prefer dedicated API with match scores)
+                    similar = similar_from_api if similar_from_api else info.get("similar", {}).get("artist", [])
 
                     # Extract tags
                     tags = [
