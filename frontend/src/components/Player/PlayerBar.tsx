@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, Radio, ListX } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, ListX } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -60,11 +60,11 @@ export function PlayerBar({
   // isInSession = false,
   // sessionParticipantCount = 0,
 }: PlayerBarProps) {
-  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreviewMode } = usePlayerStore(
+  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume } = usePlayerStore(
     useShallow((s) => ({
       currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
       currentTime: s.currentTime, duration: s.duration, volume: s.volume,
-      shuffle: s.shuffle, repeat: s.repeat, consume: s.consume, isPreviewMode: s.isPreviewMode,
+      shuffle: s.shuffle, repeat: s.repeat, consume: s.consume,
     }))
   );
   const setVolume = usePlayerStore((s) => s.setVolume);
@@ -163,15 +163,7 @@ export function PlayerBar({
           >
             <AlbumArt trackId={currentTrack.id} />
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
-                {isPreviewMode && (
-                  <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
-                    <Radio className="w-3 h-3" />
-                    Preview
-                  </span>
-                )}
-              </div>
+              <span data-testid="current-track-title" className="font-medium truncate block">{currentTrack.title || 'Unknown'}</span>
               <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
             </div>
           </button>
@@ -222,15 +214,7 @@ export function PlayerBar({
         >
           <AlbumArt trackId={currentTrack.id} />
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
-              {isPreviewMode && (
-                <span className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
-                  <Radio className="w-3 h-3" />
-                  Preview
-                </span>
-              )}
-            </div>
+            <span data-testid="current-track-title" className="font-medium truncate block">{currentTrack.title || 'Unknown'}</span>
             <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
           </div>
         </button>

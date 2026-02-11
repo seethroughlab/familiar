@@ -228,8 +228,6 @@ class ExportImportService:
             "spotify_id": ext.spotify_id,
             "musicbrainz_recording_id": ext.musicbrainz_recording_id,
             "deezer_id": ext.deezer_id,
-            "preview_url": ext.preview_url,
-            "preview_source": ext.preview_source,
             "external_data": ext.external_data,
             "source": ext.source.value if ext.source else None,
         }
@@ -1089,8 +1087,6 @@ class ImportService:
             spotify_id=spotify_id,
             musicbrainz_recording_id=ext_data.get("musicbrainz_recording_id"),
             deezer_id=ext_data.get("deezer_id"),
-            preview_url=ext_data.get("preview_url"),
-            preview_source=ext_data.get("preview_source"),
             external_data=ext_data.get("external_data", {}),
             source=source,
         )

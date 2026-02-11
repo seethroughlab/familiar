@@ -11,7 +11,6 @@ import {
   Repeat,
   Music,
   Loader2,
-  Radio,
   Maximize,
   Minimize,
   ListX,
@@ -55,11 +54,11 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
 
-  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreviewMode } = usePlayerStore(
+  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume } = usePlayerStore(
     useShallow((s) => ({
       currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
       currentTime: s.currentTime, duration: s.duration, volume: s.volume,
-      shuffle: s.shuffle, repeat: s.repeat, consume: s.consume, isPreviewMode: s.isPreviewMode,
+      shuffle: s.shuffle, repeat: s.repeat, consume: s.consume,
     }))
   );
   const setVolume = usePlayerStore((s) => s.setVolume);
@@ -291,12 +290,6 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
         >
           <div className="flex items-center justify-center gap-2">
             <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
-            {isPreviewMode && (
-              <span className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
-                <Radio className="w-3 h-3" />
-                Preview
-              </span>
-            )}
             <button
               onClick={handleContextMenu}
               className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0"

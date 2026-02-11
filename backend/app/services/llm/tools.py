@@ -516,7 +516,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "import_spotify_playlist",
-        "description": "Import a Spotify playlist to Familiar. Creates a local playlist with matched tracks and missing track placeholders. Missing tracks show preview playback.",
+        "description": "Import a Spotify playlist to Familiar. Creates a local playlist with matched tracks and missing track placeholders.",
         "input_schema": {
             "type": "object",
             "properties": {

@@ -50,8 +50,6 @@ export interface ExternalTrack {
   track_number: number | null;
   year: number | null;
   source: ExternalTrackSource;
-  preview_url: string | null;
-  preview_source: string | null;
   external_data: Record<string, unknown>;
 
   // Matching status
@@ -83,7 +81,6 @@ export interface PlaylistTrackItem {
   is_matched?: boolean;
   matched_track_id?: string | null;
   match_confidence?: number | null;
-  preview_url?: string | null;
   external_links?: Record<string, string>;
 }
 

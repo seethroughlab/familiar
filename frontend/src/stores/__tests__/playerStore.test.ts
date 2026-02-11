@@ -627,43 +627,6 @@ describe('playerStore', () => {
     })
   })
 
-  describe('preview mode', () => {
-    it('should enter preview mode and stop regular playback', () => {
-      const track = createMockTrack('1')
-      const { setQueue, playPreview } = usePlayerStore.getState()
-      setQueue([track], 0) // starts playing
-
-      playPreview({
-        id: 'preview-1',
-        title: 'Preview Song',
-        artist: 'Preview Artist',
-        previewUrl: 'https://example.com/preview.mp3',
-      })
-
-      const state = usePlayerStore.getState()
-      expect(state.isPlaying).toBe(false)
-      expect(state.isPreviewMode).toBe(true)
-      expect(state.previewTrack?.id).toBe('preview-1')
-      expect(state.previewTrack?.previewUrl).toBe('https://example.com/preview.mp3')
-    })
-
-    it('should exit preview mode', () => {
-      const { playPreview, stopPreview } = usePlayerStore.getState()
-
-      playPreview({
-        id: 'preview-1',
-        title: 'Preview Song',
-        artist: 'Preview Artist',
-        previewUrl: 'https://example.com/preview.mp3',
-      })
-      stopPreview()
-
-      const state = usePlayerStore.getState()
-      expect(state.isPreviewMode).toBe(false)
-      expect(state.previewTrack).toBeNull()
-    })
-  })
-
   describe('setQueue with source', () => {
     it('should track queue source', () => {
       const tracks = [createMockTrack('1')]

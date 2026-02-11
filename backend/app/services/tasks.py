@@ -1881,10 +1881,7 @@ def _extract_track_data(spotify_track: dict[str, Any]) -> dict[str, Any]:
         "artist_id": artists[0]["id"] if artists else None,
         "album": album.get("name"),
         "album_id": album.get("id"),
-        "isrc": spotify_track.get("external_ids", {}).get("isrc"),
         "duration_ms": spotify_track.get("duration_ms"),
-        "popularity": spotify_track.get("popularity"),
-        "preview_url": spotify_track.get("preview_url"),
         "external_url": spotify_track.get("external_urls", {}).get("spotify"),
     }
 

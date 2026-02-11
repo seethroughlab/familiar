@@ -348,10 +348,7 @@ class SpotifySyncService:
         return stats
 
     async def get_unmatched_favorites(self, profile_id: UUID, limit: int = 50) -> list[dict[str, Any]]:
-        """Get Spotify favorites that don't have local matches.
-
-        Returns tracks with popularity score for preference-based sorting.
-        """
+        """Get Spotify favorites that don't have local matches."""
         result = await self.db.execute(
             select(SpotifyFavorite)
             .where(
@@ -370,7 +367,6 @@ class SpotifySyncService:
                 "artist": f.track_data.get("artist"),
                 "album": f.track_data.get("album"),
                 "added_at": f.added_at.isoformat() if f.added_at else None,
-                "popularity": f.track_data.get("popularity"),  # 0-100 score from Spotify
             }
             for f in favorites
         ]
@@ -521,10 +517,7 @@ class SpotifySyncService:
             "artist_id": artists[0]["id"] if artists else None,
             "album": album.get("name"),
             "album_id": album.get("id"),
-            "isrc": spotify_track.get("external_ids", {}).get("isrc"),
             "duration_ms": spotify_track.get("duration_ms"),
-            "popularity": spotify_track.get("popularity"),
-            "preview_url": spotify_track.get("preview_url"),
             "external_url": spotify_track.get("external_urls", {}).get("spotify"),
         }
 
@@ -618,7 +611,6 @@ class SpotifyPlaylistService:
                 "artist": artists[0]["name"] if artists else None,
                 "album": album.get("name") if album else None,
                 "duration_ms": track.get("duration_ms"),
-                "preview_url": track.get("preview_url"),
                 "in_library": local_match is not None,
                 "local_track_id": str(local_match.id) if local_match else None,
             }
@@ -778,8 +770,6 @@ class SpotifyPlaylistService:
             year=self._parse_year(album.get("release_date")) if album else None,
             isrc=spotify_track.get("external_ids", {}).get("isrc"),
             spotify_id=spotify_id,
-            preview_url=spotify_track.get("preview_url"),
-            preview_source="spotify" if spotify_track.get("preview_url") else None,
             source=ExternalTrackSource.SPOTIFY_PLAYLIST,
             source_playlist_id=source_playlist_id,
             source_spotify_playlist_id=source_spotify_playlist_id,
@@ -788,7 +778,6 @@ class SpotifyPlaylistService:
                 "album_art": images[0].get("url") if images else None,
                 "artist_id": artists[0]["id"] if artists else None,
                 "album_id": album.get("id") if album else None,
-                "popularity": spotify_track.get("popularity"),
             },
         )
         self.db.add(external_track)
@@ -840,7 +829,6 @@ class SpotifyArtistService:
                 "id": artist.get("id"),
                 "name": artist.get("name"),
                 "genres": artist.get("genres", []),
-                "popularity": artist.get("popularity"),
                 "images": artist.get("images", []),
                 "external_url": artist.get("external_urls", {}).get("spotify"),
             }

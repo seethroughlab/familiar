@@ -345,10 +345,6 @@ class ExternalTrack(Base):
     musicbrainz_recording_id: Mapped[str | None] = mapped_column(String(36))
     deezer_id: Mapped[str | None] = mapped_column(String(50))
 
-    # Preview playback
-    preview_url: Mapped[str | None] = mapped_column(String(500))  # 30-sec preview
-    preview_source: Mapped[str | None] = mapped_column(String(20))  # "spotify", "deezer", "itunes"
-
     # Extended data (album art URLs, external URLs, etc.)
     external_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 

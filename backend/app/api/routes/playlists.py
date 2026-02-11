@@ -52,7 +52,6 @@ class TrackInPlaylist(BaseModel):
     is_matched: bool = False
     matched_track_id: str | None = None
     match_confidence: float | None = None
-    preview_url: str | None = None
     external_links: dict[str, str] = {}  # spotify, bandcamp, deezer URLs
 
 
@@ -225,7 +224,6 @@ class WishlistAddRequest(BaseModel):
     artist: str
     album: str | None = None
     spotify_id: str | None = None
-    preview_url: str | None = None
     external_data: dict | None = None
 
 
@@ -299,8 +297,6 @@ async def add_to_wishlist(
         album=request.album,
         source=ExternalTrackSource.MANUAL,
         spotify_id=request.spotify_id,
-        preview_url=request.preview_url,
-        preview_source="spotify" if request.preview_url else None,
         external_data=request.external_data,
         source_playlist_id=wishlist.id,
         try_match=True,
@@ -377,7 +373,6 @@ async def get_playlist(
                 is_matched=False,
                 matched_track_id=None,
                 match_confidence=None,
-                preview_url=None,
                 external_links={},
             ))
         elif pt.external_track_id and pt.external_track:
@@ -399,7 +394,6 @@ async def get_playlist(
                 is_matched=ext.matched_track_id is not None,
                 matched_track_id=str(ext.matched_track_id) if ext.matched_track_id else None,
                 match_confidence=ext.match_confidence,
-                preview_url=ext.preview_url,
                 external_links=external_links,
             ))
 

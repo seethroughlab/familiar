@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Radio, Search, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Search, RotateCw } from 'lucide-react';
 import { playlistsApi, tracksApi } from '../../api/client';
 import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -330,7 +330,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
         // Carry external info for the player to handle
         _externalInfo: t.type === 'external' ? {
           type: 'external' as const,
-          previewUrl: t.preview_url || null,
+          previewUrl: null,
           matchedTrackId: t.matched_track_id || null,
           originalId: t.id,
         } : undefined,
@@ -741,7 +741,6 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
           {displayedTracks.map((track, idx) => {
             const isExternal = track.type === 'external';
             const isMatched = isExternal && track.is_matched && track.matched_track_id;
-            const hasPreview = isExternal && track.preview_url;
 
             // Convert playlist track to full Track type for context menu (only for local tracks)
             const fullTrack: Track | null = !isExternal ? {
@@ -814,17 +813,6 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                       <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
                     </button>
                   </>
-                ) : isExternal && hasPreview ? (
-                  <>
-                    <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                      title="Play preview"
-                    >
-                      <Radio className="w-4 h-4 mx-auto text-amber-400" />
-                    </button>
-                  </>
                 ) : (
                   <>
                     <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
@@ -847,11 +835,6 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                   {isExternal && !isMatched && (
                     <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
                       Not in library
-                    </span>
-                  )}
-                  {isExternal && hasPreview && (
-                    <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-blue-500/20 text-blue-400 rounded">
-                      Preview
                     </span>
                   )}
                 </div>

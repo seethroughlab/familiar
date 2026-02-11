@@ -495,8 +495,6 @@ class ExternalTrackMatcher:
         spotify_id: str | None = None,
         isrc: str | None = None,
         duration_seconds: float | None = None,
-        preview_url: str | None = None,
-        preview_source: str | None = None,
         external_data: dict | None = None,
         source_playlist_id: UUID | None = None,
         source_spotify_playlist_id: str | None = None,
@@ -514,8 +512,6 @@ class ExternalTrackMatcher:
             spotify_id: Spotify track ID (optional)
             isrc: ISRC code (optional)
             duration_seconds: Track duration (optional)
-            preview_url: Preview audio URL (optional)
-            preview_source: Source of preview (spotify, deezer, etc.)
             external_data: Additional metadata (optional)
             source_playlist_id: Local playlist that originated this track
             source_spotify_playlist_id: Original Spotify playlist ID
@@ -542,8 +538,6 @@ class ExternalTrackMatcher:
             spotify_id=spotify_id,
             isrc=isrc,
             duration_seconds=duration_seconds,
-            preview_url=preview_url,
-            preview_source=preview_source if preview_url else None,
             external_data=external_data or {},
             source_playlist_id=source_playlist_id,
             source_spotify_playlist_id=source_spotify_playlist_id,

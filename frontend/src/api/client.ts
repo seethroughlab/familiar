@@ -442,7 +442,6 @@ export interface UnmatchedTrack {
   artist: string | null;
   album: string | null;
   added_at: string | null;
-  popularity: number | null;
   search_links: Record<string, StoreSearchLink>;
 }
 
@@ -477,7 +476,7 @@ export const spotifyApi = {
 
   getUnmatched: async (params?: {
     limit?: number;
-    sort_by?: 'popularity' | 'added_at';
+    sort_by?: 'added_at';
   }): Promise<UnmatchedTrack[]> => {
     const { data } = await api.get('/spotify/unmatched', { params });
     return data;

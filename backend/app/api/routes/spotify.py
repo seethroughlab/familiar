@@ -69,7 +69,6 @@ class UnmatchedTrack(BaseModel):
     artist: str | None
     album: str | None
     added_at: str | None
-    popularity: int | None = None  # Spotify popularity score (0-100)
     search_links: dict[str, StoreSearchLink] = {}
 
 
@@ -299,12 +298,12 @@ async def get_unmatched_tracks(
     db: DbSession,
     profile: CurrentProfile,
     limit: int = Query(50, ge=1, le=200),
-    sort_by: str = Query("popularity", enum=["popularity", "added_at"]),
+    sort_by: str = Query("added_at", enum=["added_at"]),
 ) -> list[UnmatchedTrack]:
     """Get Spotify favorites that don't have local matches.
 
     Requires X-Profile-ID header.
-    Sorted by listening preference (popularity) by default.
+    Sorted by date added (most recent first).
     Includes search links for Bandcamp, Discogs, Qobuz, etc.
     """
     if not profile:
@@ -340,15 +339,11 @@ async def get_unmatched_tracks(
                 artist=artist,
                 album=album,
                 added_at=track.get("added_at"),
-                popularity=track.get("popularity"),
                 search_links=search_links,
             ))
 
-        # Sort by preference
-        if sort_by == "popularity":
-            result.sort(key=lambda t: t.popularity or 0, reverse=True)
-        elif sort_by == "added_at":
-            result.sort(key=lambda t: t.added_at or "", reverse=True)
+        # Sort by date added (most recent first)
+        result.sort(key=lambda t: t.added_at or "", reverse=True)
 
         return result
     except Exception:
@@ -415,7 +410,6 @@ class SpotifyPlaylistTrack(BaseModel):
     artist: str | None
     album: str | None
     duration_ms: int | None
-    preview_url: str | None
     in_library: bool
     local_track_id: str | None
 
@@ -525,7 +519,7 @@ async def import_spotify_playlist(
 
     Creates a local playlist with:
     - Matched local tracks (playable immediately)
-    - External track placeholders for missing tracks (with preview playback)
+    - External track placeholders for missing tracks
 
     Set include_missing=false to only import tracks that exist locally.
     """

@@ -28,8 +28,6 @@ class ExternalTrackCreate(BaseModel):
     year: int | None = None
     isrc: str | None = Field(None, max_length=12)
     spotify_id: str | None = Field(None, max_length=50)
-    preview_url: str | None = Field(None, max_length=500)
-    preview_source: str | None = Field(None, max_length=20)
     external_data: dict | None = None
 
 
@@ -44,8 +42,6 @@ class ExternalTrackResponse(BaseModel):
     track_number: int | None
     year: int | None
     source: str
-    preview_url: str | None
-    preview_source: str | None
     external_data: dict
 
     # Matching status
@@ -161,8 +157,6 @@ async def create_external_track(
         spotify_id=request.spotify_id,
         isrc=request.isrc,
         duration_seconds=request.duration_seconds,
-        preview_url=request.preview_url,
-        preview_source=request.preview_source,
         external_data=request.external_data,
         try_match=True,
     )
@@ -331,8 +325,6 @@ def _external_track_to_response(track: ExternalTrack) -> ExternalTrackResponse:
         track_number=track.track_number,
         year=track.year,
         source=track.source.value,
-        preview_url=track.preview_url,
-        preview_source=track.preview_source,
         external_data=track.external_data or {},
         is_matched=track.matched_track_id is not None,
         matched_track_id=str(track.matched_track_id) if track.matched_track_id else None,

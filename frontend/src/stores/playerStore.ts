@@ -36,14 +36,6 @@ export interface QueueSource {
   filters?: LibraryFilters;  // For library context, to re-fetch with new shuffle state
 }
 
-// Preview track for external/missing tracks
-export interface PreviewTrack {
-  id: string;
-  title: string;
-  artist: string;
-  previewUrl: string;
-}
-
 interface PlayerState {
   // Current playback
   currentTrack: Track | null;
@@ -51,10 +43,6 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
-
-  // Preview mode (for external tracks)
-  isPreviewMode: boolean;
-  previewTrack: PreviewTrack | null;
 
   // Playback modes
   shuffle: boolean;
@@ -124,10 +112,6 @@ interface PlayerState {
   // Hydration
   hydrate: () => Promise<void>;
   resetForProfileSwitch: () => void;
-
-  // Preview playback (for external tracks)
-  playPreview: (track: PreviewTrack) => void;
-  stopPreview: () => void;
 }
 
 let queueIdCounter = 0;
@@ -251,8 +235,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   nextTrackPreloaded: false,
   isLoadingAudio: false,
   isHydrated: false,
-  isPreviewMode: false,
-  previewTrack: null,
 
   // Setters
   setCurrentTrack: (track) => {
@@ -902,25 +884,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       crossfadeState: 'idle',
       nextTrackPreloaded: false,
       isHydrated: false,
-      isPreviewMode: false,
-      previewTrack: null,
-    });
-  },
-
-  // Preview playback for external tracks (30-sec previews)
-  playPreview: (track: PreviewTrack) => {
-    // Stop regular playback first
-    set({
-      isPlaying: false,
-      isPreviewMode: true,
-      previewTrack: track,
-    });
-  },
-
-  stopPreview: () => {
-    set({
-      isPreviewMode: false,
-      previewTrack: null,
     });
   },
 }));

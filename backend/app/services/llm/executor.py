@@ -1748,7 +1748,6 @@ Respond with ONLY the playlist name, nothing else."""
                             external_info.update({
                                 "album": spotify_track.get("album", {}).get("name"),
                                 "spotify_id": spotify_track.get("id"),
-                                "preview_url": spotify_track.get("preview_url"),
                                 "spotify_url": spotify_track.get("external_urls", {}).get("spotify"),
                             })
                     except Exception as e:

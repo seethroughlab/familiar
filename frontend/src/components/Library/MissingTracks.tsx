@@ -7,7 +7,6 @@ import {
   ChevronDown,
   ChevronUp,
   ShoppingCart,
-  TrendingUp,
   Clock,
 } from 'lucide-react';
 import { spotifyApi } from '../../api/client';
@@ -28,13 +27,12 @@ interface Props {
 }
 
 export function MissingTracks({ onImportClick }: Props) {
-  const [sortBy, setSortBy] = useState<'popularity' | 'added_at'>('popularity');
   const [expanded, setExpanded] = useState(true);
   const [limit, setLimit] = useState(20);
 
   const { data: tracks, isLoading, error } = useQuery({
-    queryKey: ['spotify-unmatched', sortBy, limit],
-    queryFn: () => spotifyApi.getUnmatched({ sort_by: sortBy, limit }),
+    queryKey: ['spotify-unmatched', limit],
+    queryFn: () => spotifyApi.getUnmatched({ sort_by: 'added_at', limit }),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -103,29 +101,8 @@ export function MissingTracks({ onImportClick }: Props) {
           {/* Controls */}
           <div className="px-4 pb-3 flex items-center justify-between border-b border-zinc-800">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-zinc-500">Sort by:</span>
-              <button
-                onClick={() => setSortBy('popularity')}
-                className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
-                  sortBy === 'popularity'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                }`}
-              >
-                <TrendingUp className="w-3 h-3" />
-                Listening
-              </button>
-              <button
-                onClick={() => setSortBy('added_at')}
-                className={`flex items-center gap-1 px-2 py-1 text-sm rounded transition-colors ${
-                  sortBy === 'added_at'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                }`}
-              >
-                <Clock className="w-3 h-3" />
-                Recent
-              </button>
+              <Clock className="w-3 h-3 text-zinc-500" />
+              <span className="text-sm text-zinc-500">Sorted by date added</span>
             </div>
 
             {onImportClick && (
@@ -178,11 +155,6 @@ function TrackRow({ track }: { track: UnmatchedTrack }) {
             {track.artist || 'Unknown Artist'}
             {track.album && <span className="text-zinc-500"> - {track.album}</span>}
           </p>
-          {track.popularity !== null && (
-            <p className="text-xs text-zinc-500 mt-1">
-              Popularity: {track.popularity}/100
-            </p>
-          )}
         </div>
 
         {/* Search links */}
