@@ -571,6 +571,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           type: externalInfo.type,
           previewUrl: externalInfo.previewUrl,
           matchedTrackId: externalInfo.matchedTrackId,
+          originalId: externalInfo.originalId,
         } : undefined,
       };
     });

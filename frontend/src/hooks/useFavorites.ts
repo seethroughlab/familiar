@@ -69,12 +69,19 @@ export function useFavorites(): UseFavoritesResult {
               return {
                 favorites: cached.trackIds.map((id): FavoriteTrack => ({
                   id,
+                  file_path: '',
                   title: null,
                   artist: null,
                   album: null,
-                  duration_seconds: null,
-                  genre: null,
+                  album_artist: null,
+                  album_type: 'album',
+                  track_number: null,
+                  disc_number: null,
                   year: null,
+                  genre: null,
+                  duration_seconds: null,
+                  format: null,
+                  analysis_version: 0,
                   favorited_at: '',
                 })),
                 total: cached.trackIds.length,
@@ -136,12 +143,19 @@ export function useFavorites(): UseFavoritesResult {
           // Add to favorites (with placeholder data - will be refreshed)
           const newFavorite: FavoriteTrack = {
             id: trackId,
+            file_path: '',
             title: null,
             artist: null,
             album: null,
-            duration_seconds: null,
-            genre: null,
+            album_artist: null,
+            album_type: 'album',
+            track_number: null,
+            disc_number: null,
             year: null,
+            genre: null,
+            duration_seconds: null,
+            format: null,
+            analysis_version: 0,
             favorited_at: new Date().toISOString(),
           };
           return {

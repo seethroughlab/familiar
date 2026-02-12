@@ -7,22 +7,16 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.routes.tracks import TrackResponse
 from app.db.models import ProfileFavorite, Track
 
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 
-class FavoriteTrackResponse(BaseModel):
-    """Track in favorites list."""
+class FavoriteTrackResponse(TrackResponse):
+    """Track in favorites list — full track data plus favorited_at."""
 
-    id: UUID
-    title: str | None
-    artist: str | None
-    album: str | None
-    duration_seconds: float | None
-    genre: str | None
-    year: int | None
-    favorited_at: str
+    favorited_at: str = ""
 
 
 class FavoritesListResponse(BaseModel):
@@ -65,19 +59,13 @@ async def list_favorites(
         )
     ) or 0
 
-    favorites = [
-        FavoriteTrackResponse(
-            id=track.id,
-            title=track.title,
-            artist=track.artist,
-            album=track.album,
-            duration_seconds=track.duration_seconds,
-            genre=track.genre,
-            year=track.year,
-            favorited_at=favorite.favorited_at.isoformat(),
+    favorites = []
+    for favorite, track in rows:
+        resp = FavoriteTrackResponse.model_validate(
+            track, from_attributes=True
         )
-        for favorite, track in rows
-    ]
+        resp.favorited_at = favorite.favorited_at.isoformat()
+        favorites.append(resp)
 
     return FavoritesListResponse(favorites=favorites, total=total)
 

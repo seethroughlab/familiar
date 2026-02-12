@@ -2,7 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioSettingsStore } from '../stores/audioSettingsStore';
-import { tracksApi } from '../api/client';
+import { tracksApi, externalTracksApi } from '../api/client';
 import type { Track } from '../types';
 import {
   getOfflineTrack,
@@ -595,7 +595,44 @@ export function useAudioEngine() {
 
     const loadTrack = async () => {
       try {
-        const { url, isOffline } = await getTrackUrl(currentTrack.id);
+        // Check if this is an external track with preview URL support
+        const state = usePlayerStore.getState();
+        const currentQueueItem = state.queue[state.queueIndex];
+        const externalInfo = currentQueueItem?.externalInfo;
+
+        let url: string;
+        let isOffline = false;
+
+        if (externalInfo) {
+          // External track: use preview URL
+          let previewUrl = externalInfo.previewUrl;
+
+          if (!previewUrl && externalInfo.originalId) {
+            // Resolve preview URL on-demand from iTunes
+            try {
+              setIsLoadingAudio(true);
+              const result = await externalTracksApi.resolvePreviewUrl(externalInfo.originalId);
+              previewUrl = result.preview_url;
+            } catch (e) {
+              log.warn('Failed to resolve preview URL', e);
+            }
+          }
+
+          if (!previewUrl) {
+            // No preview available — skip to next track
+            log.info('No preview URL for external track, auto-advancing');
+            setIsLoadingAudio(false);
+            playNext();
+            return;
+          }
+
+          url = previewUrl;
+        } else {
+          // Normal local track
+          const trackUrl = await getTrackUrl(currentTrack.id);
+          url = trackUrl.url;
+          isOffline = trackUrl.isOffline;
+        }
 
         // Re-check state after async op
         if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) return;
@@ -615,8 +652,11 @@ export function useAudioEngine() {
             if (e.name !== 'AbortError') log.error('Play failed after load', e);
           });
         }
+
+        setIsLoadingAudio(false);
       } catch (e) {
         log.error('Failed to load track', e);
+        setIsLoadingAudio(false);
       }
     };
 

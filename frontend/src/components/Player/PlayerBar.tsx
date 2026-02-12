@@ -60,11 +60,12 @@ export function PlayerBar({
   // isInSession = false,
   // sessionParticipantCount = 0,
 }: PlayerBarProps) {
-  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume } = usePlayerStore(
+  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreview } = usePlayerStore(
     useShallow((s) => ({
       currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
       currentTime: s.currentTime, duration: s.duration, volume: s.volume,
       shuffle: s.shuffle, repeat: s.repeat, consume: s.consume,
+      isPreview: s.queueIndex >= 0 && s.queue[s.queueIndex]?.externalInfo != null,
     }))
   );
   const setVolume = usePlayerStore((s) => s.setVolume);
@@ -163,7 +164,14 @@ export function PlayerBar({
           >
             <AlbumArt trackId={currentTrack.id} />
             <div className="min-w-0 flex-1">
-              <span data-testid="current-track-title" className="font-medium truncate block">{currentTrack.title || 'Unknown'}</span>
+              <div className="flex items-center gap-1.5">
+                <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
+                {isPreview && (
+                  <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded">
+                    Preview
+                  </span>
+                )}
+              </div>
               <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
             </div>
           </button>
@@ -214,7 +222,14 @@ export function PlayerBar({
         >
           <AlbumArt trackId={currentTrack.id} />
           <div className="min-w-0 flex-1">
-            <span data-testid="current-track-title" className="font-medium truncate block">{currentTrack.title || 'Unknown'}</span>
+            <div className="flex items-center gap-1.5">
+              <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
+              {isPreview && (
+                <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded">
+                  Preview
+                </span>
+              )}
+            </div>
             <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
           </div>
         </button>

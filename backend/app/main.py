@@ -36,6 +36,7 @@ from app.api.routes import (
     external_tracks,
     favorites,
     health,
+    itunes,
     lastfm,
     library,
     new_releases,
@@ -301,6 +302,7 @@ app.include_router(background.router, prefix="/api/v1")
 app.include_router(diagnostics.router, prefix="/api/v1")
 app.include_router(plugins.router, prefix="/api/v1")
 app.include_router(external_tracks.router, prefix="/api/v1")
+app.include_router(itunes.router, prefix="/api/v1")
 app.include_router(export_import.router, prefix="/api/v1")
 app.include_router(s3_backup.router, prefix="/api/v1")
 app.include_router(subsonic_credentials.router, prefix="/api/v1")

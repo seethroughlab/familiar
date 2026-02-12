@@ -4,6 +4,7 @@ Tasks run in-process using asyncio and ProcessPoolExecutor.
 Progress is reported via Redis for frontend consumption.
 """
 
+import asyncio
 import gc
 import json
 import logging
@@ -1664,7 +1665,8 @@ async def run_spotify_sync(
     from datetime import datetime as dt
 
     from spotipy.exceptions import SpotifyException
-    from sqlalchemy import delete, select
+    from sqlalchemy import delete, func, select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     from app.db.models import ProfileFavorite, SpotifyFavorite, SpotifyProfile
@@ -1704,12 +1706,6 @@ async def run_spotify_sync(
             if not client:
                 raise ValueError("Spotify not connected - please reconnect your account")
 
-            # Clear existing favorites for full sync
-            await db.execute(
-                delete(SpotifyFavorite).where(SpotifyFavorite.profile_id == profile_uuid)
-            )
-            await db.commit()
-
             # Fetch saved tracks
             all_tracks: list[dict[str, Any]] = []
             offset = 0
@@ -1719,7 +1715,9 @@ async def run_spotify_sync(
 
             while True:
                 try:
-                    results = client.current_user_saved_tracks(limit=limit, offset=offset)
+                    results = await asyncio.to_thread(
+                        client.current_user_saved_tracks, limit=limit, offset=offset
+                    )
                 except SpotifyException as e:
                     raise ValueError(f"Spotify API error: {e.msg if hasattr(e, 'msg') else str(e)}")
 
@@ -1771,14 +1769,24 @@ async def run_spotify_sync(
                     parsed_dt = dt.fromisoformat(added_at.replace("Z", "+00:00"))
                     parsed_added_at = parsed_dt.replace(tzinfo=None)
 
-                favorite = SpotifyFavorite(
-                    profile_id=profile_uuid,
-                    spotify_track_id=track_id,
-                    matched_track_id=local_match.id if local_match else None,
-                    track_data=_extract_track_data(spotify_track),
-                    added_at=parsed_added_at,
+                values = {
+                    "profile_id": profile_uuid,
+                    "spotify_track_id": track_id,
+                    "matched_track_id": local_match.id if local_match else None,
+                    "track_data": _extract_track_data(spotify_track),
+                    "added_at": parsed_added_at,
+                }
+                insert_stmt = pg_insert(SpotifyFavorite).values(**values)
+                upsert_stmt = insert_stmt.on_conflict_do_update(
+                    constraint="uq_spotify_favorite_profile",
+                    set_={
+                        "matched_track_id": insert_stmt.excluded.matched_track_id,
+                        "track_data": insert_stmt.excluded.track_data,
+                        "added_at": insert_stmt.excluded.added_at,
+                        "synced_at": func.now(),
+                    },
                 )
-                db.add(favorite)
+                await db.execute(upsert_stmt)
                 added_track_ids.add(track_id)
                 stats["new"] += 1
 
@@ -1788,6 +1796,15 @@ async def run_spotify_sync(
                         matched_local_track_ids.append(local_match.id)
                 else:
                     stats["unmatched"] += 1
+
+            # Remove favorites no longer in Spotify saved tracks
+            if added_track_ids:
+                await db.execute(
+                    delete(SpotifyFavorite).where(
+                        SpotifyFavorite.profile_id == profile_uuid,
+                        SpotifyFavorite.spotify_track_id.notin_(added_track_ids),
+                    )
+                )
 
             # Batch process ProfileFavorites
             if favorite_matched and matched_local_track_ids:

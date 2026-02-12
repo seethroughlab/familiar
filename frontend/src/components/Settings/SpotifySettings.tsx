@@ -4,6 +4,7 @@ import { spotifyApi } from '../../api/client';
 import type { SpotifyStatus, SpotifyExportPreview, SpotifyExportImportOptions } from '../../api/client';
 import { Music2, RefreshCw, LogOut, ExternalLink, CheckCircle, XCircle, Loader2, AlertTriangle, Upload, FileArchive } from 'lucide-react';
 import { MissingTracks } from '../Library/MissingTracks';
+import { showSuccess, showError } from '../../stores/toastStore';
 
 import { createLogger } from '../../utils/logger';
 
@@ -86,6 +87,13 @@ export function SpotifySettings() {
         setIsPolling(false);
         // Sync completed - refresh stats
         queryClient.invalidateQueries({ queryKey: ['spotify-status'] });
+
+        // Surface the result to the user
+        if (syncStatus?.status === 'error') {
+          showError(syncStatus.message || 'Spotify sync failed');
+        } else if (syncStatus?.status === 'completed') {
+          showSuccess(syncStatus.message || 'Spotify sync complete');
+        }
       }
     }, 1000);
 
@@ -269,7 +277,7 @@ export function SpotifySettings() {
         )}
 
         {/* Sync progress when running */}
-        {isPolling && syncStatus?.progress && (
+        {(isPolling || syncStatus?.status === 'error') && syncStatus?.progress && (
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-zinc-400">
@@ -277,6 +285,7 @@ export function SpotifySettings() {
                 {syncStatus.progress.phase === 'fetching' && 'Fetching tracks from Spotify...'}
                 {syncStatus.progress.phase === 'matching' && 'Matching to local library...'}
                 {syncStatus.progress.phase === 'complete' && 'Complete'}
+                {syncStatus.progress.phase === 'error' && 'Sync failed'}
               </span>
               <span className="text-zinc-300">
                 {syncStatus.progress.phase === 'fetching' ? (

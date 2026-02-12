@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import sanitize_error_for_client
+from app.api.routes.tracks import TrackResponse
 from app.db.models import Track
 from app.services.smart_playlists import SmartPlaylistService
 
@@ -67,18 +68,6 @@ class SmartPlaylistResponse(BaseModel):
     updated_at: str
 
 
-class TrackResponse(BaseModel):
-    """Track in smart playlist results."""
-
-    id: str
-    title: str | None
-    artist: str | None
-    album: str | None
-    duration_seconds: float | None
-    genre: str | None
-    year: int | None
-
-
 class SmartPlaylistTracksResponse(BaseModel):
     """Response with smart playlist tracks."""
 
@@ -103,19 +92,6 @@ def playlist_to_response(playlist: Any) -> SmartPlaylistResponse:
         auto_download=playlist.auto_download,
         created_at=playlist.created_at.isoformat(),
         updated_at=playlist.updated_at.isoformat(),
-    )
-
-
-def track_to_response(track: Any) -> TrackResponse:
-    """Convert Track model to response."""
-    return TrackResponse(
-        id=str(track.id),
-        title=track.title,
-        artist=track.artist,
-        album=track.album,
-        duration_seconds=track.duration_seconds,
-        genre=track.genre,
-        year=track.year,
     )
 
 
@@ -252,7 +228,7 @@ async def get_smart_playlist_tracks(
 
     return SmartPlaylistTracksResponse(
         playlist=playlist_to_response(playlist),
-        tracks=[track_to_response(t) for t in tracks],
+        tracks=[TrackResponse.model_validate(t) for t in tracks],
         total=total,
     )
 

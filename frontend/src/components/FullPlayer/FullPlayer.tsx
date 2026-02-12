@@ -54,11 +54,12 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
 
-  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume } = usePlayerStore(
+  const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreview } = usePlayerStore(
     useShallow((s) => ({
       currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
       currentTime: s.currentTime, duration: s.duration, volume: s.volume,
       shuffle: s.shuffle, repeat: s.repeat, consume: s.consume,
+      isPreview: s.queueIndex >= 0 && s.queue[s.queueIndex]?.externalInfo != null,
     }))
   );
   const setVolume = usePlayerStore((s) => s.setVolume);
@@ -290,6 +291,11 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
         >
           <div className="flex items-center justify-center gap-2">
             <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
+            {isPreview && (
+              <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded-full">
+                Preview
+              </span>
+            )}
             <button
               onClick={handleContextMenu}
               className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0"

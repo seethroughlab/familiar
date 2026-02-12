@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Sortable columns in all playlist views** - Favorites, Playlists, Smart Playlists, Ephemeral Playlists, and Downloads now have clickable column headers with sort indicators
+  - Tri-state sort cycle: ascending → descending → clear (isolated from library sort state)
+  - Dynamic columns from column store (artist, album, year, genre, etc.) visible in all views
+  - CSS grid layout for proper column alignment across header and rows
+  - Mobile responsive: dynamic columns hidden on small screens, artist/album shown inline under title
+  - New shared `PlaylistColumnHeader` component reused across all 5 views
+
+### Changed
+
+- **Expanded playlist API responses** - All playlist-type APIs now return full track metadata
+  - Favorites API: `FavoriteTrackResponse` extends shared `TrackResponse` (adds format, year, genre, track/disc number, album_artist, album_type, analysis_version)
+  - Smart Playlists API: reuses shared `TrackResponse` instead of local limited type
+  - Playlists API: `TrackInPlaylist` expanded with full local track fields
+
 ## [0.1.0-alpha.9] - 2026-02-08
 
 Subsonic API, Volume Normalization & Queue Unification

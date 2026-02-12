@@ -177,7 +177,7 @@ class SpotifyService:
 
         from app.services.spotify_compat import SpotifyCompat
 
-        return SpotifyCompat(spotipy.Spotify(auth=spotify_profile.access_token, requests_timeout=30))
+        return SpotifyCompat(spotipy.Spotify(auth=spotify_profile.access_token, requests_timeout=30), token=spotify_profile.access_token)
 
     async def _refresh_token(
         self,

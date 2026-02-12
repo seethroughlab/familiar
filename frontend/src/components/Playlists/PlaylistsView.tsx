@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Sparkles, Play, MoreVertical, Trash2, Loader2,
   ChevronDown, ChevronUp, ListMusic, Heart, CloudOff, Download, HardDrive, Gift,
@@ -45,7 +45,15 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const { total: favoritesCount } = useFavorites();
   const { total: downloadsCount, totalSizeFormatted: downloadsTotalSize } = useDownloadedTracks();
   const { isOffline } = useOfflineStatus();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  // Helper: navigate with search params while preserving the #playlists hash
+  const updateParams = useCallback((params: URLSearchParams | Record<string, string>) => {
+    const p = params instanceof URLSearchParams ? params : new URLSearchParams(params);
+    const paramString = p.toString();
+    navigate(paramString ? `?${paramString}#playlists` : '#playlists', { replace: true });
+  }, [navigate]);
   const [cachedPlaylistIds, setCachedPlaylistIds] = useState<Set<string>>(new Set());
   const [usingCachedPlaylists, setUsingCachedPlaylists] = useState(false);
   const [savingPlaylistId, setSavingPlaylistId] = useState<string | null>(null);
@@ -113,51 +121,50 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);
     if (mode === 'favorites') {
-      // setSearchParams handles both params and hash update via React Router
-      setSearchParams({ view: 'favorites' });
+      updateParams({ view: 'favorites' });
     } else if (mode === 'downloads') {
-      setSearchParams({ view: 'downloads' });
+      updateParams({ view: 'downloads' });
     } else if (mode === 'wishlist') {
-      setSearchParams({ view: 'wishlist' });
+      updateParams({ view: 'wishlist' });
     } else if (mode === 'list') {
       // Clear playlist-related params
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('playlist');
       newParams.delete('smartPlaylist');
       newParams.delete('view');
-      setSearchParams(newParams);
+      updateParams(newParams);
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, updateParams]);
 
   const setSelectedPlaylist = useCallback((playlist: SelectedPlaylist | null) => {
     setSelectedPlaylistState(playlist);
     if (playlist) {
-      setSearchParams({ playlist: playlist.id });
+      updateParams({ playlist: playlist.id });
       setViewModeState('detail');
     } else {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('playlist');
       newParams.delete('smartPlaylist');
       newParams.delete('view');
-      setSearchParams(newParams);
+      updateParams(newParams);
       setViewModeState('list');
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, updateParams]);
 
   const setSelectedSmartPlaylist = useCallback((playlist: SmartPlaylist | null) => {
     setSelectedSmartPlaylistState(playlist);
     if (playlist) {
-      setSearchParams({ smartPlaylist: playlist.id });
+      updateParams({ smartPlaylist: playlist.id });
       setViewModeState('smart-detail');
     } else {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('playlist');
       newParams.delete('smartPlaylist');
       newParams.delete('view');
-      setSearchParams(newParams);
+      updateParams(newParams);
       setViewModeState('list');
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, updateParams]);
 
   // Auto-navigate to playlist when selectedPlaylistId is provided (e.g., from LLM creation)
   useEffect(() => {

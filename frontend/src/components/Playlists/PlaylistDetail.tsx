@@ -16,8 +16,12 @@ import * as playlistCache from '../../services/playlistCache';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
+import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
+import { getColumnDef } from '../Library/columnDefinitions';
+import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
+import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
-import type { PlaylistDetail as PlaylistDetailType } from '../../api/client';
+import type { PlaylistDetail as PlaylistDetailType, PlaylistTrack as PlaylistTrackType } from '../../api/client';
 
 import { createLogger } from '../../utils/logger';
 
@@ -134,6 +138,37 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
+
+  // Column + sort state
+  const columns = useColumnStore((s) => s.columns);
+  const { sortBy, sortOrder, toggleSort } = useLocalSort();
+  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
+  const gridColumns = useMemo(
+    () => buildGridColumns(columns, ['3rem', '3rem', '4.5rem']),
+    [columns],
+  );
+  const getTrackFromPlaylistItem = useCallback(
+    (t: PlaylistTrackType): Track | null => {
+      if (t.type === 'external') return null;
+      return {
+        id: t.id,
+        file_path: '',
+        title: t.title,
+        artist: t.artist,
+        album: t.album,
+        album_artist: t.album_artist ?? null,
+        album_type: (t.album_type as Track['album_type']) ?? 'album',
+        track_number: t.track_number ?? null,
+        disc_number: t.disc_number ?? null,
+        year: t.year ?? null,
+        genre: t.genre ?? null,
+        duration_seconds: t.duration_seconds,
+        format: t.format ?? null,
+        analysis_version: t.analysis_version ?? 0,
+      };
+    },
+    [],
+  );
 
   // Use global download store
   const { jobs, startDownload } = useDownloadStore();
@@ -280,7 +315,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
   });
 
   // Filter by downloaded tracks and search query
-  const displayedTracks = useMemo(() => {
+  const filteredTracks = useMemo(() => {
     if (!playlist) return [];
     let result = playlist.tracks;
     if (showDownloadedOnly) {
@@ -296,6 +331,8 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
     }
     return result;
   }, [playlist, showDownloadedOnly, offlineTrackIds, searchFilter]);
+
+  const displayedTracks = useSortedTracks(filteredTracks, sortBy, sortOrder, getTrackFromPlaylistItem);
 
   const handlePlay = (startIndex = 0) => {
     if (displayedTracks.length === 0) return;
@@ -318,19 +355,19 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
         title: t.title || 'Unknown',
         artist: t.artist || 'Unknown',
         album: t.album || null,
-        album_artist: null,
-        album_type: 'album' as const,
-        track_number: null,
-        disc_number: null,
-        year: null,
-        genre: null,
+        album_artist: t.album_artist ?? null,
+        album_type: (t.album_type as Track['album_type']) ?? 'album',
+        track_number: t.track_number ?? null,
+        disc_number: t.disc_number ?? null,
+        year: t.year ?? null,
+        genre: t.genre ?? null,
         duration_seconds: t.duration_seconds || null,
-        format: null,
-        analysis_version: 0,
+        format: t.format ?? null,
+        analysis_version: t.analysis_version ?? 0,
         // Carry external info for the player to handle
         _externalInfo: t.type === 'external' ? {
           type: 'external' as const,
-          previewUrl: null,
+          previewUrl: t.preview_url || null,
           matchedTrackId: t.matched_track_id || null,
           originalId: t.id,
         } : undefined,
@@ -737,28 +774,22 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
 
       {/* Track list */}
       {displayedTracks.length > 0 ? (
-        <div className="space-y-1">
+        <div>
+          <PlaylistColumnHeader
+            columns={columns}
+            gridColumns={gridColumns}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            toggleSort={toggleSort}
+            trailingCount={3}
+          />
+          <div className="space-y-1">
           {displayedTracks.map((track, idx) => {
             const isExternal = track.type === 'external';
             const isMatched = isExternal && track.is_matched && track.matched_track_id;
 
             // Convert playlist track to full Track type for context menu (only for local tracks)
-            const fullTrack: Track | null = !isExternal ? {
-              id: track.id,
-              file_path: '',
-              title: track.title || null,
-              artist: track.artist || null,
-              album: track.album || null,
-              album_artist: null,
-              album_type: 'album',
-              track_number: null,
-              disc_number: null,
-              year: null,
-              genre: null,
-              duration_seconds: track.duration_seconds || null,
-              format: null,
-              analysis_version: 0,
-            } : null;
+            const fullTrack = getTrackFromPlaylistItem(track);
             const isSelected = selectedTrackIds.has(track.playlist_track_id);
             const isDragged = draggedTrackId === track.playlist_track_id;
             const isDropTarget = dropTargetId === track.playlist_track_id;
@@ -773,61 +804,57 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
               onDragEnd={handleDragEnd}
               onClick={(e) => handleTrackClick(track.id, idx, e)}
               onContextMenu={(e) => fullTrack && handleContextMenu(fullTrack, e)}
-              className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
+              className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
                 currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
               } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''
               } ${isDragged ? 'opacity-50' : ''
               } ${isDropTarget ? 'border-t-2 border-green-500' : ''
               } ${isExternal && !isMatched ? 'opacity-60' : ''}`}
+              style={{ gridTemplateColumns: gridColumns }}
             >
-              {/* Drag handle - hidden when offline */}
-              <div className={`w-4 flex-shrink-0 cursor-grab active:cursor-grabbing transition-opacity ${
-                isOffline || usingCachedData ? 'opacity-0' : 'opacity-0 group-hover:opacity-50 hover:!opacity-100'
-              }`}>
-                <GripVertical className="w-4 h-4 text-zinc-500" />
-              </div>
-
-              {/* Track number / Play button */}
-              <div className="w-8 text-center">
+              {/* Index cell (drag handle + track number) */}
+              <div className="flex items-center">
+                <div className={`mr-0.5 transition-opacity ${
+                  isOffline || usingCachedData ? 'hidden' : 'opacity-0 group-hover:opacity-50 hover:!opacity-100 cursor-grab active:cursor-grabbing'
+                }`}>
+                  <GripVertical className="w-3 h-3 text-zinc-500" />
+                </div>
                 {currentTrack?.id === track.id && isPlaying ? (
                   <>
-                    <div className="group-hover:hidden flex justify-center gap-0.5">
+                    <div className="group-hover:hidden flex justify-center gap-0.5 flex-1">
                       <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
                       <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
                       <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
                     </div>
-                    <button
+                    <Pause
+                      className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                      fill="currentColor"
                       onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                    >
-                      <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                    </button>
+                    />
                   </>
                 ) : currentTrack?.id === track.id ? (
                   <>
-                    <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                    <button
+                    <span className="group-hover:hidden text-sm text-green-500 flex-1 text-center">{idx + 1}</span>
+                    <Play
+                      className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                      fill="currentColor"
                       onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                    >
-                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                    </button>
+                    />
                   </>
                 ) : (
                   <>
-                    <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                    <button
+                    <span className="group-hover:hidden text-sm text-zinc-500 flex-1 text-center">{idx + 1}</span>
+                    <Play
+                      className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                      fill="currentColor"
                       onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                    >
-                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                    </button>
+                    />
                   </>
                 )}
               </div>
 
-              {/* Track info */}
-              <div className="flex-1 min-w-0">
+              {/* Title + artist (mobile: shows artist/album inline) */}
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
                     {track.title || 'Unknown Title'}
@@ -838,7 +865,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-zinc-400 truncate">
+                <div className="text-sm text-zinc-400 truncate sm:hidden">
                   {track.artist || 'Unknown Artist'}
                   {track.album && (
                     <span className="text-zinc-500"> • {track.album}</span>
@@ -846,52 +873,75 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                 </div>
               </div>
 
-              {/* External links for missing tracks */}
-              {isExternal && !isMatched && track.external_links && Object.keys(track.external_links).length > 0 && (
-                <a
-                  href={Object.values(track.external_links)[0]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-1 text-zinc-500 hover:text-green-400 transition-colors"
-                  title="Open in Spotify"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
+              {/* Dynamic columns (hidden on mobile) */}
+              {visibleColumnIds.map((colId) => {
+                const colDef = getColumnDef(colId);
+                if (!colDef) return <div key={colId} />;
+                if (!fullTrack) return <div key={colId} className="hidden sm:block text-sm text-zinc-500">-</div>;
+                const raw = colDef.getValue(fullTrack);
+                const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
+                return (
+                  <div
+                    key={colId}
+                    className={`hidden sm:block text-sm text-zinc-400 truncate ${
+                      colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
+                    }`}
+                  >
+                    {String(display)}
+                  </div>
+                );
+              })}
 
-              {/* Favorite button - only for local tracks */}
-              {!isExternal && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(track.id);
-                  }}
-                  className={`p-1 transition-colors ${
-                    isFavorite(track.id)
-                      ? 'text-pink-500 hover:text-pink-400'
-                      : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                  }`}
-                  title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                  <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                </button>
-              )}
+              {/* Heart / External link */}
+              <div>
+                {isExternal ? (
+                  !isMatched && track.external_links && Object.keys(track.external_links).length > 0 ? (
+                    <a
+                      href={Object.values(track.external_links)[0]}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="p-1 text-zinc-500 hover:text-green-400 transition-colors"
+                      title="Open in Spotify"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  ) : null
+                ) : (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(track.id);
+                    }}
+                    className={`p-1 transition-colors ${
+                      isFavorite(track.id)
+                        ? 'text-pink-500 hover:text-pink-400'
+                        : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                    }`}
+                    title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
+                  </button>
+                )}
+              </div>
 
-              {/* Offline indicator - only for local tracks */}
-              {!isExternal && offlineTrackIds.has(track.id) && (
-                <span title="Available offline">
-                  <WifiOff className="w-4 h-4 text-green-500" />
-                </span>
-              )}
+              {/* Offline indicator */}
+              <div>
+                {!isExternal && offlineTrackIds.has(track.id) && (
+                  <span title="Available offline">
+                    <WifiOff className="w-4 h-4 text-green-500" />
+                  </span>
+                )}
+              </div>
 
               {/* Duration */}
-              <div className="text-sm text-zinc-500">
+              <div className="text-sm text-zinc-500 text-right">
                 {formatDuration(track.duration_seconds)}
               </div>
             </div>
             );
           })}
+        </div>
         </div>
       ) : (
         <div className="text-center py-12 text-zinc-500">

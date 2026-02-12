@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, WifiOff, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api/client';
-import type { SmartPlaylist } from '../../api/client';
+import type { SmartPlaylist, SmartPlaylistTracksResponse } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadStore, getSmartPlaylistJobId } from '../../stores/downloadStore';
@@ -15,6 +15,10 @@ import * as playlistCache from '../../services/playlistCache';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
+import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
+import { getColumnDef } from '../Library/columnDefinitions';
+import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
+import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
 
@@ -116,6 +120,34 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
   const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Column + sort state
+  const columns = useColumnStore((s) => s.columns);
+  const { sortBy, sortOrder, toggleSort } = useLocalSort();
+  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
+  const gridColumns = useMemo(
+    () => buildGridColumns(columns, ['3rem', '4.5rem']),
+    [columns],
+  );
+  const getTrackFromItem = useCallback(
+    (t: SmartPlaylistTracksResponse['tracks'][0]): Track => ({
+      id: t.id,
+      file_path: t.file_path ?? '',
+      title: t.title,
+      artist: t.artist,
+      album: t.album,
+      album_artist: t.album_artist ?? null,
+      album_type: (t.album_type as Track['album_type']) ?? 'album',
+      track_number: t.track_number ?? null,
+      disc_number: t.disc_number ?? null,
+      year: t.year ?? null,
+      genre: t.genre ?? null,
+      duration_seconds: t.duration_seconds,
+      format: t.format ?? null,
+      analysis_version: t.analysis_version ?? 0,
+    }),
+    [],
+  );
+
   // Use global download store
   const { jobs, startDownload } = useDownloadStore();
   const jobId = getSmartPlaylistJobId(playlist.id);
@@ -156,12 +188,19 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
               },
               tracks: resolvedTracks.map((t) => ({
                 id: t.id,
+                file_path: '',
                 title: t.title,
                 artist: t.artist,
                 album: t.album,
+                album_artist: null,
+                album_type: 'album' as const,
+                track_number: null,
+                disc_number: null,
                 duration_seconds: t.durationSeconds,
                 genre: t.genre,
                 year: t.year,
+                format: null,
+                analysis_version: 0,
               })),
               total: resolvedTracks.length,
             };
@@ -176,7 +215,7 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
   const allTracks = tracksResponse?.tracks || [];
 
   // Filter by downloaded tracks and search query
-  const tracks = useMemo(() => {
+  const filteredTracks = useMemo(() => {
     let result = allTracks;
     if (showDownloadedOnly) {
       result = result.filter(t => offlineTrackIds.has(t.id));
@@ -191,6 +230,8 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
     }
     return result;
   }, [allTracks, showDownloadedOnly, offlineTrackIds, searchFilter]);
+
+  const tracks = useSortedTracks(filteredTracks, sortBy, sortOrder, getTrackFromItem);
 
   // Fetch discovery data based on the first track in the playlist (not available offline)
   const firstTrackId = tracks[0]?.id;
@@ -290,22 +331,7 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
       return;
     }
 
-    const queueTracks = tracks.map(t => ({
-      id: t.id,
-      file_path: '',
-      title: t.title || 'Unknown',
-      artist: t.artist || 'Unknown',
-      album: t.album || null,
-      album_artist: null,
-      album_type: 'album' as const,
-      track_number: null,
-      disc_number: null,
-      year: t.year || null,
-      genre: t.genre || null,
-      duration_seconds: t.duration_seconds || null,
-      format: null,
-      analysis_version: 0,
-    }));
+    const queueTracks = tracks.map(t => getTrackFromItem(t));
     setQueue(queueTracks, startIndex);
   };
 
@@ -530,115 +556,118 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
 
       {/* Track list */}
       {tracks.length > 0 ? (
-        <div className="space-y-1">
-          {tracks.map((track, idx) => {
-            // Convert to full Track type for context menu
-            const fullTrack: Track = {
-              id: track.id,
-              file_path: '',
-              title: track.title || null,
-              artist: track.artist || null,
-              album: track.album || null,
-              album_artist: null,
-              album_type: 'album',
-              track_number: null,
-              disc_number: null,
-              year: track.year || null,
-              genre: track.genre || null,
-              duration_seconds: track.duration_seconds || null,
-              format: null,
-              analysis_version: 0,
-            };
-            return (
-              <div
-                key={track.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('application/track-id', track.id);
-                  e.dataTransfer.effectAllowed = 'copy';
-                }}
-                onClick={() => handlePlay(idx)}
-                onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
-                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                }`}
-              >
-                {/* Track number / Play button */}
-                <div className="w-8 text-center">
-                  {currentTrack?.id === track.id && isPlaying ? (
-                    <>
-                      <div className="group-hover:hidden flex justify-center gap-0.5">
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
-                      </div>
-                      <Pause
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                        fill="currentColor"
-                      />
-                    </>
-                  ) : currentTrack?.id === track.id ? (
-                    <>
-                      <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                      <Play
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                        fill="currentColor"
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                      <Play
-                        className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                        fill="currentColor"
-                      />
-                    </>
-                  )}
-                </div>
-
-                {/* Track info */}
-                <div className="flex-1 min-w-0">
-                  <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                    {track.title || 'Unknown Title'}
-                  </div>
-                  <div className="text-sm text-zinc-400 truncate">
-                    {track.artist || 'Unknown Artist'}
-                    {track.album && (
-                      <span className="text-zinc-500"> • {track.album}</span>
+        <div>
+          <PlaylistColumnHeader
+            columns={columns}
+            gridColumns={gridColumns}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            toggleSort={toggleSort}
+          />
+          <div className="space-y-1">
+            {tracks.map((track, idx) => {
+              const fullTrack = getTrackFromItem(track);
+              return (
+                <div
+                  key={track.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/track-id', track.id);
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  onClick={() => handlePlay(idx)}
+                  onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                  className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all sm:grid ${
+                    currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                  }`}
+                  style={{ gridTemplateColumns: gridColumns }}
+                >
+                  {/* Track number / Play button */}
+                  <div className="w-8 text-center">
+                    {currentTrack?.id === track.id && isPlaying ? (
+                      <>
+                        <div className="group-hover:hidden flex justify-center gap-0.5">
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
+                        </div>
+                        <Pause
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white"
+                          fill="currentColor"
+                        />
+                      </>
+                    ) : currentTrack?.id === track.id ? (
+                      <>
+                        <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
+                        <Play
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white"
+                          fill="currentColor"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
+                        <Play
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white"
+                          fill="currentColor"
+                        />
+                      </>
                     )}
                   </div>
+
+                  {/* Title + artist */}
+                  <div className="min-w-0">
+                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
+                      {track.title || 'Unknown Title'}
+                    </div>
+                    <div className="text-sm text-zinc-400 truncate sm:hidden">
+                      {track.artist || 'Unknown Artist'}
+                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
+                    </div>
+                  </div>
+
+                  {/* Dynamic columns */}
+                  {visibleColumnIds.map((colId) => {
+                    const colDef = getColumnDef(colId);
+                    if (!colDef) return <div key={colId} />;
+                    const raw = colDef.getValue(fullTrack);
+                    const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
+                    return (
+                      <div
+                        key={colId}
+                        className={`hidden sm:block text-sm text-zinc-400 truncate ${
+                          colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
+                        }`}
+                      >
+                        {String(display)}
+                      </div>
+                    );
+                  })}
+
+                  {/* Favorite button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(track.id);
+                    }}
+                    className={`p-1 transition-colors ${
+                      isFavorite(track.id)
+                        ? 'text-pink-500 hover:text-pink-400'
+                        : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                    }`}
+                    title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
+                  </button>
+
+                  {/* Duration */}
+                  <div className="text-sm text-zinc-500 text-right">
+                    {formatDuration(track.duration_seconds)}
+                  </div>
                 </div>
-
-                {/* Favorite button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleFavorite(track.id);
-                  }}
-                  className={`p-1 transition-colors ${
-                    isFavorite(track.id)
-                      ? 'text-pink-500 hover:text-pink-400'
-                      : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                  }`}
-                  title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-                >
-                  <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                </button>
-
-                {/* Offline indicator */}
-                {offlineTrackIds.has(track.id) && (
-                  <span title="Available offline">
-                    <WifiOff className="w-4 h-4 text-green-500" />
-                  </span>
-                )}
-
-                {/* Duration */}
-                <div className="text-sm text-zinc-500">
-                  {formatDuration(track.duration_seconds)}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="text-center py-12 text-zinc-500">

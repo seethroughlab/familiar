@@ -8,6 +8,10 @@ import { removeOfflineTrack, clearAllOfflineTracks } from '../../services/offlin
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
+import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
+import { getColumnDef } from '../Library/columnDefinitions';
+import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
+import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
 import { showError, showSuccess } from '../../stores/toastStore';
 
@@ -31,6 +35,34 @@ export function DownloadsDetail({ onBack }: Props) {
 
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Column + sort state
+  const columns = useColumnStore((s) => s.columns);
+  const { sortBy, sortOrder, toggleSort } = useLocalSort();
+  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
+  const gridColumns = useMemo(
+    () => buildGridColumns(columns, ['4rem', '3rem']),
+    [columns],
+  );
+  const getTrackFromDownload = useCallback(
+    (t: { id: string; title?: string; artist?: string; album?: string }): Track => ({
+      id: t.id,
+      file_path: '',
+      title: t.title || null,
+      artist: t.artist || null,
+      album: t.album || null,
+      album_artist: null,
+      album_type: 'album' as const,
+      track_number: null,
+      disc_number: null,
+      year: null,
+      genre: null,
+      duration_seconds: null,
+      format: null,
+      analysis_version: 0,
+    }),
+    [],
+  );
+
   // Clear all confirmation state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -53,7 +85,7 @@ export function DownloadsDetail({ onBack }: Props) {
     setContextMenu(initialContextMenuState);
   }, []);
 
-  const filteredTracks = useMemo(() => {
+  const searchedTracks = useMemo(() => {
     if (!searchFilter) return tracks;
     const q = searchFilter.toLowerCase();
     return tracks.filter(t =>
@@ -62,6 +94,8 @@ export function DownloadsDetail({ onBack }: Props) {
       (t.album?.toLowerCase().includes(q))
     );
   }, [tracks, searchFilter]);
+
+  const filteredTracks = useSortedTracks(searchedTracks, sortBy, sortOrder, getTrackFromDownload);
 
   const handlePlay = useCallback((startIndex = 0) => {
     if (filteredTracks.length === 0) return;
@@ -160,19 +194,6 @@ export function DownloadsDetail({ onBack }: Props) {
     }
   };
 
-  // Checkbox click handler (separate from row click)
-  const handleCheckboxClick = useCallback((trackId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newSet = new Set(selectedTrackIds);
-    if (newSet.has(trackId)) {
-      newSet.delete(trackId);
-    } else {
-      newSet.add(trackId);
-    }
-    setSelectedTrackIds(newSet);
-    setLastClickedId(trackId);
-  }, [selectedTrackIds]);
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -267,123 +288,116 @@ export function DownloadsDetail({ onBack }: Props) {
 
       {/* Track list */}
       {filteredTracks.length > 0 ? (
-        <div className="space-y-1">
-          {filteredTracks.map((track, idx) => {
-            // Convert offline track to full Track type for context menu
-            const fullTrack: Track = {
-              id: track.id,
-              file_path: '',
-              title: track.title || null,
-              artist: track.artist || null,
-              album: track.album || null,
-              album_artist: null,
-              album_type: 'album',
-              track_number: null,
-              disc_number: null,
-              year: null,
-              genre: null,
-              duration_seconds: null,
-              format: null,
-              analysis_version: 0,
-            };
-            const isSelected = selectedTrackIds.has(track.id);
-            return (
-              <div
-                key={track.id}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('application/track-id', track.id);
-                  e.dataTransfer.effectAllowed = 'copy';
-                }}
-                onClick={(e) => handleTrackClick(track.id, idx, e)}
-                onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
-              >
-                {/* Checkbox */}
+        <div>
+          <PlaylistColumnHeader
+            columns={columns}
+            gridColumns={gridColumns}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            toggleSort={toggleSort}
+            trailingCount={2}
+          />
+          <div className="space-y-1">
+            {filteredTracks.map((track, idx) => {
+              const fullTrack = getTrackFromDownload(track);
+              const isSelected = selectedTrackIds.has(track.id);
+              return (
                 <div
-                  onClick={(e) => handleCheckboxClick(track.id, e)}
-                  className={`w-5 h-5 flex-shrink-0 rounded border cursor-pointer transition-colors ${
-                    isSelected
-                      ? 'bg-green-500 border-green-500'
-                      : 'border-zinc-600 hover:border-zinc-500'
-                  }`}
+                  key={track.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/track-id', track.id);
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  onClick={(e) => handleTrackClick(track.id, idx, e)}
+                  onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                  className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                    currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                  } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
+                  style={{ gridTemplateColumns: gridColumns }}
                 >
-                  {isSelected && (
-                    <svg className="w-5 h-5 text-white" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                  )}
-                </div>
-                {/* Track number / Play button */}
-                <div className="w-8 text-center">
-                  {currentTrack?.id === track.id && isPlaying ? (
-                    <>
-                      <div className="group-hover:hidden flex justify-center gap-0.5">
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                        className="hidden group-hover:block"
-                      >
-                        <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                      </button>
-                    </>
-                  ) : currentTrack?.id === track.id ? (
-                    <>
-                      <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                        className="hidden group-hover:block"
-                      >
-                        <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                        className="hidden group-hover:block"
-                      >
-                        <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                      </button>
-                    </>
-                  )}
-                </div>
-
-                {/* Track info */}
-                <div className="flex-1 min-w-0">
-                  <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                    {track.title || 'Unknown Title'}
-                  </div>
-                  <div className="text-sm text-zinc-400 truncate">
-                    {track.artist || 'Unknown Artist'}
-                    {track.album && (
-                      <span className="text-zinc-500"> • {track.album}</span>
+                  {/* Track number / Play button */}
+                  <div className="text-center">
+                    {currentTrack?.id === track.id && isPlaying ? (
+                      <>
+                        <div className="group-hover:hidden flex justify-center gap-0.5">
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
+                        </div>
+                        <Pause
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                          fill="currentColor"
+                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        />
+                      </>
+                    ) : currentTrack?.id === track.id ? (
+                      <>
+                        <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
+                        <Play
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                          fill="currentColor"
+                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
+                        <Play
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                          fill="currentColor"
+                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        />
+                      </>
                     )}
                   </div>
-                </div>
 
-                {/* Size */}
-                <div className="text-xs text-zinc-500">
-                  {track.sizeFormatted}
-                </div>
+                  {/* Title + artist (mobile: shows artist/album inline) */}
+                  <div className="min-w-0">
+                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
+                      {track.title || 'Unknown Title'}
+                    </div>
+                    <div className="text-sm text-zinc-400 truncate sm:hidden">
+                      {track.artist || 'Unknown Artist'}
+                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
+                    </div>
+                  </div>
 
-                {/* Remove button */}
-                <button
-                  onClick={(e) => handleRemoveFromDownloads(track.id, e)}
-                  className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                  title="Remove from downloads"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            );
-          })}
+                  {/* Dynamic columns (hidden on mobile) */}
+                  {visibleColumnIds.map((colId) => {
+                    const colDef = getColumnDef(colId);
+                    if (!colDef) return <div key={colId} />;
+                    const raw = colDef.getValue(fullTrack);
+                    const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
+                    return (
+                      <div
+                        key={colId}
+                        className={`hidden sm:block text-sm text-zinc-400 truncate ${
+                          colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
+                        }`}
+                      >
+                        {String(display)}
+                      </div>
+                    );
+                  })}
+
+                  {/* Size */}
+                  <div className="text-xs text-zinc-500 text-right">
+                    {track.sizeFormatted}
+                  </div>
+
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => handleRemoveFromDownloads(track.id, e)}
+                    className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                    title="Remove from downloads"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="text-center py-12 text-zinc-500">

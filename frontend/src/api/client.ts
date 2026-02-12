@@ -1282,12 +1282,19 @@ export interface SmartPlaylistTracksResponse {
   playlist: SmartPlaylist;
   tracks: Array<{
     id: string;
+    file_path: string;
     title: string | null;
     artist: string | null;
     album: string | null;
-    duration_seconds: number | null;
-    genre: string | null;
+    album_artist: string | null;
+    album_type: string;
+    track_number: number | null;
+    disc_number: number | null;
     year: number | null;
+    genre: string | null;
+    duration_seconds: number | null;
+    format: string | null;
+    analysis_version: number;
   }>;
   total: number;
 }
@@ -1412,6 +1419,16 @@ export interface PlaylistTrack {
   album: string | null;
   duration_seconds: number | null;
   position: number;
+
+  // Full track fields (local tracks only)
+  format?: string | null;
+  year?: number | null;
+  genre?: string | null;
+  track_number?: number | null;
+  disc_number?: number | null;
+  album_artist?: string | null;
+  album_type?: string | null;
+  analysis_version?: number | null;
 
   // External track fields (only present when type === 'external')
   is_matched?: boolean;
@@ -1636,6 +1653,11 @@ export const externalTracksApi = {
     });
     return data;
   },
+
+  resolvePreviewUrl: async (externalTrackId: string): Promise<{ preview_url: string | null; preview_source: string | null }> => {
+    const { data } = await api.get(`/external-tracks/${externalTrackId}/preview-url`);
+    return data;
+  },
 };
 
 // Spotify Playlist Import API
@@ -1775,12 +1797,19 @@ export const profilesApi = {
 // Favorites API
 export interface FavoriteTrack {
   id: string;
+  file_path: string;
   title: string | null;
   artist: string | null;
   album: string | null;
-  duration_seconds: number | null;
-  genre: string | null;
+  album_artist: string | null;
+  album_type: string;
+  track_number: number | null;
+  disc_number: number | null;
   year: number | null;
+  genre: string | null;
+  duration_seconds: number | null;
+  format: string | null;
+  analysis_version: number;
   favorited_at: string;
 }
 

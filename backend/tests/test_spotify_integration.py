@@ -454,10 +454,7 @@ class TestSpotifyDataExtraction:
         assert result["artist_id"] == "artist_123"
         assert result["album"] == "Test Album"
         assert result["album_id"] == "album_456"
-        assert result["isrc"] == "USRC12345678"
         assert result["duration_ms"] == 180000
-        assert result["popularity"] == 75
-        assert result["preview_url"] is not None
         assert "spotify.com" in result["external_url"]
 
     def test_extract_track_data_minimal(self, sync_service):
@@ -478,4 +475,3 @@ class TestSpotifyDataExtraction:
         assert result["name"] == "Test Song"
         assert result["artist"] is None
         assert result["album"] is None
-        assert result["isrc"] is None

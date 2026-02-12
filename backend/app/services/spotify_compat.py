@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 class SpotifyCompat:
     """Wraps spotipy.Spotify to handle broken/renamed endpoints."""
 
-    def __init__(self, client: spotipy.Spotify) -> None:
+    def __init__(self, client: spotipy.Spotify, token: str) -> None:
         self._client = client
-        self._token = client.auth  # access token for direct API calls
+        self._token = token
 
     def __getattr__(self, name: str) -> Any:
         """Delegate all unhandled attributes to the underlying spotipy client."""

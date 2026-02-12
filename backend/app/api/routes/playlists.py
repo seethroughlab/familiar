@@ -48,10 +48,21 @@ class TrackInPlaylist(BaseModel):
     duration_seconds: float | None
     position: int
 
+    # Full track fields (local tracks only)
+    format: str | None = None
+    year: int | None = None
+    genre: str | None = None
+    track_number: int | None = None
+    disc_number: int | None = None
+    album_artist: str | None = None
+    album_type: str | None = None
+    analysis_version: int | None = None
+
     # External track fields
     is_matched: bool = False
     matched_track_id: str | None = None
     match_confidence: float | None = None
+    preview_url: str | None = None
     external_links: dict[str, str] = {}  # spotify, bandcamp, deezer URLs
 
 
@@ -194,6 +205,14 @@ async def create_playlist(
             album=track.album,
             duration_seconds=track.duration_seconds,
             position=position,
+            format=track.format,
+            year=track.year,
+            genre=track.genre,
+            track_number=track.track_number,
+            disc_number=track.disc_number,
+            album_artist=track.album_artist,
+            album_type=track.album_type,
+            analysis_version=track.analysis_version,
         ))
 
     await db.commit()
@@ -370,6 +389,14 @@ async def get_playlist(
                 album=pt.track.album,
                 duration_seconds=pt.track.duration_seconds,
                 position=pt.position,
+                format=pt.track.format,
+                year=pt.track.year,
+                genre=pt.track.genre,
+                track_number=pt.track.track_number,
+                disc_number=pt.track.disc_number,
+                album_artist=pt.track.album_artist,
+                album_type=pt.track.album_type,
+                analysis_version=pt.track.analysis_version,
                 is_matched=False,
                 matched_track_id=None,
                 match_confidence=None,
@@ -381,6 +408,10 @@ async def get_playlist(
             if ext.external_data:
                 if ext.external_data.get("spotify_url"):
                     external_links["spotify"] = ext.external_data["spotify_url"]
+
+            preview_url = None
+            if ext.external_data:
+                preview_url = ext.external_data.get("itunes_preview_url")
 
             tracks.append(TrackInPlaylist(
                 id=str(ext.id),
@@ -394,6 +425,7 @@ async def get_playlist(
                 is_matched=ext.matched_track_id is not None,
                 matched_track_id=str(ext.matched_track_id) if ext.matched_track_id else None,
                 match_confidence=ext.match_confidence,
+                preview_url=preview_url,
                 external_links=external_links,
             ))
 

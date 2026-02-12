@@ -81,6 +81,7 @@ export interface PlaylistTrackItem {
   is_matched?: boolean;
   matched_track_id?: string | null;
   match_confidence?: number | null;
+  preview_url?: string | null;
   external_links?: Record<string, string>;
 }
 
@@ -110,6 +111,7 @@ export interface QueueItem {
     type: 'external';
     previewUrl: string | null;
     matchedTrackId: string | null;
+    originalId?: string;
   };
 }
 

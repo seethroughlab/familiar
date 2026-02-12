@@ -8,6 +8,10 @@ import { Heart } from 'lucide-react';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
+import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
+import { getColumnDef } from '../Library/columnDefinitions';
+import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
+import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import type { Track } from '../../types';
 
@@ -49,7 +53,16 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [searchFilter, setSearchFilter] = useState('');
 
-  const filteredTracks = useMemo(() => {
+  // Column + sort state
+  const columns = useColumnStore((s) => s.columns);
+  const { sortBy, sortOrder, toggleSort } = useLocalSort();
+  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
+  const gridColumns = useMemo(
+    () => buildGridColumns(columns, ['3rem', '4.5rem']),
+    [columns],
+  );
+
+  const searchedTracks = useMemo(() => {
     if (!searchFilter) return playlist.tracks;
     const q = searchFilter.toLowerCase();
     return playlist.tracks.filter(t =>
@@ -58,6 +71,8 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
       (t.album?.toLowerCase().includes(q))
     );
   }, [playlist.tracks, searchFilter]);
+
+  const filteredTracks = useSortedTracks(searchedTracks, sortBy, sortOrder, toFullTrack);
 
   const handlePlay = useCallback((startIndex = 0) => {
     if (filteredTracks.length === 0) return;
@@ -188,97 +203,121 @@ export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, is
 
       {/* Track list */}
       {filteredTracks.length > 0 ? (
-        <div className="space-y-1">
-          {filteredTracks.map((track, idx) => (
-            <div
-              key={track.id}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/track-id', track.id);
-                e.dataTransfer.effectAllowed = 'copy';
-              }}
-              onClick={() => handlePlay(idx)}
-              onContextMenu={(e) => handleContextMenu(toFullTrack(track), e)}
-              className={`group flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
-                currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-              }`}
-            >
-              {/* Track number / Play button */}
-              <div className="w-8 text-center">
-                {currentTrack?.id === track.id && isPlaying ? (
-                  <>
-                    <div className="group-hover:hidden flex justify-center gap-0.5">
-                      <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                      <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                      <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
+        <div>
+          <PlaylistColumnHeader
+            columns={columns}
+            gridColumns={gridColumns}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            toggleSort={toggleSort}
+          />
+          <div className="space-y-1">
+            {filteredTracks.map((track, idx) => {
+              const fullTrack = toFullTrack(track);
+              return (
+                <div
+                  key={track.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/track-id', track.id);
+                    e.dataTransfer.effectAllowed = 'copy';
+                  }}
+                  onClick={() => handlePlay(idx)}
+                  onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                  className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
+                    currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                  }`}
+                  style={{ gridTemplateColumns: gridColumns }}
+                >
+                  {/* Track number / Play button */}
+                  <div className="text-center">
+                    {currentTrack?.id === track.id && isPlaying ? (
+                      <>
+                        <div className="group-hover:hidden flex justify-center gap-0.5">
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
+                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
+                        </div>
+                        <Pause
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                          fill="currentColor"
+                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        />
+                      </>
+                    ) : currentTrack?.id === track.id ? (
+                      <>
+                        <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
+                        <Play
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                          fill="currentColor"
+                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
+                        <Play
+                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
+                          fill="currentColor"
+                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
+                        />
+                      </>
+                    )}
+                  </div>
+
+                  {/* Title + artist (mobile: shows artist/album inline) */}
+                  <div className="min-w-0">
+                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
+                      {track.title || 'Unknown Title'}
                     </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                    >
-                      <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                    </button>
-                  </>
-                ) : currentTrack?.id === track.id ? (
-                  <>
-                    <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                    >
-                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                      className="hidden group-hover:block"
-                    >
-                      <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                    </button>
-                  </>
-                )}
-              </div>
+                    <div className="text-sm text-zinc-400 truncate sm:hidden">
+                      {track.artist || 'Unknown Artist'}
+                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
+                    </div>
+                  </div>
 
-              {/* Track info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                    {track.title || 'Unknown Title'}
-                  </span>
+                  {/* Dynamic columns (hidden on mobile) */}
+                  {visibleColumnIds.map((colId) => {
+                    const colDef = getColumnDef(colId);
+                    if (!colDef) return <div key={colId} />;
+                    const raw = colDef.getValue(fullTrack);
+                    const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
+                    return (
+                      <div
+                        key={colId}
+                        className={`hidden sm:block text-sm text-zinc-400 truncate ${
+                          colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
+                        }`}
+                      >
+                        {String(display)}
+                      </div>
+                    );
+                  })}
+
+                  {/* Favorite button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(track.id);
+                    }}
+                    className={`p-1 transition-colors ${
+                      isFavorite(track.id)
+                        ? 'text-pink-500 hover:text-pink-400'
+                        : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                    }`}
+                    title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
+                  </button>
+
+                  {/* Duration */}
+                  <div className="text-sm text-zinc-500 text-right">
+                    {formatDuration(track.duration_seconds)}
+                  </div>
                 </div>
-                <div className="text-sm text-zinc-400 truncate">
-                  {track.artist || 'Unknown Artist'}
-                  {track.album && (
-                    <span className="text-zinc-500"> • {track.album}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Favorite button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleFavorite(track.id);
-                }}
-                className={`p-1 transition-colors ${
-                  isFavorite(track.id)
-                    ? 'text-pink-500 hover:text-pink-400'
-                    : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                }`}
-                title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-              >
-                <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-              </button>
-
-              {/* Duration */}
-              <div className="text-sm text-zinc-500">
-                {formatDuration(track.duration_seconds)}
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="text-center py-12 text-zinc-500">
