@@ -30,6 +30,9 @@ interface CrossfadeContext {
   animationFrameId?: number;
 }
 
+// Module-level cache: albumKey -> { avgLufs, albumPeak }
+const albumGainCache = new Map<string, { avgLufs: number; albumPeak: number | null }>();
+
 // Module-level tracking state
 // We keep these here for now to maintain behavior across re-renders without full store refactor
 // but they no longer hold the actual AUDIO NODES (which are in context)
@@ -74,6 +77,13 @@ function setElementVolume(element: HTMLAudioElement | null, volume: number): voi
   }
 }
 
+function getAlbumKey(track: Track): string | null {
+  if (!track.album) return null;
+  const artist = track.album_artist || track.artist;
+  if (!artist) return null;
+  return `${artist}::${track.album}`;
+}
+
 // ============================================================================
 // Main Hook
 // ============================================================================
@@ -94,7 +104,7 @@ export function useAudioEngine() {
   const advanceToNextTrack = usePlayerStore((s) => s.advanceToNextTrack);
   const setIsLoadingAudio = usePlayerStore((s) => s.setIsLoadingAudio);
 
-  const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
+  const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationMode, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
 
   // --------------------------------------------------------------------------
   // Element Accessors (scoped to context)
@@ -147,28 +157,47 @@ export function useAudioEngine() {
   // Normalization
   // --------------------------------------------------------------------------
 
-  const computeNormalizationGain = useCallback((track: Track | null): number => {
-    if (!track?.features?.loudness_lufs) return 1;
-    if (!normalizationEnabled) return 1;
+  const shouldUseAlbumGain = useCallback((): boolean => {
+    if (!normalizationEnabled) return false;
+    if (normalizationMode === 'album') return true;
+    if (normalizationMode === 'auto') {
+      const source = usePlayerStore.getState().queueSource;
+      return source?.type === 'album';
+    }
+    return false;
+  }, [normalizationEnabled, normalizationMode]);
 
-    const lufs = track.features.loudness_lufs;
-    // gain_db = target - measured + preamp
+  const computeNormalizationGain = useCallback((
+    track: Track | null,
+    albumData?: { avgLufs: number; albumPeak: number | null } | null,
+  ): number => {
+    if (!normalizationEnabled) return 1;
+    if (!track?.features?.loudness_lufs) return 1;
+
+    // Use album avg LUFS when available and album mode is active, else track LUFS
+    const useAlbum = albumData && shouldUseAlbumGain();
+    const lufs = useAlbum ? albumData.avgLufs : track.features.loudness_lufs;
     let gainDb = normalizationTargetLufs - lufs + normalizationPreamp;
 
-    if (normalizationPreventClipping && track.features.track_peak) {
-      const maxGainDb = -20 * Math.log10(track.features.track_peak + 1e-10);
-      gainDb = Math.min(gainDb, maxGainDb);
+    if (normalizationPreventClipping) {
+      const peak = useAlbum ? albumData.albumPeak : track.features.track_peak;
+      if (peak) {
+        const maxGainDb = -20 * Math.log10(peak + 1e-10);
+        gainDb = Math.min(gainDb, maxGainDb);
+      }
     }
 
     return Math.pow(10, gainDb / 20);
-  }, [normalizationEnabled, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping]);
+  }, [normalizationEnabled, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping, shouldUseAlbumGain]);
 
   const applyNormalizationGain = useCallback((track: Track | null, isCurrent: boolean): void => {
     if (!useWebAudio) return;
     const normGain = isCurrent ? getCurrentNormGain() : getNextNormGain();
     if (!normGain) return;
 
-    const linearGain = computeNormalizationGain(track);
+    const albumKey = track ? getAlbumKey(track) : null;
+    const albumData = albumKey ? albumGainCache.get(albumKey) : undefined;
+    const linearGain = computeNormalizationGain(track, albumData);
     normGain.gain.value = linearGain;
   }, [useWebAudio, getCurrentNormGain, getNextNormGain, computeNormalizationGain]);
 
@@ -665,6 +694,42 @@ export function useAudioEngine() {
     // We only want to run this when the track ID changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?.id, isInitialized, getCurrentElement]);
+
+  // --------------------------------------------------------------------------
+  // Effect: Fetch album gain and apply normalization on track change
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isInitialized || !currentTrack) return;
+
+    let cancelled = false;
+
+    const apply = async () => {
+      if (shouldUseAlbumGain()) {
+        const albumKey = getAlbumKey(currentTrack);
+        if (albumKey && !albumGainCache.has(albumKey)) {
+          try {
+            const resp = await tracksApi.getAlbumGain(currentTrack.id);
+            if (!cancelled && resp.album_gain_db != null) {
+              // Derive avg LUFS from the backend's hardcoded -14 target
+              const avgLufs = -14.0 - resp.album_gain_db;
+              albumGainCache.set(albumKey, { avgLufs, albumPeak: resp.album_peak });
+            }
+          } catch (e) {
+            log.warn('Failed to fetch album gain, falling back to track gain', e);
+          }
+        }
+      }
+      if (!cancelled) {
+        applyNormalizationGain(currentTrack, true);
+      }
+    };
+
+    apply();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack?.id, normalizationMode, isInitialized, shouldUseAlbumGain, applyNormalizationGain]);
+
   // --------------------------------------------------------------------------
   // Animation/Update Loop
   // --------------------------------------------------------------------------

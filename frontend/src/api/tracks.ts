@@ -104,6 +104,11 @@ export const tracksApi = {
     return data;
   },
 
+  getAlbumGain: async (trackId: string): Promise<{ album_gain_db: number | null; album_peak: number | null; track_count: number }> => {
+    const { data } = await api.get(`/tracks/${trackId}/album-gain`);
+    return data;
+  },
+
   enrich: async (id: string): Promise<{ status: string; message: string }> => {
     const { data } = await api.post(`/tracks/${id}/enrich`);
     return data;
