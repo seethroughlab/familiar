@@ -427,8 +427,8 @@ function SpotifyExportImport() {
     try {
       const data = await spotifyApi.uploadExport(file);
       setPreview(data);
-    } catch (err: any) {
-      const message = err?.response?.data?.detail || err?.message || 'Upload failed';
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
       setError(message);
       log.error('Export upload failed:', err);
     } finally {
@@ -460,8 +460,8 @@ function SpotifyExportImport() {
       const data = await spotifyApi.executeImport(preview.session_id, options);
       setResult(data);
       setPreview(null);
-    } catch (err: any) {
-      const message = err?.response?.data?.detail || err?.message || 'Import failed';
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Import failed';
       setError(message);
       log.error('Import execution failed:', err);
     } finally {

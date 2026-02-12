@@ -546,7 +546,7 @@ class SpotifyExportImporter:
             playlist = Playlist(
                 profile_id=profile_uuid,
                 name=playlist_data.get("name", "Imported Playlist"),
-                description=f"Imported from Spotify data export",
+                description="Imported from Spotify data export",
                 is_auto_generated=False,
             )
             self.db.add(playlist)
