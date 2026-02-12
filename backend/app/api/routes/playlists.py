@@ -211,7 +211,7 @@ async def create_playlist(
             track_number=track.track_number,
             disc_number=track.disc_number,
             album_artist=track.album_artist,
-            album_type=track.album_type,
+            album_type=track.album_type.value if track.album_type else None,
             analysis_version=track.analysis_version,
         ))
 
@@ -395,7 +395,7 @@ async def get_playlist(
                 track_number=pt.track.track_number,
                 disc_number=pt.track.disc_number,
                 album_artist=pt.track.album_artist,
-                album_type=pt.track.album_type,
+                album_type=pt.track.album_type.value if pt.track.album_type else None,
                 analysis_version=pt.track.analysis_version,
                 is_matched=False,
                 matched_track_id=None,
