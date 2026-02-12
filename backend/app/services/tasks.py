@@ -1671,6 +1671,7 @@ async def run_spotify_sync(
 
     from app.db.models import ProfileFavorite, SpotifyFavorite, SpotifyProfile
     from app.services.spotify import SpotifyService
+    from app.services.spotify_compat import SpotifyRateLimitError
 
     progress = SpotifySyncProgressReporter(profile_id)
     profile_uuid = UUID(profile_id)
@@ -1714,12 +1715,40 @@ async def run_spotify_sync(
             progress.set_fetching(0, "Fetching saved tracks from Spotify...")
 
             while True:
-                try:
-                    results = await asyncio.to_thread(
-                        client.current_user_saved_tracks, limit=limit, offset=offset
-                    )
-                except SpotifyException as e:
-                    raise ValueError(f"Spotify API error: {e.msg if hasattr(e, 'msg') else str(e)}")
+                max_page_retries = 3
+                for page_attempt in range(max_page_retries):
+                    try:
+                        results = await asyncio.to_thread(
+                            client.current_user_saved_tracks, limit=limit, offset=offset
+                        )
+                        break  # Success
+                    except SpotifyRateLimitError as e:
+                        if page_attempt < max_page_retries - 1:
+                            wait = e.retry_after or 30
+                            logger.warning(
+                                f"Spotify rate limited during favorites sync, "
+                                f"waiting {wait}s (attempt {page_attempt + 1})"
+                            )
+                            await asyncio.sleep(wait)
+                        else:
+                            raise ValueError(
+                                f"Spotify rate limit exceeded after {max_page_retries} retries"
+                            )
+                    except SpotifyException as e:
+                        if e.http_status == 429:
+                            retry_after = int(e.headers.get("Retry-After", "30")) if e.headers else 30
+                            if page_attempt < max_page_retries - 1:
+                                logger.warning(
+                                    f"Spotify 429 during favorites sync, "
+                                    f"waiting {retry_after}s (attempt {page_attempt + 1})"
+                                )
+                                await asyncio.sleep(retry_after)
+                            else:
+                                raise ValueError(
+                                    f"Spotify rate limit exceeded after {max_page_retries} retries"
+                                )
+                        else:
+                            raise ValueError(f"Spotify API error: {e.msg if hasattr(e, 'msg') else str(e)}")
 
                 tracks = results.get("items", [])
                 if not tracks:
@@ -1732,6 +1761,8 @@ async def run_spotify_sync(
                 offset += limit
                 if offset > 2000:
                     break
+
+                await asyncio.sleep(1.0)  # Throttle between pages
 
             added_track_ids: set[str] = set()
             matched_local_track_ids: list[UUID] = []
@@ -2023,6 +2054,7 @@ async def run_new_releases_check(
     from app.services.musicbrainz import get_artist_releases_recent, search_artist
     from app.services.new_releases import NewReleasesService
     from app.services.spotify import SpotifyArtistService
+    from app.services.spotify_compat import SpotifyRateLimitError
 
     progress = NewReleasesProgressReporter(profile_id)
 
@@ -2117,8 +2149,14 @@ async def run_new_releases_check(
                                     "spotify_artist_id": spotify_artist_id,
                                 })
 
-                        time.sleep(0.1)  # Rate limiting
+                        await asyncio.sleep(2.0)  # Rate limiting: ~4s per artist with throttled API calls
 
+                    except SpotifyRateLimitError as e:
+                        logger.warning(
+                            f"Spotify rate limited during new releases check "
+                            f"(retry_after={e.retry_after}s), disabling Spotify for remainder"
+                        )
+                        spotify_service = None  # Fall back to MusicBrainz for remaining artists
                     except Exception as e:
                         logger.warning(f"Spotify lookup failed for {artist_name}: {e}")
 

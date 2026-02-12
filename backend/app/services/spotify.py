@@ -22,6 +22,7 @@ from app.db.models import (
     Track,
 )
 from app.services.app_settings import get_app_settings_service
+from app.services.spotify_compat import SpotifyRateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +178,15 @@ class SpotifyService:
 
         from app.services.spotify_compat import SpotifyCompat
 
-        return SpotifyCompat(spotipy.Spotify(auth=spotify_profile.access_token, requests_timeout=30), token=spotify_profile.access_token)
+        return SpotifyCompat(
+            spotipy.Spotify(
+                auth=spotify_profile.access_token,
+                requests_timeout=30,
+                retries=5,
+                backoff_factor=2.0,
+            ),
+            token=spotify_profile.access_token,
+        )
 
     async def _refresh_token(
         self,
@@ -834,6 +843,14 @@ class SpotifyArtistService:
                 "images": artist.get("images", []),
                 "external_url": artist.get("external_urls", {}).get("spotify"),
             }
+        except SpotifyRateLimitError:
+            raise
+        except spotipy.SpotifyException as e:
+            if e.http_status == 429:
+                retry_after = int(e.headers.get("Retry-After", "60")) if e.headers else 60
+                raise SpotifyRateLimitError(retry_after=retry_after) from e
+            logger.error(f"Spotify artist search error: {e}")
+            return None
         except Exception as e:
             logger.error(f"Spotify artist search error: {e}")
             return None
@@ -886,6 +903,14 @@ class SpotifyArtistService:
                 }
                 for album in albums
             ]
+        except SpotifyRateLimitError:
+            raise
+        except spotipy.SpotifyException as e:
+            if e.http_status == 429:
+                retry_after = int(e.headers.get("Retry-After", "60")) if e.headers else 60
+                raise SpotifyRateLimitError(retry_after=retry_after) from e
+            logger.error(f"Spotify get artist albums error: {e}")
+            return []
         except Exception as e:
             logger.error(f"Spotify get artist albums error: {e}")
             return []

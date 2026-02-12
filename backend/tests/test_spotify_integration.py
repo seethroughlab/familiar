@@ -178,7 +178,7 @@ class TestSpotifyServiceTokenRefresh:
                 # Should have called refresh
                 mock_oauth_instance.refresh_access_token.assert_called_once_with("refresh_token")
                 # Should return client with new token
-                mock_spotify.assert_called_with(auth="new_token", requests_timeout=30)
+                mock_spotify.assert_called_with(auth="new_token", requests_timeout=30, retries=5, backoff_factor=2.0)
 
     @pytest.mark.asyncio
     async def test_get_client_returns_none_when_no_profile(self, service):
