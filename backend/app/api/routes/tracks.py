@@ -187,9 +187,9 @@ async def list_track_ids(
             # Note: lastPlayed sort not supported for IDs endpoint (no profile context)
             if sort_by != 'lastPlayed':
                 if sort_order == 'desc':
-                    query = query.order_by(nulls_last(sort_col.desc()))
+                    query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number)
                 else:
-                    query = query.order_by(nulls_last(sort_col.asc()))
+                    query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
             else:
                 query = query.order_by(Track.artist, Track.album, Track.track_number)
         else:
@@ -215,9 +215,9 @@ async def list_track_ids(
 
             sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_expr.desc()))
+                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number)
             else:
-                query = query.order_by(nulls_last(sort_expr.asc()))
+                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number)
     else:
         query = query.order_by(Track.artist, Track.album, Track.track_number)
 
@@ -432,9 +432,9 @@ async def list_tracks(
                 )
 
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_col.desc()))
+                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number)
             else:
-                query = query.order_by(nulls_last(sort_col.asc()))
+                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
         else:
             # Feature sort (JSONB field) - need to join with analysis if not already joined
             if not has_feature_filter:
@@ -460,9 +460,9 @@ async def list_tracks(
             # Build sort expression for JSONB field
             sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_expr.desc()))
+                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number)
             else:
-                query = query.order_by(nulls_last(sort_expr.asc()))
+                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number)
     else:
         # Default ordering
         query = query.order_by(Track.artist, Track.album, Track.track_number)
@@ -532,12 +532,25 @@ async def get_track_index(
     search: str | None = None,
     artist: str | None = None,
     album: str | None = None,
+    genre: str | None = None,
+    year_from: int | None = Query(None),
+    year_to: int | None = Query(None),
+    energy_min: float | None = Query(None, ge=0, le=1),
+    energy_max: float | None = Query(None, ge=0, le=1),
+    valence_min: float | None = Query(None, ge=0, le=1),
+    valence_max: float | None = Query(None, ge=0, le=1),
+    sort_by: str | None = Query(None),
+    sort_order: str = Query('asc', pattern='^(asc|desc)$'),
 ) -> TrackIndexResponse:
     """Get the 0-based index of a track in the sorted list.
 
     Uses ROW_NUMBER() to efficiently find position without loading all tracks.
+    Accepts the same filter and sort parameters as list_tracks so the index
+    matches the current view.
     Returns {"index": N} or {"index": -1} if not found.
     """
+    from sqlalchemy import Float, cast, nulls_last
+
     # Build base query with same filters as list_tracks
     base_query = select(Track.id)
 
@@ -554,23 +567,98 @@ async def get_track_index(
         )
     if album:
         base_query = base_query.where(Track.album.ilike(f"%{album}%"))
+    if genre:
+        base_query = base_query.where(Track.genre.ilike(f"%{genre}%"))
+    if year_from is not None:
+        base_query = base_query.where(Track.year >= year_from)
+    if year_to is not None:
+        base_query = base_query.where(Track.year <= year_to)
 
-    # Apply same ordering as list_tracks
-    base_query = base_query.order_by(Track.artist, Track.album, Track.track_number)
-
-    # Use ROW_NUMBER() to get the index
-    row_num = func.row_number().over(
-        order_by=[Track.artist, Track.album, Track.track_number]
-    ).label("row_num")
-
-    numbered_query = (
-        select(Track.id, row_num)
-        .where(
-            Track.id.in_(base_query)
-        )
-        .order_by(Track.artist, Track.album, Track.track_number)
-        .subquery()
+    # Audio feature filters
+    has_feature_filter = any(
+        x is not None for x in [energy_min, energy_max, valence_min, valence_max]
     )
+    if has_feature_filter:
+        analysis_subq = (
+            select(
+                TrackAnalysis.track_id,
+                func.max(TrackAnalysis.version).label("max_version")
+            )
+            .where(TrackAnalysis.features.isnot(None))
+            .group_by(TrackAnalysis.track_id)
+            .subquery()
+        )
+        base_query = base_query.join(
+            analysis_subq,
+            Track.id == analysis_subq.c.track_id
+        ).join(
+            TrackAnalysis,
+            (TrackAnalysis.track_id == analysis_subq.c.track_id) &
+            (TrackAnalysis.version == analysis_subq.c.max_version)
+        )
+        if energy_min is not None:
+            base_query = base_query.where(
+                cast(TrackAnalysis.features["energy"].astext, Float) >= energy_min
+            )
+        if energy_max is not None:
+            base_query = base_query.where(
+                cast(TrackAnalysis.features["energy"].astext, Float) <= energy_max
+            )
+        if valence_min is not None:
+            base_query = base_query.where(
+                cast(TrackAnalysis.features["valence"].astext, Float) >= valence_min
+            )
+        if valence_max is not None:
+            base_query = base_query.where(
+                cast(TrackAnalysis.features["valence"].astext, Float) <= valence_max
+            )
+
+    # Build the ordering clause (mirrors list_tracks / list_track_ids)
+    needs_analysis_join = False
+    if sort_by and sort_by != 'lastPlayed' and (
+        sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS
+    ):
+        if sort_by in SORT_FIELD_MAP:
+            sort_col = SORT_FIELD_MAP[sort_by]
+            if sort_order == 'desc':
+                order_clauses = [nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number]
+            else:
+                order_clauses = [nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number]
+        else:
+            # Feature sort - need analysis join
+            needs_analysis_join = not has_feature_filter
+            sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
+            if sort_order == 'desc':
+                order_clauses = [nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number]
+            else:
+                order_clauses = [nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number]
+    else:
+        order_clauses = [Track.artist, Track.album, Track.track_number]
+
+    # Join analysis for feature sorts if not already joined via filters
+    if needs_analysis_join:
+        analysis_subq = (
+            select(
+                TrackAnalysis.track_id,
+                func.max(TrackAnalysis.version).label("max_version")
+            )
+            .where(TrackAnalysis.features.isnot(None))
+            .group_by(TrackAnalysis.track_id)
+            .subquery()
+        )
+        base_query = base_query.outerjoin(
+            analysis_subq,
+            Track.id == analysis_subq.c.track_id
+        ).outerjoin(
+            TrackAnalysis,
+            (TrackAnalysis.track_id == analysis_subq.c.track_id) &
+            (TrackAnalysis.version == analysis_subq.c.max_version)
+        )
+
+    # Add ROW_NUMBER() directly to the filtered/joined query
+    row_num = func.row_number().over(order_by=order_clauses).label("row_num")
+    base_query = base_query.add_columns(row_num)
+    numbered_query = base_query.subquery()
 
     # Find the specific track's row number
     result = await db.execute(

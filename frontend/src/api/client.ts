@@ -156,13 +156,22 @@ export const tracksApi = {
    */
   getIndex: async (
     id: string,
-    filters?: {
+    params?: {
       search?: string;
       artist?: string;
       album?: string;
+      genre?: string;
+      year_from?: number;
+      year_to?: number;
+      energy_min?: number;
+      energy_max?: number;
+      valence_min?: number;
+      valence_max?: number;
+      sort_by?: string;
+      sort_order?: 'asc' | 'desc';
     }
   ): Promise<{ index: number }> => {
-    const { data } = await api.get(`/tracks/${id}/index`, { params: filters });
+    const { data } = await api.get(`/tracks/${id}/index`, { params });
     return data;
   },
 

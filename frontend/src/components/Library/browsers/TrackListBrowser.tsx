@@ -870,6 +870,15 @@ export function TrackListBrowser({
           search: filters.search,
           artist: filters.artist,
           album: filters.album,
+          genre: filters.genre,
+          year_from: filters.yearFrom,
+          year_to: filters.yearTo,
+          energy_min: filters.energyMin,
+          energy_max: filters.energyMax,
+          valence_min: filters.valenceMin,
+          valence_max: filters.valenceMax,
+          sort_by: sortField,
+          sort_order: sortOrder,
         });
 
         // Check if we're still trying to scroll to this track (handles rapid skipping)
