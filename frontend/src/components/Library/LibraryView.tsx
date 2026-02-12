@@ -6,7 +6,7 @@
  * Persists view state in URL for reload support.
  */
 import { useCallback, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useHashSearchParams } from '../../hooks/useHashSearchParams';
 import { Download } from 'lucide-react';
 import { useLibraryViewStore } from '../../stores/libraryViewStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -40,7 +40,7 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
     setEditingTrackId,
   } = useSelectionStore();
   const { offlineIds } = useOfflineTrackIds();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useHashSearchParams();
 
   // Browser selection - read from URL, fall back to persisted preference
   const currentBrowserId = searchParams.get('browser') || selectedBrowserId;

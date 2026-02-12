@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useHashSearchParams } from '../../hooks/useHashSearchParams';
 import {
   Sparkles, Play, MoreVertical, Trash2, Loader2,
   ChevronDown, ChevronUp, ListMusic, Heart, CloudOff, Download, HardDrive, Gift,
@@ -45,15 +45,7 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const { total: favoritesCount } = useFavorites();
   const { total: downloadsCount, totalSizeFormatted: downloadsTotalSize } = useDownloadedTracks();
   const { isOffline } = useOfflineStatus();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-
-  // Helper: navigate with search params while preserving the #playlists hash
-  const updateParams = useCallback((params: URLSearchParams | Record<string, string>) => {
-    const p = params instanceof URLSearchParams ? params : new URLSearchParams(params);
-    const paramString = p.toString();
-    navigate(paramString ? `?${paramString}#playlists` : '#playlists', { replace: true });
-  }, [navigate]);
+  const [searchParams, setSearchParams] = useHashSearchParams();
   const [cachedPlaylistIds, setCachedPlaylistIds] = useState<Set<string>>(new Set());
   const [usingCachedPlaylists, setUsingCachedPlaylists] = useState(false);
   const [savingPlaylistId, setSavingPlaylistId] = useState<string | null>(null);
@@ -121,50 +113,50 @@ export function PlaylistsView({ selectedPlaylistId, onPlaylistViewed }: Props = 
   const setViewMode = useCallback((mode: ViewMode) => {
     setViewModeState(mode);
     if (mode === 'favorites') {
-      updateParams({ view: 'favorites' });
+      setSearchParams({ view: 'favorites' }, { replace: true });
     } else if (mode === 'downloads') {
-      updateParams({ view: 'downloads' });
+      setSearchParams({ view: 'downloads' }, { replace: true });
     } else if (mode === 'wishlist') {
-      updateParams({ view: 'wishlist' });
+      setSearchParams({ view: 'wishlist' }, { replace: true });
     } else if (mode === 'list') {
       // Clear playlist-related params
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('playlist');
       newParams.delete('smartPlaylist');
       newParams.delete('view');
-      updateParams(newParams);
+      setSearchParams(newParams, { replace: true });
     }
-  }, [searchParams, updateParams]);
+  }, [searchParams, setSearchParams]);
 
   const setSelectedPlaylist = useCallback((playlist: SelectedPlaylist | null) => {
     setSelectedPlaylistState(playlist);
     if (playlist) {
-      updateParams({ playlist: playlist.id });
+      setSearchParams({ playlist: playlist.id }, { replace: true });
       setViewModeState('detail');
     } else {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('playlist');
       newParams.delete('smartPlaylist');
       newParams.delete('view');
-      updateParams(newParams);
+      setSearchParams(newParams, { replace: true });
       setViewModeState('list');
     }
-  }, [searchParams, updateParams]);
+  }, [searchParams, setSearchParams]);
 
   const setSelectedSmartPlaylist = useCallback((playlist: SmartPlaylist | null) => {
     setSelectedSmartPlaylistState(playlist);
     if (playlist) {
-      updateParams({ smartPlaylist: playlist.id });
+      setSearchParams({ smartPlaylist: playlist.id }, { replace: true });
       setViewModeState('smart-detail');
     } else {
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('playlist');
       newParams.delete('smartPlaylist');
       newParams.delete('view');
-      updateParams(newParams);
+      setSearchParams(newParams, { replace: true });
       setViewModeState('list');
     }
-  }, [searchParams, updateParams]);
+  }, [searchParams, setSearchParams]);
 
   // Auto-navigate to playlist when selectedPlaylistId is provided (e.g., from LLM creation)
   useEffect(() => {

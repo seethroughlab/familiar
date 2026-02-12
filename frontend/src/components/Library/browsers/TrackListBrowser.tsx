@@ -12,7 +12,7 @@
  */
 import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useSearchParams } from 'react-router-dom';
+import { useHashSearchParams } from '../../../hooks/useHashSearchParams';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Pause, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
@@ -430,7 +430,7 @@ export function TrackListBrowser({
   onEditTrack,
   offlineTrackIds,
 }: BrowserProps) {
-  const [, setSearchParams] = useSearchParams();
+  const [, setSearchParams] = useHashSearchParams();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffle = usePlayerStore((s) => s.shuffle);

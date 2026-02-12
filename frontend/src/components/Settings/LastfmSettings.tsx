@@ -2,11 +2,11 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Loader2, User, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { lastfmApi } from '../../api/client';
-import { useSearchParams } from 'react-router-dom';
+import { useHashSearchParams } from '../../hooks/useHashSearchParams';
 
 export function LastfmSettings() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useHashSearchParams();
 
   const { data: status, isLoading } = useQuery({
     queryKey: ['lastfm-status'],

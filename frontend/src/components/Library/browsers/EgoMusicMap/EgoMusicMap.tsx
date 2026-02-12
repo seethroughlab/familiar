@@ -9,7 +9,7 @@
  * - Pan and zoom to explore
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useHashSearchParams } from '../../../../hooks/useHashSearchParams';
 import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Search, Sparkles, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { libraryApi, tracksApi, type EgoMapArtist } from '../../../../api/client';
@@ -45,7 +45,7 @@ interface AnimationState {
 }
 
 export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useHashSearchParams();
 
   // Read initial center from URL params
   const urlCenter = searchParams.get('center');
