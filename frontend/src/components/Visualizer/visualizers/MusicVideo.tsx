@@ -48,6 +48,7 @@ function MusicVideo({ track, currentTime, isPlaying }: VisualizerProps) {
   const {
     data: searchResults,
     isLoading: searchLoading,
+    isError: searchError,
     refetch: searchVideos,
   } = useQuery({
     queryKey: ['video-search', trackId],
@@ -154,6 +155,17 @@ function MusicVideo({ track, currentTime, isPlaying }: VisualizerProps) {
           {searchLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+            </div>
+          ) : searchError ? (
+            <div className="flex flex-col items-center py-12">
+              <Video className="w-12 h-12 text-red-500 mb-3 opacity-50" />
+              <p className="text-red-400">Search failed</p>
+              <button
+                onClick={() => searchVideos()}
+                className="mt-4 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-300"
+              >
+                Try again
+              </button>
             </div>
           ) : searchResults && searchResults.length > 0 ? (
             <div className="space-y-3">

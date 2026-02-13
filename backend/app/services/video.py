@@ -2,11 +2,14 @@
 
 import asyncio
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -41,10 +44,9 @@ class VideoService:
 
     @staticmethod
     def _base_ytdlp_args() -> list[str]:
-        """Common yt-dlp args for browser impersonation and YouTube compatibility."""
+        """Common yt-dlp args for YouTube compatibility."""
         return [
             "--extractor-args", "youtube:player_client=web",
-            "--impersonate", "chrome",
         ]
 
     async def search(
@@ -62,10 +64,11 @@ class VideoService:
                 "yt-dlp",
                 *self._base_ytdlp_args(),
                 "--dump-json",
-                "--flat-playlist",
-                "--no-warnings",
+                "--no-playlist",
                 f"ytsearch{limit}:{query}"
             ]
+
+            logger.info("Video search: query=%r, cmd=%s", query, " ".join(cmd))
 
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -73,10 +76,27 @@ class VideoService:
                 stderr=asyncio.subprocess.PIPE
             )
 
-            stdout, stderr = await process.communicate()
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), timeout=30.0
+                )
+            except asyncio.TimeoutError:
+                logger.error("Video search timed out after 30s for query: %r", query)
+                process.kill()
+                await process.wait()
+                return []
+
+            stderr_text = stderr.decode().strip() if stderr else ""
 
             if process.returncode != 0:
+                logger.error(
+                    "yt-dlp search failed (rc=%d) for query %r: %s",
+                    process.returncode, query, stderr_text[:500]
+                )
                 return []
+
+            if stderr_text:
+                logger.debug("yt-dlp search warnings for %r: %s", query, stderr_text[:500])
 
             results = []
             for line in stdout.decode().strip().split('\n'):
@@ -100,8 +120,10 @@ class VideoService:
                 except json.JSONDecodeError:
                     continue
 
+            logger.info("Video search returned %d results for query: %r", len(results), query)
             return results
         except Exception:
+            logger.exception("Video search failed for query: %r", query)
             return []
 
     def get_video_path(self, track_id: str) -> Path | None:

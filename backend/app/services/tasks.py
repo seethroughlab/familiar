@@ -1723,8 +1723,12 @@ async def run_spotify_sync(
                         )
                         break  # Success
                     except SpotifyRateLimitError as e:
+                        wait = e.retry_after or 30
+                        if wait > 300:
+                            raise ValueError(
+                                f"Spotify rate limit too long ({wait}s), aborting sync"
+                            )
                         if page_attempt < max_page_retries - 1:
-                            wait = e.retry_after or 30
                             logger.warning(
                                 f"Spotify rate limited during favorites sync, "
                                 f"waiting {wait}s (attempt {page_attempt + 1})"
@@ -1737,6 +1741,10 @@ async def run_spotify_sync(
                     except SpotifyException as e:
                         if e.http_status == 429:
                             retry_after = int(e.headers.get("Retry-After", "30")) if e.headers else 30
+                            if retry_after > 300:
+                                raise ValueError(
+                                    f"Spotify rate limit too long ({retry_after}s), aborting sync"
+                                )
                             if page_attempt < max_page_retries - 1:
                                 logger.warning(
                                     f"Spotify 429 during favorites sync, "
@@ -1765,7 +1773,7 @@ async def run_spotify_sync(
                 await asyncio.sleep(1.0)  # Throttle between pages
 
             added_track_ids: set[str] = set()
-            matched_local_track_ids: list[UUID] = []
+            matched_local_track_ids: set[UUID] = set()
 
             # Process tracks
             for i, item in enumerate(all_tracks):
@@ -1824,7 +1832,7 @@ async def run_spotify_sync(
                 if local_match:
                     stats["matched"] += 1
                     if favorite_matched:
-                        matched_local_track_ids.append(local_match.id)
+                        matched_local_track_ids.add(local_match.id)
                 else:
                     stats["unmatched"] += 1
 

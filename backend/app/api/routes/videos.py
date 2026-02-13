@@ -1,5 +1,6 @@
 """Video endpoints for music video search and download."""
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
@@ -12,6 +13,8 @@ from sqlalchemy import select
 from app.api.deps import DbSession
 from app.db.models import Track
 from app.services.video import get_video_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -72,6 +75,7 @@ async def search_videos(
 
     # Build search query
     search_query = f"{track.artist or ''} {track.title} official music video"
+    logger.info("Video search for track %s: '%s'", track_id, search_query)
 
     video_service = get_video_service()
     results = await video_service.search(search_query, limit=limit)
