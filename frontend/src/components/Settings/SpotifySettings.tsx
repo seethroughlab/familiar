@@ -27,6 +27,7 @@ interface SyncStatus {
   status: string;
   message: string;
   progress?: SyncProgress | null;
+  rate_limited_until?: string | null;
 }
 
 export function SpotifySettings() {
@@ -35,6 +36,32 @@ export function SpotifySettings() {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [favoriteMatched, setFavoriteMatched] = useState(true);
+  const [rateLimitCountdown, setRateLimitCountdown] = useState<number>(0);
+
+  // Track rate limit countdown
+  useEffect(() => {
+    const until = syncStatus?.rate_limited_until;
+    if (!until) {
+      setRateLimitCountdown(0);
+      return;
+    }
+
+    const calcRemaining = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
+      setRateLimitCountdown(remaining);
+      return remaining;
+    };
+
+    if (calcRemaining() === 0) return;
+
+    const interval = setInterval(() => {
+      if (calcRemaining() === 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [syncStatus?.rate_limited_until]);
 
   // Check URL params for OAuth callback status
   useEffect(() => {
@@ -125,6 +152,9 @@ export function SpotifySettings() {
     onSuccess: (data) => {
       if (data.status === 'started' || data.status === 'already_running') {
         setIsPolling(true);
+        setSyncMessage(null);
+      } else if (data.status === 'rate_limited') {
+        setSyncStatus(data);
         setSyncMessage(null);
       } else {
         setSyncMessage(data.message);
@@ -227,7 +257,7 @@ export function SpotifySettings() {
                 <>
                   <button
                     onClick={() => syncMutation.mutate()}
-                    disabled={syncMutation.isPending || isPolling}
+                    disabled={syncMutation.isPending || isPolling || rateLimitCountdown > 0}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-500 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {(syncMutation.isPending || isPolling) ? (
@@ -273,6 +303,19 @@ export function SpotifySettings() {
         {syncMessage && (
           <div className="mt-4 p-3 bg-zinc-700/50 rounded-md text-sm text-zinc-300">
             {syncMessage}
+          </div>
+        )}
+
+        {/* Rate limit warning */}
+        {rateLimitCountdown > 0 && (
+          <div className="mt-4 flex items-start gap-2 p-3 bg-amber-900/20 border border-amber-800 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-amber-400">Spotify rate limited</p>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Available again in {Math.floor(rateLimitCountdown / 60)}m {rateLimitCountdown % 60}s
+              </p>
+            </div>
           </div>
         )}
 

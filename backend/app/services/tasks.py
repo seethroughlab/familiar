@@ -1523,6 +1523,7 @@ async def queue_unanalyzed_tracks(limit: int = 500) -> int:
 # ============================================================================
 
 SPOTIFY_SYNC_PROGRESS_KEY = "familiar:spotify:sync:progress"
+SPOTIFY_RATE_LIMIT_KEY = "familiar:spotify:rate_limit_until"
 
 
 class SpotifySyncProgressReporter:
@@ -1656,6 +1657,29 @@ def clear_spotify_sync_progress() -> None:
         logger.error(f"Failed to clear Spotify sync progress: {e}")
 
 
+def set_spotify_rate_limit(seconds: int) -> None:
+    """Store Spotify rate limit expiry in Redis with auto-expiring TTL."""
+    try:
+        r = get_redis()
+        until = (datetime.now() + timedelta(seconds=seconds)).isoformat()
+        r.set(SPOTIFY_RATE_LIMIT_KEY, until, ex=seconds)
+        logger.warning(f"Spotify rate limited for {seconds}s, until {until}")
+    except Exception as e:
+        logger.error(f"Failed to set Spotify rate limit: {e}")
+
+
+def get_spotify_rate_limit() -> str | None:
+    """Get Spotify rate limit expiry ISO timestamp, or None if not rate limited."""
+    try:
+        r = get_redis()
+        data: bytes | None = r.get(SPOTIFY_RATE_LIMIT_KEY)  # type: ignore[assignment]
+        if data:
+            return data.decode() if isinstance(data, bytes) else str(data)
+    except Exception as e:
+        logger.error(f"Failed to get Spotify rate limit: {e}")
+    return None
+
+
 async def run_spotify_sync(
     profile_id: str,
     include_top_tracks: bool = True,
@@ -1725,6 +1749,7 @@ async def run_spotify_sync(
                     except SpotifyRateLimitError as e:
                         wait = e.retry_after or 30
                         if wait > 300:
+                            set_spotify_rate_limit(wait)
                             raise ValueError(
                                 f"Spotify rate limit too long ({wait}s), aborting sync"
                             )
@@ -1742,6 +1767,7 @@ async def run_spotify_sync(
                         if e.http_status == 429:
                             retry_after = int(e.headers.get("Retry-After", "30")) if e.headers else 30
                             if retry_after > 300:
+                                set_spotify_rate_limit(retry_after)
                                 raise ValueError(
                                     f"Spotify rate limit too long ({retry_after}s), aborting sync"
                                 )

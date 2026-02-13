@@ -13,7 +13,7 @@ from app.api.deps import CurrentProfile, DbSession, RequiredProfile
 from app.api.exceptions import sanitize_error_for_client
 from app.db.models import SpotifyFavorite, SpotifyProfile
 from app.services.spotify import SpotifyPlaylistService, SpotifyService, SpotifySyncService
-from app.services.tasks import get_spotify_sync_progress
+from app.services.tasks import get_spotify_rate_limit, get_spotify_sync_progress
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +52,10 @@ class SpotifySyncProgress(BaseModel):
 
 class SpotifySyncStatus(BaseModel):
     """Spotify sync status response."""
-    status: str  # "idle", "running", "completed", "error"
+    status: str  # "idle", "running", "completed", "error", "rate_limited"
     message: str
     progress: SpotifySyncProgress | None = None
+    rate_limited_until: str | None = None
 
 
 class StoreSearchLink(BaseModel):
@@ -214,6 +215,15 @@ async def start_spotify_sync(
             detail="Profile ID required",
         )
 
+    # Check if rate limited
+    rate_limit_until = get_spotify_rate_limit()
+    if rate_limit_until:
+        return SpotifySyncStatus(
+            status="rate_limited",
+            message="Spotify is rate limited. Please wait for the cooldown to expire.",
+            rate_limited_until=rate_limit_until,
+        )
+
     # Check if a sync is already running
     progress = get_spotify_sync_progress()
     if progress and progress.get("status") == "running":
@@ -246,6 +256,7 @@ async def get_sync_status() -> SpotifySyncStatus:
 
     from app.services.tasks import clear_spotify_sync_progress
 
+    rate_limit_until = get_spotify_rate_limit()
     progress = get_spotify_sync_progress()
 
     if not progress:
@@ -253,6 +264,7 @@ async def get_sync_status() -> SpotifySyncStatus:
             status="idle",
             message="No sync running",
             progress=None,
+            rate_limited_until=rate_limit_until,
         )
 
     # Check if the sync is stale (no heartbeat for 5 minutes)
@@ -291,6 +303,7 @@ async def get_sync_status() -> SpotifySyncStatus:
         status=status,
         message=progress.get("message", ""),
         progress=sync_progress if status != "idle" else None,
+        rate_limited_until=rate_limit_until,
     )
 
 
