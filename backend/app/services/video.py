@@ -80,7 +80,7 @@ class VideoService:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(), timeout=30.0
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error("Video search timed out after 30s for query: %r", query)
                 process.kill()
                 await process.wait()

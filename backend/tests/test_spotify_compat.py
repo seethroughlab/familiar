@@ -8,9 +8,9 @@ import pytest
 import spotipy
 
 from app.services.spotify_compat import (
+    _MIN_REQUEST_INTERVAL,
     SpotifyCompat,
     SpotifyRateLimitError,
-    _MIN_REQUEST_INTERVAL,
 )
 
 
