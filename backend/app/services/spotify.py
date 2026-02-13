@@ -182,8 +182,7 @@ class SpotifyService:
             spotipy.Spotify(
                 auth=spotify_profile.access_token,
                 requests_timeout=30,
-                retries=5,
-                backoff_factor=2.0,
+                retries=0,  # Don't let spotipy sleep on 429 — we handle rate limits ourselves
             ),
             token=spotify_profile.access_token,
         )
