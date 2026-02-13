@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Play,
-  Pause,
   Loader2,
   Music,
   Clock,
@@ -12,6 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import { libraryApi, playlistsApi } from '../../api/client';
+import { PlayIndicator } from '../common/PlayIndicator';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -556,46 +556,8 @@ export function AlbumDetail({
                       : ''
                 }`}
               >
-                <div className="w-8 text-center">
-                  {currentTrack?.id === track.id && isPlaying ? (
-                    <>
-                      <div className="group-hover:hidden flex justify-center gap-0.5">
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                        <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
-                      </div>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePlayTrack(idx); }}
-                        className="hidden group-hover:block"
-                      >
-                        <Pause className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                      </button>
-                    </>
-                  ) : currentTrack?.id === track.id ? (
-                    <>
-                      <span className="group-hover:hidden text-sm text-green-500">
-                        {track.track_number || idx + 1}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePlayTrack(idx); }}
-                        className="hidden group-hover:block"
-                      >
-                        <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="group-hover:hidden text-sm text-zinc-500">
-                        {track.track_number || idx + 1}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePlayTrack(idx); }}
-                        className="hidden group-hover:block"
-                      >
-                        <Play className="w-4 h-4 mx-auto text-white" fill="currentColor" />
-                      </button>
-                    </>
-                  )}
+                <div className="w-8 text-center cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePlayTrack(idx); }}>
+                  <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={track.track_number || idx + 1} />
                 </div>
 
                 <div className="flex-1 min-w-0">

@@ -86,7 +86,7 @@ interface PlayerState {
   toggleConsume: () => void;
 
   // Queue actions
-  addToQueue: (track: Track, insertIndex?: number) => void;
+  addToQueue: (track: Track, insertIndex?: number, shuffleInsertPosition?: number) => void;
   removeFromQueue: (queueId: string) => void;
   clearQueue: () => void;
   playTrack: (track: Track) => void;
@@ -94,6 +94,7 @@ interface PlayerState {
   playPrevious: () => void;
   setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
+  reorderShuffleOrder: (fromIndex: number, toIndex: number) => void;
   jumpToQueueIndex: (index: number) => void;
 
   // Lazy queue actions
@@ -340,7 +341,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   // Queue actions
-  addToQueue: (track, insertIndex) => {
+  addToQueue: (track, insertIndex, shuffleInsertPosition) => {
     const { queue, queueIndex, shuffle, shuffleOrder } = get();
 
     const insertAt = insertIndex ?? queue.length;
@@ -354,7 +355,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     let newShuffleOrder = shuffleOrder;
     if (shuffle) {
       newShuffleOrder = shuffleOrder.map(i => i >= insertAt ? i + 1 : i);
-      newShuffleOrder.push(insertAt);
+      if (shuffleInsertPosition !== undefined) {
+        // Insert at specific display position (e.g. external drop in shuffle mode)
+        newShuffleOrder.splice(shuffleInsertPosition, 0, insertAt);
+      } else {
+        newShuffleOrder.push(insertAt);
+      }
     }
 
     set({
@@ -416,6 +422,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTrack: track,
       isPlaying: true,
       currentTime: 0,
+      isLoadingAudio: true,
     });
     persistState();
   },
@@ -506,6 +513,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         currentTrack: newQueue[nextQueueIndex].track,
         isPlaying: true,
         currentTime: 0,
+        isLoadingAudio: true,
         shuffleIndex: newShuffleIndex,
         shuffleOrder: newShuffleOrder,
       });
@@ -519,6 +527,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTrack: queue[nextQueueIndex].track,
       isPlaying: true,
       currentTime: 0,
+      isLoadingAudio: true,
       shuffleIndex: newShuffleIndex,
       shuffleOrder: newShuffleOrder,
     });
@@ -542,6 +551,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         history: s.history.slice(0, -1),
         isPlaying: true,
         currentTime: 0,
+        isLoadingAudio: true,
         queueIndex: Math.max(-1, s.queueIndex - 1),
       }));
       persistState();
@@ -590,6 +600,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTrack: tracks[startIndex] || null,
       isPlaying: tracks.length > 0,
       currentTime: 0,
+      isLoadingAudio: tracks.length > 0,
       shuffleOrder,
       shuffleIndex,
       // Exit lazy mode when setting a regular queue
@@ -623,8 +634,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     persistState();
   },
 
+  reorderShuffleOrder: (fromIndex: number, toIndex: number) => {
+    const { shuffleOrder, shuffleIndex } = get();
+    if (fromIndex < 0 || fromIndex >= shuffleOrder.length || toIndex < 0 || toIndex >= shuffleOrder.length) {
+      return;
+    }
+
+    const newOrder = [...shuffleOrder];
+    const [removed] = newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, removed);
+
+    // Adjust shuffleIndex to keep pointing at the currently playing track
+    let newShuffleIndex = shuffleIndex;
+    if (fromIndex === shuffleIndex) {
+      newShuffleIndex = toIndex;
+    } else if (fromIndex < shuffleIndex && toIndex >= shuffleIndex) {
+      newShuffleIndex = shuffleIndex - 1;
+    } else if (fromIndex > shuffleIndex && toIndex <= shuffleIndex) {
+      newShuffleIndex = shuffleIndex + 1;
+    }
+
+    set({ shuffleOrder: newOrder, shuffleIndex: newShuffleIndex });
+    persistState();
+  },
+
   jumpToQueueIndex: (index: number) => {
-    const { queue, currentTrack } = get();
+    const { queue, currentTrack, shuffle, shuffleOrder } = get();
     if (index < 0 || index >= queue.length) {
       return;
     }
@@ -639,11 +674,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }));
     }
 
+    // Update shuffleIndex to match the jumped-to track
+    let newShuffleIndex = get().shuffleIndex;
+    if (shuffle && shuffleOrder.length > 0) {
+      const pos = shuffleOrder.indexOf(index);
+      if (pos >= 0) newShuffleIndex = pos;
+    }
+
     set({
       queueIndex: index,
       currentTrack: targetItem.track,
       isPlaying: true,
       currentTime: 0,
+      isLoadingAudio: true,
+      shuffleIndex: newShuffleIndex,
     });
     persistState();
   },
@@ -689,6 +733,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           currentTrack: queueItems[0].track,
           isPlaying: true,
           currentTime: 0,
+          isLoadingAudio: true,
           shuffleOrder,
           shuffleIndex,
         });

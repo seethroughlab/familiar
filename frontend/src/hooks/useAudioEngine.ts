@@ -257,15 +257,25 @@ export function useAudioEngine() {
       setIsLoadingAudio(false);
     };
 
+    const handlePlaying = (e: Event) => {
+      const target = e.target as HTMLAudioElement;
+      const currentElement = getCurrentElement();
+      if (target === currentElement) {
+        setIsLoadingAudio(false);
+      }
+    };
+
     elements.forEach(el => {
       el.addEventListener('ended', handleEnded);
       el.addEventListener('error', handleError);
+      el.addEventListener('playing', handlePlaying);
     });
 
     return () => {
       elements.forEach(el => {
         el.removeEventListener('ended', handleEnded);
         el.removeEventListener('error', handleError);
+        el.removeEventListener('playing', handlePlaying);
       });
     };
   }, [isInitialized, audioGraph, playNext, setIsPlaying, setIsLoadingAudio, getCurrentElement]);
@@ -353,7 +363,8 @@ export function useAudioEngine() {
 
     setCrossfadeState('idle');
     setNextTrackPreloaded(false);
-  }, [getCurrentElement, getNextElement, useDirectPlayback, setCrossfadeState, setNextTrackPreloaded]);
+    setIsLoadingAudio(false);
+  }, [getCurrentElement, getNextElement, useDirectPlayback, setCrossfadeState, setNextTrackPreloaded, setIsLoadingAudio]);
 
   // --------------------------------------------------------------------------
   // Cancel crossfade
@@ -619,11 +630,14 @@ export function useAudioEngine() {
 
     // Check if expected track is already loaded
     if (currentElement.getAttribute('data-track-id') === currentTrack.id) {
+      setIsLoadingAudio(false);
       return;
     }
 
     const loadTrack = async () => {
       try {
+        setIsLoadingAudio(true);
+
         // Check if this is an external track with preview URL support
         const state = usePlayerStore.getState();
         const currentQueueItem = state.queue[state.queueIndex];
@@ -639,7 +653,6 @@ export function useAudioEngine() {
           if (!previewUrl && externalInfo.originalId) {
             // Resolve preview URL on-demand from iTunes
             try {
-              setIsLoadingAudio(true);
               const result = await externalTracksApi.resolvePreviewUrl(externalInfo.originalId);
               previewUrl = result.preview_url;
             } catch (e) {
@@ -664,8 +677,14 @@ export function useAudioEngine() {
         }
 
         // Re-check state after async op
-        if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) return;
-        if (crossfadeContext?.isActive) return;
+        if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) {
+          setIsLoadingAudio(false);
+          return;
+        }
+        if (crossfadeContext?.isActive) {
+          setIsLoadingAudio(false);
+          return;
+        }
 
         // Cleanup old offline URL
         if (currentOfflineUrl) revokeOfflineTrackUrl(currentOfflineUrl);
@@ -677,12 +696,10 @@ export function useAudioEngine() {
 
         if (isPlaying) {
           const p = currentElement.play();
-          if (p) p.catch(e => {
+          if (p) p.then(() => setIsLoadingAudio(false)).catch(e => {
             if (e.name !== 'AbortError') log.error('Play failed after load', e);
           });
         }
-
-        setIsLoadingAudio(false);
       } catch (e) {
         log.error('Failed to load track', e);
         setIsLoadingAudio(false);
@@ -763,14 +780,26 @@ export function useAudioEngine() {
             ? (useDirectPlayback ? Math.max(crossfadeDuration, MOBILE_TRANSITION_OVERLAP) : crossfadeDuration)
             : (useDirectPlayback ? MOBILE_TRANSITION_OVERLAP : 0);
 
+          // Preload next track ~15s before crossfade point
+          if (timeRemaining <= effectiveCrossfade + 15 && timeRemaining > effectiveCrossfade + 1) {
+            const nextTrackForPreload = usePlayerStore.getState().getNextTrack();
+            if (nextTrackForPreload && nextTrackForPreload.id !== preloadingTrackId) {
+              preloadNextTrack(nextTrackForPreload.id);
+            }
+          }
+
           // Trigger crossfade when we reach the threshold
           if (timeRemaining <= effectiveCrossfade && timeRemaining > 0.1) {
             const nextTrack = usePlayerStore.getState().getNextTrack();
             if (nextTrack) {
-              queueTransition = true;
-              executeCrossfade(effectiveCrossfade, nextTrack);
-              // Reset queueTransition flag after a moment
-              setTimeout(() => { queueTransition = false; }, 1000);
+              const nextEl = getNextElement();
+              if (nextEl && nextEl.readyState > 0) {
+                // Next track is preloaded — crossfade
+                queueTransition = true;
+                executeCrossfade(effectiveCrossfade, nextTrack);
+                setTimeout(() => { queueTransition = false; }, 1000);
+              }
+              // else: not preloaded — let handleEnded → playNext → loadTrack handle it
             }
           }
         }
@@ -785,7 +814,7 @@ export function useAudioEngine() {
       // Cancel the current frame, not the last one
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
-  }, [isPlaying, getCurrentElement, setCurrentTime, setDuration]);
+  }, [isPlaying, getCurrentElement, getNextElement, setCurrentTime, setDuration, preloadNextTrack, executeCrossfade, crossfadeEnabled, crossfadeDuration, useDirectPlayback, currentTrack]);
 
   return {
     preloadNextTrack,

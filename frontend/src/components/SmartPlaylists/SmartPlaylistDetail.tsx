@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Loader2, Music, Zap, Clock, Download, Check, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Music, Zap, Clock, Download, Check, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api/client';
+import { PlayIndicator } from '../common/PlayIndicator';
 import type { SmartPlaylist, SmartPlaylistTracksResponse } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -584,35 +585,7 @@ export function SmartPlaylistDetail({ playlist, onBack }: Props) {
                 >
                   {/* Track number / Play button */}
                   <div className="w-8 text-center">
-                    {currentTrack?.id === track.id && isPlaying ? (
-                      <>
-                        <div className="group-hover:hidden flex justify-center gap-0.5">
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
-                        </div>
-                        <Pause
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                          fill="currentColor"
-                        />
-                      </>
-                    ) : currentTrack?.id === track.id ? (
-                      <>
-                        <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                        <Play
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                          fill="currentColor"
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                        <Play
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-white"
-                          fill="currentColor"
-                        />
-                      </>
-                    )}
+                    <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
                   </div>
 
                   {/* Title + artist */}

@@ -313,7 +313,7 @@ export function SpotifySettings() {
             <div>
               <p className="text-sm text-amber-400">Spotify rate limited</p>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Available again in {Math.floor(rateLimitCountdown / 60)}m {rateLimitCountdown % 60}s
+                Available again in {(() => { const h = Math.floor(rateLimitCountdown / 3600); const m = Math.floor((rateLimitCountdown % 3600) / 60); const s = rateLimitCountdown % 60; return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`; })()}
               </p>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
-import { ArrowLeft, Play, Pause, Download, Music, Trash2, HardDrive, X, Search } from 'lucide-react';
+import { ArrowLeft, Play, Download, Music, Trash2, HardDrive, X, Search } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
+import { PlayIndicator } from '../common/PlayIndicator';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
@@ -317,39 +318,8 @@ export function DownloadsDetail({ onBack }: Props) {
                   style={{ gridTemplateColumns: gridColumns }}
                 >
                   {/* Track number / Play button */}
-                  <div className="text-center">
-                    {currentTrack?.id === track.id && isPlaying ? (
-                      <>
-                        <div className="group-hover:hidden flex justify-center gap-0.5">
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
-                        </div>
-                        <Pause
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
-                          fill="currentColor"
-                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                        />
-                      </>
-                    ) : currentTrack?.id === track.id ? (
-                      <>
-                        <span className="group-hover:hidden text-sm text-green-500">{idx + 1}</span>
-                        <Play
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
-                          fill="currentColor"
-                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
-                        <Play
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-white cursor-pointer"
-                          fill="currentColor"
-                          onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}
-                        />
-                      </>
-                    )}
+                  <div className="text-center cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
+                    <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
                   </div>
 
                   {/* Title + artist (mobile: shows artist/album inline) */}

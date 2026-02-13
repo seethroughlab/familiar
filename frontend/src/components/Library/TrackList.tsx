@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Play, Pause, Download, Check, Loader2, Heart, Music, FolderOpen } from 'lucide-react';
+import { Download, Check, Loader2, Heart, Music, FolderOpen } from 'lucide-react';
 import { tracksApi } from '../../api/client';
 import { useFavorites } from '../../hooks/useFavorites';
 import { usePlayerStore } from '../../stores/playerStore';
+import { PlayIndicator } from '../common/PlayIndicator';
 import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
 import { useVisibleTracksStore } from '../../stores/visibleTracksStore';
 import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns } from './columnDefinitions';
@@ -51,27 +52,7 @@ function MobileTrackCard({
     >
       {/* Play button / index */}
       <div className="w-8 flex-shrink-0 flex items-center justify-center">
-        <span className="group-hover:hidden text-zinc-400 text-sm">
-          {isCurrentTrack && isPlaying ? (
-            <div className="flex gap-0.5">
-              <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-              <div className="w-0.5 h-2 bg-green-500 animate-pulse delay-75" />
-              <div className="w-0.5 h-4 bg-green-500 animate-pulse delay-150" />
-            </div>
-          ) : (
-            index + 1
-          )}
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onPlay(); }}
-          className="hidden group-hover:flex items-center justify-center"
-        >
-          {isCurrentTrack && isPlaying ? (
-            <Pause className="w-4 h-4" fill="currentColor" />
-          ) : (
-            <Play className="w-4 h-4" fill="currentColor" />
-          )}
-        </button>
+        <PlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} index={index + 1} />
       </div>
 
       {/* Track info */}
@@ -180,30 +161,11 @@ function TrackRow({ track, index, isCurrentTrack, isPlaying, onPlay, visibleColu
       style={{ gridTemplateColumns: gridColumns }}
     >
       {/* Index / Play button column */}
-      <div className="flex items-center justify-center">
-        <span className="group-hover:hidden text-zinc-400">
-          {isCurrentTrack && isPlaying ? (
-            <div className="w-4 h-4 flex items-center justify-center">
-              <div className="flex gap-0.5">
-                <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                <div className="w-0.5 h-2 bg-green-500 animate-pulse delay-75" />
-                <div className="w-0.5 h-4 bg-green-500 animate-pulse delay-150" />
-              </div>
-            </div>
-          ) : (
-            index + 1
-          )}
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onPlay(); }}
-          className="hidden group-hover:flex items-center justify-center"
-        >
-          {isCurrentTrack && isPlaying ? (
-            <Pause className="w-4 h-4" fill="currentColor" />
-          ) : (
-            <Play className="w-4 h-4" fill="currentColor" />
-          )}
-        </button>
+      <div className="flex items-center justify-center"
+        onClick={(e) => { e.stopPropagation(); onPlay(); }}
+        role="button"
+      >
+        <PlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} index={index + 1} />
       </div>
 
       {/* Title column (always visible) */}

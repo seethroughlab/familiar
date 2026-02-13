@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { ListMusic, ListX, Play, Pause, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
+import { ListMusic, ListX, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
+import { PlayIndicator } from '../common/PlayIndicator';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
@@ -21,11 +22,12 @@ interface QueueViewProps {
 }
 
 export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
-  const { queue, queueIndex, isPlaying, shuffle, consume, lazyQueueIds } = usePlayerStore(
+  const { queue, queueIndex, isPlaying, shuffle, consume, lazyQueueIds, shuffleOrder } = usePlayerStore(
     useShallow((s) => ({
       queue: s.queue, queueIndex: s.queueIndex,
       isPlaying: s.isPlaying, shuffle: s.shuffle, consume: s.consume,
       lazyQueueIds: s.lazyQueueIds,
+      shuffleOrder: s.shuffleOrder,
     }))
   );
   const clearQueue = usePlayerStore((s) => s.clearQueue);
@@ -67,6 +69,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
 
   // Get reorder and jump actions from store
   const reorderQueue = usePlayerStore((state) => state.reorderQueue);
+  const reorderShuffleOrder = usePlayerStore((state) => state.reorderShuffleOrder);
   const jumpToQueueIndex = usePlayerStore((state) => state.jumpToQueueIndex);
 
   // Pointer-event drag handlers for reorder (works on touch + mouse)
@@ -104,13 +107,17 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     if (draggedIndex !== null && dropTargetIndex !== null && draggedIndex !== dropTargetIndex) {
-      reorderQueue(draggedIndex, dropTargetIndex);
+      if (shuffle && shuffleOrder.length > 0) {
+        reorderShuffleOrder(draggedIndex, dropTargetIndex);
+      } else {
+        reorderQueue(draggedIndex, dropTargetIndex);
+      }
       didDragRef.current = true;
     }
     setDraggedIndex(null);
     setDropTargetIndex(null);
     setPointerDeltaY(0);
-  }, [draggedIndex, dropTargetIndex, reorderQueue]);
+  }, [draggedIndex, dropTargetIndex, shuffle, shuffleOrder, reorderQueue, reorderShuffleOrder]);
 
   const handlePointerCancel = useCallback((e: React.PointerEvent) => {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
@@ -144,14 +151,19 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     try {
       const tracks = await tracksApi.getBatch([trackId]);
       if (tracks.length > 0) {
-        // Insert after the hovered item
-        addToQueue(tracks[0], displayIndex + 1);
+        if (shuffle && shuffleOrder.length > 0) {
+          // In shuffle mode: append to queue end, insert into shuffleOrder at display position
+          addToQueue(tracks[0], undefined, displayIndex + 1);
+        } else {
+          // Normal mode: insert after the hovered item
+          addToQueue(tracks[0], displayIndex + 1);
+        }
         onTrackDropped?.(trackId);
       }
     } catch (error) {
       log.error('Failed to add track to queue:', error);
     }
-  }, [addToQueue, onTrackDropped]);
+  }, [addToQueue, onTrackDropped, shuffle, shuffleOrder]);
 
   // Handle external track drops (from library) — fallback for empty space
   const handleExternalDragOver = useCallback((e: React.DragEvent) => {
@@ -227,13 +239,23 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Build display tracks — always from queue[] (lazy mode materializes into queue[])
+  // Build display tracks — respect shuffle order when active
   const totalCount = isLazyMode ? lazyQueueIds.length : queue.length;
-  const displayTracks = queue.map((item, index) => ({
-    track: item.track,
-    queueId: item.queueId,
-    isCurrent: index === queueIndex,
-  }));
+  const displayTracks = (shuffle && shuffleOrder.length > 0)
+    ? shuffleOrder
+        .map((queueIdx) => ({
+          track: queue[queueIdx]?.track,
+          queueId: queue[queueIdx]?.queueId,
+          isCurrent: queueIdx === queueIndex,
+          actualQueueIndex: queueIdx,
+        }))
+        .filter(item => item.track != null)
+    : queue.map((item, index) => ({
+        track: item.track,
+        queueId: item.queueId,
+        isCurrent: index === queueIndex,
+        actualQueueIndex: index,
+      }));
 
   const isEmpty = totalCount === 0;
 
@@ -334,9 +356,8 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
         ) : (
           <div className="py-1 space-y-1">
             {displayTracks.map((item, displayIndex) => {
-              const { track, queueId, isCurrent } = item;
-              const actualIndex = queue.findIndex(q => q.queueId === queueId);
-              const isDragged = draggedIndex === actualIndex;
+              const { track, queueId, isCurrent, actualQueueIndex } = item;
+              const isDragged = draggedIndex === displayIndex;
               const isReorderTarget = dropTargetIndex === displayIndex && draggedIndex !== null;
               const isExtDropTarget = externalDropTargetIndex === displayIndex;
 
@@ -355,7 +376,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                       handleExternalDropAtPosition(e, displayIndex);
                     }
                   }}
-                  onClick={() => handleTrackClick(actualIndex)}
+                  onClick={() => handleTrackClick(actualQueueIndex)}
                   onContextMenu={(e) => handleContextMenu(track, e)}
                   style={isDragged ? { transform: `translateY(${pointerDeltaY}px)`, zIndex: 10, position: 'relative' } : undefined}
                   className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
@@ -376,7 +397,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                       'opacity-50 sm:opacity-0 sm:group-hover:opacity-50 hover:!opacity-100'
                     } ${isDragged ? '!opacity-100' : ''}`}
                     style={{ touchAction: 'none' }}
-                    onPointerDown={(e) => handlePointerDown(actualIndex, e)}
+                    onPointerDown={(e) => handlePointerDown(displayIndex, e)}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
                     onPointerCancel={handlePointerCancel}
@@ -386,39 +407,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
 
                   {/* Play indicator / number */}
                   <div className="w-8 text-center flex-shrink-0">
-                    {isCurrent && isPlaying ? (
-                      <>
-                        <div className="group-hover:hidden flex justify-center gap-0.5">
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.2s]" />
-                          <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
-                        </div>
-                        <Pause
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-green-500"
-                          fill="currentColor"
-                        />
-                      </>
-                    ) : isCurrent ? (
-                      <>
-                        <span className="group-hover:hidden text-sm text-green-500 font-medium">
-                          {displayIndex + 1}
-                        </span>
-                        <Play
-                          className="hidden group-hover:block w-4 h-4 mx-auto text-green-500"
-                          fill="currentColor"
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <span className="group-hover:hidden text-sm text-zinc-500">
-                          {displayIndex + 1}
-                        </span>
-                        <Play
-                          className="hidden group-hover:block w-4 h-4 mx-auto"
-                          fill="currentColor"
-                        />
-                      </>
-                    )}
+                    <PlayIndicator isCurrent={isCurrent} isPlaying={isPlaying} index={displayIndex + 1} />
                   </div>
 
                   {/* Track info */}

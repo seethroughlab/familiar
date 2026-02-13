@@ -2,8 +2,8 @@
  * Mobile card component for track list display on small screens.
  * Supports long-press for context menu and drag for playlist creation.
  */
-import { Play, Pause } from 'lucide-react';
 import { useLongPress } from '../../../../hooks/useLongPress';
+import { MobilePlayIndicator } from '../../../common/PlayIndicator';
 import { FavoriteButton } from './FavoriteButton';
 import { OfflineButton } from './OfflineButton';
 import type { Track } from '../../../../types';
@@ -65,30 +65,7 @@ export function MobileTrackCard({
         onClick={(e) => { e.stopPropagation(); onPlay(); }}
         className="w-8 flex-shrink-0 flex items-center justify-center text-zinc-400"
       >
-        {isCurrentTrack && isPlaying ? (
-          <>
-            {/* Equalizer animation - always show when playing */}
-            <div className="flex gap-0.5 md:group-hover:hidden">
-              <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-              <div className="w-0.5 h-2 bg-green-500 animate-pulse delay-75" />
-              <div className="w-0.5 h-4 bg-green-500 animate-pulse delay-150" />
-            </div>
-            {/* Desktop: pause on hover */}
-            <Pause className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
-          </>
-        ) : (
-          <>
-            {/* Mobile: show play icon when selected, number otherwise */}
-            {isSelected ? (
-              <Play className="md:hidden w-4 h-4" fill="currentColor" />
-            ) : (
-              <span className="md:hidden text-sm">{index + 1}</span>
-            )}
-            {/* Desktop: show number, play on hover */}
-            <span className="hidden md:block md:group-hover:hidden text-sm">{index + 1}</span>
-            <Play className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
-          </>
-        )}
+        <MobilePlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} isSelected={isSelected} index={index + 1} />
       </button>
 
       {/* Track info */}

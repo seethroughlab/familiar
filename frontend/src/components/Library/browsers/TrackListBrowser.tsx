@@ -14,9 +14,10 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } fr
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useHashSearchParams } from '../../../hooks/useHashSearchParams';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Play, Pause, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
 import { usePlayerStore } from '../../../stores/playerStore';
+import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
 import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
 import { useFavorites } from '../../../hooks/useFavorites';
@@ -255,30 +256,7 @@ function MobileTrackCard({
         onClick={(e) => { e.stopPropagation(); onPlay(); }}
         className="w-8 flex-shrink-0 flex items-center justify-center text-zinc-400"
       >
-        {isCurrentTrack && isPlaying ? (
-          <>
-            {/* Equalizer animation - always show when playing */}
-            <div className="flex gap-0.5 md:group-hover:hidden">
-              <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-              <div className="w-0.5 h-2 bg-green-500 animate-pulse delay-75" />
-              <div className="w-0.5 h-4 bg-green-500 animate-pulse delay-150" />
-            </div>
-            {/* Desktop: pause on hover */}
-            <Pause className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
-          </>
-        ) : (
-          <>
-            {/* Mobile: show play icon when selected, number otherwise */}
-            {isSelected ? (
-              <Play className="md:hidden w-4 h-4" fill="currentColor" />
-            ) : (
-              <span className="md:hidden text-sm">{index + 1}</span>
-            )}
-            {/* Desktop: show number, play on hover */}
-            <span className="hidden md:block md:group-hover:hidden text-sm">{index + 1}</span>
-            <Play className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
-          </>
-        )}
+        <MobilePlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} isSelected={isSelected} index={index + 1} />
       </button>
 
       {/* Track info */}
@@ -345,33 +323,11 @@ function TrackRow({
       style={{ gridTemplateColumns: gridColumns }}
     >
       {/* Index / Play button column */}
-      <div className="flex items-center justify-center">
-        <span className="group-hover:hidden text-zinc-400">
-          {isCurrentTrack && isPlaying ? (
-            <div className="w-4 h-4 flex items-center justify-center">
-              <div className="flex gap-0.5">
-                <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
-                <div className="w-0.5 h-2 bg-green-500 animate-pulse delay-75" />
-                <div className="w-0.5 h-4 bg-green-500 animate-pulse delay-150" />
-              </div>
-            </div>
-          ) : (
-            index + 1
-          )}
-        </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onPlay();
-          }}
-          className="hidden group-hover:flex items-center justify-center"
-        >
-          {isCurrentTrack && isPlaying ? (
-            <Pause className="w-4 h-4" fill="currentColor" />
-          ) : (
-            <Play className="w-4 h-4" fill="currentColor" />
-          )}
-        </button>
+      <div className="flex items-center justify-center"
+        onClick={(e) => { e.stopPropagation(); onPlay(); }}
+        role="button"
+      >
+        <PlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} index={index + 1} />
       </div>
 
       {/* Title column (always visible) */}
