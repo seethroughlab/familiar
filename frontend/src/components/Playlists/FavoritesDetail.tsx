@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
 import { favoritesApi } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -19,7 +19,11 @@ import { getColumnDef } from '../Library/columnDefinitions';
 import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
 import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
-import type { FavoriteTrack } from '../../api/client';
+import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api/client';
+
+type FavoriteItem =
+  | (FavoriteTrack & { _kind: 'local' })
+  | (ExternalFavoriteTrack & { _kind: 'external' });
 
 interface Props {
   onBack: () => void;
@@ -32,7 +36,7 @@ export function FavoritesDetail({ onBack }: Props) {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const { favorites, total, toggle } = useFavorites();
+  const { favorites, total, toggle, externalFavorites, toggleExternal } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
@@ -48,22 +52,49 @@ export function FavoritesDetail({ onBack }: Props) {
     [columns],
   );
   const getTrack = useCallback(
-    (fav: FavoriteTrack): Track => ({
-      id: fav.id,
-      file_path: fav.file_path ?? '',
-      title: fav.title,
-      artist: fav.artist,
-      album: fav.album,
-      album_artist: fav.album_artist ?? null,
-      album_type: (fav.album_type as Track['album_type']) ?? 'album',
-      track_number: fav.track_number ?? null,
-      disc_number: fav.disc_number ?? null,
-      year: fav.year ?? null,
-      genre: fav.genre ?? null,
-      duration_seconds: fav.duration_seconds,
-      format: fav.format ?? null,
-      analysis_version: fav.analysis_version ?? 0,
-    }),
+    (item: FavoriteItem): Track & { _externalInfo?: { type: 'external'; previewUrl: string | null; matchedTrackId: string | null; originalId: string } } => {
+      if (item._kind === 'external') {
+        const trackId = item.matched_track_id || item.id;
+        return {
+          id: trackId,
+          file_path: '',
+          title: item.title,
+          artist: item.artist,
+          album: item.album,
+          album_artist: null,
+          album_type: 'album',
+          track_number: null,
+          disc_number: null,
+          year: item.year ?? null,
+          genre: null,
+          duration_seconds: item.duration_seconds,
+          format: null,
+          analysis_version: 0,
+          _externalInfo: {
+            type: 'external' as const,
+            previewUrl: item.preview_url || null,
+            matchedTrackId: item.matched_track_id || null,
+            originalId: item.id,
+          },
+        };
+      }
+      return {
+        id: item.id,
+        file_path: item.file_path ?? '',
+        title: item.title,
+        artist: item.artist,
+        album: item.album,
+        album_artist: item.album_artist ?? null,
+        album_type: (item.album_type as Track['album_type']) ?? 'album',
+        track_number: item.track_number ?? null,
+        disc_number: item.disc_number ?? null,
+        year: item.year ?? null,
+        genre: item.genre ?? null,
+        duration_seconds: item.duration_seconds,
+        format: item.format ?? null,
+        analysis_version: item.analysis_version ?? 0,
+      };
+    },
     [],
   );
 
@@ -134,7 +165,27 @@ export function FavoritesDetail({ onBack }: Props) {
     );
   }, [favorites, searchFilter]);
 
-  const filteredFavorites = useSortedTracks(searchedFavorites, sortBy, sortOrder, getTrack);
+  const searchedExternalFavorites = useMemo(() => {
+    const extFavs = externalFavorites ?? [];
+    if (!searchFilter) return extFavs;
+    const q = searchFilter.toLowerCase();
+    return extFavs.filter(t =>
+      (t.title?.toLowerCase().includes(q)) ||
+      (t.artist?.toLowerCase().includes(q)) ||
+      (t.album?.toLowerCase().includes(q))
+    );
+  }, [externalFavorites, searchFilter]);
+
+  const mergedFavorites = useMemo(() => {
+    const locals: FavoriteItem[] = searchedFavorites.map(f => ({ ...f, _kind: 'local' as const }));
+    const externals: FavoriteItem[] = searchedExternalFavorites.map(f => ({ ...f, _kind: 'external' as const }));
+    const all = [...locals, ...externals];
+    // Default sort: by favorited_at DESC (interleaved by date)
+    all.sort((a, b) => (b.favorited_at || '').localeCompare(a.favorited_at || ''));
+    return all;
+  }, [searchedFavorites, searchedExternalFavorites]);
+
+  const sortedFavorites = useSortedTracks(mergedFavorites, sortBy, sortOrder, getTrack);
 
   // Context menu handlers
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
@@ -152,16 +203,17 @@ export function FavoritesDetail({ onBack }: Props) {
   }, []);
 
   const handlePlay = (startIndex = 0) => {
-    if (filteredFavorites.length === 0) return;
+    const item = sortedFavorites[startIndex];
+    if (!item) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = filteredFavorites[startIndex];
-    if (clickedTrack && currentTrack?.id === clickedTrack.id) {
+    const trackForItem = getTrack(item);
+    if (currentTrack?.id === trackForItem.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = filteredFavorites.map(t => getTrack(t));
+    const queueTracks = sortedFavorites.map(t => getTrack(t));
     setQueue(queueTracks, startIndex);
   };
 
@@ -176,6 +228,8 @@ export function FavoritesDetail({ onBack }: Props) {
     (sum, t) => sum + (t.duration_seconds || 0),
     0
   );
+
+  const hasAnyFavorites = sortedFavorites.length > 0;
 
   return (
     <div className="space-y-4">
@@ -206,8 +260,8 @@ export function FavoritesDetail({ onBack }: Props) {
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <button
-            onClick={() => handlePlay()}
-            disabled={favorites.length === 0}
+            onClick={() => handlePlay(0)}
+            disabled={sortedFavorites.length === 0}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:hover:bg-pink-600 rounded-full transition-colors"
           >
             <Play className="w-4 h-4" fill="currentColor" />
@@ -283,7 +337,7 @@ export function FavoritesDetail({ onBack }: Props) {
       </div>
 
       {/* Track list */}
-      {filteredFavorites.length > 0 ? (
+      {hasAnyFavorites ? (
         <div>
           <PlaylistColumnHeader
             columns={columns}
@@ -293,26 +347,134 @@ export function FavoritesDetail({ onBack }: Props) {
             toggleSort={toggleSort}
           />
           <div className="space-y-1">
-            {filteredFavorites.map((track, idx) => {
-              const fullTrack = getTrack(track);
+            {sortedFavorites.map((item, idx) => {
+              if (item._kind === 'external') {
+                const isMatched = item.is_matched && item.matched_track_id;
+                const extTrack = getTrack(item);
+                const isCurrentTrack = currentTrack?.id === extTrack.id;
+                return (
+                  <div
+                    key={`ext-${item.id}`}
+                    onClick={() => handlePlay(idx)}
+                    className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                      !isMatched ? 'opacity-60' : ''
+                    } ${isCurrentTrack ? 'bg-zinc-800/30' : ''}`}
+                    style={{ gridTemplateColumns: gridColumns }}
+                  >
+                    {/* Index / Play button */}
+                    <div className="w-8 text-center">
+                      {isCurrentTrack && isPlaying ? (
+                        <>
+                          <div className="group-hover:hidden flex justify-center gap-0.5">
+                            <div className="w-0.5 h-3 bg-pink-500 animate-pulse" />
+                            <div className="w-0.5 h-3 bg-pink-500 animate-pulse [animation-delay:0.2s]" />
+                            <div className="w-0.5 h-3 bg-pink-500 animate-pulse [animation-delay:0.4s]" />
+                          </div>
+                          <Pause
+                            className="hidden group-hover:block w-4 h-4 mx-auto text-white"
+                            fill="currentColor"
+                          />
+                        </>
+                      ) : (
+                        <>
+                          <span className="group-hover:hidden text-sm text-zinc-500">{idx + 1}</span>
+                          <Play
+                            className="hidden group-hover:block w-4 h-4 mx-auto text-white"
+                            fill="currentColor"
+                          />
+                        </>
+                      )}
+                    </div>
+
+                    {/* Title + artist */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium truncate ${isCurrentTrack ? 'text-pink-500' : ''}`}>
+                          {item.title || 'Unknown Title'}
+                        </span>
+                        {!isMatched && (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
+                            Not in library
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-zinc-400 truncate sm:hidden">
+                        {item.artist || 'Unknown Artist'}
+                        {item.album && <span className="text-zinc-500"> • {item.album}</span>}
+                      </div>
+                    </div>
+
+                    {/* Dynamic columns */}
+                    {visibleColumnIds.map((colId) => {
+                      const fullTrack = getTrack(item);
+                      const colDef = getColumnDef(colId);
+                      if (!colDef) return <div key={colId} />;
+                      const raw = colDef.getValue(fullTrack);
+                      const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
+                      return (
+                        <div
+                          key={colId}
+                          className="hidden sm:block text-sm text-zinc-500 truncate"
+                        >
+                          {String(display)}
+                        </div>
+                      );
+                    })}
+
+                    {/* Heart + external link */}
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExternal(item.id);
+                        }}
+                        className="p-1 text-pink-500 hover:text-pink-400 transition-colors"
+                        title="Remove from favorites"
+                      >
+                        <Heart className="w-4 h-4" fill="currentColor" />
+                      </button>
+                      {item.external_links && Object.keys(item.external_links).length > 0 && (
+                        <a
+                          href={Object.values(item.external_links)[0]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="p-1 text-zinc-500 hover:text-green-400 transition-colors"
+                          title="Open in Spotify"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Duration */}
+                    <div className="text-sm text-zinc-500 text-right">
+                      {formatDuration(item.duration_seconds)}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Local favorite
+              const fullTrack = getTrack(item);
               return (
                 <div
-                  key={track.id}
+                  key={item.id}
                   draggable
                   onDragStart={(e) => {
-                    e.dataTransfer.setData('application/track-id', track.id);
+                    e.dataTransfer.setData('application/track-id', item.id);
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
                   onClick={() => handlePlay(idx)}
                   onContextMenu={(e) => handleContextMenu(fullTrack, e)}
                   className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors sm:grid ${
-                    currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                    currentTrack?.id === item.id ? 'bg-zinc-800/30' : ''
                   }`}
                   style={{ gridTemplateColumns: gridColumns }}
                 >
                   {/* Track number / Play button */}
                   <div className="w-8 text-center">
-                    {currentTrack?.id === track.id && isPlaying ? (
+                    {currentTrack?.id === item.id && isPlaying ? (
                       <>
                         <div className="group-hover:hidden flex justify-center gap-0.5">
                           <div className="w-0.5 h-3 bg-pink-500 animate-pulse" />
@@ -324,7 +486,7 @@ export function FavoritesDetail({ onBack }: Props) {
                           fill="currentColor"
                         />
                       </>
-                    ) : currentTrack?.id === track.id ? (
+                    ) : currentTrack?.id === item.id ? (
                       <>
                         <span className="group-hover:hidden text-sm text-pink-500">{idx + 1}</span>
                         <Play
@@ -345,12 +507,12 @@ export function FavoritesDetail({ onBack }: Props) {
 
                   {/* Title + artist (mobile: also shows artist/album inline) */}
                   <div className="min-w-0">
-                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-pink-500' : ''}`}>
-                      {track.title || 'Unknown Title'}
+                    <div className={`font-medium truncate ${currentTrack?.id === item.id ? 'text-pink-500' : ''}`}>
+                      {item.title || 'Unknown Title'}
                     </div>
                     <div className="text-sm text-zinc-400 truncate sm:hidden">
-                      {track.artist || 'Unknown Artist'}
-                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
+                      {item.artist || 'Unknown Artist'}
+                      {item.album && <span className="text-zinc-500"> • {item.album}</span>}
                     </div>
                   </div>
 
@@ -376,7 +538,7 @@ export function FavoritesDetail({ onBack }: Props) {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggle(track.id);
+                      toggle(item.id);
                     }}
                     className="p-1 text-pink-500 hover:text-pink-400 transition-colors"
                     title="Remove from favorites"
@@ -386,7 +548,7 @@ export function FavoritesDetail({ onBack }: Props) {
 
                   {/* Duration */}
                   <div className="text-sm text-zinc-500 text-right">
-                    {formatDuration(track.duration_seconds)}
+                    {formatDuration(item.duration_seconds)}
                   </div>
                 </div>
               );
@@ -409,7 +571,7 @@ export function FavoritesDetail({ onBack }: Props) {
           isSelected={false}
           onClose={closeContextMenu}
           onPlay={() => {
-            const idx = filteredFavorites.findIndex(t => t.id === contextMenu.track?.id);
+            const idx = sortedFavorites.findIndex(t => t.id === contextMenu.track?.id);
             if (idx !== -1) handlePlay(idx);
           }}
           onQueue={() => {
@@ -432,7 +594,7 @@ export function FavoritesDetail({ onBack }: Props) {
           }}
           onAddToPlaylist={() => {
             // TODO: Open playlist picker modal
-            
+
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
