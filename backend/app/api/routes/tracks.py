@@ -314,8 +314,8 @@ async def get_tracks_batch(
     # Fetch external tracks
     ext_tracks_by_id: dict[str, ExternalTrack] = {}
     if ext_uuids:
-        result = await db.execute(select(ExternalTrack).where(ExternalTrack.id.in_(ext_uuids)))
-        ext_tracks_by_id = {str(t.id): t for t in result.scalars().all()}
+        ext_result = await db.execute(select(ExternalTrack).where(ExternalTrack.id.in_(ext_uuids)))
+        ext_tracks_by_id = {str(t.id): t for t in ext_result.scalars().all()}
 
     # Fetch play history for local tracks
     play_history_map: dict[UUID, ProfilePlayHistory] = {}
@@ -552,11 +552,11 @@ async def list_tracks(
 
         ext_tracks_by_id: dict[str, ExternalTrack] = {}
         if ext_uuids:
-            res = await db.execute(select(ExternalTrack).where(ExternalTrack.id.in_(ext_uuids)))
-            ext_tracks_by_id = {str(t.id): t for t in res.scalars().all()}
+            ext_res = await db.execute(select(ExternalTrack).where(ExternalTrack.id.in_(ext_uuids)))
+            ext_tracks_by_id = {str(t.id): t for t in ext_res.scalars().all()}
 
         # Play history for local tracks
-        play_history_map: dict[UUID, ProfilePlayHistory] = {}
+        ph_map: dict[UUID, ProfilePlayHistory] = {}
         if profile and local_uuids:
             ph_result = await db.execute(
                 select(ProfilePlayHistory).where(
@@ -564,10 +564,10 @@ async def list_tracks(
                     ProfilePlayHistory.track_id.in_(local_uuids),
                 )
             )
-            play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
+            ph_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
 
         # Phase 3: build response in page order
-        items: list[TrackResponse] = []
+        unified_items: list[TrackResponse] = []
         for row in page_rows:
             if row.track_type == "local":
                 track = local_tracks_by_id.get(row.id)
@@ -590,19 +590,19 @@ async def list_tracks(
                             track_peak=latest.features.get("track_peak"),
                             replaygain_track_gain=latest.features.get("replaygain_track_gain"),
                         )
-                if track.id in play_history_map:
-                    ph = play_history_map[track.id]
+                if track.id in ph_map:
+                    ph = ph_map[track.id]
                     response.last_played_at = ph.last_played_at
                     response.play_count = ph.play_count
-                items.append(response)
+                unified_items.append(response)
             else:
                 # External track
                 ext_id = row.id[4:]  # strip "ext:" prefix
                 ext = ext_tracks_by_id.get(ext_id)
                 if ext:
-                    items.append(_external_track_to_response(ext))
+                    unified_items.append(_external_track_to_response(ext))
 
-        return TrackListResponse(items=items, total=total, page=page, page_size=page_size)
+        return TrackListResponse(items=unified_items, total=total, page=page, page_size=page_size)
 
     # ──────────────────────────────────────────────────────────────────────
     # Standard path: local tracks only (original logic)
@@ -818,8 +818,8 @@ async def get_track_index(
 
         combined = union_all(local_q, ext_q).subquery()
 
-        order_clauses = [combined.c.sort_artist, combined.c.sort_album, combined.c.sort_track_number]
-        row_num = func.row_number().over(order_by=order_clauses).label("row_num")
+        ext_order_clauses: list[Any] = [combined.c.sort_artist, combined.c.sort_album, combined.c.sort_track_number]
+        row_num = func.row_number().over(order_by=ext_order_clauses).label("row_num")
         numbered = select(combined.c.id, row_num).subquery()
 
         # Look up this track's row number (local tracks use UUID string, not ext:-prefixed)
@@ -875,6 +875,7 @@ async def get_track_index(
             base_query = base_query.where(cast(TrackAnalysis.features["valence"].astext, Float) <= valence_max)
 
     needs_analysis_join = False
+    order_clauses: list[Any] = []
     if sort_by and sort_by != 'lastPlayed' and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
         if sort_by in SORT_FIELD_MAP:
             sort_col = SORT_FIELD_MAP[sort_by]
