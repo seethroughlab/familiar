@@ -11,7 +11,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, U
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Float, String, cast, func, literal, nulls_last, select, union_all
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentProfile, DbSession, RequiredProfile

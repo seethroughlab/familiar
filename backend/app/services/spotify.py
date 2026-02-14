@@ -449,7 +449,6 @@ class SpotifySyncService:
             external_track = ext_result.scalar_one_or_none()
 
             if not external_track:
-                album = track_data.get("album", {}) if isinstance(track_data.get("album"), dict) else None
                 external_track = ExternalTrack(
                     title=track_data.get("name") or "Unknown",
                     artist=track_data.get("artist") or "Unknown",
