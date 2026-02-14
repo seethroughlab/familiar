@@ -638,7 +638,7 @@ class SmartPlaylistService:
         total = count_result.scalar() or 0
 
         # Sort + paginate
-        order_expr = combined.c.sort_val
+        order_expr: Any = combined.c.sort_val
         if playlist.order_direction == "desc":
             order_expr = order_expr.desc()
 
@@ -664,29 +664,29 @@ class SmartPlaylistService:
 
         local_map: dict[Any, Track] = {}
         if local_ids:
-            result = await self.db.execute(
+            local_result = await self.db.execute(
                 select(Track).where(Track.id.in_(local_ids))
             )
-            for t in result.scalars().all():
+            for t in local_result.scalars().all():
                 local_map[t.id] = t
 
         ext_map: dict[Any, ExternalTrack] = {}
         if ext_ids:
-            result = await self.db.execute(
+            ext_result = await self.db.execute(
                 select(ExternalTrack).where(ExternalTrack.id.in_(ext_ids))
             )
-            for et in result.scalars().all():
+            for et in ext_result.scalars().all():
                 ext_map[et.id] = et
 
         # Phase 3: Build result in page order
-        tracks: list[Any] = []
+        result_tracks: list[Any] = []
         for row in page_rows:
             if row.track_type == "local" and row.id in local_map:
-                tracks.append(local_map[row.id])
+                result_tracks.append(local_map[row.id])
             elif row.track_type == "external" and row.id in ext_map:
-                tracks.append(ext_map[row.id])
+                result_tracks.append(ext_map[row.id])
 
-        return tracks, total
+        return result_tracks, total
 
 
 async def get_smart_playlist_service(db: AsyncSession) -> SmartPlaylistService:

@@ -18,6 +18,14 @@ class TestFavoritesAPI:
         assert data["total"] == 0
         assert data["favorites"] == []
 
+    def test_list_favorites_has_external_favorites_field(self, client: TestClient, test_profile: dict):
+        headers = make_profile_headers(test_profile)
+        response = client.get("/api/v1/favorites", headers=headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "external_favorites" in data
+        assert data["external_favorites"] == []
+
     def test_add_favorite_nonexistent_track(self, client: TestClient, test_profile: dict):
         headers = make_profile_headers(test_profile)
         fake_id = str(uuid4())
@@ -57,3 +65,55 @@ class TestFavoritesAPI:
         r2 = client.get("/api/v1/favorites", headers=headers2)
         assert r1.json()["total"] == 0
         assert r2.json()["total"] == 0
+
+    def test_toggle_favorite_nonexistent_track(self, client: TestClient, test_profile: dict):
+        headers = make_profile_headers(test_profile)
+        fake_id = str(uuid4())
+        r = client.post(f"/api/v1/favorites/{fake_id}/toggle", headers=headers)
+        assert r.status_code == 404
+
+    def test_check_favorite_status_not_favorited(self, client: TestClient, test_profile: dict):
+        """Checking favorite status for a valid-format but nonexistent track."""
+        headers = make_profile_headers(test_profile)
+        fake_id = str(uuid4())
+        r = client.get(f"/api/v1/favorites/{fake_id}", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["is_favorite"] is False
+
+    def test_auto_download_setting(self, client: TestClient, test_profile: dict):
+        headers = make_profile_headers(test_profile)
+
+        # Default is off
+        r = client.get("/api/v1/favorites/auto-download", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["enabled"] is False
+
+        # Enable
+        r = client.put("/api/v1/favorites/auto-download", headers=headers, json={"enabled": True})
+        assert r.status_code == 200
+        assert r.json()["enabled"] is True
+
+        # Verify persisted
+        r = client.get("/api/v1/favorites/auto-download", headers=headers)
+        assert r.json()["enabled"] is True
+
+        # Disable
+        r = client.put("/api/v1/favorites/auto-download", headers=headers, json={"enabled": False})
+        assert r.status_code == 200
+        assert r.json()["enabled"] is False
+
+
+class TestExternalFavoritesAPI:
+    """Tests for external favorites endpoints."""
+
+    def test_toggle_external_favorite_nonexistent(self, client: TestClient, test_profile: dict):
+        headers = make_profile_headers(test_profile)
+        fake_id = str(uuid4())
+        r = client.post(f"/api/v1/favorites/external/{fake_id}/toggle", headers=headers)
+        assert r.status_code == 404
+
+    def test_check_external_favorite_nonexistent(self, client: TestClient, test_profile: dict):
+        headers = make_profile_headers(test_profile)
+        fake_id = str(uuid4())
+        r = client.get(f"/api/v1/favorites/external/{fake_id}", headers=headers)
+        assert r.status_code == 404
