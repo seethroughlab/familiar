@@ -17,6 +17,18 @@ export interface Track {
   // Play history (profile-specific)
   last_played_at?: string | null;
   play_count?: number | null;
+
+  // External track fields (present when track_type === 'external')
+  track_type?: 'local' | 'external';
+  preview_url?: string | null;
+  matched_track_id?: string | null;
+  external_data?: Record<string, unknown>;
+  source?: string | null;
+  spotify_id?: string | null;
+}
+
+export function isExternalTrack(track: Track): boolean {
+  return track.track_type === 'external';
 }
 
 export interface TrackFeatures {

@@ -183,6 +183,13 @@ const refillFromReservoir = async () => {
     const newItems: QueueItem[] = tracks.map(track => ({
       track,
       queueId: generateQueueId(),
+      // Attach externalInfo for external tracks so audio engine uses preview URLs
+      externalInfo: track.track_type === 'external' ? {
+        type: 'external' as const,
+        previewUrl: track.preview_url || null,
+        matchedTrackId: track.matched_track_id || null,
+        originalId: track.id,
+      } : undefined,
     }));
 
     // Re-read state after async gap
@@ -279,6 +286,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             const queueItems: QueueItem[] = tracks.map(track => ({
               track,
               queueId: generateQueueId(),
+              externalInfo: track.track_type === 'external' ? {
+                type: 'external' as const,
+                previewUrl: track.preview_url || null,
+                matchedTrackId: track.matched_track_id || null,
+                originalId: track.id,
+              } : undefined,
             }));
 
             // Keep current track at position 0 if present
@@ -717,6 +730,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const queueItems: QueueItem[] = tracks.map(track => ({
           track,
           queueId: generateQueueId(),
+          externalInfo: track.track_type === 'external' ? {
+            type: 'external' as const,
+            previewUrl: track.preview_url || null,
+            matchedTrackId: track.matched_track_id || null,
+            originalId: track.id,
+          } : undefined,
         }));
 
         // Generate shuffle order if shuffle is enabled

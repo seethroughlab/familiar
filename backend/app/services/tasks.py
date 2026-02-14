@@ -1693,7 +1693,14 @@ async def run_spotify_sync(
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    from app.db.models import ProfileFavorite, SpotifyFavorite, SpotifyProfile
+    from app.db.models import (
+        ExternalTrack,
+        ExternalTrackSource,
+        ProfileExternalFavorite,
+        ProfileFavorite,
+        SpotifyFavorite,
+        SpotifyProfile,
+    )
     from app.services.spotify import SpotifyService
     from app.services.spotify_compat import SpotifyRateLimitError
 
@@ -1889,6 +1896,90 @@ async def run_spotify_sync(
                 if new_favs:
                     db.add_all(new_favs)
                     stats["favorited"] = len(new_favs)
+
+            # Promote unmatched favorites to external favorites
+            unmatched_result = await db.execute(
+                select(SpotifyFavorite).where(
+                    SpotifyFavorite.profile_id == profile_uuid,
+                    SpotifyFavorite.matched_track_id.is_(None),
+                )
+            )
+            unmatched_favs = unmatched_result.scalars().all()
+            promoted = 0
+
+            for fav in unmatched_favs:
+                track_data = fav.track_data or {}
+
+                # Find or create ExternalTrack by spotify_id
+                ext_result = await db.execute(
+                    select(ExternalTrack).where(
+                        ExternalTrack.spotify_id == fav.spotify_track_id
+                    )
+                )
+                external_track = ext_result.scalar_one_or_none()
+
+                if not external_track:
+                    external_track = ExternalTrack(
+                        title=track_data.get("name") or "Unknown",
+                        artist=track_data.get("artist") or "Unknown",
+                        album=track_data.get("album") if isinstance(track_data.get("album"), str) else None,
+                        duration_seconds=(track_data.get("duration_ms") or 0) / 1000.0,
+                        spotify_id=fav.spotify_track_id,
+                        source=ExternalTrackSource.SPOTIFY_FAVORITE,
+                        external_data={
+                            "spotify_url": track_data.get("external_url"),
+                            "album_id": track_data.get("album_id"),
+                            "artist_id": track_data.get("artist_id"),
+                        },
+                    )
+                    db.add(external_track)
+                    await db.flush()
+
+                # Check if ProfileExternalFavorite already exists
+                pef_result = await db.execute(
+                    select(ProfileExternalFavorite).where(
+                        ProfileExternalFavorite.profile_id == profile_uuid,
+                        ProfileExternalFavorite.external_track_id == external_track.id,
+                    )
+                )
+                if not pef_result.scalar_one_or_none():
+                    db.add(ProfileExternalFavorite(
+                        profile_id=profile_uuid,
+                        external_track_id=external_track.id,
+                        favorited_at=fav.added_at or dt.utcnow(),
+                    ))
+                    promoted += 1
+
+            stats["external_favorites"] = promoted
+            logger.info(
+                f"Promoted {promoted} unmatched Spotify favorites to external favorites"
+            )
+
+            # Remove external favorites for tracks that now have local matches
+            if matched_local_track_ids:
+                matched_spotify_ids_result = await db.execute(
+                    select(SpotifyFavorite.spotify_track_id).where(
+                        SpotifyFavorite.profile_id == profile_uuid,
+                        SpotifyFavorite.matched_track_id.isnot(None),
+                    )
+                )
+                matched_spotify_ids = [
+                    row[0] for row in matched_spotify_ids_result.fetchall()
+                ]
+                if matched_spotify_ids:
+                    matched_ext_result = await db.execute(
+                        select(ExternalTrack.id).where(
+                            ExternalTrack.spotify_id.in_(matched_spotify_ids)
+                        )
+                    )
+                    matched_ext_ids = [row[0] for row in matched_ext_result.fetchall()]
+                    if matched_ext_ids:
+                        await db.execute(
+                            delete(ProfileExternalFavorite).where(
+                                ProfileExternalFavorite.profile_id == profile_uuid,
+                                ProfileExternalFavorite.external_track_id.in_(matched_ext_ids),
+                            )
+                        )
 
             # Update last sync time
             profile_result = await db.execute(

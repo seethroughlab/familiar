@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **External favorites system** - Favorite tracks that aren't in your local library
+  - New `profile_external_favorites` table and `ProfileExternalFavorite` model with migration
+  - Spotify sync automatically promotes unmatched favorites to external favorites
+  - External favorites cleaned up when tracks get matched to local library
+  - `useFavorites` hook extended with `isExternalFavorite`, `toggleExternal`, and `externalFavorites`
+  - Favorite/unfavorite external tracks from Playlist and Library views
+- **External tracks in Library browser** - Unmatched external tracks appear in the main track list
+  - Tracks API supports `include_external` parameter for UNION queries across local and external tracks
+  - External tracks tagged with "External" badge and Spotify link button
+  - Playback via iTunes preview URLs or matched local files with `_externalInfo` metadata
+- **External tracks in Smart Playlists** - Smart playlists can include external tracks when rules use compatible fields (title, artist, album, year, track_number, duration)
+  - New `get_tracks_unified` method with UNION-based pagination across both tables
+- **AlbumArtwork direct URL support** - New `artworkUrl` prop for displaying external artwork (e.g. from Spotify/iTunes)
 - **Sortable columns in all playlist views** - Favorites, Playlists, Smart Playlists, Ephemeral Playlists, and Downloads now have clickable column headers with sort indicators
   - Tri-state sort cycle: ascending → descending → clear (isolated from library sort state)
   - Dynamic columns from column store (artist, album, year, genre, etc.) visible in all views
@@ -22,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Favorites API: `FavoriteTrackResponse` extends shared `TrackResponse` (adds format, year, genre, track/disc number, album_artist, album_type, analysis_version)
   - Smart Playlists API: reuses shared `TrackResponse` instead of local limited type
   - Playlists API: `TrackInPlaylist` expanded with full local track fields
+- **Track type extended for external tracks** - `Track` type and `TrackResponse` now include `track_type`, `preview_url`, `matched_track_id`, `external_data`, `source`, and `spotify_id` fields
+- **Player store handles external tracks natively** - `setQueue`, `refillFromReservoir`, and shuffle all attach `externalInfo` for tracks with `track_type === 'external'`
+
+### Fixed
+
+- **External tracks now playable in Favorites view** - External tracks could be favorited but not played; now mirrors PlaylistDetail's approach with `_externalInfo` metadata
 
 ## [0.1.0-alpha.9] - 2026-02-08
 

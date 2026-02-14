@@ -55,6 +55,9 @@ class Profile(Base):
     favorites: Mapped[list["ProfileFavorite"]] = relationship(
         back_populates="profile", cascade="all, delete"
     )
+    external_favorites: Mapped[list["ProfileExternalFavorite"]] = relationship(
+        back_populates="profile", cascade="all, delete"
+    )
     play_history: Mapped[list["ProfilePlayHistory"]] = relationship(
         back_populates="profile", cascade="all, delete"
     )
@@ -169,6 +172,28 @@ class ProfileFavorite(Base):
     # Relationships
     profile: Mapped["Profile"] = relationship(back_populates="favorites")
     track: Mapped["Track"] = relationship()
+
+
+class ProfileExternalFavorite(Base):
+    """External track favorites per profile (tracks not in local library)."""
+
+    __tablename__ = "profile_external_favorites"
+    __table_args__ = (
+        UniqueConstraint("profile_id", "external_track_id", name="uq_profile_external_favorite"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), index=True
+    )
+    external_track_id: Mapped[UUID] = mapped_column(
+        ForeignKey("external_tracks.id", ondelete="CASCADE"), index=True
+    )
+    favorited_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Relationships
+    profile: Mapped["Profile"] = relationship(back_populates="external_favorites")
+    external_track: Mapped["ExternalTrack"] = relationship()
 
 
 class ProfilePlayHistory(Base):

@@ -20,6 +20,7 @@ from .plugins import Plugin, PluginType
 from .profiles import (
     LastfmProfile,
     Profile,
+    ProfileExternalFavorite,
     ProfileFavorite,
     ProfilePlayHistory,
     SpotifyFavorite,
@@ -49,6 +50,7 @@ __all__ = [
     "PlaylistTrack",
     "Plugin",
     "Profile",
+    "ProfileExternalFavorite",
     "ProfileFavorite",
     "ProfilePlayHistory",
     "ProposedChange",

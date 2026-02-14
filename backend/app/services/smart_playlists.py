@@ -4,10 +4,15 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, and_, cast, func, or_, select
+from sqlalchemy import Float, and_, cast, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ProfilePlayHistory, SmartPlaylist, Track, TrackAnalysis
+from app.db.models import ExternalTrack, ProfilePlayHistory, SmartPlaylist, Track, TrackAnalysis
+
+# Fields that exist on BOTH Track and ExternalTrack (safe for UNION queries)
+EXTERNAL_COMPATIBLE_FIELDS = {
+    "title", "artist", "album", "year", "track_number", "duration_seconds",
+}
 
 # Fields that exist directly on the Track model
 TRACK_FIELDS = {
@@ -509,6 +514,179 @@ class SmartPlaylistService:
             return getattr(ProfilePlayHistory, order_by)
         else:
             return Track.title  # Default
+
+    def _can_include_external(self, rules: list[dict[str, Any]], order_by: str) -> bool:
+        """Check if external tracks can participate in this smart playlist.
+
+        External tracks only have basic metadata fields, so they can only
+        participate when all rules and the sort field use compatible fields.
+        """
+        for rule in rules:
+            if rule["field"] not in EXTERNAL_COMPATIBLE_FIELDS:
+                return False
+        return order_by in EXTERNAL_COMPATIBLE_FIELDS
+
+    def _build_external_condition(self, rule: dict[str, Any]) -> Any:
+        """Build a single SQLAlchemy condition for ExternalTrack from a rule."""
+        field = rule["field"]
+        operator = rule["operator"]
+        value = rule.get("value")
+
+        column = getattr(ExternalTrack, field)
+
+        if operator == "equals":
+            return column == value
+        elif operator == "not_equals":
+            return column != value
+        elif operator == "contains":
+            return column.ilike(f"%{value}%")
+        elif operator == "not_contains":
+            return ~column.ilike(f"%{value}%")
+        elif operator == "starts_with":
+            return column.ilike(f"{value}%")
+        elif operator == "ends_with":
+            return column.ilike(f"%{value}")
+        elif operator == "greater_than":
+            return column > value
+        elif operator == "less_than":
+            return column < value
+        elif operator == "greater_or_equal":
+            return column >= value
+        elif operator == "less_or_equal":
+            return column <= value
+        elif operator == "between":
+            if isinstance(value, list) and len(value) == 2:
+                return and_(column >= value[0], column <= value[1])
+            return None
+        elif operator == "in":
+            if isinstance(value, list):
+                return column.in_(value)
+            return None
+        elif operator == "not_in":
+            if isinstance(value, list):
+                return ~column.in_(value)
+            return None
+        elif operator == "is_empty":
+            return or_(column.is_(None), column == "")
+        elif operator == "is_not_empty":
+            return and_(column.isnot(None), column != "")
+        return None
+
+    async def get_tracks_unified(
+        self,
+        playlist: SmartPlaylist,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> tuple[list[Any], int]:
+        """Get tracks including external tracks when rules allow.
+
+        Returns (tracks, total) where tracks is a mixed list of Track and
+        ExternalTrack ORM objects. The caller must handle type conversion.
+        Falls back to local-only when rules use fields external tracks lack.
+        """
+        if not self._can_include_external(playlist.rules, playlist.order_by):
+            tracks = await self.get_tracks(playlist, limit=limit, offset=offset)
+            total = await self.get_track_count(playlist)
+            return tracks, total
+
+        sort_field = playlist.order_by
+
+        # Phase 1: UNION of IDs + sort column for correct cross-table pagination
+        local_sort_col = getattr(Track, sort_field)
+        ext_sort_col = getattr(ExternalTrack, sort_field)
+
+        local_q = select(
+            Track.id,
+            literal("local").label("track_type"),
+            local_sort_col.label("sort_val"),
+        )
+        ext_q = select(
+            ExternalTrack.id,
+            literal("external").label("track_type"),
+            ext_sort_col.label("sort_val"),
+        ).where(ExternalTrack.matched_track_id.is_(None))
+
+        # Apply rule conditions to both queries
+        local_conditions = []
+        ext_conditions = []
+        for rule in playlist.rules:
+            local_cond = self._build_condition(rule, False, False)
+            if local_cond is not None:
+                local_conditions.append(local_cond)
+            ext_cond = self._build_external_condition(rule)
+            if ext_cond is not None:
+                ext_conditions.append(ext_cond)
+
+        if local_conditions:
+            if playlist.match_mode == "any":
+                local_q = local_q.where(or_(*local_conditions))
+            else:
+                local_q = local_q.where(and_(*local_conditions))
+
+        if ext_conditions:
+            if playlist.match_mode == "any":
+                ext_q = ext_q.where(or_(*ext_conditions))
+            else:
+                ext_q = ext_q.where(and_(*ext_conditions))
+
+        combined = union_all(local_q, ext_q).subquery()
+
+        # Count
+        count_result = await self.db.execute(
+            select(func.count()).select_from(combined)
+        )
+        total = count_result.scalar() or 0
+
+        # Sort + paginate
+        order_expr = combined.c.sort_val
+        if playlist.order_direction == "desc":
+            order_expr = order_expr.desc()
+
+        effective_limit = limit
+        if playlist.max_tracks:
+            effective_limit = min(limit or playlist.max_tracks, playlist.max_tracks)
+
+        page_q = select(combined.c.id, combined.c.track_type).order_by(order_expr)
+        if effective_limit:
+            page_q = page_q.limit(effective_limit)
+        if offset:
+            page_q = page_q.offset(offset)
+
+        page_result = await self.db.execute(page_q)
+        page_rows = page_result.all()
+
+        if not page_rows:
+            return [], total
+
+        # Phase 2: Fetch full objects by collected IDs
+        local_ids = [row.id for row in page_rows if row.track_type == "local"]
+        ext_ids = [row.id for row in page_rows if row.track_type == "external"]
+
+        local_map: dict[Any, Track] = {}
+        if local_ids:
+            result = await self.db.execute(
+                select(Track).where(Track.id.in_(local_ids))
+            )
+            for t in result.scalars().all():
+                local_map[t.id] = t
+
+        ext_map: dict[Any, ExternalTrack] = {}
+        if ext_ids:
+            result = await self.db.execute(
+                select(ExternalTrack).where(ExternalTrack.id.in_(ext_ids))
+            )
+            for et in result.scalars().all():
+                ext_map[et.id] = et
+
+        # Phase 3: Build result in page order
+        tracks: list[Any] = []
+        for row in page_rows:
+            if row.track_type == "local" and row.id in local_map:
+                tracks.append(local_map[row.id])
+            elif row.track_type == "external" and row.id in ext_map:
+                tracks.append(ext_map[row.id])
+
+        return tracks, total
 
 
 async def get_smart_playlist_service(db: AsyncSession) -> SmartPlaylistService:

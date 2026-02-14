@@ -17,6 +17,8 @@ interface AlbumArtworkProps {
   className?: string;
   // For backwards compatibility - if provided, use this as fallback
   fallbackTrackId?: string;
+  // Direct artwork URL (e.g. from external track album art)
+  artworkUrl?: string | null;
 }
 
 export function AlbumArtwork({
@@ -26,6 +28,7 @@ export function AlbumArtwork({
   size = 'thumb',
   className = '',
   fallbackTrackId,
+  artworkUrl: directArtworkUrl,
 }: AlbumArtworkProps) {
   const requestArtwork = useArtworkStore((state) => state.requestArtwork);
   // Subscribe to status map to trigger re-render when it changes
@@ -48,7 +51,7 @@ export function AlbumArtwork({
   const artworkUrl = (hash && status === 'ready') ? getApiUrl(`/artwork/${hash}/${size}`) : null;
 
   // Determine what to show
-  const showPlaceholder = !artist || !album || status === 'unknown' || status === 'checking' || status === 'pending' || status === 'missing' || imageError;
+  const showPlaceholder = (!directArtworkUrl && (!artist || !album || status === 'unknown' || status === 'checking' || status === 'pending' || status === 'missing')) || imageError;
 
   // For backwards compatibility, try the old track-based URL if we have a fallback
   const fallbackUrl = fallbackTrackId ? getApiUrl(`/tracks/${fallbackTrackId}/artwork?size=${size}`) : null;
@@ -86,7 +89,7 @@ export function AlbumArtwork({
     );
   }
 
-  const imageUrl = artworkUrl || fallbackUrl;
+  const imageUrl = directArtworkUrl || artworkUrl || fallbackUrl;
 
   return (
     <div ref={containerRef} className={`bg-zinc-700 relative ${className}`}>

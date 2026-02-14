@@ -14,7 +14,7 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } fr
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useHashSearchParams } from '../../../hooks/useHashSearchParams';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
@@ -33,6 +33,7 @@ import { TrackContextMenu } from '../TrackContextMenu';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
+import { isExternalTrack } from '../../../types';
 
 import { createLogger } from '../../../utils/logger';
 
@@ -103,15 +104,19 @@ function OfflineButton({ trackId }: { trackId: string }) {
   );
 }
 
-function FavoriteButton({ trackId }: { trackId: string }) {
-  const { isFavorite, toggle } = useFavorites();
-  const favorited = isFavorite(trackId);
+function FavoriteButton({ trackId, isExternal = false }: { trackId: string; isExternal?: boolean }) {
+  const { isFavorite, toggle, isExternalFavorite, toggleExternal } = useFavorites();
+  const favorited = isExternal ? isExternalFavorite(trackId) : isFavorite(trackId);
 
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
-        toggle(trackId);
+        if (isExternal) {
+          toggleExternal(trackId);
+        } else {
+          toggle(trackId);
+        }
       }}
       className={`p-1 transition-colors ${
         favorited
@@ -122,6 +127,27 @@ function FavoriteButton({ trackId }: { trackId: string }) {
     >
       <Heart className="w-4 h-4" fill={favorited ? 'currentColor' : 'none'} />
     </button>
+  );
+}
+
+function ExternalLinkButton({ track }: { track: Track }) {
+  const spotifyUrl = track.spotify_id
+    ? `https://open.spotify.com/track/${track.spotify_id}`
+    : null;
+
+  if (!spotifyUrl) return null;
+
+  return (
+    <a
+      href={spotifyUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="p-1 text-zinc-500 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+      title="Open in Spotify"
+    >
+      <ExternalLink className="w-4 h-4" />
+    </a>
   );
 }
 
@@ -261,8 +287,13 @@ function MobileTrackCard({
 
       {/* Track info */}
       <div className="flex-1 min-w-0">
-        <div className={`truncate font-medium ${isCurrentTrack ? 'text-green-500' : 'text-white'}`}>
-          {track.title || 'Unknown'}
+        <div className={`truncate font-medium flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : 'text-white'}`}>
+          <span className="truncate">{track.title || 'Unknown'}</span>
+          {isExternalTrack(track) && (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-400 flex-shrink-0">
+              External
+            </span>
+          )}
         </div>
         <div className="text-sm text-zinc-400 truncate">
           {track.artist || 'Unknown Artist'}
@@ -277,8 +308,12 @@ function MobileTrackCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <FavoriteButton trackId={track.id} />
-        <OfflineButton trackId={track.id} />
+        <FavoriteButton trackId={track.id} isExternal={isExternalTrack(track)} />
+        {isExternalTrack(track) ? (
+          <ExternalLinkButton track={track} />
+        ) : (
+          <OfflineButton trackId={track.id} />
+        )}
       </div>
     </div>
   );
@@ -332,8 +367,13 @@ function TrackRow({
 
       {/* Title column (always visible) */}
       <div className="min-w-0">
-        <div className={`truncate ${isCurrentTrack ? 'text-green-500' : ''}`}>
+        <div className={`truncate flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : ''}`}>
           {track.title || 'Unknown'}
+          {isExternalTrack(track) && (
+            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-400 flex-shrink-0">
+              External
+            </span>
+          )}
         </div>
       </div>
 
@@ -364,12 +404,16 @@ function TrackRow({
 
       {/* Favorite button */}
       <div className="flex items-center justify-center">
-        <FavoriteButton trackId={track.id} />
+        <FavoriteButton trackId={track.id} isExternal={isExternalTrack(track)} />
       </div>
 
-      {/* Offline button */}
+      {/* Offline / External link button */}
       <div className="flex items-center justify-center">
-        <OfflineButton trackId={track.id} />
+        {isExternalTrack(track) ? (
+          <ExternalLinkButton track={track} />
+        ) : (
+          <OfflineButton trackId={track.id} />
+        )}
       </div>
     </div>
   );
@@ -580,6 +624,7 @@ export function TrackListBrowser({
         valenceMin: filters.valenceMin,
         valenceMax: filters.valenceMax,
         include_features: needsFeatures,
+        include_external: true,
         sortBy: sortField,
         sortOrder,
       },
@@ -598,6 +643,7 @@ export function TrackListBrowser({
         page: pageParam,
         page_size: PAGE_SIZE,
         include_features: needsFeatures,
+        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       }),
@@ -638,6 +684,7 @@ export function TrackListBrowser({
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
         include_features: needsFeatures,
+        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -833,6 +880,7 @@ export function TrackListBrowser({
           energy_max: filters.energyMax,
           valence_min: filters.valenceMin,
           valence_max: filters.valenceMax,
+          include_external: true,
           sort_by: sortField,
           sort_order: sortOrder,
         });
@@ -938,6 +986,7 @@ export function TrackListBrowser({
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
         include_features: needsFeatures,
+        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -981,6 +1030,7 @@ export function TrackListBrowser({
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
         include_features: needsFeatures,
+        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -1022,6 +1072,7 @@ export function TrackListBrowser({
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
         include_features: needsFeatures,
+        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -1153,6 +1204,7 @@ export function TrackListBrowser({
     energy_max: filters.energyMax,
     valence_min: filters.valenceMin,
     valence_max: filters.valenceMax,
+    include_external: true,
     sort_by: sortField,
     sort_order: sortOrder,
   }), [filters, sortField, sortOrder]);
@@ -1171,7 +1223,7 @@ export function TrackListBrowser({
         try {
           const response = await tracksApi.getIds({
             shuffle: shuffle,
-            start_with: track.id,  // Clicked track plays first
+            start_with: isExternalTrack(track) ? `ext:${track.id}` : track.id,  // Clicked track plays first
             ...queueFilters,
           });
           if (response.ids.length > 0) {
@@ -1189,8 +1241,18 @@ export function TrackListBrowser({
       }
 
       // For smaller result sets, use regular queue (use dense array)
+      // Attach _externalInfo for external tracks so the audio engine uses preview URLs
       if (allTracksUnfiltered.length > 0) {
-        setQueue(allTracksUnfiltered as Track[], index);
+        const queueTracks = allTracksUnfiltered.map(t => ({
+          ...t,
+          _externalInfo: isExternalTrack(t) ? {
+            type: 'external' as const,
+            previewUrl: t.preview_url || null,
+            matchedTrackId: t.matched_track_id || null,
+            originalId: t.id,
+          } : undefined,
+        }));
+        setQueue(queueTracks as Track[], index);
       }
     },
     [currentTrack, isPlaying, setIsPlaying, allTracksUnfiltered, setQueue, total, shuffle, queueFilters, setLazyQueue]
@@ -1266,7 +1328,16 @@ export function TrackListBrowser({
     // For smaller result sets, use regular queue (use dense array)
     // setQueue() already respects the global shuffle toggle
     if (allTracksUnfiltered.length > 0) {
-      setQueue(allTracksUnfiltered as Track[], 0);
+      const queueTracks = allTracksUnfiltered.map(t => ({
+        ...t,
+        _externalInfo: isExternalTrack(t) ? {
+          type: 'external' as const,
+          previewUrl: t.preview_url || null,
+          matchedTrackId: t.matched_track_id || null,
+          originalId: t.id,
+        } : undefined,
+      }));
+      setQueue(queueTracks as Track[], 0);
     }
   }, [total, shuffle, queueFilters, setLazyQueue, allTracksUnfiltered, setQueue]);
 

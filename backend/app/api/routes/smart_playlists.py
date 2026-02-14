@@ -10,8 +10,8 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import sanitize_error_for_client
-from app.api.routes.tracks import TrackResponse
-from app.db.models import Track
+from app.api.routes.tracks import TrackResponse, _external_track_to_response
+from app.db.models import ExternalTrack as ExternalTrackModel, Track
 from app.services.smart_playlists import SmartPlaylistService
 
 router = APIRouter(prefix="/smart-playlists", tags=["smart-playlists"])
@@ -223,12 +223,18 @@ async def get_smart_playlist_tracks(
             detail="Smart playlist not found",
         )
 
-    tracks = await service.get_tracks(playlist, limit=limit, offset=offset)
-    total = await service.get_track_count(playlist)
+    tracks, total = await service.get_tracks_unified(playlist, limit=limit, offset=offset)
+
+    track_responses = []
+    for t in tracks:
+        if isinstance(t, ExternalTrackModel):
+            track_responses.append(_external_track_to_response(t))
+        else:
+            track_responses.append(TrackResponse.model_validate(t))
 
     return SmartPlaylistTracksResponse(
         playlist=playlist_to_response(playlist),
-        tracks=[TrackResponse.model_validate(t) for t in tracks],
+        tracks=track_responses,
         total=total,
     )
 

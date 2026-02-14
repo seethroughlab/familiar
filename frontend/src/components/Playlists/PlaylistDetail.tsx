@@ -131,7 +131,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { isFavorite, toggle: toggleFavorite, isExternalFavorite, toggleExternal } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
@@ -864,21 +864,37 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                 );
               })}
 
-              {/* Heart / External link */}
-              <div>
+              {/* Heart + External link */}
+              <div className="flex items-center gap-0.5">
                 {isExternal ? (
-                  !isMatched && track.external_links && Object.keys(track.external_links).length > 0 ? (
-                    <a
-                      href={Object.values(track.external_links)[0]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-1 text-zinc-500 hover:text-green-400 transition-colors"
-                      title="Open in Spotify"
+                  <>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExternal(track.id);
+                      }}
+                      className={`p-1 transition-colors ${
+                        isExternalFavorite(track.id)
+                          ? 'text-pink-500 hover:text-pink-400'
+                          : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                      }`}
+                      title={isExternalFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
                     >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  ) : null
+                      <Heart className="w-4 h-4" fill={isExternalFavorite(track.id) ? 'currentColor' : 'none'} />
+                    </button>
+                    {!isMatched && track.external_links && Object.keys(track.external_links).length > 0 && (
+                      <a
+                        href={Object.values(track.external_links)[0]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1 text-zinc-500 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                        title="Open in Spotify"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </>
                 ) : (
                   <button
                     onClick={(e) => {
