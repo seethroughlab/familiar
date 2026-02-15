@@ -354,14 +354,62 @@ export function FavoritesDetail({ onBack }: Props) {
                 const extTrack = getTrack(item);
                 const isCurrentTrack = currentTrack?.id === extTrack.id;
                 return (
-                  <div
-                    key={`ext-${item.id}`}
-                    onClick={() => handlePlay(idx)}
-                    className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                      !isMatched ? 'opacity-60' : ''
-                    } ${isCurrentTrack ? 'bg-zinc-800/30' : ''}`}
-                    style={{ gridTemplateColumns: gridColumns }}
-                  >
+                  <div key={`ext-${item.id}`}>
+                    {/* Mobile layout */}
+                    <div
+                      onClick={() => handlePlay(idx)}
+                      className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                        !isMatched ? 'opacity-60' : ''
+                      } ${isCurrentTrack ? 'bg-zinc-800/30' : ''}`}
+                    >
+                      <div className="w-8 flex-shrink-0 text-center">
+                        {isCurrentTrack && isPlaying ? (
+                          <div className="flex justify-center gap-0.5">
+                            <div className="w-0.5 h-3 bg-pink-500 animate-pulse" />
+                            <div className="w-0.5 h-3 bg-pink-500 animate-pulse [animation-delay:0.2s]" />
+                            <div className="w-0.5 h-3 bg-pink-500 animate-pulse [animation-delay:0.4s]" />
+                          </div>
+                        ) : (
+                          <span className="text-sm text-zinc-500">{idx + 1}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium truncate ${isCurrentTrack ? 'text-pink-500' : ''}`}>
+                            {item.title || 'Unknown Title'}
+                          </span>
+                          {!isMatched && (
+                            <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
+                              Not in library
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-zinc-400 truncate">
+                          {item.artist || 'Unknown Artist'}
+                          {item.album && <span className="text-zinc-500"> • {item.album}</span>}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleExternal(item.id);
+                        }}
+                        className="flex-shrink-0 p-1 text-pink-500 hover:text-pink-400 transition-colors"
+                      >
+                        <Heart className="w-4 h-4" fill="currentColor" />
+                      </button>
+                      <div className="flex-shrink-0 text-sm text-zinc-500">
+                        {formatDuration(item.duration_seconds)}
+                      </div>
+                    </div>
+                    {/* Desktop layout */}
+                    <div
+                      onClick={() => handlePlay(idx)}
+                      className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                        !isMatched ? 'opacity-60' : ''
+                      } ${isCurrentTrack ? 'bg-zinc-800/30' : ''}`}
+                      style={{ gridTemplateColumns: gridColumns }}
+                    >
                     {/* Index / Play button */}
                     <div className="w-8 text-center">
                       {isCurrentTrack && isPlaying ? (
@@ -453,6 +501,7 @@ export function FavoritesDetail({ onBack }: Props) {
                     <div className="text-sm text-zinc-500 text-right">
                       {formatDuration(item.duration_seconds)}
                     </div>
+                    </div>
                   </div>
                 );
               }
@@ -460,20 +509,62 @@ export function FavoritesDetail({ onBack }: Props) {
               // Local favorite
               const fullTrack = getTrack(item);
               return (
-                <div
-                  key={item.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/track-id', item.id);
-                    e.dataTransfer.effectAllowed = 'copy';
-                  }}
-                  onClick={() => handlePlay(idx)}
-                  onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                  className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors sm:grid ${
-                    currentTrack?.id === item.id ? 'bg-zinc-800/30' : ''
-                  }`}
-                  style={{ gridTemplateColumns: gridColumns }}
-                >
+                <div key={item.id}>
+                  {/* Mobile layout */}
+                  <div
+                    onClick={() => handlePlay(idx)}
+                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                    className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                      currentTrack?.id === item.id ? 'bg-zinc-800/30' : ''
+                    }`}
+                  >
+                    <div className="w-8 flex-shrink-0 text-center">
+                      {currentTrack?.id === item.id && isPlaying ? (
+                        <div className="flex justify-center gap-0.5">
+                          <div className="w-0.5 h-3 bg-pink-500 animate-pulse" />
+                          <div className="w-0.5 h-3 bg-pink-500 animate-pulse [animation-delay:0.2s]" />
+                          <div className="w-0.5 h-3 bg-pink-500 animate-pulse [animation-delay:0.4s]" />
+                        </div>
+                      ) : (
+                        <span className={`text-sm ${currentTrack?.id === item.id ? 'text-pink-500' : 'text-zinc-500'}`}>{idx + 1}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-medium truncate ${currentTrack?.id === item.id ? 'text-pink-500' : ''}`}>
+                        {item.title || 'Unknown Title'}
+                      </div>
+                      <div className="text-sm text-zinc-400 truncate">
+                        {item.artist || 'Unknown Artist'}
+                        {item.album && <span className="text-zinc-500"> • {item.album}</span>}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle(item.id);
+                      }}
+                      className="flex-shrink-0 p-1 text-pink-500 hover:text-pink-400 transition-colors"
+                    >
+                      <Heart className="w-4 h-4" fill="currentColor" />
+                    </button>
+                    <div className="flex-shrink-0 text-sm text-zinc-500">
+                      {formatDuration(item.duration_seconds)}
+                    </div>
+                  </div>
+                  {/* Desktop layout */}
+                  <div
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/track-id', item.id);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                    onClick={() => handlePlay(idx)}
+                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                    className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                      currentTrack?.id === item.id ? 'bg-zinc-800/30' : ''
+                    }`}
+                    style={{ gridTemplateColumns: gridColumns }}
+                  >
                   {/* Track number / Play button */}
                   <div className="w-8 text-center">
                     {currentTrack?.id === item.id && isPlaying ? (
@@ -551,6 +642,7 @@ export function FavoritesDetail({ onBack }: Props) {
                   {/* Duration */}
                   <div className="text-sm text-zinc-500 text-right">
                     {formatDuration(item.duration_seconds)}
+                  </div>
                   </div>
                 </div>
               );

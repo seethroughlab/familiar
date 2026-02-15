@@ -303,20 +303,45 @@ export function DownloadsDetail({ onBack }: Props) {
               const fullTrack = getTrackFromDownload(track);
               const isSelected = selectedTrackIds.has(track.id);
               return (
-                <div
-                  key={track.id}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/track-id', track.id);
-                    e.dataTransfer.effectAllowed = 'copy';
-                  }}
-                  onClick={(e) => handleTrackClick(track.id, idx, e)}
-                  onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                  className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                    currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                  } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
-                  style={{ gridTemplateColumns: gridColumns }}
-                >
+                <div key={track.id}>
+                  {/* Mobile layout */}
+                  <div
+                    onClick={(e) => handleTrackClick(track.id, idx, e)}
+                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                    className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                    } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
+                  >
+                    <div className="w-8 flex-shrink-0 text-center" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
+                      <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
+                        {track.title || 'Unknown Title'}
+                      </div>
+                      <div className="text-sm text-zinc-400 truncate">
+                        {track.artist || 'Unknown Artist'}
+                        {track.album && <span className="text-zinc-500"> • {track.album}</span>}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 text-xs text-zinc-500">
+                      {track.sizeFormatted}
+                    </div>
+                  </div>
+                  {/* Desktop layout */}
+                  <div
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/track-id', track.id);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
+                    onClick={(e) => handleTrackClick(track.id, idx, e)}
+                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
+                    className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                    } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
+                    style={{ gridTemplateColumns: gridColumns }}
+                  >
                   {/* Track number / Play button */}
                   <div className="text-center cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
                     <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
@@ -364,6 +389,7 @@ export function DownloadsDetail({ onBack }: Props) {
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                  </div>
                 </div>
               );
             })}

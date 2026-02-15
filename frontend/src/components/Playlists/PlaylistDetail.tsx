@@ -796,24 +796,70 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
             const isDragged = draggedTrackId === track.playlist_track_id;
             const isDropTarget = dropTargetId === track.playlist_track_id;
             return (
-            <div
-              key={track.playlist_track_id}
-              draggable={!isOffline && !usingCachedData}
-              onDragStart={(e) => !isOffline && !usingCachedData && handleDragStart(track.playlist_track_id, track.id, e)}
-              onDragOver={(e) => !isOffline && !usingCachedData && handleDragOver(e, track.playlist_track_id)}
-              onDragLeave={handleDragLeave}
-              onDrop={() => !isOffline && !usingCachedData && handleDrop(track.playlist_track_id)}
-              onDragEnd={handleDragEnd}
-              onClick={(e) => handleTrackClick(track.id, idx, e)}
-              onContextMenu={(e) => fullTrack && handleContextMenu(fullTrack, e)}
-              className={`group grid gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
-                currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-              } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''
-              } ${isDragged ? 'opacity-50' : ''
-              } ${isDropTarget ? 'border-t-2 border-green-500' : ''
-              } ${isExternal && !isMatched ? 'opacity-60' : ''}`}
-              style={{ gridTemplateColumns: gridColumns }}
-            >
+            <div key={track.playlist_track_id}>
+              {/* Mobile layout */}
+              <div
+                onClick={(e) => handleTrackClick(track.id, idx, e)}
+                onContextMenu={(e) => fullTrack && handleContextMenu(fullTrack, e)}
+                className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
+                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''
+                } ${isExternal && !isMatched ? 'opacity-60' : ''}`}
+              >
+                <div className="w-8 flex-shrink-0 text-center" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
+                  <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
+                      {track.title || 'Unknown Title'}
+                    </span>
+                    {isExternal && !isMatched && (
+                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
+                        Not in library
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-zinc-400 truncate">
+                    {track.artist || 'Unknown Artist'}
+                    {track.album && <span className="text-zinc-500"> • {track.album}</span>}
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    isExternal ? toggleExternal(track.id) : toggleFavorite(track.id);
+                  }}
+                  className={`flex-shrink-0 p-1 transition-colors ${
+                    (isExternal ? isExternalFavorite(track.id) : isFavorite(track.id))
+                      ? 'text-pink-500 hover:text-pink-400'
+                      : 'text-zinc-500 hover:text-pink-400'
+                  }`}
+                >
+                  <Heart className="w-4 h-4" fill={(isExternal ? isExternalFavorite(track.id) : isFavorite(track.id)) ? 'currentColor' : 'none'} />
+                </button>
+                <div className="flex-shrink-0 text-sm text-zinc-500">
+                  {formatDuration(track.duration_seconds)}
+                </div>
+              </div>
+              {/* Desktop layout */}
+              <div
+                draggable={!isOffline && !usingCachedData}
+                onDragStart={(e) => !isOffline && !usingCachedData && handleDragStart(track.playlist_track_id, track.id, e)}
+                onDragOver={(e) => !isOffline && !usingCachedData && handleDragOver(e, track.playlist_track_id)}
+                onDragLeave={handleDragLeave}
+                onDrop={() => !isOffline && !usingCachedData && handleDrop(track.playlist_track_id)}
+                onDragEnd={handleDragEnd}
+                onClick={(e) => handleTrackClick(track.id, idx, e)}
+                onContextMenu={(e) => fullTrack && handleContextMenu(fullTrack, e)}
+                className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
+                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
+                } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''
+                } ${isDragged ? 'opacity-50' : ''
+                } ${isDropTarget ? 'border-t-2 border-green-500' : ''
+                } ${isExternal && !isMatched ? 'opacity-60' : ''}`}
+                style={{ gridTemplateColumns: gridColumns }}
+              >
               {/* Index cell (drag handle + track number) */}
               <div className="flex items-center">
                 <div className={`mr-0.5 transition-opacity ${
@@ -929,6 +975,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
               {/* Duration */}
               <div className="text-sm text-zinc-500 text-right">
                 {formatDuration(track.duration_seconds)}
+              </div>
               </div>
             </div>
             );
