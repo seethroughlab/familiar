@@ -213,9 +213,9 @@ export function SpotifySettings() {
     <div className="space-y-4">
       {/* Connection status card */}
       <div className="bg-zinc-800/50 rounded-lg p-6">
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-lg ${status.connected ? 'bg-green-500/20' : 'bg-zinc-700'}`}>
+            <div className={`p-3 rounded-lg flex-shrink-0 ${status.connected ? 'bg-green-500/20' : 'bg-zinc-700'}`}>
               <Music2 className={`w-6 h-6 ${status.connected ? 'text-green-500' : 'text-zinc-400'}`} />
             </div>
             <div>
