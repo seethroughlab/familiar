@@ -5,6 +5,7 @@ import { playlistsApi, tracksApi } from '../../api/client';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
+import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadStore, getPlaylistJobId } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
@@ -131,6 +132,8 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
+  const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
   const { isFavorite, toggle: toggleFavorite, isExternalFavorite, toggleExternal } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
@@ -715,6 +718,22 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
               <span className="text-sm">
                 {showDownloadedOnly ? `Downloaded (${offlineCount})` : 'Downloaded only'}
               </span>
+            </button>
+          )}
+
+          {/* External preview toggle */}
+          {playlist.tracks.some(t => t.type === 'external') && (
+            <button
+              onClick={() => setPlayExternalPreviews(!playExternalPreviews)}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
+                playExternalPreviews
+                  ? 'bg-amber-600 hover:bg-amber-500'
+                  : 'bg-zinc-700 hover:bg-zinc-600'
+              }`}
+              title={playExternalPreviews ? 'Disable external track previews' : 'Enable external track previews'}
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="text-sm">Previews</span>
             </button>
           )}
         </div>

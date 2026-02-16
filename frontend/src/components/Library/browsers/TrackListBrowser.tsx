@@ -17,6 +17,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
 import { usePlayerStore } from '../../../stores/playerStore';
+import { useAudioSettingsStore } from '../../../stores/audioSettingsStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
 import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
@@ -444,6 +445,8 @@ export function TrackListBrowser({
   const sortBy = useColumnStore((state) => state.sortBy);
   const sortOrder = useColumnStore((state) => state.sortOrder);
   const toggleSort = useColumnStore((state) => state.toggleSort);
+  const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
+  const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
   const { isFavorite, toggle } = useFavorites();
 
   // Context menu state
@@ -1341,6 +1344,12 @@ export function TrackListBrowser({
     }
   }, [total, shuffle, queueFilters, setLazyQueue, allTracksUnfiltered, setQueue]);
 
+  // Check if any external tracks are loaded
+  const hasExternalTracks = useMemo(
+    () => allTracksUnfiltered.some(t => isExternalTrack(t)),
+    [allTracksUnfiltered]
+  );
+
   // Check if currently playing from lazy queue
   const isInLazyQueueMode = lazyQueueIds !== null && lazyQueueIds.length > 0;
 
@@ -1478,19 +1487,35 @@ export function TrackListBrowser({
               </span>
             )}
           </div>
-          <button
-            onClick={handlePlayAll}
-            disabled={isLoadingPlayAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-full transition-colors"
-            title="Play all tracks"
-          >
-            {isLoadingPlayAll ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Play className="w-3.5 h-3.5" fill="currentColor" />
+          <div className="flex items-center gap-2">
+            {hasExternalTracks && (
+              <button
+                onClick={() => setPlayExternalPreviews(!playExternalPreviews)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full transition-colors ${
+                  playExternalPreviews
+                    ? 'bg-amber-600 hover:bg-amber-500'
+                    : 'bg-zinc-700 hover:bg-zinc-600'
+                }`}
+                title={playExternalPreviews ? 'Disable external track previews' : 'Enable external track previews'}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Previews</span>
+              </button>
             )}
-            <span className="hidden sm:inline">Play</span>
-          </button>
+            <button
+              onClick={handlePlayAll}
+              disabled={isLoadingPlayAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-full transition-colors"
+              title="Play all tracks"
+            >
+              {isLoadingPlayAll ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5" fill="currentColor" />
+              )}
+              <span className="hidden sm:inline">Play</span>
+            </button>
+          </div>
         </div>
       )}
 

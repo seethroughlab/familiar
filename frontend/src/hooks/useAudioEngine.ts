@@ -642,6 +642,14 @@ export function useAudioEngine() {
         const currentQueueItem = state.queue[state.queueIndex];
         const externalInfo = currentQueueItem?.externalInfo;
 
+        // Skip external tracks entirely when previews are disabled
+        if (externalInfo && !useAudioSettingsStore.getState().playExternalPreviews) {
+          log.info('External previews disabled, auto-advancing');
+          setIsLoadingAudio(false);
+          playNext();
+          return;
+        }
+
         let url: string;
         let isOffline = false;
 

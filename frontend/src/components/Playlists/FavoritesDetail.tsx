@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
 import { favoritesApi } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
+import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
@@ -36,6 +37,8 @@ export function FavoritesDetail({ onBack }: Props) {
   const setQueue = usePlayerStore((s) => s.setQueue);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
+  const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
   const { favorites, total, toggle, externalFavorites, toggleExternal } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
@@ -313,6 +316,22 @@ export function FavoritesDetail({ onBack }: Props) {
             <RotateCw className="w-4 h-4" />
             <span className="text-sm">Auto</span>
           </button>
+
+          {/* External preview toggle */}
+          {externalFavorites && externalFavorites.length > 0 && (
+            <button
+              onClick={() => setPlayExternalPreviews(!playExternalPreviews)}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
+                playExternalPreviews
+                  ? 'bg-amber-600 hover:bg-amber-500'
+                  : 'bg-zinc-700 hover:bg-zinc-600'
+              }`}
+              title={playExternalPreviews ? 'Disable external track previews' : 'Enable external track previews'}
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span className="text-sm">Previews</span>
+            </button>
+          )}
         </div>
       </div>
 
