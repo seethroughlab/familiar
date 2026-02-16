@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Play, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Search, RotateCw } from 'lucide-react';
-import { BuyButton } from '../common/BuyButton';
 import { playlistsApi, tracksApi } from '../../api/client';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { showError } from '../../stores/toastStore';
@@ -929,9 +928,6 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                     >
                       <Heart className="w-4 h-4" fill={isExternalFavorite(track.id) ? 'currentColor' : 'none'} />
                     </button>
-                    {!isMatched && (
-                      <BuyButton artist={track.artist || ''} title={track.title || ''} album={track.album || undefined} />
-                    )}
                     {!isMatched && track.external_links && Object.keys(track.external_links).length > 0 && (
                       <a
                         href={Object.values(track.external_links)[0]}

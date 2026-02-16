@@ -17,8 +17,12 @@ import {
   Trash2,
   X,
   Heart,
+  ShoppingCart,
+  ExternalLink,
 } from 'lucide-react';
 import type { Track } from '../../types';
+import { isExternalTrack } from '../../types';
+import { generateAllSearchUrls } from '../../utils/storeLinks';
 
 interface TrackContextMenuProps {
   track: Track;
@@ -288,6 +292,24 @@ export function TrackContextMenu({
         label="Add to Playlist..."
         onClick={() => handleAction(onAddToPlaylist)}
       />
+
+      {/* Purchase links for unmatched external tracks */}
+      {isExternalTrack(track) && !track.matched_track_id && (
+        <>
+          <MenuDivider />
+          {generateAllSearchUrls(track.artist || '', track.title || '', track.album || undefined).map(({ key, name, url }, idx) => (
+            <MenuItem
+              key={key}
+              icon={idx === 0 ? <ShoppingCart className="w-4 h-4" /> : <ExternalLink className="w-4 h-4" />}
+              label={`Buy on ${name}`}
+              onClick={() => {
+                window.open(url, '_blank');
+                onClose();
+              }}
+            />
+          ))}
+        </>
+      )}
 
       <MenuDivider />
 

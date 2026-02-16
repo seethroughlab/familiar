@@ -241,16 +241,15 @@ export function useAudioEngine() {
       const currentElement = getCurrentElement();
       if (target !== currentElement) return;
 
-      const { isPlaying: playing } = usePlayerStore.getState();
-      if (!playing) return;
+      const state = usePlayerStore.getState();
+      if (!state.isPlaying) return;
 
       const mediaError = target.error;
-      log.error('Playback error:', mediaError);
+      const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
+      log.error('Playback error for "%s":', trackName, mediaError);
 
-      // Only show error toast if we haven't shown one recently for this track
-      // (Simple implementation for now)
       showError('Playback error', {
-        description: mediaError?.message || 'Failed to play track'
+        description: `${trackName}: ${mediaError?.message || 'Failed to play track'}`
       });
 
       setIsPlaying(false);

@@ -1,5 +1,6 @@
 """Track endpoints."""
 
+import asyncio
 import logging
 from collections.abc import Iterator
 from datetime import datetime
@@ -1276,7 +1277,12 @@ AUDIO_MIME_TYPES = {
     ".aac": "audio/aac",
     ".ogg": "audio/ogg",
     ".wav": "audio/wav",
+    ".aiff": "audio/aiff",
+    ".aif": "audio/aiff",
 }
+
+# Formats that browsers can't natively decode — need server-side transcoding
+TRANSCODE_EXTENSIONS = {".aiff", ".aif"}
 
 
 def get_audio_mime_type(file_path: Path) -> str:
@@ -1314,11 +1320,39 @@ async def stream_track(
         logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)
         raise HTTPException(status_code=404, detail="Audio file not found")
 
+    # Transcode formats that browsers can't natively decode
+    if file_path.suffix.lower() in TRANSCODE_EXTENSIONS:
+        logger.debug("Transcoding track_id=%s path=%s to FLAC", track_id, file_path)
+        return await _stream_transcoded(file_path)
+
     mime_type = get_audio_mime_type(file_path)
     logger.debug("Streaming track_id=%s path=%s type=%s", track_id, file_path, mime_type)
 
     from app.api.streaming import stream_file
     return await stream_file(file_path, request, mime_type)
+
+
+async def _stream_transcoded(file_path: Path) -> StreamingResponse:
+    """Transcode an audio file to FLAC via ffmpeg and stream the result."""
+    process = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-i", str(file_path), "-f", "flac", "-loglevel", "error", "pipe:1",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    async def stream_output():
+        assert process.stdout is not None
+        try:
+            while chunk := await process.stdout.read(64 * 1024):
+                yield chunk
+        finally:
+            await process.wait()
+
+    return StreamingResponse(
+        stream_output(),
+        media_type="audio/flac",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/{track_id}/artwork")

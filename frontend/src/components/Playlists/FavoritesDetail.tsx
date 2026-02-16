@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
-import { BuyButton } from '../common/BuyButton';
 import { favoritesApi } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -482,7 +481,6 @@ export function FavoritesDetail({ onBack }: Props) {
                       >
                         <Heart className="w-4 h-4" fill="currentColor" />
                       </button>
-                      <BuyButton artist={item.artist || ''} title={item.title || ''} album={item.album || undefined} />
                       {item.external_links && Object.keys(item.external_links).length > 0 && (
                         <a
                           href={Object.values(item.external_links)[0]}
