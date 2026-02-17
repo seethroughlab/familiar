@@ -51,12 +51,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-import { AudioEngineProvider } from './contexts/AudioEngineContext';
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AudioEngineProvider>
-      <App />
-    </AudioEngineProvider>
+    <App />
   </StrictMode>,
 )

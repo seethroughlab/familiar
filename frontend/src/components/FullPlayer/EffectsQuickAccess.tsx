@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Sliders } from 'lucide-react';
 import { useAudioEffectsStore } from '../../stores/audioEffectsStore';
-import { useAudioEngineContext } from '../../contexts/AudioEngineContext';
+import { areAudioEffectsAvailable } from '../../hooks/audio/audioGraph';
 
 /**
  * Quick access button for audio effects in the FullPlayer header.
@@ -11,8 +11,7 @@ export function EffectsQuickAccess() {
   const [isOpen, setIsOpen] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const { platform } = useAudioEngineContext();
-  const effectsAvailable = platform.useWebAudio;
+  const effectsAvailable = areAudioEffectsAvailable();
 
   const masterEnabled = useAudioEffectsStore((s) => s.masterEnabled);
   const setMasterEnabled = useAudioEffectsStore((s) => s.setMasterEnabled);

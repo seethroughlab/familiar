@@ -14,7 +14,7 @@ import {
   type SaturationState,
   type TremoloState,
 } from '../../stores/audioEffectsStore';
-import { useAudioEngineContext } from '../../contexts/AudioEngineContext';
+import { areAudioEffectsAvailable } from '../../hooks/audio/audioGraph';
 
 // Collapsible section component
 function EffectSection({
@@ -130,8 +130,7 @@ const REVERB_PRESETS: { value: ReverbPreset; label: string }[] = [
 export function AudioEffectsSettings() {
   const [savePresetName, setSavePresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
-  const { platform } = useAudioEngineContext();
-  const effectsAvailable = platform.useWebAudio;
+  const effectsAvailable = areAudioEffectsAvailable();
 
   const {
     masterEnabled,

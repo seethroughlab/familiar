@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Bug, RefreshCw, Trash2, Download, AlertCircle } from 'lucide-react';
 import { getApiUrl } from '../../api/base';
-import { useAudioEngineContext } from '../../contexts/AudioEngineContext';
+import {
+  getAudioContext,
+  getAudioAnalyser,
+  areAudioEffectsAvailable,
+  isVisualizerAvailable,
+  getCurrentMode,
+} from '../../hooks/audio/audioGraph';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import * as offlineService from '../../services/offlineService';
@@ -63,7 +69,6 @@ export function DebugSettings() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const { jobs, activeJobId } = useDownloadStore();
-  const { audioGraph, platform } = useAudioEngineContext();
 
   // Subscribe to API errors
   useEffect(() => {
@@ -93,11 +98,11 @@ export function DebugSettings() {
     return () => clearInterval(interval);
   }, [expanded]);
 
-  const audioContext = audioGraph.current.audioContext;
-  const analyser = audioGraph.current.analyser;
-  const effectsAvailable = platform.useWebAudio;
-  const visualizerAvailable = platform.useWebAudio;
-  const currentMode = platform.useDirectPlayback ? 'hybrid' : 'webaudio';
+  const audioContext = getAudioContext();
+  const analyser = getAudioAnalyser();
+  const effectsAvailable = areAudioEffectsAvailable();
+  const visualizerAvailable = isVisualizerAvailable();
+  const currentMode = getCurrentMode();
 
   // Platform detection
   const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
@@ -405,7 +410,7 @@ export function DebugSettings() {
               </button>
               <button
                 onClick={() => {
-                  const ctx = audioGraph.current.audioContext;
+                  const ctx = getAudioContext();
                   if (ctx) {
                     console.log('[Test] AudioContext state:', ctx.state);
                     if (ctx.state === 'suspended') {

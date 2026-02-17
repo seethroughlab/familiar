@@ -90,7 +90,10 @@ export async function preloadNextTrack(trackId: string): Promise<boolean> {
 export function completeCrossfade(
   setCrossfadeStateFn: (state: 'idle' | 'preloading' | 'crossfading') => void,
   setNextTrackPreloadedFn: (preloaded: boolean) => void,
+  onCompleteFn?: () => void,
 ): void {
+  if (!getCrossfadeContext()) return; // already completed or never started
+
   {
     const { currentTrack: track } = usePlayerStore.getState();
     log.debug('completeCrossfade called', {
@@ -126,6 +129,7 @@ export function completeCrossfade(
 
   setCrossfadeStateFn('idle');
   setNextTrackPreloadedFn(false);
+  onCompleteFn?.();
 }
 
 // ============================================================================
@@ -138,6 +142,7 @@ export function executeCrossfade(
   advanceToNextTrackFn: (track: Track) => void,
   setCrossfadeStateFn: (state: 'idle' | 'preloading' | 'crossfading') => void,
   setNextTrackPreloadedFn: (preloaded: boolean) => void,
+  onCompleteFn?: () => void,
 ): void {
   const currentElement = getCurrentElement();
   const nextElement = getNextElement();
@@ -164,7 +169,7 @@ export function executeCrossfade(
         startTime: performance.now(),
         duration,
         timeoutId: setTimeout(
-          () => completeCrossfade(setCrossfadeStateFn, setNextTrackPreloadedFn),
+          () => completeCrossfade(setCrossfadeStateFn, setNextTrackPreloadedFn, onCompleteFn),
           duration * 1000,
         ),
       });
@@ -191,7 +196,7 @@ export function executeCrossfade(
             ctx.animationFrameId = requestAnimationFrame(animateCrossfade);
           }
         } else {
-          completeCrossfade(setCrossfadeStateFn, setNextTrackPreloadedFn);
+          completeCrossfade(setCrossfadeStateFn, setNextTrackPreloadedFn, onCompleteFn);
         }
       };
 
@@ -234,7 +239,7 @@ export function executeCrossfade(
       startTime: now,
       duration,
       timeoutId: setTimeout(
-        () => completeCrossfade(setCrossfadeStateFn, setNextTrackPreloadedFn),
+        () => completeCrossfade(setCrossfadeStateFn, setNextTrackPreloadedFn, onCompleteFn),
         duration * 1000,
       ),
     });

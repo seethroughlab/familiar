@@ -24,6 +24,8 @@ let globalMediaSourceA: MediaElementAudioSourceNode | null = null;
 let globalMediaSourceB: MediaElementAudioSourceNode | null = null;
 let globalGainA: GainNode | null = null;
 let globalGainB: GainNode | null = null;
+let globalNormGainA: GainNode | null = null;
+let globalNormGainB: GainNode | null = null;
 
 // Direct playback elements (NOT connected to Web Audio - for background playback)
 let directElementA: HTMLAudioElement | null = null;
@@ -129,6 +131,16 @@ export function getCurrentGain(): GainNode | null {
 export function getNextGain(): GainNode | null {
   if (!useWebAudio) return null;
   return currentElementIsA ? globalGainB : globalGainA;
+}
+
+export function getCurrentNormGain(): GainNode | null {
+  if (!useWebAudio) return null;
+  return currentElementIsA ? globalNormGainA : globalNormGainB;
+}
+
+export function getNextNormGain(): GainNode | null {
+  if (!useWebAudio) return null;
+  return currentElementIsA ? globalNormGainB : globalNormGainA;
 }
 
 // ============================================================================
@@ -305,6 +317,15 @@ export function initializeAudioGraph(): boolean {
         globalMediaSourceB = globalAudioContext.createMediaElementSource(webAudioElementB);
       }
 
+      if (!globalNormGainA) {
+        globalNormGainA = globalAudioContext.createGain();
+        globalNormGainA.gain.value = 1;
+      }
+      if (!globalNormGainB) {
+        globalNormGainB = globalAudioContext.createGain();
+        globalNormGainB.gain.value = 1;
+      }
+
       if (!globalGainA) {
         globalGainA = globalAudioContext.createGain();
         globalGainA.gain.value = 1;
@@ -322,9 +343,11 @@ export function initializeAudioGraph(): boolean {
         globalEffectsChain = initEffectsChain(globalAudioContext);
       }
 
-      // Connect the Web Audio graph
-      globalMediaSourceA!.connect(globalGainA);
-      globalMediaSourceB!.connect(globalGainB);
+      // Connect: Source -> NormGain -> CrossfadeGain -> MasterGain -> Effects -> Analyser -> Destination
+      globalMediaSourceA!.connect(globalNormGainA);
+      globalMediaSourceB!.connect(globalNormGainB);
+      globalNormGainA.connect(globalGainA);
+      globalNormGainB.connect(globalGainB);
       globalGainA.connect(globalMasterGain);
       globalGainB.connect(globalMasterGain);
 
@@ -390,4 +413,38 @@ export function updateDirectPlaybackVolumes(): void {
     setElementVolume(currentElement, currentMasterVolume);
     setElementVolume(nextElement, 0);
   }
+}
+
+// ============================================================================
+// Test Utilities
+// ============================================================================
+
+export function resetForTesting(): void {
+  globalAudioContext = null;
+  globalAnalyser = null;
+  globalMasterGain = null;
+  globalEffectsChain = null;
+  webAudioElementA = null;
+  webAudioElementB = null;
+  globalMediaSourceA = null;
+  globalMediaSourceB = null;
+  globalGainA = null;
+  globalGainB = null;
+  globalNormGainA = null;
+  globalNormGainB = null;
+  directElementA = null;
+  directElementB = null;
+  currentElementIsA = true;
+  crossfadeContext = null;
+  currentOfflineUrl = null;
+  nextOfflineUrl = null;
+  currentMasterVolume = 1;
+  loadedTrackId = null;
+  currentLoadId = 0;
+  preloadingTrackId = null;
+  earlyPreloadedTrackId = null;
+  queueTransition = false;
+  errorCount = 0;
+  lastErrorTrackId = null;
+  hasShownInitError = false;
 }

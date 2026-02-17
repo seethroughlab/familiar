@@ -16,7 +16,7 @@ const localStorageMock = {
 }
 Object.defineProperty(window, 'localStorage', { value: localStorageMock })
 
-// Mock Audio API
+// Mock Audio API with real event handling
 class AudioMock {
   src = ''
   volume = 1
@@ -25,13 +25,48 @@ class AudioMock {
   paused = true
   muted = false
   loop = false
-  play = vi.fn(() => Promise.resolve())
-  pause = vi.fn()
+  readyState = 0
+  crossOrigin: string | null = null
+  preload = ''
+  error: MediaError | null = null
+  style = { display: '' }
+
+  private _listeners: Map<string, Set<EventListener>> = new Map()
+
+  play = vi.fn(() => {
+    this.paused = false
+    // Fire 'playing' asynchronously like a real element
+    Promise.resolve().then(() => this.emit('playing'))
+    return Promise.resolve()
+  })
+  pause = vi.fn(() => {
+    this.paused = true
+  })
   load = vi.fn()
-  addEventListener = vi.fn()
-  removeEventListener = vi.fn()
+  setAttribute = vi.fn()
+  getAttribute = vi.fn((_name: string) => null)
+
+  addEventListener(event: string, handler: EventListener) {
+    if (!this._listeners.has(event)) {
+      this._listeners.set(event, new Set())
+    }
+    this._listeners.get(event)!.add(handler)
+  }
+
+  removeEventListener(event: string, handler: EventListener) {
+    this._listeners.get(event)?.delete(handler)
+  }
+
+  /** Trigger an event on this mock element (for use in tests) */
+  emit(event: string) {
+    const handlers = this._listeners.get(event)
+    if (handlers) {
+      const evt = { target: this, type: event } as unknown as Event
+      handlers.forEach(h => h(evt))
+    }
+  }
 }
-Object.defineProperty(window, 'Audio', { value: AudioMock })
+Object.defineProperty(window, 'Audio', { value: AudioMock, writable: true })
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {
@@ -79,6 +114,7 @@ class AudioContextMock {
       value: 1,
       setValueAtTime: vi.fn(),
       linearRampToValueAtTime: vi.fn(),
+      setTargetAtTime: vi.fn(),
       cancelScheduledValues: vi.fn(),
     },
     connect: vi.fn(),

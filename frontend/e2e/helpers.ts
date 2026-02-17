@@ -204,3 +204,93 @@ export async function waitForAnalysisComplete(page: Page, timeout = 180000) {
 
   throw new Error('Analysis timed out');
 }
+
+// ============================================================================
+// Crossfade / Audio Playback Helpers
+// ============================================================================
+
+/**
+ * Get the state of all <audio> elements in the page
+ */
+export async function getAllAudioStates(page: Page) {
+  return page.evaluate(() => {
+    const elements = Array.from(document.querySelectorAll('audio'));
+    return elements.map((el, i) => ({
+      index: i,
+      src: el.src,
+      paused: el.paused,
+      currentTime: el.currentTime,
+      duration: el.duration,
+      volume: el.volume,
+      readyState: el.readyState,
+    }));
+  });
+}
+
+/**
+ * Check if at least one audio element is not paused
+ */
+export async function isAnyAudioPlaying(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const elements = Array.from(document.querySelectorAll('audio'));
+    return elements.some(el => !el.paused);
+  });
+}
+
+/**
+ * Seek the currently playing audio element to a specific time
+ */
+export async function seekAudio(page: Page, time: number) {
+  await page.evaluate((t) => {
+    const elements = Array.from(document.querySelectorAll('audio'));
+    const playing = elements.find(el => !el.paused);
+    if (playing) {
+      playing.currentTime = t;
+    }
+  }, time);
+}
+
+/**
+ * Wait for the displayed track title to change from the current one
+ */
+export async function waitForTrackChange(page: Page, currentTitle: string, timeout = 15000) {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeout) {
+    const title = await page.evaluate(() => {
+      // Look for track title in the player bar or full player
+      const el = document.querySelector('[data-testid="track-title"]') ||
+                 document.querySelector('.track-title');
+      return el?.textContent || '';
+    });
+    if (title && title !== currentTitle) {
+      return title;
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`Track title didn't change from "${currentTitle}" within ${timeout}ms`);
+}
+
+/**
+ * Detect if there's a gap in audio playback (all elements paused)
+ * during a given monitoring window.
+ * Returns true if a gap was detected.
+ */
+export async function detectAudioGap(page: Page, durationMs: number): Promise<boolean> {
+  return page.evaluate(async (ms) => {
+    const pollInterval = 50;
+    const end = Date.now() + ms;
+    let gapDetected = false;
+
+    while (Date.now() < end) {
+      const elements = Array.from(document.querySelectorAll('audio'));
+      const anyPlaying = elements.some(el => !el.paused && el.currentTime > 0);
+      if (!anyPlaying && elements.length > 0) {
+        gapDetected = true;
+        break;
+      }
+      await new Promise(r => setTimeout(r, pollInterval));
+    }
+
+    return gapDetected;
+  }, durationMs);
+}

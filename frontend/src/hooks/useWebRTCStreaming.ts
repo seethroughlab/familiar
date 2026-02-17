@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAudioEngine } from './useAudioEngine';
+import { getAudioContext, getGlobalMasterGain } from './audio/audioGraph';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('WebRTC');
@@ -44,7 +44,6 @@ export function useWebRTCStreaming({
   iceServers = [],
   onSendMessage,
 }: UseWebRTCStreamingOptions) {
-  const audioEngine = useAudioEngine();
   const [peers, setPeers] = useState<Map<string, PeerConnection>>(new Map());
   const [isStreaming, setIsStreaming] = useState(false);
   const [guestAudio, setGuestAudio] = useState<HTMLAudioElement | null>(null);
@@ -68,17 +67,17 @@ export function useWebRTCStreaming({
       return mediaStreamRef.current;
     }
 
-    const audioContext = audioEngine.audioGraph.audioContext;
-    if (!audioContext) {
+    const audioCtx = getAudioContext();
+    if (!audioCtx) {
       log.error('No audio context available');
       return null;
     }
 
     // Create a media stream destination from the audio context
-    const destination = audioContext.createMediaStreamDestination();
+    const destination = audioCtx.createMediaStreamDestination();
 
     // Get the audio engine's output node (master gain) and connect it to the destination
-    const outputNode = audioEngine.audioGraph.masterGain;
+    const outputNode = getGlobalMasterGain();
     if (outputNode) {
       outputNode.connect(destination);
     } else {
