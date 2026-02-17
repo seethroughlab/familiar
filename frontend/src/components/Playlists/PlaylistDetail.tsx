@@ -846,7 +846,7 @@ export function PlaylistDetail({ playlistId, onBack }: Props) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    isExternal ? toggleExternal(track.id) : toggleFavorite(track.id);
+                    if (isExternal) { toggleExternal(track.id); } else { toggleFavorite(track.id); }
                   }}
                   className={`flex-shrink-0 p-1 transition-colors ${
                     (isExternal ? isExternalFavorite(track.id) : isFavorite(track.id))

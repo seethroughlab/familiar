@@ -8,7 +8,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   executeCrossfade,
-  completeCrossfade,
   cancelCrossfade,
   preloadNextTrack,
 } from '../crossfade';
@@ -80,7 +79,6 @@ function createMockGainNode() {
   } as unknown as GainNode;
 }
 
-const trackA: Track = { id: 'track-a', title: 'Track A', artist: 'Artist', file_path: '/music/a.mp3' } as Track;
 const trackB: Track = { id: 'track-b', title: 'Track B', artist: 'Artist', file_path: '/music/b.mp3' } as Track;
 const trackC: Track = { id: 'track-c', title: 'Track C', artist: 'Artist', file_path: '/music/c.mp3' } as Track;
 

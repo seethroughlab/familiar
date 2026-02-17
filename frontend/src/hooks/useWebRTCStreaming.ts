@@ -87,7 +87,7 @@ export function useWebRTCStreaming({
 
     mediaStreamRef.current = destination.stream;
     return destination.stream;
-  }, [audioEngine]);
+  }, []);
 
   // Create a peer connection for a guest (host only)
   const createPeerConnection = useCallback((userId: string, peerId: string): RTCPeerConnection => {

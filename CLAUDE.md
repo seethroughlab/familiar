@@ -7,7 +7,7 @@ An LLM-powered local music player that combines library management with AI-power
 - **Backend**: Python FastAPI + PostgreSQL (pgvector) + Redis
 - **Frontend**: React + TypeScript + Vite + Tailwind + Zustand
 - **Analysis**: Audio embeddings and features extracted via librosa/torch
-- **LLM**: Claude API with tool-use (Ollama fallback)
+- **LLM**: Claude API with tool-use
 - **Offline**: IndexedDB (Dexie) for track caching, download queue, playlist cache
 
 ## Key Directories
@@ -15,7 +15,7 @@ An LLM-powered local music player that combines library management with AI-power
 ```
 backend/
 ├── app/
-│   ├── api/routes/      # FastAPI endpoints (~27 route files)
+│   ├── api/routes/      # FastAPI endpoints (~29 route files)
 │   ├── db/models.py     # SQLAlchemy models
 │   └── services/        # Business logic
 │       └── llm/         # LLM module (service.py, executor.py, tools.py, providers.py)
@@ -31,7 +31,7 @@ frontend/
 ├── e2e/                 # Playwright E2E tests
 dev/
 └── scripts/
-    └── deploy-dev.sh    # Fast deploy to NAS (~16-25s)
+    └── deploy-dev.sh    # Fast deploy to NAS (~16-30s)
 ```
 
 ## Key Files
@@ -67,7 +67,7 @@ dev/
 3. Bump `ANALYSIS_VERSION` in `config.py` to re-analyze existing tracks
 
 ### Add a new LLM tool
-1. Define tool schema in `MUSIC_PLAYER_TOOLS` list in `services/llm/tools.py`
+1. Define tool schema in `MUSIC_TOOLS` list in `services/llm/tools.py`
 2. Implement handler in `ToolExecutor` class in `services/llm/executor.py`
 3. Tools can query JSONB with PostgreSQL `->` operator
 
@@ -102,7 +102,7 @@ Screenshots for the README are auto-generated using Playwright:
 
 1. Ensure backend is running: `cd backend && make run`
 2. Start frontend dev server: `cd frontend && npm run dev`
-3. Run screenshot script: `cd frontend && BASE_URL=http://localhost:5173 npm run screenshots`
+3. Run screenshot script: `cd frontend && BASE_URL=http://localhost:3000 npm run screenshots`
 
 Screenshots are saved to `screenshots/` directory. The script is in `frontend/e2e/screenshots.spec.ts`.
 
@@ -150,7 +150,7 @@ npm run dev
 Backend and frontend run locally with hot-reload:
 ```bash
 # Terminal 1: Start database + redis
-docker compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # Terminal 2: Backend with hot-reload
 cd backend && make run
@@ -169,7 +169,7 @@ make dev-remote  # Vite dev server proxies to NAS backend
 
 **Full-stack changes:**
 ```bash
-make deploy-dev  # Build + rsync to NAS + restart (~16-25s)
+make deploy-dev  # Build + rsync to NAS + restart (~16-30s)
 ```
 
 **IMPORTANT:** Do NOT use the full Docker build + GitHub Actions workflow for iterative development - that takes ~1 hour per change. Use `make deploy-dev` instead.

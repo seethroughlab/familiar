@@ -46,11 +46,6 @@ vi.mock('../../../stores/toastStore', () => ({
   showError: vi.fn(),
 }));
 
-/** Flush all pending microtasks (resolved promises) */
-function flushMicrotasks(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 0));
-}
-
 describe('preloadNextTrack', () => {
   let nextElement: HTMLAudioElement;
 
