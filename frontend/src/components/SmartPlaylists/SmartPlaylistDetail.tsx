@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Loader2, Music, Zap, Clock, Download, Check, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api/client';
 import { PlayIndicator } from '../common/PlayIndicator';
@@ -101,12 +102,32 @@ function SmartPlaylistDiscoverySection({
 }
 
 interface Props {
-  playlist: SmartPlaylist;
-  onBack: () => void;
+  playlist?: SmartPlaylist;
+  onBack?: () => void;
 }
 
-export function SmartPlaylistDetail({ playlist, onBack }: Props) {
+export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp }: Props) {
+  const routeParams = useParams<{ id: string }>();
+  const routeNavigate = useNavigate();
+  const onBack = onBackProp || (() => routeNavigate(-1));
   const queryClient = useQueryClient();
+
+  // Fetch playlist from route param if not provided as prop
+  const { data: fetchedPlaylist } = useQuery({
+    queryKey: ['smart-playlist', routeParams.id],
+    queryFn: () => smartPlaylistsApi.get(routeParams.id!),
+    enabled: !playlistProp && !!routeParams.id,
+  });
+
+  const playlist = playlistProp || fetchedPlaylist;
+
+  if (!playlist) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);

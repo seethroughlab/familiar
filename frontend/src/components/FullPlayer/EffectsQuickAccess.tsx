@@ -137,13 +137,15 @@ export function EffectsQuickAccess() {
           )}
 
           <div className="p-2 border-t border-zinc-700">
-            <a
-              href="#settings"
-              onClick={() => setIsOpen(false)}
-              className="block text-center text-xs text-zinc-400 hover:text-white py-1 transition-colors"
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                window.dispatchEvent(new Event('navigate-to-settings'));
+              }}
+              className="block w-full text-center text-xs text-zinc-400 hover:text-white py-1 transition-colors"
             >
               More options in Settings
-            </a>
+            </button>
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
 import { PlayIndicator } from '../common/PlayIndicator';
 import {
   ArrowLeft,
@@ -160,8 +161,8 @@ function ArtistDiscoverySection({
 }
 
 interface Props {
-  artistName: string;
-  onBack: () => void;
+  artistName?: string;
+  onBack?: () => void;
   onGoToAlbum?: (artistName: string, albumName: string) => void;
   onGoToGenre?: (genre: string) => void;
   onGoToYear?: (year: number) => void;
@@ -172,7 +173,12 @@ const LAZY_QUEUE_THRESHOLD = 50;
 // Number of tracks to show before collapsing
 const COLLAPSED_TRACK_COUNT = 15;
 
-export function ArtistDetail({ artistName, onBack, onGoToAlbum, onGoToGenre, onGoToYear }: Props) {
+export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, onGoToAlbum, onGoToGenre, onGoToYear }: Props) {
+  // Support both route params and props
+  const routeParams = useParams<{ name: string }>();
+  const routeNavigate = useNavigate();
+  const artistName = artistNameProp || (routeParams.name ? decodeURIComponent(routeParams.name) : '');
+  const onBack = onBackProp || (() => routeNavigate(-1));
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffle = usePlayerStore((s) => s.shuffle);

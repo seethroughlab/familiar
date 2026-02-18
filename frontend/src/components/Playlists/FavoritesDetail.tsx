@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
 import { favoritesApi } from '../../api/client';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -27,10 +28,12 @@ type FavoriteItem =
   | (ExternalFavoriteTrack & { _kind: 'external' });
 
 interface Props {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
-export function FavoritesDetail({ onBack }: Props) {
+export function FavoritesDetail({ onBack: onBackProp }: Props) {
+  const routeNavigate = useNavigate();
+  const onBack = onBackProp || (() => routeNavigate(-1));
   const queryClient = useQueryClient();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);

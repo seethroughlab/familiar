@@ -7,7 +7,7 @@
  * - Unmatched Spotify favorites
  */
 import { useQuery } from '@tanstack/react-query';
-import { useHashSearchParams } from '../../../hooks/useHashSearchParams';
+import { useNavigate } from 'react-router-dom';
 import {
   Disc,
   Music,
@@ -44,7 +44,7 @@ registerBrowser(
 );
 
 export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
-  const [, setSearchParams] = useHashSearchParams();
+  const discoverNavigate = useNavigate();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['library-discover'],
@@ -105,7 +105,7 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
     if (onGoToArtist) {
       onGoToArtist(artistName);
     } else {
-      setSearchParams({ artistDetail: artistName });
+      discoverNavigate(`/library/artists/${encodeURIComponent(artistName)}`);
     }
   };
 

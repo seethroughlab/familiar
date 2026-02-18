@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Download, Music, Trash2, HardDrive, X, Search } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { PlayIndicator } from '../common/PlayIndicator';
@@ -21,10 +22,12 @@ import { createLogger } from '../../utils/logger';
 const log = createLogger('DownloadsDetail');
 
 interface Props {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
-export function DownloadsDetail({ onBack }: Props) {
+export function DownloadsDetail({ onBack: onBackProp }: Props) {
+  const routeNavigate = useNavigate();
+  const onBack = onBackProp || (() => routeNavigate(-1));
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);

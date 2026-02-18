@@ -12,7 +12,7 @@
  */
 import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useHashSearchParams } from '../../../hooks/useHashSearchParams';
+import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import { tracksApi } from '../../../api/client';
@@ -431,7 +431,7 @@ export function TrackListBrowser({
   onEditTrack,
   offlineTrackIds,
 }: BrowserProps) {
-  const [, setSearchParams] = useHashSearchParams();
+  const trackListNavigate = useNavigate();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffle = usePlayerStore((s) => s.shuffle);
@@ -455,14 +455,9 @@ export function TrackListBrowser({
   // Navigate to ego music map with artist
   const handleExploreSimilarArtists = useCallback(
     (artistName: string) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set('browser', 'ego-music-map');
-        next.set('center', artistName);
-        return next;
-      });
+      trackListNavigate(`/library/music-map?center=${encodeURIComponent(artistName)}`);
     },
-    [setSearchParams]
+    [trackListNavigate]
   );
 
   // Drag & drop state for columns

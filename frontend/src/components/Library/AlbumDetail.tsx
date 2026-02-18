@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Play,
@@ -235,9 +236,9 @@ function AlbumDiscoverySection({
 }
 
 interface Props {
-  artistName: string;
-  albumName: string;
-  onBack: () => void;
+  artistName?: string;
+  albumName?: string;
+  onBack?: () => void;
   onGoToArtist?: (artistName: string) => void;
   onGoToAlbum?: (artistName: string, albumName: string) => void;
   onGoToYear?: (year: number) => void;
@@ -245,14 +246,21 @@ interface Props {
 }
 
 export function AlbumDetail({
-  artistName,
-  albumName,
-  onBack,
+  artistName: artistNameProp,
+  albumName: albumNameProp,
+  onBack: onBackProp,
   onGoToArtist,
   onGoToAlbum,
   onGoToYear,
   onGoToGenre,
 }: Props) {
+  // Support both route params and props
+  const routeParams = useParams<{ artist: string; album: string }>();
+  const routeNavigate = useNavigate();
+  const artistName = artistNameProp || (routeParams.artist ? decodeURIComponent(routeParams.artist) : '');
+  const albumName = albumNameProp || (routeParams.album ? decodeURIComponent(routeParams.album) : '');
+  const onBack = onBackProp || (() => routeNavigate(-1));
+
   const { currentTrack, isPlaying, setQueue, addToQueue, setIsPlaying } =
     usePlayerStore();
   const [contextMenu, setContextMenu] =

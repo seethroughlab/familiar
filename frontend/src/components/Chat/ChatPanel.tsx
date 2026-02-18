@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff, X } from 'lucide-react';
 import { getApiUrl } from '../../api/base';
 import { createLogger } from '../../utils/logger';
@@ -6,7 +7,6 @@ import { createLogger } from '../../utils/logger';
 const log = createLogger('ChatPanel');
 import { useQueryClient } from '@tanstack/react-query';
 import { usePlayerStore } from '../../stores/playerStore';
-import { useLibraryViewStore } from '../../stores/libraryViewStore';
 import { useVisibleTracksStore } from '../../stores/visibleTracksStore';
 import { useEphemeralPlaylistStore, type EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
@@ -33,6 +33,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }: ChatPanelProps = {}) {
+  const chatNavigate = useNavigate();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [input, setInput] = useState('');
@@ -422,8 +423,8 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       case 'navigate': {
         const view = event.view as string;
         if (view === 'proposed-changes') {
-          // Switch to Proposed Changes browser view
-          useLibraryViewStore.getState().setSelectedBrowserId('proposed-changes');
+          // Navigate to Proposed Changes browser view
+          chatNavigate('/library/proposed-changes');
           // Refresh the changes list
           queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
           queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });

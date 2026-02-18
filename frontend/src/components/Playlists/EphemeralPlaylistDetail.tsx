@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Clock, Save, Trash2, Loader2, Music, Search, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { PlayIndicator } from '../common/PlayIndicator';
@@ -13,15 +14,16 @@ import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
 import { getColumnDef } from '../Library/columnDefinitions';
 import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
 import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
+import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import type { Track } from '../../types';
 
 interface Props {
-  playlist: EphemeralPlaylist;
-  onBack: () => void;
-  onSave: () => Promise<void>;
-  onDelete: () => void;
-  isSaving: boolean;
+  playlist?: EphemeralPlaylist;
+  onBack?: () => void;
+  onSave?: () => Promise<void>;
+  onDelete?: () => void;
+  isSaving?: boolean;
 }
 
 function toFullTrack(t: EphemeralTrack): Track {
@@ -43,7 +45,42 @@ function toFullTrack(t: EphemeralTrack): Track {
   };
 }
 
-export function EphemeralPlaylistDetail({ playlist, onBack, onSave, onDelete, isSaving }: Props) {
+export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBackProp, onSave: onSaveProp, onDelete: onDeleteProp, isSaving: isSavingProp }: Props) {
+  // Support route params
+  const routeParams = useParams<{ id: string }>();
+  const routeNavigate = useNavigate();
+  const ephemeralPlaylists = useEphemeralPlaylistStore((s) => s.playlists);
+  const removeEphemeral = useEphemeralPlaylistStore((s) => s.removePlaylist);
+  const saveEphemeralPlaylist = useSaveEphemeralPlaylist();
+  const [routeSaving, setRouteSaving] = useState(false);
+
+  const playlist = playlistProp || ephemeralPlaylists.find((p) => p.id === routeParams.id);
+  const onBack = onBackProp || (() => routeNavigate(-1));
+  const isSaving = isSavingProp ?? routeSaving;
+  const onSave = onSaveProp || (async () => {
+    if (!playlist) return;
+    setRouteSaving(true);
+    try {
+      const savedId = await saveEphemeralPlaylist(playlist.id);
+      routeNavigate(`/playlists/${savedId}`, { replace: true });
+    } finally {
+      setRouteSaving(false);
+    }
+  });
+  const onDelete = onDeleteProp || (() => {
+    if (playlist) {
+      removeEphemeral(playlist.id);
+      routeNavigate(-1);
+    }
+  });
+
+  if (!playlist) {
+    return (
+      <div className="flex items-center justify-center py-12 text-zinc-500">
+        Playlist not found or has been discarded
+      </div>
+    );
+  }
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);

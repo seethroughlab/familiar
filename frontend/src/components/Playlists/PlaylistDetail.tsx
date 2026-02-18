@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Search, RotateCw } from 'lucide-react';
 import { playlistsApi, tracksApi } from '../../api/client';
 import { PlayIndicator } from '../common/PlayIndicator';
@@ -121,11 +122,15 @@ function PlaylistDiscoverySection({
 }
 
 interface Props {
-  playlistId: string;
-  onBack: () => void;
+  playlistId?: string;
+  onBack?: () => void;
 }
 
-export function PlaylistDetail({ playlistId, onBack }: Props) {
+export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp }: Props) {
+  const routeParams = useParams<{ id: string }>();
+  const routeNavigate = useNavigate();
+  const playlistId = playlistIdProp || routeParams.id || '';
+  const onBack = onBackProp || (() => routeNavigate(-1));
   const queryClient = useQueryClient();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
