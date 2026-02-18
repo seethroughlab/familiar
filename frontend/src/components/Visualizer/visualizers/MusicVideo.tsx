@@ -16,6 +16,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { videosApi, type VideoSearchResult } from '../../../api/client';
+import { usePlayerStore } from '../../../stores/playerStore';
 import { registerVisualizer, type VisualizerProps } from '../types';
 
 function formatDuration(seconds: number): string {
@@ -24,10 +25,12 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function MusicVideo({ track, currentTime, isPlaying }: VisualizerProps) {
+function MusicVideo({ track, isPlaying }: VisualizerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showSearch, setShowSearch] = useState(false);
   const queryClient = useQueryClient();
+  // Read currentTime directly from store (avoids prop cascade from FullPlayer)
+  const currentTime = usePlayerStore((s) => s.currentTime);
   const trackId = track?.id ?? null;
 
   // Get video status

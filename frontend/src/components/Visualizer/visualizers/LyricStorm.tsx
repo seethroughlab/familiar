@@ -13,6 +13,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
+import { usePlayerStore } from '../../../stores/playerStore';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 
@@ -56,6 +57,7 @@ function SwarmParticles() {
   }, []);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const tempColor = useMemo(() => new THREE.Color(), []);
 
   useFrame((state) => {
     if (!meshRef.current) return;
@@ -100,8 +102,8 @@ function SwarmParticles() {
 
       // Color based on position and audio
       const hue = (0.7 + s * 0.2 + mid * 0.1) % 1;
-      const color = new THREE.Color().setHSL(hue, 0.8, 0.3 + bass * 0.2);
-      meshRef.current!.setColorAt(i, color);
+      tempColor.setHSL(hue, 0.8, 0.3 + bass * 0.2);
+      meshRef.current!.setColorAt(i, tempColor);
     });
 
     meshRef.current.instanceMatrix.needsUpdate = true;
@@ -366,11 +368,9 @@ function LyricStormScene({
 function TextOverlay({
   currentLine,
   nextLine,
-  audioData,
 }: {
   currentLine: string;
   nextLine: string;
-  audioData: ReturnType<typeof useAudioAnalyser>;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -398,6 +398,8 @@ function TextOverlay({
       // Clear
       ctx.clearRect(0, 0, width, height);
 
+      // Read audio data directly (no React re-renders needed)
+      const audioData = getAudioData();
       const bass = audioData?.bass ?? 0;
       const intensity = (audioData?.averageFrequency ?? 0) / 255;
 
@@ -446,7 +448,7 @@ function TextOverlay({
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, [currentLine, nextLine, audioData]);
+  }, [currentLine, nextLine]);
 
   return (
     <canvas
@@ -457,8 +459,11 @@ function TextOverlay({
   );
 }
 
-export function LyricStorm({ lyrics, currentTime, track }: VisualizerProps) {
-  const audioData = useAudioAnalyser(true);
+export function LyricStorm({ lyrics, track }: VisualizerProps) {
+  useAudioAnalyser(true);
+
+  // Read currentTime directly from store (only LyricStorm needs it)
+  const currentTime = usePlayerStore((s) => s.currentTime);
 
   // Extract all unique words from lyrics
   const allWords = useMemo(() => {
@@ -509,7 +514,7 @@ export function LyricStorm({ lyrics, currentTime, track }: VisualizerProps) {
         />
       </Canvas>
 
-      <TextOverlay currentLine={currentLine} nextLine={nextLine} audioData={audioData} />
+      <TextOverlay currentLine={currentLine} nextLine={nextLine} />
     </div>
   );
 }

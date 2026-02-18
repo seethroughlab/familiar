@@ -17,8 +17,6 @@ interface AudioVisualizerProps {
   track?: Track | null;
   artworkUrl?: string | null;
   lyrics?: LyricLine[] | null;
-  currentTime?: number;
-  duration?: number;
   isPlaying?: boolean;
   features?: TrackFeatures | null;
   className?: string;
@@ -36,8 +34,6 @@ export function AudioVisualizer({
   track = null,
   artworkUrl = null,
   lyrics = null,
-  currentTime = 0,
-  duration = 0,
   isPlaying = false,
   features = null,
   className = '',
@@ -64,8 +60,8 @@ export function AudioVisualizer({
           track={track}
           artworkUrl={artworkUrl}
           lyrics={lyrics}
-          currentTime={currentTime}
-          duration={duration}
+          currentTime={0}
+          duration={0}
           isPlaying={isPlaying}
           features={features}
         />

@@ -1320,6 +1320,30 @@ async def stream_track(
         logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)
         raise HTTPException(status_code=404, detail="Audio file not found")
 
+    # Fix FLAC files missing PTS timestamps (causes Chromium playback errors)
+    if file_path.suffix.lower() == ".flac":
+        from app.services.flac_remux import needs_remux, remux_flac_in_place
+
+        try:
+            if await needs_remux(file_path):
+                logger.info("Re-muxing FLAC for PTS fix: %s", file_path.name)
+                await remux_flac_in_place(file_path)
+                # Update hash/size so scanner doesn't detect false change
+                from app.services.scanner import compute_file_hash
+
+                track.file_hash = compute_file_hash(file_path)
+                track.file_size = file_path.stat().st_size
+                track.file_modified_at = datetime.fromtimestamp(
+                    file_path.stat().st_mtime
+                )
+                await db.commit()
+        except Exception:
+            logger.warning(
+                "FLAC PTS check/re-mux failed for %s, serving as-is",
+                track_id,
+                exc_info=True,
+            )
+
     # Transcode formats that browsers can't natively decode
     if file_path.suffix.lower() in TRANSCODE_EXTENSIONS:
         logger.debug("Transcoding track_id=%s path=%s to FLAC", track_id, file_path)

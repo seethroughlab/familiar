@@ -256,8 +256,6 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             track={currentTrack}
             artworkUrl={artworkUrl}
             lyrics={lyrics}
-            currentTime={currentTime}
-            duration={duration}
             isPlaying={isPlaying}
             className="absolute inset-0"
           />

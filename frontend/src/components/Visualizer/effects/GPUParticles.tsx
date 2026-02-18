@@ -73,7 +73,8 @@ function noise3D(x: number, y: number, z: number): number {
   );
 }
 
-// Curl noise for fluid-like motion
+// Curl noise for fluid-like motion (reuses a single Vector3)
+const _curlVec = new THREE.Vector3();
 function curlNoise(x: number, y: number, z: number, time: number): THREE.Vector3 {
   const eps = 0.0001;
   const n1 = noise3D(x, y + eps, z + time);
@@ -83,13 +84,13 @@ function curlNoise(x: number, y: number, z: number, time: number): THREE.Vector3
   const n5 = noise3D(x + eps, y, z + time);
   const n6 = noise3D(x - eps, y, z + time);
 
-  const curl = new THREE.Vector3(
+  _curlVec.set(
     (n1 - n2 - n3 + n4) / (2 * eps),
     (n3 - n4 - n5 + n6) / (2 * eps),
     (n5 - n6 - n1 + n2) / (2 * eps)
   );
 
-  return curl.normalize();
+  return _curlVec.normalize();
 }
 
 export function GPUParticles({
@@ -144,6 +145,7 @@ export function GPUParticles({
   }, [count, spread, color, secondaryColor]);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const tempColor = useMemo(() => new THREE.Color(), []);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -252,13 +254,12 @@ export function GPUParticles({
 
       // Update color based on audio
       const hueShift = intensity * 0.1;
-      const instanceColor = new THREE.Color();
-      instanceColor.setRGB(
+      tempColor.setRGB(
         colors[i3] + hueShift,
         colors[i3 + 1],
         colors[i3 + 2] + hueShift * 0.5
       );
-      meshRef.current.setColorAt(i, instanceColor);
+      meshRef.current.setColorAt(i, tempColor);
     }
 
     meshRef.current.instanceMatrix.needsUpdate = true;

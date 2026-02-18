@@ -503,7 +503,7 @@ export function useAudioEngine() {
       animationFrameId = requestAnimationFrame(loop);
 
       const now = performance.now();
-      if (now - lastTimeUpdate < 16) return;
+      if (now - lastTimeUpdate < 250) return; // ~4Hz — sufficient for seek bar UI
       lastTimeUpdate = now;
 
       const el = getCurrentElement();

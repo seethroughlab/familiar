@@ -204,6 +204,7 @@ function SparkleParticles({ segments }: { segments: number }) {
   }, [segments]);
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const tempColor = useMemo(() => new THREE.Color(), []);
   const particleIndex = useRef(0);
 
   useFrame((_, delta) => {
@@ -274,8 +275,8 @@ function SparkleParticles({ segments }: { segments: number }) {
 
       // Color based on segment - create rainbow effect (reduced brightness)
       const hue = (segmentIndices[i] / segments + time * 0.1) % 1;
-      const color = new THREE.Color().setHSL(hue, 0.8, 0.4 + lifetimes[i] * 0.2);
-      meshRef.current.setColorAt(i, color);
+      tempColor.setHSL(hue, 0.8, 0.4 + lifetimes[i] * 0.2);
+      meshRef.current.setColorAt(i, tempColor);
     }
 
     meshRef.current.instanceMatrix.needsUpdate = true;

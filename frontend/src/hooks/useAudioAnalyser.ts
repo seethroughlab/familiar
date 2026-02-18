@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useEffect } from 'react';
 import { getAudioAnalyser, getAudioContext } from './audio/audioGraph';
 
 export interface AudioAnalysisData {
@@ -10,106 +10,129 @@ export interface AudioAnalysisData {
   treble: number;
 }
 
-// Shared ref for audio data that can be read inside useFrame
+// ---------------------------------------------------------------------------
+// Singleton analysis loop — one rAF loop shared by all hook instances.
+// Components read the latest data via getAudioData() (typically inside
+// R3F useFrame). No React state updates are triggered by the loop.
+// ---------------------------------------------------------------------------
+
 const sharedAudioDataRef: { current: AudioAnalysisData | null } = { current: null };
 
-// Get current audio data synchronously (for use in useFrame)
+let subscriberCount = 0;
+let loopRunning = false;
+let animationFrameId: number | undefined;
+
+// Persistent output object (mutated in place, buffers reused every frame)
+let sharedData: AudioAnalysisData | null = null;
+let lastBinCount = 0;
+
+function analyseLoop() {
+  if (!loopRunning) return;
+  animationFrameId = requestAnimationFrame(analyseLoop);
+
+  const analyser = getAudioAnalyser();
+  const context = getAudioContext();
+
+  if (!analyser || !context || context.state !== 'running') {
+    return;
+  }
+
+  // Lazily allocate buffers once (when analyser size is known)
+  const binCount = analyser.frequencyBinCount;
+  if (!sharedData || lastBinCount !== binCount) {
+    lastBinCount = binCount;
+    sharedData = {
+      frequencyData: new Uint8Array(binCount),
+      timeDomainData: new Uint8Array(binCount),
+      averageFrequency: 0,
+      bass: 0,
+      mid: 0,
+      treble: 0,
+    };
+  }
+
+  // Read directly into the shared buffers (no allocations, no copy)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  analyser.getByteFrequencyData(sharedData.frequencyData as any);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  analyser.getByteTimeDomainData(sharedData.timeDomainData as any);
+
+  // Calculate average frequency
+  const freqData = sharedData.frequencyData;
+  let sum = 0;
+  for (let i = 0; i < binCount; i++) {
+    sum += freqData[i];
+  }
+
+  // Split into bass, mid, treble ranges
+  const bassEnd = Math.floor(binCount * 0.1);
+  const midEnd = Math.floor(binCount * 0.5);
+
+  let bassSum = 0;
+  for (let i = 0; i < bassEnd; i++) {
+    bassSum += freqData[i];
+  }
+
+  let midSum = 0;
+  for (let i = bassEnd; i < midEnd; i++) {
+    midSum += freqData[i];
+  }
+
+  let trebleSum = 0;
+  for (let i = midEnd; i < binCount; i++) {
+    trebleSum += freqData[i];
+  }
+
+  sharedData.averageFrequency = sum / binCount;
+  sharedData.bass = bassSum / bassEnd / 255;
+  sharedData.mid = midSum / (midEnd - bassEnd) / 255;
+  sharedData.treble = trebleSum / (binCount - midEnd) / 255;
+
+  sharedAudioDataRef.current = sharedData;
+}
+
+function startLoop() {
+  if (loopRunning) return;
+  loopRunning = true;
+  animationFrameId = requestAnimationFrame(analyseLoop);
+}
+
+function stopLoop() {
+  loopRunning = false;
+  if (animationFrameId !== undefined) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = undefined;
+  }
+}
+
+// Get current audio data synchronously (for use in useFrame / rAF loops)
 export function getAudioData(): AudioAnalysisData | null {
   return sharedAudioDataRef.current;
 }
 
+/**
+ * Subscribe to the audio analysis loop. The first subscriber starts
+ * the singleton rAF loop; the last unsubscriber stops it.
+ *
+ * Most consumers should read data via getAudioData() inside useFrame.
+ * The returned value is the current snapshot (not reactive — no
+ * React re-renders are triggered by audio data changes).
+ */
 export function useAudioAnalyser(enabled: boolean = true): AudioAnalysisData | null {
-  const [data, setData] = useState<AudioAnalysisData | null>(null);
-  const animationFrameRef = useRef<number | undefined>(undefined);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const frequencyDataRef = useRef<any>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const timeDomainDataRef = useRef<any>(null);
-
-  const analyse = useCallback(() => {
-    const analyser = getAudioAnalyser();
-    const context = getAudioContext();
-
-    if (!analyser || !context || context.state !== 'running') {
-      animationFrameRef.current = requestAnimationFrame(analyse);
-      return;
-    }
-
-    // Initialize data arrays if needed
-    if (!frequencyDataRef.current) {
-      frequencyDataRef.current = new Uint8Array(analyser.frequencyBinCount);
-    }
-    if (!timeDomainDataRef.current) {
-      timeDomainDataRef.current = new Uint8Array(analyser.frequencyBinCount);
-    }
-
-    // Get frequency and time domain data
-    analyser.getByteFrequencyData(frequencyDataRef.current);
-    analyser.getByteTimeDomainData(timeDomainDataRef.current);
-
-    const freqData = frequencyDataRef.current;
-    const binCount = freqData.length;
-
-    // Calculate average frequency (overall volume/intensity)
-    let sum = 0;
-    for (let i = 0; i < binCount; i++) {
-      sum += freqData[i];
-    }
-    const averageFrequency = sum / binCount;
-
-    // Split into bass, mid, treble ranges
-    // Bass: 0-10% of frequency bins (roughly 20-200Hz)
-    // Mid: 10-50% (roughly 200Hz-2kHz)
-    // Treble: 50-100% (roughly 2kHz-20kHz)
-    const bassEnd = Math.floor(binCount * 0.1);
-    const midEnd = Math.floor(binCount * 0.5);
-
-    let bassSum = 0;
-    for (let i = 0; i < bassEnd; i++) {
-      bassSum += freqData[i];
-    }
-    const bass = bassSum / bassEnd;
-
-    let midSum = 0;
-    for (let i = bassEnd; i < midEnd; i++) {
-      midSum += freqData[i];
-    }
-    const mid = midSum / (midEnd - bassEnd);
-
-    let trebleSum = 0;
-    for (let i = midEnd; i < binCount; i++) {
-      trebleSum += freqData[i];
-    }
-    const treble = trebleSum / (binCount - midEnd);
-
-    const newData: AudioAnalysisData = {
-      frequencyData: new Uint8Array(freqData),
-      timeDomainData: new Uint8Array(timeDomainDataRef.current),
-      averageFrequency,
-      bass: bass / 255,
-      mid: mid / 255,
-      treble: treble / 255,
-    };
-
-    // Update shared ref for useFrame access
-    sharedAudioDataRef.current = newData;
-
-    setData(newData);
-
-    animationFrameRef.current = requestAnimationFrame(analyse);
-  }, []);
-
   useEffect(() => {
-    if (enabled) {
-      animationFrameRef.current = requestAnimationFrame(analyse);
-    }
+    if (!enabled) return;
+
+    subscriberCount++;
+    startLoop();
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      subscriberCount--;
+      if (subscriberCount <= 0) {
+        subscriberCount = 0;
+        stopLoop();
       }
     };
-  }, [enabled, analyse]);
+  }, [enabled]);
 
-  return data;
+  return enabled ? sharedAudioDataRef.current : null;
 }
