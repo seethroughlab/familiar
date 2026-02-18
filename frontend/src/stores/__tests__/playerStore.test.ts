@@ -131,6 +131,31 @@ describe('playerStore', () => {
       expect(state.shuffleIndex).toBe(-1)
     })
 
+    it('should enable shuffle even with empty queue', () => {
+      const { toggleShuffle } = usePlayerStore.getState()
+
+      // Toggle shuffle with no queue
+      toggleShuffle()
+
+      const state = usePlayerStore.getState()
+      expect(state.shuffle).toBe(true)
+      expect(state.shuffleOrder).toEqual([])
+      expect(state.shuffleIndex).toBe(-1)
+    })
+
+    it('should enable shuffle with single track in queue', () => {
+      const track1 = createMockTrack('1')
+      const { setQueue, toggleShuffle } = usePlayerStore.getState()
+      setQueue([track1], 0)
+
+      toggleShuffle()
+
+      const state = usePlayerStore.getState()
+      expect(state.shuffle).toBe(true)
+      expect(state.shuffleOrder).toEqual([])
+      expect(state.shuffleIndex).toBe(-1)
+    })
+
     it('should include all tracks in shuffle order', () => {
       const tracks = Array.from({ length: 10 }, (_, i) =>
         createMockTrack(`${i}`, `Track ${i}`)

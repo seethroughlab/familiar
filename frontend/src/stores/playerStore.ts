@@ -326,16 +326,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         log.error('Failed to refresh lazy queue with new shuffle state:', error);
         // Rollback shuffle state on failure
         set({ shuffle: previousShuffle });
+        persistState();
       }
 
       return;
     }
 
     // Standard queue mode
-    if (newShuffle && queue.length > 1) {
-      // Enabling shuffle: generate order starting from current track
-      const shuffleOrder = generateShuffleOrder(queue.length, queueIndex);
-      set({ shuffle: true, shuffleOrder, shuffleIndex: 0 });
+    if (newShuffle) {
+      // Enabling shuffle: generate order starting from current track (if queue has tracks)
+      const shuffleOrder = queue.length > 1
+        ? generateShuffleOrder(queue.length, queueIndex)
+        : [];
+      set({ shuffle: true, shuffleOrder, shuffleIndex: shuffleOrder.length > 0 ? 0 : -1 });
     } else {
       // Disabling shuffle: clear shuffle state, keep current track playing
       set({ shuffle: false, shuffleOrder: [], shuffleIndex: -1 });
