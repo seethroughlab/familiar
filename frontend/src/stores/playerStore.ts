@@ -497,7 +497,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       newQueue.splice(removedIndex, 1);
 
       if (newQueue.length === 0) {
-        set({ queue: [], queueIndex: -1, currentTrack: null, isPlaying: false, shuffleOrder: [], shuffleIndex: -1 });
+        set({ queue: [], queueIndex: -1, isPlaying: false, shuffleOrder: [], shuffleIndex: -1 });
         persistState();
         return;
       }
@@ -831,7 +831,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       newQueue.splice(removedIndex, 1);
 
       if (newQueue.length === 0) {
-        set({ queue: [], queueIndex: -1, currentTrack: null, isPlaying: false, crossfadeState: 'idle', nextTrackPreloaded: false, shuffleOrder: [], shuffleIndex: -1 });
+        set({ queue: [], queueIndex: -1, isPlaying: false, crossfadeState: 'idle', nextTrackPreloaded: false, shuffleOrder: [], shuffleIndex: -1 });
         persistState();
         return;
       }

@@ -238,7 +238,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const hasAnyFavorites = sortedFavorites.length > 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4">
       {/* Header */}
       <div className="space-y-4">
         <button

@@ -142,13 +142,7 @@ export function PlayerBar({
     touchStartRef.current = null;
   }, [onExpandClick]);
 
-  if (!currentTrack) {
-    return (
-      <div className="fixed bottom-12 md:bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 z-20 flex items-center justify-center text-zinc-500 h-20 pb-safe-bottom">
-        No track selected
-      </div>
-    );
-  }
+  const hasTrack = !!currentTrack;
 
   return (
     <div className="fixed bottom-12 md:bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 z-20 pb-safe-bottom">
@@ -169,29 +163,45 @@ export function PlayerBar({
             onContextMenu={handleContextMenu}
             className="flex items-center gap-3 flex-1 min-w-0 text-left"
             aria-label="Expand player"
+            disabled={!hasTrack}
           >
-            <AlbumArt trackId={currentTrack.id} />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
-                {isPreview && (
-                  <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded">
-                    Preview
-                  </span>
-                )}
+            {currentTrack ? (
+              <AlbumArt trackId={currentTrack.id} />
+            ) : (
+              <div className="w-12 h-12 bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
+                <Music className="w-6 h-6 text-zinc-600" />
               </div>
-              <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
+            )}
+            <div className="min-w-0 flex-1">
+              {currentTrack ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
+                    {isPreview && (
+                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded">
+                        Preview
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
+                </>
+              ) : (
+                <div className="text-sm text-zinc-500">No track selected</div>
+              )}
             </div>
           </button>
-          <ChevronUp
-            className="w-5 h-5 text-zinc-500 flex-shrink-0"
-            onClick={onExpandClick}
-          />
+          {hasTrack && (
+            <ChevronUp
+              className="w-5 h-5 text-zinc-500 flex-shrink-0"
+              onClick={onExpandClick}
+            />
+          )}
           <button
             data-testid="play-pause-mobile"
             onClick={togglePlayPause}
-            className="p-3 bg-white text-black rounded-full flex-shrink-0"
+            className={`p-3 rounded-full flex-shrink-0 ${hasTrack ? 'bg-white text-black' : 'bg-zinc-700 text-zinc-500'}`}
             aria-label={isLoadingAudio ? 'Loading' : isPlaying ? 'Pause' : 'Play'}
+            disabled={!hasTrack}
           >
             {isLoadingAudio ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -206,8 +216,8 @@ export function PlayerBar({
         <div className="px-4 pb-2">
           <div
             data-testid="progress-bar-mobile"
-            className="py-2 cursor-pointer"
-            onClick={handleSeek}
+            className={`py-2 ${hasTrack ? 'cursor-pointer' : ''}`}
+            onClick={hasTrack ? handleSeek : undefined}
           >
             <div className="h-1 bg-zinc-700 rounded-full">
               <div
@@ -223,31 +233,45 @@ export function PlayerBar({
       <div className="hidden sm:flex h-20 max-w-screen-2xl mx-auto px-4 items-center gap-4">
         {/* Track info - clickable to expand, right-click for context menu */}
         <button
-          onClick={onExpandClick}
+          onClick={hasTrack ? onExpandClick : undefined}
           onContextMenu={handleContextMenu}
-          className="flex items-center gap-3 w-64 min-w-0 text-left hover:bg-zinc-800/50 rounded-lg p-1 -ml-1 transition-colors group"
+          className={`flex items-center gap-3 w-64 min-w-0 text-left rounded-lg p-1 -ml-1 transition-colors group ${hasTrack ? 'hover:bg-zinc-800/50' : ''}`}
           aria-label="Expand player"
+          disabled={!hasTrack}
         >
-          <AlbumArt trackId={currentTrack.id} />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
-              {isPreview && (
-                <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded">
-                  Preview
-                </span>
-              )}
+          {currentTrack ? (
+            <AlbumArt trackId={currentTrack.id} />
+          ) : (
+            <div className="w-12 h-12 bg-zinc-800 rounded flex-shrink-0 flex items-center justify-center">
+              <Music className="w-6 h-6 text-zinc-600" />
             </div>
-            <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
+          )}
+          <div className="min-w-0 flex-1">
+            {currentTrack ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span data-testid="current-track-title" className="font-medium truncate">{currentTrack.title || 'Unknown'}</span>
+                  {isPreview && (
+                    <span className="flex-shrink-0 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider bg-amber-500/20 text-amber-400 rounded">
+                      Preview
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-zinc-400 truncate">{currentTrack.artist || 'Unknown'}</div>
+              </>
+            ) : (
+              <div className="text-sm text-zinc-500">No track selected</div>
+            )}
           </div>
         </button>
 
         {/* Standalone expand button */}
         <button
           onClick={onExpandClick}
-          className="p-2 hover:bg-zinc-800 rounded-full transition-colors text-zinc-400 hover:text-white"
+          className={`p-2 rounded-full transition-colors ${hasTrack ? 'text-zinc-400 hover:text-white hover:bg-zinc-800' : 'text-zinc-600'}`}
           aria-label="Expand player"
           title="Expand player (F)"
+          disabled={!hasTrack}
         >
           <ChevronUp className="w-5 h-5" />
         </button>
@@ -258,26 +282,29 @@ export function PlayerBar({
             <button
               onClick={toggleShuffle}
               className={`p-2 rounded-full transition-colors ${
-                shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+                !hasTrack ? 'text-zinc-600' : shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
               }`}
               aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
               aria-pressed={shuffle}
+              disabled={!hasTrack}
             >
               <Shuffle className="w-4 h-4" />
             </button>
             <button
               data-testid="prev-track"
               onClick={playPrevious}
-              className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
+              className={`p-2 rounded-full transition-colors ${hasTrack ? 'hover:bg-zinc-800' : 'text-zinc-600'}`}
               aria-label="Previous track"
+              disabled={!hasTrack}
             >
               <SkipBack className="w-5 h-5" />
             </button>
             <button
               data-testid="play-pause"
               onClick={togglePlayPause}
-              className="p-3 bg-white text-black rounded-full hover:scale-105 transition-transform"
+              className={`p-3 rounded-full transition-transform ${hasTrack ? 'bg-white text-black hover:scale-105' : 'bg-zinc-700 text-zinc-500'}`}
               aria-label={isLoadingAudio ? 'Loading' : isPlaying ? 'Pause' : 'Play'}
+              disabled={!hasTrack}
             >
               {isLoadingAudio ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -290,18 +317,20 @@ export function PlayerBar({
             <button
               data-testid="next-track"
               onClick={playNext}
-              className="p-2 hover:bg-zinc-800 rounded-full transition-colors"
+              className={`p-2 rounded-full transition-colors ${hasTrack ? 'hover:bg-zinc-800' : 'text-zinc-600'}`}
               aria-label="Next track"
+              disabled={!hasTrack}
             >
               <SkipForward className="w-5 h-5" />
             </button>
             <button
               onClick={toggleRepeat}
               className={`p-2 rounded-full transition-colors relative ${
-                repeat !== 'off' ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+                !hasTrack ? 'text-zinc-600' : repeat !== 'off' ? 'text-green-500' : 'text-zinc-400 hover:text-white'
               }`}
               aria-label={`Repeat: ${repeat}`}
               aria-pressed={repeat !== 'off'}
+              disabled={!hasTrack}
             >
               <Repeat className="w-4 h-4" />
               {repeat === 'one' && (
@@ -311,11 +340,12 @@ export function PlayerBar({
             <button
               onClick={toggleConsume}
               className={`p-2 rounded-full transition-colors ${
-                consume ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+                !hasTrack ? 'text-zinc-600' : consume ? 'text-green-500' : 'text-zinc-400 hover:text-white'
               }`}
               aria-label={consume ? 'Disable consume mode' : 'Enable consume mode'}
               aria-pressed={consume}
               title="Consume: remove tracks after playing"
+              disabled={!hasTrack}
             >
               <ListX className="w-4 h-4" />
             </button>
@@ -328,15 +358,17 @@ export function PlayerBar({
             </span>
             <div
               data-testid="progress-bar"
-              className="flex-1 py-2 cursor-pointer group"
-              onClick={handleSeek}
+              className={`flex-1 py-2 group ${hasTrack ? 'cursor-pointer' : ''}`}
+              onClick={hasTrack ? handleSeek : undefined}
             >
               <div className="h-1 bg-zinc-700 rounded-full">
                 <div
-                  className="h-full bg-white rounded-full relative group-hover:bg-green-500 transition-colors"
+                  className={`h-full rounded-full relative transition-colors ${hasTrack ? 'bg-white group-hover:bg-green-500' : 'bg-zinc-600'}`}
                   style={{ width: `${progress}%` }}
                 >
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {hasTrack && (
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                  )}
                 </div>
               </div>
             </div>
