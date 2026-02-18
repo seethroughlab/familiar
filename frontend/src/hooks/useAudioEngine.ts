@@ -68,8 +68,8 @@ function getAlbumKey(track: Track): string | null {
 export function useAudioEngine() {
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const { currentTrack, isPlaying, volume } = usePlayerStore(
-    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume }))
+  const { currentTrack, isPlaying, volume, isLoadingAudio } = usePlayerStore(
+    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume, isLoadingAudio: s.isLoadingAudio }))
   );
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
   const setDuration = usePlayerStore((s) => s.setDuration);
@@ -175,14 +175,25 @@ export function useAudioEngine() {
 
     const handleEnded = (e: Event) => {
       const target = e.target as HTMLAudioElement;
-      if (shouldHandleEnded(
+      const willHandle = shouldHandleEnded(
         target,
         getWebAudioElementA(),
         getDirectElementA(),
         getQueueTransition(),
         getCurrentElementIsA(),
         !!getCrossfadeContext()?.isActive,
-      )) {
+      );
+      const state = usePlayerStore.getState();
+      log.debug('ended event', {
+        willHandle,
+        trackId: state.currentTrack?.id,
+        trackTitle: state.currentTrack?.title,
+        queueTransition: getQueueTransition(),
+        crossfadeActive: !!getCrossfadeContext()?.isActive,
+        elementTime: target.currentTime,
+        elementDuration: target.duration,
+      });
+      if (willHandle) {
         playNext();
       }
     };
@@ -223,8 +234,31 @@ export function useAudioEngine() {
 
     const handlePlaying = (e: Event) => {
       const target = e.target as HTMLAudioElement;
-      if (target === getCurrentElement()) {
+      const isCurrent = target === getCurrentElement();
+      log.debug('playing event', {
+        isCurrent,
+        trackId: usePlayerStore.getState().currentTrack?.id,
+        readyState: target.readyState,
+        currentTime: target.currentTime,
+        audioContextState: getGlobalAudioContext()?.state,
+      });
+      if (isCurrent) {
         setIsLoadingAudio(false);
+      }
+    };
+
+    const handleWaiting = (e: Event) => {
+      const target = e.target as HTMLAudioElement;
+      const isCurrent = target === getCurrentElement();
+      log.debug('waiting event', {
+        isCurrent,
+        trackId: usePlayerStore.getState().currentTrack?.id,
+        readyState: target.readyState,
+        currentTime: target.currentTime,
+        networkState: target.networkState,
+      });
+      if (isCurrent) {
+        setIsLoadingAudio(true);
       }
     };
 
@@ -232,6 +266,7 @@ export function useAudioEngine() {
       el.addEventListener('ended', handleEnded);
       el.addEventListener('error', handleError);
       el.addEventListener('playing', handlePlaying);
+      el.addEventListener('waiting', handleWaiting);
     });
 
     return () => {
@@ -239,6 +274,7 @@ export function useAudioEngine() {
         el.removeEventListener('ended', handleEnded);
         el.removeEventListener('error', handleError);
         el.removeEventListener('playing', handlePlaying);
+        el.removeEventListener('waiting', handleWaiting);
       });
     };
   }, [isInitialized, playNext, setIsPlaying, setIsLoadingAudio]);
@@ -319,6 +355,13 @@ export function useAudioEngine() {
     if (!el) return;
 
     if (isPlaying) {
+      log.debug('play/pause effect — play', {
+        trackId: currentTrack?.id,
+        elementReadyState: el.readyState,
+        elementPaused: el.paused,
+        audioContextState: getGlobalAudioContext()?.state,
+      });
+
       const ctx = getGlobalAudioContext();
       if (ctx && ctx.state === 'suspended') {
         ctx.resume().catch(e => log.error('Failed to resume audio context', e));
@@ -332,13 +375,16 @@ export function useAudioEngine() {
             setIsPlaying(false);
           } else if (e.name !== 'AbortError') {
             log.error('Play failed', e);
+            setIsPlaying(false);
+            setIsLoadingAudio(false);
           }
         });
       }
     } else {
+      log.debug('play/pause effect — pause', { trackId: currentTrack?.id });
       el.pause();
     }
-  }, [isPlaying, isInitialized, setIsPlaying]);
+  }, [isPlaying, isInitialized, setIsPlaying, setIsLoadingAudio]);
 
   // --------------------------------------------------------------------------
   // Effect: Handle Volume Changes
@@ -436,6 +482,14 @@ export function useAudioEngine() {
         if (oldOfflineUrl) revokeOfflineTrackUrl(oldOfflineUrl);
         setCurrentOfflineUrl(isOffline ? url : null);
 
+        log.debug('loadTrack', {
+          trackId: currentTrack.id,
+          trackTitle: currentTrack.title,
+          isOffline,
+          isPlaying,
+          elementReadyState: el.readyState,
+        });
+
         el.src = url;
         el.setAttribute('data-track-id', currentTrack.id);
         el.load();
@@ -444,7 +498,11 @@ export function useAudioEngine() {
         if (isPlaying) {
           const p = el.play();
           if (p) p.then(() => setIsLoadingAudio(false)).catch(e => {
-            if (e.name !== 'AbortError') log.error('Play failed after load', e);
+            if (e.name !== 'AbortError') {
+              log.error('Play failed after load', e);
+              setIsLoadingAudio(false);
+              setIsPlaying(false);
+            }
           });
         }
       } catch (e) {
@@ -491,6 +549,83 @@ export function useAudioEngine() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrack?.id, normalizationMode, isInitialized, shouldUseAlbumGain, applyNormalizationGain]);
+
+  // --------------------------------------------------------------------------
+  // Effect: Auto-resume AudioContext when suspended mid-playback (Windows)
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    const ctx = getGlobalAudioContext();
+    if (!isInitialized || !ctx) return;
+    const handler = () => {
+      log.debug('AudioContext statechange', {
+        contextState: ctx.state,
+        isPlaying: usePlayerStore.getState().isPlaying,
+      });
+      if (ctx.state === 'suspended' && usePlayerStore.getState().isPlaying) {
+        ctx.resume().catch(e => log.error('Failed to resume AudioContext', e));
+      }
+    };
+    ctx.addEventListener('statechange', handler);
+    return () => ctx.removeEventListener('statechange', handler);
+  }, [isInitialized]);
+
+  // --------------------------------------------------------------------------
+  // Effect: Resume playback when returning from background tab
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isInitialized) return;
+    const handler = () => {
+      const state = usePlayerStore.getState();
+      const el = getCurrentElement();
+      const ctx = getGlobalAudioContext();
+      log.debug('visibilitychange', {
+        hidden: document.hidden,
+        isPlaying: state.isPlaying,
+        elPaused: el?.paused,
+        elEnded: el?.ended,
+        audioContextState: ctx?.state,
+        trackId: state.currentTrack?.id,
+      });
+      if (document.hidden) return;
+      if (!state.isPlaying) return;
+      if (ctx?.state === 'suspended') {
+        ctx.resume().catch(e => log.error('Failed to resume AudioContext', e));
+      }
+      if (el?.paused && !el.ended) {
+        el.play().catch(e => {
+          if (e.name !== 'AbortError') {
+            setIsPlaying(false);
+            setIsLoadingAudio(false);
+          }
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [isInitialized, setIsPlaying, setIsLoadingAudio]);
+
+  // --------------------------------------------------------------------------
+  // Effect: Loading watchdog — clear stuck loading state after 15s
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isLoadingAudio) return;
+    const timeout = setTimeout(() => {
+      const state = usePlayerStore.getState();
+      if (!state.isLoadingAudio) return;
+      const el = getCurrentElement();
+      log.warn('Loading timeout - clearing stuck loading state', {
+        trackId: state.currentTrack?.id,
+        trackTitle: state.currentTrack?.title,
+        elPaused: el?.paused,
+        elReadyState: el?.readyState,
+      });
+      setIsLoadingAudio(false);
+      if (el?.paused && state.isPlaying) {
+        el.play().catch(() => setIsPlaying(false));
+      }
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [isLoadingAudio, setIsLoadingAudio, setIsPlaying]);
 
   // --------------------------------------------------------------------------
   // Animation/Update Loop

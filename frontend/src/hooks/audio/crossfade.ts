@@ -260,6 +260,11 @@ export function cancelCrossfade(
   const ctx = getCrossfadeContext();
   if (!ctx) return;
 
+  log.debug('cancelCrossfade', {
+    trackId: usePlayerStore.getState().currentTrack?.id,
+    crossfadeActive: ctx.isActive,
+  });
+
   const currentElement = getCurrentElement();
   const nextElement = getNextElement();
   const masterVolume = getCurrentMasterVolume();

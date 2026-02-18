@@ -124,4 +124,76 @@ describe('logger', () => {
       vi.unstubAllEnvs();
     });
   });
+
+  describe('runtime debug toggle', () => {
+    function stubLocalStorageDebug(value: string) {
+      // The test setup replaces localStorage with a mock object;
+      // override its getItem to return the desired debug flag.
+      (localStorage.getItem as ReturnType<typeof vi.fn>).mockReturnValue(value);
+    }
+
+    it('should enable verbose logging in prod when namespace matches localStorage.debug', async () => {
+      vi.stubEnv('DEV', false);
+      stubLocalStorageDebug('AudioEngine');
+
+      const { createLogger } = await import('../logger');
+      const log = createLogger('AudioEngine');
+
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      log.debug('should appear');
+      expect(debugSpy).toHaveBeenCalledWith('[AudioEngine]', 'should appear');
+
+      vi.unstubAllEnvs();
+    });
+
+    it('should enable all namespaces with wildcard *', async () => {
+      vi.stubEnv('DEV', false);
+      stubLocalStorageDebug('*');
+
+      const { createLogger } = await import('../logger');
+      const log = createLogger('AnyNamespace');
+
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      log.debug('wildcard msg');
+      expect(debugSpy).toHaveBeenCalledWith('[AnyNamespace]', 'wildcard msg');
+
+      vi.unstubAllEnvs();
+    });
+
+    it('should stay suppressed when namespace does not match', async () => {
+      vi.stubEnv('DEV', false);
+      stubLocalStorageDebug('AudioEngine');
+
+      const { createLogger } = await import('../logger');
+      const log = createLogger('OtherModule');
+
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      log.debug('should not appear');
+      expect(debugSpy).not.toHaveBeenCalled();
+
+      vi.unstubAllEnvs();
+    });
+
+    it('should support comma-separated namespace list', async () => {
+      vi.stubEnv('DEV', false);
+      stubLocalStorageDebug('AudioEngine,app,PlayerStore');
+
+      const { createLogger } = await import('../logger');
+      const logAudio = createLogger('AudioEngine');
+      const logApp = createLogger('app');
+      const logOther = createLogger('SomethingElse');
+
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+      logAudio.debug('audio msg');
+      logApp.debug('app msg');
+      logOther.debug('other msg');
+
+      expect(debugSpy).toHaveBeenCalledWith('[AudioEngine]', 'audio msg');
+      expect(debugSpy).toHaveBeenCalledWith('[app]', 'app msg');
+      expect(debugSpy).not.toHaveBeenCalledWith('[SomethingElse]', 'other msg');
+
+      vi.unstubAllEnvs();
+    });
+  });
 });

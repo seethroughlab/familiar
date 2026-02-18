@@ -4,7 +4,7 @@ import { createLogger } from '../../utils/logger';
 // Platform Detection
 // ============================================================================
 
-export const log = createLogger('AudioEngine');
+export const log = createLogger('AudioEngine', { forceVerbose: true });
 
 export const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
 
