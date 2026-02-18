@@ -79,7 +79,7 @@ class TestNeedsRemux:
     async def test_returns_false_on_timeout(self):
         """Should not request remux if ffprobe times out."""
         mock_proc = AsyncMock()
-        mock_proc.communicate.side_effect = asyncio.TimeoutError()
+        mock_proc.communicate.side_effect = TimeoutError()
         mock_proc.kill = AsyncMock()
         mock_proc.wait = AsyncMock()
 

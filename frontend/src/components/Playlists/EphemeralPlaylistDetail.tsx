@@ -74,13 +74,6 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
     }
   });
 
-  if (!playlist) {
-    return (
-      <div className="flex items-center justify-center py-12 text-zinc-500">
-        Playlist not found or has been discarded
-      </div>
-    );
-  }
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
@@ -100,20 +93,21 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
     [columns],
   );
 
+  const playlistTracks = playlist?.tracks ?? [];
   const searchedTracks = useMemo(() => {
-    if (!searchFilter) return playlist.tracks;
+    if (!searchFilter) return playlistTracks;
     const q = searchFilter.toLowerCase();
-    return playlist.tracks.filter(t =>
+    return playlistTracks.filter(t =>
       (t.title?.toLowerCase().includes(q)) ||
       (t.artist?.toLowerCase().includes(q)) ||
       (t.album?.toLowerCase().includes(q))
     );
-  }, [playlist.tracks, searchFilter]);
+  }, [playlistTracks, searchFilter]);
 
   const filteredTracks = useSortedTracks(searchedTracks, sortBy, sortOrder, toFullTrack);
 
   const handlePlay = useCallback((startIndex = 0) => {
-    if (filteredTracks.length === 0) return;
+    if (filteredTracks.length === 0 || !playlist) return;
 
     // If clicking on the currently playing track, toggle play/pause
     const clickedTrack = filteredTracks[startIndex];
@@ -124,7 +118,7 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
 
     const queueTracks = filteredTracks.map(toFullTrack);
     setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
-  }, [filteredTracks, playlist.id, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+  }, [filteredTracks, playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
   // Context menu handlers
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
@@ -136,6 +130,14 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
   const closeContextMenu = useCallback(() => {
     setContextMenu(initialContextMenuState);
   }, []);
+
+  if (!playlist) {
+    return (
+      <div className="flex items-center justify-center py-12 text-zinc-500">
+        Playlist not found or has been discarded
+      </div>
+    );
+  }
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return '--:--';

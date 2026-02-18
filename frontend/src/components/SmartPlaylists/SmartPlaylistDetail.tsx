@@ -121,13 +121,6 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
 
   const playlist = playlistProp || fetchedPlaylist;
 
-  if (!playlist) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
@@ -172,7 +165,8 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
 
   // Use global download store
   const { jobs, startDownload } = useDownloadStore();
-  const jobId = getSmartPlaylistJobId(playlist.id);
+  const playlistId = playlist?.id ?? '';
+  const jobId = getSmartPlaylistJobId(playlistId);
   const downloadJob = jobs.get(jobId);
   const isDownloading = downloadJob?.status === 'downloading' || downloadJob?.status === 'queued';
   const downloadProgress = {
@@ -182,30 +176,32 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
 
   // Fetch tracks for this smart playlist with offline fallback
   const { data: tracksResponse, isLoading: tracksLoading, refetch } = useQuery({
-    queryKey: ['smart-playlist-tracks', playlist.id],
+    queryKey: ['smart-playlist-tracks', playlistId],
     queryFn: async () => {
       try {
-        const result = await smartPlaylistsApi.getTracks(playlist.id, 500);
+        const result = await smartPlaylistsApi.getTracks(playlistId, 500);
         setUsingCachedData(false);
 
         // Cache the smart playlist with its track IDs
-        await playlistCache.cacheSmartPlaylist(
-          playlist,
-          result.tracks.map((t) => t.id)
-        );
+        if (playlist) {
+          await playlistCache.cacheSmartPlaylist(
+            playlist,
+            result.tracks.map((t) => t.id)
+          );
+        }
 
         return result;
       } catch (error) {
         // If offline, try to load from cache
         if (isOffline) {
-          const cached = await playlistCache.getCachedSmartPlaylist(playlist.id);
+          const cached = await playlistCache.getCachedSmartPlaylist(playlistId);
           if (cached) {
             // Resolve track metadata from cached tracks
             const resolvedTracks = await playlistCache.resolveTrackIds(cached.track_ids);
             setUsingCachedData(true);
             return {
               playlist: {
-                ...playlist,
+                ...playlist!,
                 cached_track_count: cached.cached_track_count,
               },
               tracks: resolvedTracks.map((t) => ({
@@ -231,6 +227,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
         throw error;
       }
     },
+    enabled: !!playlist,
     retry: isOffline ? false : 3,
   });
 
@@ -296,6 +293,35 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
     checkOfflineStatus();
   }, []);
 
+  // Update offline track IDs when download job completes
+  useEffect(() => {
+    if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
+      // Refresh offline IDs after download completes
+      offlineService.getOfflineTrackIds().then((ids) => {
+        setOfflineTrackIds(new Set(ids));
+      });
+    }
+  }, [downloadJob?.status]);
+
+  const allTrackIds = useMemo(() => allTracks.map(t => t.id), [allTracks]);
+
+  // Auto-download new tracks when enabled
+  useAutoDownload({
+    enabled: playlist?.auto_download ?? false,
+    jobId,
+    jobType: 'smart-playlist',
+    jobName: playlist?.name ?? '',
+    trackIds: allTrackIds,
+  });
+
+  if (!playlist) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+      </div>
+    );
+  }
+
   const handleDownloadPlaylist = async () => {
     if (allTracks.length === 0) return;
 
@@ -320,28 +346,8 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
     );
   };
 
-  // Update offline track IDs when download job completes
-  useEffect(() => {
-    if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
-      // Refresh offline IDs after download completes
-      offlineService.getOfflineTrackIds().then((ids) => {
-        setOfflineTrackIds(new Set(ids));
-      });
-    }
-  }, [downloadJob?.status]);
-
   const allTracksOffline = allTracks.every(t => offlineTrackIds.has(t.id));
   const offlineCount = allTracks.filter(t => offlineTrackIds.has(t.id)).length;
-  const allTrackIds = useMemo(() => allTracks.map(t => t.id), [allTracks]);
-
-  // Auto-download new tracks when enabled
-  useAutoDownload({
-    enabled: playlist.auto_download,
-    jobId,
-    jobType: 'smart-playlist',
-    jobName: playlist.name,
-    trackIds: allTrackIds,
-  });
 
   const handlePlay = (startIndex = 0) => {
     if (tracks.length === 0) return;

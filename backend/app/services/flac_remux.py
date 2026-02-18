@@ -33,7 +33,7 @@ async def needs_remux(file_path: Path) -> bool:
     )
     try:
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         logger.warning("ffprobe timed out checking PTS for %s", file_path.name)
@@ -71,7 +71,7 @@ async def remux_flac_in_place(file_path: Path) -> None:
         )
         try:
             _, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             raise RuntimeError(f"ffmpeg timed out re-muxing {file_path.name}")
