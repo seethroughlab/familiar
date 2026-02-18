@@ -1,23 +1,18 @@
 /**
  * LibraryView - Main container for library browsing.
  *
- * Manages browser selection, track selection, and filters.
+ * Manages track selection and filters.
  * Renders the selected browser with BrowserProps.
- * Persists view state in URL for reload support.
+ * Browser selection is controlled by the route via browserId prop.
  */
-import { useCallback, useMemo, useEffect } from 'react';
-import { useHashSearchParams } from '../../hooks/useHashSearchParams';
+import { useCallback, useMemo } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Download } from 'lucide-react';
-import { useLibraryViewStore } from '../../stores/libraryViewStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
-import { BrowserPicker } from './BrowserPicker';
 import { SelectionIndicator } from './SelectionIndicator';
-import { ArtistDetail } from './ArtistDetail';
-import { AlbumDetail } from './AlbumDetail';
 import {
   getBrowser,
-  DEFAULT_BROWSER_ID,
   type LibraryFilters,
   type ArtistSummary,
   type AlbumSummary,
@@ -27,12 +22,12 @@ import {
 import './browsers';
 
 interface LibraryViewProps {
-  /** Initial search query from parent */
-  initialSearch?: string;
+  /** Browser ID to display - from route */
+  browserId: string;
 }
 
-export function LibraryView({ initialSearch }: LibraryViewProps) {
-  const { selectedBrowserId, setSelectedBrowserId } = useLibraryViewStore();
+export function LibraryView({ browserId }: LibraryViewProps) {
+  const navigate = useNavigate();
   const {
     selectedIds: selectedTrackIds,
     toggleSelection,
@@ -40,34 +35,12 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
     setEditingTrackId,
   } = useSelectionStore();
   const { offlineIds } = useOfflineTrackIds();
-  const [searchParams, setSearchParams] = useHashSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Browser selection - read from URL, fall back to persisted preference
-  const currentBrowserId = searchParams.get('browser') || selectedBrowserId;
-
-  const setCurrentBrowserId = useCallback(
-    (browserId: string) => {
-      // Persist the selection to localStorage
-      setSelectedBrowserId(browserId);
-
-      // Also update the URL
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (browserId === DEFAULT_BROWSER_ID) {
-          next.delete('browser');
-        } else {
-          next.set('browser', browserId);
-        }
-        return next;
-      });
-    },
-    [setSearchParams, setSelectedBrowserId]
-  );
-
-  // Filters - read from URL
+  // Filters - read from URL query params
   const filters: LibraryFilters = useMemo(() => {
     return {
-      search: initialSearch || searchParams.get('search') || undefined,
+      search: searchParams.get('search') || undefined,
       artist: searchParams.get('artist') || undefined,
       album: searchParams.get('album') || undefined,
       genre: searchParams.get('genre') || undefined,
@@ -79,7 +52,7 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
       valenceMax: searchParams.get('valenceMax') ? Number(searchParams.get('valenceMax')) : undefined,
       downloadedOnly: searchParams.get('downloadedOnly') === 'true',
     };
-  }, [searchParams, initialSearch]);
+  }, [searchParams]);
 
   const setFilters = useCallback(
     (newFilters: LibraryFilters) => {
@@ -108,208 +81,65 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
         if (newFilters.valenceMax !== undefined) next.set('valenceMax', String(newFilters.valenceMax));
         if (newFilters.downloadedOnly) next.set('downloadedOnly', 'true');
         return next;
-      });
+      }, { replace: true });
     },
     [setSearchParams]
   );
 
-  // Auto-switch to artist detail when artist filter is active and Artists view is selected
-  // This provides a more intuitive UX: "I'm looking at this artist, show me their page"
-  useEffect(() => {
-    const artistFilter = searchParams.get('artist');
-    if (artistFilter && currentBrowserId === 'artist-list') {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set('artistDetail', artistFilter);
-        return next;
-      }, { replace: true });
-    }
-  }, [currentBrowserId, searchParams, setSearchParams]);
-
-  // Artist detail view state - read from URL
-  const selectedArtist = searchParams.get('artistDetail');
-
-  // Album detail view state - read from URL
-  const selectedAlbum = useMemo(() => {
-    const artistParam = searchParams.get('albumDetailArtist');
-    const albumParam = searchParams.get('albumDetailAlbum');
-    if (artistParam && albumParam) {
-      return { artist: artistParam, album: albumParam };
-    }
-    return null;
-  }, [searchParams]);
-
   const selectTrack = useCallback((trackId: string, multi: boolean) => {
     if (multi) {
-      // Toggle individual track (Cmd/Ctrl+click)
       toggleSelection(trackId);
     } else {
-      // Single select - clear others and select this one
-      // Use clearSelection + toggleSelection to select only this track
       clearSelection();
       toggleSelection(trackId);
     }
   }, [toggleSelection, clearSelection]);
 
   const selectAll = useCallback(() => {
-    // This would need track data from the browser - for now, it's a no-op
     // The browser can implement its own select-all
   }, []);
 
-  // Navigation handlers - switch to track list and apply filter
-  // Note: Must update both filters AND view in a single setSearchParams call
-  // to avoid React batching issues where one overwrites the other
+  // Navigation handlers - use path-based routing
   const handleGoToArtist = useCallback(
     (artistName: string) => {
-      // Open artist detail view - persist in URL
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.set('artistDetail', artistName);
-        return next;
-      });
+      navigate(`/library/artists/${encodeURIComponent(artistName)}`);
     },
-    [setSearchParams]
+    [navigate]
   );
-
-  const handleBackFromArtist = useCallback(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('artistDetail');
-      // Also clear artist filter to prevent auto-switch useEffect from
-      // immediately re-opening the artist detail view
-      next.delete('artist');
-      return next;
-    });
-  }, [setSearchParams]);
 
   const handleGoToAlbum = useCallback(
     (artistName: string, albumName: string) => {
-      // Open album detail view - persist in URL
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        // Clear other detail/filter views
-        next.delete('artistDetail');
-        next.delete('artist');
-        next.delete('album');
-        next.delete('browser');
-        next.delete('yearFrom');
-        next.delete('yearTo');
-        next.delete('energyMin');
-        next.delete('energyMax');
-        next.delete('valenceMin');
-        next.delete('valenceMax');
-        // Set album detail params
-        next.set('albumDetailArtist', artistName);
-        next.set('albumDetailAlbum', albumName);
-        return next;
-      });
+      navigate(`/library/albums/${encodeURIComponent(artistName)}/${encodeURIComponent(albumName)}`);
     },
-    [setSearchParams]
+    [navigate]
   );
-
-  const handleBackFromAlbum = useCallback(() => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('albumDetailArtist');
-      next.delete('albumDetailAlbum');
-      return next;
-    });
-  }, [setSearchParams]);
 
   const handleGoToYear = useCallback(
     (year: number) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('artist');
-        next.delete('album');
-        next.delete('yearFrom');
-        next.delete('yearTo');
-        next.delete('energyMin');
-        next.delete('energyMax');
-        next.delete('valenceMin');
-        next.delete('valenceMax');
-        // Explicitly switch to track-list to show filtered tracks
-        next.set('browser', 'track-list');
-        next.set('yearFrom', String(year));
-        next.set('yearTo', String(year));
-        return next;
-      });
+      navigate(`/library/tracks?yearFrom=${year}&yearTo=${year}`);
     },
-    [setSearchParams]
+    [navigate]
   );
 
   const handleGoToYearRange = useCallback(
     (yearFrom: number, yearTo: number) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('artist');
-        next.delete('album');
-        next.delete('yearFrom');
-        next.delete('yearTo');
-        next.delete('energyMin');
-        next.delete('energyMax');
-        next.delete('valenceMin');
-        next.delete('valenceMax');
-        // Explicitly switch to track-list to show filtered tracks
-        next.set('browser', 'track-list');
-        next.set('yearFrom', String(yearFrom));
-        next.set('yearTo', String(yearTo));
-        return next;
-      });
+      navigate(`/library/tracks?yearFrom=${yearFrom}&yearTo=${yearTo}`);
     },
-    [setSearchParams]
+    [navigate]
   );
 
   const handleGoToMood = useCallback(
     (energyMin: number, energyMax: number, valenceMin: number, valenceMax: number) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        // Clear old filter params
-        next.delete('artist');
-        next.delete('album');
-        next.delete('yearFrom');
-        next.delete('yearTo');
-        next.delete('energyMin');
-        next.delete('energyMax');
-        next.delete('valenceMin');
-        next.delete('valenceMax');
-        // Explicitly switch to track-list to show filtered tracks
-        next.set('browser', 'track-list');
-        // Set mood filters
-        next.set('energyMin', String(energyMin));
-        next.set('energyMax', String(energyMax));
-        next.set('valenceMin', String(valenceMin));
-        next.set('valenceMax', String(valenceMax));
-        return next;
-      });
+      navigate(`/library/tracks?energyMin=${energyMin}&energyMax=${energyMax}&valenceMin=${valenceMin}&valenceMax=${valenceMax}`);
     },
-    [setSearchParams]
+    [navigate]
   );
 
   const handleGoToGenre = useCallback(
     (genre: string) => {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        // Clear other filters but keep genre
-        next.delete('artist');
-        next.delete('album');
-        next.delete('genre');
-        next.delete('yearFrom');
-        next.delete('yearTo');
-        next.delete('energyMin');
-        next.delete('energyMax');
-        next.delete('valenceMin');
-        next.delete('valenceMax');
-        next.delete('albumDetailArtist');
-        next.delete('albumDetailAlbum');
-        next.delete('artistDetail');
-        // Explicitly switch to track-list to show filtered tracks
-        next.set('browser', 'track-list');
-        next.set('genre', genre);
-        return next;
-      });
+      navigate(`/library/tracks?genre=${encodeURIComponent(genre)}`);
     },
-    [setSearchParams]
+    [navigate]
   );
 
   const handleFilterChange = useCallback(
@@ -319,13 +149,12 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
     [filters, setFilters]
   );
 
-  // Playback handlers
   const handlePlayTrack = useCallback((_trackId: string) => {
-    // This is handled by the browser component directly
+    // Handled by the browser component directly
   }, []);
 
   const handlePlayTrackAt = useCallback((_trackId: string, _index: number) => {
-    // This is handled by the browser component directly
+    // Handled by the browser component directly
   }, []);
 
   const handleQueueTrack = useCallback((_trackId: string) => {
@@ -337,58 +166,16 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
   }, [setEditingTrackId]);
 
   // Get the current browser component
-  const currentBrowser = getBrowser(currentBrowserId);
+  const currentBrowser = getBrowser(browserId);
   const BrowserComponent = currentBrowser?.component;
 
-  // Placeholder data for artists/albums (Phase 2 will populate these)
   const artists: ArtistSummary[] = [];
   const albums: AlbumSummary[] = [];
 
-  // Show artist detail view if an artist is selected
-  if (selectedArtist) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto p-4">
-          <ArtistDetail
-            artistName={selectedArtist}
-            onBack={handleBackFromArtist}
-            onGoToAlbum={handleGoToAlbum}
-            onGoToGenre={handleGoToGenre}
-            onGoToYear={handleGoToYear}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Show album detail view if an album is selected
-  if (selectedAlbum) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 overflow-y-auto p-4">
-          <AlbumDetail
-            artistName={selectedAlbum.artist}
-            albumName={selectedAlbum.album}
-            onBack={handleBackFromAlbum}
-            onGoToArtist={handleGoToArtist}
-            onGoToAlbum={handleGoToAlbum}
-            onGoToYear={handleGoToYear}
-            onGoToGenre={handleGoToGenre}
-          />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col md:h-full md:min-h-0">
-      {/* Browser picker toolbar */}
+      {/* Filter toolbar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-800/50">
-        <BrowserPicker
-          currentBrowserId={currentBrowserId}
-          onSelectBrowser={setCurrentBrowserId}
-        />
-
         {/* Downloaded only filter toggle */}
         <button
           onClick={() => setFilters({ ...filters, downloadedOnly: !filters.downloadedOnly })}
@@ -459,7 +246,7 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
       <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
         {BrowserComponent ? (
           <BrowserComponent
-            key={`browser-${currentBrowserId}`}
+            key={`browser-${browserId}`}
             tracks={[]}
             artists={artists}
             albums={albums}
@@ -484,7 +271,7 @@ export function LibraryView({ initialSearch }: LibraryViewProps) {
           />
         ) : (
           <div className="flex items-center justify-center py-20 text-zinc-500">
-            Browser not found: {currentBrowserId}
+            Browser not found: {browserId}
           </div>
         )}
       </div>

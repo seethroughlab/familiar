@@ -1,86 +1,63 @@
 /**
- * useAppNavigation - Centralized navigation hook for the app
+ * useAppNavigation - Centralized navigation hook for path-based routing.
  *
- * Provides typed navigation methods that handle URL parameters correctly,
- * ensuring consistent behavior across all navigation actions.
+ * Provides typed navigation methods that use React Router paths.
  */
 
 import { useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { TAB_PARAM_WHITELIST, type AppTab } from '../utils/urlParams';
-
-interface NavigateToLibraryParams {
-  browser?: string;
-  search?: string;
-  artist?: string;
-  album?: string;
-  genre?: string;
-  yearFrom?: number;
-  yearTo?: number;
-  artistDetail?: string;
-  albumDetailArtist?: string;
-  albumDetailAlbum?: string;
-  energyMin?: number;
-  energyMax?: number;
-  valenceMin?: number;
-  valenceMax?: number;
-  downloadedOnly?: boolean;
-}
 
 export function useAppNavigation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
   /**
-   * Navigate to a tab, optionally preserving compatible params
-   */
-  const navigateToTab = useCallback(
-    (tab: AppTab, options?: { preserveParams?: boolean }) => {
-      const newParams = new URLSearchParams();
-
-      if (options?.preserveParams) {
-        // Only keep params that are valid for the target tab
-        const allowedParams = new Set(TAB_PARAM_WHITELIST[tab]);
-        for (const [key, value] of searchParams.entries()) {
-          if (allowedParams.has(key)) {
-            newParams.set(key, value);
-          }
-        }
-      }
-
-      const paramString = newParams.toString();
-      const url = paramString ? `?${paramString}#${tab}` : `#${tab}`;
-      navigate(url, { replace: true });
-    },
-    [navigate, searchParams]
-  );
-
-  /**
-   * Navigate to the library tab with specific params
+   * Navigate to a library browser view with optional filters
    */
   const navigateToLibrary = useCallback(
-    (params: NavigateToLibraryParams) => {
-      const newParams = new URLSearchParams();
+    (params: {
+      browser?: string;
+      search?: string;
+      artist?: string;
+      album?: string;
+      genre?: string;
+      yearFrom?: number;
+      yearTo?: number;
+      energyMin?: number;
+      energyMax?: number;
+      valenceMin?: number;
+      valenceMax?: number;
+      downloadedOnly?: boolean;
+    }) => {
+      // Map browser IDs to paths
+      const browserMap: Record<string, string> = {
+        'track-list': '/library/tracks',
+        'artist-list': '/library/artists',
+        'album-grid': '/library/albums',
+        'mood-grid': '/library/mood-grid',
+        'ego-music-map': '/library/music-map',
+        'umap-explorer': '/library/explorer',
+        'discover': '/library/discover',
+        'proposed-changes': '/library/proposed-changes',
+      };
 
-      if (params.browser) newParams.set('browser', params.browser);
-      if (params.search) newParams.set('search', params.search);
-      if (params.artist) newParams.set('artist', params.artist);
-      if (params.album) newParams.set('album', params.album);
-      if (params.genre) newParams.set('genre', params.genre);
-      if (params.yearFrom !== undefined) newParams.set('yearFrom', String(params.yearFrom));
-      if (params.yearTo !== undefined) newParams.set('yearTo', String(params.yearTo));
-      if (params.artistDetail) newParams.set('artistDetail', params.artistDetail);
-      if (params.albumDetailArtist) newParams.set('albumDetailArtist', params.albumDetailArtist);
-      if (params.albumDetailAlbum) newParams.set('albumDetailAlbum', params.albumDetailAlbum);
-      if (params.energyMin !== undefined) newParams.set('energyMin', String(params.energyMin));
-      if (params.energyMax !== undefined) newParams.set('energyMax', String(params.energyMax));
-      if (params.valenceMin !== undefined) newParams.set('valenceMin', String(params.valenceMin));
-      if (params.valenceMax !== undefined) newParams.set('valenceMax', String(params.valenceMax));
-      if (params.downloadedOnly) newParams.set('downloadedOnly', 'true');
+      const path = params.browser ? (browserMap[params.browser] || '/library/tracks') : '/library/tracks';
+      const filterParams = new URLSearchParams();
 
-      const paramString = newParams.toString();
-      const url = paramString ? `?${paramString}#library` : '#library';
-      navigate(url);
+      if (params.search) filterParams.set('search', params.search);
+      if (params.artist) filterParams.set('artist', params.artist);
+      if (params.album) filterParams.set('album', params.album);
+      if (params.genre) filterParams.set('genre', params.genre);
+      if (params.yearFrom !== undefined) filterParams.set('yearFrom', String(params.yearFrom));
+      if (params.yearTo !== undefined) filterParams.set('yearTo', String(params.yearTo));
+      if (params.energyMin !== undefined) filterParams.set('energyMin', String(params.energyMin));
+      if (params.energyMax !== undefined) filterParams.set('energyMax', String(params.energyMax));
+      if (params.valenceMin !== undefined) filterParams.set('valenceMin', String(params.valenceMin));
+      if (params.valenceMax !== undefined) filterParams.set('valenceMax', String(params.valenceMax));
+      if (params.downloadedOnly) filterParams.set('downloadedOnly', 'true');
+
+      const qs = filterParams.toString();
+      navigate(path + (qs ? `?${qs}` : ''));
     },
     [navigate]
   );
@@ -90,9 +67,9 @@ export function useAppNavigation() {
    */
   const navigateToArtist = useCallback(
     (artistName: string) => {
-      navigateToLibrary({ artistDetail: artistName });
+      navigate(`/library/artists/${encodeURIComponent(artistName)}`);
     },
-    [navigateToLibrary]
+    [navigate]
   );
 
   /**
@@ -114,12 +91,9 @@ export function useAppNavigation() {
    */
   const navigateToAlbumDetail = useCallback(
     (artist: string, album: string) => {
-      navigateToLibrary({
-        albumDetailArtist: artist,
-        albumDetailAlbum: album,
-      });
+      navigate(`/library/albums/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`);
     },
-    [navigateToLibrary]
+    [navigate]
   );
 
   /**
@@ -184,8 +158,7 @@ export function useAppNavigation() {
    */
   const navigateToPlaylist = useCallback(
     (playlistId: string) => {
-      const url = `?playlist=${encodeURIComponent(playlistId)}#playlists`;
-      navigate(url);
+      navigate(`/playlists/${encodeURIComponent(playlistId)}`);
     },
     [navigate]
   );
@@ -195,8 +168,7 @@ export function useAppNavigation() {
    */
   const navigateToSmartPlaylist = useCallback(
     (smartPlaylistId: string) => {
-      const url = `?smartPlaylist=${encodeURIComponent(smartPlaylistId)}#playlists`;
-      navigate(url);
+      navigate(`/smart-playlists/${encodeURIComponent(smartPlaylistId)}`);
     },
     [navigate]
   );
@@ -205,18 +177,18 @@ export function useAppNavigation() {
    * Navigate to favorites view
    */
   const navigateToFavorites = useCallback(() => {
-    navigate('?view=favorites#playlists');
+    navigate('/favorites');
   }, [navigate]);
 
   /**
    * Navigate to downloads view
    */
   const navigateToDownloads = useCallback(() => {
-    navigate('?view=downloads#playlists');
+    navigate('/downloads');
   }, [navigate]);
 
   /**
-   * Update URL params without changing tab
+   * Update URL params without changing path
    */
   const updateParams = useCallback(
     (updates: Record<string, string | number | boolean | undefined | null>) => {
@@ -236,10 +208,8 @@ export function useAppNavigation() {
         }
       }
 
-      const hash = window.location.hash || '';
       const paramString = newParams.toString();
-      const url = paramString ? `?${paramString}${hash}` : hash || '/';
-      navigate(url, { replace: true });
+      navigate(paramString ? `?${paramString}` : '.', { replace: true });
     },
     [navigate, searchParams]
   );
@@ -254,16 +224,13 @@ export function useAppNavigation() {
         newParams.delete(key);
       }
 
-      const hash = window.location.hash || '';
       const paramString = newParams.toString();
-      const url = paramString ? `?${paramString}${hash}` : hash || '/';
-      navigate(url, { replace: true });
+      navigate(paramString ? `?${paramString}` : '.', { replace: true });
     },
     [navigate, searchParams]
   );
 
   return {
-    navigateToTab,
     navigateToLibrary,
     navigateToArtist,
     navigateToAlbum,
