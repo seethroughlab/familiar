@@ -1,6 +1,5 @@
 """Tests for FLAC PTS remux service."""
 
-import asyncio
 import shutil
 import subprocess
 import tempfile
