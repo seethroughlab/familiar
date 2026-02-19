@@ -179,6 +179,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const routeNavigate = useNavigate();
   const artistName = artistNameProp || (routeParams.name ? decodeURIComponent(routeParams.name) : '');
   const onBack = onBackProp || (() => routeNavigate(-1));
+  const goToAlbum = onGoToAlbum || ((artist: string, album: string) => navigateToAlbumDetail(artist, album));
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffle = usePlayerStore((s) => s.shuffle);
@@ -187,7 +188,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const setLazyQueue = usePlayerStore((s) => s.setLazyQueue);
   const { startDownload } = useDownloadStore();
-  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const { navigateToArtist, navigateToAlbumDetail } = useAppNavigation();
   const [showFullBio, setShowFullBio] = useState(false);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
@@ -628,7 +629,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
               <div
                 key={album.name}
                 className="group bg-zinc-800/50 rounded-lg overflow-hidden hover:bg-zinc-800 transition-colors cursor-pointer"
-                onClick={() => onGoToAlbum?.(artist.name, album.name)}
+                onClick={() => goToAlbum(artist.name, album.name)}
                 onContextMenu={(e) => handleAlbumContextMenu(album, e)}
               >
                 <div className="aspect-square relative overflow-hidden">
@@ -644,7 +645,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
                     onClick={(e) => {
                       e.stopPropagation();
                       handlePlayAlbum(album.name);
-                      onGoToAlbum?.(artist.name, album.name);
+                      goToAlbum(artist.name, album.name);
                     }}
                   >
                     <Play className="w-10 h-10" fill="currentColor" />
@@ -800,7 +801,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
           }}
           onGoToAlbum={() => {
             if (contextMenu.track?.album) {
-              navigateToAlbum(artistName, contextMenu.track.album);
+              navigateToAlbumDetail(artistName, contextMenu.track.album);
             }
           }}
           onToggleSelect={() => {
@@ -907,7 +908,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
           }}
           onGoToAlbum={() => {
             if (albumContextMenu.album) {
-              onGoToAlbum?.(albumContextMenu.album.artist, albumContextMenu.album.name);
+              goToAlbum(albumContextMenu.album.artist, albumContextMenu.album.name);
             }
           }}
           onDownload={() => {
