@@ -202,6 +202,10 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
             # Get MIDI path if melodic analysis produced one
             midi_path = results.get("melodic", {}).get("midi_path")
 
+            # Sanitize numpy types for JSON serialization
+            results = _sanitize_for_json(results)
+            section_errors = _sanitize_for_json(section_errors)
+
             # Save to database
             from uuid import uuid4
             deep = TrackDeepAnalysis(
@@ -937,6 +941,21 @@ def _analyze_energy(
 
 
 # ─── Helper functions ──────────────────────────────────────────────────────
+
+def _sanitize_for_json(obj: Any) -> Any:
+    """Recursively convert numpy types to native Python types for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    return obj
+
 
 def _midi_to_note(midi_num: int) -> str:
     """Convert MIDI number to note name (e.g., 60 -> 'C4')."""
