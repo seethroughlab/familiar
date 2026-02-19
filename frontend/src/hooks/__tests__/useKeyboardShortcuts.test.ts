@@ -17,7 +17,7 @@ vi.mock('../../services/playerPersistence', () => ({
 // Mock audioGraph so keyboard seek tests can verify element.currentTime
 const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
 vi.mock('../audio/audioGraph', () => ({
-  getCurrentElement: (...args: unknown[]) => mockGetCurrentElement(...args),
+  getCurrentElement: () => mockGetCurrentElement(),
 }))
 
 // Helper to simulate keyboard events

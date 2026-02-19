@@ -16,7 +16,7 @@ vi.mock('../../services/playerPersistence', () => ({
 // Mock audioGraph so playerStore's playPrevious can set element.currentTime
 const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
 vi.mock('../../hooks/audio/audioGraph', () => ({
-  getCurrentElement: (...args: unknown[]) => mockGetCurrentElement(...args),
+  getCurrentElement: () => mockGetCurrentElement(),
 }))
 
 // Helper to create mock tracks

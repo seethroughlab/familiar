@@ -16,16 +16,16 @@ vi.mock('../../services/playerPersistence', () => ({
 
 // Mock audioGraph — provide controllable getCurrentElement and getCrossfadeContext
 const mockGetCurrentElement = vi.fn<() => HTMLAudioElement | null>(() => null)
-const mockGetCrossfadeContext = vi.fn(() => null)
+const mockGetCrossfadeContext = vi.fn<() => { isActive: boolean; startTime: number; duration: number; timeoutId: ReturnType<typeof setTimeout> | null } | null>(() => null)
 vi.mock('../audio/audioGraph', () => ({
-  getCurrentElement: (...args: unknown[]) => mockGetCurrentElement(...args),
-  getCrossfadeContext: (...args: unknown[]) => mockGetCrossfadeContext(...args),
+  getCurrentElement: () => mockGetCurrentElement(),
+  getCrossfadeContext: () => mockGetCrossfadeContext(),
 }))
 
 // Mock crossfade module
 const mockCancelCrossfade = vi.fn()
 vi.mock('../audio/crossfade', () => ({
-  cancelCrossfade: (...args: unknown[]) => mockCancelCrossfade(...args),
+  cancelCrossfade: () => mockCancelCrossfade(),
 }))
 
 // Mock eventHandlers — return a fixed effective crossfade duration
