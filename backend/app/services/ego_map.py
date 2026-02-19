@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Track, TrackStatus
+from app.services.normalize import normalize_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -171,22 +172,28 @@ class EgoMapService:
             if latest.embedding is None:
                 continue
 
-            artist = track.artist.strip()
-            if not artist:
+            display_name = track.artist.strip()
+            if not display_name:
+                continue
+
+            key = normalize_for_matching(display_name)
+            if not key:
                 continue
 
             embedding = np.array(latest.embedding)
-            artist_data = artist_embeddings[artist]
+            artist_data = artist_embeddings[key]
             artist_data["embeddings"].append(embedding)
             artist_data["track_count"] += 1
             if artist_data["first_track_id"] is None:
                 artist_data["first_track_id"] = str(track.id)
+                artist_data["display_name"] = display_name
 
         # Compute mean embeddings
         result_dict = {}
-        for artist, data in artist_embeddings.items():
+        for key, data in artist_embeddings.items():
             if data["track_count"] >= MIN_TRACKS_PER_ARTIST:
-                result_dict[artist] = {
+                display_name = data.get("display_name", key)
+                result_dict[display_name] = {
                     "mean_embedding": np.mean(data["embeddings"], axis=0),
                     "track_count": data["track_count"],
                     "first_track_id": data["first_track_id"],
@@ -304,20 +311,16 @@ class EgoMapService:
         all_artists = await self.get_all_artist_embeddings(db)
         total_artists = len(all_artists)
 
-        # Find center artist
-        center_normalized = center.strip()
+        # Find center artist using normalized matching
+        center_norm = normalize_for_matching(center)
         center_data = None
         center_key = None
 
-        # Try exact match first, then case-insensitive
         for artist_name, data in all_artists.items():
-            if artist_name == center_normalized:
+            if normalize_for_matching(artist_name) == center_norm:
                 center_data = data
                 center_key = artist_name
                 break
-            if artist_name.lower() == center_normalized.lower():
-                center_data = data
-                center_key = artist_name
 
         if center_data is None:
             raise ValueError(f"Artist '{center}' not found or has no embeddings")

@@ -10,7 +10,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Search, Sparkles, X } from 'lucide-react';
+import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Search, Sparkles, X, Music } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { libraryApi, tracksApi, type EgoMapArtist } from '../../../../api/client';
 import { registerBrowser, type BrowserProps } from '../../types';
@@ -52,6 +52,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
   const [centerArtist, setCenterArtist] = useState<string | null>(urlCenter);
   const [showPicker, setShowPicker] = useState(!urlCenter);
   const [hoveredArtist, setHoveredArtist] = useState<HoveredArtist | null>(null);
+  const [hoveredImageError, setHoveredImageError] = useState(false);
 
   // Sync center artist to URL
   useEffect(() => {
@@ -512,6 +513,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
         // Check for hover
         const artist = findArtistAtPosition(mouseX, mouseY);
         if (artist) {
+          setHoveredImageError(false);
           setHoveredArtist({ artist, screenX: mouseX, screenY: mouseY });
         } else {
           setHoveredArtist(null);
@@ -707,11 +709,18 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
           }}
         >
           <div className="flex items-center gap-3">
-            <img
-              src={tracksApi.getArtworkUrl(hoveredArtist.artist.first_track_id, 'thumb')}
-              alt=""
-              className="w-12 h-12 rounded-lg object-cover bg-zinc-700"
-            />
+            {!hoveredImageError ? (
+              <img
+                src={tracksApi.getArtworkUrl(hoveredArtist.artist.first_track_id, 'thumb')}
+                alt=""
+                className="w-12 h-12 rounded-lg object-cover bg-zinc-700"
+                onError={() => setHoveredImageError(true)}
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-lg bg-zinc-700 flex items-center justify-center">
+                <Music className="w-6 h-6 text-zinc-500" />
+              </div>
+            )}
             <div>
               <div className="font-medium text-white">{hoveredArtist.artist.name}</div>
               <div className="text-sm text-zinc-400">

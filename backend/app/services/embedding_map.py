@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Track, TrackStatus
+from app.services.normalize import normalize_for_matching
 
 logger = logging.getLogger(__name__)
 
@@ -441,21 +442,26 @@ class EmbeddingMapService:
             if latest.embedding is None:
                 continue
 
-            artist = track.artist.strip()
-            if not artist:
+            display_name = track.artist.strip()
+            if not display_name:
+                continue
+
+            key = normalize_for_matching(display_name)
+            if not key:
                 continue
 
             embedding = np.array(latest.embedding)
-            artist_data = artist_embeddings[artist]
+            artist_data = artist_embeddings[key]
             artist_data["embeddings"].append(embedding)
             artist_data["track_ids"].append(str(track.id))
             artist_data["track_count"] += 1
             if artist_data["first_track_id"] is None:
                 artist_data["first_track_id"] = str(track.id)
+                artist_data["display_name"] = display_name
 
         # Compute mean embeddings and find representative track
         result_dict = {}
-        for artist, data in artist_embeddings.items():
+        for key, data in artist_embeddings.items():
             if data["track_count"] >= MIN_TRACKS_PER_ENTITY:
                 embeddings_matrix = np.array(data["embeddings"])
                 mean_embedding = np.mean(embeddings_matrix, axis=0)
@@ -472,7 +478,9 @@ class EmbeddingMapService:
                     closest_idx = int(np.argmax(similarities))
                     representative_track_id = data["track_ids"][closest_idx]
 
-                result_dict[artist] = {
+                # Use display_name (first casing encountered) as the dict key
+                display_name = data.get("display_name", key)
+                result_dict[display_name] = {
                     "mean_embedding": mean_embedding,
                     "track_count": data["track_count"],
                     "first_track_id": data["first_track_id"],
