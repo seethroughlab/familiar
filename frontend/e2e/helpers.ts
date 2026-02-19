@@ -55,6 +55,8 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
       // Click Settings button in sidebar footer (force click to bypass player bar overlay)
       const settingsBtn = page.locator('button:has-text("Settings")').first();
       await settingsBtn.click({ force: true });
+      // Wait for the lazy-loaded Settings modal to render
+      await page.waitForSelector('h2:has-text("Settings")', { timeout: 10000 });
       break;
     }
     case 'Playlists':
