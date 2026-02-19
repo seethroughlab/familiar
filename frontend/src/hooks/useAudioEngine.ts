@@ -234,15 +234,17 @@ export function useAudioEngine() {
 
     const handlePlaying = (e: Event) => {
       const target = e.target as HTMLAudioElement;
-      const isCurrent = target === getCurrentElement();
+      const state = usePlayerStore.getState();
+      const matchesCurrentTrack = target.getAttribute('data-track-id') === state.currentTrack?.id;
       log.debug('playing event', {
-        isCurrent,
-        trackId: usePlayerStore.getState().currentTrack?.id,
+        matchesCurrentTrack,
+        trackId: state.currentTrack?.id,
+        elementTrackId: target.getAttribute('data-track-id'),
         readyState: target.readyState,
         currentTime: target.currentTime,
         audioContextState: getGlobalAudioContext()?.state,
       });
-      if (isCurrent) {
+      if (matchesCurrentTrack) {
         setIsLoadingAudio(false);
       }
     };
@@ -392,12 +394,28 @@ export function useAudioEngine() {
         trackId: currentTrack?.id,
         elementReadyState: el.readyState,
         elementPaused: el.paused,
+        elementTrackId: el.getAttribute('data-track-id'),
         audioContextState: getGlobalAudioContext()?.state,
       });
 
+      // Always resume AudioContext when transitioning to play state
       const ctx = getGlobalAudioContext();
       if (ctx && ctx.state === 'suspended') {
         ctx.resume().catch(e => log.error('Failed to resume audio context', e));
+      }
+
+      // Only call play() if the element has the correct track loaded.
+      // If the track hasn't been loaded yet (empty element or stale track from
+      // a previous session), the loadTrack effect will handle loading + playing.
+      // Without this guard, play() on an empty/wrong element fails and sets
+      // isPlaying=false, which then causes el.pause() to race with loadTrack's
+      // async el.play(), leaving the track loaded but paused.
+      if (!currentTrack || el.getAttribute('data-track-id') !== currentTrack.id) {
+        log.debug('play/pause effect — skipping play, element has wrong track', {
+          elementTrackId: el.getAttribute('data-track-id'),
+          currentTrackId: currentTrack?.id,
+        });
+        return;
       }
 
       const playPromise = el.play();
@@ -537,6 +555,9 @@ export function useAudioEngine() {
               setIsPlaying(false);
             }
           });
+        } else {
+          // Track preloaded (e.g. hydration) — no spinner needed
+          setIsLoadingAudio(false);
         }
       } catch (e) {
         log.error('Failed to load track', e);

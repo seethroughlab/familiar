@@ -48,6 +48,7 @@ export async function preloadNextTrack(trackId: string): Promise<boolean> {
     if (isOffline) setNextOfflineUrl(url);
 
     nextElement.src = url;
+    nextElement.setAttribute('data-track-id', trackId);
     nextElement.load();
 
     return new Promise((resolve) => {
@@ -123,8 +124,12 @@ export function completeCrossfade(
   const currentId = usePlayerStore.getState().currentTrack?.id;
   if (currentId) setLoadedTrackId(currentId);
 
+  const newCurrentElement = getCurrentElement();
+  if (newCurrentElement && currentId) {
+    newCurrentElement.setAttribute('data-track-id', currentId);
+  }
+
   if (useDirectPlayback) {
-    const newCurrentElement = getCurrentElement();
     const newNextElement = getNextElement();
     setElementVolume(newCurrentElement, getCurrentMasterVolume());
     setElementVolume(newNextElement, 0);
