@@ -27,16 +27,15 @@ export function useDeepAnalysis() {
       // Processing — poll until ready
       for (let i = 0; i < 90; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        try {
-          await deepAnalysisApi.getStatus(track.id);
-          // If getStatus succeeds, analysis is ready
-          dismissToast(toastId);
-          await deepAnalysisApi.downloadReport(track.id);
-          showSuccess('Analysis downloaded');
-          return;
-        } catch {
-          // 404 = still processing, continue polling
+        const { data: status } = await deepAnalysisApi.getStatus(track.id);
+        if ('status' in status && status.status === 'processing') {
+          continue; // still processing
         }
+        // Analysis ready — download report
+        dismissToast(toastId);
+        await deepAnalysisApi.downloadReport(track.id);
+        showSuccess('Analysis downloaded');
+        return;
       }
 
       dismissToast(toastId);

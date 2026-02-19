@@ -5,7 +5,7 @@ import logging
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -154,7 +154,10 @@ async def get_deep_analysis(track_id: UUID, db: DbSession):
     ).scalar_one_or_none()
 
     if not cached:
-        raise HTTPException(status_code=404, detail="Deep analysis not found. Trigger it first with POST.")
+        return JSONResponse(
+            status_code=202,
+            content={"status": "processing", "track_id": str(track_id)},
+        )
 
     return {
         "track_id": str(track_id),

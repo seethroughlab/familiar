@@ -28,7 +28,7 @@ export const deepAnalysisApi = {
     api.post<DeepAnalysisStatus>(`/tracks/${trackId}/deep-analysis`),
 
   getStatus: (trackId: string) =>
-    api.get<DeepAnalysisResult>(`/tracks/${trackId}/deep-analysis`),
+    api.get<DeepAnalysisResult | DeepAnalysisStatus>(`/tracks/${trackId}/deep-analysis`),
 
   downloadReport: async (trackId: string): Promise<void> => {
     const response = await api.get(`/tracks/${trackId}/deep-analysis/report`, {
