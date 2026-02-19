@@ -21,7 +21,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Independent version from ANALYSIS_VERSION (which covers CLAP/librosa features)
-DEEP_ANALYSIS_VERSION = 1
+DEEP_ANALYSIS_VERSION = 3
 
 # Minimum track duration for deep analysis (seconds)
 MIN_DURATION_SECONDS = 30
@@ -84,8 +84,8 @@ EUCLIDEAN_RHYTHMS = {
 }
 
 INTERVAL_NAMES = {
-    -12: "Octave down", -11: "m7 down", -10: "M6 down", -9: "m6 down",
-    -8: "P5 down", -7: "Tritone down", -6: "Tritone down", -5: "P4 down",
+    -12: "Octave down", -11: "M7 down", -10: "m7 down", -9: "M6 down",
+    -8: "m6 down", -7: "P5 down", -6: "Tritone down", -5: "P4 down",
     -4: "M3 down", -3: "m3 down", -2: "M2 down", -1: "m2 down",
     0: "Unison", 1: "m2 up", 2: "M2 up", 3: "m3 up",
     4: "M3 up", 5: "P4 up", 6: "Tritone up", 7: "P5 up",
@@ -267,6 +267,10 @@ def _precompute_shared(y: np.ndarray, sr: int) -> dict[str, Any]:
     # RMS energy
     rms = librosa.feature.rms(y=y)[0]
 
+    # Log power spectrogram and MFCCs (shared for spectral + structural)
+    log_S = librosa.power_to_db(power_spec, ref=np.max)
+    mfcc = librosa.feature.mfcc(S=log_S, sr=sr, n_mfcc=13)
+
     # Hop length for time conversion
     hop_length = 512
 
@@ -279,6 +283,8 @@ def _precompute_shared(y: np.ndarray, sr: int) -> dict[str, Any]:
         "beat_frames": beat_frames,
         "beat_times": beat_times,
         "rms": rms,
+        "log_S": log_S,
+        "mfcc": mfcc,
         "n_fft": n_fft,
         "hop_length": hop_length,
         "duration": len(y) / sr,
@@ -331,26 +337,50 @@ def _analyze_harmonic(
         t = float(beat_times[min(i, len(beat_times) - 1)]) if len(beat_times) > 0 else i * 0.5
         chords.append({"time": round(t, 2), "chord": best_label, "confidence": round(best_corr, 3)})
 
-    # Smooth: merge adjacent identical chords
+    # Smooth: merge adjacent identical chords (RLE dedup)
     smoothed: list[dict] = []
     for c in chords:
         if smoothed and smoothed[-1]["chord"] == c["chord"]:
             continue
         smoothed.append(c)
 
-    # Most common chords
-    chord_names = [c["chord"] for c in smoothed if c["chord"] != "N"]
+    # Short-chord merge: absorb brief chords flanked by the same chord
+    if len(beat_times) > 1:
+        median_beat_dur = float(np.median(np.diff(beat_times)))
+    else:
+        median_beat_dur = 0.5
+    min_chord_dur = median_beat_dur * 1.1
+    merged: list[dict] = []
+    for i, c in enumerate(smoothed):
+        if 0 < i < len(smoothed) - 1:
+            dur = smoothed[i + 1]["time"] - c["time"]
+            if dur <= min_chord_dur and merged and merged[-1]["chord"] == smoothed[i + 1]["chord"]:
+                continue  # absorb short chord flanked by same chord
+        merged.append(c)
+    smoothed = merged
+
+    # Most common chords (duration-weighted)
     from collections import Counter
-    chord_counts = Counter(chord_names)
-    total_chords = sum(chord_counts.values()) or 1
+    duration = shared["duration"]
+    chord_durations: dict[str, float] = {}
+    for i, c in enumerate(smoothed):
+        if c["chord"] == "N":
+            continue
+        if i + 1 < len(smoothed):
+            dur = smoothed[i + 1]["time"] - c["time"]
+        else:
+            dur = duration - c["time"]
+        chord_durations[c["chord"]] = chord_durations.get(c["chord"], 0) + dur
+    total_dur = sum(chord_durations.values()) or 1
     most_common = [
-        {"chord": ch, "percentage": round(cnt / total_chords * 100, 1)}
-        for ch, cnt in chord_counts.most_common(8)
+        {"chord": ch, "percentage": round(dur / total_dur * 100, 1)}
+        for ch, dur in sorted(chord_durations.items(), key=lambda x: -x[1])[:8]
     ]
 
-    # Harmonic rhythm (chord changes per second)
-    duration = shared["duration"]
-    harmonic_rhythm = round(len(smoothed) / max(duration, 1), 2)
+    # Harmonic rhythm (chord changes per bar)
+    bpm = shared["bpm"]
+    n_bars = duration / (4 * 60 / bpm) if bpm > 0 else 1
+    harmonic_rhythm = round(len(smoothed) / max(n_bars, 1), 2)
 
     # Key stability: windowed key estimation
     window_size = max(1, chroma.shape[1] // 8)
@@ -377,16 +407,97 @@ def _analyze_harmonic(
                 best_mode_corr = corr
                 best_mode = f"{NOTE_NAMES[root_idx]} {mode_name}"
 
+    # Key/mode confidence over time (windowed full mode matching)
+    hop_length = shared["hop_length"]
+    duration = shared["duration"]
+    beat_frames_h = shared["beat_frames"]
+    # Determine window in chroma frames: 8 bars worth, slide by 4 bars
+    if len(beat_frames_h) >= 16 and bpm > 0:
+        frames_per_beat = sr / (bpm / 60.0) / hop_length
+        frames_per_bar = frames_per_beat * 4
+        win_frames = int(frames_per_bar * 8)
+        slide_frames = int(frames_per_bar * 4)
+    else:
+        # Fallback: 8 equal windows
+        win_frames = max(1, chroma.shape[1] // 8)
+        slide_frames = max(1, win_frames // 2)
+
+    # Pre-compute all 84 mode templates (12 roots x 7 modes)
+    mode_templates = []
+    for root_idx in range(12):
+        for mode_name, profile in MODE_PROFILES.items():
+            rotated = np.roll(profile, root_idx).astype(np.float64)
+            rotated /= np.linalg.norm(rotated) + 1e-10
+            mode_templates.append((f"{NOTE_NAMES[root_idx]} {mode_name}", rotated))
+
+    key_mode_timeline: list[dict[str, Any]] = []
+    for start in range(0, chroma.shape[1] - win_frames + 1, slide_frames):
+        end = start + win_frames
+        win_chroma = np.mean(chroma[:, start:end], axis=1)
+        win_norm = win_chroma / (np.linalg.norm(win_chroma) + 1e-10)
+
+        best_label = "Unknown"
+        best_conf = -1.0
+        for label, tmpl in mode_templates:
+            corr = float(np.dot(win_norm, tmpl))
+            if corr > best_conf:
+                best_conf = corr
+                best_label = label
+
+        t_start = round(start * hop_length / sr, 2)
+        t_end = round(min(end * hop_length / sr, duration), 2)
+        key_mode_timeline.append({
+            "start": t_start,
+            "end": t_end,
+            "key_mode": best_label,
+            "confidence": round(best_conf, 3),
+        })
+
     return {
         "harmonic_content": True,
-        "chords": smoothed[:200],  # Limit for storage
+        "chords": smoothed,
         "most_common_chords": most_common,
         "harmonic_rhythm": harmonic_rhythm,
         "key_stability": key_stability,
         "key_windows": key_windows,
         "modal_character": best_mode,
         "modal_confidence": round(best_mode_corr, 3),
+        "key_mode_timeline": key_mode_timeline,
     }
+
+
+def _compute_interval_histogram(
+    notes: list[dict],
+) -> tuple[dict[str, float], list[int], str, float]:
+    """Compute interval histogram, character, and avg size from a sorted note list.
+
+    Returns (histogram, raw_intervals, character, avg_size).
+    """
+    from collections import Counter
+
+    intervals = []
+    for i in range(1, len(notes)):
+        interval = notes[i]["pitch"] - notes[i - 1]["pitch"]
+        if -12 <= interval <= 12:
+            intervals.append(interval)
+
+    interval_counts = Counter(intervals)
+    total_intervals = sum(interval_counts.values()) or 1
+    histogram = {
+        str(iv): round(cnt / total_intervals * 100, 1)
+        for iv, cnt in sorted(interval_counts.items())
+    }
+
+    abs_intervals = [abs(iv) for iv in intervals]
+    avg_size = float(np.mean(abs_intervals)) if abs_intervals else 0.0
+    if avg_size < 2.5:
+        character = "stepwise-dominant"
+    elif avg_size > 4.0:
+        character = "leap-heavy"
+    else:
+        character = "mixed"
+
+    return histogram, intervals, character, round(avg_size, 2)
 
 
 def _analyze_melodic(
@@ -445,29 +556,69 @@ def _analyze_melodic(
     pitch_range["primary_high"] = _midi_to_note(p90)
 
     # Interval histogram (between consecutive notes)
-    intervals = []
-    for i in range(1, len(notes)):
-        interval = notes[i]["pitch"] - notes[i - 1]["pitch"]
-        if -12 <= interval <= 12:
-            intervals.append(interval)
+    interval_histogram, intervals, interval_character, avg_interval = (
+        _compute_interval_histogram(notes)
+    )
 
     from collections import Counter
-    interval_counts = Counter(intervals)
-    total_intervals = sum(interval_counts.values()) or 1
-    interval_histogram = {
-        str(iv): round(cnt / total_intervals * 100, 1)
-        for iv, cnt in sorted(interval_counts.items())
-    }
 
-    # Interval character
-    abs_intervals = [abs(iv) for iv in intervals]
-    avg_interval = float(np.mean(abs_intervals)) if abs_intervals else 0
-    if avg_interval < 2.5:
-        interval_character = "stepwise-dominant"
-    elif avg_interval > 4.0:
-        interval_character = "leap-heavy"
-    else:
-        interval_character = "mixed"
+    # Voice separation by register
+    register_bounds = {"bass": (0, 48), "mid": (48, 72), "lead": (72, 128)}
+    register_intervals: dict[str, Any] = {}
+    for reg_name, (lo, hi) in register_bounds.items():
+        reg_notes = [n for n in notes if lo <= n["pitch"] < hi]
+        entry: dict[str, Any] = {"note_count": len(reg_notes)}
+        if len(reg_notes) >= 10:
+            hist, _ivs, char, avg = _compute_interval_histogram(reg_notes)
+            entry["interval_histogram"] = hist
+            entry["interval_character"] = char
+            entry["avg_interval_size"] = avg
+        register_intervals[reg_name] = entry
+
+    # Interval transition matrix
+    interval_transitions_common: list[dict[str, Any]] = []
+    interval_transitions_unexpected: list[dict[str, Any]] = []
+    if len(intervals) >= 3:
+        pair_counts: dict[tuple[int, int], int] = Counter(
+            (intervals[i], intervals[i + 1]) for i in range(len(intervals) - 1)
+        )
+        total_pairs = sum(pair_counts.values())
+
+        # Top 10 most common
+        for (a, b), cnt in sorted(pair_counts.items(), key=lambda x: -x[1])[:10]:
+            interval_transitions_common.append({
+                "from": INTERVAL_NAMES.get(a, f"{a:+d}"),
+                "to": INTERVAL_NAMES.get(b, f"{b:+d}"),
+                "from_semitones": a,
+                "to_semitones": b,
+                "count": cnt,
+                "percentage": round(cnt / total_pairs * 100, 1),
+            })
+
+        # Independence model for unexpected transitions
+        from_counts: dict[int, int] = Counter(intervals[:-1])
+        to_counts: dict[int, int] = Counter(intervals[1:])
+        total_from = sum(from_counts.values()) or 1
+        total_to = sum(to_counts.values()) or 1
+
+        surprises: list[tuple[float, int, int, int]] = []
+        for (a, b), observed in pair_counts.items():
+            p_from = from_counts[a] / total_from
+            p_to = to_counts[b] / total_to
+            expected = p_from * p_to * total_pairs
+            if expected > 0.5:  # only consider pairs with meaningful expectation
+                ratio = observed / expected
+                surprises.append((ratio, a, b, observed))
+
+        for ratio, a, b, cnt in sorted(surprises, key=lambda x: -x[0])[:5]:
+            interval_transitions_unexpected.append({
+                "from": INTERVAL_NAMES.get(a, f"{a:+d}"),
+                "to": INTERVAL_NAMES.get(b, f"{b:+d}"),
+                "from_semitones": a,
+                "to_semitones": b,
+                "count": cnt,
+                "observed_expected_ratio": round(ratio, 2),
+            })
 
     # Phrase detection: segment by onset gaps > 0.3s
     phrases = []
@@ -483,26 +634,39 @@ def _analyze_melodic(
     if current_phrase:
         phrases.append(current_phrase)
 
-    # Contour: per-phrase classification
+    # Contour: per-phrase classification using intervals (octave-jump resistant)
     contours = []
     for phrase in phrases[:50]:  # Limit
         if len(phrase) < 3:
             contours.append("flat")
             continue
         phrase_pitches = [n["pitch"] for n in phrase]
-        mid = len(phrase_pitches) // 2
-        first_half = np.mean(phrase_pitches[:mid])
-        second_half = np.mean(phrase_pitches[mid:])
-        peak_pos = np.argmax(phrase_pitches)
-        valley_pos = np.argmin(phrase_pitches)
+        # Compute intervals, skipping octave jumps (>6 semitones)
+        intervals_p = []
+        for j in range(1, len(phrase_pitches)):
+            iv = phrase_pitches[j] - phrase_pitches[j - 1]
+            if abs(iv) > 6:
+                continue  # skip octave jumps
+            intervals_p.append(iv)
 
-        if peak_pos < len(phrase_pitches) * 0.4 and second_half < first_half - 1:
+        if len(intervals_p) < 2:
+            contours.append("flat")
+            continue
+
+        mid = len(intervals_p) // 2
+        first_half_net = sum(intervals_p[:mid])
+        second_half_net = sum(intervals_p[mid:])
+        up_count = sum(1 for iv in intervals_p if iv > 0)
+        down_count = sum(1 for iv in intervals_p if iv < 0)
+        total_moves = up_count + down_count or 1
+
+        if first_half_net > 1 and second_half_net < -1:
             contours.append("arch")
-        elif valley_pos < len(phrase_pitches) * 0.4 and second_half > first_half + 1:
+        elif first_half_net < -1 and second_half_net > 1:
             contours.append("valley")
-        elif second_half > first_half + 1:
+        elif up_count / total_moves > 0.6:
             contours.append("ascending")
-        elif second_half < first_half - 1:
+        elif down_count / total_moves > 0.6:
             contours.append("descending")
         else:
             contours.append("flat")
@@ -524,6 +688,26 @@ def _analyze_melodic(
     beats_total = (duration / 60.0) * bpm
     note_density = round(len(notes) / max(beats_total, 1), 2)
 
+    # Contour distribution as percentages
+    total_contours = sum(contour_counts.values()) or 1
+    contour_summary = {k: round(v / total_contours * 100, 1) for k, v in contour_counts.items()}
+
+    # Register movement: linear trend of mean pitch per phrase
+    if len(phrases) >= 2:
+        phrase_means = [float(np.mean([n["pitch"] for n in p])) for p in phrases]
+        x = np.arange(len(phrase_means))
+        slope = float(np.polyfit(x, phrase_means, 1)[0])
+        if slope > 0.3:
+            register_trend = "rising"
+        elif slope < -0.3:
+            register_trend = "falling"
+        else:
+            register_trend = "stable"
+        register_slope = round(slope, 3)
+    else:
+        register_trend = "insufficient data"
+        register_slope = 0.0
+
     # Phrase lengths
     phrase_lengths = [
         round(phrase[-1]["end"] - phrase[0]["start"], 2) for phrase in phrases if phrase
@@ -540,10 +724,15 @@ def _analyze_melodic(
         "avg_interval_size": round(avg_interval, 2),
         "phrase_count": len(phrases),
         "avg_phrase_length_seconds": avg_phrase_length,
-        "contour_summary": dict(contour_counts),
+        "contour_summary": contour_summary,
         "dominant_contour": dominant_contour,
+        "register_trend": register_trend,
+        "register_slope": register_slope,
         "pitch_class_distribution": pitch_class_dist,
         "note_density_per_beat": note_density,
+        "register_intervals": register_intervals,
+        "interval_transitions_common": interval_transitions_common,
+        "interval_transitions_unexpected": interval_transitions_unexpected,
     }
 
 
@@ -731,8 +920,8 @@ def _analyze_spectral(
         energy = float(np.sum(spec[mask] ** 2))
         band_energy[band_name] = round(energy / total_energy * 100, 1)
 
-    # MFCCs (13 coefficients, averaged)
-    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    # MFCCs (13 coefficients, averaged) — use shared pre-computed MFCCs
+    mfcc = shared["mfcc"]
     mfcc_mean = [round(float(m), 3) for m in np.mean(mfcc, axis=1)]
 
     # Spectral contrast
@@ -759,6 +948,46 @@ def _analyze_spectral(
     }
 
 
+def _find_segment_boundaries(
+    sim_matrix: np.ndarray,
+    threshold_factor: float = 0.25,
+    rms: np.ndarray | None = None,
+) -> np.ndarray:
+    """Find segment boundaries using Foote novelty with optional RMS supplementation."""
+    import librosa
+    from scipy.signal import find_peaks
+
+    try:
+        novelty = librosa.segment.novelty(sim_matrix, kernel_size=16)
+        threshold = np.mean(novelty) + np.std(novelty) * threshold_factor
+        peaks, _ = find_peaks(novelty, height=threshold, distance=5)
+    except Exception:
+        peaks = np.array([])
+
+    # Supplement with energy-based boundaries from RMS envelope
+    if rms is not None and len(rms) > 0:
+        try:
+            n_frames = sim_matrix.shape[0]
+            rms_ds = np.interp(
+                np.linspace(0, len(rms) - 1, n_frames),
+                np.arange(len(rms)),
+                rms,
+            )
+            rms_diff = np.abs(np.diff(rms_ds))
+            rms_threshold = np.mean(rms_diff) + np.std(rms_diff) * 1.5
+            rms_peaks, _ = find_peaks(rms_diff, height=rms_threshold, distance=5)
+
+            # Merge RMS peaks with novelty peaks if not within 3 frames of existing
+            for rp in rms_peaks:
+                if len(peaks) == 0 or np.min(np.abs(peaks - rp)) > 3:
+                    peaks = np.append(peaks, rp)
+            peaks = np.sort(peaks)
+        except Exception:
+            pass
+
+    return peaks
+
+
 def _analyze_structural(
     y: np.ndarray, sr: int, shared: dict, file_path: str, track_id: str
 ) -> dict[str, Any]:
@@ -766,18 +995,24 @@ def _analyze_structural(
     import librosa
 
     chroma = shared["chroma"]
+    mfcc = shared["mfcc"]
     duration = shared["duration"]
 
-    # Self-similarity matrix (chroma-based)
-    # Downsample chroma for manageable matrix size
+    # Combined chroma+MFCC feature matrix for self-similarity
     target_frames = min(200, chroma.shape[1])
     hop = max(1, chroma.shape[1] // target_frames)
     chroma_ds = chroma[:, ::hop]
+    mfcc_ds = mfcc[:, ::hop]
 
-    # Compute cosine similarity
-    norms = np.linalg.norm(chroma_ds, axis=0, keepdims=True) + 1e-10
-    chroma_normed = chroma_ds / norms
-    sim_matrix = np.dot(chroma_normed.T, chroma_normed)
+    # Normalize each feature set globally before stacking
+    chroma_norm = chroma_ds / (np.linalg.norm(chroma_ds) + 1e-10)
+    mfcc_norm = mfcc_ds / (np.linalg.norm(mfcc_ds) + 1e-10)
+    features = np.vstack([chroma_norm, mfcc_norm])  # 25-row matrix
+
+    # Compute cosine similarity on combined features
+    norms = np.linalg.norm(features, axis=0, keepdims=True) + 1e-10
+    features_normed = features / norms
+    sim_matrix = np.dot(features_normed.T, features_normed)
 
     # Render self-similarity matrix as PNG
     ssm_png_b64 = None
@@ -801,14 +1036,9 @@ def _analyze_structural(
     except Exception as e:
         logger.warning(f"Failed to render self-similarity matrix: {e}")
 
-    # Segmentation using Foote novelty
-    try:
-        novelty = librosa.segment.novelty(sim_matrix, kernel_size=16)
-        # Find peaks in novelty curve
-        from scipy.signal import find_peaks
-        peaks, _ = find_peaks(novelty, height=np.mean(novelty) + np.std(novelty) * 0.5, distance=5)
-    except Exception:
-        peaks = np.array([])
+    # Segmentation using Foote novelty + RMS supplementation
+    rms = shared["rms"]
+    peaks = _find_segment_boundaries(sim_matrix, threshold_factor=0.25, rms=rms)
 
     # Convert peak frames to times
     frames_to_time_factor = duration / max(sim_matrix.shape[0], 1)
@@ -822,6 +1052,19 @@ def _analyze_structural(
             "end": boundary_times[i + 1],
             "duration": round(boundary_times[i + 1] - boundary_times[i], 2),
         })
+
+    # Single-section retry: if only 1 segment for track > 60s, retry with lower threshold
+    if len(segments) <= 1 and duration > 60:
+        peaks = _find_segment_boundaries(sim_matrix, threshold_factor=0.0, rms=rms)
+        if len(peaks) > 0:
+            boundary_times = [0.0] + [round(float(p * frames_to_time_factor), 2) for p in peaks] + [round(duration, 2)]
+            segments = []
+            for i in range(len(boundary_times) - 1):
+                segments.append({
+                    "start": boundary_times[i],
+                    "end": boundary_times[i + 1],
+                    "duration": round(boundary_times[i + 1] - boundary_times[i], 2),
+                })
 
     # Section labeling by chroma similarity
     section_labels = []
@@ -1024,7 +1267,7 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
         lines.append(f"- {harmonic.get('note', 'No significant harmonic content detected')}")
     else:
         hr = harmonic.get("harmonic_rhythm", "?")
-        lines.append(f"- **Chord change frequency:** {hr} changes/second")
+        lines.append(f"- **Chord change frequency:** {hr} changes/bar")
 
         ks = harmonic.get("key_stability", "?")
         lines.append(f"- **Key stability:** {ks}")
@@ -1035,6 +1278,15 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
         if mc:
             chord_str = ", ".join(f"{c['chord']} ({c['percentage']}%)" for c in mc[:6])
             lines.append(f"- **Most common chords:** {chord_str}")
+
+        kmt = harmonic.get("key_mode_timeline", [])
+        if kmt:
+            lines.append("- **Key/mode over time:**")
+            for entry in kmt:
+                lines.append(
+                    f"  - {_format_time(entry['start'])}–{_format_time(entry['end'])}: "
+                    f"{entry['key_mode']} ({round(entry['confidence'] * 100)}%)"
+                )
     lines.append("")
 
     # Melodic Character
@@ -1059,10 +1311,50 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
         lines.append(f"- **Phrases:** {pc} phrases, avg {apl}s")
 
         dc = melodic.get("dominant_contour", "?")
-        lines.append(f"- **Contour tendency:** {dc}")
+        cs = melodic.get("contour_summary", {})
+        if cs:
+            dist_parts = [f"{k} {v}%" for k, v in sorted(cs.items(), key=lambda x: -x[1])]
+            lines.append(f"- **Contour tendency:** {dc} ({', '.join(dist_parts)})")
+        else:
+            lines.append(f"- **Contour tendency:** {dc}")
+
+        rt = melodic.get("register_trend")
+        if rt:
+            lines.append(f"- **Register movement:** {rt}")
 
         nd = melodic.get("note_density_per_beat", "?")
         lines.append(f"- **Note density:** {nd} notes/beat")
+
+        # Voice register summary
+        ri = melodic.get("register_intervals", {})
+        if ri:
+            reg_parts = []
+            for reg_name in ("bass", "mid", "lead"):
+                reg = ri.get(reg_name, {})
+                nc = reg.get("note_count", 0)
+                if nc > 0:
+                    char = reg.get("interval_character", "")
+                    avg = reg.get("avg_interval_size", "")
+                    detail = f", {char}, avg {avg}st" if char else ""
+                    reg_parts.append(f"{reg_name}: {nc} notes{detail}")
+            if reg_parts:
+                lines.append(f"- **Register breakdown:** {' | '.join(reg_parts)}")
+
+        # Interval transitions
+        itc = melodic.get("interval_transitions_common", [])
+        if itc:
+            top5 = itc[:5]
+            parts = [f"{t['from']}\u2192{t['to']} ({t['percentage']}%)" for t in top5]
+            lines.append(f"- **Common transitions:** {', '.join(parts)}")
+
+        itu = melodic.get("interval_transitions_unexpected", [])
+        if itu:
+            top3 = itu[:3]
+            parts = [
+                f"{t['from']}\u2192{t['to']} ({t['observed_expected_ratio']}x expected)"
+                for t in top3
+            ]
+            lines.append(f"- **Unexpected transitions:** {', '.join(parts)}")
     lines.append("")
 
     # Rhythmic Character
@@ -1095,7 +1387,7 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
     be = spectral.get("band_energy", {})
     if be:
         parts = [f"{k.replace('_', ' ')}: {v}%" for k, v in be.items()]
-        lines.append(f"- **Band energy:** {' · '.join(parts)}")
+        lines.append(f"- **Band energy:** {' / '.join(parts)}")
 
     fl = spectral.get("flatness", 0)
     tonal_desc = "tonal" if fl < 0.01 else "mixed" if fl < 0.1 else "noisy/textural"
@@ -1120,6 +1412,16 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
                 f"  - {_format_time(seg['start'])}–{_format_time(seg['end'])} — "
                 f"Section {seg.get('label', '?')} ({seg['duration']}s)"
             )
+
+    ssm_png = structural.get("self_similarity_png")
+    if ssm_png:
+        lines.append("")
+        lines.append("<details>")
+        lines.append("<summary>Self-Similarity Matrix</summary>")
+        lines.append("")
+        lines.append(f"![Self-Similarity Matrix](data:image/png;base64,{ssm_png})")
+        lines.append("")
+        lines.append("</details>")
     lines.append("")
 
     # Energy
@@ -1147,8 +1449,12 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
         lines.append("")
         lines.append("| Time | Chord | Confidence |")
         lines.append("|------|-------|------------|")
-        for c in chord_seq[:100]:
+        display_limit = 200
+        total = len(chord_seq)
+        for c in chord_seq[:display_limit]:
             lines.append(f"| {_format_time(c['time'])} | {c['chord']} | {c['confidence']} |")
+        if total > display_limit:
+            lines.append(f"\n*Showing first {display_limit} of {total} total chord changes.*")
         lines.append("")
         lines.append("</details>")
         lines.append("")
@@ -1165,6 +1471,75 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
             iv = int(iv_str)
             name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
             lines.append(f"| {iv:+d} | {name} | {pct}% |")
+        lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    # Per-register interval histograms
+    ri = melodic.get("register_intervals", {})
+    has_register_data = any(
+        ri.get(r, {}).get("interval_histogram") for r in ("bass", "mid", "lead")
+    )
+    if has_register_data:
+        lines.append("<details>")
+        lines.append("<summary>Per-register interval histograms</summary>")
+        lines.append("")
+        for reg_name in ("bass", "mid", "lead"):
+            reg = ri.get(reg_name, {})
+            reg_hist = reg.get("interval_histogram", {})
+            if not reg_hist:
+                continue
+            lines.append(f"**{reg_name.title()}** ({reg.get('note_count', 0)} notes, "
+                         f"{reg.get('interval_character', '?')}, avg {reg.get('avg_interval_size', '?')}st)")
+            lines.append("")
+            lines.append("| Interval | Name | Frequency |")
+            lines.append("|----------|------|-----------|")
+            for iv_str, pct in sorted(reg_hist.items(), key=lambda x: -x[1]):
+                iv = int(iv_str)
+                name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
+                lines.append(f"| {iv:+d} | {name} | {pct}% |")
+            lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    # Interval transition matrix
+    itc = melodic.get("interval_transitions_common", [])
+    if itc:
+        lines.append("<details>")
+        lines.append("<summary>Interval transitions</summary>")
+        lines.append("")
+        lines.append("**Most common transitions (top 10):**")
+        lines.append("")
+        lines.append("| From | To | Count | Percentage |")
+        lines.append("|------|----|-------|------------|")
+        for t in itc:
+            lines.append(f"| {t['from']} | {t['to']} | {t['count']} | {t['percentage']}% |")
+        lines.append("")
+        itu = melodic.get("interval_transitions_unexpected", [])
+        if itu:
+            lines.append("**Most unexpected transitions (top 5):**")
+            lines.append("")
+            lines.append("| From | To | Count | Observed/Expected |")
+            lines.append("|------|----|-------|-------------------|")
+            for t in itu:
+                lines.append(f"| {t['from']} | {t['to']} | {t['count']} | {t['observed_expected_ratio']}x |")
+            lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    # Key/mode timeline table
+    kmt = harmonic.get("key_mode_timeline", [])
+    if kmt:
+        lines.append("<details>")
+        lines.append("<summary>Key/mode timeline</summary>")
+        lines.append("")
+        lines.append("| Time Range | Key/Mode | Confidence |")
+        lines.append("|------------|----------|------------|")
+        for entry in kmt:
+            lines.append(
+                f"| {_format_time(entry['start'])}–{_format_time(entry['end'])} "
+                f"| {entry['key_mode']} | {round(entry['confidence'] * 100)}% |"
+            )
         lines.append("")
         lines.append("</details>")
         lines.append("")
