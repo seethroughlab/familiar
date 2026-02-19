@@ -24,6 +24,16 @@ vi.mock('../profileService', () => ({
   getSelectedProfileId: vi.fn(() => Promise.resolve('profile-123')),
 }));
 
+const { mockGetBatch } = vi.hoisted(() => ({
+  mockGetBatch: vi.fn((_ids: string[]) => Promise.resolve([] as Record<string, unknown>[])),
+}));
+
+vi.mock('../../api/client', () => ({
+  tracksApi: {
+    getBatch: mockGetBatch,
+  },
+}));
+
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -39,7 +49,7 @@ import {
   loadPlayerStateForProfile,
   clearPlayerState,
   migrateOldPlayerState,
-  fetchTracksByIds,
+  fetchTracksBatched,
   debouncedSavePlayerState,
 } from '../playerPersistence';
 import { isIndexedDBAvailable } from '../../db';
@@ -379,51 +389,72 @@ describe('playerPersistence', () => {
     });
   });
 
-  describe('fetchTracksByIds', () => {
-    beforeEach(() => {
-      global.fetch = vi.fn();
-    });
-
-    it('should fetch tracks from API', async () => {
+  describe('fetchTracksBatched', () => {
+    it('should fetch tracks using batch API', async () => {
       const track1 = { id: 't1', title: 'Song 1', artist: 'A' };
       const track2 = { id: 't2', title: 'Song 2', artist: 'B' };
 
-      (global.fetch as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(track1) })
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(track2) });
+      mockGetBatch.mockResolvedValueOnce([track1, track2]);
 
-      const result = await fetchTracksByIds(['t1', 't2']);
+      const result = await fetchTracksBatched(['t1', 't2']);
 
       expect(result).toEqual([track1, track2]);
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(mockGetBatch).toHaveBeenCalledWith(['t1', 't2']);
     });
 
     it('should return empty array for empty input', async () => {
-      const result = await fetchTracksByIds([]);
+      const result = await fetchTracksBatched([]);
       expect(result).toEqual([]);
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(mockGetBatch).not.toHaveBeenCalled();
     });
 
-    it('should skip tracks that fail to fetch', async () => {
+    it('should chunk into groups of 50 and fetch in parallel', async () => {
+      // Create 120 track IDs
+      const ids = Array.from({ length: 120 }, (_, i) => `t${i}`);
+      const tracks = ids.map(id => ({ id, title: `Song ${id}` }));
+
+      mockGetBatch
+        .mockResolvedValueOnce(tracks.slice(0, 50))
+        .mockResolvedValueOnce(tracks.slice(50, 100))
+        .mockResolvedValueOnce(tracks.slice(100, 120));
+
+      const result = await fetchTracksBatched(ids);
+
+      expect(mockGetBatch).toHaveBeenCalledTimes(3);
+      expect(mockGetBatch).toHaveBeenCalledWith(ids.slice(0, 50));
+      expect(mockGetBatch).toHaveBeenCalledWith(ids.slice(50, 100));
+      expect(mockGetBatch).toHaveBeenCalledWith(ids.slice(100, 120));
+      expect(result).toHaveLength(120);
+    });
+
+    it('should preserve original ID order', async () => {
+      const track1 = { id: 't1', title: 'Song 1' };
+      const track2 = { id: 't2', title: 'Song 2' };
+
+      // API returns in different order
+      mockGetBatch.mockResolvedValueOnce([track2, track1]);
+
+      const result = await fetchTracksBatched(['t1', 't2']);
+
+      expect(result).toEqual([track1, track2]);
+    });
+
+    it('should skip missing tracks gracefully', async () => {
       const track1 = { id: 't1', title: 'Song 1' };
 
-      (global.fetch as ReturnType<typeof vi.fn>)
-        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(track1) })
-        .mockResolvedValueOnce({ ok: false, status: 404 });
+      // Only t1 returned, t2 is missing
+      mockGetBatch.mockResolvedValueOnce([track1]);
 
-      const result = await fetchTracksByIds(['t1', 't2']);
+      const result = await fetchTracksBatched(['t1', 't2']);
 
       expect(result).toEqual([track1]);
     });
 
-    it('should handle network errors gracefully', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-        new Error('Network error')
-      );
+    it('should handle batch errors gracefully', async () => {
+      mockGetBatch.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchTracksByIds(['t1']);
+      const result = await fetchTracksBatched(['t1']);
 
-      // Individual track errors are caught, but the outer try-catch may also fire
       expect(result).toEqual([]);
     });
   });

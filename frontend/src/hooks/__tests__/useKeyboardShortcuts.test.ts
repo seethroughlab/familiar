@@ -10,7 +10,7 @@ import { usePlayerStore } from '../../stores/playerStore'
 vi.mock('../../services/playerPersistence', () => ({
   debouncedSavePlayerState: vi.fn(),
   loadPlayerState: vi.fn(() => Promise.resolve(null)),
-  fetchTracksByIds: vi.fn(() => Promise.resolve([])),
+  fetchTracksBatched: vi.fn(() => Promise.resolve([])),
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }))
 

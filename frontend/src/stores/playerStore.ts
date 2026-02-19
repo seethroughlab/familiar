@@ -3,7 +3,7 @@ import type { Track, QueueItem } from '../types';
 import {
   debouncedSavePlayerState,
   loadPlayerState,
-  fetchTracksByIds,
+  fetchTracksBatched,
   migrateOldPlayerState,
 } from '../services/playerPersistence';
 import { tracksApi } from '../api/client';
@@ -74,6 +74,7 @@ interface PlayerState {
 
   // Hydration
   isHydrated: boolean;
+  isQueueHydrating: boolean;
 
   // Actions
   setCurrentTrack: (track: Track | null) => void;
@@ -160,6 +161,9 @@ const REFILL_BATCH = 20;       // How many to fetch per refill
 // Concurrency guard for reservoir refills
 let isRefilling = false;
 
+// Hydration version counter — invalidates in-flight hydrations on profile switch or re-hydrate
+let hydrationVersion = 0;
+
 // Helper to refill queue from the lazy reservoir.
 // Self-contained: checks threshold internally, so callers can call unconditionally.
 const refillFromReservoir = async () => {
@@ -243,6 +247,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   nextTrackPreloaded: false,
   isLoadingAudio: false,
   isHydrated: false,
+  isQueueHydrating: false,
 
   // Setters
   setCurrentTrack: (track) => {
@@ -518,6 +523,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         nextQueueIndex = 0;
       }
 
+      // Clamp to valid range after splice
+      if (nextQueueIndex < 0 || nextQueueIndex >= newQueue.length) {
+        nextQueueIndex = 0;
+      }
+
       // Adjust shuffle order: remove the old index and shift down
       if (shuffle) {
         newShuffleOrder = newShuffleOrder
@@ -540,6 +550,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       });
       persistState();
       refillFromReservoir();
+      return;
+    }
+
+    if (nextQueueIndex < 0 || nextQueueIndex >= queue.length) {
+      log.warn('playNext — nextQueueIndex out of bounds, stopping', { nextQueueIndex, queueLength: queue.length });
+      set({ isPlaying: false });
       return;
     }
 
@@ -902,57 +918,88 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     refillFromReservoir();
   },
 
-  // Hydrate state from IndexedDB
+  // Hydrate state from IndexedDB (two-phase: instant current track + background queue)
   hydrate: async () => {
+    const myVersion = ++hydrationVersion;
+
     try {
       // Migrate old player state from fixed ID to profile-based
       await migrateOldPlayerState();
 
+      if (myVersion !== hydrationVersion) return;
+
       const persisted = await loadPlayerState();
+      if (myVersion !== hydrationVersion) return;
+
       if (!persisted) {
         set({ isHydrated: true });
         return;
       }
 
-      // Fetch tracks if we have queue track IDs
-      let queue: QueueItem[] = [];
-      let currentTrack: Track | null = null;
-
-      if (persisted.queueTrackIds.length > 0) {
-        const tracks = await fetchTracksByIds(persisted.queueTrackIds);
-        queue = tracks.map((track) => ({
-          track,
-          queueId: generateQueueId(),
-        }));
-
-        // Find current track in queue
-        if (persisted.currentTrackId && persisted.queueIndex >= 0) {
-          currentTrack = queue[persisted.queueIndex]?.track || null;
-        }
-      }
-
+      // Phase 1: Immediately set playback settings + mark hydrated so UI renders
       set({
         volume: persisted.volume,
         shuffle: persisted.shuffle,
         repeat: persisted.repeat,
         consume: persisted.consume ?? false,
-        queue,
-        queueIndex: persisted.queueIndex,
-        currentTrack,
         currentTime: persisted.currentTime ?? 0,
-        isPlaying: false, // Don't auto-play on hydration
+        isPlaying: false,
         isHydrated: true,
-        shuffleOrder: persisted.shuffleOrder || [],
+        isQueueHydrating: persisted.queueTrackIds.length > 0,
+      });
+
+      if (persisted.queueTrackIds.length === 0) return;
+
+      // Phase 1b: Fetch just the current track so the playbar renders immediately
+      if (persisted.currentTrackId) {
+        try {
+          const [currentTrack] = await tracksApi.getBatch([persisted.currentTrackId]);
+          if (myVersion !== hydrationVersion) return;
+          if (currentTrack) {
+            set({ currentTrack });
+          }
+        } catch {
+          // Non-fatal — will be resolved when full queue loads
+        }
+      }
+
+      if (myVersion !== hydrationVersion) return;
+
+      // Phase 2: Fetch the full queue in batched parallel requests
+      const tracks = await fetchTracksBatched(persisted.queueTrackIds);
+      if (myVersion !== hydrationVersion) return;
+
+      const queue: QueueItem[] = tracks.map((track) => ({
+        track,
+        queueId: generateQueueId(),
+      }));
+
+      // Clamp persisted indices to actual queue length (tracks may have been deleted)
+      const clampedQueueIndex = queue.length > 0
+        ? Math.min(persisted.queueIndex, queue.length - 1)
+        : -1;
+      const currentTrack = clampedQueueIndex >= 0 ? queue[clampedQueueIndex]?.track || null : null;
+      const clampedShuffleOrder = (persisted.shuffleOrder || []).filter(i => i < queue.length);
+
+      const existingTrackId = get().currentTrack?.id;
+      set({
+        queue,
+        queueIndex: clampedQueueIndex,
+        // Only update currentTrack if it actually changed (avoid re-triggering audio engine)
+        ...(currentTrack?.id !== existingTrackId ? { currentTrack } : {}),
+        isQueueHydrating: false,
+        shuffleOrder: clampedShuffleOrder,
         shuffleIndex: persisted.shuffleIndex ?? -1,
       });
     } catch (error) {
       log.error('Failed to hydrate player state:', error);
-      set({ isHydrated: true });
+      set({ isHydrated: true, isQueueHydrating: false });
     }
   },
 
   // Reset player state for profile switch (call before hydrate)
   resetForProfileSwitch: () => {
+    ++hydrationVersion;
     set({
       currentTrack: null,
       isPlaying: false,
@@ -973,6 +1020,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       crossfadeState: 'idle',
       nextTrackPreloaded: false,
       isHydrated: false,
+      isQueueHydrating: false,
     });
   },
 }));

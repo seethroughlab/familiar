@@ -6,6 +6,7 @@
 import { db, isIndexedDBAvailable, type PersistedPlayerState } from '../db';
 import { getSelectedProfileId } from './profileService';
 import type { Track, QueueItem } from '../types';
+import { tracksApi } from '../api/client';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlayerPersistence');
@@ -93,27 +94,48 @@ export async function loadPlayerStateForProfile(profileId: string): Promise<Pers
 }
 
 /**
- * Fetch tracks by IDs from API.
+ * Fetch tracks by IDs from API using batch endpoint.
+ * Chunks into groups of 50 (the batch endpoint limit) and fetches with limited
+ * concurrency (3 at a time) to avoid saturating the browser's connection pool
+ * — leaving connections free for audio streaming.
+ * Returns tracks in the original ID order, skipping any that couldn't be fetched.
  */
-export async function fetchTracksByIds(trackIds: string[]): Promise<Track[]> {
+const BATCH_CONCURRENCY = 3;
+
+export async function fetchTracksBatched(trackIds: string[]): Promise<Track[]> {
   if (trackIds.length === 0) return [];
 
   try {
-    // Fetch each track individually (could be optimized with a batch endpoint)
-    const tracks: Track[] = [];
-    for (const id of trackIds) {
-      try {
-        const response = await fetch(`/api/v1/tracks/${id}`);
-        if (response.ok) {
-          const track = await response.json();
-          tracks.push(track);
-        }
-      } catch {
-        // Skip tracks that can't be fetched
-        log.warn(`Failed to fetch track ${id}`);
+    // Chunk into groups of 50
+    const chunks: string[][] = [];
+    for (let i = 0; i < trackIds.length; i += 50) {
+      chunks.push(trackIds.slice(i, i + 50));
+    }
+
+    // Fetch chunks with limited concurrency to leave connections free for audio
+    const results: Track[][] = [];
+    for (let i = 0; i < chunks.length; i += BATCH_CONCURRENCY) {
+      const batch = chunks.slice(i, i + BATCH_CONCURRENCY);
+      const batchResults = await Promise.all(
+        batch.map(chunk => tracksApi.getBatch(chunk).catch((error) => {
+          log.warn('Failed to fetch track batch:', error);
+          return [] as Track[];
+        }))
+      );
+      results.push(...batchResults);
+    }
+
+    // Build a map for O(1) lookup, then return in original ID order
+    const trackMap = new Map<string, Track>();
+    for (const batch of results) {
+      for (const track of batch) {
+        trackMap.set(track.id, track);
       }
     }
-    return tracks;
+
+    return trackIds
+      .map(id => trackMap.get(id))
+      .filter((t): t is Track => t !== undefined);
   } catch (error) {
     log.error('Failed to fetch tracks:', error);
     return [];
