@@ -368,7 +368,7 @@ def _analyze_harmonic(
             dur = smoothed[i + 1]["time"] - c["time"]
         else:
             dur = duration - c["time"]
-        chord_durations[c["chord"]] = chord_durations.get(c["chord"], 0) + dur
+        chord_durations[str(c["chord"])] = chord_durations.get(str(c["chord"]), 0) + dur
     total_dur = sum(chord_durations.values()) or 1
     most_common = [
         {"chord": ch, "percentage": round(dur / total_dur * 100, 1)}
@@ -544,8 +544,8 @@ def _analyze_melodic(
     pitch_range = {
         "low": int(min(pitches)),
         "high": int(max(pitches)),
-        "low_note": _midi_to_note(min(pitches)),
-        "high_note": _midi_to_note(max(pitches)),
+        "low_note": _midi_to_note(int(min(pitches))),
+        "high_note": _midi_to_note(int(max(pitches))),
     }
 
     # 10th-90th percentile range
@@ -676,7 +676,7 @@ def _analyze_melodic(
     pc_counts = Counter(p % 12 for p in pitches)
     total_pc = sum(pc_counts.values()) or 1
     pitch_class_dist = {
-        NOTE_NAMES[pc]: round(cnt / total_pc * 100, 1)
+        NOTE_NAMES[int(pc)]: round(cnt / total_pc * 100, 1)
         for pc, cnt in sorted(pc_counts.items())
     }
 

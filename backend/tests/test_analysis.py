@@ -9,6 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("librosa")
+
 from app.services.analysis import (
     AnalysisError,
     extract_features,

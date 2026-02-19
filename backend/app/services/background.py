@@ -921,7 +921,7 @@ class BackgroundManager:
                     delete(FrontendLog).where(FrontendLog.server_ts < cutoff)
                 )
                 await db.commit()
-                logger.info(f"Frontend logs cleanup: deleted {result.rowcount} entries older than 7 days")
+                logger.info(f"Frontend logs cleanup: deleted {result.rowcount} entries older than 7 days")  # type: ignore[attr-defined]
 
             await engine.dispose()
         except Exception as e:

@@ -9,6 +9,8 @@ from uuid import uuid4
 import numpy as np
 import pytest
 
+pytest.importorskip("sklearn")
+
 from app.services.embedding_map import (
     EmbeddingMapService,
     MapData,
