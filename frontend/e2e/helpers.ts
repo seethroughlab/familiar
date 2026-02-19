@@ -36,18 +36,33 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
     await page.waitForTimeout(500);
   }
 
-  // Wait for main app to load - Library button indicates we're in the app
-  await page.waitForSelector('button:has-text("Library")', { timeout: 10000 });
+  // Wait for main app to load - sidebar nav link indicates we're in the app
+  await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 10000 });
 }
 
 /**
- * Navigate to a specific tab in the main UI
+ * Navigate to a specific section in the sidebar-based UI
  */
 export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Settings') {
-  // The tab buttons contain the text directly
-  const tabButton = page.locator(`button:has-text("${tabName}")`).first();
-  await tabButton.click();
-  await page.waitForTimeout(300); // Allow tab transition
+  switch (tabName) {
+    case 'Library': {
+      // Click "Tracks" link in sidebar to navigate to library view
+      const tracksLink = page.locator('a:has-text("Tracks")').first();
+      await tracksLink.click();
+      break;
+    }
+    case 'Settings': {
+      // Click Settings button in sidebar footer
+      const settingsBtn = page.locator('button:has-text("Settings")').first();
+      await settingsBtn.click();
+      break;
+    }
+    case 'Playlists':
+    case 'Queue':
+      // These are visible in the sidebar by default, no navigation needed
+      break;
+  }
+  await page.waitForTimeout(300);
 }
 
 /**

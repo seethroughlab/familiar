@@ -36,7 +36,7 @@ test.describe('Profiles', () => {
     await page.waitForTimeout(500);
 
     // Should transition to main app
-    await page.waitForSelector('button:has-text("Library")', { timeout: 5000 });
+    await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 5000 });
   });
 
   test('settings has profile section', async ({ page }) => {
@@ -65,7 +65,7 @@ test.describe('Profiles', () => {
       // Click a profile
       await profileButtons.first().click();
       // Should navigate to main app
-      await page.waitForSelector('button:has-text("Library")', { timeout: 5000 });
+      await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 5000 });
     } else {
       test.skip(true, 'No existing profiles to select');
     }

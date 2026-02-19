@@ -158,17 +158,19 @@ test.describe('UI Elements', () => {
     expect(criticalErrors.length).toBe(0);
   });
 
-  test('main navigation tabs work', async ({ page }) => {
-    // Test all main tabs are accessible
-    const tabs = ['Library', 'Playlists', 'Settings'] as const;
+  test('main sidebar navigation works', async ({ page }) => {
+    // Test sidebar navigation links are accessible
+    const sidebarLinks = ['Tracks', 'Artists', 'Albums'] as const;
 
-    for (const tab of tabs) {
-      await navigateToTab(page, tab);
+    for (const linkText of sidebarLinks) {
+      const link = page.locator(`a:has-text("${linkText}")`).first();
+      await expect(link).toBeVisible({ timeout: 5000 });
+      await link.click();
       await page.waitForTimeout(300);
-
-      // Verify we're on the right page (URL or content check)
-      const _content = page.locator(`[data-testid="${tab.toLowerCase()}"], .${tab.toLowerCase()}, main`);
-      // Just verify navigation didn't error
     }
+
+    // Verify Settings button works
+    const settingsBtn = page.locator('button:has-text("Settings")').first();
+    await expect(settingsBtn).toBeVisible({ timeout: 5000 });
   });
 });

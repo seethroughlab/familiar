@@ -75,7 +75,7 @@ const MOCK_NO_TRACKS_RESPONSE = createMockSSEResponse([
 
 /** Open the chat panel (hidden by default behind a toggle button) */
 async function openChatPanel(page: Page) {
-  const chatButton = page.locator('button:has-text("Chat")').first();
+  const chatButton = page.locator('button[aria-label*="chat" i]').first();
   await chatButton.click();
   await page.waitForTimeout(500);
 }
