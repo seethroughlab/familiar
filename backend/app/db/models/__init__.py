@@ -27,7 +27,7 @@ from .profiles import (
     SpotifyProfile,
     SubsonicCredential,
 )
-from .tracks import ExternalTrack, Track, TrackAnalysis, TrackVideo
+from .tracks import ExternalTrack, Track, TrackAnalysis, TrackDeepAnalysis, TrackVideo
 
 __all__ = [
     # Base
@@ -60,5 +60,6 @@ __all__ = [
     "SubsonicCredential",
     "Track",
     "TrackAnalysis",
+    "TrackDeepAnalysis",
     "TrackVideo",
 ]

@@ -42,6 +42,9 @@ fi
 # Sync backend if needed
 if [ "$DEPLOY_BACKEND" = true ]; then
     echo "Syncing backend to $NAS_HOST..."
+    # Remove stale models.py if it exists alongside models/ package
+    # Python prefers packages over modules — having both causes import confusion
+    ssh root@$NAS_HOST "test -d $REMOTE_PATH/backend/app/db/models && rm -f $REMOTE_PATH/backend/app/db/models.py" 2>/dev/null || true
     rsync -avz \
         --exclude '__pycache__' \
         --exclude '.venv' \
