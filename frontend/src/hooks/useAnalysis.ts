@@ -1,25 +1,25 @@
 import { useCallback } from 'react';
-import { deepAnalysisApi } from '../api/deep-analysis';
+import { analysisApi } from '../api/analysis';
 import { showLoading, showSuccess, showError, dismissToast } from '../stores/toastStore';
 import type { Track } from '../types';
 
 /**
- * Hook for triggering deep analysis and downloading reports.
- * Handles the trigger → poll → download flow with toast progress.
+ * Hook for triggering analysis and downloading reports.
+ * Handles the trigger -> poll -> download flow with toast progress.
  */
-export function useDeepAnalysis() {
+export function useAnalysis() {
   const downloadAnalysis = useCallback(async (track: Track) => {
     const label = `${track.artist || 'Unknown'} - ${track.title || 'Unknown'}`;
     const toastId = showLoading(`Analyzing ${label}...`);
 
     try {
       // Trigger analysis (returns immediately if cached)
-      const { data } = await deepAnalysisApi.trigger(track.id);
+      const { data } = await analysisApi.trigger(track.id);
 
       if (data.status === 'ready') {
         // Already cached — download immediately
         dismissToast(toastId);
-        await deepAnalysisApi.downloadReport(track.id);
+        await analysisApi.downloadReport(track.id);
         showSuccess('Analysis downloaded');
         return;
       }
@@ -27,13 +27,13 @@ export function useDeepAnalysis() {
       // Processing — poll until ready
       for (let i = 0; i < 90; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        const { data: status } = await deepAnalysisApi.getStatus(track.id);
+        const { data: status } = await analysisApi.getStatus(track.id);
         if ('status' in status && status.status === 'processing') {
           continue; // still processing
         }
         // Analysis ready — download report
         dismissToast(toastId);
-        await deepAnalysisApi.downloadReport(track.id);
+        await analysisApi.downloadReport(track.id);
         showSuccess('Analysis downloaded');
         return;
       }
@@ -53,19 +53,19 @@ export function useDeepAnalysis() {
     const toastId = showLoading(`Analyzing ${trackIds.length} tracks...`);
 
     try {
-      const { data } = await deepAnalysisApi.triggerBulk(trackIds);
+      const { data } = await analysisApi.triggerBulk(trackIds);
       const taskId = data.task_id;
 
       // Poll progress
       for (let i = 0; i < 180; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         try {
-          const { data: progress } = await deepAnalysisApi.getBulkStatus(taskId);
+          const { data: progress } = await analysisApi.getBulkStatus(taskId);
 
           dismissToast(toastId);
           if (progress.status === 'completed') {
             // Download combined report
-            await deepAnalysisApi.downloadBulkReport(taskId);
+            await analysisApi.downloadBulkReport(taskId);
             showSuccess(`Analysis downloaded (${progress.completed} tracks)`);
             return;
           }

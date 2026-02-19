@@ -1342,7 +1342,8 @@ async def get_mood_distribution(
     latest_analysis = (
         select(
             TrackAnalysis.track_id,
-            TrackAnalysis.features,
+            TrackAnalysis.energy,
+            TrackAnalysis.valence,
             func.row_number()
             .over(
                 partition_by=TrackAnalysis.track_id,
@@ -1353,9 +1354,9 @@ async def get_mood_distribution(
         .subquery("latest_analysis")
     )
 
-    # Extract energy/valence from JSONB as floats
-    energy_expr = latest_analysis.c.features.op("->>")("energy").cast(Float)
-    valence_expr = latest_analysis.c.features.op("->>")("valence").cast(Float)
+    # Use typed columns directly
+    energy_expr = latest_analysis.c.energy
+    valence_expr = latest_analysis.c.valence
 
     # Bin into grid cells, clamped to [0, grid_size-1]
     energy_cell = func.least(

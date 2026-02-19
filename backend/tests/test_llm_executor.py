@@ -872,7 +872,7 @@ class TestGetTrackDetails:
         mock_track.year = 2020
 
         mock_analysis = MagicMock()
-        mock_analysis.features = {"bpm": 120, "key": "C"}
+        mock_analysis.to_features_dict.return_value = {"bpm": 120, "key": "C"}
 
         # First call: track lookup, second: analysis lookup
         mock_db.execute.side_effect = [

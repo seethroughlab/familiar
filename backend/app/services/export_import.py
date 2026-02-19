@@ -1273,7 +1273,7 @@ class LibraryExportService:
         if analysis:
             analysis_export: dict[str, Any] = {
                 "version": analysis.version,
-                "features": analysis.features or {},
+                "features": analysis.to_features_dict(),
             }
 
             if include_embeddings and analysis.embedding is not None:
@@ -1504,21 +1504,19 @@ class LibraryImportService:
                             analysis = TrackAnalysis(
                                 track_id=track_id,
                                 version=ANALYSIS_VERSION,
-                                features={},
                             )
                             self.db.add(analysis)
 
-                        # Merge features (imported values fill gaps)
-                        existing_features = analysis.features or {}
+                        # Merge features (imported values fill gaps in typed columns)
+                        from app.db.models import ANALYSIS_FEATURE_COLUMNS
+
                         imported_features = export_analysis.get("features", {})
-                        if not existing_features or mode == "replace":
-                            analysis.features = imported_features
-                        else:
-                            # Only fill missing features
-                            for key, value in imported_features.items():
-                                if key not in existing_features:
-                                    existing_features[key] = value
-                            analysis.features = existing_features
+                        for col in ANALYSIS_FEATURE_COLUMNS:
+                            imported_val = imported_features.get(col)
+                            if imported_val is not None:
+                                existing_val = getattr(analysis, col, None)
+                                if existing_val is None or mode == "replace":
+                                    setattr(analysis, col, imported_val)
 
                         analysis.features_source = "library_import"
                         analysis_imported += 1
@@ -2003,7 +2001,7 @@ class BackupService:
         if analysis:
             analysis_export: dict[str, Any] = {
                 "version": analysis.version,
-                "features": analysis.features or {},
+                "features": analysis.to_features_dict(),
             }
 
             if include_embeddings and analysis.embedding is not None:
@@ -2493,19 +2491,19 @@ class RestoreService:
                         analysis = TrackAnalysis(
                             track_id=track_id,
                             version=ANALYSIS_VERSION,
-                            features={},
                         )
                         self.db.add(analysis)
 
-                    existing_features = analysis.features or {}
+                    # Merge features into typed columns
+                    from app.db.models import ANALYSIS_FEATURE_COLUMNS
+
                     imported_features = export_analysis.get("features", {})
-                    if not existing_features or mode == "replace":
-                        analysis.features = imported_features
-                    else:
-                        for key, value in imported_features.items():
-                            if key not in existing_features:
-                                existing_features[key] = value
-                        analysis.features = existing_features
+                    for col in ANALYSIS_FEATURE_COLUMNS:
+                        imported_val = imported_features.get(col)
+                        if imported_val is not None:
+                            existing_val = getattr(analysis, col, None)
+                            if existing_val is None or mode == "replace":
+                                setattr(analysis, col, imported_val)
 
                     analysis.features_source = "library_import"
                     analysis_imported += 1

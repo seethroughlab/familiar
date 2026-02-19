@@ -46,11 +46,13 @@ PLAY_HISTORY_FIELDS = {
 # Boolean fields
 BOOLEAN_FIELDS = {"never_played"}
 
-# Fields that exist in TrackAnalysis.features JSONB
+# Fields that exist as typed columns on TrackAnalysis
 ANALYSIS_FIELDS = {
     "bpm", "key", "energy", "valence", "danceability",
     "acousticness", "instrumentalness", "speechiness",
-    "loudness_db", "dynamic_range_db",
+    "loudness_lufs", "dynamic_range_db", "swing_ratio",
+    "syncopation", "brightness", "harmonic_complexity",
+    "note_density", "section_count", "avg_section_length",
 }
 
 # Valid operators
@@ -377,8 +379,8 @@ class SmartPlaylistService:
         if field in TRACK_FIELDS:
             column = getattr(Track, field)
         elif field in ANALYSIS_FIELDS and has_analysis_join:
-            # Access JSONB field
-            column = cast(TrackAnalysis.features[field].astext, Float)
+            # Access typed column
+            column = getattr(TrackAnalysis, field)
         elif field in PLAY_HISTORY_FIELDS and has_play_history_join:
             # Play history fields - treat NULL as 0 for numeric comparisons
             if field in ("play_count", "total_play_seconds"):
@@ -506,7 +508,7 @@ class SmartPlaylistService:
         if order_by in TRACK_FIELDS:
             return getattr(Track, order_by)
         elif order_by in ANALYSIS_FIELDS:
-            return cast(TrackAnalysis.features[order_by].astext, Float)
+            return getattr(TrackAnalysis, order_by)
         elif order_by in ("play_count", "total_play_seconds", "last_played_at"):
             # Play history fields - use coalesce for numeric to sort NULLs as 0
             if order_by in ("play_count", "total_play_seconds"):

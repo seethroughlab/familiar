@@ -204,7 +204,6 @@ async def list_track_ids(
     if has_feature_filter:
         analysis_subq = (
             select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-            .where(TrackAnalysis.features.isnot(None))
             .group_by(TrackAnalysis.track_id)
             .subquery()
         )
@@ -213,13 +212,13 @@ async def list_track_ids(
             (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
         )
         if energy_min is not None:
-            query = query.where(cast(TrackAnalysis.features["energy"].astext, Float) >= energy_min)
+            query = query.where(TrackAnalysis.energy >= energy_min)
         if energy_max is not None:
-            query = query.where(cast(TrackAnalysis.features["energy"].astext, Float) <= energy_max)
+            query = query.where(TrackAnalysis.energy <= energy_max)
         if valence_min is not None:
-            query = query.where(cast(TrackAnalysis.features["valence"].astext, Float) >= valence_min)
+            query = query.where(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
-            query = query.where(cast(TrackAnalysis.features["valence"].astext, Float) <= valence_max)
+            query = query.where(TrackAnalysis.valence <= valence_max)
 
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query) or 0
@@ -240,7 +239,6 @@ async def list_track_ids(
             if not has_feature_filter:
                 analysis_subq = (
                     select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-                    .where(TrackAnalysis.features.isnot(None))
                     .group_by(TrackAnalysis.track_id)
                     .subquery()
                 )
@@ -248,7 +246,8 @@ async def list_track_ids(
                     TrackAnalysis,
                     (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
                 )
-            sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
+            sort_col_attr = getattr(TrackAnalysis, sort_by, None)
+            sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
                 query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number)
             else:
@@ -577,19 +576,19 @@ async def list_tracks(
                 response = TrackResponse.model_validate(track)
                 if include_features and track.analyses:
                     latest = max(track.analyses, key=lambda a: a.version)
-                    if latest.features:
+                    if latest.bpm is not None:
                         response.features = TrackFeaturesResponse(
-                            bpm=latest.features.get("bpm"),
-                            key=latest.features.get("key"),
-                            energy=latest.features.get("energy"),
-                            danceability=latest.features.get("danceability"),
-                            valence=latest.features.get("valence"),
-                            acousticness=latest.features.get("acousticness"),
-                            instrumentalness=latest.features.get("instrumentalness"),
-                            speechiness=latest.features.get("speechiness"),
-                            loudness_lufs=latest.features.get("loudness_lufs"),
-                            track_peak=latest.features.get("track_peak"),
-                            replaygain_track_gain=latest.features.get("replaygain_track_gain"),
+                            bpm=latest.bpm,
+                            key=latest.key,
+                            energy=latest.energy,
+                            danceability=latest.danceability,
+                            valence=latest.valence,
+                            acousticness=latest.acousticness,
+                            instrumentalness=latest.instrumentalness,
+                            speechiness=latest.speechiness,
+                            loudness_lufs=latest.loudness_lufs,
+                            track_peak=latest.track_peak,
+                            replaygain_track_gain=latest.replaygain_track_gain,
                         )
                 if track.id in ph_map:
                     ph = ph_map[track.id]
@@ -642,7 +641,7 @@ async def list_tracks(
                 TrackAnalysis.track_id,
                 func.max(TrackAnalysis.version).label("max_version")
             )
-            .where(TrackAnalysis.features.isnot(None))
+            .where(TrackAnalysis.bpm.isnot(None))
             .group_by(TrackAnalysis.track_id)
             .subquery()
         )
@@ -655,13 +654,13 @@ async def list_tracks(
             (TrackAnalysis.version == analysis_subq.c.max_version)
         )
         if energy_min is not None:
-            query = query.where(cast(TrackAnalysis.features["energy"].astext, Float) >= energy_min)
+            query = query.where(TrackAnalysis.energy >= energy_min)
         if energy_max is not None:
-            query = query.where(cast(TrackAnalysis.features["energy"].astext, Float) <= energy_max)
+            query = query.where(TrackAnalysis.energy <= energy_max)
         if valence_min is not None:
-            query = query.where(cast(TrackAnalysis.features["valence"].astext, Float) >= valence_min)
+            query = query.where(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
-            query = query.where(cast(TrackAnalysis.features["valence"].astext, Float) <= valence_max)
+            query = query.where(TrackAnalysis.valence <= valence_max)
 
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -688,7 +687,7 @@ async def list_tracks(
                         TrackAnalysis.track_id,
                         func.max(TrackAnalysis.version).label("max_version")
                     )
-                    .where(TrackAnalysis.features.isnot(None))
+                    .where(TrackAnalysis.bpm.isnot(None))
                     .group_by(TrackAnalysis.track_id)
                     .subquery()
                 )
@@ -699,7 +698,8 @@ async def list_tracks(
                     (TrackAnalysis.track_id == analysis_subq.c.track_id) &
                     (TrackAnalysis.version == analysis_subq.c.max_version)
                 )
-            sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
+            sort_col_attr = getattr(TrackAnalysis, sort_by, None)
+            sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
                 query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number)
             else:
@@ -729,19 +729,19 @@ async def list_tracks(
         response = TrackResponse.model_validate(track)
         if include_features and track.analyses:
             latest = max(track.analyses, key=lambda a: a.version)
-            if latest.features:
+            if latest.bpm is not None:
                 response.features = TrackFeaturesResponse(
-                    bpm=latest.features.get("bpm"),
-                    key=latest.features.get("key"),
-                    energy=latest.features.get("energy"),
-                    danceability=latest.features.get("danceability"),
-                    valence=latest.features.get("valence"),
-                    acousticness=latest.features.get("acousticness"),
-                    instrumentalness=latest.features.get("instrumentalness"),
-                    speechiness=latest.features.get("speechiness"),
-                    loudness_lufs=latest.features.get("loudness_lufs"),
-                    track_peak=latest.features.get("track_peak"),
-                    replaygain_track_gain=latest.features.get("replaygain_track_gain"),
+                    bpm=latest.bpm,
+                    key=latest.key,
+                    energy=latest.energy,
+                    danceability=latest.danceability,
+                    valence=latest.valence,
+                    acousticness=latest.acousticness,
+                    instrumentalness=latest.instrumentalness,
+                    speechiness=latest.speechiness,
+                    loudness_lufs=latest.loudness_lufs,
+                    track_peak=latest.track_peak,
+                    replaygain_track_gain=latest.replaygain_track_gain,
                 )
         if track.id in play_history_map:
             ph = play_history_map[track.id]
@@ -858,7 +858,7 @@ async def get_track_index(
     if has_feature_filter:
         analysis_subq = (
             select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-            .where(TrackAnalysis.features.isnot(None))
+            .where(TrackAnalysis.bpm.isnot(None))
             .group_by(TrackAnalysis.track_id)
             .subquery()
         )
@@ -867,13 +867,13 @@ async def get_track_index(
             (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
         )
         if energy_min is not None:
-            base_query = base_query.where(cast(TrackAnalysis.features["energy"].astext, Float) >= energy_min)
+            base_query = base_query.where(TrackAnalysis.energy >= energy_min)
         if energy_max is not None:
-            base_query = base_query.where(cast(TrackAnalysis.features["energy"].astext, Float) <= energy_max)
+            base_query = base_query.where(TrackAnalysis.energy <= energy_max)
         if valence_min is not None:
-            base_query = base_query.where(cast(TrackAnalysis.features["valence"].astext, Float) >= valence_min)
+            base_query = base_query.where(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
-            base_query = base_query.where(cast(TrackAnalysis.features["valence"].astext, Float) <= valence_max)
+            base_query = base_query.where(TrackAnalysis.valence <= valence_max)
 
     needs_analysis_join = False
     order_clauses: list[Any] = []
@@ -886,7 +886,8 @@ async def get_track_index(
                 order_clauses = [nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number]
         else:
             needs_analysis_join = not has_feature_filter
-            sort_expr = cast(TrackAnalysis.features[sort_by].astext, Float)
+            sort_col_attr = getattr(TrackAnalysis, sort_by, None)
+            sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
                 order_clauses = [nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number]
             else:
@@ -897,7 +898,7 @@ async def get_track_index(
     if needs_analysis_join:
         analysis_subq = (
             select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-            .where(TrackAnalysis.features.isnot(None))
+            .where(TrackAnalysis.bpm.isnot(None))
             .group_by(TrackAnalysis.track_id)
             .subquery()
         )
@@ -940,19 +941,19 @@ async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
     # Get latest analysis features
     if track.analyses:
         latest = max(track.analyses, key=lambda a: a.version)
-        if latest.features:
+        if latest.bpm is not None:
             response.features = TrackFeaturesResponse(
-                bpm=latest.features.get("bpm"),
-                key=latest.features.get("key"),
-                energy=latest.features.get("energy"),
-                danceability=latest.features.get("danceability"),
-                valence=latest.features.get("valence"),
-                acousticness=latest.features.get("acousticness"),
-                instrumentalness=latest.features.get("instrumentalness"),
-                speechiness=latest.features.get("speechiness"),
-                loudness_lufs=latest.features.get("loudness_lufs"),
-                track_peak=latest.features.get("track_peak"),
-                replaygain_track_gain=latest.features.get("replaygain_track_gain"),
+                bpm=latest.bpm,
+                key=latest.key,
+                energy=latest.energy,
+                danceability=latest.danceability,
+                valence=latest.valence,
+                acousticness=latest.acousticness,
+                instrumentalness=latest.instrumentalness,
+                speechiness=latest.speechiness,
+                loudness_lufs=latest.loudness_lufs,
+                track_peak=latest.track_peak,
+                replaygain_track_gain=latest.replaygain_track_gain,
             )
 
     return response
@@ -995,15 +996,15 @@ async def get_album_gain(
             TrackAnalysis.track_id,
             func.max(TrackAnalysis.version).label("max_version"),
         )
-        .where(TrackAnalysis.features.isnot(None))
+        .where(TrackAnalysis.bpm.isnot(None))
         .group_by(TrackAnalysis.track_id)
         .subquery()
     )
 
     album_query = (
         select(
-            cast(TrackAnalysis.features["loudness_lufs"].astext, Float).label("lufs"),
-            cast(TrackAnalysis.features["track_peak"].astext, Float).label("peak"),
+            TrackAnalysis.loudness_lufs.label("lufs"),
+            TrackAnalysis.track_peak.label("peak"),
         )
         .join(Track, Track.id == TrackAnalysis.track_id)
         .join(
@@ -1014,7 +1015,7 @@ async def get_album_gain(
         .where(
             Track.album == track.album,
             (Track.album_artist == album_artist) | (Track.artist == album_artist),
-            TrackAnalysis.features["loudness_lufs"].astext != "null",
+            TrackAnalysis.loudness_lufs.isnot(None),
         )
     )
 
@@ -1922,20 +1923,20 @@ async def update_track_metadata(
     # Get latest analysis features
     if track.analyses:
         latest = max(track.analyses, key=lambda a: a.version)
-        if latest.features:
+        if latest.bpm is not None:
             # Merge user overrides with analysis features
             features_data = {
-                "bpm": latest.features.get("bpm"),
-                "key": latest.features.get("key"),
-                "energy": latest.features.get("energy"),
-                "danceability": latest.features.get("danceability"),
-                "valence": latest.features.get("valence"),
-                "acousticness": latest.features.get("acousticness"),
-                "instrumentalness": latest.features.get("instrumentalness"),
-                "speechiness": latest.features.get("speechiness"),
-                "loudness_lufs": latest.features.get("loudness_lufs"),
-                "track_peak": latest.features.get("track_peak"),
-                "replaygain_track_gain": latest.features.get("replaygain_track_gain"),
+                "bpm": latest.bpm,
+                "key": latest.key,
+                "energy": latest.energy,
+                "danceability": latest.danceability,
+                "valence": latest.valence,
+                "acousticness": latest.acousticness,
+                "instrumentalness": latest.instrumentalness,
+                "speechiness": latest.speechiness,
+                "loudness_lufs": latest.loudness_lufs,
+                "track_peak": latest.track_peak,
+                "replaygain_track_gain": latest.replaygain_track_gain,
             }
             # Apply user overrides
             if track.user_overrides:
@@ -2001,19 +2002,19 @@ async def get_track_metadata(
     # Get latest analysis features with user overrides applied
     if track.analyses:
         latest = max(track.analyses, key=lambda a: a.version)
-        if latest.features:
+        if latest.bpm is not None:
             features_data = {
-                "bpm": latest.features.get("bpm"),
-                "key": latest.features.get("key"),
-                "energy": latest.features.get("energy"),
-                "danceability": latest.features.get("danceability"),
-                "valence": latest.features.get("valence"),
-                "acousticness": latest.features.get("acousticness"),
-                "instrumentalness": latest.features.get("instrumentalness"),
-                "speechiness": latest.features.get("speechiness"),
-                "loudness_lufs": latest.features.get("loudness_lufs"),
-                "track_peak": latest.features.get("track_peak"),
-                "replaygain_track_gain": latest.features.get("replaygain_track_gain"),
+                "bpm": latest.bpm,
+                "key": latest.key,
+                "energy": latest.energy,
+                "danceability": latest.danceability,
+                "valence": latest.valence,
+                "acousticness": latest.acousticness,
+                "instrumentalness": latest.instrumentalness,
+                "speechiness": latest.speechiness,
+                "loudness_lufs": latest.loudness_lufs,
+                "track_peak": latest.track_peak,
+                "replaygain_track_gain": latest.replaygain_track_gain,
             }
             # Apply user overrides
             if track.user_overrides:

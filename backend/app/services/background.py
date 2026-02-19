@@ -635,6 +635,10 @@ class BackgroundManager:
             task = asyncio.create_task(self._do_features(track_id))
         elif phase == "embedding":
             task = asyncio.create_task(self._do_embedding(track_id))
+        elif phase == "deep_backfill":
+            task = asyncio.create_task(self._do_deep_backfill(track_id))
+        elif phase == "melodic":
+            task = asyncio.create_task(self._do_melodic(track_id))
         else:
             task = asyncio.create_task(self._do_analysis(track_id))
 
@@ -688,6 +692,48 @@ class BackgroundManager:
             return result
         except Exception as e:
             logger.error(f"Embedding generation failed for {track_id}: {e}")
+            return {"status": "error", "error": str(e)}
+        finally:
+            self._current_track_id = None
+            self._last_task_started_at = None
+            self._analysis_tasks.pop(task_key, None)
+
+    async def _do_deep_backfill(self, track_id: str) -> dict[str, Any]:
+        """Execute deep analysis backfill (cheap sections only).
+
+        For existing tracks that have features but no analysis_detail.
+        """
+        from app.services.deep_analysis import run_track_deep_backfill
+
+        task_key = f"{track_id}:deep_backfill"
+        try:
+            self._current_track_id = track_id
+            self._last_task_started_at = time.monotonic()
+            result = await self.run_cpu_bound(run_track_deep_backfill, track_id)
+            return result
+        except Exception as e:
+            logger.error(f"Deep backfill failed for {track_id}: {e}")
+            return {"status": "error", "error": str(e)}
+        finally:
+            self._current_track_id = None
+            self._last_task_started_at = None
+            self._analysis_tasks.pop(task_key, None)
+
+    async def _do_melodic(self, track_id: str) -> dict[str, Any]:
+        """Execute melodic analysis only (Phase 3).
+
+        Runs basic-pitch MIDI transcription in a subprocess.
+        """
+        from app.services.deep_analysis import run_track_melodic
+
+        task_key = f"{track_id}:melodic"
+        try:
+            self._current_track_id = track_id
+            self._last_task_started_at = time.monotonic()
+            result = await self.run_cpu_bound(run_track_melodic, track_id)
+            return result
+        except Exception as e:
+            logger.error(f"Melodic analysis failed for {track_id}: {e}")
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None

@@ -1,4 +1,4 @@
-"""API routes for deep track analysis."""
+"""API routes for track analysis."""
 
 import json
 import logging
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
-from app.db.models import Track, TrackDeepAnalysis
+from app.db.models import Track, TrackAnalysis
 from app.services.background import get_background_manager
 from app.services.deep_analysis import (
     DEEP_ANALYSIS_VERSION,
@@ -20,7 +20,7 @@ from app.services.deep_analysis import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/tracks", tags=["deep-analysis"])
+router = APIRouter(prefix="/tracks", tags=["analysis"])
 
 
 class BulkAnalysisRequest(BaseModel):
@@ -30,9 +30,9 @@ class BulkAnalysisRequest(BaseModel):
 # ─── Bulk endpoints (must be declared before {track_id} parameterized routes) ──
 
 
-@router.post("/deep-analysis/bulk")
-async def trigger_bulk_deep_analysis(body: BulkAnalysisRequest, db: DbSession):
-    """Trigger deep analysis for multiple tracks. Returns task_id for polling."""
+@router.post("/analysis/bulk")
+async def trigger_bulk_analysis(body: BulkAnalysisRequest, db: DbSession):
+    """Trigger analysis for multiple tracks. Returns task_id for polling."""
     if not body.track_ids:
         raise HTTPException(status_code=400, detail="No track IDs provided")
 
@@ -48,9 +48,9 @@ async def trigger_bulk_deep_analysis(body: BulkAnalysisRequest, db: DbSession):
     return {"status": "processing", "task_id": task_id, "total": len(body.track_ids)}
 
 
-@router.get("/deep-analysis/bulk/{task_id}")
+@router.get("/analysis/bulk/{task_id}")
 async def get_bulk_analysis_progress(task_id: str):
-    """Poll progress of a bulk deep analysis task."""
+    """Poll progress of a bulk analysis task."""
     bg = get_background_manager()
     data = bg.redis.get(f"familiar:deep_analysis:{task_id}")
 
@@ -60,7 +60,7 @@ async def get_bulk_analysis_progress(task_id: str):
     return json.loads(data)
 
 
-@router.get("/deep-analysis/bulk/{task_id}/report")
+@router.get("/analysis/bulk/{task_id}/report")
 async def get_bulk_analysis_report(task_id: str, db: DbSession):
     """Download combined markdown report for a bulk analysis task."""
     bg = get_background_manager()
@@ -77,19 +77,18 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
     track_metas = []
 
     for tid in progress["track_ids"]:
-        cached = (
+        analysis = (
             await db.execute(
-                select(TrackDeepAnalysis).where(
-                    TrackDeepAnalysis.track_id == UUID(tid),
-                    TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-                )
+                select(TrackAnalysis)
+                .where(TrackAnalysis.track_id == UUID(tid))
+                .order_by(TrackAnalysis.version.desc())
             )
         ).scalar_one_or_none()
 
         track = (await db.execute(select(Track).where(Track.id == UUID(tid)))).scalar_one_or_none()
 
-        if cached and track:
-            analyses.append(cached.results)
+        if analysis and analysis.analysis_detail and track:
+            analyses.append(analysis.analysis_detail)
             track_metas.append({
                 "artist": track.artist,
                 "title": track.title,
@@ -112,9 +111,9 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
 # ─── Single track endpoints ────────────────────────────────────────────────
 
 
-@router.post("/{track_id}/deep-analysis")
-async def trigger_deep_analysis(track_id: UUID, db: DbSession):
-    """Trigger deep analysis for a single track.
+@router.post("/{track_id}/analysis")
+async def trigger_analysis(track_id: UUID, db: DbSession):
+    """Trigger analysis for a single track.
 
     Returns immediately if cached at current version.
     Otherwise queues background processing and returns 202.
@@ -123,16 +122,15 @@ async def trigger_deep_analysis(track_id: UUID, db: DbSession):
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
 
-    cached = (
+    analysis = (
         await db.execute(
-            select(TrackDeepAnalysis).where(
-                TrackDeepAnalysis.track_id == track_id,
-                TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-            )
+            select(TrackAnalysis)
+            .where(TrackAnalysis.track_id == track_id)
+            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
-    if cached:
+    if analysis and analysis.analysis_detail:
         return {"status": "ready", "track_id": str(track_id)}
 
     bg = get_background_manager()
@@ -141,19 +139,18 @@ async def trigger_deep_analysis(track_id: UUID, db: DbSession):
     return {"status": "processing", "track_id": str(track_id)}
 
 
-@router.get("/{track_id}/deep-analysis")
-async def get_deep_analysis(track_id: UUID, db: DbSession):
-    """Get cached deep analysis JSON for a track."""
-    cached = (
+@router.get("/{track_id}/analysis")
+async def get_analysis(track_id: UUID, db: DbSession):
+    """Get cached analysis JSON for a track."""
+    analysis = (
         await db.execute(
-            select(TrackDeepAnalysis).where(
-                TrackDeepAnalysis.track_id == track_id,
-                TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-            )
+            select(TrackAnalysis)
+            .where(TrackAnalysis.track_id == track_id)
+            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
-    if not cached:
+    if not analysis or not analysis.analysis_detail:
         return JSONResponse(
             status_code=202,
             content={"status": "processing", "track_id": str(track_id)},
@@ -161,29 +158,28 @@ async def get_deep_analysis(track_id: UUID, db: DbSession):
 
     return {
         "track_id": str(track_id),
-        "version": cached.version,
-        "results": cached.results,
-        "midi_path": cached.midi_path,
-        "section_errors": cached.section_errors,
-        "analysis_duration_seconds": cached.analysis_duration_seconds,
-        "created_at": cached.created_at.isoformat() if cached.created_at else None,
+        "version": analysis.version,
+        "results": analysis.analysis_detail,
+        "midi_path": analysis.midi_path,
+        "has_melodic": analysis.has_melodic,
+        "melodic_version": analysis.melodic_version,
+        "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
     }
 
 
-@router.get("/{track_id}/deep-analysis/report")
-async def get_deep_analysis_report(track_id: UUID, db: DbSession, format: str = "md"):
-    """Download the deep analysis report as markdown or JSON."""
-    cached = (
+@router.get("/{track_id}/analysis/report")
+async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md"):
+    """Download the analysis report as markdown or JSON."""
+    analysis = (
         await db.execute(
-            select(TrackDeepAnalysis).where(
-                TrackDeepAnalysis.track_id == track_id,
-                TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-            )
+            select(TrackAnalysis)
+            .where(TrackAnalysis.track_id == track_id)
+            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
-    if not cached:
-        raise HTTPException(status_code=404, detail="Deep analysis not found")
+    if not analysis or not analysis.analysis_detail:
+        raise HTTPException(status_code=404, detail="Analysis not found")
 
     track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     if not track:
@@ -197,9 +193,9 @@ async def get_deep_analysis_report(track_id: UUID, db: DbSession, format: str = 
     }
 
     if format == "json":
-        return cached.results
+        return analysis.analysis_detail
 
-    report = generate_report(cached.results, track_meta)
+    report = generate_report(analysis.analysis_detail, track_meta)
     filename = f"{track.artist or 'Unknown'} - {track.title or 'Unknown'} - analysis.md"
     filename = "".join(c for c in filename if c.isalnum() or c in " -_.").strip()
 
@@ -210,24 +206,23 @@ async def get_deep_analysis_report(track_id: UUID, db: DbSession, format: str = 
     )
 
 
-@router.get("/{track_id}/deep-analysis/midi")
-async def get_deep_analysis_midi(track_id: UUID, db: DbSession):
+@router.get("/{track_id}/analysis/midi")
+async def get_analysis_midi(track_id: UUID, db: DbSession):
     """Download the MIDI transcription file if available."""
     from pathlib import Path
 
-    cached = (
+    analysis = (
         await db.execute(
-            select(TrackDeepAnalysis).where(
-                TrackDeepAnalysis.track_id == track_id,
-                TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-            )
+            select(TrackAnalysis)
+            .where(TrackAnalysis.track_id == track_id)
+            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
-    if not cached or not cached.midi_path:
+    if not analysis or not analysis.midi_path:
         raise HTTPException(status_code=404, detail="MIDI file not available")
 
-    midi_file = Path(cached.midi_path)
+    midi_file = Path(analysis.midi_path)
     if not midi_file.exists():
         raise HTTPException(status_code=404, detail="MIDI file not found on disk")
 

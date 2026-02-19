@@ -9,7 +9,7 @@ Usage (API-level):
 
 Usage (DB-level):
     track = await insert_test_track(async_db, title="My Song")
-    analysis = await insert_test_analysis(async_db, track.id, {"energy": 0.8})
+    analysis = await insert_test_analysis(async_db, track.id, {"energy": 0.8})  # sets typed column
 """
 
 from datetime import datetime
@@ -207,12 +207,17 @@ async def insert_test_analysis(
     *,
     version: int = 1,
 ) -> TrackAnalysis:
-    """Insert a TrackAnalysis row for a track."""
+    """Insert a TrackAnalysis row for a track.
+
+    The `features` dict maps typed column names to values (e.g. {"energy": 0.8}).
+    """
     analysis = TrackAnalysis(
         track_id=track_id,
         version=version,
-        features=features or {},
     )
+    if features:
+        for col_name, value in features.items():
+            setattr(analysis, col_name, value)
     db.add(analysis)
     await db.flush()
     return analysis

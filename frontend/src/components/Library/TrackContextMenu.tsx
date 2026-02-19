@@ -4,7 +4,7 @@
  * Shows on right-click with options like Play, Queue, Go to Artist, etc.
  */
 import { useEffect, useRef } from 'react';
-import { useDeepAnalysis } from '../../hooks/useDeepAnalysis';
+import { useAnalysis } from '../../hooks/useAnalysis';
 import {
   Play,
   ListPlus,
@@ -99,7 +99,7 @@ export function TrackContextMenu({
   onClearSelection,
 }: TrackContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const { downloadAnalysis } = useDeepAnalysis();
+  const { downloadAnalysis } = useAnalysis();
 
   // Close on click outside
   useEffect(() => {

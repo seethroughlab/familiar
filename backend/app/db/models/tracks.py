@@ -174,20 +174,82 @@ class ExternalTrack(Base):
     )
 
 
+# All scalar feature columns on TrackAnalysis
+ANALYSIS_FEATURE_COLUMNS = [
+    # From librosa (Phase 1)
+    "bpm", "key", "energy", "danceability", "valence", "acousticness",
+    "instrumentalness", "speechiness", "loudness_lufs", "track_peak",
+    "replaygain_track_gain",
+    # From analysis algorithms (Phase 1)
+    "harmonic_complexity", "key_stability", "modal_character", "modal_confidence",
+    "swing_ratio", "syncopation", "tempo_character", "brightness",
+    "dynamic_range_db", "energy_shape", "section_count", "form_string",
+    "avg_section_length",
+    # Melodic (Phase 3)
+    "note_density", "interval_character", "pitch_range",
+]
+
+
 class TrackAnalysis(Base):
-    """Versioned audio analysis with JSONB features and vector embedding."""
+    """Versioned audio analysis with typed feature columns and vector embedding."""
 
     __tablename__ = "track_analysis"
-    __table_args__ = (UniqueConstraint("track_id", "version", name="uq_track_analysis_version"),)
+    __table_args__ = (
+        UniqueConstraint("track_id", "version", name="uq_track_analysis_version"),
+        Index("ix_track_analysis_bpm", "bpm"),
+        Index("ix_track_analysis_energy", "energy"),
+        Index("ix_track_analysis_valence", "valence"),
+        Index("ix_track_analysis_key", "key"),
+        Index("ix_track_analysis_swing_ratio", "swing_ratio"),
+        Index("ix_track_analysis_brightness", "brightness"),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     track_id: Mapped[UUID] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), index=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    # Flexible features stored as JSONB (no migrations needed when adding new features)
-    # Example: {"bpm": 124.5, "key": "Am", "energy": 0.87, "valence": 0.65, ...}
-    features: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    # ── Typed feature columns (promoted from JSONB) ──────────────────────
+    # Phase 1: librosa features
+    bpm: Mapped[float | None] = mapped_column(Float)
+    key: Mapped[str | None] = mapped_column(String(10))
+    energy: Mapped[float | None] = mapped_column(Float)
+    danceability: Mapped[float | None] = mapped_column(Float)
+    valence: Mapped[float | None] = mapped_column(Float)
+    acousticness: Mapped[float | None] = mapped_column(Float)
+    instrumentalness: Mapped[float | None] = mapped_column(Float)
+    speechiness: Mapped[float | None] = mapped_column(Float)
+    loudness_lufs: Mapped[float | None] = mapped_column(Float)
+    track_peak: Mapped[float | None] = mapped_column(Float)
+    replaygain_track_gain: Mapped[float | None] = mapped_column(Float)
 
+    # Phase 1: analysis algorithm scalars
+    harmonic_complexity: Mapped[float | None] = mapped_column(Float)
+    key_stability: Mapped[str | None] = mapped_column(String(20))
+    modal_character: Mapped[str | None] = mapped_column(String(40))
+    modal_confidence: Mapped[float | None] = mapped_column(Float)
+    swing_ratio: Mapped[float | None] = mapped_column(Float)
+    syncopation: Mapped[float | None] = mapped_column(Float)
+    tempo_character: Mapped[str | None] = mapped_column(String(20))
+    brightness: Mapped[float | None] = mapped_column(Float)
+    dynamic_range_db: Mapped[float | None] = mapped_column(Float)
+    energy_shape: Mapped[str | None] = mapped_column(String(20))
+    section_count: Mapped[int | None] = mapped_column(Integer)
+    form_string: Mapped[str | None] = mapped_column(String(50))
+    avg_section_length: Mapped[float | None] = mapped_column(Float)
+
+    # Phase 3: melodic features (NULL until Phase 3 runs)
+    note_density: Mapped[float | None] = mapped_column(Float)
+    interval_character: Mapped[str | None] = mapped_column(String(20))
+    pitch_range: Mapped[int | None] = mapped_column(Integer)
+
+    # ── Structural columns ───────────────────────────────────────────────
+    # Full structured data for report generation (chord sequences, SSM image, etc.)
+    analysis_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    has_melodic: Mapped[bool] = mapped_column(Boolean, default=False)
+    midi_path: Mapped[str | None] = mapped_column(String(500))
+    melodic_version: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ── Existing columns ─────────────────────────────────────────────────
     # Vector embedding for similarity search (CLAP produces 512-dim embeddings)
     embedding: Mapped[Any | None] = mapped_column(Vector(512))
 
@@ -195,7 +257,6 @@ class TrackAnalysis(Base):
     acoustid: Mapped[str | None] = mapped_column(Text)
 
     # Cached AcoustID API lookup results (list of candidates with scores/recording IDs)
-    # Avoids repeated API calls for tracks we've already identified
     acoustid_lookup: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Source tracking: "local", "reccobeats", "community_cache", etc.
@@ -210,6 +271,15 @@ class TrackAnalysis(Base):
 
     # Relationships
     track: Mapped["Track"] = relationship(back_populates="analyses")
+
+    def to_features_dict(self) -> dict[str, Any]:
+        """Build a features dict from typed columns (preserves API shape)."""
+        result: dict[str, Any] = {}
+        for col in ANALYSIS_FEATURE_COLUMNS:
+            val = getattr(self, col, None)
+            if val is not None:
+                result[col] = val
+        return result
 
 
 class TrackVideo(Base):
@@ -241,26 +311,4 @@ class TrackVideo(Base):
     last_played_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Relationships
-    track: Mapped["Track"] = relationship()
-
-
-class TrackDeepAnalysis(Base):
-    """Deep musical analysis results (harmonic, melodic, rhythmic, spectral, structural, energy)."""
-
-    __tablename__ = "track_deep_analysis"
-    __table_args__ = (
-        UniqueConstraint("track_id", "version", name="uq_track_deep_analysis_version"),
-    )
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    track_id: Mapped[UUID] = mapped_column(
-        ForeignKey("tracks.id", ondelete="CASCADE"), index=True
-    )
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
-    results: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    midi_path: Mapped[str | None] = mapped_column(String(500))
-    section_errors: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-    analysis_duration_seconds: Mapped[float | None] = mapped_column(Float)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
     track: Mapped["Track"] = relationship()

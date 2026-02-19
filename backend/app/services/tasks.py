@@ -262,6 +262,38 @@ class SyncProgressReporter:
             "started_at": self.started_at,
         })
 
+    def set_melodic(
+        self,
+        analyzed: int,
+        pending: int,
+        total: int,
+        scan_stats: dict[str, int] | None = None,
+    ) -> None:
+        """Phase 5: Melodic analysis (basic-pitch MIDI transcription)."""
+        pct = int(analyzed / total * 100) if total > 0 else 0
+        stats = scan_stats or {}
+
+        self._update({
+            "status": "running",
+            "phase": "melodic",
+            "phase_message": f"Melodic analysis... {analyzed}/{total} ({pct}%)",
+            "files_discovered": stats.get("files_total", 0),
+            "files_processed": stats.get("files_total", 0),
+            "files_total": stats.get("files_total", 0),
+            "new_tracks": stats.get("new_tracks", 0),
+            "updated_tracks": stats.get("updated_tracks", 0),
+            "unchanged_tracks": stats.get("unchanged_tracks", 0),
+            "relocated_tracks": stats.get("relocated_tracks", 0),
+            "marked_missing": stats.get("marked_missing", 0),
+            "recovered": stats.get("recovered", 0),
+            "tracks_analyzed": analyzed,
+            "tracks_pending_analysis": pending,
+            "tracks_total": total,
+            "analysis_percent": pct,
+            "current_item": None,
+            "started_at": self.started_at,
+        })
+
     def complete(
         self,
         new: int = 0,
@@ -701,6 +733,160 @@ async def run_library_sync(
 
                     await asyncio.sleep(2)
 
+            # Phase 4.5: Deep backfill — populate analysis_detail for existing tracks
+            # One-time cost: runs cheap section analyzers on tracks that have
+            # features but no analysis_detail yet.
+            backfill_start = time.time()
+            backfill_max_duration = 8 * 60 * 60  # 8 hours
+            backfill_stall_threshold = 10 * 60  # 10 minutes
+            last_backfill_progress_time = time.time()
+            last_backfill_done = 0
+
+            while True:
+                async with local_session_maker() as db:
+                    from app.db.models import TrackAnalysis
+
+                    # Count tracks that already have analysis_detail
+                    backfill_done_result = await db.execute(
+                        select(func.count(TrackAnalysis.id)).where(
+                            and_(
+                                TrackAnalysis.version >= ANALYSIS_VERSION,
+                                TrackAnalysis.analysis_detail.is_not(None),
+                            )
+                        )
+                    )
+                    backfill_done = backfill_done_result.scalar() or 0
+
+                    # Total tracks with current version
+                    backfill_total_result = await db.execute(
+                        select(func.count(TrackAnalysis.id)).where(
+                            TrackAnalysis.version >= ANALYSIS_VERSION,
+                        )
+                    )
+                    backfill_total = backfill_total_result.scalar() or 0
+
+                    pending_backfill = backfill_total - backfill_done
+
+                if pending_backfill == 0:
+                    logger.info(
+                        f"Deep backfill complete: {backfill_done}/{backfill_total}"
+                    )
+                    break
+
+                elapsed = time.time() - backfill_start
+                if elapsed > backfill_max_duration:
+                    logger.warning(
+                        f"Deep backfill timed out after {elapsed/3600:.1f}h "
+                        f"({backfill_done} done, {pending_backfill} pending)"
+                    )
+                    break
+
+                if backfill_done > last_backfill_done:
+                    last_backfill_progress_time = time.time()
+                    last_backfill_done = backfill_done
+                elif time.time() - last_backfill_progress_time > backfill_stall_threshold:
+                    queued = await queue_tracks_for_deep_backfill(limit=200)
+                    if queued == 0 and pending_backfill > 0:
+                        logger.warning(
+                            f"Deep backfill stalled with {pending_backfill} pending"
+                        )
+                        break
+                    last_backfill_progress_time = time.time()
+
+                if pending_backfill > 0:
+                    await queue_tracks_for_deep_backfill(limit=100)
+
+                # Report as features phase since it's populating analysis data
+                pct = int(backfill_done / backfill_total * 100) if backfill_total > 0 else 0
+                progress.set_features(
+                    analyzed=backfill_done,
+                    pending=pending_backfill,
+                    total=backfill_total,
+                    scan_stats=scan_stats,
+                )
+
+                await asyncio.sleep(5)
+
+            # Phase 5: Melodic analysis (basic-pitch, optional)
+            try:
+                import basic_pitch  # noqa: F401
+                melodic_available = True
+            except ImportError:
+                melodic_available = False
+                logger.info("basic_pitch not installed — skipping melodic phase")
+
+            if melodic_available:
+                melodic_start_time = time.time()
+                max_melodic_duration = 8 * 60 * 60  # 8 hours max
+                melodic_stall_threshold = 10 * 60  # 10 minutes
+                last_melodic_progress_time = time.time()
+                last_melodic_done = 0
+
+                while True:
+                    async with local_session_maker() as db:
+                        from app.db.models import TrackAnalysis
+
+                        # Count tracks with melodic analysis done
+                        melodic_done_result = await db.execute(
+                            select(func.count(TrackAnalysis.id)).where(
+                                and_(
+                                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                                    TrackAnalysis.has_melodic.is_(True),
+                                )
+                            )
+                        )
+                        melodic_done = melodic_done_result.scalar() or 0
+
+                        # Total tracks eligible for melodic (have analysis_detail)
+                        melodic_total_result = await db.execute(
+                            select(func.count(TrackAnalysis.id)).where(
+                                and_(
+                                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                                    TrackAnalysis.analysis_detail.is_not(None),
+                                )
+                            )
+                        )
+                        melodic_total = melodic_total_result.scalar() or 0
+
+                        pending_melodic = melodic_total - melodic_done
+
+                    # Timeout
+                    elapsed = time.time() - melodic_start_time
+                    if elapsed > max_melodic_duration:
+                        logger.warning(
+                            f"Melodic phase timed out after {elapsed/3600:.1f}h "
+                            f"({melodic_done} done, {pending_melodic} pending)"
+                        )
+                        break
+
+                    # Stall detection
+                    if melodic_done > last_melodic_done:
+                        last_melodic_progress_time = time.time()
+                        last_melodic_done = melodic_done
+                    elif time.time() - last_melodic_progress_time > melodic_stall_threshold:
+                        queued = await queue_tracks_for_melodic(limit=200)
+                        if queued == 0 and pending_melodic > 0:
+                            logger.warning(
+                                f"Melodic phase stalled with {pending_melodic} pending"
+                            )
+                            break
+                        last_melodic_progress_time = time.time()
+
+                    if pending_melodic == 0:
+                        break
+
+                    if pending_melodic > 0:
+                        await queue_tracks_for_melodic(limit=100)
+
+                    progress.set_melodic(
+                        analyzed=melodic_done,
+                        pending=pending_melodic,
+                        total=melodic_total,
+                        scan_stats=scan_stats,
+                    )
+
+                    await asyncio.sleep(5)
+
         finally:
             await local_engine.dispose()
 
@@ -793,17 +979,20 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
     from sqlalchemy import select
 
-    from app.db.models import SpotifyFavorite, Track, TrackAnalysis
+    from app.db.models import ANALYSIS_FEATURE_COLUMNS, SpotifyFavorite, Track, TrackAnalysis
     from app.db.session import sync_session_maker
     from app.services.analysis import (
         AnalysisError,
+        derive_features,
         extract_features,
         generate_fingerprint,
         identify_track,
+        precompute_shared,
     )
     from app.services.app_settings import get_app_settings_service
     from app.services.artwork import extract_and_save_artwork
     from app.services.community_cache import get_community_cache_service
+    from app.services.deep_analysis import run_cheap_sections
     from app.services.external_features import get_external_features_service
 
     log_memory("features_start")
@@ -949,10 +1138,31 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
             # Fall back to local librosa extraction if no external/cached features
             computed_locally = False
+            analysis_detail = None
+            deep_scalars: dict[str, Any] = {}
             if not features.get("bpm"):
-                features = extract_features(file_path)
+                # Use unified pipeline: shared precomputation → features + cheap sections
+                import numpy as np
+                y, sr, shared = precompute_shared(file_path)
+                features = derive_features(y, sr, shared, file_path)
                 features_source = "local"
                 computed_locally = True
+
+                # Run cheap deep analysis sections (harmonic, rhythmic, spectral, structural, energy)
+                # Only if track is long enough for meaningful analysis
+                if track.duration_seconds and track.duration_seconds >= 30:
+                    try:
+                        analysis_detail, deep_scalars, section_errors = run_cheap_sections(
+                            y, sr, shared, str(file_path), track_id
+                        )
+                        if section_errors:
+                            logger.warning(
+                                f"Deep analysis section errors for {track.title}: {section_errors}"
+                            )
+                    except Exception as e:
+                        logger.warning(f"Cheap sections failed for {track.title}: {e}")
+
+                del y, shared
                 gc.collect()
 
             # Contribute features to community cache if computed locally
@@ -992,10 +1202,10 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 musicbrainz_recording_id=musicbrainz_recording_id,
             )
 
-            if musicbrainz_metadata:
-                features["musicbrainz"] = musicbrainz_metadata
-
             log_memory("after_metadata")
+
+            # Merge all features: librosa + deep analysis scalars
+            all_features = {**features, **deep_scalars}
 
             # Create or update analysis record (without embedding - that comes in phase 2)
             # Query by track_id only - NOT by version, to avoid creating duplicates
@@ -1008,20 +1218,31 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             existing_analysis = existing.scalar_one_or_none()
 
             if existing_analysis:
-                existing_analysis.features = features
+                # Set typed columns from features
+                for col in ANALYSIS_FEATURE_COLUMNS:
+                    val = all_features.get(col)
+                    if val is not None:
+                        setattr(existing_analysis, col, val)
                 existing_analysis.features_source = features_source
                 existing_analysis.acoustid = acoustid_fingerprint
-                existing_analysis.version = ANALYSIS_VERSION  # Update version
+                existing_analysis.version = ANALYSIS_VERSION
+                if analysis_detail is not None:
+                    existing_analysis.analysis_detail = analysis_detail
                 # Keep existing embedding if present
             else:
                 analysis = TrackAnalysis(
                     track_id=track.id,
                     version=ANALYSIS_VERSION,
-                    features=features,
                     features_source=features_source,
                     embedding=None,  # Embedding extracted in phase 2
                     acoustid=acoustid_fingerprint,
+                    analysis_detail=analysis_detail,
                 )
+                # Set typed columns from features
+                for col in ANALYSIS_FEATURE_COLUMNS:
+                    val = all_features.get(col)
+                    if val is not None:
+                        setattr(analysis, col, val)
                 db.add(analysis)
 
             # Update track analysis status
@@ -1035,7 +1256,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
             logger.info(
                 f"Features extracted for {track.title} (source={features_source}): "
-                f"BPM={features.get('bpm')}, Key={features.get('key')}"
+                f"BPM={all_features.get('bpm')}, Key={all_features.get('key')}"
             )
 
             gc.collect()
@@ -1047,10 +1268,10 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 "status": "success",
                 "phase": "features",
                 "artwork_extracted": artwork_hash is not None,
-                "features_extracted": bool(features.get("bpm")),
+                "features_extracted": bool(all_features.get("bpm")),
                 "features_source": features_source,
-                "bpm": features.get("bpm"),
-                "key": features.get("key"),
+                "bpm": all_features.get("bpm"),
+                "key": all_features.get("key"),
             }
 
     except AnalysisError as e:
@@ -1423,6 +1644,78 @@ async def queue_tracks_for_embeddings(limit: int = 500) -> int:
         manager = get_background_manager()
         for track_id in track_ids:
             await manager.run_analysis(track_id, phase="embedding")
+            queued += 1
+
+    return queued
+
+
+async def queue_tracks_for_melodic(limit: int = 500) -> int:
+    """Queue tracks that need melodic analysis (Phase 3).
+
+    This includes tracks with analysis_detail but has_melodic=False.
+    Returns the number of tracks queued.
+    """
+    from sqlalchemy import and_, select
+
+    from app.db.models import TrackAnalysis
+    from app.db.session import async_session_maker
+    from app.services.background import get_background_manager
+
+    queued = 0
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(TrackAnalysis.track_id)
+            .where(
+                and_(
+                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                    TrackAnalysis.analysis_detail.is_not(None),
+                    TrackAnalysis.has_melodic.is_(False),
+                )
+            )
+            .limit(limit)
+        )
+        track_ids = [str(row[0]) for row in result.fetchall()]
+
+    if track_ids:
+        manager = get_background_manager()
+        for track_id in track_ids:
+            await manager.run_analysis(track_id, phase="melodic")
+            queued += 1
+
+    return queued
+
+
+async def queue_tracks_for_deep_backfill(limit: int = 500) -> int:
+    """Queue tracks that need deep analysis backfill.
+
+    Finds tracks with current analysis version but no analysis_detail,
+    and queues them for cheap section analysis.
+    Returns the number of tracks queued.
+    """
+    from sqlalchemy import and_, select
+
+    from app.db.models import TrackAnalysis
+    from app.db.session import async_session_maker
+    from app.services.background import get_background_manager
+
+    queued = 0
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(TrackAnalysis.track_id)
+            .where(
+                and_(
+                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                    TrackAnalysis.analysis_detail.is_(None),
+                )
+            )
+            .limit(limit)
+        )
+        track_ids = [str(row[0]) for row in result.fetchall()]
+
+    if track_ids:
+        manager = get_background_manager()
+        for track_id in track_ids:
+            await manager.run_analysis(track_id, phase="deep_backfill")
             queued += 1
 
     return queued

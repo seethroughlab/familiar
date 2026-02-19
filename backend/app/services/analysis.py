@@ -318,84 +318,110 @@ def read_replaygain_tags(file_path: Path) -> dict[str, float | None]:
     return result
 
 
-def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
-    """Internal implementation of feature extraction.
+def precompute_shared(file_path: Path) -> tuple:
+    """Load audio and compute all shared librosa intermediates.
 
-    This runs in a subprocess to isolate crashes (SIGSEGV) from the main worker.
+    Returns (y, sr, shared_dict) where shared_dict contains:
+    spec, power_spec, chroma, onset_env, bpm, beat_frames, beat_times,
+    rms, log_S, mfcc, n_fft, hop_length, duration, pulse
     """
-    # Re-import in subprocess to ensure fresh state
-    from pathlib import Path
-
     import librosa
 
-    file_path = Path(file_path_str)
-    features: dict[str, float | str | None] = {
-        "bpm": None,
-        "key": None,
-        "energy": None,
-        "danceability": None,
-        "acousticness": None,
-        "instrumentalness": None,
-        "valence": None,
-        "speechiness": None,
-    }
+    y, sr = librosa.load(str(file_path), sr=22050, mono=True)
 
-    # Load audio
-    y, sr = librosa.load(file_path, sr=22050, mono=True)
-
-    # BPM detection using tempo estimation (beat_track crashes on macOS Accelerate)
-    # First compute onset envelope, then estimate tempo
-    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
-    tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr)
-    features["bpm"] = float(tempo) if not isinstance(tempo, np.ndarray) else float(tempo[0])
-
-    # Compute STFT once for reuse (avoids crashes in chroma_cqt/chroma_stft)
-    # Note: librosa.feature.chroma_cqt and chroma_stft crash with SIGSEGV on some
-    # systems due to OpenBLAS issues. Manual computation from STFT avoids this.
     n_fft = 2048
+    hop_length = 512
     spec = np.abs(librosa.stft(y, n_fft=n_fft))
     power_spec = spec ** 2
 
-    # Key detection using manually computed chroma features
-    # This avoids the SIGSEGV in librosa.feature.chroma_cqt/chroma_stft
+    # Chroma via manual filter bank (avoids chroma_cqt SIGSEGV on macOS Accelerate)
     chroma_fb = librosa.filters.chroma(sr=sr, n_fft=n_fft)
     raw_chroma = np.dot(chroma_fb, power_spec)
     chroma = librosa.util.normalize(raw_chroma, norm=np.inf, axis=0)
+
+    # Onset envelope + tempo
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+    tempo = librosa.feature.tempo(onset_envelope=onset_env, sr=sr)
+    bpm = float(tempo) if not isinstance(tempo, np.ndarray) else float(tempo[0])
+
+    # Beat positions via PLP
+    pulse = librosa.beat.plp(onset_envelope=onset_env, sr=sr)
+    beats_plp = librosa.util.localmax(pulse)
+    beat_frames = np.flatnonzero(beats_plp)
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+
+    # RMS energy
+    rms = librosa.feature.rms(y=y)[0]
+
+    # Log power spectrogram and MFCCs
+    log_S = librosa.power_to_db(power_spec, ref=np.max)
+    mfcc = librosa.feature.mfcc(S=log_S, sr=sr, n_mfcc=13)
+
+    shared = {
+        "spec": spec,
+        "power_spec": power_spec,
+        "chroma": chroma,
+        "onset_env": onset_env,
+        "bpm": bpm,
+        "beat_frames": beat_frames,
+        "beat_times": beat_times,
+        "rms": rms,
+        "log_S": log_S,
+        "mfcc": mfcc,
+        "n_fft": n_fft,
+        "hop_length": hop_length,
+        "duration": len(y) / sr,
+        "pulse": pulse,
+    }
+
+    return y, sr, shared
+
+
+def derive_features(
+    y: np.ndarray, sr: int, shared: dict, file_path: Path
+) -> dict[str, float | str | None]:
+    """Derive classic scalar features from shared librosa intermediates.
+
+    Returns a flat dict of typed values matching TrackAnalysis typed columns.
+    """
+    import librosa
+
+    features: dict[str, float | str | None] = {}
+
+    chroma = shared["chroma"]
+    spec = shared["spec"]
+    onset_env = shared["onset_env"]
+    rms = shared["rms"]
+    n_fft = shared["n_fft"]
+    bpm = shared["bpm"]
+
+    features["bpm"] = bpm
+
+    # Key detection
     key_idx = np.argmax(np.mean(chroma, axis=1))
     key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
     features["key"] = key_names[key_idx]
 
     # Energy (RMS energy normalized to 0-1 using dB scale)
-    rms = librosa.feature.rms(y=y)[0]
     rms_mean = float(np.mean(rms))
-    # Convert to dB, normalize: -60dB (very quiet) -> 0, -6dB (loud) -> 1
     rms_db = 20 * np.log10(rms_mean + 1e-10)
     features["energy"] = float(np.clip((rms_db + 60) / 54, 0, 1))
 
-    # Spectral features for danceability approximation
-    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]  # noqa: F841
+    # Spectral centroid
+    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
 
-    # Danceability: combination of tempo regularity and beat strength
-    # Reuse onset_env computed earlier for BPM detection
-    pulse = librosa.beat.plp(onset_envelope=onset_env, sr=sr)
+    # Danceability
+    pulse = shared["pulse"]
     features["danceability"] = float(np.mean(pulse))
 
-    # Zero crossing rate (indicator of percussiveness/noisiness)
+    # Zero crossing rate
     zcr = librosa.feature.zero_crossing_rate(y)[0]
 
-    # MFCC for timbral features (computed for future embedding use)
-    _mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-
-    # Spectral contrast (computed for future use)
-    _contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
-
-    # Acousticness: based on spectral features
-    # Higher spectral centroid and rolloff usually indicate electric/produced sound
+    # Acousticness
     centroid_norm = np.mean(spectral_centroid) / (sr / 2)
     features["acousticness"] = float(max(0, 1 - centroid_norm * 2))
 
-    # Instrumentalness: based on vocal frequency presence
-    # This is a rough approximation - vocals typically have energy in 300-3000 Hz
+    # Instrumentalness
     freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
     vocal_mask = (freqs >= 300) & (freqs <= 3000)
     vocal_energy = np.mean(spec[vocal_mask, :])
@@ -403,87 +429,63 @@ def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
     vocal_ratio = vocal_energy / (total_energy + 1e-6)
     features["instrumentalness"] = float(max(0, 1 - vocal_ratio))
 
-    # Valence: Multi-feature approach for musical positivity/happiness
-    # Uses mode (major/minor), brightness, tempo, spectral contrast, and dynamics
-
-    # 1. Mode (major/minor) via chroma analysis
+    # Valence
     chroma_rotated = np.roll(chroma, -key_idx, axis=0)
     major_thirds = chroma_rotated[[0, 4, 7], :]
     minor_thirds = chroma_rotated[[0, 3, 7], :]
     major_energy = np.mean(major_thirds)
     minor_energy = np.mean(minor_thirds)
     mode_indicator = (major_energy - minor_energy) / (major_energy + minor_energy + 1e-6)
-    # Scale from [-1, 1] to [0, 1]
     mode_score = (mode_indicator + 1) / 2
 
-    # 2. Brightness via spectral centroid (brighter = generally happier)
     centroid_norm = np.mean(spectral_centroid) / (sr / 2)
-    brightness_score = np.clip(centroid_norm * 2, 0, 1)  # Typical range 0.1-0.4, scale up
+    brightness_score = np.clip(centroid_norm * 2, 0, 1)
 
-    # 3. Tempo factor (faster tempos tend toward positive affect)
-    # Map 60-180 BPM to 0-1, with 120 BPM at 0.5
-    bpm = features["bpm"]
     tempo_score = np.clip((bpm - 60) / 120, 0, 1) if bpm else 0.5
 
-    # 4. Spectral contrast (higher contrast = more "vibrant/dynamic" sound)
     contrast = librosa.feature.spectral_contrast(S=spec, sr=sr)
     contrast_mean = np.mean(contrast)
     contrast_score = np.clip(contrast_mean / 25, 0, 1)
 
-    # 5. Dynamic variation (more expressive dynamics = more emotional range)
     rms_std = np.std(rms)
     dynamics_score = np.clip(rms_std / 0.08, 0, 1)
 
-    # Combine features with weights
     raw_valence = (
-        mode_score * 0.30 +       # Major/minor is primary indicator
-        brightness_score * 0.25 + # Brightness correlates with positivity
-        tempo_score * 0.20 +      # Tempo affects perceived energy/mood
-        contrast_score * 0.15 +   # Spectral vibrancy
-        dynamics_score * 0.10     # Dynamic expressiveness
+        mode_score * 0.30 +
+        brightness_score * 0.25 +
+        tempo_score * 0.20 +
+        contrast_score * 0.15 +
+        dynamics_score * 0.10
     )
 
-    # Apply power transformation to spread the distribution
-    # This pushes values away from 0.5 toward the extremes
     centered = raw_valence - 0.5
     spread = np.sign(centered) * (np.abs(centered) ** 0.6) * 1.8
     features["valence"] = float(np.clip(spread + 0.5, 0, 1))
 
-    # Speechiness: based on zero crossing rate and spectral flatness
-    _flatness = librosa.feature.spectral_flatness(y=y)[0]
+    # Speechiness
     zcr_mean = np.mean(zcr)
-    # Speech typically has high ZCR and moderate spectral flatness
     features["speechiness"] = float(min(1, zcr_mean * 2))
 
-    # Loudness / ReplayGain measurement
-    # First try reading existing ReplayGain tags (fast path)
+    # Loudness / ReplayGain
     rg_tags = read_replaygain_tags(file_path)
     if rg_tags["loudness_lufs"] is not None:
         features["loudness_lufs"] = rg_tags["loudness_lufs"]
         features["track_peak"] = rg_tags["track_peak"]
         features["replaygain_track_gain"] = rg_tags["replaygain_track_gain"]
     else:
-        # Measure loudness using pyloudnorm (EBU R128)
         try:
             import pyloudnorm as pyln
             import soundfile as sf
 
-            # Load at native sample rate for accurate loudness measurement
-            data, rate = sf.read(file_path_str)
-            # Convert to mono if needed for peak measurement
-            if data.ndim > 1:
-                peak = float(np.max(np.abs(data)))
-            else:
-                peak = float(np.max(np.abs(data)))
+            data, rate = sf.read(str(file_path))
+            peak = float(np.max(np.abs(data)))
 
             meter = pyln.Meter(rate)
             loudness = meter.integrated_loudness(data)
 
-            # pyloudnorm returns -inf for silence
             if np.isfinite(loudness):
                 features["loudness_lufs"] = float(loudness)
                 features["track_peak"] = peak
-                # ReplayGain = reference - loudness (reference = -18 LUFS for RG2)
                 features["replaygain_track_gain"] = float(-18.0 - loudness)
             else:
                 features["loudness_lufs"] = None
@@ -497,6 +499,19 @@ def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
             features["replaygain_track_gain"] = None
 
     return features
+
+
+def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
+    """Internal implementation of feature extraction.
+
+    This runs in a subprocess to isolate crashes (SIGSEGV) from the main worker.
+    Calls precompute_shared() + derive_features() internally.
+    """
+    from pathlib import Path
+
+    file_path = Path(file_path_str)
+    y, sr, shared = precompute_shared(file_path)
+    return derive_features(y, sr, shared, file_path)
 
 
 def extract_features(file_path: Path) -> dict[str, float | str | None]:

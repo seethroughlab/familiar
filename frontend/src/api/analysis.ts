@@ -1,11 +1,11 @@
 import api from './base';
 
-export interface DeepAnalysisStatus {
+export interface AnalysisStatus {
   status: 'ready' | 'processing' | 'cached';
   track_id: string;
 }
 
-export interface DeepAnalysisResult {
+export interface AnalysisResult {
   track_id: string;
   version: number;
   results: Record<string, unknown>;
@@ -23,15 +23,15 @@ export interface BulkAnalysisStatus {
   errors: Array<{ track_id: string; error: string }>;
 }
 
-export const deepAnalysisApi = {
+export const analysisApi = {
   trigger: (trackId: string) =>
-    api.post<DeepAnalysisStatus>(`/tracks/${trackId}/deep-analysis`),
+    api.post<AnalysisStatus>(`/tracks/${trackId}/analysis`),
 
   getStatus: (trackId: string) =>
-    api.get<DeepAnalysisResult | DeepAnalysisStatus>(`/tracks/${trackId}/deep-analysis`),
+    api.get<AnalysisResult | AnalysisStatus>(`/tracks/${trackId}/analysis`),
 
   downloadReport: async (trackId: string): Promise<void> => {
-    const response = await api.get(`/tracks/${trackId}/deep-analysis/report`, {
+    const response = await api.get(`/tracks/${trackId}/analysis/report`, {
       responseType: 'blob',
     });
     const blob = new Blob([response.data], { type: 'text/markdown' });
@@ -52,7 +52,7 @@ export const deepAnalysisApi = {
   },
 
   downloadMidi: async (trackId: string): Promise<void> => {
-    const response = await api.get(`/tracks/${trackId}/deep-analysis/midi`, {
+    const response = await api.get(`/tracks/${trackId}/analysis/midi`, {
       responseType: 'blob',
     });
     const blob = new Blob([response.data], { type: 'audio/midi' });
@@ -74,16 +74,16 @@ export const deepAnalysisApi = {
 
   triggerBulk: (trackIds: string[]) =>
     api.post<{ status: string; task_id: string; total: number }>(
-      '/tracks/deep-analysis/bulk',
+      '/tracks/analysis/bulk',
       { track_ids: trackIds }
     ),
 
   getBulkStatus: (taskId: string) =>
-    api.get<BulkAnalysisStatus>(`/tracks/deep-analysis/bulk/${taskId}`),
+    api.get<BulkAnalysisStatus>(`/tracks/analysis/bulk/${taskId}`),
 
   downloadBulkReport: async (taskId: string): Promise<void> => {
     const response = await api.get(
-      `/tracks/deep-analysis/bulk/${taskId}/report`,
+      `/tracks/analysis/bulk/${taskId}/report`,
       { responseType: 'blob' }
     );
     const blob = new Blob([response.data], { type: 'text/markdown' });

@@ -20,7 +20,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Independent version from ANALYSIS_VERSION (which covers CLAP/librosa features)
-DEEP_ANALYSIS_VERSION = 3
+DEEP_ANALYSIS_VERSION = 4
 
 # Minimum track duration for deep analysis (seconds)
 MIN_DURATION_SECONDS = 30
@@ -91,6 +91,32 @@ INTERVAL_NAMES = {
     8: "m6 up", 9: "M6 up", 10: "m7 up", 11: "M7 up", 12: "Octave up",
 }
 
+# Roman numeral labels for major and minor keys
+_ROMAN_MAJOR = ["I", "bII", "II", "bIII", "III", "IV", "#IV", "V", "bVI", "VI", "bVII", "VII"]
+_ROMAN_MINOR = ["i", "bII", "ii", "bIII", "III", "iv", "#IV", "v", "bVI", "VI", "bVII", "VII"]
+
+# Quality suffixes for Roman numerals
+_QUALITY_TO_ROMAN_SUFFIX = {
+    "maj": "", "min": "", "dim": "dim", "aug": "aug",
+    "7": "7", "maj7": "maj7", "min7": "7",
+}
+
+# Common chord progressions to detect (as Roman numeral degree tuples)
+# Each entry: (name, list of degree patterns as semitone intervals from root)
+COMMON_PROGRESSIONS = {
+    "I-V-vi-IV": (0, 7, 9, 5),
+    "I-IV-V-IV": (0, 5, 7, 5),
+    "I-IV-V": (0, 5, 7),
+    "ii-V-I": (2, 7, 0),
+    "I-vi-IV-V": (0, 9, 5, 7),
+    "vi-IV-I-V": (9, 5, 0, 7),
+    "I-bVII-IV": (0, 10, 5),
+    "i-bVII-bVI-V": (0, 10, 8, 7),
+    "i-iv-v": (0, 5, 7),
+    "i-bVI-bIII-bVII": (0, 8, 3, 10),
+    "12-bar blues": (0, 0, 0, 0, 5, 5, 0, 0, 7, 5, 0, 7),
+}
+
 
 # ─── Bjorklund's algorithm ────────────────────────────────────────────────
 
@@ -119,10 +145,231 @@ def _bjorklund(pulses: int, steps: int) -> list[int]:
     return pattern
 
 
+# ─── Roman numeral analysis ──────────────────────────────────────────────
+
+def _parse_chord_root(chord_name: str) -> tuple[int, str] | None:
+    """Parse a chord name into (root_pitch_class, quality_suffix).
+
+    Returns None for 'N' (no chord).
+    """
+    if chord_name == "N" or not chord_name:
+        return None
+
+    # Try two-char root first (e.g., C#, Bb)
+    if len(chord_name) >= 2 and chord_name[1] in ("#", "b"):
+        root_str = chord_name[:2]
+        quality = chord_name[2:] or "maj"
+    else:
+        root_str = chord_name[0]
+        quality = chord_name[1:] or "maj"
+
+    # Handle flats by converting to sharps
+    flat_to_sharp = {"Db": "C#", "Eb": "D#", "Fb": "E", "Gb": "F#", "Ab": "G#", "Bb": "A#", "Cb": "B"}
+    root_str = flat_to_sharp.get(root_str, root_str)
+
+    try:
+        root_pc = NOTE_NAMES.index(root_str)
+    except ValueError:
+        return None
+
+    return root_pc, quality
+
+
+def _chord_to_roman(chord_name: str, key_root: int, is_minor: bool) -> str:
+    """Convert an absolute chord name to a Roman numeral relative to key_root."""
+    parsed = _parse_chord_root(chord_name)
+    if parsed is None:
+        return "N"
+
+    root_pc, quality = parsed
+    degree = (root_pc - key_root) % 12
+
+    roman_table = _ROMAN_MINOR if is_minor else _ROMAN_MAJOR
+    numeral = roman_table[degree]
+
+    # Determine case: minor/dim chords get lowercase, major/aug get uppercase
+    if quality in ("min", "min7"):
+        numeral = numeral.lower()
+    elif quality in ("maj", "maj7", "7", "aug"):
+        numeral = numeral.upper() if numeral[0].isalpha() else numeral[0] + numeral[1:].upper()
+
+    suffix = _QUALITY_TO_ROMAN_SUFFIX.get(quality, quality)
+    return f"{numeral}{suffix}"
+
+
+def _detect_progressions(
+    chord_sequence: list[dict],
+    key_root: int,
+    duration: float,
+) -> list[dict[str, Any]]:
+    """Detect common chord progressions in the sequence.
+
+    Returns list of detected progressions with name and count.
+    """
+    # Build degree sequence (skip N chords)
+    degrees = []
+    for c in chord_sequence:
+        parsed = _parse_chord_root(c["chord"])
+        if parsed is None:
+            continue
+        root_pc, _quality = parsed
+        degree = (root_pc - key_root) % 12
+        degrees.append(degree)
+
+    if len(degrees) < 3:
+        return []
+
+    detected = []
+    for prog_name, prog_degrees in COMMON_PROGRESSIONS.items():
+        prog_len = len(prog_degrees)
+        if prog_len > len(degrees):
+            continue
+
+        count = 0
+        for i in range(len(degrees) - prog_len + 1):
+            window = tuple(degrees[i:i + prog_len])
+            if window == prog_degrees:
+                count += 1
+
+        if count > 0:
+            detected.append({"name": prog_name, "occurrences": count})
+
+    # Sort by frequency
+    detected.sort(key=lambda x: -x["occurrences"])
+    return detected[:5]
+
+
+# ─── Cheap section analysis (runs during Phase 1) ────────────────────────────
+
+def run_cheap_sections(
+    y: np.ndarray,
+    sr: int,
+    shared: dict[str, Any],
+    file_path: str,
+    track_id: str,
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, str]]]:
+    """Run the 5 cheap section analyzers (everything except melodic/basic-pitch).
+
+    Returns (analysis_detail, feature_scalars, section_errors).
+    - analysis_detail: full structured data for report generation
+    - feature_scalars: typed column values for TrackAnalysis
+    - section_errors: list of {section, error} for any failed sections
+    """
+    results: dict[str, Any] = {}
+    section_errors: list[dict[str, str]] = []
+
+    for section_name, analyzer in [
+        ("harmonic", _analyze_harmonic),
+        ("rhythmic", _analyze_rhythmic),
+        ("spectral", _analyze_spectral),
+        ("structural", _analyze_structural),
+        ("energy", _analyze_energy),
+    ]:
+        try:
+            results[section_name] = analyzer(y, sr, shared, file_path, track_id)
+        except Exception as e:
+            logger.error(f"Section '{section_name}' failed for {track_id}: {e}")
+            section_errors.append({"section": section_name, "error": str(e)})
+            results[section_name] = {"error": str(e)}
+
+    # Post-processing: melodic sketches per section (uses chroma, not basic-pitch)
+    try:
+        _add_melodic_sketches(results, shared)
+    except Exception as e:
+        logger.warning(f"Melodic sketch generation failed: {e}")
+
+    results = _sanitize_for_json(results)
+    section_errors = _sanitize_for_json(section_errors)
+
+    feature_scalars = extract_feature_scalars(results)
+    return results, feature_scalars, section_errors
+
+
+def extract_feature_scalars(results: dict[str, Any]) -> dict[str, Any]:
+    """Extract typed column values from deep analysis results.
+
+    Maps section result keys to TrackAnalysis column names.
+    Returns a flat dict suitable for setattr() on TrackAnalysis.
+    """
+    scalars: dict[str, Any] = {}
+
+    # Harmonic section
+    harmonic = results.get("harmonic", {})
+    if harmonic.get("harmonic_content"):
+        scalars["harmonic_complexity"] = harmonic.get("harmonic_rhythm")
+        scalars["key_stability"] = harmonic.get("key_stability")
+        scalars["modal_character"] = harmonic.get("modal_character")
+        scalars["modal_confidence"] = harmonic.get("modal_confidence")
+
+    # Rhythmic section
+    rhythmic = results.get("rhythmic", {})
+    raw_swing = rhythmic.get("swing_ratio")
+    if raw_swing is not None:
+        # Normalize: deep analysis stores 0-100, typed column uses 0-1
+        scalars["swing_ratio"] = raw_swing / 100.0 if raw_swing > 1 else raw_swing
+    syncopation = rhythmic.get("syncopation_index")
+    if syncopation is not None:
+        scalars["syncopation"] = syncopation
+    scalars["tempo_character"] = rhythmic.get("tempo_stability")
+
+    # Spectral section
+    spectral = results.get("spectral", {})
+    centroid_hz = spectral.get("centroid_hz")
+    if centroid_hz is not None:
+        # Normalize centroid to 0-1 (8000 Hz = 1.0)
+        scalars["brightness"] = min(centroid_hz / 8000.0, 1.0)
+    else:
+        # Fallback: map string brightness label to numeric
+        br_label = spectral.get("brightness")
+        if br_label == "dark":
+            scalars["brightness"] = 0.1
+        elif br_label == "neutral":
+            scalars["brightness"] = 0.5
+        elif br_label == "bright":
+            scalars["brightness"] = 0.9
+
+    # Energy section
+    energy = results.get("energy", {})
+    scalars["dynamic_range_db"] = energy.get("dynamic_range_db")
+    raw_shape = energy.get("energy_shape")
+    if raw_shape:
+        # Normalize to underscore format
+        scalars["energy_shape"] = raw_shape.replace(" ", "_").replace("-", "_")
+
+    # Structural section
+    structural = results.get("structural", {})
+    scalars["section_count"] = structural.get("section_count")
+    scalars["form_string"] = structural.get("form")
+    scalars["avg_section_length"] = structural.get("avg_section_length")
+
+    # Remove None values
+    return {k: v for k, v in scalars.items() if v is not None}
+
+
+def extract_melodic_scalars(melodic_results: dict[str, Any]) -> dict[str, Any]:
+    """Extract typed column values from melodic analysis results."""
+    scalars: dict[str, Any] = {}
+
+    if melodic_results.get("degraded"):
+        return scalars
+
+    scalars["note_density"] = melodic_results.get("note_density_per_beat")
+    scalars["interval_character"] = melodic_results.get("interval_character")
+
+    pitch_range = melodic_results.get("pitch_range")
+    if isinstance(pitch_range, dict):
+        low = pitch_range.get("low")
+        high = pitch_range.get("high")
+        if low is not None and high is not None:
+            scalars["pitch_range"] = high - low
+
+    return {k: v for k, v in scalars.items() if v is not None}
+
+
 # ─── Entry point (top-level picklable for ProcessPoolExecutor) ─────────────
 
 def run_deep_analysis(track_id: str) -> dict[str, Any]:
-    """Run deep analysis for a single track.
+    """Run deep analysis for a single track (on-demand, all 6 sections).
 
     Creates its own sync DB session (same pattern as run_track_features).
     Returns a summary dict with status.
@@ -132,7 +379,7 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
 
     from sqlalchemy import select
 
-    from app.db.models import Track, TrackDeepAnalysis
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import sync_session_maker
 
     start_time = time.time()
@@ -154,15 +401,18 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
             if track.duration_seconds and track.duration_seconds < MIN_DURATION_SECONDS:
                 return {"status": "skipped", "reason": "Track too short for deep analysis"}
 
-            # Check for cached analysis at current version
-            cached = db.execute(
-                select(TrackDeepAnalysis).where(
-                    TrackDeepAnalysis.track_id == UUID(track_id),
-                    TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-                )
+            # Get latest analysis row
+            analysis = db.execute(
+                select(TrackAnalysis)
+                .where(TrackAnalysis.track_id == UUID(track_id))
+                .order_by(TrackAnalysis.version.desc())
             ).scalar_one_or_none()
 
-            if cached:
+            if not analysis:
+                return {"status": "error", "error": "No analysis row exists — run Phase 1 first"}
+
+            # Check cache: if analysis_detail exists and has melodic, return cached
+            if analysis.analysis_detail and analysis.has_melodic:
                 return {"status": "cached", "track_id": track_id}
 
             # Load audio
@@ -177,46 +427,44 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
             # Pre-compute shared representations
             shared = _precompute_shared(y, sr)
 
-            # Run each section analyzer with per-section try/except
-            results: dict[str, Any] = {}
+            need_cheap = analysis.analysis_detail is None
+            need_melodic = not analysis.has_melodic
+
+            results = dict(analysis.analysis_detail) if analysis.analysis_detail else {}
             section_errors: list[dict[str, str]] = []
 
-            for section_name, analyzer in [
-                ("harmonic", _analyze_harmonic),
-                ("melodic", _analyze_melodic),
-                ("rhythmic", _analyze_rhythmic),
-                ("spectral", _analyze_spectral),
-                ("structural", _analyze_structural),
-                ("energy", _analyze_energy),
-            ]:
+            # Run cheap sections if needed
+            if need_cheap:
+                cheap_results, feature_scalars, section_errors = run_cheap_sections(
+                    y, sr, shared, str(file_path), track_id
+                )
+                results.update(cheap_results)
+                for col, val in feature_scalars.items():
+                    setattr(analysis, col, val)
+
+            # Run melodic analysis if needed
+            if need_melodic:
                 try:
-                    results[section_name] = analyzer(y, sr, shared, str(file_path), track_id)
+                    melodic_result = _analyze_melodic(y, sr, shared, str(file_path), track_id)
+                    results["melodic"] = _sanitize_for_json(melodic_result)
+
+                    melodic_scalars = extract_melodic_scalars(results["melodic"])
+                    for col, val in melodic_scalars.items():
+                        setattr(analysis, col, val)
+
+                    midi_path = results["melodic"].get("midi_path")
+                    if midi_path:
+                        analysis.midi_path = midi_path
+                    analysis.has_melodic = not results["melodic"].get("degraded", False)
                 except Exception as e:
-                    logger.error(f"Deep analysis section '{section_name}' failed for {track_id}: {e}")
-                    section_errors.append({"section": section_name, "error": str(e)})
-                    results[section_name] = {"error": str(e)}
+                    logger.error(f"Melodic analysis failed for {track_id}: {e}")
+                    section_errors.append({"section": "melodic", "error": str(e)})
+                    results["melodic"] = {"error": str(e)}
 
             elapsed = time.time() - start_time
 
-            # Get MIDI path if melodic analysis produced one
-            midi_path = results.get("melodic", {}).get("midi_path")
-
-            # Sanitize numpy types for JSON serialization
-            results = _sanitize_for_json(results)
-            section_errors = _sanitize_for_json(section_errors)
-
-            # Save to database
-            from uuid import uuid4
-            deep = TrackDeepAnalysis(
-                id=uuid4(),
-                track_id=UUID(track_id),
-                version=DEEP_ANALYSIS_VERSION,
-                results=results,
-                midi_path=midi_path,
-                section_errors=section_errors,
-                analysis_duration_seconds=elapsed,
-            )
-            db.add(deep)
+            analysis.analysis_detail = results
+            analysis.melodic_version = DEEP_ANALYSIS_VERSION
             db.commit()
 
             logger.info(
@@ -233,6 +481,169 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Deep analysis failed for {track_id}: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+
+
+def run_track_deep_backfill(track_id: str) -> dict[str, Any]:
+    """Backfill deep analysis for existing tracks (cheap sections only).
+
+    Top-level picklable function for ProcessPoolExecutor.
+    For tracks that already have Phase 1 features but no analysis_detail.
+    """
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+
+    from sqlalchemy import select
+
+    from app.db.models import Track, TrackAnalysis
+    from app.db.session import sync_session_maker
+
+    start_time = time.time()
+
+    try:
+        with sync_session_maker() as db:
+            result = db.execute(select(Track).where(Track.id == UUID(track_id)))
+            track = result.scalar_one_or_none()
+
+            if not track:
+                return {"status": "error", "error": f"Track not found: {track_id}"}
+
+            file_path = Path(track.file_path)
+            if not file_path.exists():
+                return {"status": "error", "error": f"File not found: {file_path}"}
+
+            if track.duration_seconds and track.duration_seconds < MIN_DURATION_SECONDS:
+                return {"status": "skipped", "reason": "Track too short"}
+
+            analysis = db.execute(
+                select(TrackAnalysis)
+                .where(TrackAnalysis.track_id == UUID(track_id))
+                .order_by(TrackAnalysis.version.desc())
+            ).scalar_one_or_none()
+
+            if not analysis:
+                return {"status": "error", "error": "No analysis row"}
+
+            if analysis.analysis_detail is not None:
+                return {"status": "cached", "track_id": track_id}
+
+            import librosa
+            y, sr = librosa.load(str(file_path), sr=22050, mono=True)
+
+            rms_all = librosa.feature.rms(y=y)[0]
+            if np.mean(rms_all) < 1e-6:
+                return {"status": "skipped", "reason": "Near-silence"}
+
+            shared = _precompute_shared(y, sr)
+            results, feature_scalars, section_errors = run_cheap_sections(
+                y, sr, shared, str(file_path), track_id
+            )
+
+            analysis.analysis_detail = results
+            for col, val in feature_scalars.items():
+                setattr(analysis, col, val)
+            db.commit()
+
+            elapsed = time.time() - start_time
+            logger.info(
+                f"Deep backfill complete for {track.artist} - {track.title} ({elapsed:.1f}s)"
+            )
+            return {
+                "status": "success",
+                "track_id": track_id,
+                "duration_seconds": elapsed,
+                "section_errors": section_errors,
+            }
+
+    except Exception as e:
+        logger.error(f"Deep backfill failed for {track_id}: {e}", exc_info=True)
+        return {"status": "error", "error": str(e)}
+
+
+def run_track_melodic(track_id: str) -> dict[str, Any]:
+    """Run Phase 3 melodic analysis for a single track.
+
+    Top-level picklable function for ProcessPoolExecutor.
+    Runs basic-pitch MIDI transcription + melodic feature extraction.
+    """
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
+
+    from sqlalchemy import select
+
+    from app.db.models import Track, TrackAnalysis
+    from app.db.session import sync_session_maker
+
+    start_time = time.time()
+
+    try:
+        with sync_session_maker() as db:
+            result = db.execute(select(Track).where(Track.id == UUID(track_id)))
+            track = result.scalar_one_or_none()
+
+            if not track:
+                return {"status": "error", "error": f"Track not found: {track_id}"}
+
+            file_path = Path(track.file_path)
+            if not file_path.exists():
+                return {"status": "error", "error": f"File not found: {file_path}"}
+
+            if track.duration_seconds and track.duration_seconds < MIN_DURATION_SECONDS:
+                return {"status": "skipped", "reason": "Track too short"}
+
+            analysis = db.execute(
+                select(TrackAnalysis)
+                .where(TrackAnalysis.track_id == UUID(track_id))
+                .order_by(TrackAnalysis.version.desc())
+            ).scalar_one_or_none()
+
+            if not analysis:
+                return {"status": "error", "error": "No analysis row"}
+
+            if analysis.has_melodic:
+                return {"status": "cached", "track_id": track_id}
+
+            import librosa
+            y, sr = librosa.load(str(file_path), sr=22050, mono=True)
+
+            rms_all = librosa.feature.rms(y=y)[0]
+            if np.mean(rms_all) < 1e-6:
+                return {"status": "skipped", "reason": "Near-silence"}
+
+            shared = _precompute_shared(y, sr)
+
+            try:
+                melodic_result = _analyze_melodic(y, sr, shared, str(file_path), track_id)
+                melodic_result = _sanitize_for_json(melodic_result)
+            except Exception as e:
+                logger.error(f"Melodic analysis failed for {track_id}: {e}")
+                return {"status": "error", "error": str(e)}
+
+            # Merge melodic into analysis_detail
+            detail = dict(analysis.analysis_detail) if analysis.analysis_detail else {}
+            detail["melodic"] = melodic_result
+            analysis.analysis_detail = detail
+
+            # Set typed columns
+            melodic_scalars = extract_melodic_scalars(melodic_result)
+            for col, val in melodic_scalars.items():
+                setattr(analysis, col, val)
+
+            midi_path = melodic_result.get("midi_path")
+            if midi_path:
+                analysis.midi_path = midi_path
+            analysis.has_melodic = not melodic_result.get("degraded", False)
+            analysis.melodic_version = DEEP_ANALYSIS_VERSION
+            db.commit()
+
+            elapsed = time.time() - start_time
+            logger.info(
+                f"Melodic analysis complete for {track.artist} - {track.title} ({elapsed:.1f}s)"
+            )
+            return {"status": "success", "track_id": track_id, "duration_seconds": elapsed}
+
+    except Exception as e:
+        logger.error(f"Melodic analysis failed for {track_id}: {e}", exc_info=True)
         return {"status": "error", "error": str(e)}
 
 
@@ -451,10 +862,35 @@ def _analyze_harmonic(
             "confidence": round(best_conf, 3),
         })
 
+    # Roman numeral analysis relative to detected key
+    # Parse key root from best_mode (e.g., "D Ionian (Major)" -> D -> 2)
+    key_root_name = best_mode.split()[0] if best_mode and best_mode != "Unknown" else None
+    is_minor_key = any(m in best_mode.lower() for m in ("aeolian", "minor", "dorian", "phrygian", "locrian"))
+
+    roman_chords: list[dict[str, Any]] = []
+    detected_progressions: list[dict[str, Any]] = []
+
+    if key_root_name and key_root_name in NOTE_NAMES:
+        key_root = NOTE_NAMES.index(key_root_name)
+
+        # Convert most common chords to Roman numerals
+        for mc_entry in most_common:
+            rn = _chord_to_roman(mc_entry["chord"], key_root, is_minor_key)
+            roman_chords.append({
+                "chord": mc_entry["chord"],
+                "roman": rn,
+                "percentage": mc_entry["percentage"],
+            })
+
+        # Detect common progressions
+        detected_progressions = _detect_progressions(smoothed, key_root, duration)
+
     return {
         "harmonic_content": True,
         "chords": smoothed,
         "most_common_chords": most_common,
+        "roman_numeral_chords": roman_chords,
+        "detected_progressions": detected_progressions,
         "harmonic_rhythm": harmonic_rhythm,
         "key_stability": key_stability,
         "key_windows": key_windows,
@@ -858,6 +1294,102 @@ def _analyze_rhythmic(
                         "hamming_distance": best_hamming,
                     })
 
+    # Rhythm pattern classification using the 16-step grid
+    rhythm_pattern = "unclassified"
+    if len(beat_times) >= 8:
+        # Reuse pattern_accumulator from Euclidean analysis
+        measures_p = []
+        beats_per_measure = 4
+        for i in range(0, len(beat_times) - beats_per_measure, beats_per_measure):
+            m_start = beat_times[i]
+            m_end = beat_times[min(i + beats_per_measure, len(beat_times) - 1)]
+            measures_p.append((m_start, m_end))
+
+        kick_pattern = np.zeros(16)
+        snare_pattern = np.zeros(16)
+        measure_count_p = 0
+
+        for m_start, m_end in measures_p[:16]:
+            m_dur = m_end - m_start
+            if m_dur < 0.1:
+                continue
+            # Separate low-freq onsets (kick) from mid-freq (snare)
+            # Use spectral centroid of each onset region
+            mask = (onset_times >= m_start) & (onset_times < m_end)
+            m_onsets = onset_times[mask]
+            for onset_t in m_onsets:
+                step = int((onset_t - m_start) / m_dur * 16) % 16
+                # Approximate frequency separation: use onset position in spectrum
+                onset_sample = int(onset_t * sr)
+                window_size = min(1024, len(y) - onset_sample)
+                if window_size > 256:
+                    onset_spec = np.abs(np.fft.rfft(y[onset_sample:onset_sample + window_size]))
+                    freqs = np.fft.rfftfreq(window_size, 1.0 / sr)
+                    centroid_onset = float(np.sum(freqs * onset_spec) / (np.sum(onset_spec) + 1e-10))
+                    if centroid_onset < 300:
+                        kick_pattern[step] += 1
+                    elif centroid_onset < 2000:
+                        snare_pattern[step] += 1
+            measure_count_p += 1
+
+        if measure_count_p > 0:
+            kick_pattern /= measure_count_p
+            snare_pattern /= measure_count_p
+
+            kick_thresh = np.mean(kick_pattern) * 0.8
+            snare_thresh = np.mean(snare_pattern) * 0.8
+            kick_binary = kick_pattern > kick_thresh
+            snare_binary = snare_pattern > snare_thresh
+
+            # Four-on-the-floor: kick on beats 1,5,9,13 (every quarter note)
+            four_otf = all(kick_binary[i] for i in [0, 4, 8, 12])
+            # Half-time: snare only on beat 3 (step 8), not on 2 (step 4)
+            half_time = snare_binary[8] and not snare_binary[4]
+            # Breakbeat: syncopated kick (hits on off-beats)
+            offbeat_kicks = sum(kick_binary[i] for i in [1, 3, 5, 7, 9, 11, 13, 15])
+            onbeat_kicks = sum(kick_binary[i] for i in [0, 4, 8, 12])
+
+            if four_otf and not half_time:
+                rhythm_pattern = "four-on-the-floor"
+            elif half_time:
+                rhythm_pattern = "half-time"
+            elif offbeat_kicks > onbeat_kicks:
+                rhythm_pattern = "breakbeat"
+            elif abs(swing_ratio - 50) > 8:
+                rhythm_pattern = "shuffle"
+            elif onbeat_kicks >= 2:
+                rhythm_pattern = "standard backbeat"
+            else:
+                rhythm_pattern = "unclassified"
+
+    # Rhythmic density over time (8 equal segments)
+    n_density_segments = 8
+    density_timeline = []
+    seg_duration = shared["duration"] / n_density_segments if shared["duration"] > 0 else 1
+    for i in range(n_density_segments):
+        seg_start = i * seg_duration
+        seg_end = (i + 1) * seg_duration
+        mask = (onset_times >= seg_start) & (onset_times < seg_end)
+        onset_count_seg = int(np.sum(mask))
+        # Normalize to onsets per second
+        density = round(onset_count_seg / max(seg_duration, 0.1), 1)
+        density_timeline.append(density)
+
+    # Classify density trajectory
+    if len(density_timeline) >= 4:
+        first_q = np.mean(density_timeline[:2])
+        last_q = np.mean(density_timeline[-2:])
+        if last_q > first_q * 1.3:
+            density_shape = "building"
+        elif first_q > last_q * 1.3:
+            density_shape = "thinning"
+        elif np.std(density_timeline) < np.mean(density_timeline) * 0.15:
+            density_shape = "consistent"
+        else:
+            density_shape = "varied"
+    else:
+        density_shape = "insufficient data"
+
     return {
         "has_clear_beat": True,
         "bpm": round(bpm, 1),
@@ -867,6 +1399,9 @@ def _analyze_rhythmic(
         "tempo_cv": round(tempo_cv, 4),
         "euclidean_patterns": euclidean_patterns,
         "onset_count": len(onset_times),
+        "rhythm_pattern": rhythm_pattern,
+        "density_timeline": density_timeline,
+        "density_shape": density_shape,
     }
 
 
@@ -988,6 +1523,7 @@ def _analyze_structural(
     y: np.ndarray, sr: int, shared: dict, file_path: str, track_id: str
 ) -> dict[str, Any]:
     """Structural analysis: self-similarity, segmentation, form labeling."""
+    import librosa
 
     chroma = shared["chroma"]
     mfcc = shared["mfcc"]
@@ -1103,12 +1639,67 @@ def _analyze_structural(
 
     form = "".join(section_labels)
 
+    # Section-aware energy/timbral profiles
+    rms = shared["rms"]
+    hop_length = shared["hop_length"]
+    section_profiles = []
+    for seg in segments:
+        start_sample = int(seg["start"] * sr)
+        end_sample = int(seg["end"] * sr)
+        start_frame = start_sample // hop_length
+        end_frame = end_sample // hop_length
+
+        # RMS energy for this section
+        seg_rms = rms[start_frame:end_frame]
+        if len(seg_rms) > 0:
+            rms_db = round(float(20 * np.log10(np.mean(seg_rms) + 1e-10)), 1)
+        else:
+            rms_db = -60.0
+
+        # Spectral centroid (brightness) for this section
+        seg_y = y[start_sample:end_sample]
+        if len(seg_y) > sr // 4:  # At least 0.25s
+            centroid = librosa.feature.spectral_centroid(y=seg_y, sr=sr)[0]
+            centroid_mean = float(np.mean(centroid))
+            centroid_norm = centroid_mean / (sr / 2)
+            if centroid_norm < 0.1:
+                brightness = "dark"
+            elif centroid_norm < 0.25:
+                brightness = "neutral"
+            else:
+                brightness = "bright"
+        else:
+            centroid_mean = 0.0
+            brightness = "?"
+
+        # Density estimate from chroma variance
+        seg_start_cf = int(seg["start"] / duration * chroma.shape[1]) if duration > 0 else 0
+        seg_end_cf = int(seg["end"] / duration * chroma.shape[1]) if duration > 0 else chroma.shape[1]
+        seg_end_cf = max(seg_start_cf + 1, min(seg_end_cf, chroma.shape[1]))
+        chroma_var = float(np.mean(np.var(chroma[:, seg_start_cf:seg_end_cf], axis=1)))
+        if chroma_var < 0.01:
+            density = "sparse"
+        elif chroma_var < 0.04:
+            density = "moderate"
+        else:
+            density = "dense"
+
+        section_profiles.append({
+            "label": seg.get("label", "?"),
+            "start": seg["start"],
+            "end": seg["end"],
+            "rms_db": rms_db,
+            "brightness": brightness,
+            "density": density,
+        })
+
     return {
         "segments": segments,
         "form": form,
         "section_count": len(segments),
         "avg_section_length": round(float(np.mean([s["duration"] for s in segments])), 2) if segments else 0,
         "self_similarity_png": ssm_png_b64,
+        "section_profiles": section_profiles,
     }
 
 
@@ -1178,6 +1769,119 @@ def _analyze_energy(
     }
 
 
+# ─── Melodic sketches (post-processing) ──────────────────────────────────
+
+# Rhythm notation for melodic sketches
+_RHYTHM_SYMBOLS = {
+    (0, 0.25): "♬",     # sixteenth
+    (0.25, 0.5): "♪",   # eighth
+    (0.5, 1.0): "♩",    # quarter
+    (1.0, 2.0): "𝅗𝅥",   # half
+    (2.0, 99): "𝅝",     # whole
+}
+
+
+def _duration_symbol(dur_beats: float) -> str:
+    """Convert duration in beats to a rhythm symbol."""
+    for (lo, hi), symbol in _RHYTHM_SYMBOLS.items():
+        if lo <= dur_beats < hi:
+            return symbol
+    return "♩"
+
+
+def _add_melodic_sketches(results: dict[str, Any], shared: dict) -> None:
+    """Add compact melodic sketches per structural section to results.
+
+    Requires both melodic (with note data) and structural (with segments) results.
+    Modifies results["melodic"] in place to add "section_sketches".
+    """
+    melodic = results.get("melodic", {})
+    structural = results.get("structural", {})
+
+    if melodic.get("degraded") or melodic.get("error"):
+        return
+    if not structural.get("segments"):
+        return
+
+    # We need the raw notes — reconstruct from the MIDI file or use the note_events
+    # Since _analyze_melodic doesn't store raw notes in results, we use MIDI file
+    midi_path = melodic.get("midi_path")
+    if not midi_path:
+        return
+
+    try:
+        import pretty_midi
+        from basic_pitch.inference import predict as _  # noqa: F401
+        midi = pretty_midi.PrettyMIDI(midi_path)
+    except (ImportError, Exception):
+        return
+
+    # Collect all notes
+    all_notes = []
+    for instrument in midi.instruments:
+        for note in instrument.notes:
+            all_notes.append({
+                "start": note.start,
+                "end": note.end,
+                "pitch": note.pitch,
+                "velocity": note.velocity,
+            })
+    all_notes.sort(key=lambda n: n["start"])
+
+    if not all_notes:
+        return
+
+    bpm = shared.get("bpm", 120)
+    beat_duration = 60.0 / bpm
+
+    segments = structural["segments"]
+    sketches = []
+    seen_labels = set()
+
+    for seg in segments:
+        label = seg.get("label", "?")
+        if label in seen_labels:
+            continue  # Only sketch first occurrence of each section type
+        seen_labels.add(label)
+
+        seg_start = seg["start"]
+        seg_end = seg["end"]
+
+        # Get notes in this section
+        seg_notes = [n for n in all_notes if n["start"] >= seg_start and n["start"] < seg_end]
+        if len(seg_notes) < 4:
+            continue
+
+        # Take top-register notes (likely melody): filter to notes above median pitch
+        pitches = [n["pitch"] for n in seg_notes]
+        median_pitch = float(np.median(pitches))
+        melody_notes = [n for n in seg_notes if n["pitch"] >= median_pitch]
+
+        if len(melody_notes) < 4:
+            melody_notes = seg_notes
+
+        # Take first 12 notes
+        sketch_notes = melody_notes[:12]
+
+        # Format as pitch names with rhythm
+        parts = []
+        for note in sketch_notes:
+            note_name = _midi_to_note(note["pitch"])
+            dur = (note["end"] - note["start"]) / beat_duration
+            symbol = _duration_symbol(dur)
+            parts.append(f"{note_name}({symbol})")
+
+        sketch_str = " ".join(parts)
+        sketches.append({
+            "label": label,
+            "sketch": sketch_str,
+            "note_count": len(sketch_notes),
+        })
+
+    if sketches:
+        melodic["section_sketches"] = sketches
+
+
 # ─── Helper functions ──────────────────────────────────────────────────────
 
 def _sanitize_for_json(obj: Any) -> Any:
@@ -1209,10 +1913,133 @@ def _format_time(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+# ─── Character summary ─────────────────────────────────────────────────────
+
+def _generate_character_summary(
+    harmonic: dict[str, Any],
+    melodic: dict[str, Any],
+    rhythmic: dict[str, Any],
+    spectral: dict[str, Any],
+    structural: dict[str, Any],
+    energy: dict[str, Any],
+    duration: float,
+) -> str:
+    """Synthesize a 2-3 sentence natural language character summary from analysis data."""
+    parts = []
+
+    # Sentence 1: Tempo + harmonic character
+    bpm = rhythmic.get("bpm")
+    modal = harmonic.get("modal_character", "")
+    if bpm and modal:
+        # Classify tempo
+        if bpm < 80:
+            tempo_desc = "slow"
+        elif bpm < 110:
+            tempo_desc = "mid-tempo"
+        elif bpm < 140:
+            tempo_desc = "upbeat"
+        else:
+            tempo_desc = "fast"
+
+        # Extract mode flavor
+        mode_lower = modal.lower()
+        if "phrygian" in mode_lower:
+            harmonic_desc = "dark, phrygian-inflected harmonic palette"
+        elif "dorian" in mode_lower:
+            harmonic_desc = "dorian harmonic color"
+        elif "mixolydian" in mode_lower:
+            harmonic_desc = "mixolydian harmonic feel"
+        elif "lydian" in mode_lower:
+            harmonic_desc = "bright, lydian-inflected harmony"
+        elif "locrian" in mode_lower:
+            harmonic_desc = "tense, locrian-inflected harmony"
+        elif "aeolian" in mode_lower or "minor" in mode_lower:
+            harmonic_desc = "minor-key harmonic palette"
+        elif "ionian" in mode_lower or "major" in mode_lower:
+            harmonic_desc = "major-key harmonic palette"
+        else:
+            harmonic_desc = f"{modal} tonality"
+
+        parts.append(f"A {tempo_desc} ({bpm:.0f} BPM) track with a {harmonic_desc}")
+    elif bpm:
+        parts.append(f"A {bpm:.0f} BPM track")
+
+    # Sentence 2: Rhythmic + timbral character
+    sentence2_parts = []
+    swing = rhythmic.get("swing_ratio", 50)
+    syncopation = rhythmic.get("syncopation_index", 0)
+    brightness = spectral.get("brightness", "")
+
+    if rhythmic.get("has_clear_beat", True):
+        if abs(swing - 50) < 5:
+            feel = "straight"
+        elif swing < 60:
+            feel = "lightly swung"
+        else:
+            feel = "swung"
+
+        if syncopation > 0.5:
+            feel += " with heavy syncopation"
+        elif syncopation > 0.3:
+            feel += " with moderate syncopation"
+
+        sentence2_parts.append(f"Rhythmically {feel}")
+    else:
+        sentence2_parts.append("No clear beat (ambient/drone)")
+
+    if brightness:
+        flatness = spectral.get("flatness", 0)
+        if flatness > 0.1:
+            timbral = f"{brightness} and textural"
+        else:
+            timbral = f"{brightness} timbral character"
+        sentence2_parts.append(timbral)
+
+    if sentence2_parts:
+        parts.append(". ".join(sentence2_parts))
+
+    # Sentence 3: Energy shape + structure
+    shape = energy.get("energy_shape", "")
+    section_count = structural.get("section_count", 0)
+    form = structural.get("form", "")
+
+    sentence3_parts = []
+    if shape and shape != "insufficient data":
+        sentence3_parts.append(f"The arrangement has a {shape} energy profile")
+
+    if section_count > 0:
+        unique_sections = len(set(form)) if form else section_count
+        if unique_sections <= 2:
+            structure_desc = f"across {section_count} sections with a simple structure"
+        elif unique_sections <= 4:
+            structure_desc = f"across {section_count} sections with moderate structural variety"
+        else:
+            structure_desc = f"across {section_count} sections with high structural complexity"
+        sentence3_parts.append(structure_desc)
+
+    if sentence3_parts:
+        parts.append(", ".join(sentence3_parts))
+
+    if not parts:
+        return ""
+
+    # Join sentences with proper punctuation
+    result = ". ".join(parts)
+    if not result.endswith("."):
+        result += "."
+    return result
+
+
 # ─── Report generation ─────────────────────────────────────────────────────
 
-def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> str:
-    """Generate a single-track markdown report from cached analysis JSON."""
+def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for_llm: bool = False) -> str:
+    """Generate a single-track markdown report from cached analysis JSON.
+
+    Args:
+        for_llm: If True, strip heavy raw data sections (SSM image, full chord
+                 sequence, interval histograms, MFCCs, key/mode timeline table)
+                 to reduce token usage by ~40-60% with no loss of understanding.
+    """
     lines = []
 
     artist = track_metadata.get("artist", "Unknown Artist")
@@ -1235,10 +2062,23 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
     lines.append("---")
     lines.append("")
 
-    # Overview
+    # Extract sections used in summary and overview
     harmonic = results.get("harmonic", {})
     rhythmic = results.get("rhythmic", {})
     energy = results.get("energy", {})
+    spectral = results.get("spectral", {})
+    structural = results.get("structural", {})
+    melodic = results.get("melodic", {})
+
+    # Musical character summary — synthesized natural language paragraph
+    summary = _generate_character_summary(
+        harmonic, melodic, rhythmic, spectral, structural, energy, duration
+    )
+    if summary:
+        lines.append(f"> {summary}")
+        lines.append("")
+
+    # Overview
 
     lines.append("## Overview")
     bpm = rhythmic.get("bpm", "?")
@@ -1269,10 +2109,25 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
 
         lines.append(f"- **Modal quality:** {modal}")
 
+        # Prefer Roman numeral display if available
+        rnc = harmonic.get("roman_numeral_chords", [])
         mc = harmonic.get("most_common_chords", [])
-        if mc:
+        if rnc:
+            chord_str = ", ".join(
+                f"{c['roman']} [{c['chord']}] ({c['percentage']}%)" for c in rnc[:6]
+            )
+            lines.append(f"- **Most common chords:** {chord_str}")
+        elif mc:
             chord_str = ", ".join(f"{c['chord']} ({c['percentage']}%)" for c in mc[:6])
             lines.append(f"- **Most common chords:** {chord_str}")
+
+        # Detected progressions
+        progs = harmonic.get("detected_progressions", [])
+        if progs:
+            prog_str = ", ".join(
+                f"{p['name']} ({p['occurrences']}x)" for p in progs[:3]
+            )
+            lines.append(f"- **Detected progressions:** {prog_str}")
 
         kmt = harmonic.get("key_mode_timeline", [])
         if kmt:
@@ -1285,7 +2140,6 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
     lines.append("")
 
     # Melodic Character
-    melodic = results.get("melodic", {})
     lines.append("## Melodic Character")
     if melodic.get("degraded"):
         lines.append(f"> *{melodic.get('error', 'Melodic analysis unavailable')}*")
@@ -1350,6 +2204,13 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
                 for t in top3
             ]
             lines.append(f"- **Unexpected transitions:** {', '.join(parts)}")
+
+        # Melodic sketches per section
+        sketches = melodic.get("section_sketches", [])
+        if sketches:
+            lines.append("- **Melodic sketches:**")
+            for sk in sketches:
+                lines.append(f"  - Section {sk['label']}: {sk['sketch']}")
     lines.append("")
 
     # Rhythmic Character
@@ -1367,6 +2228,14 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
         ts = rhythmic.get("tempo_stability", "?")
         lines.append(f"- **Tempo stability:** {ts}")
 
+        rp = rhythmic.get("rhythm_pattern", "")
+        if rp and rp != "unclassified":
+            lines.append(f"- **Pattern:** {rp}")
+
+        ds = rhythmic.get("density_shape", "")
+        if ds and ds != "insufficient data":
+            lines.append(f"- **Rhythmic density:** {ds}")
+
         ep = rhythmic.get("euclidean_patterns", [])
         if ep:
             for p in ep:
@@ -1374,7 +2243,6 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
     lines.append("")
 
     # Timbral Character
-    spectral = results.get("spectral", {})
     lines.append("## Timbral Character")
     br = spectral.get("brightness", "?")
     lines.append(f"- **Brightness:** {br} (centroid: {spectral.get('centroid_hz', '?')} Hz)")
@@ -1390,7 +2258,6 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
     lines.append("")
 
     # Structure
-    structural = results.get("structural", {})
     lines.append("## Structure")
     sc = structural.get("section_count", 0)
     form = structural.get("form", "?")
@@ -1400,23 +2267,38 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
     lines.append(f"- **Average section length:** {asl}s")
 
     segs = structural.get("segments", [])
+    section_profiles = structural.get("section_profiles", [])
+    profile_by_key = {}
+    for sp in section_profiles:
+        key = (sp["start"], sp["end"])
+        profile_by_key[key] = sp
+
     if segs:
         lines.append("- **Section map:**")
         for seg in segs:
-            lines.append(
-                f"  - {_format_time(seg['start'])}–{_format_time(seg['end'])} — "
-                f"Section {seg.get('label', '?')} ({seg['duration']}s)"
-            )
+            profile = profile_by_key.get((seg["start"], seg["end"]))
+            if profile:
+                lines.append(
+                    f"  - {_format_time(seg['start'])}–{_format_time(seg['end'])} — "
+                    f"Section {seg.get('label', '?')} ({seg['duration']}s) — "
+                    f"{profile['rms_db']}dB, {profile['brightness']}, {profile['density']}"
+                )
+            else:
+                lines.append(
+                    f"  - {_format_time(seg['start'])}–{_format_time(seg['end'])} — "
+                    f"Section {seg.get('label', '?')} ({seg['duration']}s)"
+                )
 
-    ssm_png = structural.get("self_similarity_png")
-    if ssm_png:
-        lines.append("")
-        lines.append("<details>")
-        lines.append("<summary>Self-Similarity Matrix</summary>")
-        lines.append("")
-        lines.append(f"![Self-Similarity Matrix](data:image/png;base64,{ssm_png})")
-        lines.append("")
-        lines.append("</details>")
+    if not for_llm:
+        ssm_png = structural.get("self_similarity_png")
+        if ssm_png:
+            lines.append("")
+            lines.append("<details>")
+            lines.append("<summary>Self-Similarity Matrix</summary>")
+            lines.append("")
+            lines.append(f"![Self-Similarity Matrix](data:image/png;base64,{ssm_png})")
+            lines.append("")
+            lines.append("</details>")
     lines.append("")
 
     # Energy
@@ -1432,126 +2314,127 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
             lines.append(f"- **{b['type'].title()}** at {_format_time(b['time'])} (ratio: {b['ratio']})")
     lines.append("")
 
-    # Raw data reference (collapsible)
-    lines.append("## Raw Data Reference")
-    lines.append("")
-
-    # Chord sequence
-    chord_seq = harmonic.get("chords", [])
-    if chord_seq:
-        lines.append("<details>")
-        lines.append("<summary>Chord sequence (click to expand)</summary>")
-        lines.append("")
-        lines.append("| Time | Chord | Confidence |")
-        lines.append("|------|-------|------------|")
-        display_limit = 200
-        total = len(chord_seq)
-        for c in chord_seq[:display_limit]:
-            lines.append(f"| {_format_time(c['time'])} | {c['chord']} | {c['confidence']} |")
-        if total > display_limit:
-            lines.append(f"\n*Showing first {display_limit} of {total} total chord changes.*")
-        lines.append("")
-        lines.append("</details>")
+    # Raw data reference (collapsible) — omitted for LLM to save tokens
+    if not for_llm:
+        lines.append("## Raw Data Reference")
         lines.append("")
 
-    # Interval histogram
-    ih = melodic.get("interval_histogram", {})
-    if ih:
-        lines.append("<details>")
-        lines.append("<summary>Interval histogram</summary>")
-        lines.append("")
-        lines.append("| Interval (semitones) | Name | Frequency |")
-        lines.append("|---------------------|------|-----------|")
-        for iv_str, pct in sorted(ih.items(), key=lambda x: -x[1]):
-            iv = int(iv_str)
-            name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
-            lines.append(f"| {iv:+d} | {name} | {pct}% |")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
-
-    # Per-register interval histograms
-    ri = melodic.get("register_intervals", {})
-    has_register_data = any(
-        ri.get(r, {}).get("interval_histogram") for r in ("bass", "mid", "lead")
-    )
-    if has_register_data:
-        lines.append("<details>")
-        lines.append("<summary>Per-register interval histograms</summary>")
-        lines.append("")
-        for reg_name in ("bass", "mid", "lead"):
-            reg = ri.get(reg_name, {})
-            reg_hist = reg.get("interval_histogram", {})
-            if not reg_hist:
-                continue
-            lines.append(f"**{reg_name.title()}** ({reg.get('note_count', 0)} notes, "
-                         f"{reg.get('interval_character', '?')}, avg {reg.get('avg_interval_size', '?')}st)")
+        # Chord sequence
+        chord_seq = harmonic.get("chords", [])
+        if chord_seq:
+            lines.append("<details>")
+            lines.append("<summary>Chord sequence (click to expand)</summary>")
             lines.append("")
-            lines.append("| Interval | Name | Frequency |")
-            lines.append("|----------|------|-----------|")
-            for iv_str, pct in sorted(reg_hist.items(), key=lambda x: -x[1]):
+            lines.append("| Time | Chord | Confidence |")
+            lines.append("|------|-------|------------|")
+            display_limit = 200
+            total = len(chord_seq)
+            for c in chord_seq[:display_limit]:
+                lines.append(f"| {_format_time(c['time'])} | {c['chord']} | {c['confidence']} |")
+            if total > display_limit:
+                lines.append(f"\n*Showing first {display_limit} of {total} total chord changes.*")
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
+
+        # Interval histogram
+        ih = melodic.get("interval_histogram", {})
+        if ih:
+            lines.append("<details>")
+            lines.append("<summary>Interval histogram</summary>")
+            lines.append("")
+            lines.append("| Interval (semitones) | Name | Frequency |")
+            lines.append("|---------------------|------|-----------|")
+            for iv_str, pct in sorted(ih.items(), key=lambda x: -x[1]):
                 iv = int(iv_str)
                 name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
                 lines.append(f"| {iv:+d} | {name} | {pct}% |")
             lines.append("")
-        lines.append("</details>")
-        lines.append("")
-
-    # Interval transition matrix
-    itc = melodic.get("interval_transitions_common", [])
-    if itc:
-        lines.append("<details>")
-        lines.append("<summary>Interval transitions</summary>")
-        lines.append("")
-        lines.append("**Most common transitions (top 10):**")
-        lines.append("")
-        lines.append("| From | To | Count | Percentage |")
-        lines.append("|------|----|-------|------------|")
-        for t in itc:
-            lines.append(f"| {t['from']} | {t['to']} | {t['count']} | {t['percentage']}% |")
-        lines.append("")
-        itu = melodic.get("interval_transitions_unexpected", [])
-        if itu:
-            lines.append("**Most unexpected transitions (top 5):**")
+            lines.append("</details>")
             lines.append("")
-            lines.append("| From | To | Count | Observed/Expected |")
-            lines.append("|------|----|-------|-------------------|")
-            for t in itu:
-                lines.append(f"| {t['from']} | {t['to']} | {t['count']} | {t['observed_expected_ratio']}x |")
+
+        # Per-register interval histograms
+        ri = melodic.get("register_intervals", {})
+        has_register_data = any(
+            ri.get(r, {}).get("interval_histogram") for r in ("bass", "mid", "lead")
+        )
+        if has_register_data:
+            lines.append("<details>")
+            lines.append("<summary>Per-register interval histograms</summary>")
             lines.append("")
-        lines.append("</details>")
-        lines.append("")
+            for reg_name in ("bass", "mid", "lead"):
+                reg = ri.get(reg_name, {})
+                reg_hist = reg.get("interval_histogram", {})
+                if not reg_hist:
+                    continue
+                lines.append(f"**{reg_name.title()}** ({reg.get('note_count', 0)} notes, "
+                             f"{reg.get('interval_character', '?')}, avg {reg.get('avg_interval_size', '?')}st)")
+                lines.append("")
+                lines.append("| Interval | Name | Frequency |")
+                lines.append("|----------|------|-----------|")
+                for iv_str, pct in sorted(reg_hist.items(), key=lambda x: -x[1]):
+                    iv = int(iv_str)
+                    name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
+                    lines.append(f"| {iv:+d} | {name} | {pct}% |")
+                lines.append("")
+            lines.append("</details>")
+            lines.append("")
 
-    # Key/mode timeline table
-    kmt = harmonic.get("key_mode_timeline", [])
-    if kmt:
-        lines.append("<details>")
-        lines.append("<summary>Key/mode timeline</summary>")
-        lines.append("")
-        lines.append("| Time Range | Key/Mode | Confidence |")
-        lines.append("|------------|----------|------------|")
-        for entry in kmt:
-            lines.append(
-                f"| {_format_time(entry['start'])}–{_format_time(entry['end'])} "
-                f"| {entry['key_mode']} | {round(entry['confidence'] * 100)}% |"
-            )
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
+        # Interval transition matrix
+        itc = melodic.get("interval_transitions_common", [])
+        if itc:
+            lines.append("<details>")
+            lines.append("<summary>Interval transitions</summary>")
+            lines.append("")
+            lines.append("**Most common transitions (top 10):**")
+            lines.append("")
+            lines.append("| From | To | Count | Percentage |")
+            lines.append("|------|----|-------|------------|")
+            for t in itc:
+                lines.append(f"| {t['from']} | {t['to']} | {t['count']} | {t['percentage']}% |")
+            lines.append("")
+            itu = melodic.get("interval_transitions_unexpected", [])
+            if itu:
+                lines.append("**Most unexpected transitions (top 5):**")
+                lines.append("")
+                lines.append("| From | To | Count | Observed/Expected |")
+                lines.append("|------|----|-------|-------------------|")
+                for t in itu:
+                    lines.append(f"| {t['from']} | {t['to']} | {t['count']} | {t['observed_expected_ratio']}x |")
+                lines.append("")
+            lines.append("</details>")
+            lines.append("")
 
-    # MFCCs
-    mfcc = spectral.get("mfcc_mean", [])
-    if mfcc:
-        lines.append("<details>")
-        lines.append("<summary>MFCC coefficients</summary>")
-        lines.append("")
-        lines.append("| Coefficient | Value |")
-        lines.append("|------------|-------|")
-        for i, v in enumerate(mfcc):
-            lines.append(f"| MFCC-{i} | {v} |")
-        lines.append("")
-        lines.append("</details>")
-        lines.append("")
+        # Key/mode timeline table
+        kmt = harmonic.get("key_mode_timeline", [])
+        if kmt:
+            lines.append("<details>")
+            lines.append("<summary>Key/mode timeline</summary>")
+            lines.append("")
+            lines.append("| Time Range | Key/Mode | Confidence |")
+            lines.append("|------------|----------|------------|")
+            for entry in kmt:
+                lines.append(
+                    f"| {_format_time(entry['start'])}–{_format_time(entry['end'])} "
+                    f"| {entry['key_mode']} | {round(entry['confidence'] * 100)}% |"
+                )
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
+
+        # MFCCs
+        mfcc = spectral.get("mfcc_mean", [])
+        if mfcc:
+            lines.append("<details>")
+            lines.append("<summary>MFCC coefficients</summary>")
+            lines.append("")
+            lines.append("| Coefficient | Value |")
+            lines.append("|------------|-------|")
+            for i, v in enumerate(mfcc):
+                lines.append(f"| MFCC-{i} | {v} |")
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
 
     return "\n".join(lines)
 
@@ -1559,6 +2442,7 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any]) -> 
 def generate_comparative_report(
     analyses: list[dict[str, Any]],
     tracks: list[dict[str, Any]],
+    for_llm: bool = False,
 ) -> str:
     """Generate a multi-track comparative report.
 
@@ -1571,7 +2455,7 @@ def generate_comparative_report(
 
     # Individual reports first
     for analysis, track_meta in zip(analyses, tracks):
-        lines.append(generate_report(analysis, track_meta))
+        lines.append(generate_report(analysis, track_meta, for_llm=for_llm))
         lines.append("")
         lines.append("---")
         lines.append("")

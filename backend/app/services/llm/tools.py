@@ -63,7 +63,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "filter_tracks",
-        "description": "Filter tracks by library criteria (favorites, play history, genre, artist, year, recently added) and/or audio features (BPM, energy, key). Use for requests like 'play my favorites', 'what have I been listening to', 'electronic tracks from the 90s', 'upbeat songs', 'something around 120 BPM'.",
+        "description": "Filter tracks by library criteria (favorites, play history, genre, artist, year, recently added) and/or audio features (BPM, energy, key, swing feel, brightness, modal character, energy shape, and more). Use for requests like 'play my favorites', 'what have I been listening to', 'electronic tracks from the 90s', 'upbeat songs', 'something around 120 BPM', 'tracks with swing feel', 'something in Dorian mode', 'bright sounding tracks'.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -99,6 +99,20 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 "valence_max": {"type": "number", "minimum": 0, "maximum": 1},
                 "acousticness_min": {"type": "number", "minimum": 0, "maximum": 1},
                 "instrumentalness_min": {"type": "number", "minimum": 0, "maximum": 1},
+                # Deep analysis feature criteria
+                "swing_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum swing ratio (0=straight, 1=heavy swing)"},
+                "swing_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum swing ratio"},
+                "syncopation_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum syncopation index"},
+                "brightness_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum brightness (spectral centroid, 0=dark, 1=bright)"},
+                "brightness_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum brightness"},
+                "dynamic_range_min": {"type": "number", "description": "Minimum dynamic range in dB"},
+                "energy_shape": {"type": "string", "enum": ["gradual_build", "fade_out", "peak_middle", "consistent", "dynamic"], "description": "Energy shape pattern"},
+                "modal_character": {"type": "string", "description": "Modal character filter (e.g. 'dorian', 'mixolydian', 'lydian')"},
+                "key_stability": {"type": "string", "enum": ["stable", "drifting", "modulating"], "description": "Key stability filter"},
+                "section_count_min": {"type": "integer", "description": "Minimum number of song sections"},
+                "section_count_max": {"type": "integer", "description": "Maximum number of song sections"},
+                "note_density_min": {"type": "number", "description": "Minimum melodic note density (notes per beat)"},
+                "note_density_max": {"type": "number", "description": "Maximum melodic note density"},
                 "limit": {"type": "integer", "default": 20}
             }
         }

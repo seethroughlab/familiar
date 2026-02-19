@@ -425,6 +425,20 @@ Respond with ONLY the playlist name, nothing else."""
         valence_max: float | None = None,
         acousticness_min: float | None = None,
         instrumentalness_min: float | None = None,
+        # Deep analysis feature criteria
+        swing_min: float | None = None,
+        swing_max: float | None = None,
+        syncopation_min: float | None = None,
+        brightness_min: float | None = None,
+        brightness_max: float | None = None,
+        dynamic_range_min: float | None = None,
+        energy_shape: str | None = None,
+        modal_character: str | None = None,
+        key_stability: str | None = None,
+        section_count_min: int | None = None,
+        section_count_max: int | None = None,
+        note_density_min: float | None = None,
+        note_density_max: float | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         """Filter tracks by library criteria and/or audio features."""
@@ -554,15 +568,11 @@ Respond with ONLY the playlist name, nothing else."""
                     )
                 )
 
-        # --- Audio feature criteria ---
+        # --- Audio feature criteria (typed columns on TrackAnalysis) ---
         if bpm_min is not None:
-            conditions.append(
-                text("(features->>'bpm')::float >= :bpm_min").bindparams(bpm_min=bpm_min)
-            )
+            conditions.append(TrackAnalysis.bpm >= bpm_min)
         if bpm_max is not None:
-            conditions.append(
-                text("(features->>'bpm')::float <= :bpm_max").bindparams(bpm_max=bpm_max)
-            )
+            conditions.append(TrackAnalysis.bpm <= bpm_max)
         if key is not None:
             key_normalized = key.strip().upper()
             key_root = key_normalized.split()[0].rstrip("M")
@@ -574,51 +584,60 @@ Respond with ONLY the playlist name, nothing else."""
                     key_root = flat_to_sharp[key_root + "B"]
                 elif key_root in flat_to_sharp:
                     key_root = flat_to_sharp[key_root]
-            conditions.append(
-                text("features->>'key' = :key_value").bindparams(key_value=key_root)
-            )
+            conditions.append(TrackAnalysis.key == key_root)
         if energy_min is not None:
-            conditions.append(
-                text("(features->>'energy')::float >= :energy_min").bindparams(
-                    energy_min=energy_min
-                )
-            )
+            conditions.append(TrackAnalysis.energy >= energy_min)
         if energy_max is not None:
-            conditions.append(
-                text("(features->>'energy')::float <= :energy_max").bindparams(
-                    energy_max=energy_max
-                )
-            )
+            conditions.append(TrackAnalysis.energy <= energy_max)
         if danceability_min is not None:
-            conditions.append(
-                text("(features->>'danceability')::float >= :danceability_min").bindparams(
-                    danceability_min=danceability_min
-                )
-            )
+            conditions.append(TrackAnalysis.danceability >= danceability_min)
         if valence_min is not None:
-            conditions.append(
-                text("(features->>'valence')::float >= :valence_min").bindparams(
-                    valence_min=valence_min
-                )
-            )
+            conditions.append(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
-            conditions.append(
-                text("(features->>'valence')::float <= :valence_max").bindparams(
-                    valence_max=valence_max
-                )
-            )
+            conditions.append(TrackAnalysis.valence <= valence_max)
         if acousticness_min is not None:
-            conditions.append(
-                text("(features->>'acousticness')::float >= :acousticness_min").bindparams(
-                    acousticness_min=acousticness_min
-                )
-            )
+            conditions.append(TrackAnalysis.acousticness >= acousticness_min)
         if instrumentalness_min is not None:
-            conditions.append(
-                text("(features->>'instrumentalness')::float >= :instrumentalness_min").bindparams(
-                    instrumentalness_min=instrumentalness_min
-                )
-            )
+            conditions.append(TrackAnalysis.instrumentalness >= instrumentalness_min)
+
+        # --- Deep analysis feature criteria (coerce types) ---
+        swing_min = to_float(swing_min)
+        swing_max = to_float(swing_max)
+        syncopation_min = to_float(syncopation_min)
+        brightness_min = to_float(brightness_min)
+        brightness_max = to_float(brightness_max)
+        dynamic_range_min = to_float(dynamic_range_min)
+        section_count_min = to_int(section_count_min)
+        section_count_max = to_int(section_count_max)
+        note_density_min = to_float(note_density_min)
+        note_density_max = to_float(note_density_max)
+
+        if swing_min is not None:
+            conditions.append(TrackAnalysis.swing_ratio >= swing_min)
+        if swing_max is not None:
+            conditions.append(TrackAnalysis.swing_ratio <= swing_max)
+        if syncopation_min is not None:
+            conditions.append(TrackAnalysis.syncopation >= syncopation_min)
+        if brightness_min is not None:
+            conditions.append(TrackAnalysis.brightness >= brightness_min)
+        if brightness_max is not None:
+            conditions.append(TrackAnalysis.brightness <= brightness_max)
+        if dynamic_range_min is not None:
+            conditions.append(TrackAnalysis.dynamic_range_db >= dynamic_range_min)
+        if energy_shape is not None:
+            conditions.append(TrackAnalysis.energy_shape == energy_shape)
+        if modal_character is not None:
+            conditions.append(TrackAnalysis.modal_character.ilike(f"%{modal_character}%"))
+        if key_stability is not None:
+            conditions.append(TrackAnalysis.key_stability == key_stability)
+        if section_count_min is not None:
+            conditions.append(TrackAnalysis.section_count >= section_count_min)
+        if section_count_max is not None:
+            conditions.append(TrackAnalysis.section_count <= section_count_max)
+        if note_density_min is not None:
+            conditions.append(TrackAnalysis.note_density >= note_density_min)
+        if note_density_max is not None:
+            conditions.append(TrackAnalysis.note_density <= note_density_max)
 
         for condition in conditions:
             stmt = stmt.where(condition)
@@ -839,7 +858,7 @@ Respond with ONLY the playlist name, nothing else."""
 
         track_dict = self._track_to_dict(track)
         if analysis:
-            track_dict["features"] = analysis.features
+            track_dict["features"] = analysis.to_features_dict()
 
         return track_dict
 
@@ -1860,10 +1879,8 @@ Respond with ONLY the playlist name, nothing else."""
         """
         import asyncio
 
-        from app.db.models import TrackDeepAnalysis
         from app.services.background import get_background_manager
         from app.services.deep_analysis import (
-            DEEP_ANALYSIS_VERSION,
             generate_comparative_report,
             generate_report,
         )
@@ -1881,34 +1898,35 @@ Respond with ONLY the playlist name, nothing else."""
 
         for tid in track_ids:
             try:
-                # Check cache
-                cached = (
+                # Check for existing analysis_detail on TrackAnalysis
+                analysis = (
                     await self.db.execute(
-                        select(TrackDeepAnalysis).where(
-                            TrackDeepAnalysis.track_id == UUID(tid),
-                            TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-                        )
+                        select(TrackAnalysis)
+                        .where(TrackAnalysis.track_id == UUID(tid))
+                        .order_by(TrackAnalysis.version.desc())
                     )
                 ).scalar_one_or_none()
 
-                if not cached:
-                    # Trigger analysis and wait for it
+                has_detail = analysis and analysis.analysis_detail
+
+                if not has_detail:
+                    # Trigger deep analysis and wait for it
                     await bg.run_deep_analysis(tid)
                     # Wait for completion (poll up to 120s)
                     for _ in range(60):
                         await asyncio.sleep(2)
-                        cached = (
+                        await self.db.expire_all()
+                        analysis = (
                             await self.db.execute(
-                                select(TrackDeepAnalysis).where(
-                                    TrackDeepAnalysis.track_id == UUID(tid),
-                                    TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
-                                )
+                                select(TrackAnalysis)
+                                .where(TrackAnalysis.track_id == UUID(tid))
+                                .order_by(TrackAnalysis.version.desc())
                             )
                         ).scalar_one_or_none()
-                        if cached:
+                        if analysis and analysis.analysis_detail:
                             break
 
-                if not cached:
+                if not analysis or not analysis.analysis_detail:
                     errors.append(f"Analysis timed out for track {tid}")
                     continue
 
@@ -1918,7 +1936,7 @@ Respond with ONLY the playlist name, nothing else."""
                 ).scalar_one_or_none()
 
                 if track:
-                    analyses.append(cached.results)
+                    analyses.append(analysis.analysis_detail)
                     track_metas.append({
                         "artist": track.artist,
                         "title": track.title,
@@ -1935,16 +1953,16 @@ Respond with ONLY the playlist name, nothing else."""
                 "errors": errors,
             }
 
-        # Generate report
+        # Generate report (for_llm=True strips heavy raw data sections)
         if len(analyses) == 1:
-            report = generate_report(analyses[0], track_metas[0])
+            report = generate_report(analyses[0], track_metas[0], for_llm=True)
         elif include_comparative:
-            report = generate_comparative_report(analyses, track_metas)
+            report = generate_comparative_report(analyses, track_metas, for_llm=True)
         else:
             # Multiple tracks without comparison: just concatenate
             parts = []
             for a, m in zip(analyses, track_metas):
-                parts.append(generate_report(a, m))
+                parts.append(generate_report(a, m, for_llm=True))
             report = "\n\n---\n\n".join(parts)
 
         result: dict[str, Any] = {

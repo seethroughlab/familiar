@@ -17,7 +17,7 @@ export interface RecentImport {
 }
 
 // Unified Sync Types
-export type SyncPhase = 'idle' | 'discovering' | 'reading' | 'features' | 'embeddings' | 'complete' | 'error';
+export type SyncPhase = 'idle' | 'discovering' | 'reading' | 'features' | 'embeddings' | 'melodic' | 'complete' | 'error';
 
 export interface SyncProgress {
   phase: SyncPhase;

@@ -1059,7 +1059,7 @@ class TestLibraryExportBuildTrackExport:
 
         analysis = MagicMock()
         analysis.version = 5
-        analysis.features = {"bpm": 120}
+        analysis.to_features_dict.return_value = {"bpm": 120}
         analysis.embedding = None
         analysis.acoustid = "fingerprint_data_abc"
         analysis.acoustid_lookup = {"recording_id": "mb123"}
@@ -1094,7 +1094,7 @@ class TestLibraryExportBuildTrackExport:
 
         analysis = MagicMock()
         analysis.version = 5
-        analysis.features = {}
+        analysis.to_features_dict.return_value = {}
         analysis.embedding = MagicMock()
         analysis.embedding.tolist.return_value = [0.1, 0.2, 0.3]
         analysis.acoustid = None
