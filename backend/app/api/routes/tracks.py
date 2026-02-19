@@ -1925,7 +1925,7 @@ async def update_track_metadata(
         latest = max(track.analyses, key=lambda a: a.version)
         if latest.bpm is not None:
             # Merge user overrides with analysis features
-            features_data = {
+            features_data: dict[str, Any] = {
                 "bpm": latest.bpm,
                 "key": latest.key,
                 "energy": latest.energy,
@@ -2003,7 +2003,7 @@ async def get_track_metadata(
     if track.analyses:
         latest = max(track.analyses, key=lambda a: a.version)
         if latest.bpm is not None:
-            features_data = {
+            features_data: dict[str, Any] = {
                 "bpm": latest.bpm,
                 "key": latest.key,
                 "energy": latest.energy,

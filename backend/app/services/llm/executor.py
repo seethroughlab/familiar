@@ -1915,7 +1915,7 @@ Respond with ONLY the playlist name, nothing else."""
                     # Wait for completion (poll up to 120s)
                     for _ in range(60):
                         await asyncio.sleep(2)
-                        await self.db.expire_all()
+                        self.db.expire_all()
                         analysis = (
                             await self.db.execute(
                                 select(TrackAnalysis)

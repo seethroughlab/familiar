@@ -27,11 +27,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.exceptions import FamiliarError
 from app.api.ratelimit import limiter
 from app.api.routes import (
+    analysis,
     artwork,
     background,
     bandcamp,
     chat,
-    analysis,
     diagnostics,
     export_import,
     external_tracks,

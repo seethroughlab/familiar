@@ -12,7 +12,7 @@ import io
 import logging
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import numpy as np
@@ -235,7 +235,7 @@ def _detect_progressions(
             detected.append({"name": prog_name, "occurrences": count})
 
     # Sort by frequency
-    detected.sort(key=lambda x: -x["occurrences"])
+    detected.sort(key=lambda x: -cast(int, x["occurrences"]))
     return detected[:5]
 
 
@@ -875,7 +875,7 @@ def _analyze_harmonic(
 
         # Convert most common chords to Roman numerals
         for mc_entry in most_common:
-            rn = _chord_to_roman(mc_entry["chord"], key_root, is_minor_key)
+            rn = _chord_to_roman(str(mc_entry["chord"]), key_root, is_minor_key)
             roman_chords.append({
                 "chord": mc_entry["chord"],
                 "roman": rn,
@@ -974,6 +974,19 @@ def _analyze_melodic(
 
     # Sort by start time
     notes.sort(key=lambda n: n["start"])
+
+    # Deduplicate consecutive same-pitch notes (basic-pitch transcription artifact)
+    if notes:
+        deduped = [notes[0]]
+        for n in notes[1:]:
+            prev = deduped[-1]
+            gap = n["start"] - prev["end"]
+            if n["pitch"] == prev["pitch"] and gap < 0.05:
+                prev["end"] = max(prev["end"], n["end"])
+                prev["velocity"] = max(prev["velocity"], n["velocity"])
+            else:
+                deduped.append(n)
+        notes = deduped
 
     # Pitch range
     pitches = [n["pitch"] for n in notes]

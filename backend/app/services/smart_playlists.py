@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, and_, cast, func, literal, or_, select, union_all
+from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ExternalTrack, ProfilePlayHistory, SmartPlaylist, Track, TrackAnalysis

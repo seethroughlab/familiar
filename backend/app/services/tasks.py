@@ -797,7 +797,6 @@ async def run_library_sync(
                     await queue_tracks_for_deep_backfill(limit=100)
 
                 # Report as features phase since it's populating analysis data
-                pct = int(backfill_done / backfill_total * 100) if backfill_total > 0 else 0
                 progress.set_features(
                     analyzed=backfill_done,
                     pending=pending_backfill,
@@ -984,7 +983,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
     from app.services.analysis import (
         AnalysisError,
         derive_features,
-        extract_features,
         generate_fingerprint,
         identify_track,
         precompute_shared,
@@ -1142,7 +1140,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             deep_scalars: dict[str, Any] = {}
             if not features.get("bpm"):
                 # Use unified pipeline: shared precomputation → features + cheap sections
-                import numpy as np
                 y, sr, shared = precompute_shared(file_path)
                 features = derive_features(y, sr, shared, file_path)
                 features_source = "local"
@@ -1195,7 +1192,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
             # Enrich with MusicBrainz metadata
             from app.services.musicbrainz import enrich_track
-            musicbrainz_metadata = enrich_track(
+            enrich_track(
                 title=track.title,
                 artist=track.artist,
                 album=track.album,

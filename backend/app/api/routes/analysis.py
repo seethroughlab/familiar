@@ -13,7 +13,6 @@ from app.api.deps import DbSession
 from app.db.models import Track, TrackAnalysis
 from app.services.background import get_background_manager
 from app.services.deep_analysis import (
-    DEEP_ANALYSIS_VERSION,
     generate_comparative_report,
     generate_report,
 )

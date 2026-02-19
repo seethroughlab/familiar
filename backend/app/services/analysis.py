@@ -390,7 +390,6 @@ def derive_features(
 
     chroma = shared["chroma"]
     spec = shared["spec"]
-    onset_env = shared["onset_env"]
     rms = shared["rms"]
     n_fft = shared["n_fft"]
     bpm = shared["bpm"]

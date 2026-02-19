@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import Float, String, func, select
+from sqlalchemy import String, func, select
 
 from app.api.deps import DbSession
 from app.api.exceptions import sanitize_error_for_client
