@@ -12,6 +12,7 @@ import { AnalysisSettings } from './AnalysisSettings';
 import { PluginsSettings } from './PluginsSettings';
 import { InstallStatus } from '../PWA/InstallPrompt';
 import { DebugSettings } from './DebugSettings';
+import { RemoteLogsPanel } from './RemoteLogsPanel';
 import { AISettings } from './AISettings';
 import { DataManagement } from './DataManagement';
 import { SubsonicSettings } from './SubsonicSettings';
@@ -136,6 +137,7 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <DebugSettings />
+            <RemoteLogsPanel />
           </div>
         </section>
 

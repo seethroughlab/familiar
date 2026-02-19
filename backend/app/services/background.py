@@ -320,6 +320,14 @@ class BackgroundManager:
                 replace_existing=True,
             )
 
+            # Daily cleanup of old frontend logs (older than 7 days)
+            self._scheduler.add_job(
+                self._cleanup_frontend_logs,
+                CronTrigger(hour=4, minute=0),
+                id="frontend_logs_cleanup",
+                replace_existing=True,
+            )
+
             # Register S3 backup schedule if enabled
             self._register_s3_backup_schedule()
 
@@ -892,6 +900,32 @@ class BackgroundManager:
         except Exception as e:
             logger.error(f"Priority-based new releases check failed: {e}", exc_info=True)
             return {"status": "error", "error": str(e)}
+
+    async def _cleanup_frontend_logs(self) -> None:
+        """Delete frontend_logs older than 7 days."""
+        from datetime import timedelta
+
+        from sqlalchemy import delete
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+        from app.config import settings
+        from app.db.models import FrontendLog
+
+        try:
+            engine = create_async_engine(settings.database_url)
+            async_session = async_sessionmaker(engine, class_=AsyncSession)
+            cutoff = datetime.utcnow() - timedelta(days=7)
+
+            async with async_session() as db:
+                result = await db.execute(
+                    delete(FrontendLog).where(FrontendLog.server_ts < cutoff)
+                )
+                await db.commit()
+                logger.info(f"Frontend logs cleanup: deleted {result.rowcount} entries older than 7 days")
+
+            await engine.dispose()
+        except Exception as e:
+            logger.warning(f"Frontend logs cleanup failed: {e}")
 
     async def _daily_new_releases_check(self) -> None:
         """Run daily priority-based new releases check.

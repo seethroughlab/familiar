@@ -18,6 +18,7 @@ import { usePlayTracking } from '../hooks/usePlayTracking';
 import { useMetadataEnrichment } from '../hooks/useMetadataEnrichment';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { initSyncListeners } from '../services/syncService';
+import { initRemoteLogging } from '../services/remoteLogService';
 import { PlayerBar } from './Player/PlayerBar';
 import { Sidebar } from './Sidebar/Sidebar';
 import { ContentToolbar } from './ContentToolbar';
@@ -101,6 +102,11 @@ export function AppShell() {
   // Initialize offline sync listeners
   useEffect(() => {
     return initSyncListeners();
+  }, []);
+
+  // Initialize remote logging (captures frontend logs to backend)
+  useEffect(() => {
+    return initRemoteLogging();
   }, []);
 
   // Listen for navigate-to-settings event

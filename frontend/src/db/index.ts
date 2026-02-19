@@ -139,6 +139,20 @@ export interface PersistedDownloadJob {
   updatedAt: Date;
 }
 
+// Remote log entry for frontend-to-backend log shipping
+export interface RemoteLogEntry {
+  id?: number; // Auto-increment
+  level: string;
+  namespace: string;
+  message: string; // Serialized args
+  context: {
+    url: string;
+    userAgent: string;
+    profileId: string | null;
+  };
+  createdAt: Date;
+}
+
 // Track partial download progress for resume support
 export interface PartialDownload {
   trackId: string;
@@ -212,6 +226,7 @@ export class FamiliarDB extends Dexie {
   cachedFavorites!: Table<CachedFavorites>;
   downloadQueue!: Table<PersistedDownloadJob>;
   partialDownloads!: Table<PartialDownload>;
+  remoteLogs!: Table<RemoteLogEntry>;
 
   constructor() {
     super('FamiliarDB');
@@ -308,6 +323,24 @@ export class FamiliarDB extends Dexie {
       cachedFavorites: 'profileId, cachedAt',
       downloadQueue: 'id, status, updatedAt',
       partialDownloads: 'trackId, updatedAt',
+    });
+
+    // Version 10: Add remote logs for frontend-to-backend log shipping
+    this.version(10).stores({
+      deviceProfile: 'id',
+      chatSessions: 'id, profileId, updatedAt',
+      cachedTracks: 'id, artist, album, cachedAt',
+      offlineTracks: 'id, cachedAt',
+      offlineArtwork: 'hash, cachedAt',
+      pendingActions: '++id, profileId, type, createdAt',
+      playerState: 'id',
+      cachedProfiles: 'id, cachedAt',
+      cachedPlaylists: 'id, cachedAt',
+      cachedSmartPlaylists: 'id, cachedAt',
+      cachedFavorites: 'profileId, cachedAt',
+      downloadQueue: 'id, status, updatedAt',
+      partialDownloads: 'trackId, updatedAt',
+      remoteLogs: '++id, level, createdAt',
     });
   }
 }

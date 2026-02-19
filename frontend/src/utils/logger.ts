@@ -18,7 +18,14 @@
  */
 
 const isDev = import.meta.env.DEV;
-const noop = () => {};
+
+type LogSink = (level: string, namespace: string, args: unknown[]) => void;
+let _sink: LogSink | null = null;
+
+/** Register an external log sink (e.g. remoteLogService). Breaks the import cycle. */
+export function setLogSink(fn: LogSink): void {
+  _sink = fn;
+}
 
 function isDebugEnabled(namespace: string): boolean {
   try {
@@ -42,10 +49,16 @@ export function createLogger(namespace: string, opts?: { forceVerbose?: boolean 
   const tag = `[${namespace}]`;
   const verbose = isDev || opts?.forceVerbose || isDebugEnabled(namespace);
   return {
-    debug: verbose ? (...args: unknown[]) => console.debug(tag, ...args) : noop,
-    info: verbose ? (...args: unknown[]) => console.log(tag, ...args) : noop,
-    warn: verbose ? (...args: unknown[]) => console.warn(tag, ...args) : noop,
-    error: (...args: unknown[]) => console.error(tag, ...args),
+    debug: verbose
+      ? (...args: unknown[]) => { console.debug(tag, ...args); _sink?.('debug', namespace, args); }
+      : (...args: unknown[]) => { _sink?.('debug', namespace, args); },
+    info: verbose
+      ? (...args: unknown[]) => { console.log(tag, ...args); _sink?.('info', namespace, args); }
+      : (...args: unknown[]) => { _sink?.('info', namespace, args); },
+    warn: verbose
+      ? (...args: unknown[]) => { console.warn(tag, ...args); _sink?.('warn', namespace, args); }
+      : (...args: unknown[]) => { _sink?.('warn', namespace, args); },
+    error: (...args: unknown[]) => { console.error(tag, ...args); _sink?.('error', namespace, args); },
   };
 }
 

@@ -27,6 +27,7 @@ from .profiles import (
     SpotifyProfile,
     SubsonicCredential,
 )
+from .frontend_log import FrontendLog
 from .tracks import ExternalTrack, Track, TrackAnalysis, TrackDeepAnalysis, TrackVideo
 
 __all__ = [
@@ -44,6 +45,7 @@ __all__ = [
     "ArtistCheckCache",
     "ArtistInfo",
     "ArtistNewRelease",
+    "FrontendLog",
     "ExternalTrack",
     "LastfmProfile",
     "Playlist",

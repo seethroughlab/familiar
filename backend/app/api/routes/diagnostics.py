@@ -5,11 +5,13 @@ import platform
 import sys
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from app.api.deps import DbSession
+from app.api.deps import CurrentProfile, DbSession
 from app.config import ANALYSIS_VERSION, get_app_version
 
 router = APIRouter(tags=["diagnostics"])
@@ -57,7 +59,31 @@ class DiagnosticsExport(BaseModel):
     library_stats: dict[str, Any]
     recent_failures: list[dict[str, Any]]
     recent_logs: list[dict[str, Any]]
+    frontend_logs: list[dict[str, Any]]
     settings_summary: dict[str, Any]
+
+
+# ── Frontend Log Schemas ────────────────────────────────────────────
+
+class FrontendLogEntry(BaseModel):
+    level: str
+    namespace: str
+    message: str
+    timestamp: str
+    context: dict[str, Any] | None = None
+
+
+class FrontendLogBatch(BaseModel):
+    entries: list[FrontendLogEntry]
+
+
+class FrontendLogIngestResponse(BaseModel):
+    received: int
+
+
+class FrontendLogQueryResponse(BaseModel):
+    entries: list[dict[str, Any]]
+    total: int
 
 
 @router.get("/diagnostics/export", response_model=DiagnosticsExport)
@@ -130,6 +156,28 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
     except Exception as e:
         settings_summary = {"error": str(e)}
 
+    # Get recent frontend logs
+    frontend_logs_list: list[dict[str, Any]] = []
+    try:
+        from app.db.models import FrontendLog
+
+        fe_result = await db.execute(
+            select(FrontendLog)
+            .order_by(FrontendLog.client_ts.desc())
+            .limit(100)
+        )
+        for row in fe_result.scalars():
+            frontend_logs_list.append({
+                "level": row.level,
+                "namespace": row.namespace,
+                "message": row.message,
+                "client_ts": row.client_ts.isoformat() if row.client_ts else None,
+                "server_ts": row.server_ts.isoformat() if row.server_ts else None,
+                "context": row.context,
+            })
+    except Exception as e:
+        frontend_logs_list = [{"error": str(e)}]
+
     return DiagnosticsExport(
         exported_at=datetime.now(UTC).isoformat(),
         version=get_app_version(),
@@ -139,5 +187,135 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
         library_stats=library_stats,
         recent_failures=recent_failures,
         recent_logs=recent_logs,
+        frontend_logs=frontend_logs_list,
         settings_summary=settings_summary,
     )
+
+
+# ── Frontend Log Endpoints ──────────────────────────────────────────
+
+
+@router.post("/diagnostics/frontend-logs", response_model=FrontendLogIngestResponse)
+async def ingest_frontend_logs(
+    batch: FrontendLogBatch,
+    db: DbSession,
+    profile: CurrentProfile,
+) -> FrontendLogIngestResponse:
+    """Ingest a batch of frontend log entries."""
+    from sqlalchemy import insert
+
+    from app.db.models import FrontendLog
+
+    if not batch.entries:
+        return FrontendLogIngestResponse(received=0)
+
+    # Cap at 200 per request
+    entries = batch.entries[:200]
+
+    profile_id = UUID(str(profile.id)) if profile else None
+
+    values = []
+    for entry in entries:
+        try:
+            client_ts = datetime.fromisoformat(entry.timestamp)
+            # Strip timezone info -- column is TIMESTAMP WITHOUT TIME ZONE
+            if client_ts.tzinfo is not None:
+                client_ts = client_ts.replace(tzinfo=None)
+        except (ValueError, TypeError):
+            client_ts = datetime.utcnow()
+
+        values.append({
+            "id": uuid4(),
+            "profile_id": profile_id,
+            "level": entry.level[:10],
+            "namespace": entry.namespace[:200],
+            "message": entry.message,
+            "context": entry.context,
+            "client_ts": client_ts,
+        })
+
+    await db.execute(insert(FrontendLog), values)
+    return FrontendLogIngestResponse(received=len(values))
+
+
+@router.get("/diagnostics/frontend-logs")
+async def query_frontend_logs(
+    db: DbSession,
+    level: str | None = Query(None),
+    namespace: str | None = Query(None),
+    search: str | None = Query(None),
+    since: str | None = Query(None),
+    until: str | None = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    format: str = Query("json"),
+) -> Any:
+    """Query frontend logs with optional filters.
+
+    Set format=text for plain-text output suitable for curl | grep.
+    """
+    from sqlalchemy import func, select
+
+    from app.db.models import FrontendLog
+
+    query = select(FrontendLog)
+
+    if level:
+        query = query.where(FrontendLog.level == level)
+    if namespace:
+        query = query.where(FrontendLog.namespace == namespace)
+    if search:
+        query = query.where(FrontendLog.message.ilike(f"%{search}%"))
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+            query = query.where(FrontendLog.client_ts >= since_dt)
+        except ValueError:
+            pass
+    if until:
+        try:
+            until_dt = datetime.fromisoformat(until)
+            query = query.where(FrontendLog.client_ts <= until_dt)
+        except ValueError:
+            pass
+
+    # Get total count (without limit/offset)
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query) or 0
+
+    # Apply ordering and pagination
+    query = query.order_by(FrontendLog.client_ts.desc()).offset(offset).limit(limit)
+    result = await db.execute(query)
+    rows = result.scalars().all()
+
+    if format == "text":
+        lines = []
+        for row in rows:
+            ts = row.client_ts.isoformat() if row.client_ts else "?"
+            lines.append(f"{ts} {row.level.upper():5s} [{row.namespace}] {row.message}")
+        return PlainTextResponse("\n".join(lines))
+
+    entries = []
+    for row in rows:
+        entries.append({
+            "id": str(row.id),
+            "level": row.level,
+            "namespace": row.namespace,
+            "message": row.message,
+            "context": row.context,
+            "client_ts": row.client_ts.isoformat() if row.client_ts else None,
+            "server_ts": row.server_ts.isoformat() if row.server_ts else None,
+        })
+
+    return FrontendLogQueryResponse(entries=entries, total=total)
+
+
+@router.delete("/diagnostics/frontend-logs")
+async def clear_frontend_logs(db: DbSession) -> dict[str, str]:
+    """Delete all frontend log entries."""
+    from sqlalchemy import delete
+
+    from app.db.models import FrontendLog
+
+    await db.execute(delete(FrontendLog))
+    return {"status": "cleared"}
