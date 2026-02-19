@@ -3,7 +3,6 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useAppNavigation } from './useAppNavigation';
 import { useFavorites } from './useFavorites';
-import { useDeepAnalysis } from './useDeepAnalysis';
 import { TrackContextMenu } from '../components/Library/TrackContextMenu';
 import type { ContextMenuState } from '../components/Library/types';
 import { initialContextMenuState } from '../components/Library/types';
@@ -47,7 +46,6 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
-  const { downloadAnalysis } = useDeepAnalysis();
 
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
     e.preventDefault();
@@ -136,7 +134,6 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
             useSelectionStore.getState().setEditingTrackId(track.id);
           }
         }}
-        onDownloadAnalysis={() => downloadAnalysis(track)}
         onRemoveFromDownloads={
           options.onRemoveFromDownloads
             ? () => options.onRemoveFromDownloads!(track)
@@ -153,7 +150,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
     );
   }, [
     contextMenu, options, closeContextMenu, addToQueue,
-    navigateToArtist, navigateToAlbum, isFavorite, toggleFavorite, downloadAnalysis,
+    navigateToArtist, navigateToAlbum, isFavorite, toggleFavorite,
   ]);
 
   return {

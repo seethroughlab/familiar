@@ -4,6 +4,7 @@
  * Shows on right-click with options like Play, Queue, Go to Artist, etc.
  */
 import { useEffect, useRef } from 'react';
+import { useDeepAnalysis } from '../../hooks/useDeepAnalysis';
 import {
   Play,
   ListPlus,
@@ -39,7 +40,6 @@ interface TrackContextMenuProps {
   onAddToPlaylist: () => void;
   onMakePlaylist: () => void;
   onEditMetadata?: () => void;
-  onDownloadAnalysis?: () => void;
   onRemoveFromDownloads?: () => void;
   // Favorite toggle
   isFavorite?: boolean;
@@ -94,12 +94,12 @@ export function TrackContextMenu({
   isFavorite,
   onToggleFavorite,
   selectedCount = 0,
-  onDownloadAnalysis,
   onPlaySelected,
   onAddSelectedToPlaylist,
   onClearSelection,
 }: TrackContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const { downloadAnalysis } = useDeepAnalysis();
 
   // Close on click outside
   useEffect(() => {
@@ -281,13 +281,11 @@ export function TrackContextMenu({
       )}
 
       {/* Download Track Analysis */}
-      {onDownloadAnalysis && (
-        <MenuItem
-          icon={<FileText className="w-4 h-4" />}
-          label="Download Track Analysis"
-          onClick={() => handleAction(onDownloadAnalysis)}
-        />
-      )}
+      <MenuItem
+        icon={<FileText className="w-4 h-4" />}
+        label="Download Track Analysis"
+        onClick={() => handleAction(() => downloadAnalysis(track))}
+      />
 
       {/* Remove from Downloads */}
       {onRemoveFromDownloads && (
