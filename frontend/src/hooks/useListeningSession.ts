@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
-import { useAudioEngine } from './useAudioEngine';
+import { useAudioControls } from './useAudioControls';
 import { useWebRTCStreaming } from './useWebRTCStreaming';
 import { createLogger } from '../utils/logger';
 
@@ -63,7 +63,7 @@ export function useListeningSession({ userId, username }: UseListeningSessionOpt
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const currentTime = usePlayerStore((s) => s.currentTime);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const audioEngine = useAudioEngine();
+  const audioEngine = useAudioControls();
 
   // Send message helper (defined early for WebRTC hook)
   const send = useCallback((message: object) => {

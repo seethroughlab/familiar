@@ -20,7 +20,6 @@ import {
   setLoadedTrackId,
   getPreloadingTrackId,
   setPreloadingTrackId,
-  setEarlyPreloadedTrackId,
   cleanupElement,
   setElementVolume,
   getTrackUrl,
@@ -119,7 +118,7 @@ export function completeCrossfade(
   setCrossfadeContext(null);
 
   setPreloadingTrackId(null);
-  setEarlyPreloadedTrackId(null);
+
 
   const currentId = usePlayerStore.getState().currentTrack?.id;
   if (currentId) setLoadedTrackId(currentId);
@@ -301,7 +300,7 @@ export function cancelCrossfade(
   setCrossfadeContext(null);
 
   setPreloadingTrackId(null);
-  setEarlyPreloadedTrackId(null);
+
   setCrossfadeStateFn('idle');
   setNextTrackPreloadedFn(false);
 }

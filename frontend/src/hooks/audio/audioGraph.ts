@@ -56,10 +56,7 @@ let currentMasterVolume = 1;
 let loadedTrackId: string | null = null;
 let currentLoadId = 0;
 let preloadingTrackId: string | null = null;
-let earlyPreloadedTrackId: string | null = null;
 let queueTransition = false;
-let errorCount = 0;
-let lastErrorTrackId: string | null = null;
 
 // Track if we've shown init error (avoid spam)
 let hasShownInitError = false;
@@ -92,11 +89,6 @@ export function areAudioEffectsAvailable(): boolean {
 export function isVisualizerAvailable(): boolean {
   // Visualizer only works on desktop (requires Web Audio)
   return useWebAudio;
-}
-
-// Legacy function - kept for API compatibility but no longer does anything
-export function setVisualizerVisible(_visible: boolean): void {
-  // No-op: visualizer is disabled on mobile
 }
 
 export function getCurrentMode(): 'direct' | 'webaudio' {
@@ -219,40 +211,12 @@ export function setPreloadingTrackId(id: string | null): void {
   preloadingTrackId = id;
 }
 
-export function getEarlyPreloadedTrackId(): string | null {
-  return earlyPreloadedTrackId;
-}
-
-export function setEarlyPreloadedTrackId(id: string | null): void {
-  earlyPreloadedTrackId = id;
-}
-
 export function getQueueTransition(): boolean {
   return queueTransition;
 }
 
 export function setQueueTransition(val: boolean): void {
   queueTransition = val;
-}
-
-export function getErrorCount(): number {
-  return errorCount;
-}
-
-export function setErrorCount(count: number): void {
-  errorCount = count;
-}
-
-export function incrementErrorCount(): void {
-  errorCount++;
-}
-
-export function getLastErrorTrackId(): string | null {
-  return lastErrorTrackId;
-}
-
-export function setLastErrorTrackId(id: string | null): void {
-  lastErrorTrackId = id;
 }
 
 // Direct element accessors (for event listeners in the coordinator)
@@ -442,9 +406,6 @@ export function resetForTesting(): void {
   loadedTrackId = null;
   currentLoadId = 0;
   preloadingTrackId = null;
-  earlyPreloadedTrackId = null;
   queueTransition = false;
-  errorCount = 0;
-  lastErrorTrackId = null;
   hasShownInitError = false;
 }

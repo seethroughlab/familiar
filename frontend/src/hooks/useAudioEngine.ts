@@ -51,6 +51,8 @@ import {
   log,
 } from './audio/platform';
 
+export { useAudioControls } from './useAudioControls';
+
 // Module-level cache: albumKey -> { avgLufs, albumPeak }
 const albumGainCache = new Map<string, { avgLufs: number; albumPeak: number | null }>();
 
@@ -148,10 +150,6 @@ export function useAudioEngine() {
       onCrossfadeComplete,
     );
   }, [advanceToNextTrack, setCrossfadeState, setNextTrackPreloaded, applyNormalizationGain, onCrossfadeComplete]);
-
-  const cancelCrossfade = useCallback(() => {
-    cancelCrossfadeModule(setCrossfadeState, setNextTrackPreloaded);
-  }, [setCrossfadeState, setNextTrackPreloaded]);
 
   // --------------------------------------------------------------------------
   // Lifecycle & Initialization
@@ -333,45 +331,17 @@ export function useAudioEngine() {
       navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
       navigator.mediaSession.setActionHandler('previoustrack', () => usePlayerStore.getState().playPrevious());
       navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime !== undefined) {
-          seek(details.seekTime);
+        if (details.seekTime === undefined) return;
+        const el = getCurrentElement();
+        if (el && Number.isFinite(details.seekTime)) {
+          el.currentTime = details.seekTime;
+          usePlayerStore.getState().setCurrentTime(details.seekTime);
         }
       });
     } catch (e) {
       log.warn('Failed to update media session', e);
     }
   }, [currentTrack, setIsPlaying, playNext]);
-
-  // --------------------------------------------------------------------------
-  // Seek
-  // --------------------------------------------------------------------------
-  const seek = useCallback((time: number) => {
-    const el = getCurrentElement();
-    if (!el) return;
-
-    if (getCrossfadeContext()?.isActive) {
-      const effectiveCrossfade = getEffectiveCrossfadeDuration(
-        crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
-      );
-      if (el.duration - time > effectiveCrossfade + 1) cancelCrossfade();
-    }
-
-    if (!Number.isFinite(time)) return;
-
-    try {
-      el.currentTime = time;
-      setCurrentTime(time);
-    } catch (e) {
-      log.error('Seek failed', e);
-    }
-  }, [setCurrentTime, crossfadeEnabled, crossfadeDuration, cancelCrossfade]);
-
-  // --------------------------------------------------------------------------
-  // Toggle play/pause
-  // --------------------------------------------------------------------------
-  const togglePlayPause = useCallback(() => {
-    setIsPlaying(!isPlaying);
-  }, [isPlaying, setIsPlaying]);
 
   // --------------------------------------------------------------------------
   // Effect: Update Media Session when track changes
@@ -661,6 +631,9 @@ export function useAudioEngine() {
 
   // --------------------------------------------------------------------------
   // Effect: Loading watchdog — clear stuck loading state after 15s
+  // Safety net for isLoadingAudio getting stuck due to edge-case event ordering
+  // (e.g. handlePlaying not firing after handleWaiting). If loading doesn't
+  // resolve within 15s, force-clear it and attempt playback recovery.
   // --------------------------------------------------------------------------
   useEffect(() => {
     if (!isLoadingAudio) return;
@@ -730,6 +703,9 @@ export function useAudioEngine() {
                 const effectiveDuration = getEffectiveCrossfadeDuration(
                   crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
                 );
+                // queueTransition suppresses the 'ended' handler during crossfade setup
+                // to prevent double-advance. completeCrossfade also clears it; this 1s
+                // timeout is a safety net in case completeCrossfade doesn't fire.
                 setQueueTransition(true);
                 executeCrossfade(effectiveDuration, nextTrack);
                 setTimeout(() => { setQueueTransition(false); }, 1000);
@@ -749,9 +725,4 @@ export function useAudioEngine() {
     };
   }, [isPlaying, setCurrentTime, setDuration, executeCrossfade, crossfadeEnabled, crossfadeDuration, currentTrack]);
 
-  return {
-    executeCrossfade,
-    togglePlayPause,
-    seek,
-  };
 }

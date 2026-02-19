@@ -20,7 +20,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
-import { useAudioEngine } from '../../hooks/useAudioEngine';
+import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { tracksApi, type LyricLine } from '../../api/client';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
@@ -70,7 +70,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const toggleConsume = usePlayerStore((s) => s.toggleConsume);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
 
-  const { seek, togglePlayPause } = useAudioEngine();
+  const { seek, togglePlayPause } = useAudioControls();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { visualizerId } = useVisualizerStore();
   const isMusicVideo = visualizerId === 'music-video';

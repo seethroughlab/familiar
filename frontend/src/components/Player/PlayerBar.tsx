@@ -3,7 +3,7 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp,
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { useAudioEngine } from '../../hooks/useAudioEngine';
+import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { tracksApi } from '../../api/client';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
@@ -84,7 +84,7 @@ export function PlayerBar({
   const toggleConsume = usePlayerStore((s) => s.toggleConsume);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
 
-  const { seek, togglePlayPause } = useAudioEngine();
+  const { seek, togglePlayPause } = useAudioControls();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
 

@@ -7,6 +7,7 @@ import {
   migrateOldPlayerState,
 } from '../services/playerPersistence';
 import { tracksApi } from '../api/client';
+import { getCurrentElement } from '../hooks/audio/audioGraph';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Player', { forceVerbose: true });
@@ -588,6 +589,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // If we're more than 3 seconds in, restart current track
     if (state.currentTime > 3) {
       log.info('playPrevious — restarting current track', { title: state.currentTrack?.title, currentTime: state.currentTime });
+      const el = getCurrentElement();
+      if (el) {
+        el.currentTime = 0;
+      }
       set({ currentTime: 0 });
       return;
     }
@@ -912,7 +917,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       currentTime: 0,
       crossfadeState: 'idle',
       nextTrackPreloaded: false,
-      shuffleIndex: shuffle ? shuffleIndex + 1 : shuffleIndex,
+      shuffleIndex: shuffle ? Math.min(shuffleIndex + 1, shuffleOrder.length) : shuffleIndex,
     });
     persistState();
     refillFromReservoir();
