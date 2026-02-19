@@ -99,7 +99,7 @@ class ToolExecutor:
             # Track identification tools
             "identify_track": self._identify_track,
             "get_similar_tracks_external": self._get_similar_tracks_external,
-            # Deep analysis tools
+            # Analysis tools
             "get_track_analysis": self._get_track_analysis,
         }
 
@@ -425,7 +425,7 @@ Respond with ONLY the playlist name, nothing else."""
         valence_max: float | None = None,
         acousticness_min: float | None = None,
         instrumentalness_min: float | None = None,
-        # Deep analysis feature criteria
+        # Analysis feature criteria
         swing_min: float | None = None,
         swing_max: float | None = None,
         syncopation_min: float | None = None,
@@ -600,7 +600,7 @@ Respond with ONLY the playlist name, nothing else."""
         if instrumentalness_min is not None:
             conditions.append(TrackAnalysis.instrumentalness >= instrumentalness_min)
 
-        # --- Deep analysis feature criteria (coerce types) ---
+        # --- Analysis feature criteria (coerce types) ---
         swing_min = to_float(swing_min)
         swing_max = to_float(swing_max)
         syncopation_min = to_float(syncopation_min)
@@ -1865,14 +1865,14 @@ Respond with ONLY the playlist name, nothing else."""
             "note": f"Found {len(tracks_with_status)} similar tracks ({in_library_count} in library, {len(tracks_with_status) - in_library_count} not in library).",
         }
 
-    # --- Deep analysis tools ---
+    # --- Analysis tools ---
 
     async def _get_track_analysis(
         self,
         track_ids: list[str],
         include_comparative: bool = True,
     ) -> dict[str, Any]:
-        """Get deep musical analysis for one or more tracks.
+        """Get musical analysis for one or more tracks.
 
         Checks cache first, triggers analysis if needed.
         Returns markdown report content for LLM consumption.
@@ -1880,7 +1880,7 @@ Respond with ONLY the playlist name, nothing else."""
         import asyncio
 
         from app.services.background import get_background_manager
-        from app.services.deep_analysis import (
+        from app.services.track_analysis import (
             generate_comparative_report,
             generate_report,
         )
@@ -1910,8 +1910,8 @@ Respond with ONLY the playlist name, nothing else."""
                 has_detail = analysis and analysis.analysis_detail
 
                 if not has_detail:
-                    # Trigger deep analysis and wait for it
-                    await bg.run_deep_analysis(tid)
+                    # Trigger analysis and wait for it
+                    await bg.run_track_analysis(tid)
                     # Wait for completion (poll up to 120s)
                     for _ in range(60):
                         await asyncio.sleep(2)

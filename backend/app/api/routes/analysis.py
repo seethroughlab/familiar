@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.api.deps import DbSession
 from app.db.models import Track, TrackAnalysis
 from app.services.background import get_background_manager
-from app.services.deep_analysis import (
+from app.services.track_analysis import (
     generate_comparative_report,
     generate_report,
 )
@@ -42,7 +42,7 @@ async def trigger_bulk_analysis(body: BulkAnalysisRequest, db: DbSession):
     bg = get_background_manager()
 
     import asyncio
-    asyncio.create_task(bg.run_bulk_deep_analysis(task_id, body.track_ids))
+    asyncio.create_task(bg.run_bulk_analysis(task_id, body.track_ids))
 
     return {"status": "processing", "task_id": task_id, "total": len(body.track_ids)}
 
@@ -51,7 +51,7 @@ async def trigger_bulk_analysis(body: BulkAnalysisRequest, db: DbSession):
 async def get_bulk_analysis_progress(task_id: str):
     """Poll progress of a bulk analysis task."""
     bg = get_background_manager()
-    data = bg.redis.get(f"familiar:deep_analysis:{task_id}")
+    data = bg.redis.get(f"familiar:analysis:{task_id}")
 
     if not data:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -63,7 +63,7 @@ async def get_bulk_analysis_progress(task_id: str):
 async def get_bulk_analysis_report(task_id: str, db: DbSession):
     """Download combined markdown report for a bulk analysis task."""
     bg = get_background_manager()
-    data = bg.redis.get(f"familiar:deep_analysis:{task_id}")
+    data = bg.redis.get(f"familiar:analysis:{task_id}")
 
     if not data:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -93,6 +93,7 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
                 "title": track.title,
                 "album": track.album,
                 "duration_seconds": track.duration_seconds,
+                "track_id": tid,
             })
 
     if not analyses:
@@ -133,7 +134,7 @@ async def trigger_analysis(track_id: UUID, db: DbSession):
         return {"status": "ready", "track_id": str(track_id)}
 
     bg = get_background_manager()
-    await bg.run_deep_analysis(str(track_id))
+    await bg.run_track_analysis(str(track_id))
 
     return {"status": "processing", "track_id": str(track_id)}
 
@@ -194,7 +195,7 @@ async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md")
     if format == "json":
         return analysis.analysis_detail
 
-    report = generate_report(analysis.analysis_detail, track_meta)
+    report = generate_report(analysis.analysis_detail, track_meta, track_id=str(track_id))
     filename = f"{track.artist or 'Unknown'} - {track.title or 'Unknown'} - analysis.md"
     filename = "".join(c for c in filename if c.isalnum() or c in " -_.").strip()
 
@@ -202,6 +203,41 @@ async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md")
         iter([report]),
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{track_id}/analysis/similarity.png")
+async def get_similarity_image(track_id: UUID, db: DbSession):
+    """Serve the self-similarity matrix PNG for a track."""
+    from pathlib import Path
+
+    analysis = (
+        await db.execute(
+            select(TrackAnalysis)
+            .where(TrackAnalysis.track_id == track_id)
+            .order_by(TrackAnalysis.version.desc())
+        )
+    ).scalar_one_or_none()
+
+    if not analysis or not analysis.analysis_detail:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    ssm_path = analysis.analysis_detail.get("structural", {}).get("self_similarity_png_path")
+    if not ssm_path:
+        raise HTTPException(status_code=404, detail="Similarity image not available")
+
+    ssm_file = Path(ssm_path)
+    if not ssm_file.exists():
+        raise HTTPException(status_code=404, detail="Similarity image not found on disk")
+
+    def file_iter():
+        with open(ssm_file, "rb") as f:
+            yield f.read()
+
+    return StreamingResponse(
+        file_iter(),
+        media_type="image/png",
+        headers={"Content-Disposition": f'inline; filename="{track_id}_similarity.png"'},
     )
 
 

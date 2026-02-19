@@ -1,4 +1,4 @@
-"""Deep musical analysis service.
+"""Track analysis service.
 
 Computes rich harmonic, melodic, rhythmic, timbral, and structural analysis
 for tracks, designed for export as markdown reports and LLM consumption.
@@ -7,7 +7,6 @@ This runs as a top-level picklable function in a ProcessPoolExecutor, following
 the same pattern as run_track_features in tasks.py.
 """
 
-import base64
 import io
 import logging
 import time
@@ -20,9 +19,9 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Independent version from ANALYSIS_VERSION (which covers CLAP/librosa features)
-DEEP_ANALYSIS_VERSION = 4
+TRACK_ANALYSIS_VERSION = 5
 
-# Minimum track duration for deep analysis (seconds)
+# Minimum track duration for analysis (seconds)
 MIN_DURATION_SECONDS = 30
 
 # MIDI data directory
@@ -286,7 +285,7 @@ def run_cheap_sections(
 
 
 def extract_feature_scalars(results: dict[str, Any]) -> dict[str, Any]:
-    """Extract typed column values from deep analysis results.
+    """Extract typed column values from analysis results.
 
     Maps section result keys to TrackAnalysis column names.
     Returns a flat dict suitable for setattr() on TrackAnalysis.
@@ -305,7 +304,7 @@ def extract_feature_scalars(results: dict[str, Any]) -> dict[str, Any]:
     rhythmic = results.get("rhythmic", {})
     raw_swing = rhythmic.get("swing_ratio")
     if raw_swing is not None:
-        # Normalize: deep analysis stores 0-100, typed column uses 0-1
+        # Normalize: analysis stores 0-100, typed column uses 0-1
         scalars["swing_ratio"] = raw_swing / 100.0 if raw_swing > 1 else raw_swing
     syncopation = rhythmic.get("syncopation_index")
     if syncopation is not None:
@@ -368,8 +367,8 @@ def extract_melodic_scalars(melodic_results: dict[str, Any]) -> dict[str, Any]:
 
 # ─── Entry point (top-level picklable for ProcessPoolExecutor) ─────────────
 
-def run_deep_analysis(track_id: str) -> dict[str, Any]:
-    """Run deep analysis for a single track (on-demand, all 6 sections).
+def run_analysis(track_id: str) -> dict[str, Any]:
+    """Run analysis for a single track (on-demand, all 6 sections).
 
     Creates its own sync DB session (same pattern as run_track_features).
     Returns a summary dict with status.
@@ -399,7 +398,7 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
 
             # Check duration
             if track.duration_seconds and track.duration_seconds < MIN_DURATION_SECONDS:
-                return {"status": "skipped", "reason": "Track too short for deep analysis"}
+                return {"status": "skipped", "reason": "Track too short for analysis"}
 
             # Get latest analysis row
             analysis = db.execute(
@@ -464,11 +463,11 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
             elapsed = time.time() - start_time
 
             analysis.analysis_detail = results
-            analysis.melodic_version = DEEP_ANALYSIS_VERSION
+            analysis.melodic_version = TRACK_ANALYSIS_VERSION
             db.commit()
 
             logger.info(
-                f"Deep analysis complete for {track.artist} - {track.title} "
+                f"Analysis complete for {track.artist} - {track.title} "
                 f"({elapsed:.1f}s, {len(section_errors)} section errors)"
             )
 
@@ -480,12 +479,12 @@ def run_deep_analysis(track_id: str) -> dict[str, Any]:
             }
 
     except Exception as e:
-        logger.error(f"Deep analysis failed for {track_id}: {e}", exc_info=True)
+        logger.error(f"Analysis failed for {track_id}: {e}", exc_info=True)
         return {"status": "error", "error": str(e)}
 
 
-def run_track_deep_backfill(track_id: str) -> dict[str, Any]:
-    """Backfill deep analysis for existing tracks (cheap sections only).
+def run_backfill(track_id: str) -> dict[str, Any]:
+    """Backfill analysis for existing tracks (cheap sections only).
 
     Top-level picklable function for ProcessPoolExecutor.
     For tracks that already have Phase 1 features but no analysis_detail.
@@ -633,7 +632,7 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
             if midi_path:
                 analysis.midi_path = midi_path
             analysis.has_melodic = not melodic_result.get("degraded", False)
-            analysis.melodic_version = DEEP_ANALYSIS_VERSION
+            analysis.melodic_version = TRACK_ANALYSIS_VERSION
             db.commit()
 
             elapsed = time.time() - start_time
@@ -862,6 +861,36 @@ def _analyze_harmonic(
             "confidence": round(best_conf, 3),
         })
 
+    # Run-length-encode: merge consecutive entries with the same key_mode
+    merged_timeline: list[dict[str, Any]] = []
+    for entry in key_mode_timeline:
+        if merged_timeline and merged_timeline[-1]["key_mode"] == entry["key_mode"]:
+            merged_timeline[-1]["end"] = entry["end"]
+            merged_timeline[-1]["conf_min"] = min(merged_timeline[-1]["conf_min"], entry["confidence"])
+            merged_timeline[-1]["conf_max"] = max(merged_timeline[-1]["conf_max"], entry["confidence"])
+            # Keep average confidence for backward compat
+            merged_timeline[-1]["_conf_sum"] += entry["confidence"]
+            merged_timeline[-1]["_conf_count"] += 1
+            merged_timeline[-1]["confidence"] = round(
+                merged_timeline[-1]["_conf_sum"] / merged_timeline[-1]["_conf_count"], 3
+            )
+        else:
+            merged_timeline.append({
+                "start": entry["start"],
+                "end": entry["end"],
+                "key_mode": entry["key_mode"],
+                "confidence": entry["confidence"],
+                "conf_min": entry["confidence"],
+                "conf_max": entry["confidence"],
+                "_conf_sum": entry["confidence"],
+                "_conf_count": 1,
+            })
+    # Strip internal accumulator fields
+    for entry in merged_timeline:
+        entry.pop("_conf_sum", None)
+        entry.pop("_conf_count", None)
+    key_mode_timeline = merged_timeline
+
     # Roman numeral analysis relative to detected key
     # Parse key root from best_mode (e.g., "D Ionian (Major)" -> D -> 2)
     key_root_name = best_mode.split()[0] if best_mode and best_mode != "Unknown" else None
@@ -902,10 +931,10 @@ def _analyze_harmonic(
 
 def _compute_interval_histogram(
     notes: list[dict],
-) -> tuple[dict[str, float], list[int], str, float]:
+) -> tuple[dict[str, float], list[int], str, float, float]:
     """Compute interval histogram, character, and avg size from a sorted note list.
 
-    Returns (histogram, raw_intervals, character, avg_size).
+    Returns (histogram, raw_intervals, character, avg_size, unison_pct).
     """
     from collections import Counter
 
@@ -917,6 +946,11 @@ def _compute_interval_histogram(
 
     interval_counts = Counter(intervals)
     total_intervals = sum(interval_counts.values()) or 1
+
+    # Count unisons separately
+    unison_count = interval_counts.get(0, 0)
+    unison_pct = round(unison_count / total_intervals * 100, 1)
+
     histogram = {
         str(iv): round(cnt / total_intervals * 100, 1)
         for iv, cnt in sorted(interval_counts.items())
@@ -931,7 +965,7 @@ def _compute_interval_histogram(
     else:
         character = "mixed"
 
-    return histogram, intervals, character, round(avg_size, 2)
+    return histogram, intervals, character, round(avg_size, 2), unison_pct
 
 
 def _analyze_melodic(
@@ -1003,7 +1037,7 @@ def _analyze_melodic(
     pitch_range["primary_high"] = _midi_to_note(p90)
 
     # Interval histogram (between consecutive notes)
-    interval_histogram, intervals, interval_character, avg_interval = (
+    interval_histogram, intervals, interval_character, avg_interval, unison_pct = (
         _compute_interval_histogram(notes)
     )
 
@@ -1016,7 +1050,7 @@ def _analyze_melodic(
         reg_notes = [n for n in notes if lo <= n["pitch"] < hi]
         entry: dict[str, Any] = {"note_count": len(reg_notes)}
         if len(reg_notes) >= 10:
-            hist, _ivs, char, avg = _compute_interval_histogram(reg_notes)
+            hist, _ivs, char, avg, _upct = _compute_interval_histogram(reg_notes)
             entry["interval_histogram"] = hist
             entry["interval_character"] = char
             entry["avg_interval_size"] = avg
@@ -1067,12 +1101,16 @@ def _analyze_melodic(
                 "observed_expected_ratio": round(ratio, 2),
             })
 
-    # Phrase detection: segment by onset gaps > 0.3s
+    # Phrase detection: segment by onset gaps (tempo-relative threshold)
+    bpm = shared.get("bpm", 120)
+    beat_duration = 60.0 / bpm
+    phrase_gap = max(beat_duration * 2, 1.0)  # At least 2 beats or 1 second
+
     phrases = []
     current_phrase: list[dict] = [notes[0]] if notes else []
     for i in range(1, len(notes)):
         gap = notes[i]["start"] - notes[i - 1]["end"]
-        if gap > 0.3:
+        if gap > phrase_gap:
             if current_phrase:
                 phrases.append(current_phrase)
             current_phrase = [notes[i]]
@@ -1169,6 +1207,7 @@ def _analyze_melodic(
         "interval_histogram": interval_histogram,
         "interval_character": interval_character,
         "avg_interval_size": round(avg_interval, 2),
+        "unison_pct": unison_pct,
         "phrase_count": len(phrases),
         "avg_phrase_length_seconds": avg_phrase_length,
         "contour_summary": contour_summary,
@@ -1558,8 +1597,8 @@ def _analyze_structural(
     features_normed = features / norms
     sim_matrix = np.dot(features_normed.T, features_normed)
 
-    # Render self-similarity matrix as PNG
-    ssm_png_b64 = None
+    # Render self-similarity matrix as PNG and save to disk
+    ssm_png_path = None
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1576,7 +1615,13 @@ def _analyze_structural(
         fig.savefig(buf, format="png", bbox_inches="tight")
         plt.close(fig)
         buf.seek(0)
-        ssm_png_b64 = base64.b64encode(buf.read()).decode("ascii")
+        png_data = buf.read()
+
+        # Save to disk instead of storing base64 in JSON
+        MIDI_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        ssm_file = MIDI_DATA_DIR / f"{track_id}_similarity.png"
+        ssm_file.write_bytes(png_data)
+        ssm_png_path = str(ssm_file)
     except Exception as e:
         logger.warning(f"Failed to render self-similarity matrix: {e}")
 
@@ -1610,32 +1655,51 @@ def _analyze_structural(
                     "duration": round(boundary_times[i + 1] - boundary_times[i], 2),
                 })
 
-    # Section labeling by chroma similarity
+    # Section labeling by multi-feature similarity (chroma + energy + MFCC)
     section_labels = []
     label_map: dict[int, str] = {}
+    # Cache per-section features to avoid recomputing for every comparison
+    section_features: list[dict] = []
     current_label_idx = 0
     label_chars = "ABCDEFGHIJKLMNOP"
 
+    hop_length = shared["hop_length"]
+    rms = shared["rms"]
+
     for i, seg in enumerate(segments):
-        # Get average chroma for this segment
+        # Compute chroma, energy, and MFCC features for this segment
         start_frame = int(seg["start"] / duration * chroma.shape[1]) if duration > 0 else 0
         end_frame = int(seg["end"] / duration * chroma.shape[1]) if duration > 0 else chroma.shape[1]
         end_frame = max(start_frame + 1, min(end_frame, chroma.shape[1]))
         seg_chroma = np.mean(chroma[:, start_frame:end_frame], axis=1)
         seg_chroma_norm = seg_chroma / (np.linalg.norm(seg_chroma) + 1e-10)
 
-        # Compare to previous sections
+        # Mean RMS energy in dB
+        rms_start = int(seg["start"] * sr) // hop_length
+        rms_end = int(seg["end"] * sr) // hop_length
+        seg_rms = rms[rms_start:rms_end]
+        rms_db = float(20 * np.log10(np.mean(seg_rms) + 1e-10)) if len(seg_rms) > 0 else -60.0
+
+        # Mean MFCC vector
+        seg_mfcc = np.mean(mfcc[:, start_frame:end_frame], axis=1)
+        seg_mfcc_norm = seg_mfcc / (np.linalg.norm(seg_mfcc) + 1e-10)
+
+        section_features.append({
+            "chroma_norm": seg_chroma_norm,
+            "rms_db": rms_db,
+            "mfcc_norm": seg_mfcc_norm,
+        })
+
+        # Compare to previous labeled sections using all three features
         matched = False
         for prev_idx, prev_label in label_map.items():
-            prev_seg = segments[prev_idx]
-            ps_frame = int(prev_seg["start"] / duration * chroma.shape[1]) if duration > 0 else 0
-            pe_frame = int(prev_seg["end"] / duration * chroma.shape[1]) if duration > 0 else chroma.shape[1]
-            pe_frame = max(ps_frame + 1, min(pe_frame, chroma.shape[1]))
-            prev_chroma = np.mean(chroma[:, ps_frame:pe_frame], axis=1)
-            prev_norm = prev_chroma / (np.linalg.norm(prev_chroma) + 1e-10)
+            pf = section_features[prev_idx]
 
-            similarity = float(np.dot(seg_chroma_norm, prev_norm))
-            if similarity > 0.85:
+            chroma_sim = float(np.dot(seg_chroma_norm, pf["chroma_norm"]))
+            energy_diff = abs(rms_db - pf["rms_db"])
+            mfcc_sim = float(np.dot(seg_mfcc_norm, pf["mfcc_norm"]))
+
+            if chroma_sim > 0.75 and energy_diff < 6.0 and mfcc_sim > 0.7:
                 section_labels.append(prev_label)
                 matched = True
                 break
@@ -1711,7 +1775,7 @@ def _analyze_structural(
         "form": form,
         "section_count": len(segments),
         "avg_section_length": round(float(np.mean([s["duration"] for s in segments])), 2) if segments else 0,
-        "self_similarity_png": ssm_png_b64,
+        "self_similarity_png_path": ssm_png_path,
         "section_profiles": section_profiles,
     }
 
@@ -2045,7 +2109,12 @@ def _generate_character_summary(
 
 # ─── Report generation ─────────────────────────────────────────────────────
 
-def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for_llm: bool = False) -> str:
+def generate_report(
+    results: dict[str, Any],
+    track_metadata: dict[str, Any],
+    for_llm: bool = False,
+    track_id: str | None = None,
+) -> str:
     """Generate a single-track markdown report from cached analysis JSON.
 
     Args:
@@ -2054,6 +2123,10 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for
                  to reduce token usage by ~40-60% with no loss of understanding.
     """
     lines = []
+
+    # Allow track_id from kwarg or from metadata
+    if track_id is None:
+        track_id = track_metadata.get("track_id")
 
     artist = track_metadata.get("artist", "Unknown Artist")
     title = track_metadata.get("title", "Unknown Title")
@@ -2146,9 +2219,15 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for
         if kmt:
             lines.append("- **Key/mode over time:**")
             for entry in kmt:
+                conf_min = entry.get("conf_min", entry["confidence"])
+                conf_max = entry.get("conf_max", entry["confidence"])
+                if abs(conf_min - conf_max) < 0.005:
+                    conf_str = f"{round(conf_min * 100)}%"
+                else:
+                    conf_str = f"{round(conf_min * 100)}–{round(conf_max * 100)}%"
                 lines.append(
                     f"  - {_format_time(entry['start'])}–{_format_time(entry['end'])}: "
-                    f"{entry['key_mode']} ({round(entry['confidence'] * 100)}%)"
+                    f"{entry['key_mode']} ({conf_str})"
                 )
     lines.append("")
 
@@ -2166,7 +2245,21 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for
 
         ic = melodic.get("interval_character", "?")
         avg_iv = melodic.get("avg_interval_size", "?")
-        lines.append(f"- **Interval character:** {ic} (avg {avg_iv} semitones)")
+        upct = melodic.get("unison_pct", 0)
+        if upct > 5:
+            # Show top non-unison intervals for context
+            ih = melodic.get("interval_histogram", {})
+            non_unison = {k: v for k, v in ih.items() if k != "0"}
+            top_non = sorted(non_unison.items(), key=lambda x: -x[1])[:3]
+            top_str = ", ".join(
+                f"{INTERVAL_NAMES.get(int(k), k)} ({v}%)" for k, v in top_non
+            )
+            lines.append(
+                f"- **Interval character:** {ic} (avg {avg_iv} semitones) — "
+                f"{upct}% repeated pitches; excluding unisons: {top_str}"
+            )
+        else:
+            lines.append(f"- **Interval character:** {ic} (avg {avg_iv} semitones)")
 
         pc = melodic.get("phrase_count", 0)
         apl = melodic.get("avg_phrase_length_seconds", 0)
@@ -2303,15 +2396,11 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for
                 )
 
     if not for_llm:
-        ssm_png = structural.get("self_similarity_png")
-        if ssm_png:
-            lines.append("")
-            lines.append("<details>")
-            lines.append("<summary>Self-Similarity Matrix</summary>")
-            lines.append("")
-            lines.append(f"![Self-Similarity Matrix](data:image/png;base64,{ssm_png})")
-            lines.append("")
-            lines.append("</details>")
+        ssm_path = structural.get("self_similarity_png_path")
+        if ssm_path and track_id:
+            lines.append(f"- **Self-similarity matrix:** [View](/api/tracks/{track_id}/analysis/similarity.png)")
+        elif ssm_path:
+            lines.append(f"- **Self-similarity matrix:** saved to `{ssm_path}`")
     lines.append("")
 
     # Energy
@@ -2427,9 +2516,15 @@ def generate_report(results: dict[str, Any], track_metadata: dict[str, Any], for
             lines.append("| Time Range | Key/Mode | Confidence |")
             lines.append("|------------|----------|------------|")
             for entry in kmt:
+                conf_min = entry.get("conf_min", entry["confidence"])
+                conf_max = entry.get("conf_max", entry["confidence"])
+                if abs(conf_min - conf_max) < 0.005:
+                    conf_str = f"{round(conf_min * 100)}%"
+                else:
+                    conf_str = f"{round(conf_min * 100)}–{round(conf_max * 100)}%"
                 lines.append(
                     f"| {_format_time(entry['start'])}–{_format_time(entry['end'])} "
-                    f"| {entry['key_mode']} | {round(entry['confidence'] * 100)}% |"
+                    f"| {entry['key_mode']} | {conf_str} |"
                 )
             lines.append("")
             lines.append("</details>")

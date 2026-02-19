@@ -785,16 +785,16 @@ async def run_library_sync(
                     last_backfill_progress_time = time.time()
                     last_backfill_done = backfill_done
                 elif time.time() - last_backfill_progress_time > backfill_stall_threshold:
-                    queued = await queue_tracks_for_deep_backfill(limit=200)
+                    queued = await queue_tracks_for_backfill(limit=200)
                     if queued == 0 and pending_backfill > 0:
                         logger.warning(
-                            f"Deep backfill stalled with {pending_backfill} pending"
+                            f"Backfill stalled with {pending_backfill} pending"
                         )
                         break
                     last_backfill_progress_time = time.time()
 
                 if pending_backfill > 0:
-                    await queue_tracks_for_deep_backfill(limit=100)
+                    await queue_tracks_for_backfill(limit=100)
 
                 # Report as features phase since it's populating analysis data
                 progress.set_features(
@@ -990,8 +990,8 @@ def run_track_features(track_id: str) -> dict[str, Any]:
     from app.services.app_settings import get_app_settings_service
     from app.services.artwork import extract_and_save_artwork
     from app.services.community_cache import get_community_cache_service
-    from app.services.deep_analysis import run_cheap_sections
     from app.services.external_features import get_external_features_service
+    from app.services.track_analysis import run_cheap_sections
 
     log_memory("features_start")
 
@@ -1145,7 +1145,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 features_source = "local"
                 computed_locally = True
 
-                # Run cheap deep analysis sections (harmonic, rhythmic, spectral, structural, energy)
+                # Run cheap analysis sections (harmonic, rhythmic, spectral, structural, energy)
                 # Only if track is long enough for meaningful analysis
                 if track.duration_seconds and track.duration_seconds >= 30:
                     try:
@@ -1154,7 +1154,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                         )
                         if section_errors:
                             logger.warning(
-                                f"Deep analysis section errors for {track.title}: {section_errors}"
+                                f"Analysis section errors for {track.title}: {section_errors}"
                             )
                     except Exception as e:
                         logger.warning(f"Cheap sections failed for {track.title}: {e}")
@@ -1201,7 +1201,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
             log_memory("after_metadata")
 
-            # Merge all features: librosa + deep analysis scalars
+            # Merge all features: librosa + analysis scalars
             all_features = {**features, **deep_scalars}
 
             # Create or update analysis record (without embedding - that comes in phase 2)
@@ -1682,8 +1682,8 @@ async def queue_tracks_for_melodic(limit: int = 500) -> int:
     return queued
 
 
-async def queue_tracks_for_deep_backfill(limit: int = 500) -> int:
-    """Queue tracks that need deep analysis backfill.
+async def queue_tracks_for_backfill(limit: int = 500) -> int:
+    """Queue tracks that need analysis backfill.
 
     Finds tracks with current analysis version but no analysis_detail,
     and queues them for cheap section analysis.

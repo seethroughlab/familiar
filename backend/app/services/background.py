@@ -636,7 +636,7 @@ class BackgroundManager:
         elif phase == "embedding":
             task = asyncio.create_task(self._do_embedding(track_id))
         elif phase == "deep_backfill":
-            task = asyncio.create_task(self._do_deep_backfill(track_id))
+            task = asyncio.create_task(self._do_backfill(track_id))
         elif phase == "melodic":
             task = asyncio.create_task(self._do_melodic(track_id))
         else:
@@ -698,21 +698,21 @@ class BackgroundManager:
             self._last_task_started_at = None
             self._analysis_tasks.pop(task_key, None)
 
-    async def _do_deep_backfill(self, track_id: str) -> dict[str, Any]:
-        """Execute deep analysis backfill (cheap sections only).
+    async def _do_backfill(self, track_id: str) -> dict[str, Any]:
+        """Execute analysis backfill (cheap sections only).
 
         For existing tracks that have features but no analysis_detail.
         """
-        from app.services.deep_analysis import run_track_deep_backfill
+        from app.services.track_analysis import run_backfill
 
         task_key = f"{track_id}:deep_backfill"
         try:
             self._current_track_id = track_id
             self._last_task_started_at = time.monotonic()
-            result = await self.run_cpu_bound(run_track_deep_backfill, track_id)
+            result = await self.run_cpu_bound(run_backfill, track_id)
             return result
         except Exception as e:
-            logger.error(f"Deep backfill failed for {track_id}: {e}")
+            logger.error(f"Backfill failed for {track_id}: {e}")
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None
@@ -724,7 +724,7 @@ class BackgroundManager:
 
         Runs basic-pitch MIDI transcription in a subprocess.
         """
-        from app.services.deep_analysis import run_track_melodic
+        from app.services.track_analysis import run_track_melodic
 
         task_key = f"{track_id}:melodic"
         try:
@@ -794,9 +794,9 @@ class BackgroundManager:
             self._last_task_started_at = None
             self._analysis_tasks.pop(task_key, None)
 
-    async def run_deep_analysis(self, track_id: str) -> dict[str, Any]:
-        """Run deep analysis in process pool. Follows _do_features pattern."""
-        from app.services.deep_analysis import run_deep_analysis
+    async def run_track_analysis(self, track_id: str) -> dict[str, Any]:
+        """Run track analysis in process pool. Follows _do_features pattern."""
+        from app.services.track_analysis import run_analysis
 
         task_key = f"{track_id}:deep"
 
@@ -810,10 +810,10 @@ class BackgroundManager:
             try:
                 self._current_track_id = tid
                 self._last_task_started_at = time.monotonic()
-                result = await self.run_cpu_bound(run_deep_analysis, tid)
+                result = await self.run_cpu_bound(run_analysis, tid)
                 return result
             except Exception as e:
-                logger.error(f"Deep analysis failed for {tid}: {e}")
+                logger.error(f"Analysis failed for {tid}: {e}")
                 return {"status": "error", "error": str(e)}
             finally:
                 self._current_track_id = None
@@ -824,15 +824,15 @@ class BackgroundManager:
         self._analysis_tasks[task_key] = task
         return {"status": "queued", "task_key": task_key}
 
-    async def run_bulk_deep_analysis(
+    async def run_bulk_analysis(
         self,
         task_id: str,
         track_ids: list[str],
     ) -> dict[str, Any]:
-        """Run deep analysis for multiple tracks with Redis progress tracking."""
-        from app.services.deep_analysis import run_deep_analysis
+        """Run analysis for multiple tracks with Redis progress tracking."""
+        from app.services.track_analysis import run_analysis
 
-        logger.info(f"Starting bulk deep analysis {task_id} for {len(track_ids)} tracks")
+        logger.info(f"Starting bulk analysis {task_id} for {len(track_ids)} tracks")
 
         progress: dict[str, Any] = {
             "status": "processing",
@@ -842,7 +842,7 @@ class BackgroundManager:
             "errors": [],
         }
         self.redis.set(
-            f"familiar:deep_analysis:{task_id}",
+            f"familiar:analysis:{task_id}",
             json.dumps(progress),
             ex=3600,
         )
@@ -851,12 +851,12 @@ class BackgroundManager:
             try:
                 self._current_track_id = tid
                 self._last_task_started_at = time.monotonic()
-                result = await self.run_cpu_bound(run_deep_analysis, tid)
+                result = await self.run_cpu_bound(run_analysis, tid)
 
                 if result.get("status") == "error":
                     progress["errors"].append({"track_id": tid, "error": result["error"]})
             except Exception as e:
-                logger.error(f"Bulk deep analysis failed for {tid}: {e}")
+                logger.error(f"Bulk analysis failed for {tid}: {e}")
                 progress["errors"].append({"track_id": tid, "error": str(e)})
             finally:
                 self._current_track_id = None
@@ -864,20 +864,20 @@ class BackgroundManager:
 
             progress["completed"] = i + 1
             self.redis.set(
-                f"familiar:deep_analysis:{task_id}",
+                f"familiar:analysis:{task_id}",
                 json.dumps(progress),
                 ex=3600,
             )
 
         progress["status"] = "completed"
         self.redis.set(
-            f"familiar:deep_analysis:{task_id}",
+            f"familiar:analysis:{task_id}",
             json.dumps(progress),
             ex=3600,
         )
 
         logger.info(
-            f"Bulk deep analysis {task_id} completed: "
+            f"Bulk analysis {task_id} completed: "
             f"{progress['completed']}/{progress['total']}, {len(progress['errors'])} errors"
         )
 

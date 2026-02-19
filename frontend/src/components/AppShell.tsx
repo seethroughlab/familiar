@@ -5,7 +5,7 @@
  * PlayerBar (full width, bottom)
  */
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
@@ -49,6 +49,7 @@ function LazyLoadSpinner() {
 
 export function AppShell() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [importFiles, setImportFiles] = useState<File[] | null>(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -205,7 +206,7 @@ export function AppShell() {
           <main className={`flex-1 flex flex-col overflow-hidden min-h-0 ${resolvedTheme === 'light' ? 'bg-gradient-to-b from-zinc-50 to-white' : 'bg-gradient-to-b from-zinc-900 to-black'}`}>
             <ContentToolbar />
             <div className="flex-1 overflow-y-auto min-h-0">
-              <Outlet />
+              <Outlet key={location.pathname} />
             </div>
           </main>
 
