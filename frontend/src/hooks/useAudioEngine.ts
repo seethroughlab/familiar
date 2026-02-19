@@ -262,11 +262,42 @@ export function useAudioEngine() {
       }
     };
 
+    const handleStalled = (e: Event) => {
+      const target = e.target as HTMLAudioElement;
+      const isCurrent = target === getCurrentElement();
+      const state = usePlayerStore.getState();
+      log.warn('stalled event — browser cannot fetch data', {
+        isCurrent,
+        trackId: state.currentTrack?.id,
+        trackTitle: state.currentTrack?.title,
+        readyState: target.readyState,
+        networkState: target.networkState,
+        currentTime: target.currentTime,
+      });
+    };
+
+    const handlePause = (e: Event) => {
+      const target = e.target as HTMLAudioElement;
+      const isCurrent = target === getCurrentElement();
+      const state = usePlayerStore.getState();
+      // Only log if we didn't initiate the pause (external interruption)
+      if (isCurrent && state.isPlaying) {
+        log.warn('pause event — external interruption (browser/OS paused playback)', {
+          trackId: state.currentTrack?.id,
+          trackTitle: state.currentTrack?.title,
+          readyState: target.readyState,
+          currentTime: target.currentTime,
+        });
+      }
+    };
+
     elements.forEach(el => {
       el.addEventListener('ended', handleEnded);
       el.addEventListener('error', handleError);
       el.addEventListener('playing', handlePlaying);
       el.addEventListener('waiting', handleWaiting);
+      el.addEventListener('stalled', handleStalled);
+      el.addEventListener('pause', handlePause);
     });
 
     return () => {
@@ -275,6 +306,8 @@ export function useAudioEngine() {
         el.removeEventListener('error', handleError);
         el.removeEventListener('playing', handlePlaying);
         el.removeEventListener('waiting', handleWaiting);
+        el.removeEventListener('stalled', handleStalled);
+        el.removeEventListener('pause', handlePause);
       });
     };
   }, [isInitialized, playNext, setIsPlaying, setIsLoadingAudio]);
@@ -594,6 +627,7 @@ export function useAudioEngine() {
       if (el?.paused && !el.ended) {
         el.play().catch(e => {
           if (e.name !== 'AbortError') {
+            log.warn('Visibility recovery play() failed', { error: e.message, name: e.name, trackId: state.currentTrack?.id });
             setIsPlaying(false);
             setIsLoadingAudio(false);
           }
@@ -621,7 +655,10 @@ export function useAudioEngine() {
       });
       setIsLoadingAudio(false);
       if (el?.paused && state.isPlaying) {
-        el.play().catch(() => setIsPlaying(false));
+        el.play().catch(e => {
+          log.warn('Loading watchdog play() failed', { error: e.message, name: e.name, trackId: state.currentTrack?.id });
+          setIsPlaying(false);
+        });
       }
     }, 15000);
     return () => clearTimeout(timeout);

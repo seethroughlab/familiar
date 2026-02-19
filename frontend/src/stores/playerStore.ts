@@ -9,7 +9,7 @@ import {
 import { tracksApi } from '../api/client';
 import { createLogger } from '../utils/logger';
 
-const log = createLogger('Player');
+const log = createLogger('Player', { forceVerbose: true });
 
 type RepeatMode = 'off' | 'all' | 'one';
 type CrossfadeState = 'idle' | 'preloading' | 'crossfading';
@@ -422,11 +422,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   clearQueue: () => {
+    log.info('clearQueue');
     set({ queue: [], queueIndex: -1, lazyQueueIds: null, lazyQueueIndex: -1, queueSource: null });
     persistState();
   },
 
   playTrack: (track) => {
+    log.info('playTrack', { id: track.id, title: track.title });
     const state = get();
     // Add current track to history
     if (state.currentTrack) {
@@ -447,6 +449,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat, consume, currentTrack } = get();
 
     if (queue.length === 0) {
+      log.info('playNext — empty queue, stopping');
       set({ isPlaying: false });
       return;
     }
@@ -473,6 +476,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
           newShuffleIndex = 0;
           nextQueueIndex = newShuffleOrder[0];
         } else {
+          log.info('playNext — end of shuffle order, stopping', { repeat, consume });
           set({ isPlaying: false });
           return;
         }
@@ -486,6 +490,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         if (repeat === 'all') {
           nextQueueIndex = 0;
         } else {
+          log.info('playNext — end of queue, stopping', { queueIndex, queueLength: queue.length, repeat, consume });
           set({ isPlaying: false });
           return;
         }
@@ -538,9 +543,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       return;
     }
 
+    const nextTrack = queue[nextQueueIndex].track;
+    log.info('playNext', {
+      from: currentTrack?.title,
+      to: nextTrack.title,
+      nextId: nextTrack.id,
+      mode: shuffle ? 'shuffle' : 'sequential',
+      repeat,
+      consume,
+      nextQueueIndex,
+    });
+
     set({
       queueIndex: nextQueueIndex,
-      currentTrack: queue[nextQueueIndex].track,
+      currentTrack: nextTrack,
       isPlaying: true,
       currentTime: 0,
       isLoadingAudio: true,
@@ -555,6 +571,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const state = get();
     // If we're more than 3 seconds in, restart current track
     if (state.currentTime > 3) {
+      log.info('playPrevious — restarting current track', { title: state.currentTrack?.title, currentTime: state.currentTime });
       set({ currentTime: 0 });
       return;
     }
@@ -562,6 +579,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Otherwise go to previous in history
     if (state.history.length > 0) {
       const prevTrack = state.history[state.history.length - 1];
+      log.info('playPrevious — going to history track', { title: prevTrack.title, id: prevTrack.id });
       set((s) => ({
         currentTrack: prevTrack,
         history: s.history.slice(0, -1),
@@ -575,6 +593,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0, source?: QueueSource) => {
+    log.info('setQueue', { trackCount: tracks.length, startIndex, source: source?.type, sourceId: source?.id, shuffle: get().shuffle });
     const { shuffle } = get();
     // Support tracks with _externalInfo metadata from playlist views
     const queueItems = tracks.map((track) => {
@@ -682,6 +701,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     const targetItem = queue[index];
     if (!targetItem) return;
+    log.info('jumpToQueueIndex', { index, title: targetItem.track.title, id: targetItem.track.id });
 
     // Add current track to history if exists
     if (currentTrack) {
@@ -815,6 +835,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   advanceToNextTrack: (track) => {
     const { queueIndex, shuffle, shuffleIndex, shuffleOrder, repeat, consume, currentTrack, queue } = get();
+    log.info('advanceToNextTrack (crossfade)', { from: currentTrack?.title, to: track.title, toId: track.id });
 
     // Add current track to history
     if (currentTrack) {

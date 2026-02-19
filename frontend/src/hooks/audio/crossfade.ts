@@ -59,6 +59,7 @@ export async function preloadNextTrack(trackId: string): Promise<boolean> {
 
       const timeout = setTimeout(() => {
         cleanup();
+        log.warn('Preload timeout (10s)', { trackId, readyState: nextElement.readyState, networkState: nextElement.networkState });
         setPreloadingTrackId(null);
         resolve(false);
       }, 10000);
@@ -70,6 +71,8 @@ export async function preloadNextTrack(trackId: string): Promise<boolean> {
       };
       const onError = () => {
         cleanup();
+        const mediaError = nextElement.error;
+        log.warn('Preload error', { trackId, errorCode: mediaError?.code, errorMessage: mediaError?.message });
         setPreloadingTrackId(null);
         resolve(false);
       };

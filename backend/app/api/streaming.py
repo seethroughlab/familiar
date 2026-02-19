@@ -1,10 +1,13 @@
 """Shared streaming utilities for serving audio files with range request support."""
 
+import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import Request
 from starlette.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 
 async def stream_file(file_path: Path, request: Request, mime_type: str) -> StreamingResponse:
@@ -25,18 +28,23 @@ async def stream_file(file_path: Path, request: Request, mime_type: str) -> Stre
         end = max(start, min(end, file_size - 1))
         content_length = end - start + 1
 
+        logger.debug("Range request: %s bytes=%d-%d (%d bytes)", file_path.name, start, end, content_length)
+
         async def stream_range() -> AsyncIterator[bytes]:
-            with open(file_path, "rb") as f:
-                f.seek(start)
-                remaining = content_length
-                chunk_size = 64 * 1024
-                while remaining > 0:
-                    read_size = min(chunk_size, remaining)
-                    data = f.read(read_size)
-                    if not data:
-                        break
-                    remaining -= len(data)
-                    yield data
+            try:
+                with open(file_path, "rb") as f:
+                    f.seek(start)
+                    remaining = content_length
+                    chunk_size = 64 * 1024
+                    while remaining > 0:
+                        read_size = min(chunk_size, remaining)
+                        data = f.read(read_size)
+                        if not data:
+                            break
+                        remaining -= len(data)
+                        yield data
+            except IOError:
+                logger.exception("IO error streaming range for %s", file_path)
 
         return StreamingResponse(
             stream_range(),
@@ -50,11 +58,16 @@ async def stream_file(file_path: Path, request: Request, mime_type: str) -> Stre
             },
         )
     else:
+        logger.debug("Full file request: %s (%d bytes)", file_path.name, file_size)
+
         async def stream_full() -> AsyncIterator[bytes]:
-            with open(file_path, "rb") as f:
-                chunk_size = 64 * 1024
-                while chunk := f.read(chunk_size):
-                    yield chunk
+            try:
+                with open(file_path, "rb") as f:
+                    chunk_size = 64 * 1024
+                    while chunk := f.read(chunk_size):
+                        yield chunk
+            except IOError:
+                logger.exception("IO error streaming full file %s", file_path)
 
         return StreamingResponse(
             stream_full(),
