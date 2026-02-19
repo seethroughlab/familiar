@@ -416,6 +416,34 @@ class TrackAnalysis(Base):
     track: Mapped["Track"] = relationship(back_populates="analyses")
 
 
+class TrackDeepAnalysis(Base):
+    """Deep musical analysis results for a track.
+
+    Stores rich harmonic, melodic, rhythmic, timbral, and structural analysis
+    computed by the deep analysis service. Results are cached and versioned
+    independently from the standard analysis (CLAP embeddings / librosa features).
+    """
+
+    __tablename__ = "track_deep_analysis"
+    __table_args__ = (
+        UniqueConstraint("track_id", "version", name="uq_track_deep_analysis_version"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    track_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tracks.id", ondelete="CASCADE"), index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    results: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    midi_path: Mapped[str | None] = mapped_column(String(500))
+    section_errors: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    analysis_duration_seconds: Mapped[float | None] = mapped_column(Float)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Relationships
+    track: Mapped["Track"] = relationship()
+
+
 class Playlist(Base):
     """User-created or AI-generated playlists."""
 

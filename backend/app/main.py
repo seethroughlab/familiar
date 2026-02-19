@@ -31,6 +31,7 @@ from app.api.routes import (
     background,
     bandcamp,
     chat,
+    deep_analysis,
     diagnostics,
     export_import,
     external_tracks,
@@ -306,6 +307,7 @@ app.include_router(itunes.router, prefix="/api/v1")
 app.include_router(export_import.router, prefix="/api/v1")
 app.include_router(s3_backup.router, prefix="/api/v1")
 app.include_router(subsonic_credentials.router, prefix="/api/v1")
+app.include_router(deep_analysis.router, prefix="/api/v1")
 
 # Subsonic API mounted at /rest (Subsonic clients expect this path)
 app.include_router(subsonic.router, prefix="/rest")

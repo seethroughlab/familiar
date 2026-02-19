@@ -579,6 +579,27 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             "required": ["artist", "track"]
         }
     },
+    # Deep analysis tools
+    {
+        "name": "get_track_analysis",
+        "description": "Get deep musical analysis for one or more tracks. Returns harmonic, melodic, rhythmic, timbral, and structural analysis. Use when the user wants to understand musical character, compare tracks, or use tracks as creative reference. Triggers analysis if not cached.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "track_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "UUIDs of tracks to analyze"
+                },
+                "include_comparative": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Include cross-track comparison for multiple tracks"
+                }
+            },
+            "required": ["track_ids"]
+        }
+    },
     # Web page reading tools
     {
         "name": "fetch_webpage",

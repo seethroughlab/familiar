@@ -99,6 +99,8 @@ class ToolExecutor:
             # Track identification tools
             "identify_track": self._identify_track,
             "get_similar_tracks_external": self._get_similar_tracks_external,
+            # Deep analysis tools
+            "get_track_analysis": self._get_track_analysis,
         }
 
         handler = handlers.get(tool_name)
@@ -1843,6 +1845,117 @@ Respond with ONLY the playlist name, nothing else."""
             "missing": len(tracks_with_status) - in_library_count,
             "note": f"Found {len(tracks_with_status)} similar tracks ({in_library_count} in library, {len(tracks_with_status) - in_library_count} not in library).",
         }
+
+    # --- Deep analysis tools ---
+
+    async def _get_track_analysis(
+        self,
+        track_ids: list[str],
+        include_comparative: bool = True,
+    ) -> dict[str, Any]:
+        """Get deep musical analysis for one or more tracks.
+
+        Checks cache first, triggers analysis if needed.
+        Returns markdown report content for LLM consumption.
+        """
+        import asyncio
+
+        from app.db.models import TrackDeepAnalysis
+        from app.services.background import get_background_manager
+        from app.services.deep_analysis import (
+            DEEP_ANALYSIS_VERSION,
+            generate_comparative_report,
+            generate_report,
+        )
+
+        if not track_ids:
+            return {"error": "No track IDs provided"}
+
+        if len(track_ids) > 10:
+            return {"error": "Maximum 10 tracks per analysis request"}
+
+        bg = get_background_manager()
+        analyses = []
+        track_metas = []
+        errors = []
+
+        for tid in track_ids:
+            try:
+                # Check cache
+                cached = (
+                    await self.db.execute(
+                        select(TrackDeepAnalysis).where(
+                            TrackDeepAnalysis.track_id == UUID(tid),
+                            TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
+                        )
+                    )
+                ).scalar_one_or_none()
+
+                if not cached:
+                    # Trigger analysis and wait for it
+                    await bg.run_deep_analysis(tid)
+                    # Wait for completion (poll up to 120s)
+                    for _ in range(60):
+                        await asyncio.sleep(2)
+                        cached = (
+                            await self.db.execute(
+                                select(TrackDeepAnalysis).where(
+                                    TrackDeepAnalysis.track_id == UUID(tid),
+                                    TrackDeepAnalysis.version == DEEP_ANALYSIS_VERSION,
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if cached:
+                            break
+
+                if not cached:
+                    errors.append(f"Analysis timed out for track {tid}")
+                    continue
+
+                # Load track metadata
+                track = (
+                    await self.db.execute(select(Track).where(Track.id == UUID(tid)))
+                ).scalar_one_or_none()
+
+                if track:
+                    analyses.append(cached.results)
+                    track_metas.append({
+                        "artist": track.artist,
+                        "title": track.title,
+                        "album": track.album,
+                        "duration_seconds": track.duration_seconds,
+                    })
+
+            except Exception as e:
+                errors.append(f"Error analyzing track {tid}: {str(e)}")
+
+        if not analyses:
+            return {
+                "error": "No analyses completed",
+                "errors": errors,
+            }
+
+        # Generate report
+        if len(analyses) == 1:
+            report = generate_report(analyses[0], track_metas[0])
+        elif include_comparative:
+            report = generate_comparative_report(analyses, track_metas)
+        else:
+            # Multiple tracks without comparison: just concatenate
+            parts = []
+            for a, m in zip(analyses, track_metas):
+                parts.append(generate_report(a, m))
+            report = "\n\n---\n\n".join(parts)
+
+        result: dict[str, Any] = {
+            "report": report,
+            "tracks_analyzed": len(analyses),
+            "total_requested": len(track_ids),
+        }
+        if errors:
+            result["errors"] = errors
+
+        return result
 
     # --- Spotify playlist tools ---
 

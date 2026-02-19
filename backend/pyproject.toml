@@ -72,6 +72,8 @@ analysis = [
     "soundfile>=0.12.0", # Audio file loading
     "umap-learn>=0.5.0", # Dimensionality reduction for music map
     "pyloudnorm>=0.1.0", # EBU R128 loudness measurement
+    "basic-pitch[onnx]>=0.3.0", # Polyphonic audio-to-MIDI for deep analysis
+    "matplotlib>=3.5.0", # Self-similarity matrix rendering for deep analysis
 ]
 
 [build-system]

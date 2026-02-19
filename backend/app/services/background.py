@@ -740,6 +740,95 @@ class BackgroundManager:
             self._last_task_started_at = None
             self._analysis_tasks.pop(task_key, None)
 
+    async def run_deep_analysis(self, track_id: str) -> dict[str, Any]:
+        """Run deep analysis in process pool. Follows _do_features pattern."""
+        from app.services.deep_analysis import run_deep_analysis
+
+        task_key = f"{track_id}:deep"
+
+        # Check if already running
+        if task_key in self._analysis_tasks:
+            task = self._analysis_tasks[task_key]
+            if not task.done():
+                return {"status": "already_queued"}
+
+        async def _do_deep(tid: str) -> dict[str, Any]:
+            try:
+                self._current_track_id = tid
+                self._last_task_started_at = time.monotonic()
+                result = await self.run_cpu_bound(run_deep_analysis, tid)
+                return result
+            except Exception as e:
+                logger.error(f"Deep analysis failed for {tid}: {e}")
+                return {"status": "error", "error": str(e)}
+            finally:
+                self._current_track_id = None
+                self._last_task_started_at = None
+                self._analysis_tasks.pop(task_key, None)
+
+        task = asyncio.create_task(_do_deep(track_id))
+        self._analysis_tasks[task_key] = task
+        return {"status": "queued", "task_key": task_key}
+
+    async def run_bulk_deep_analysis(
+        self,
+        task_id: str,
+        track_ids: list[str],
+    ) -> dict[str, Any]:
+        """Run deep analysis for multiple tracks with Redis progress tracking."""
+        from app.services.deep_analysis import run_deep_analysis
+
+        logger.info(f"Starting bulk deep analysis {task_id} for {len(track_ids)} tracks")
+
+        progress: dict[str, Any] = {
+            "status": "processing",
+            "completed": 0,
+            "total": len(track_ids),
+            "track_ids": track_ids,
+            "errors": [],
+        }
+        self.redis.set(
+            f"familiar:deep_analysis:{task_id}",
+            json.dumps(progress),
+            ex=3600,
+        )
+
+        for i, tid in enumerate(track_ids):
+            try:
+                self._current_track_id = tid
+                self._last_task_started_at = time.monotonic()
+                result = await self.run_cpu_bound(run_deep_analysis, tid)
+
+                if result.get("status") == "error":
+                    progress["errors"].append({"track_id": tid, "error": result["error"]})
+            except Exception as e:
+                logger.error(f"Bulk deep analysis failed for {tid}: {e}")
+                progress["errors"].append({"track_id": tid, "error": str(e)})
+            finally:
+                self._current_track_id = None
+                self._last_task_started_at = None
+
+            progress["completed"] = i + 1
+            self.redis.set(
+                f"familiar:deep_analysis:{task_id}",
+                json.dumps(progress),
+                ex=3600,
+            )
+
+        progress["status"] = "completed"
+        self.redis.set(
+            f"familiar:deep_analysis:{task_id}",
+            json.dumps(progress),
+            ex=3600,
+        )
+
+        logger.info(
+            f"Bulk deep analysis {task_id} completed: "
+            f"{progress['completed']}/{progress['total']}, {len(progress['errors'])} errors"
+        )
+
+        return {"status": "completed", "task_id": task_id}
+
     async def run_spotify_sync(
         self,
         profile_id: str,

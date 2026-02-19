@@ -19,6 +19,7 @@ import {
   Heart,
   ShoppingCart,
   ExternalLink,
+  FileText,
 } from 'lucide-react';
 import type { Track } from '../../types';
 import { isExternalTrack } from '../../types';
@@ -38,6 +39,7 @@ interface TrackContextMenuProps {
   onAddToPlaylist: () => void;
   onMakePlaylist: () => void;
   onEditMetadata?: () => void;
+  onDownloadAnalysis?: () => void;
   onRemoveFromDownloads?: () => void;
   // Favorite toggle
   isFavorite?: boolean;
@@ -92,6 +94,7 @@ export function TrackContextMenu({
   isFavorite,
   onToggleFavorite,
   selectedCount = 0,
+  onDownloadAnalysis,
   onPlaySelected,
   onAddSelectedToPlaylist,
   onClearSelection,
@@ -274,6 +277,15 @@ export function TrackContextMenu({
           icon={<Edit3 className="w-4 h-4" />}
           label="Edit Metadata..."
           onClick={() => handleAction(onEditMetadata)}
+        />
+      )}
+
+      {/* Download Track Analysis */}
+      {onDownloadAnalysis && (
+        <MenuItem
+          icon={<FileText className="w-4 h-4" />}
+          label="Download Track Analysis"
+          onClick={() => handleAction(onDownloadAnalysis)}
         />
       )}
 
