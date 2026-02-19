@@ -116,7 +116,7 @@ describe('crossfade - Desktop (Web Audio)', () => {
     vi.spyOn(audioGraph, 'toggleCurrentElement').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setLoadedTrackId').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setPreloadingTrackId').mockImplementation(() => {});
-    vi.spyOn(audioGraph, 'setEarlyPreloadedTrackId').mockImplementation(() => {});
+
     vi.spyOn(audioGraph, 'cleanupElement').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setElementVolume').mockImplementation(() => {});
 
@@ -289,7 +289,7 @@ describe('crossfade - Mobile (Direct Playback)', () => {
     vi.spyOn(audioGraph, 'toggleCurrentElement').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setLoadedTrackId').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setPreloadingTrackId').mockImplementation(() => {});
-    vi.spyOn(audioGraph, 'setEarlyPreloadedTrackId').mockImplementation(() => {});
+
     vi.spyOn(audioGraph, 'cleanupElement').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setElementVolume').mockImplementation(() => {});
 

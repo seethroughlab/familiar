@@ -13,6 +13,12 @@ vi.mock('../../services/playerPersistence', () => ({
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }))
 
+// Mock audioGraph so playerStore's playPrevious can set element.currentTime
+const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
+vi.mock('../../hooks/audio/audioGraph', () => ({
+  getCurrentElement: (...args: unknown[]) => mockGetCurrentElement(...args),
+}))
+
 // Helper to create mock tracks
 const createMockTrack = (id: string, title = 'Test Track'): Track => ({
   id,
@@ -51,6 +57,7 @@ describe('playerStore', () => {
       nextTrackPreloaded: false,
       isHydrated: true,
     })
+    mockGetCurrentElement.mockReturnValue(null)
   })
 
   describe('volume control', () => {
@@ -806,6 +813,60 @@ describe('playerStore', () => {
       expect(state.queueSource).toBeNull()
       // Queue should remain intact
       expect(state.queue).toHaveLength(1)
+    })
+  })
+
+  describe('playPrevious audio element', () => {
+    it('should seek audio element to 0 when restarting current track', () => {
+      const track1 = createMockTrack('1')
+      const { setQueue } = usePlayerStore.getState()
+      setQueue([track1], 0)
+
+      const mockEl = { currentTime: 50 }
+      mockGetCurrentElement.mockReturnValue(mockEl as unknown as HTMLAudioElement)
+
+      usePlayerStore.setState({ currentTime: 5 })
+      usePlayerStore.getState().playPrevious()
+
+      expect(mockEl.currentTime).toBe(0)
+      expect(usePlayerStore.getState().currentTime).toBe(0)
+    })
+  })
+
+  describe('advanceToNextTrack with shuffle', () => {
+    it('should clamp shuffleIndex at boundary', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      // Manually set up shuffle state at the last position
+      usePlayerStore.setState({
+        shuffle: true,
+        shuffleOrder: [0, 2, 1],
+        shuffleIndex: 2,
+      })
+
+      usePlayerStore.getState().advanceToNextTrack(tracks[1])
+
+      const state = usePlayerStore.getState()
+      expect(state.shuffleIndex).toBeLessThanOrEqual(state.shuffleOrder.length)
+    })
+
+    it('should increment shuffleIndex normally', () => {
+      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')]
+      const { setQueue } = usePlayerStore.getState()
+      setQueue(tracks, 0)
+
+      usePlayerStore.setState({
+        shuffle: true,
+        shuffleOrder: [0, 2, 1],
+        shuffleIndex: 0,
+      })
+
+      usePlayerStore.getState().advanceToNextTrack(tracks[2])
+
+      const state = usePlayerStore.getState()
+      expect(state.shuffleIndex).toBe(1)
     })
   })
 })

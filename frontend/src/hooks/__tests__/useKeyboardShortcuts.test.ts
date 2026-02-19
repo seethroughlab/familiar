@@ -14,6 +14,12 @@ vi.mock('../../services/playerPersistence', () => ({
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }))
 
+// Mock audioGraph so keyboard seek tests can verify element.currentTime
+const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
+vi.mock('../audio/audioGraph', () => ({
+  getCurrentElement: (...args: unknown[]) => mockGetCurrentElement(...args),
+}))
+
 // Helper to simulate keyboard events
 const fireKeyDown = (key: string, options: Partial<KeyboardEvent> = {}) => {
   const event = new KeyboardEvent('keydown', {
@@ -46,6 +52,7 @@ describe('useKeyboardShortcuts', () => {
       nextTrackPreloaded: false,
       isHydrated: true,
     })
+    mockGetCurrentElement.mockReturnValue(null)
   })
 
   afterEach(() => {
@@ -290,6 +297,32 @@ describe('useKeyboardShortcuts', () => {
       })
 
       expect(usePlayerStore.getState().currentTime).toBe(0)
+    })
+
+    it('should set audio element currentTime on l key', () => {
+      const mockEl = { currentTime: 0 }
+      mockGetCurrentElement.mockReturnValue(mockEl as unknown as HTMLAudioElement)
+      usePlayerStore.setState({ currentTime: 30, duration: 180 })
+      renderHook(() => useKeyboardShortcuts())
+
+      act(() => {
+        fireKeyDown('l')
+      })
+
+      expect(mockEl.currentTime).toBe(40)
+    })
+
+    it('should set audio element currentTime on j key', () => {
+      const mockEl = { currentTime: 0 }
+      mockGetCurrentElement.mockReturnValue(mockEl as unknown as HTMLAudioElement)
+      usePlayerStore.setState({ currentTime: 30, duration: 180 })
+      renderHook(() => useKeyboardShortcuts())
+
+      act(() => {
+        fireKeyDown('j')
+      })
+
+      expect(mockEl.currentTime).toBe(20)
     })
   })
 

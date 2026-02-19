@@ -128,7 +128,6 @@ describe('Orchestration: continuous playback scenarios', () => {
     vi.spyOn(audioGraph, 'setLoadedTrackId').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'getPreloadingTrackId').mockReturnValue(null);
     vi.spyOn(audioGraph, 'setPreloadingTrackId').mockImplementation(() => {});
-    vi.spyOn(audioGraph, 'setEarlyPreloadedTrackId').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'cleanupElement').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'setElementVolume').mockImplementation(() => {});
     vi.spyOn(audioGraph, 'getCurrentElementIsA').mockImplementation(() => currentIsA);

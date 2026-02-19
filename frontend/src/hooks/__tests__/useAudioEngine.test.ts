@@ -224,66 +224,6 @@ describe('Media Session integration', () => {
   })
 })
 
-describe('Error handling', () => {
-  it('should track consecutive errors for same track', () => {
-    let errorCount = 0
-    let lastErrorTrack: string | null = null
-    const maxRetries = 3
-
-    const handleError = (trackId: string): boolean => {
-      if (trackId === lastErrorTrack) {
-        errorCount++
-        if (errorCount >= maxRetries) {
-          errorCount = 0
-          lastErrorTrack = null
-          return true // Skip to next track
-        }
-      } else {
-        errorCount = 1
-        lastErrorTrack = trackId
-      }
-      return false // Retry
-    }
-
-    // First error
-    expect(handleError('track-1')).toBe(false)
-    expect(errorCount).toBe(1)
-
-    // Second error (same track)
-    expect(handleError('track-1')).toBe(false)
-    expect(errorCount).toBe(2)
-
-    // Third error (same track) - should skip
-    expect(handleError('track-1')).toBe(true)
-    expect(errorCount).toBe(0)
-  })
-
-  it('should reset error count on different track', () => {
-    let errorCount = 0
-    let lastErrorTrack: string | null = null
-
-    const handleError = (trackId: string): void => {
-      if (trackId === lastErrorTrack) {
-        errorCount++
-      } else {
-        errorCount = 1
-        lastErrorTrack = trackId
-      }
-    }
-
-    handleError('track-1')
-    expect(errorCount).toBe(1)
-
-    handleError('track-1')
-    expect(errorCount).toBe(2)
-
-    // Different track resets count
-    handleError('track-2')
-    expect(errorCount).toBe(1)
-    expect(lastErrorTrack).toBe('track-2')
-  })
-})
-
 describe('Preload logic', () => {
   it('should determine when to preload next track', () => {
     const crossfadeEnabled = true
