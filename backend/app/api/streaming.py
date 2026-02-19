@@ -43,7 +43,7 @@ async def stream_file(file_path: Path, request: Request, mime_type: str) -> Stre
                             break
                         remaining -= len(data)
                         yield data
-            except IOError:
+            except OSError:
                 logger.exception("IO error streaming range for %s", file_path)
 
         return StreamingResponse(
@@ -66,7 +66,7 @@ async def stream_file(file_path: Path, request: Request, mime_type: str) -> Stre
                     chunk_size = 64 * 1024
                     while chunk := f.read(chunk_size):
                         yield chunk
-            except IOError:
+            except OSError:
                 logger.exception("IO error streaming full file %s", file_path)
 
         return StreamingResponse(

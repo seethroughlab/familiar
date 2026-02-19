@@ -26,7 +26,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra dev
 
       - name: Lint with ruff
         run: uv run ruff check .
@@ -75,7 +75,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --extra dev
 
       - name: Initialize database
         env:
@@ -211,7 +211,7 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: uv sync --all-extras
+        run: uv sync --extra dev
 
       - name: Initialize database
         working-directory: backend

@@ -903,7 +903,7 @@ class BackgroundManager:
 
     async def _cleanup_frontend_logs(self) -> None:
         """Delete frontend_logs older than 7 days."""
-        from datetime import timedelta
+        from datetime import datetime, timedelta
 
         from sqlalchemy import delete
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

@@ -10,7 +10,6 @@ the same pattern as run_track_features in tasks.py.
 import base64
 import io
 import logging
-import os
 import time
 from pathlib import Path
 from typing import Any
@@ -360,7 +359,6 @@ def _analyze_harmonic(
     smoothed = merged
 
     # Most common chords (duration-weighted)
-    from collections import Counter
     duration = shared["duration"]
     chord_durations: dict[str, float] = {}
     for i, c in enumerate(smoothed):
@@ -840,7 +838,6 @@ def _analyze_rhythmic(
             # Threshold to binary
             threshold = np.mean(pattern_accumulator)
             binary_pattern = (pattern_accumulator > threshold).astype(int)
-            pulses = int(np.sum(binary_pattern))
 
             # Compare against known Euclidean rhythms
             for (k, n), name in EUCLIDEAN_RHYTHMS.items():
@@ -901,7 +898,6 @@ def _analyze_spectral(
 
     # Band energy distribution (6 bands)
     spec = shared["spec"]
-    n_fft = shared["n_fft"]
     freqs = np.linspace(0, sr / 2, spec.shape[0])
 
     bands = {
@@ -992,7 +988,6 @@ def _analyze_structural(
     y: np.ndarray, sr: int, shared: dict, file_path: str, track_id: str
 ) -> dict[str, Any]:
     """Structural analysis: self-similarity, segmentation, form labeling."""
-    import librosa
 
     chroma = shared["chroma"]
     mfcc = shared["mfcc"]

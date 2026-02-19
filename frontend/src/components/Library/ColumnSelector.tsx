@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Columns, Check, RotateCcw } from 'lucide-react';
 import { useColumnStore } from '../../stores/columnStore';
@@ -50,13 +50,17 @@ export function ColumnSelector() {
   const analysisColumns = getAnalysisColumns();
 
   // Compute dropdown position from button rect
-  const menuPosition = useMemo(() => {
-    if (!isOpen || !buttonRef.current) return null;
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) {
+      setMenuPosition(null);
+      return;
+    }
     const rect = buttonRef.current.getBoundingClientRect();
-    return {
+    setMenuPosition({
       top: rect.bottom + 8,
       right: window.innerWidth - rect.right,
-    };
+    });
   }, [isOpen]);
 
   const dropdownMenu = isOpen && menuPosition && createPortal(

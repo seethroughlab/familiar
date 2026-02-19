@@ -14,6 +14,7 @@ from .base import (
     ExternalTrackSource,
     TrackStatus,
 )
+from .frontend_log import FrontendLog
 from .metadata import ProposedChange
 from .playlists import Playlist, PlaylistTrack, SmartPlaylist
 from .plugins import Plugin, PluginType
@@ -27,7 +28,6 @@ from .profiles import (
     SpotifyProfile,
     SubsonicCredential,
 )
-from .frontend_log import FrontendLog
 from .tracks import ExternalTrack, Track, TrackAnalysis, TrackDeepAnalysis, TrackVideo
 
 __all__ = [
