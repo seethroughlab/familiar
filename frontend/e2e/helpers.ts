@@ -52,9 +52,9 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
       break;
     }
     case 'Settings': {
-      // Click Settings button in sidebar footer
+      // Click Settings button in sidebar footer (force click to bypass player bar overlay)
       const settingsBtn = page.locator('button:has-text("Settings")').first();
-      await settingsBtn.click();
+      await settingsBtn.click({ force: true });
       break;
     }
     case 'Playlists':

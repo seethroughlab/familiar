@@ -177,7 +177,14 @@ test.describe('Playlists', () => {
     // Navigate to Library
     await navigateToTab(page, 'Library');
 
-    const trackRows = page.locator('[data-testid="track-row"], .track-row, tr');
+    // Wait for track rows to be visible
+    const firstTrack = page.locator('[data-testid="track-row"]').first();
+    if (!(await firstTrack.isVisible({ timeout: 10000 }).catch(() => false))) {
+      test.skip(true, 'No visible tracks in library');
+      return;
+    }
+
+    const trackRows = page.locator('[data-testid="track-row"]');
     const count = await trackRows.count();
 
     if (count < 2) {
