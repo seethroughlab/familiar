@@ -75,14 +75,27 @@ class Settings(BaseSettings):
         return self.database_url.replace("+asyncpg", "")
 
 
-# Analysis version constant - bump when analysis pipeline changes
-# v1: Placeholder features only
-# v2: Real CLAP embeddings + librosa features
-# v3: Fixed energy normalization (dB scale) and valence (key-aware chroma)
-# v4: Improved valence with multi-feature approach (mode, brightness, tempo, contrast, dynamics)
-# v5: Re-extract CLAP embeddings (psutil fix enabled proper RAM detection)
-# v6: Added loudness measurement (EBU R128 / ReplayGain) for volume normalization
-ANALYSIS_VERSION = 6
+# Per-phase analysis version constants
+# Bump ONLY the phase that changed; other phases won't re-run
+#
+# Features history:
+#   v1: Placeholder features only
+#   v2: Real librosa features
+#   v3: Fixed energy normalization (dB scale) and valence (key-aware chroma)
+#   v4: Improved valence with multi-feature approach
+#   v5: Re-extract (psutil fix enabled proper RAM detection)
+#   v6: Added loudness measurement (EBU R128 / ReplayGain)
+FEATURES_VERSION = 6
+
+# Embedding history:
+#   v2: First CLAP 512-dim embeddings
+#   v5: Re-extract (psutil fix)
+#   v6: Matched features version at loudness addition
+EMBEDDING_VERSION = 6
+
+# Melodic history:
+#   v5: basic-pitch MIDI transcription + melodic feature extraction
+MELODIC_VERSION = 5
 
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}

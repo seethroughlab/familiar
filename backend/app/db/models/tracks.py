@@ -80,7 +80,6 @@ class Track(Base):
     user_overrides: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
     # Analysis status
-    analysis_version: Mapped[int] = mapped_column(Integer, default=0)
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
     analysis_error: Mapped[str | None] = mapped_column(String(500))
     analysis_failed_at: Mapped[datetime | None] = mapped_column(DateTime)
@@ -107,6 +106,15 @@ class Track(Base):
     playlist_entries: Mapped[list["PlaylistTrack"]] = relationship(
         back_populates="track", cascade="all, delete"
     )
+
+    @property
+    def analysis_version(self) -> int:
+        """Derived from TrackAnalysis for API backward compatibility."""
+        from sqlalchemy import inspect as sa_inspect
+
+        if "analyses" in sa_inspect(self).unloaded:
+            return 0
+        return self.analyses[0].features_version if self.analyses else 0
 
 
 class ExternalTrack(Base):
@@ -195,7 +203,7 @@ class TrackAnalysis(Base):
 
     __tablename__ = "track_analysis"
     __table_args__ = (
-        UniqueConstraint("track_id", "version", name="uq_track_analysis_version"),
+        UniqueConstraint("track_id", name="uq_track_analysis_track_id"),
         Index("ix_track_analysis_bpm", "bpm"),
         Index("ix_track_analysis_energy", "energy"),
         Index("ix_track_analysis_valence", "valence"),
@@ -206,7 +214,8 @@ class TrackAnalysis(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     track_id: Mapped[UUID] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), index=True)
-    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    features_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    embedding_version: Mapped[int] = mapped_column(Integer, default=0)
 
     # ── Typed feature columns (promoted from JSONB) ──────────────────────
     # Phase 1: librosa features

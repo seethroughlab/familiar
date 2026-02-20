@@ -237,8 +237,51 @@ def upgrade() -> None:
     for col_name, col_type in [("has_melodic", sa.Boolean()), ("melodic_version", sa.Integer())]:
         op.alter_column("track_analysis", col_name, nullable=False, existing_type=col_type)
 
+    # ── Step 7: Per-phase versioning ─────────────────────────────────
+    # Rename version → features_version
+    if _column_exists("track_analysis", "version") and not _column_exists("track_analysis", "features_version"):
+        op.alter_column("track_analysis", "version", new_column_name="features_version")
+
+    # Add embedding_version column
+    if not _column_exists("track_analysis", "embedding_version"):
+        op.execute(sa.text(
+            "ALTER TABLE track_analysis ADD COLUMN embedding_version INTEGER DEFAULT 0 NOT NULL"
+        ))
+        # Backfill: tracks that have an embedding were analyzed at features_version
+        op.execute(sa.text(
+            "UPDATE track_analysis SET embedding_version = features_version "
+            "WHERE embedding IS NOT NULL"
+        ))
+
+    # Replace UniqueConstraint: (track_id, version) → (track_id)
+    op.execute(sa.text(
+        "ALTER TABLE track_analysis DROP CONSTRAINT IF EXISTS uq_track_analysis_version"
+    ))
+    op.execute(sa.text(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_track_analysis_track_id') THEN "
+        "ALTER TABLE track_analysis ADD CONSTRAINT uq_track_analysis_track_id UNIQUE (track_id); "
+        "END IF; END $$"
+    ))
+
 
 def downgrade() -> None:
+    # Revert per-phase versioning
+    op.execute(sa.text(
+        "ALTER TABLE track_analysis DROP CONSTRAINT IF EXISTS uq_track_analysis_track_id"
+    ))
+    if _column_exists("track_analysis", "embedding_version"):
+        op.drop_column("track_analysis", "embedding_version")
+    if _column_exists("track_analysis", "features_version") and not _column_exists("track_analysis", "version"):
+        op.alter_column("track_analysis", "features_version", new_column_name="version")
+    # Re-add old constraint (may fail if duplicates exist, but best-effort for downgrade)
+    op.execute(sa.text(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_track_analysis_version') THEN "
+        "ALTER TABLE track_analysis ADD CONSTRAINT uq_track_analysis_version UNIQUE (track_id, version); "
+        "END IF; END $$"
+    ))
+
     # Re-add features JSONB column
     if not _column_exists("track_analysis", "features"):
         op.add_column("track_analysis", sa.Column("features", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb")))
