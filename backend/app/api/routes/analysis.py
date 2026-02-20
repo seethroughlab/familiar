@@ -112,27 +112,17 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
 
 @router.post("/{track_id}/analysis")
 async def trigger_analysis(track_id: UUID, db: DbSession):
-    """Trigger analysis for a single track.
+    """Trigger full analysis pipeline for a single track.
 
-    Returns immediately if cached at current version.
-    Otherwise queues background processing and returns 202.
+    Runs all missing phases (features, embedding, deep analysis/melodic)
+    using a dedicated on-demand executor. Caching is handled internally.
     """
     track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
 
-    analysis = (
-        await db.execute(
-            select(TrackAnalysis)
-            .where(TrackAnalysis.track_id == track_id)
-        )
-    ).scalar_one_or_none()
-
-    if analysis and analysis.analysis_detail:
-        return {"status": "ready", "track_id": str(track_id)}
-
     bg = get_background_manager()
-    await bg.run_track_analysis(str(track_id))
+    await bg.run_track_analysis_full(str(track_id))
 
     return {"status": "processing", "track_id": str(track_id)}
 
