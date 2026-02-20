@@ -9,12 +9,12 @@ if TYPE_CHECKING:
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import String, delete, func, select
+from sqlalchemy import delete, func, select
 
 from app.api.deps import DbSession
 from app.api.exceptions import sanitize_error_for_client
 from app.config import settings
-from app.db.models import Track, TrackAnalysis, TrackStatus
+from app.db.models import Track, TrackAnalysis
 from app.services.import_service import ImportService, MusicImportError, save_upload_to_temp
 from app.services.scanner import LibraryScanner
 
@@ -216,7 +216,6 @@ async def _find_import_duplicate(
     Returns (matching_track, match_type) where match_type is one of:
     "exact", "normalized", "artist_title", or "" if no match.
     """
-    from sqlalchemy import func, select
 
     from app.db.models import Track
     from app.services.normalize import normalize_for_duplicate_matching

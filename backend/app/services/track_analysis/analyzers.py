@@ -13,6 +13,9 @@ from typing import Any, cast
 import numpy as np
 
 from app.services.track_analysis.constants import (
+    _QUALITY_TO_ROMAN_SUFFIX,
+    _ROMAN_MAJOR,
+    _ROMAN_MINOR,
     CHORD_TEMPLATES,
     COMMON_PROGRESSIONS,
     EUCLIDEAN_RHYTHMS,
@@ -20,9 +23,6 @@ from app.services.track_analysis.constants import (
     MIDI_DATA_DIR,
     MODE_PROFILES,
     NOTE_NAMES,
-    _QUALITY_TO_ROMAN_SUFFIX,
-    _ROMAN_MAJOR,
-    _ROMAN_MINOR,
 )
 from app.services.track_analysis.utils import (
     _duration_symbol,

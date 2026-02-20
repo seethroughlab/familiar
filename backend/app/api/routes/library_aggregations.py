@@ -3,7 +3,7 @@
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import String, func, select
 

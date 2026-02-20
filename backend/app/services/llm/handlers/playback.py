@@ -20,7 +20,7 @@ class PlaybackHandlersMixin:
     """Mixin providing playback tool handlers."""
 
     async def _queue_tracks(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         track_ids: list[str],
         clear_existing: bool = False,
         suggested_tracks: list[dict[str, Any]] | None = None,
@@ -70,12 +70,12 @@ class PlaybackHandlersMixin:
 
         return response
 
-    async def _control_playback(self: "ToolExecutor", action: str) -> dict[str, Any]:
+    async def _control_playback(self: ToolExecutor, action: str) -> dict[str, Any]:
         """Control playback."""
         self._playback_action = action
         return {"action": action, "status": "ok"}
 
-    async def _get_track_details(self: "ToolExecutor", track_id: str) -> dict[str, Any]:
+    async def _get_track_details(self: ToolExecutor, track_id: str) -> dict[str, Any]:
         """Get detailed track info including features."""
         stmt = select(Track).where(Track.id == UUID(track_id))
         result = await self.db.execute(stmt)

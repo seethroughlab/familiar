@@ -338,7 +338,6 @@ def _run_scan_in_process(
     This is a sync top-level function (must be picklable for ProcessPoolExecutor).
     Pattern follows run_track_features().
     """
-    import asyncio
     import logging
 
     logging.basicConfig(level=logging.INFO, format="%(message)s", force=True)
@@ -443,7 +442,6 @@ async def run_library_sync(
     Returns:
         Dict with status and statistics.
     """
-    import asyncio
 
     from sqlalchemy import and_, func, select
 

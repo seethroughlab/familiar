@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class MetadataHandlersMixin:
     """Mixin providing metadata correction tool handlers."""
 
-    async def _lookup_correct_metadata(self: "ToolExecutor", track_id: str) -> dict[str, Any]:
+    async def _lookup_correct_metadata(self: ToolExecutor, track_id: str) -> dict[str, Any]:
         """Look up correct metadata from external sources."""
         try:
             track_uuid = UUID(track_id)
@@ -71,7 +71,7 @@ class MetadataHandlersMixin:
         }
 
     async def _propose_metadata_change(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         track_ids: list[str],
         field: str,
         new_value: str,
@@ -148,7 +148,7 @@ class MetadataHandlersMixin:
         }
 
     async def _get_album_tracks(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         album: str,
         artist: str | None = None,
     ) -> dict[str, Any]:
@@ -195,7 +195,7 @@ class MetadataHandlersMixin:
         }
 
     async def _mark_album_as_compilation(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         album: str,
         album_artist: str,
         reason: str,
@@ -219,7 +219,7 @@ class MetadataHandlersMixin:
         )
 
     async def _propose_album_artwork(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         artist: str,
         album: str,
         reason: str,
@@ -283,7 +283,7 @@ class MetadataHandlersMixin:
             "message": f"Found artwork for '{album}' and proposed the change. User can review in Settings > Proposed Changes.",
         }
 
-    def _normalize_artist_for_comparison(self: "ToolExecutor", artist: str) -> str:
+    def _normalize_artist_for_comparison(self: ToolExecutor, artist: str) -> str:
         """Normalize artist name for duplicate detection.
 
         Handles common variations:
@@ -313,7 +313,7 @@ class MetadataHandlersMixin:
         return s
 
     async def _find_duplicate_artists(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         artist_hint: str | None = None,
         limit: int = 10,
     ) -> dict[str, Any]:
@@ -378,7 +378,7 @@ class MetadataHandlersMixin:
         }
 
     async def _merge_duplicate_artists(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         source_artist: str,
         target_artist: str,
         reason: str,

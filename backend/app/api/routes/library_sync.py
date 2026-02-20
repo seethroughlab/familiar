@@ -5,7 +5,6 @@ import logging
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.api.deps import DbSession
 from app.api.ratelimit import SCAN_RATE_LIMIT, limiter
 from app.services.tasks import get_sync_progress
 

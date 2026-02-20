@@ -9,7 +9,6 @@ from typing import Any
 from app.services.track_analysis.constants import INTERVAL_NAMES
 from app.services.track_analysis.utils import _format_time
 
-
 # ─── Character summary ─────────────────────────────────────────────────────
 
 def _generate_character_summary(

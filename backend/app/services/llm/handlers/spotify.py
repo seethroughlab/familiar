@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class SpotifyHandlersMixin:
     """Mixin providing Spotify-related tool handlers."""
 
-    async def _get_spotify_status(self: "ToolExecutor") -> dict[str, Any]:
+    async def _get_spotify_status(self: ToolExecutor) -> dict[str, Any]:
         """Check if Spotify is connected."""
         if not self.profile_id:
             return {
@@ -47,7 +47,7 @@ class SpotifyHandlersMixin:
             "last_sync": profile.last_sync_at.isoformat() if profile.last_sync_at else None,
         }
 
-    async def _get_spotify_favorites(self: "ToolExecutor", limit: int = 50) -> dict[str, Any]:
+    async def _get_spotify_favorites(self: ToolExecutor, limit: int = 50) -> dict[str, Any]:
         """Get Spotify favorites that are matched to local library."""
         try:
             limit = int(float(limit)) if limit else 50
@@ -83,7 +83,7 @@ class SpotifyHandlersMixin:
             "note": "These are Spotify favorites that match tracks in your local library",
         }
 
-    async def _get_unmatched_spotify_favorites(self: "ToolExecutor", limit: int = 50) -> dict[str, Any]:
+    async def _get_unmatched_spotify_favorites(self: ToolExecutor, limit: int = 50) -> dict[str, Any]:
         """Get Spotify favorites that don't have local matches."""
         try:
             limit = int(float(limit)) if limit else 50
@@ -122,7 +122,7 @@ class SpotifyHandlersMixin:
             "note": "These are Spotify favorites you don't have in your local library",
         }
 
-    async def _get_spotify_sync_stats(self: "ToolExecutor") -> dict[str, Any]:
+    async def _get_spotify_sync_stats(self: ToolExecutor) -> dict[str, Any]:
         """Get Spotify sync statistics."""
         if not self.profile_id:
             return {
@@ -169,7 +169,7 @@ class SpotifyHandlersMixin:
             "connected": profile is not None,
         }
 
-    async def _list_spotify_playlists(self: "ToolExecutor", limit: int = 20) -> dict[str, Any]:
+    async def _list_spotify_playlists(self: ToolExecutor, limit: int = 20) -> dict[str, Any]:
         """List user's Spotify playlists."""
         try:
             limit = int(float(limit)) if limit else 20
@@ -210,7 +210,7 @@ class SpotifyHandlersMixin:
             }
 
     async def _get_spotify_playlist_tracks(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         playlist_id: str,
         limit: int = 50,
     ) -> dict[str, Any]:
@@ -258,7 +258,7 @@ class SpotifyHandlersMixin:
             }
 
     async def _import_spotify_playlist(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         spotify_playlist_id: str,
         name: str | None = None,
         include_missing: bool = True,

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class SearchHandlersMixin:
     """Mixin providing search tool handlers."""
 
-    async def _search_library(self: "ToolExecutor", query: str, limit: int = 20) -> dict[str, Any]:
+    async def _search_library(self: ToolExecutor, query: str, limit: int = 20) -> dict[str, Any]:
         """Search tracks by text query with diversity across artists/albums."""
         # Convert limit to int (LLM may pass string)
         try:
@@ -59,7 +59,7 @@ class SearchHandlersMixin:
             "note": f"Selected from {len(all_tracks)} matches with artist/album diversity",
         }
 
-    async def _find_similar_tracks(self: "ToolExecutor", track_id: str, limit: int = 10) -> dict[str, Any]:
+    async def _find_similar_tracks(self: ToolExecutor, track_id: str, limit: int = 10) -> dict[str, Any]:
         """Find similar tracks using embedding similarity."""
         # Convert limit to int (LLM may pass string)
         try:
@@ -97,7 +97,7 @@ class SearchHandlersMixin:
             "note": f"Similar tracks from {len(set(t.artist for t in selected))} different artists",
         }
 
-    async def _semantic_search(self: "ToolExecutor", description: str, limit: int = 20) -> dict[str, Any]:
+    async def _semantic_search(self: ToolExecutor, description: str, limit: int = 20) -> dict[str, Any]:
         """Search for tracks using text-to-audio semantic similarity via CLAP embeddings."""
         from app.services.analysis import extract_text_embedding, get_analysis_capabilities
 
@@ -149,7 +149,7 @@ class SearchHandlersMixin:
         }
 
     async def _filter_tracks(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         # Library criteria
         genre: str | None = None,
         artist: str | None = None,

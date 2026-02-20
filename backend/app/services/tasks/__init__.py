@@ -5,24 +5,8 @@ Re-exports all public names for backward compatibility so that
 """
 
 # common.py
-from app.services.tasks.common import (
-    MAX_FAILURES_STORED,
-    SYNC_PROGRESS_KEY,
-    TASK_FAILURES_KEY,
-    _record_task_failure,
-    clear_task_failures,
-    get_memory_mb,
-    get_recent_failures,
-    log_memory,
-)
-
-# library_sync.py
-from app.services.tasks.library_sync import (
-    SyncProgressReporter,
-    clear_sync_progress,
-    get_sync_progress,
-    run_library_sync,
-)
+# Re-export get_redis for any remaining consumers
+from app.services.redis_client import get_redis
 
 # analysis_pipeline.py
 from app.services.tasks.analysis_pipeline import (
@@ -34,6 +18,40 @@ from app.services.tasks.analysis_pipeline import (
     run_track_analysis,
     run_track_embedding,
     run_track_features,
+)
+from app.services.tasks.common import (
+    MAX_FAILURES_STORED,
+    SYNC_PROGRESS_KEY,
+    TASK_FAILURES_KEY,
+    _record_task_failure,
+    clear_task_failures,
+    get_memory_mb,
+    get_recent_failures,
+    log_memory,
+)
+
+# enrichment.py
+from app.services.tasks.enrichment import (
+    propose_enrichment_for_track,
+    run_track_enrichment,
+)
+
+# library_sync.py
+from app.services.tasks.library_sync import (
+    SyncProgressReporter,
+    clear_sync_progress,
+    get_sync_progress,
+    run_library_sync,
+)
+
+# new_releases.py
+from app.services.tasks.new_releases import (
+    NEW_RELEASES_PROGRESS_KEY,
+    NewReleasesProgressReporter,
+    clear_new_releases_progress,
+    get_new_releases_progress,
+    run_new_releases_check,
+    run_prioritized_new_releases_check,
 )
 
 # spotify_sync.py
@@ -47,25 +65,6 @@ from app.services.tasks.spotify_sync import (
     run_spotify_sync,
     set_spotify_rate_limit,
 )
-
-# new_releases.py
-from app.services.tasks.new_releases import (
-    NEW_RELEASES_PROGRESS_KEY,
-    NewReleasesProgressReporter,
-    clear_new_releases_progress,
-    get_new_releases_progress,
-    run_new_releases_check,
-    run_prioritized_new_releases_check,
-)
-
-# enrichment.py
-from app.services.tasks.enrichment import (
-    propose_enrichment_for_track,
-    run_track_enrichment,
-)
-
-# Re-export get_redis for any remaining consumers
-from app.services.redis_client import get_redis
 
 __all__ = [
     # common

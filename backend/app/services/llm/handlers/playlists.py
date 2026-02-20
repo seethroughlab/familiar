@@ -26,7 +26,7 @@ class PlaylistHandlersMixin:
     """Mixin providing playlist-related tool handlers."""
 
     async def _select_diverse_tracks(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         track_ids: list[str],
         limit: int = 20,
         max_per_artist: int = 2,
@@ -73,7 +73,7 @@ class PlaylistHandlersMixin:
             "note": f"Selected {len(selected)} tracks from {unique_artists} different artists",
         }
 
-    async def _fetch_webpage(self: "ToolExecutor", url: str) -> dict[str, Any]:
+    async def _fetch_webpage(self: ToolExecutor, url: str) -> dict[str, Any]:
         """Fetch a web page and extract readable content.
 
         Uses curl_cffi for TLS fingerprint impersonation to bypass bot detection
@@ -143,7 +143,7 @@ class PlaylistHandlersMixin:
         }
 
     async def _create_playlist_from_items(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         name: str,
         items: list[dict[str, Any]],
         description: str | None = None,
@@ -288,7 +288,7 @@ class PlaylistHandlersMixin:
         }
 
     async def _search_for_item(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         artist: str,
         album: str | None = None,
         track: str | None = None,
@@ -364,7 +364,7 @@ class PlaylistHandlersMixin:
         return list(result.scalars().all())
 
     async def _save_as_playlist(
-        self: "ToolExecutor",
+        self: ToolExecutor,
         name: str,
         track_ids: list[str],
         description: str | None = None,
