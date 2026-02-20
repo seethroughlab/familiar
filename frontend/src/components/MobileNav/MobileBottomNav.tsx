@@ -37,7 +37,7 @@ export function MobileBottomNav() {
   return (
     <>
       <nav
-        className={`fixed bottom-0 left-0 right-0 z-20 md:hidden flex items-center justify-around pb-safe-bottom ${
+        className={`shrink-0 z-20 md:hidden flex items-center justify-around pb-safe-bottom ${
           light ? 'bg-white border-t border-zinc-200' : 'bg-zinc-950 border-t border-zinc-800'
         }`}
       >

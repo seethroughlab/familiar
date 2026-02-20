@@ -145,7 +145,7 @@ export function PlayerBar({
   const hasTrack = !!currentTrack;
 
   return (
-    <div className="fixed bottom-12 md:bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 z-20 pb-safe-bottom">
+    <div className="shrink-0 bg-zinc-900 border-t border-zinc-800 z-20 pb-safe-bottom">
       {/* Mobile layout: two rows - track info + play, then progress bar */}
       <div
         className="sm:hidden"

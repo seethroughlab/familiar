@@ -199,7 +199,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4">
       {/* Header */}
       <div className="flex items-start gap-4">
         <button
