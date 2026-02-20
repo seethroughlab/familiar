@@ -7,40 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10] - 2026-02-20
+
+Sidebar Navigation, Deep Analysis & External Tracks
+
 ### Added
 
-- **External favorites system** - Favorite tracks that aren't in your local library
-  - New `profile_external_favorites` table and `ProfileExternalFavorite` model with migration
-  - Spotify sync automatically promotes unmatched favorites to external favorites
-  - External favorites cleaned up when tracks get matched to local library
-  - `useFavorites` hook extended with `isExternalFavorite`, `toggleExternal`, and `externalFavorites`
-  - Favorite/unfavorite external tracks from Playlist and Library views
-- **External tracks in Library browser** - Unmatched external tracks appear in the main track list
-  - Tracks API supports `include_external` parameter for UNION queries across local and external tracks
-  - External tracks tagged with "External" badge and Spotify link button
-  - Playback via iTunes preview URLs or matched local files with `_externalInfo` metadata
-- **External tracks in Smart Playlists** - Smart playlists can include external tracks when rules use compatible fields (title, artist, album, year, track_number, duration)
-  - New `get_tracks_unified` method with UNION-based pagination across both tables
-- **AlbumArtwork direct URL support** - New `artworkUrl` prop for displaying external artwork (e.g. from Spotify/iTunes)
-- **Sortable columns in all playlist views** - Favorites, Playlists, Smart Playlists, Ephemeral Playlists, and Downloads now have clickable column headers with sort indicators
+- **Sidebar navigation layout** — Replaced tab-based navigation with a persistent sidebar (desktop) and mobile bottom nav
+  - Desktop: 240px sidebar with collapsible icon-only mode, sections for Library views, Collections (Favorites/Downloads/Wishlist with live counts), Playlists, and Smart Playlists
+  - Mobile: 5-item bottom nav (Tracks, Artists, Favorites, Chat, More) plus slide-up "More" sheet for full navigation
+  - Right panel hosts Queue and Chat on desktop; full-screen overlays on mobile
+  - Chat toggle moved from header to PlayerBar and mobile bottom nav
+- **Deep track analysis** — Per-track musical analysis generating downloadable Markdown reports
+  - Harmonic: chord detection (84 templates), Roman numeral progressions, mode detection (Ionian through Locrian)
+  - Rhythmic: swing ratio, syncopation, Euclidean rhythm identification (Tresillo, Bossa Nova, Samba, etc.)
+  - Timbral/spectral character, structural form detection, optional melodic transcription via basic-pitch MIDI
+  - Bulk analysis (up to 50 tracks) via context menu with toast progress notifications
+  - New API: `POST /tracks/analysis/bulk`, poll + download Markdown report
+- **Per-phase analysis versioning** — Independent version tracking for features, embeddings, and melodic phases
+  - Three constants: `FEATURES_VERSION`, `EMBEDDING_VERSION`, `MELODIC_VERSION`
+  - Bumping one phase no longer forces re-running the other phases across the entire library
+  - Separate `features_version`, `embedding_version`, `melodic_version` columns on `TrackAnalysis`
+- **Spotify GDPR data import** — Upload your Spotify "Download your data" zip to import saved tracks, playlists, and streaming history
+  - Parses `YourLibrary.json`, `Playlist*.json`, and `Streaming_History_Audio*.json`
+  - Fuzzy matching against local library
+- **SpotifyCompat wrapper** — Handles Nov 2024 and Feb 2026 Spotify API breaking changes
+  - Normalizes renamed endpoints (`playlist_tracks` → `playlist_items`), missing fields (`preview_url`, `popularity`, ISRC)
+  - Centralized 1 req/sec rate limiting with 429 retry (up to 5 attempts) and cooldown countdown in UI
+- **Remote frontend logging** — Frontend logs shipped to backend for remote diagnosis
+  - Captures all `createLogger()` output plus uncaught errors to IndexedDB
+  - Batches and POSTs to `/api/v1/diagnostics/frontend-logs` every 30 seconds
+  - Flushes on `visibilitychange` (catches iOS tab kills)
+  - Settings panel with remote log viewer, level/namespace filters, and manual flush
+- **External favorites system** — Favorite tracks not in your local library
+  - New `profile_external_favorites` table with migration
+  - Spotify sync promotes unmatched favorites to external favorites
+  - `useFavorites` hook extended with `isExternalFavorite`, `toggleExternal`, `externalFavorites`
+- **External tracks in Library browser** — Unmatched external tracks appear in main track list
+  - Tracks API `include_external` parameter for UNION queries across local and external tracks
+  - Tagged with "External" badge and Spotify link button
+- **External tracks in Smart Playlists** — Smart playlists include external tracks when rules use compatible fields
+  - New `get_tracks_unified` method with UNION-based pagination
+- **Sortable columns in all playlist views** — Favorites, Playlists, Smart Playlists, Ephemeral Playlists, Downloads
   - Tri-state sort cycle: ascending → descending → clear (isolated from library sort state)
-  - Dynamic columns from column store (artist, album, year, genre, etc.) visible in all views
-  - CSS grid layout for proper column alignment across header and rows
-  - Mobile responsive: dynamic columns hidden on small screens, artist/album shown inline under title
-  - New shared `PlaylistColumnHeader` component reused across all 5 views
+  - CSS grid layout for proper column alignment; dynamic columns hidden on mobile
+  - New shared `PlaylistColumnHeader` and `PlaylistColumns` components
+- **Purchase links (Buy button)** for external tracks — links to find tracks on storefronts
+- **Toggle to skip external track preview playback** — opt out of 30-second previews
+- **Last.fm similar artists with match scores** — improved similarity results
+- **FLAC remux for PTS-less files** — Auto-detects FLAC files missing PTS timestamps (causes Chromium "FFmpegDemuxer: PTS is not defined" error) and losslessly re-muxes via `ffmpeg -c:a copy` with atomic in-place replacement
+- **AIFF playback support** — AIFF files now stream via on-the-fly ffmpeg transcoding to FLAC
+- **Batch track enrichment** — New `POST /tracks/enrich-batch` endpoint replaces N individual requests from ArtistDetail
+- **Album prefetching in ArtistDetail** — First 5 albums prefetched on artist load for near-instant navigation
+- **Lower/trim functional indexes** — PostgreSQL indexes on `lower(trim(artist))`, `lower(trim(album))`, `lower(trim(coalesce(nullif(album_artist,''),artist)))` for faster library queries on the 23K-track library
+- **Themed scrollbars** — Custom scrollbar styling matching dark/light theme
+- **Sync phase labels** — BackgroundJobsIndicator shows human-readable phase names (Discovering files, Extracting features, Generating embeddings)
+- **Sync stall detection** — Library sync has 8-hour total timeout and 5-minute stall detection that re-queues stuck tracks
 
 ### Changed
 
-- **Expanded playlist API responses** - All playlist-type APIs now return full track metadata
-  - Favorites API: `FavoriteTrackResponse` extends shared `TrackResponse` (adds format, year, genre, track/disc number, album_artist, album_type, analysis_version)
-  - Smart Playlists API: reuses shared `TrackResponse` instead of local limited type
-  - Playlists API: `TrackInPlaylist` expanded with full local track fields
-- **Track type extended for external tracks** - `Track` type and `TrackResponse` now include `track_type`, `preview_url`, `matched_track_id`, `external_data`, `source`, and `spotify_id` fields
-- **Player store handles external tracks natively** - `setQueue`, `refillFromReservoir`, and shuffle all attach `externalInfo` for tracks with `track_type === 'external'`
+- **Expanded playlist API responses** — All playlist-type APIs return full track metadata (format, year, genre, track/disc number, album_artist, album_type, analysis_version)
+- **Track type extended for external tracks** — `Track` type includes `track_type`, `preview_url`, `matched_track_id`, `external_data`, `source`, `spotify_id`
+- **Player store handles external tracks natively** — `setQueue`, `refillFromReservoir`, and shuffle attach `externalInfo` for external tracks
+- **Player hydration improved** — Two-phase restore: playback settings (volume, shuffle, repeat) restored instantly, queue fetched in background via batched parallel API calls (chunks of 50, up to 3 concurrent)
+- **Audio engine refactored** — Extracted `useAudioControls` hook (safe to call from multiple components) from `useAudioEngine` (singleton with event listeners)
+- **Album detail queries parallelized** — `get_album_detail` uses `asyncio.gather` for concurrent DB queries
+- **RainWindow visualizer rewritten** — Full rewrite from 2D Canvas to Three.js/GLSL two-pass FBO rendering with refraction, SSS, caustics, surface tension, and bead physics
 
 ### Fixed
 
-- **External tracks now playable in Favorites view** - External tracks could be favorited but not played; now mirrors PlaylistDetail's approach with `_externalInfo` metadata
+- **Spotify rate limiting** — Disabled spotipy's internal retry (was sleeping 11.5 hours on 429), added centralized 1 req/sec throttle, capped retry wait at 5 minutes, rate limit cooldown stored in Redis with UI countdown
+- **Spotify sync duplicate key error** — Deduplicate `matched_local_track_ids` (multiple Spotify tracks matching same local track)
+- **isLoadingAudio stuck after crossfade** — Changed element identity check to `data-track-id` comparison during crossfade transitions
+- **Album navigation from ArtistDetail** — Added `?source=artist` param to skip album_artist lookup; fallback to `navigateToAlbumDetail` when no parent callback
+- **BackgroundJobsIndicator popover clipped** — Render via `createPortal` to `document.body`
+- **Columns dropdown behind content** — Same `createPortal` fix for `ColumnSelector`
+- **Shuffle toggle for empty/single-track queues** — Edge case handling
+- **Music Map broken image placeholder** — Show Music icon instead of broken image; case-insensitive artist grouping
+- **Track names invisible on mobile** — Fixed in all playlist views
+- **Spotify settings card cramped on mobile** — Layout fix
+- **playPrevious not seeking audio** — Was only updating store state, now sets `element.currentTime = 0`
+- **Keyboard seek (j/l) using stale element** — Now uses `getCurrentElement()` from audio graph singleton
+- **shuffleIndex out-of-bounds** — Clamped at boundary in `advanceToNextTrack`
+- **External tracks playable in Favorites** — External tracks could be favorited but not played
 
 ## [0.1.0-alpha.9] - 2026-02-08
 
@@ -620,7 +669,8 @@ First alpha release of Familiar - an LLM-powered local music player.
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - MoodMap accuracy depends on proper key detection
 
-[Unreleased]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.9...HEAD
+[Unreleased]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.10...HEAD
+[0.1.0-alpha.10]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/seethroughlab/familiar/compare/v0.1.0-alpha.5...v0.1.0-alpha.7
