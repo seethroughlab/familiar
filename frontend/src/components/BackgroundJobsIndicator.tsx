@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, X, Music, Radio, Disc, Image } from 'lucide-react';
 import { useBackgroundJobsStore } from '../stores/backgroundJobsStore';
 import type { BackgroundJob } from '../api/client';
@@ -70,6 +71,7 @@ function JobProgressBar({ job }: { job: BackgroundJob }) {
 export function BackgroundJobsIndicator() {
   const { jobs, activeCount, startPolling, stopPolling } = useBackgroundJobsStore();
   const [showPopover, setShowPopover] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Start polling on mount
@@ -80,16 +82,34 @@ export function BackgroundJobsIndicator() {
 
   // Close popover when clicking outside
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
-        setShowPopover(false);
-      }
-    }
+    if (!showPopover) return;
 
-    if (showPopover) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        buttonRef.current?.contains(e.target as Node) ||
+        popoverRef.current?.contains(e.target as Node)
+      ) {
+        return;
+      }
+      setShowPopover(false);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPopover]);
+
+  // Compute popover position from button rect
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  useEffect(() => {
+    if (!showPopover || !buttonRef.current) {
+      setMenuPosition(null);
+      return;
     }
+    const rect = buttonRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 8,
+      right: window.innerWidth - rect.right,
+    });
   }, [showPopover]);
 
   // Don't render if no active jobs
@@ -97,44 +117,52 @@ export function BackgroundJobsIndicator() {
     return null;
   }
 
+  const popover = showPopover && menuPosition && createPortal(
+    <div
+      ref={popoverRef}
+      style={{ top: menuPosition.top, right: menuPosition.right }}
+      className="fixed w-80 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-[60]"
+    >
+      <div className="p-3 border-b border-zinc-700 flex items-center justify-between">
+        <h3 className="font-medium text-white flex items-center gap-2">
+          <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
+          Background Jobs
+        </h3>
+        <button
+          onClick={() => setShowPopover(false)}
+          className="p-1 hover:bg-zinc-700 rounded transition-colors"
+        >
+          <X className="w-4 h-4 text-zinc-400" />
+        </button>
+      </div>
+
+      <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+        {jobs.map((job) => (
+          <JobProgressBar key={job.type} job={job} />
+        ))}
+      </div>
+    </div>,
+    document.body
+  );
+
   return (
-    <div className="relative" ref={popoverRef}>
-      <button
-        onClick={() => setShowPopover(!showPopover)}
-        className="p-2 rounded-lg transition-colors text-blue-400 hover:text-blue-300 hover:bg-blue-900/30"
-        title={`${activeCount} background job${activeCount !== 1 ? 's' : ''} running`}
-      >
-        <Loader2 className="w-5 h-5 animate-spin" />
-        {activeCount > 1 && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
-            {activeCount}
-          </span>
-        )}
-      </button>
-
-      {/* Popover */}
-      {showPopover && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-[60]">
-          <div className="p-3 border-b border-zinc-700 flex items-center justify-between">
-            <h3 className="font-medium text-white flex items-center gap-2">
-              <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
-              Background Jobs
-            </h3>
-            <button
-              onClick={() => setShowPopover(false)}
-              className="p-1 hover:bg-zinc-700 rounded transition-colors"
-            >
-              <X className="w-4 h-4 text-zinc-400" />
-            </button>
-          </div>
-
-          <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
-            {jobs.map((job) => (
-              <JobProgressBar key={job.type} job={job} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    <>
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          onClick={() => setShowPopover(!showPopover)}
+          className="p-2 rounded-lg transition-colors text-blue-400 hover:text-blue-300 hover:bg-blue-900/30"
+          title={`${activeCount} background job${activeCount !== 1 ? 's' : ''} running`}
+        >
+          <Loader2 className="w-5 h-5 animate-spin" />
+          {activeCount > 1 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-xs rounded-full flex items-center justify-center">
+              {activeCount}
+            </span>
+          )}
+        </button>
+      </div>
+      {popover}
+    </>
   );
 }
