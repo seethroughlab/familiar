@@ -889,6 +889,11 @@ def _analyze_harmonic(
         entry.pop("_conf_count", None)
     key_mode_timeline = merged_timeline
 
+    # Snap overlapping windows: set each entry's end to the next entry's start
+    for i in range(len(key_mode_timeline) - 1):
+        if key_mode_timeline[i]["end"] > key_mode_timeline[i + 1]["start"]:
+            key_mode_timeline[i]["end"] = key_mode_timeline[i + 1]["start"]
+
     # Roman numeral analysis relative to detected key
     # Parse key root from best_mode (e.g., "D Ionian (Major)" -> D -> 2)
     key_root_name = best_mode.split()[0] if best_mode and best_mode != "Unknown" else None
@@ -1697,7 +1702,7 @@ def _analyze_structural(
             energy_diff = abs(rms_db - pf["rms_db"])
             mfcc_sim = float(np.dot(seg_mfcc_norm, pf["mfcc_norm"]))
 
-            if chroma_sim > 0.75 and energy_diff < 6.0 and mfcc_sim > 0.7:
+            if chroma_sim > 0.97 and energy_diff < 3.0 and mfcc_sim > 0.95:
                 section_labels.append(prev_label)
                 matched = True
                 break
