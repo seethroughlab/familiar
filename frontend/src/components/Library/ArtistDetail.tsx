@@ -17,7 +17,7 @@ import {
   Download,
   Check,
 } from 'lucide-react';
-import { libraryApi, tracksApi, playlistsApi } from '../../api/client';
+import { libraryApi, tracksApi, playlistsApi, downloadApi } from '../../api/client';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -33,6 +33,8 @@ import { getOfflineTrackIds, removeOfflineTrack } from '../../services/offlineSe
 import type { Track } from '../../types';
 import { DiscoveryPanel, useArtistDiscovery, type DiscoveryItem } from '../Discovery';
 
+import { showLoading, showError } from '../../stores/toastStore';
+import { toast } from 'sonner';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ArtistDetail');
@@ -829,9 +831,31 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
             }
           }}
           onClearSelection={() => setSelectedTrackIds(new Set())}
+          onDownloadSelectedTracks={async () => {
+            const ids = Array.from(selectedTrackIds);
+            if (ids.length === 0) return;
+            try {
+              await downloadApi.tracks(ids, `${ids.length} Selected Tracks`);
+            } catch {
+              showError('Failed to download tracks');
+            }
+          }}
+          onDownloadSelectedAnalyses={async () => {
+            const ids = Array.from(selectedTrackIds);
+            if (ids.length === 0) return;
+            const toastId = showLoading(`Preparing ${ids.length} analyses...`);
+            try {
+              await downloadApi.analysesZip(ids, `${ids.length} Track Analyses`, (done, total) => {
+                toast.loading(`Analyzing tracks... ${done}/${total}`, { id: toastId });
+              });
+              toast.success('Analyses downloaded!', { id: toastId });
+            } catch {
+              toast.error('Failed to download analyses', { id: toastId });
+            }
+          }}
           onAddToPlaylist={() => {
             // TODO: Open playlist picker modal
-            
+
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {

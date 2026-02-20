@@ -15,7 +15,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
-import { tracksApi } from '../../../api/client';
+import { tracksApi, downloadApi } from '../../../api/client';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useAudioSettingsStore } from '../../../stores/audioSettingsStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
@@ -36,6 +36,8 @@ import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
 import { isExternalTrack } from '../../../types';
 
+import { showLoading, showError } from '../../../stores/toastStore';
+import { toast } from 'sonner';
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('TrackListBrowser');
@@ -1816,6 +1818,28 @@ export function TrackListBrowser({
             if (selectedTracks.length > 0) {
               setQueue(selectedTracks, 0);
               onClearSelection();
+            }
+          }}
+          onDownloadSelectedTracks={async () => {
+            const ids = Array.from(selectedTrackIds);
+            if (ids.length === 0) return;
+            try {
+              await downloadApi.tracks(ids, `${ids.length} Selected Tracks`);
+            } catch {
+              showError('Failed to download tracks');
+            }
+          }}
+          onDownloadSelectedAnalyses={async () => {
+            const ids = Array.from(selectedTrackIds);
+            if (ids.length === 0) return;
+            const toastId = showLoading(`Preparing ${ids.length} analyses...`);
+            try {
+              await downloadApi.analysesZip(ids, `${ids.length} Track Analyses`, (done, total) => {
+                toast.loading(`Analyzing tracks... ${done}/${total}`, { id: toastId });
+              });
+              toast.success('Analyses downloaded!', { id: toastId });
+            } catch {
+              toast.error('Failed to download analyses', { id: toastId });
             }
           }}
           onClearSelection={onClearSelection}

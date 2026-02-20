@@ -56,6 +56,7 @@ class BackgroundManager:
 
     def __init__(self):
         self._executor: ProcessPoolExecutor | None = None
+        self._ondemand_executor: ProcessPoolExecutor | None = None
         self._scheduler = None
         self._redis: ResilientRedisClient | None = None
         self._current_sync_task: asyncio.Task | None = None
@@ -103,6 +104,26 @@ class BackgroundManager:
         if not self._atexit_registered:
             atexit.register(self._atexit_cleanup)
             self._atexit_registered = True
+
+    @property
+    def ondemand_executor(self) -> ProcessPoolExecutor:
+        """Lazy ProcessPoolExecutor for on-demand single-track analysis."""
+        if self._ondemand_executor is None:
+            self._create_ondemand_executor()
+        return self._ondemand_executor
+
+    def _create_ondemand_executor(self) -> None:
+        """Create a separate ProcessPoolExecutor for on-demand analysis.
+
+        This keeps on-demand requests from being blocked by bulk analysis
+        running on the main executor.
+        """
+        self._ondemand_executor = ProcessPoolExecutor(
+            max_workers=1,
+            mp_context=mp_context,
+            initializer=_analysis_worker_init,
+        )
+        logger.info("On-demand ProcessPoolExecutor initialized (1 worker, nice=10)")
 
     def _reset_executor(self) -> bool:
         """Reset the executor after a crash. Creates a fresh process pool.
@@ -216,11 +237,12 @@ class BackgroundManager:
 
     def _atexit_cleanup(self) -> None:
         """Last-resort cleanup when the process exits without proper shutdown."""
-        if self._executor is not None:
-            try:
-                self._executor.shutdown(wait=False, cancel_futures=True)
-            except Exception:
-                pass
+        for executor in (self._executor, self._ondemand_executor):
+            if executor is not None:
+                try:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                except Exception:
+                    pass
 
     def _check_worker_health(self) -> bool:
         """Return False if a task has been running longer than 10 minutes."""
@@ -367,9 +389,11 @@ class BackgroundManager:
         if self._scheduler:
             self._scheduler.shutdown(wait=False)
 
-        # Shutdown executor
+        # Shutdown executors
         if self._executor:
             self._executor.shutdown(wait=False)
+        if self._ondemand_executor:
+            self._ondemand_executor.shutdown(wait=False)
 
         logger.info("BackgroundManager shutdown complete")
 
@@ -605,6 +629,27 @@ class BackgroundManager:
                     raise
         raise last_error  # Should not reach here, but for type safety
 
+    async def run_cpu_bound_ondemand(self, func: Callable, *args: Any) -> Any:
+        """Run CPU-bound function in the on-demand process pool.
+
+        Simpler than run_cpu_bound: no circuit breaker, just BrokenProcessPool
+        recovery. Used for single-track on-demand analysis so it doesn't compete
+        with bulk analysis on the main executor.
+        """
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(self.ondemand_executor, func, *args)
+        except BrokenProcessPool:
+            logger.warning("On-demand executor crashed, recreating")
+            if self._ondemand_executor is not None:
+                try:
+                    self._ondemand_executor.shutdown(wait=False, cancel_futures=True)
+                except Exception:
+                    pass
+                self._ondemand_executor = None
+            # Retry once with fresh executor
+            return await loop.run_in_executor(self.ondemand_executor, func, *args)
+
     async def run_analysis(
         self,
         track_id: str,
@@ -823,6 +868,148 @@ class BackgroundManager:
         task = asyncio.create_task(_do_deep(track_id))
         self._analysis_tasks[task_key] = task
         return {"status": "queued", "task_key": task_key}
+
+    async def run_track_analysis_full(self, track_id: str) -> dict[str, Any]:
+        """Run the full analysis pipeline for a single track on-demand.
+
+        Checks which phases are missing (features, embedding, deep analysis)
+        and runs them sequentially using the on-demand executor so bulk
+        analysis on the main executor is not blocked.
+        """
+        import os
+
+        from app.services.tasks import run_track_embedding, run_track_features
+        from app.services.track_analysis import run_analysis
+
+        task_key = f"{track_id}:full_ondemand"
+
+        # Deduplicate
+        if task_key in self._analysis_tasks:
+            task = self._analysis_tasks[task_key]
+            if not task.done():
+                return {"status": "already_queued"}
+
+        async def _do_full_ondemand(tid: str) -> dict[str, Any]:
+            from uuid import UUID
+
+            from sqlalchemy import select
+            from sqlalchemy.ext.asyncio import (
+                AsyncSession,
+                async_sessionmaker,
+                create_async_engine,
+            )
+
+            from app.config import EMBEDDING_VERSION, FEATURES_VERSION
+            from app.db.models import TrackAnalysis
+
+            try:
+                # Check what phases are needed via async DB query
+                from app.config import settings as app_settings
+
+                engine = create_async_engine(app_settings.database_url)
+                async_session = async_sessionmaker(engine, class_=AsyncSession)
+
+                need_features = True
+                need_embedding = True
+
+                try:
+                    async with async_session() as db:
+                        analysis = (
+                            await db.execute(
+                                select(TrackAnalysis).where(
+                                    TrackAnalysis.track_id == UUID(tid)
+                                )
+                            )
+                        ).scalar_one_or_none()
+
+                        if analysis:
+                            need_features = (
+                                analysis.features_version is None
+                                or analysis.features_version < FEATURES_VERSION
+                            )
+                            need_embedding = (
+                                analysis.embedding_version is None
+                                or analysis.embedding_version < EMBEDDING_VERSION
+                            )
+                finally:
+                    await engine.dispose()
+
+                # Phase 1: Features (if needed)
+                if need_features:
+                    logger.info(f"On-demand full: running features for {tid}")
+                    result = await self.run_cpu_bound_ondemand(run_track_features, tid)
+                    if result.get("status") == "error":
+                        return result
+
+                # Phase 2: Embedding (if needed and CLAP enabled)
+                clap_disabled = os.environ.get("DISABLE_CLAP_EMBEDDINGS", "").lower() in (
+                    "1", "true", "yes"
+                )
+                if need_embedding and not clap_disabled:
+                    logger.info(f"On-demand full: running embedding for {tid}")
+                    await self.run_cpu_bound_ondemand(run_track_embedding, tid)
+
+                # Phase 3: Deep analysis + melodic (always — handles its own caching)
+                logger.info(f"On-demand full: running deep analysis for {tid}")
+                result = await self.run_cpu_bound_ondemand(run_analysis, tid)
+                return result
+
+            except Exception as e:
+                logger.error(f"On-demand full analysis failed for {tid}: {e}")
+                return {"status": "error", "error": str(e)}
+            finally:
+                self._analysis_tasks.pop(task_key, None)
+
+        task = asyncio.create_task(_do_full_ondemand(track_id))
+        self._analysis_tasks[task_key] = task
+        return {"status": "queued", "task_key": task_key}
+
+    async def run_analyses_for_download(
+        self,
+        task_id: str,
+        track_ids: list[str],
+    ) -> dict[str, Any]:
+        """Run analysis for multiple tracks using the on-demand executor.
+
+        Used when downloading analyses as ZIP — processes only tracks that
+        are missing analysis_detail. Progress tracked in Redis.
+        """
+        from app.services.tasks import run_track_embedding, run_track_features
+        from app.services.track_analysis import run_analysis
+
+        redis_key = f"familiar:download_analysis:{task_id}"
+        logger.info(f"Starting analyses for download {task_id}: {len(track_ids)} tracks")
+
+        progress: dict[str, Any] = {
+            "status": "processing",
+            "completed": 0,
+            "total": len(track_ids),
+            "needs_analysis": len(track_ids),
+            "errors": [],
+        }
+        self.redis.set(redis_key, json.dumps(progress), ex=3600)
+
+        for i, tid in enumerate(track_ids):
+            try:
+                # Run full pipeline: features → embedding → analysis
+                await self.run_cpu_bound_ondemand(run_track_features, tid)
+                await self.run_cpu_bound_ondemand(run_track_embedding, tid)
+                await self.run_cpu_bound_ondemand(run_analysis, tid)
+            except Exception as e:
+                logger.error(f"Analysis for download failed for {tid}: {e}")
+                progress["errors"].append({"track_id": tid, "error": str(e)})
+
+            progress["completed"] = i + 1
+            self.redis.set(redis_key, json.dumps(progress), ex=3600)
+
+        progress["status"] = "ready"
+        self.redis.set(redis_key, json.dumps(progress), ex=3600)
+
+        logger.info(
+            f"Analyses for download {task_id} completed: "
+            f"{progress['completed']}/{progress['total']}, {len(progress['errors'])} errors"
+        )
+        return {"status": "ready", "task_id": task_id}
 
     async def run_bulk_analysis(
         self,

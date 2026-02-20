@@ -20,6 +20,7 @@ import {
   ShoppingCart,
   ExternalLink,
   FileText,
+  Download,
 } from 'lucide-react';
 import type { Track } from '../../types';
 import { isExternalTrack } from '../../types';
@@ -48,6 +49,8 @@ interface TrackContextMenuProps {
   selectedCount?: number;
   onPlaySelected?: () => void;
   onAddSelectedToPlaylist?: () => void;
+  onDownloadSelectedTracks?: () => void;
+  onDownloadSelectedAnalyses?: () => void;
   onClearSelection?: () => void;
 }
 
@@ -71,6 +74,8 @@ export function TrackContextMenu({
   selectedCount = 0,
   onPlaySelected,
   onAddSelectedToPlaylist,
+  onDownloadSelectedTracks,
+  onDownloadSelectedAnalyses,
   onClearSelection,
 }: TrackContextMenuProps) {
   const { downloadAnalysis } = useAnalysis();
@@ -104,6 +109,20 @@ export function TrackContextMenu({
               icon={<ListPlus className="w-4 h-4" />}
               label={`Add ${selectedCount} to playlist...`}
               onClick={() => handleAction(onAddSelectedToPlaylist)}
+            />
+          )}
+          {onDownloadSelectedTracks && (
+            <MenuItem
+              icon={<Download className="w-4 h-4" />}
+              label={`Download ${selectedCount} tracks as ZIP`}
+              onClick={() => handleAction(onDownloadSelectedTracks)}
+            />
+          )}
+          {onDownloadSelectedAnalyses && (
+            <MenuItem
+              icon={<FileText className="w-4 h-4" />}
+              label={`Download ${selectedCount} analyses as ZIP`}
+              onClick={() => handleAction(onDownloadSelectedAnalyses)}
             />
           )}
           {onClearSelection && (
