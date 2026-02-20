@@ -77,25 +77,26 @@ export function SidebarPlaylistItem({
   }, [id, name, selectedIds, queryClient]);
 
   return (
-    <Link
-      to={to}
-      onContextMenu={onContextMenu}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-        isDragOver
-          ? 'ring-2 ring-green-500 bg-green-500/10'
-          : isActive
-            ? activeClass
-            : `${textClass} ${hoverClass}`
-      }`}
-    >
-      <ListMusic className="w-4 h-4 flex-shrink-0" />
-      <span className="truncate flex-1">{name}</span>
-      <span className={`text-xs ${countClass}`}>
-        {trackCount}
-      </span>
-    </Link>
+    <div onContextMenu={onContextMenu}>
+      <Link
+        to={to}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+          isDragOver
+            ? 'ring-2 ring-green-500 bg-green-500/10'
+            : isActive
+              ? activeClass
+              : `${textClass} ${hoverClass}`
+        }`}
+      >
+        <ListMusic className="w-4 h-4 flex-shrink-0" />
+        <span className="truncate flex-1">{name}</span>
+        <span className={`text-xs ${countClass}`}>
+          {trackCount}
+        </span>
+      </Link>
+    </div>
   );
 }

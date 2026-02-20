@@ -136,31 +136,31 @@ export function Sidebar() {
       <div className={`w-14 flex flex-col border-r ${bgClass} h-full`}>
         <div className="flex-1 py-2 space-y-0.5 overflow-y-auto">
           {LIBRARY_ITEMS.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onContextMenu={(e) => libraryMenu.open(item.path, e)}
-              className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
-                isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
-              }`}
-              title={item.label}
-            >
-              <item.icon className="w-5 h-5" />
-            </Link>
+            <div key={item.path} onContextMenu={(e) => libraryMenu.open(item.path, e)}>
+              <Link
+                to={item.path}
+                className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
+                  isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
+                }`}
+                title={item.label}
+              >
+                <item.icon className="w-5 h-5" />
+              </Link>
+            </div>
           ))}
           <div className={`mx-3 my-2 border-t ${dividerClass}`} />
           {COLLECTION_ITEMS.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onContextMenu={(e) => collectionMenu.open(item.path, e)}
-              className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
-                isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
-              }`}
-              title={`${item.label} (${counts[item.countKey]})`}
-            >
-              <item.icon className="w-5 h-5" />
-            </Link>
+            <div key={item.path} onContextMenu={(e) => collectionMenu.open(item.path, e)}>
+              <Link
+                to={item.path}
+                className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
+                  isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
+                }`}
+                title={`${item.label} (${counts[item.countKey]})`}
+              >
+                <item.icon className="w-5 h-5" />
+              </Link>
+            </div>
           ))}
         </div>
         <div className={`border-t p-1 space-y-0.5 ${dividerClass}`}>
@@ -209,17 +209,17 @@ export function Sidebar() {
         </div>
         <nav className="space-y-0.5 px-2 mt-1">
           {LIBRARY_ITEMS.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onContextMenu={(e) => libraryMenu.open(item.path, e)}
-              className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
-              }`}
-            >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{item.label}</span>
-            </Link>
+            <div key={item.path} onContextMenu={(e) => libraryMenu.open(item.path, e)}>
+              <Link
+                to={item.path}
+                className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                  isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
+                }`}
+              >
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            </div>
           ))}
         </nav>
 
@@ -231,22 +231,22 @@ export function Sidebar() {
         </div>
         <nav className="space-y-0.5 px-2 mt-1">
           {COLLECTION_ITEMS.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onContextMenu={(e) => collectionMenu.open(item.path, e)}
-              className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
-              }`}
-            >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate flex-1">{item.label}</span>
-              {counts[item.countKey] > 0 && (
-                <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                  {counts[item.countKey]}
-                </span>
-              )}
-            </Link>
+            <div key={item.path} onContextMenu={(e) => collectionMenu.open(item.path, e)}>
+              <Link
+                to={item.path}
+                className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                  isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
+                }`}
+              >
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <span className="truncate flex-1">{item.label}</span>
+                {counts[item.countKey] > 0 && (
+                  <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    {counts[item.countKey]}
+                  </span>
+                )}
+              </Link>
+            </div>
           ))}
         </nav>
 
@@ -261,22 +261,22 @@ export function Sidebar() {
             </div>
             <nav className="space-y-0.5 px-2 mt-1">
               {ephemeralPlaylists.map((pl) => (
-                <Link
-                  key={pl.id}
-                  to={`/ephemeral/${pl.id}`}
-                  onContextMenu={(e) => ephemeralMenu.open(pl.id, e)}
-                  className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors border border-dashed ${
-                    isEphemeralActive(pl.id)
-                      ? 'border-amber-500/30 bg-amber-900/20 text-amber-300'
-                      : `border-transparent ${textClass} ${hoverClass}`
-                  }`}
-                >
-                  <ListMusic className="w-4 h-4 flex-shrink-0 text-amber-400" />
-                  <span className="truncate flex-1">{pl.name}</span>
-                  <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                    {pl.tracks.length}
-                  </span>
-                </Link>
+                <div key={pl.id} onContextMenu={(e) => ephemeralMenu.open(pl.id, e)}>
+                  <Link
+                    to={`/ephemeral/${pl.id}`}
+                    className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors border border-dashed ${
+                      isEphemeralActive(pl.id)
+                        ? 'border-amber-500/30 bg-amber-900/20 text-amber-300'
+                        : `border-transparent ${textClass} ${hoverClass}`
+                    }`}
+                  >
+                    <ListMusic className="w-4 h-4 flex-shrink-0 text-amber-400" />
+                    <span className="truncate flex-1">{pl.name}</span>
+                    <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      {pl.tracks.length}
+                    </span>
+                  </Link>
+                </div>
               ))}
             </nav>
             <div className={`mx-4 my-3 border-t ${dividerClass}`} />
@@ -331,17 +331,17 @@ export function Sidebar() {
           <nav className="space-y-0.5 px-2 mt-1">
             {smartPlaylists && smartPlaylists.length > 0 ? (
               smartPlaylists.map((pl) => (
-                <Link
-                  key={pl.id}
-                  to={`/smart-playlists/${pl.id}`}
-                  onContextMenu={(e) => smartPlaylistMenu.open(pl, e)}
-                  className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                    isSmartPlaylistActive(pl.id) ? activeClass : `${textClass} ${hoverClass}`
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate flex-1">{pl.name}</span>
-                </Link>
+                <div key={pl.id} onContextMenu={(e) => smartPlaylistMenu.open(pl, e)}>
+                  <Link
+                    to={`/smart-playlists/${pl.id}`}
+                    className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                      isSmartPlaylistActive(pl.id) ? activeClass : `${textClass} ${hoverClass}`
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate flex-1">{pl.name}</span>
+                  </Link>
+                </div>
               ))
             ) : (
               <div className={`px-2 py-1.5 text-xs ${textClass}`}>
