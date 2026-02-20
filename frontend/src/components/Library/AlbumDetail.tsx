@@ -671,6 +671,31 @@ export function AlbumDetail({
               setSelectedTrackIds(newSet);
             }
           }}
+          onPlaySelected={() => {
+            if (!album) return;
+            const selectedTracks = album.tracks
+              .filter((t) => selectedTrackIds.has(t.id))
+              .map((t) => ({
+                id: t.id,
+                file_path: '',
+                title: t.title || 'Unknown',
+                artist: album.artist,
+                album: album.name,
+                album_artist: album.album_artist,
+                album_type: 'album' as const,
+                track_number: t.track_number,
+                disc_number: t.disc_number,
+                year: album.year,
+                genre: album.genre,
+                duration_seconds: t.duration_seconds,
+                format: null,
+                analysis_version: 0,
+              }));
+            if (selectedTracks.length > 0) {
+              setQueue(selectedTracks, 0);
+              setSelectedTrackIds(new Set());
+            }
+          }}
           onClearSelection={() => setSelectedTrackIds(new Set())}
           onDownloadSelectedTracks={async () => {
             const ids = Array.from(selectedTrackIds);
