@@ -171,6 +171,25 @@ async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md")
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
 
+    # If melodic analysis hasn't run yet, is stale, or outdated version, run on-demand
+    from app.config import MELODIC_VERSION
+    if (not analysis.has_melodic
+            or "melodic" not in (analysis.analysis_detail or {})
+            or (analysis.melodic_version or 0) < MELODIC_VERSION):
+        from app.services.track_analysis import run_analysis
+
+        bg = get_background_manager()
+        await bg.run_cpu_bound_ondemand(run_analysis, str(track_id))
+
+        # Re-fetch with updated melodic data (expire to bypass identity map cache)
+        await db.expire_all()
+        analysis = (
+            await db.execute(
+                select(TrackAnalysis)
+                .where(TrackAnalysis.track_id == track_id)
+            )
+        ).scalar_one_or_none()
+
     track_meta = {
         "artist": track.artist,
         "title": track.title,

@@ -85,7 +85,8 @@ class Settings(BaseSettings):
 #   v4: Improved valence with multi-feature approach
 #   v5: Re-extract (psutil fix enabled proper RAM detection)
 #   v6: Added loudness measurement (EBU R128 / ReplayGain)
-FEATURES_VERSION = 6
+#   v7: Tightened section labeling thresholds, fixed key timeline overlaps
+FEATURES_VERSION = 7
 
 # Embedding history:
 #   v2: First CLAP 512-dim embeddings
@@ -95,7 +96,8 @@ EMBEDDING_VERSION = 6
 
 # Melodic history:
 #   v5: basic-pitch MIDI transcription + melodic feature extraction
-MELODIC_VERSION = 5
+#   v6: Density phrase fallback, fixed-window register movement, no-unison intervals
+MELODIC_VERSION = 6
 
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}

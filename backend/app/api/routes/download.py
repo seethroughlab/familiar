@@ -296,9 +296,14 @@ async def download_analyses_zip(
     analyses = {a.track_id: a for a in analysis_result.scalars().all()}
 
     # Check which tracks need analysis
+    from app.config import MELODIC_VERSION
     needs_analysis = [
         str(t.id) for t in tracks
-        if t.id not in analyses or not analyses[t.id].analysis_detail
+        if t.id not in analyses
+        or not analyses[t.id].analysis_detail
+        or not analyses[t.id].has_melodic
+        or "melodic" not in (analyses[t.id].analysis_detail or {})
+        or (analyses[t.id].melodic_version or 0) < MELODIC_VERSION
     ]
 
     if not needs_analysis:

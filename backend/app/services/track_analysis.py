@@ -408,8 +408,10 @@ def run_analysis(track_id: str) -> dict[str, Any]:
             if not analysis:
                 return {"status": "error", "error": "No analysis row exists — run Phase 1 first"}
 
-            # Check cache: if analysis_detail exists and has melodic, return cached
-            if analysis.analysis_detail and analysis.has_melodic and "melodic" in analysis.analysis_detail:
+            # Check cache: if analysis_detail exists, has melodic, and version is current
+            if (analysis.analysis_detail and analysis.has_melodic
+                    and "melodic" in analysis.analysis_detail
+                    and (analysis.melodic_version or 0) >= MELODIC_VERSION):
                 return {"status": "cached", "track_id": track_id}
 
             # Load audio
@@ -425,8 +427,10 @@ def run_analysis(track_id: str) -> dict[str, Any]:
             shared = _precompute_shared(y, sr)
 
             need_cheap = analysis.analysis_detail is None
-            need_melodic = not analysis.has_melodic or (
-                analysis.analysis_detail is not None and "melodic" not in analysis.analysis_detail
+            need_melodic = (
+                not analysis.has_melodic
+                or (analysis.analysis_detail is not None and "melodic" not in analysis.analysis_detail)
+                or (analysis.melodic_version or 0) < MELODIC_VERSION
             )
 
             results = dict(analysis.analysis_detail) if analysis.analysis_detail else {}
@@ -934,10 +938,12 @@ def _analyze_harmonic(
 
 def _compute_interval_histogram(
     notes: list[dict],
-) -> tuple[dict[str, float], list[int], str, float, float]:
+) -> tuple[dict[str, float], list[int], str, float, float,
+           dict[str, float], str, float]:
     """Compute interval histogram, character, and avg size from a sorted note list.
 
-    Returns (histogram, raw_intervals, character, avg_size, unison_pct).
+    Returns (histogram, raw_intervals, character, avg_size, unison_pct,
+             histogram_no_unison, character_no_unison, avg_size_no_unison).
     """
     from collections import Counter
 
@@ -968,7 +974,31 @@ def _compute_interval_histogram(
     else:
         character = "mixed"
 
-    return histogram, intervals, character, round(avg_size, 2), unison_pct
+    # No-unison variant
+    non_unison = [iv for iv in intervals if iv != 0]
+    if non_unison:
+        nu_counts = Counter(non_unison)
+        total_nu = sum(nu_counts.values()) or 1
+        histogram_no_unison = {
+            str(iv): round(cnt / total_nu * 100, 1)
+            for iv, cnt in sorted(nu_counts.items())
+        }
+        abs_nu = [abs(iv) for iv in non_unison]
+        avg_size_nu = float(np.mean(abs_nu))
+        if avg_size_nu < 2.5:
+            character_nu = "stepwise-dominant"
+        elif avg_size_nu > 4.0:
+            character_nu = "leap-heavy"
+        else:
+            character_nu = "mixed"
+        avg_size_nu = round(avg_size_nu, 2)
+    else:
+        histogram_no_unison = {}
+        character_nu = character
+        avg_size_nu = round(avg_size, 2)
+
+    return (histogram, intervals, character, round(avg_size, 2), unison_pct,
+            histogram_no_unison, character_nu, avg_size_nu)
 
 
 def _analyze_melodic(
@@ -1040,9 +1070,9 @@ def _analyze_melodic(
     pitch_range["primary_high"] = _midi_to_note(p90)
 
     # Interval histogram (between consecutive notes)
-    interval_histogram, intervals, interval_character, avg_interval, unison_pct = (
-        _compute_interval_histogram(notes)
-    )
+    (interval_histogram, intervals, interval_character, avg_interval, unison_pct,
+     interval_histogram_no_unison, interval_character_no_unison,
+     avg_interval_no_unison) = _compute_interval_histogram(notes)
 
     from collections import Counter
 
@@ -1053,10 +1083,14 @@ def _analyze_melodic(
         reg_notes = [n for n in notes if lo <= n["pitch"] < hi]
         entry: dict[str, Any] = {"note_count": len(reg_notes)}
         if len(reg_notes) >= 10:
-            hist, _ivs, char, avg, _upct = _compute_interval_histogram(reg_notes)
+            (hist, _ivs, char, avg, _upct,
+             hist_nu, char_nu, avg_nu) = _compute_interval_histogram(reg_notes)
             entry["interval_histogram"] = hist
             entry["interval_character"] = char
             entry["avg_interval_size"] = avg
+            entry["interval_histogram_no_unison"] = hist_nu
+            entry["interval_character_no_unison"] = char_nu
+            entry["avg_interval_size_no_unison"] = avg_nu
         register_intervals[reg_name] = entry
 
     # Interval transition matrix
@@ -1122,6 +1156,75 @@ def _analyze_melodic(
     if current_phrase:
         phrases.append(current_phrase)
 
+    phrase_detection_method = "gap"
+
+    # Density-based fallback when gap detection yields too few phrases
+    if len(phrases) < 4 and len(notes) >= 20:
+        track_duration = notes[-1]["end"] - notes[0]["start"]
+        if track_duration > 0:
+            # Compute note onset density in 4-second sliding windows (0.5s hop)
+            window_size = 4.0
+            hop = 0.5
+            onsets = np.array([n["start"] for n in notes])
+            window_centers = np.arange(
+                onsets[0] + window_size / 2,
+                onsets[-1] - window_size / 2 + hop,
+                hop,
+            )
+            density = np.array([
+                float(np.sum((onsets >= t - window_size / 2) & (onsets < t + window_size / 2)))
+                / window_size
+                for t in window_centers
+            ])
+
+            if len(density) > 4:
+                # Smooth with moving-average kernel (~5% of curve length)
+                kernel_size = max(3, int(len(density) * 0.05)) | 1  # ensure odd
+                kernel = np.ones(kernel_size) / kernel_size
+                smoothed = np.convolve(density, kernel, mode="same")
+
+                # Find local minima (no scipy)
+                order = max(2, len(smoothed) // 20)
+                minima = [
+                    i for i in range(order, len(smoothed) - order)
+                    if all(smoothed[i] <= smoothed[i - j] for j in range(1, order + 1))
+                    and all(smoothed[i] <= smoothed[i + j] for j in range(1, order + 1))
+                ]
+
+                # If too many boundaries, keep only the deepest troughs
+                max_phrases = max(20, int(track_duration / 10))
+                if len(minima) > max_phrases:
+                    # Sort by depth (ascending density) and keep deepest
+                    minima.sort(key=lambda idx: smoothed[idx])
+                    minima = sorted(minima[:max_phrases])
+
+                if len(minima) >= 1:
+                    # Convert minima indices to times
+                    boundary_times = [float(window_centers[m]) for m in minima]
+
+                    # Re-segment notes at boundary times
+                    density_phrases: list[list[dict]] = []
+                    current: list[dict] = []
+                    b_idx = 0
+                    for n in notes:
+                        if b_idx < len(boundary_times) and n["start"] >= boundary_times[b_idx]:
+                            if current:
+                                density_phrases.append(current)
+                            current = [n]
+                            b_idx += 1
+                        else:
+                            current.append(n)
+                    if current:
+                        density_phrases.append(current)
+
+                    if len(density_phrases) >= 4:
+                        phrases = density_phrases
+                        phrase_detection_method = "density-fallback"
+
+    # Mark low confidence if still too few phrases
+    if len(phrases) < 4 and len(notes) >= 20:
+        phrase_detection_method = "low"
+
     # Contour: per-phrase classification using intervals (octave-jump resistant)
     contours = []
     for phrase in phrases[:50]:  # Limit
@@ -1180,18 +1283,25 @@ def _analyze_melodic(
     total_contours = sum(contour_counts.values()) or 1
     contour_summary = {k: round(v / total_contours * 100, 1) for k, v in contour_counts.items()}
 
-    # Register movement: linear trend of mean pitch per phrase
-    if len(phrases) >= 2:
-        phrase_means = [float(np.mean([n["pitch"] for n in p])) for p in phrases]
-        x = np.arange(len(phrase_means))
-        slope = float(np.polyfit(x, phrase_means, 1)[0])
-        if slope > 0.3:
-            register_trend = "rising"
-        elif slope < -0.3:
-            register_trend = "falling"
+    # Register movement: linear trend of mean pitch in fixed 30s windows
+    window_duration = 30.0
+    track_duration = notes[-1]["end"] - notes[0]["start"] if notes else 0
+
+    if track_duration >= 30 and len(notes) >= 20:
+        window_starts = np.arange(notes[0]["start"], notes[-1]["end"], window_duration)
+        window_means = []
+        for ws in window_starts:
+            window_notes = [n for n in notes if ws <= n["start"] < ws + window_duration]
+            if len(window_notes) >= 5:
+                window_means.append(float(np.mean([n["pitch"] for n in window_notes])))
+
+        if len(window_means) >= 2:
+            slope = float(np.polyfit(np.arange(len(window_means)), window_means, 1)[0])
+            register_trend = "rising" if slope > 0.3 else "falling" if slope < -0.3 else "stable"
+            register_slope = round(slope, 3)
         else:
-            register_trend = "stable"
-        register_slope = round(slope, 3)
+            register_trend = "insufficient data"
+            register_slope = 0.0
     else:
         register_trend = "insufficient data"
         register_slope = 0.0
@@ -1211,7 +1321,11 @@ def _analyze_melodic(
         "interval_character": interval_character,
         "avg_interval_size": round(avg_interval, 2),
         "unison_pct": unison_pct,
+        "interval_histogram_no_unison": interval_histogram_no_unison,
+        "interval_character_no_unison": interval_character_no_unison,
+        "avg_interval_size_no_unison": avg_interval_no_unison,
         "phrase_count": len(phrases),
+        "phrase_detection_method": phrase_detection_method,
         "avg_phrase_length_seconds": avg_phrase_length,
         "contour_summary": contour_summary,
         "dominant_contour": dominant_contour,
@@ -2250,16 +2364,12 @@ def generate_report(
         avg_iv = melodic.get("avg_interval_size", "?")
         upct = melodic.get("unison_pct", 0)
         if upct > 5:
-            # Show top non-unison intervals for context
-            ih = melodic.get("interval_histogram", {})
-            non_unison = {k: v for k, v in ih.items() if k != "0"}
-            top_non = sorted(non_unison.items(), key=lambda x: -x[1])[:3]
-            top_str = ", ".join(
-                f"{INTERVAL_NAMES.get(int(k), k)} ({v}%)" for k, v in top_non
-            )
+            ic_nu = melodic.get("interval_character_no_unison", ic)
+            avg_iv_nu = melodic.get("avg_interval_size_no_unison", avg_iv)
             lines.append(
                 f"- **Interval character:** {ic} (avg {avg_iv} semitones) — "
-                f"{upct}% repeated pitches; excluding unisons: {top_str}"
+                f"{upct}% repeated pitches; excluding unisons: {ic_nu} "
+                f"(avg {avg_iv_nu} semitones)"
             )
         else:
             lines.append(f"- **Interval character:** {ic} (avg {avg_iv} semitones)")
@@ -2458,6 +2568,26 @@ def generate_report(
             lines.append("</details>")
             lines.append("")
 
+        # No-unison interval histogram (when unison% is significant)
+        upct = melodic.get("unison_pct", 0)
+        ih_nu = melodic.get("interval_histogram_no_unison", {})
+        if upct > 5 and ih_nu:
+            lines.append("<details>")
+            lines.append("<summary>Interval histogram (excluding unisons)</summary>")
+            lines.append("")
+            lines.append(f"*{upct}% of intervals were unisons (repeated pitches) — "
+                         f"this table shows the distribution of the remaining intervals.*")
+            lines.append("")
+            lines.append("| Interval (semitones) | Name | Frequency |")
+            lines.append("|---------------------|------|-----------|")
+            for iv_str, pct in sorted(ih_nu.items(), key=lambda x: -x[1]):
+                iv = int(iv_str)
+                name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
+                lines.append(f"| {iv:+d} | {name} | {pct}% |")
+            lines.append("")
+            lines.append("</details>")
+            lines.append("")
+
         # Per-register interval histograms
         ri = melodic.get("register_intervals", {})
         has_register_data = any(
@@ -2482,6 +2612,21 @@ def generate_report(
                     name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
                     lines.append(f"| {iv:+d} | {name} | {pct}% |")
                 lines.append("")
+
+                # No-unison variant for this register
+                reg_hist_nu = reg.get("interval_histogram_no_unison", {})
+                if reg_hist_nu and "0" in reg_hist and float(reg_hist.get("0", 0)) > 5:
+                    lines.append(f"*Excluding unisons ({reg.get('interval_character_no_unison', '?')}, "
+                                 f"avg {reg.get('avg_interval_size_no_unison', '?')}st):*")
+                    lines.append("")
+                    lines.append("| Interval | Name | Frequency |")
+                    lines.append("|----------|------|-----------|")
+                    for iv_str, pct in sorted(reg_hist_nu.items(), key=lambda x: -x[1]):
+                        iv = int(iv_str)
+                        name = INTERVAL_NAMES.get(iv, f"{iv:+d}")
+                        lines.append(f"| {iv:+d} | {name} | {pct}% |")
+                    lines.append("")
+
             lines.append("</details>")
             lines.append("")
 
