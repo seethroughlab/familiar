@@ -5,13 +5,13 @@
  * Right-click context menus on playlist items, collection items, and library items.
  */
 import { useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
   Heart, Download, Gift,
   Settings, PanelLeftClose, PanelLeft,
-  ListMusic, Clock, ChevronDown, ChevronUp,
+  ListMusic, Clock, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -49,6 +49,7 @@ const COLLECTION_ITEMS = [
 
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed);
@@ -66,7 +67,7 @@ export function Sidebar() {
   const libraryMenu = useContextMenu<string>(); // stores library item path
 
   // Playlist edit modal
-  const [editModal, setEditModal] = useState<{ id: string; name: string; description: string } | null>(null);
+  const [editModal, setEditModal] = useState<{ id?: string; name: string; description: string } | null>(null);
 
   // Collection counts
   const { total: favoritesCount } = useFavorites();
@@ -89,11 +90,8 @@ export function Sidebar() {
 
   // Playlists
   const { data: playlists } = useQuery({
-    queryKey: ['playlists', 'ai'],
-    queryFn: async () => {
-      const data = await playlistsApi.list(true);
-      return data.filter((p: Playlist) => p.is_auto_generated);
-    },
+    queryKey: ['playlists'],
+    queryFn: () => playlistsApi.list(true),
     retry: isOffline ? false : 3,
   });
 
@@ -284,13 +282,22 @@ export function Sidebar() {
         )}
 
         {/* Playlists section */}
-        <button
-          onClick={() => setPlaylistsExpanded(!playlistsExpanded)}
-          className={`w-full flex items-center justify-between px-4 py-1 text-xs font-semibold uppercase tracking-wider ${sectionClass} ${hoverClass} rounded`}
-        >
-          <span>Playlists</span>
-          {playlistsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
+        <div className="flex items-center px-4 py-1">
+          <button
+            onClick={() => setPlaylistsExpanded(!playlistsExpanded)}
+            className={`flex items-center gap-1 flex-1 text-xs font-semibold uppercase tracking-wider ${sectionClass} ${hoverClass} rounded py-0.5`}
+          >
+            <span>Playlists</span>
+            {playlistsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          <button
+            onClick={() => setEditModal({ name: '', description: '' })}
+            className={`p-0.5 rounded ${sectionClass} ${hoverClass}`}
+            title="Create playlist"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
         {playlistsExpanded && (
           <nav className="space-y-0.5 px-2 mt-1">
             {playlists && playlists.length > 0 ? (
@@ -421,6 +428,7 @@ export function Sidebar() {
           initialDescription={editModal.description}
           isOpen={true}
           onClose={() => setEditModal(null)}
+          onCreated={(id) => navigate(`/playlists/${id}`)}
         />
       )}
     </div>

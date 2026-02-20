@@ -1,5 +1,6 @@
 /**
  * Quick-edit modal for renaming a playlist + editing description.
+ * Also supports create mode when playlistId is omitted.
  */
 import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
@@ -8,14 +9,16 @@ import { playlistsApi } from '../../api/client';
 import { showSuccess, showError } from '../../stores/toastStore';
 
 interface Props {
-  playlistId: string;
-  initialName: string;
-  initialDescription: string;
+  playlistId?: string;
+  initialName?: string;
+  initialDescription?: string;
   isOpen: boolean;
   onClose: () => void;
+  onCreated?: (id: string) => void;
 }
 
-export function PlaylistEditModal({ playlistId, initialName, initialDescription, isOpen, onClose }: Props) {
+export function PlaylistEditModal({ playlistId, initialName = '', initialDescription = '', isOpen, onClose, onCreated }: Props) {
+  const isCreateMode = !playlistId;
   const [name, setName] = useState(initialName);
   const [description, setDescription] = useState(initialDescription);
   const [saving, setSaving] = useState(false);
@@ -36,13 +39,20 @@ export function PlaylistEditModal({ playlistId, initialName, initialDescription,
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await playlistsApi.update(playlistId, { name: name.trim(), description: description.trim() || undefined });
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
-      showSuccess('Playlist updated');
+      if (isCreateMode) {
+        const created = await playlistsApi.create({ name: name.trim(), description: description.trim() || undefined, track_ids: [] });
+        queryClient.invalidateQueries({ queryKey: ['playlists'] });
+        showSuccess('Playlist created');
+        onCreated?.(created.id);
+      } else {
+        await playlistsApi.update(playlistId, { name: name.trim(), description: description.trim() || undefined });
+        queryClient.invalidateQueries({ queryKey: ['playlists'] });
+        queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
+        showSuccess('Playlist updated');
+      }
       onClose();
     } catch {
-      showError('Failed to update playlist');
+      showError(isCreateMode ? 'Failed to create playlist' : 'Failed to update playlist');
     } finally {
       setSaving(false);
     }
@@ -65,7 +75,7 @@ export function PlaylistEditModal({ playlistId, initialName, initialDescription,
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-white">Edit Playlist</h3>
+          <h3 className="text-sm font-medium text-white">{isCreateMode ? 'New Playlist' : 'Edit Playlist'}</h3>
           <button onClick={onClose} className="text-zinc-400 hover:text-white">
             <X className="w-4 h-4" />
           </button>
@@ -106,7 +116,7 @@ export function PlaylistEditModal({ playlistId, initialName, initialDescription,
             disabled={saving || !name.trim()}
             className="px-3 py-1.5 text-sm bg-zinc-600 hover:bg-zinc-500 text-white rounded disabled:opacity-50 transition-colors"
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? (isCreateMode ? 'Creating...' : 'Saving...') : (isCreateMode ? 'Create' : 'Save')}
           </button>
         </div>
       </div>
