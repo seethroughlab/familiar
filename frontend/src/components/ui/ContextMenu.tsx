@@ -8,6 +8,7 @@
  * MenuHeader — info header block (title + subtitle).
  */
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ContextMenuContainerProps {
   position: { x: number; y: number };
@@ -68,23 +69,25 @@ export function ContextMenuContainer({
         }
 
         if (rect.bottom > viewportHeight) {
-          menuRef.current.style.top = `${position.y - rect.height}px`;
+          const newTop = Math.max(16, position.y - rect.height);
+          menuRef.current.style.top = `${newTop}px`;
         }
       }
     }
   }, [position]);
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[200px] py-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl"
+      className="fixed z-50 min-w-[200px] max-h-[calc(100vh-32px)] overflow-y-auto py-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl"
       style={{
         left: position.x,
         top: position.y,
       }}
     >
       {children}
-    </div>
+    </div>,
+    document.body
   );
 }
 
