@@ -205,7 +205,7 @@ async def insert_test_analysis(
     track_id: UUID,
     features: dict | None = None,
     *,
-    version: int = 1,
+    features_version: int = 1,
 ) -> TrackAnalysis:
     """Insert a TrackAnalysis row for a track.
 
@@ -213,7 +213,7 @@ async def insert_test_analysis(
     """
     analysis = TrackAnalysis(
         track_id=track_id,
-        version=version,
+        features_version=features_version,
     )
     if features:
         for col_name, value in features.items():

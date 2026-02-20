@@ -250,22 +250,22 @@ class TestAggregation:
         track1 = MagicMock()
         track1.id = uuid4()
         track1.artist = "Test Artist"
-        track1.analyses = [MagicMock(version=1, embedding=list(np.ones(512)))]
+        track1.analyses = [MagicMock(features_version=1, embedding=list(np.ones(512)))]
 
         track2 = MagicMock()
         track2.id = uuid4()
         track2.artist = "Test Artist"
-        track2.analyses = [MagicMock(version=1, embedding=list(np.ones(512) * 2))]
+        track2.analyses = [MagicMock(features_version=1, embedding=list(np.ones(512) * 2))]
 
         track3 = MagicMock()
         track3.id = uuid4()
         track3.artist = "Other Artist"
-        track3.analyses = [MagicMock(version=1, embedding=list(np.zeros(512)))]
+        track3.analyses = [MagicMock(features_version=1, embedding=list(np.zeros(512)))]
 
         mock_db.execute.return_value = MagicMock()
         mock_db.execute.return_value.scalars.return_value.all.return_value = [track1, track2, track3]
 
-        with patch("app.config.ANALYSIS_VERSION", 1):
+        with patch("app.config.FEATURES_VERSION", 1):
             result = await service._aggregate_by_artist(mock_db)
 
         assert "Test Artist" in result
@@ -280,11 +280,11 @@ class TestAggregation:
         """Should skip tracks without embeddings."""
         track1 = MagicMock()
         track1.artist = "Artist With Embedding"
-        track1.analyses = [MagicMock(version=1, embedding=list(np.ones(512)))]
+        track1.analyses = [MagicMock(features_version=1, embedding=list(np.ones(512)))]
 
         track2 = MagicMock()
         track2.artist = "Artist Without Embedding"
-        track2.analyses = [MagicMock(version=1, embedding=None)]
+        track2.analyses = [MagicMock(features_version=1, embedding=None)]
 
         track3 = MagicMock()
         track3.artist = "Artist No Analysis"
@@ -293,7 +293,7 @@ class TestAggregation:
         mock_db.execute.return_value = MagicMock()
         mock_db.execute.return_value.scalars.return_value.all.return_value = [track1, track2, track3]
 
-        with patch("app.config.ANALYSIS_VERSION", 1):
+        with patch("app.config.FEATURES_VERSION", 1):
             result = await service._aggregate_by_artist(mock_db)
 
         assert "Artist With Embedding" in result

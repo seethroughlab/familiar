@@ -1058,17 +1058,22 @@ class TestLibraryExportBuildTrackExport:
         track.user_overrides = None
 
         analysis = MagicMock()
-        analysis.version = 5
+        analysis.features_version = 5
         analysis.to_features_dict.return_value = {"bpm": 120}
+        analysis.analysis_detail = None
+        analysis.has_melodic = False
+        analysis.melodic_version = 0
         analysis.embedding = None
         analysis.acoustid = "fingerprint_data_abc"
         analysis.acoustid_lookup = {"recording_id": "mb123"}
 
         result = service._build_track_export(track, analysis, include_embeddings=True, include_acoustid=True)
 
-        assert result["analysis"]["version"] == 5
+        assert result["analysis"]["features_version"] == 5
         assert result["analysis"]["features"] == {"bpm": 120}
         assert result["analysis"]["acoustid"] == "fingerprint_data_abc"
+        assert "analysis_detail" not in result["analysis"]
+        assert "has_melodic" not in result["analysis"]
 
     def test_with_embedding(self, service):
         """Should include embedding when requested."""
@@ -1093,8 +1098,11 @@ class TestLibraryExportBuildTrackExport:
         track.user_overrides = None
 
         analysis = MagicMock()
-        analysis.version = 5
+        analysis.features_version = 5
         analysis.to_features_dict.return_value = {}
+        analysis.analysis_detail = None
+        analysis.has_melodic = False
+        analysis.melodic_version = 0
         analysis.embedding = MagicMock()
         analysis.embedding.tolist.return_value = [0.1, 0.2, 0.3]
         analysis.acoustid = None
@@ -1103,6 +1111,53 @@ class TestLibraryExportBuildTrackExport:
         result = service._build_track_export(track, analysis, include_embeddings=True, include_acoustid=False)
 
         assert result["analysis"]["embedding"] == [0.1, 0.2, 0.3]
+
+    def test_with_analysis_detail(self, service):
+        """Should include analysis_detail and melodic metadata when available."""
+        track = MagicMock(spec=Track)
+        track.file_hash = None
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = None
+        track.track_number = None
+        track.disc_number = None
+        track.year = None
+        track.genre = None
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        melodic_detail = {
+            "melodic": {
+                "note_density": 3.5,
+                "interval_histogram": {"m2": 0.3, "M2": 0.2},
+                "contour": "ascending",
+            },
+            "harmonic": {"key": "C major", "chord_complexity": 0.6},
+        }
+
+        analysis = MagicMock()
+        analysis.features_version = 5
+        analysis.to_features_dict.return_value = {"bpm": 120}
+        analysis.analysis_detail = melodic_detail
+        analysis.has_melodic = True
+        analysis.melodic_version = 2
+        analysis.embedding = None
+        analysis.acoustid = None
+        analysis.acoustid_lookup = None
+
+        result = service._build_track_export(track, analysis, include_embeddings=False, include_acoustid=False)
+
+        assert result["analysis"]["analysis_detail"] == melodic_detail
+        assert result["analysis"]["has_melodic"] is True
+        assert result["analysis"]["melodic_version"] == 2
 
 
 class TestLibraryImportBuildLocalIndexes:
