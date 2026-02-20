@@ -23,6 +23,7 @@ import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver'
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlbumContextMenu } from '../AlbumContextMenu';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
+import { useUIStore } from '../../../stores/uiStore';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useDownloadStore, getAlbumJobId } from '../../../stores/downloadStore';
 import { getOfflineTrackIds, removeOfflineTrack } from '../../../services/offlineService';
@@ -527,14 +528,22 @@ export function AlbumGrid({
           hasDownloadedTracks={(() => {
             return offlineTrackIds.size > 0;
           })()}
-          onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
+          onAddToPlaylist={async () => {
+            if (albumContextMenu.album) {
+              const album = albumContextMenu.album;
+              const albumData = await queryClient.fetchQuery({
+                queryKey: ['album', album.artist, album.name],
+                queryFn: () => libraryApi.getAlbum(album.artist, album.name),
+              });
+              const trackIds = albumData.tracks.map((t) => t.id);
+              useUIStore.getState().openPlaylistPicker(trackIds);
+            }
           }}
           onMakePlaylist={() => {
             if (albumContextMenu.album) {
               const album = albumContextMenu.album;
               const message = `Make me a playlist based on the album "${album.name}" by ${album.artist}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
         />

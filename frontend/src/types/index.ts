@@ -45,38 +45,6 @@ export interface TrackFeatures {
   replaygain_track_gain: number | null;
 }
 
-// External/Missing tracks (tracks user wants but doesn't have locally)
-export type ExternalTrackSource =
-  | 'spotify_playlist'
-  | 'spotify_favorite'
-  | 'playlist_import'
-  | 'llm_recommendation'
-  | 'manual';
-
-export interface ExternalTrack {
-  id: string;
-  title: string;
-  artist: string;
-  album: string | null;
-  duration_seconds: number | null;
-  track_number: number | null;
-  year: number | null;
-  source: ExternalTrackSource;
-  external_data: Record<string, unknown>;
-
-  // Matching status
-  is_matched: boolean;
-  matched_track_id: string | null;
-  matched_at: string | null;
-  match_confidence: number | null;
-  match_method: string | null;
-
-  // External IDs
-  spotify_id: string | null;
-  isrc: string | null;
-
-  created_at: string;
-}
 
 // Playlist track - can be local or external
 export interface PlaylistTrackItem {

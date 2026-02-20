@@ -17,6 +17,7 @@ import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import type { Track } from '../../types';
+import { useUIStore } from '../../stores/uiStore';
 
 interface Props {
   playlist?: EphemeralPlaylist;
@@ -397,12 +398,16 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
             }
           }}
           onToggleSelect={() => {}}
-          onAddToPlaylist={() => {}}
+          onAddToPlaylist={() => {
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
+          }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {

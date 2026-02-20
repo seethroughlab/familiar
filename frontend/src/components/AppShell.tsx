@@ -29,6 +29,7 @@ import { OfflineIndicator } from './PWA/OfflineIndicator';
 import { ShortcutsHelp } from './KeyboardShortcuts';
 import { TrackEditModal } from './TrackEdit';
 import { MobileBottomNav } from './MobileNav';
+import { PlaylistPickerModal } from './Playlists/PlaylistPickerModal';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('AppShell');
@@ -141,22 +142,8 @@ export function AppShell() {
     return () => window.removeEventListener('show-ephemeral-playlist', handler);
   }, [navigate]);
 
-  // Listen for trigger-chat event from context menus
-  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.message) {
-        setPendingChatMessage(detail.message);
-        // Open chat panel
-        if (rightPanel !== 'chat') {
-          toggleRightPanel('chat');
-        }
-      }
-    };
-    window.addEventListener('trigger-chat', handler);
-    return () => window.removeEventListener('trigger-chat', handler);
-  }, [rightPanel, toggleRightPanel]);
+  const pendingChatMessage = useUIStore((s) => s.pendingChatMessage);
+  const playlistPickerTrackIds = useUIStore((s) => s.playlistPickerTrackIds);
 
   // Hydrate player state from IndexedDB
   const hydrate = usePlayerStore((state) => state.hydrate);
@@ -229,7 +216,7 @@ export function AppShell() {
                   {rightPanel === 'chat' && (
                     <ChatPanel
                       pendingMessage={pendingChatMessage}
-                      onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                      onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
                     />
                   )}
                 </Suspense>
@@ -297,7 +284,7 @@ export function AppShell() {
               <Suspense fallback={<LazyLoadSpinner />}>
                 <ChatPanel
                   pendingMessage={pendingChatMessage}
-                  onPendingMessageConsumed={() => setPendingChatMessage(null)}
+                  onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
                   onClose={closeRightPanel}
                 />
               </Suspense>
@@ -336,6 +323,9 @@ export function AppShell() {
 
         {/* Track edit modal */}
         {editingTrackId && <TrackEditModal />}
+
+        {/* Playlist picker modal */}
+        {playlistPickerTrackIds && <PlaylistPickerModal trackIds={playlistPickerTrackIds} />}
 
         {/* Import modal */}
         {importFiles && (

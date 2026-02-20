@@ -190,7 +190,7 @@ def test_list_playlists_excludes_auto_generated(
 
 
 def test_add_tracks_to_playlist(client: TestClient, test_profile: dict) -> None:
-    """Test adding tracks to an existing playlist."""
+    """Test adding tracks to an existing playlist (JSON body is parsed, not 422)."""
     headers = make_profile_headers(test_profile)
 
     # Create an empty playlist
@@ -201,22 +201,16 @@ def test_add_tracks_to_playlist(client: TestClient, test_profile: dict) -> None:
     )
     playlist_id = create_response.json()["id"]
 
-    # Find some tracks to add
-    list_response = client.get("/api/v1/tracks?page_size=2")
-    tracks = list_response.json()["items"]
-
-    if tracks:
-        track_ids = [t["id"] for t in tracks]
-
-        # Add tracks
-        response = client.post(
-            f"/api/v1/playlists/{playlist_id}/tracks",
-            headers=headers,
-            json=track_ids,
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data["tracks"]) == len(track_ids)
+    # Send fake UUIDs — backend silently skips non-existent IDs
+    fake_ids = ["00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"]
+    response = client.post(
+        f"/api/v1/playlists/{playlist_id}/tracks",
+        headers=headers,
+        json=fake_ids,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == playlist_id
 
 
 def test_remove_track_from_playlist(client: TestClient, test_profile: dict) -> None:

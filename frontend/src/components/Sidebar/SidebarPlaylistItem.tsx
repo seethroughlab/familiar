@@ -71,7 +71,8 @@ export function SidebarPlaylistItem({
       queryClient.invalidateQueries({ queryKey: ['playlist', id] });
       const countLabel = trackIds.length === 1 ? '1 track' : `${trackIds.length} tracks`;
       showSuccess(`Added ${countLabel} to "${name}"`);
-    } catch {
+    } catch (err) {
+      console.error(`Failed to add tracks to playlist "${name}":`, err);
       showError(`Failed to add to "${name}"`);
     }
   }, [id, name, selectedIds, queryClient]);

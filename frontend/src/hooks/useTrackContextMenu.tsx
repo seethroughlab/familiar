@@ -6,6 +6,7 @@ import { useFavorites } from './useFavorites';
 import { TrackContextMenu } from '../components/Library/TrackContextMenu';
 import type { ContextMenuState } from '../components/Library/types';
 import { initialContextMenuState } from '../components/Library/types';
+import { useUIStore } from '../stores/uiStore';
 import type { Track } from '../types';
 
 interface UseTrackContextMenuOptions {
@@ -117,12 +118,12 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
           options.onToggleSelect?.(track);
         }}
         onAddToPlaylist={() => {
-          // TODO: Open playlist picker modal
+          useUIStore.getState().openPlaylistPicker([track.id]);
         }}
         onMakePlaylist={() => {
           const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
           options.beforeNavigate?.();
-          window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+          useUIStore.getState().triggerChat(message);
         }}
         onEditMetadata={() => {
           if (options.onEditMetadata) {

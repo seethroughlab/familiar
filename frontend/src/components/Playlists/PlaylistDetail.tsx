@@ -23,6 +23,7 @@ import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
 import { getColumnDef } from '../Library/columnDefinitions';
 import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
 import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
+import { useUIStore } from '../../stores/uiStore';
 import type { Track } from '../../types';
 import type { PlaylistDetail as PlaylistDetailType, PlaylistTrack as PlaylistTrackType } from '../../api';
 
@@ -1051,14 +1052,15 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
             // Not applicable in playlists
           }}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
-            
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {

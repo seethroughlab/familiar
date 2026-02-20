@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import delete
 
-from app.api.routes.library import get_artist_detail
+from app.api.routes.library_artists import get_artist_detail
 from app.db.models import ArtistInfo
 from tests.factories import insert_test_track
 

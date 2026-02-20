@@ -11,6 +11,7 @@ import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useUIStore } from '../../stores/uiStore';
 
 interface PlayerBarProps {
   onExpandClick?: () => void;
@@ -461,13 +462,15 @@ export function PlayerBar({
             // Not applicable in player bar
           }}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {

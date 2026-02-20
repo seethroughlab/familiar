@@ -22,6 +22,7 @@ import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/Playl
 import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
 import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api';
+import { useUIStore } from '../../stores/uiStore';
 
 type FavoriteItem =
   | (FavoriteTrack & { _kind: 'local' })
@@ -707,14 +708,15 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
             // Not applicable in favorites
           }}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
-
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {

@@ -14,7 +14,7 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } fr
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
+import { Play, Download, Check, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import { tracksApi, downloadApi } from '../../../api';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useAudioSettingsStore } from '../../../stores/audioSettingsStore';
@@ -23,10 +23,12 @@ import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
 import { useFavorites } from '../../../hooks/useFavorites';
 import { useArtworkPrefetchBatch } from '../../../hooks/useArtworkPrefetch';
+import { useUIStore } from '../../../stores/uiStore';
 import { useLongPress } from '../../../hooks/useLongPress';
 import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
 import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns, COLUMN_MAP } from '../columnDefinitions';
-import { useOfflineTrack } from '../../../hooks/useOfflineTrack';
+import { OfflineButton } from './trackList/OfflineButton';
+import { FavoriteButton } from './trackList/FavoriteButton';
 import { useOfflineAlbum } from '../../../hooks/useOfflineAlbum';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver'; // Still used for mobile view
 import { registerBrowser, type BrowserProps, type ContextMenuState, initialContextMenuState } from '../types';
@@ -58,80 +60,6 @@ registerBrowser(
   },
   TrackListBrowser
 );
-
-function OfflineButton({ trackId }: { trackId: string }) {
-  const { isOffline, isDownloading, downloadProgress, download, remove } = useOfflineTrack(trackId);
-
-  if (isDownloading) {
-    return (
-      <div
-        className="relative p-1 text-purple-400"
-        title={`Downloading... ${downloadProgress}%`}
-      >
-        <Loader2 className="w-4 h-4 animate-spin" />
-        {downloadProgress > 0 && downloadProgress < 100 && (
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[8px] font-medium">
-            {downloadProgress}%
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (isOffline) {
-    return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          remove();
-        }}
-        className="p-1 text-green-500 hover:text-red-400 transition-colors"
-        title="Remove offline copy"
-      >
-        <Check className="w-4 h-4" />
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        download();
-      }}
-      className="p-1 text-zinc-500 hover:text-white transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      title="Download for offline"
-    >
-      <Download className="w-4 h-4" />
-    </button>
-  );
-}
-
-function FavoriteButton({ trackId, isExternal = false }: { trackId: string; isExternal?: boolean }) {
-  const { isFavorite, toggle, isExternalFavorite, toggleExternal } = useFavorites();
-  const favorited = isExternal ? isExternalFavorite(trackId) : isFavorite(trackId);
-
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        if (isExternal) {
-          toggleExternal(trackId);
-        } else {
-          toggle(trackId);
-        }
-      }}
-      className={`p-1 transition-colors ${
-        favorited
-          ? 'text-pink-500 hover:text-pink-400'
-          : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-      }`}
-      title={favorited ? 'Remove from favorites' : 'Add to favorites'}
-    >
-      <Heart className="w-4 h-4" fill={favorited ? 'currentColor' : 'none'} />
-    </button>
-  );
-}
 
 function ExternalLinkButton({ track }: { track: Track }) {
   const spotifyUrl = track.spotify_id
@@ -1789,14 +1717,15 @@ export function TrackListBrowser({
             }
           }}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
-
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {

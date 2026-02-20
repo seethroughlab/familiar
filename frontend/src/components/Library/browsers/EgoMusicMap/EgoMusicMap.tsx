@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { libraryApi, tracksApi, type EgoMapArtist } from '../../../../api';
 import { registerBrowser, type BrowserProps } from '../../types';
 import { ArtistPicker } from './ArtistPicker';
+import { useUIStore } from '../../../../stores/uiStore';
 
 // Register this browser
 registerBrowser(
@@ -620,8 +621,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
     const artistList = Array.from(selectedArtists).join(', ');
     const message = `Create a playlist from these artists: ${artistList}`;
 
-    // Dispatch trigger-chat event to send to chat panel
-    window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+    useUIStore.getState().triggerChat(message);
 
     // Clear selection after creating
     setSelectedArtists(new Set());

@@ -7,7 +7,6 @@ import {
   Loader2,
   Music,
   Clock,
-  Heart,
   Download,
   Check,
 } from 'lucide-react';
@@ -16,123 +15,21 @@ import { PlayIndicator } from '../common/PlayIndicator';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { useFavorites } from '../../hooks/useFavorites';
-import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
+import { OfflineButton } from './browsers/trackList/OfflineButton';
+import { FavoriteButton } from './browsers/trackList/FavoriteButton';
 import { useOfflineAlbum } from '../../hooks/useOfflineAlbum';
 import { TrackContextMenu } from './TrackContextMenu';
 import type { ContextMenuState } from './types';
 import { initialContextMenuState } from './types';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useAlbumDiscovery, type DiscoveryItem } from '../Discovery';
+import { useUIStore } from '../../stores/uiStore';
 
 import { showLoading, showError } from '../../stores/toastStore';
 import { toast } from 'sonner';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('AlbumDetail');
-
-function OfflineButton({ trackId, isOffline: isOfflineProp, onStatusChange }: {
-  trackId: string;
-  isOffline: boolean;
-  onStatusChange: () => void;
-}) {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
-
-  const handleDownload = useCallback(async () => {
-    if (isOfflineProp || isDownloading) return;
-    setIsDownloading(true);
-    setDownloadProgress(0);
-    try {
-      const { downloadTrackForOffline } = await import('../../services/offlineService');
-      await downloadTrackForOffline(trackId, (progress) => {
-        setDownloadProgress(progress.percentage);
-      });
-      onStatusChange();
-    } catch {
-      // Download failed silently
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [trackId, isOfflineProp, isDownloading, onStatusChange]);
-
-  const handleRemove = useCallback(async () => {
-    if (!isOfflineProp) return;
-    try {
-      const { removeOfflineTrack } = await import('../../services/offlineService');
-      await removeOfflineTrack(trackId);
-      onStatusChange();
-    } catch {
-      // Remove failed silently
-    }
-  }, [trackId, isOfflineProp, onStatusChange]);
-
-  if (isDownloading) {
-    return (
-      <div
-        className="relative p-1 text-purple-400"
-        title={`Downloading... ${downloadProgress}%`}
-      >
-        <Loader2 className="w-4 h-4 animate-spin" />
-        {downloadProgress > 0 && downloadProgress < 100 && (
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[8px] font-medium">
-            {downloadProgress}%
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (isOfflineProp) {
-    return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleRemove();
-        }}
-        className="p-1 text-green-500 hover:text-red-400 transition-colors"
-        title="Remove offline copy"
-      >
-        <Check className="w-4 h-4" />
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        handleDownload();
-      }}
-      className="p-1 text-zinc-500 hover:text-white transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      title="Download for offline"
-    >
-      <Download className="w-4 h-4" />
-    </button>
-  );
-}
-
-function FavoriteButton({ trackId }: { trackId: string }) {
-  const { isFavorite, toggle } = useFavorites();
-  const favorited = isFavorite(trackId);
-
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        toggle(trackId);
-      }}
-      className={`p-1 transition-colors ${
-        favorited
-          ? 'text-pink-500 hover:text-pink-400'
-          : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-      }`}
-      title={favorited ? 'Remove from favorites' : 'Add to favorites'}
-    >
-      <Heart className="w-4 h-4" fill={favorited ? 'currentColor' : 'none'} />
-    </button>
-  );
-}
 
 interface AlbumTrack {
   id: string;
@@ -324,8 +221,6 @@ export function AlbumDetail({
     queryFn: () => libraryApi.getAlbum(artistName, albumName, 8, source),
   });
 
-  // Batch offline status check (single IndexedDB read instead of N+1)
-  const { offlineIds, refresh: refreshOfflineIds } = useOfflineTrackIds();
 
   const handlePlayAll = () => {
     if (!album || album.tracks.length === 0) return;
@@ -621,7 +516,7 @@ export function AlbumDetail({
                 </div>
 
                 <FavoriteButton trackId={track.id} />
-                <OfflineButton trackId={track.id} isOffline={offlineIds.has(track.id)} onStatusChange={refreshOfflineIds} />
+                <OfflineButton trackId={track.id} />
               </div>
             );
           })}
@@ -720,15 +615,15 @@ export function AlbumDetail({
             }
           }}
           onAddToPlaylist={() => {
-
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(
-                new CustomEvent('trigger-chat', { detail: { message } })
-              );
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {

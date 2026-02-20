@@ -23,6 +23,7 @@ import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { tracksApi, type LyricLine } from '../../api';
+import { useUIStore } from '../../stores/uiStore';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
 import { EffectsQuickAccess } from './EffectsQuickAccess';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
@@ -471,14 +472,15 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             // Not applicable in full player
           }}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
-            
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
               onClose();
             }
           }}

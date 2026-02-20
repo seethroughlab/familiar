@@ -13,19 +13,17 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
-  Heart,
-  Download,
-  Check,
 } from 'lucide-react';
 import { libraryApi, tracksApi, playlistsApi, downloadApi } from '../../api';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { useFavorites } from '../../hooks/useFavorites';
-import { useOfflineTrack } from '../../hooks/useOfflineTrack';
+import { OfflineButton } from './browsers/trackList/OfflineButton';
+import { FavoriteButton } from './browsers/trackList/FavoriteButton';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { TrackContextMenu } from './TrackContextMenu';
 import { AlbumContextMenu } from './AlbumContextMenu';
+import { useUIStore } from '../../stores/uiStore';
 import type { ContextMenuState, AlbumContextMenuState } from './types';
 import { initialContextMenuState, initialAlbumContextMenuState } from './types';
 import { useDownloadStore, getAlbumJobId } from '../../stores/downloadStore';
@@ -38,76 +36,6 @@ import { toast } from 'sonner';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ArtistDetail');
-
-function OfflineButton({ trackId }: { trackId: string }) {
-  const { isOffline, isDownloading, downloadProgress, download, remove } = useOfflineTrack(trackId);
-
-  if (isDownloading) {
-    return (
-      <div
-        className="relative p-1 text-purple-400"
-        title={`Downloading... ${downloadProgress}%`}
-      >
-        <Loader2 className="w-4 h-4 animate-spin" />
-        {downloadProgress > 0 && downloadProgress < 100 && (
-          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[8px] font-medium">
-            {downloadProgress}%
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  if (isOffline) {
-    return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          remove();
-        }}
-        className="p-1 text-green-500 hover:text-red-400 transition-colors"
-        title="Remove offline copy"
-      >
-        <Check className="w-4 h-4" />
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        download();
-      }}
-      className="p-1 text-zinc-500 hover:text-white transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      title="Download for offline"
-    >
-      <Download className="w-4 h-4" />
-    </button>
-  );
-}
-
-function FavoriteButton({ trackId }: { trackId: string }) {
-  const { isFavorite, toggle } = useFavorites();
-  const favorited = isFavorite(trackId);
-
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        toggle(trackId);
-      }}
-      className={`p-1 transition-colors ${
-        favorited
-          ? 'text-pink-500 hover:text-pink-400'
-          : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-      }`}
-      title={favorited ? 'Remove from favorites' : 'Add to favorites'}
-    >
-      <Heart className="w-4 h-4" fill={favorited ? 'currentColor' : 'none'} />
-    </button>
-  );
-}
 
 // Artist Discovery Section using unified components
 function ArtistDiscoverySection({
@@ -854,14 +782,15 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
             }
           }}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
-
+            if (contextMenu.track) {
+              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
+            }
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
               const track = contextMenu.track;
               const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
           onEditMetadata={() => {
@@ -986,13 +915,18 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
             return albumTracks.some((t) => offlineTrackIds.has(t.id));
           })()}
           onAddToPlaylist={() => {
-            // TODO: Open playlist picker modal
+            if (albumContextMenu.album && artist) {
+              const trackIds = artist.tracks
+                .filter((t) => t.album === albumContextMenu.album!.name)
+                .map((t) => t.id);
+              useUIStore.getState().openPlaylistPicker(trackIds);
+            }
           }}
           onMakePlaylist={() => {
             if (albumContextMenu.album) {
               const album = albumContextMenu.album;
               const message = `Make me a playlist based on the album "${album.name}" by ${album.artist}`;
-              window.dispatchEvent(new CustomEvent('trigger-chat', { detail: { message } }));
+              useUIStore.getState().triggerChat(message);
             }
           }}
         />

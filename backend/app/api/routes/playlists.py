@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import selectinload
@@ -583,9 +583,9 @@ async def duplicate_playlist(
 @router.post("/{playlist_id}/tracks", response_model=PlaylistDetailResponse)
 async def add_tracks_to_playlist(
     playlist_id: UUID,
-    track_ids: list[str],
     db: DbSession,
     profile: RequiredProfile,
+    track_ids: list[str] = Body(...),
 ) -> PlaylistDetailResponse:
     """Add tracks to an existing playlist."""
     playlist = await db.get(Playlist, playlist_id)
