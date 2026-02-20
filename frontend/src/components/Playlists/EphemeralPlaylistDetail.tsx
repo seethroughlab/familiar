@@ -1,23 +1,11 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Clock, Save, Trash2, Loader2, Music, Search, X } from 'lucide-react';
+import { ArrowLeft, Play, Clock, Save, Trash2, Loader2, Search, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
-import { PlayIndicator } from '../common/PlayIndicator';
-import { useSelectionStore } from '../../stores/selectionStore';
-import { useFavorites } from '../../hooks/useFavorites';
-import { useAppNavigation } from '../../hooks/useAppNavigation';
-import { Heart } from 'lucide-react';
-import { TrackContextMenu } from '../Library/TrackContextMenu';
-import type { ContextMenuState } from '../Library/types';
-import { initialContextMenuState } from '../Library/types';
-import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
-import { getColumnDef } from '../Library/columnDefinitions';
-import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
-import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import type { Track } from '../../types';
-import { useUIStore } from '../../stores/uiStore';
+import { PlaylistTrackList } from '../shared/PlaylistTrackList';
 
 interface Props {
   playlist?: EphemeralPlaylist;
@@ -79,20 +67,7 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const { isFavorite, toggle: toggleFavorite } = useFavorites();
-  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [searchFilter, setSearchFilter] = useState('');
-
-  // Column + sort state
-  const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort();
-  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
-  const gridColumns = useMemo(
-    () => buildGridColumns(columns, ['3rem', '4.5rem']),
-    [columns],
-  );
 
   const playlistTracks = playlist?.tracks ?? [];
   const searchedTracks = useMemo(() => {
@@ -105,32 +80,19 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
     );
   }, [playlistTracks, searchFilter]);
 
-  const filteredTracks = useSortedTracks(searchedTracks, sortBy, sortOrder, toFullTrack);
-
   const handlePlay = useCallback((startIndex = 0) => {
-    if (filteredTracks.length === 0 || !playlist) return;
+    if (searchedTracks.length === 0 || !playlist) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = filteredTracks[startIndex];
+    const clickedTrack = searchedTracks[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = filteredTracks.map(toFullTrack);
+    const queueTracks = searchedTracks.map(toFullTrack);
     setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
-  }, [filteredTracks, playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
-
-  // Context menu handlers
-  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ isOpen: true, track, position: { x: e.clientX, y: e.clientY } });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(initialContextMenuState);
-  }, []);
+  }, [searchedTracks, playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
   if (!playlist) {
     return (
@@ -139,13 +101,6 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
       </div>
     );
   }
-
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   const totalDuration = playlist.tracks.reduce(
     (sum, t) => sum + (t.duration_seconds || 0),
@@ -243,184 +198,12 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
       </div>
 
       {/* Track list */}
-      {filteredTracks.length > 0 ? (
-        <div>
-          <PlaylistColumnHeader
-            columns={columns}
-            gridColumns={gridColumns}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            toggleSort={toggleSort}
-          />
-          <div className="space-y-1">
-            {filteredTracks.map((track, idx) => {
-              const fullTrack = toFullTrack(track);
-              return (
-                <div key={track.id}>
-                  {/* Mobile layout */}
-                  <div
-                    onClick={() => handlePlay(idx)}
-                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                    className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                    }`}
-                  >
-                    <div className="w-8 flex-shrink-0 text-center" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                      <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                        {track.title || 'Unknown Title'}
-                      </div>
-                      <div className="text-sm text-zinc-400 truncate">
-                        {track.artist || 'Unknown Artist'}
-                        {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(track.id);
-                      }}
-                      className={`flex-shrink-0 p-1 transition-colors ${
-                        isFavorite(track.id)
-                          ? 'text-pink-500 hover:text-pink-400'
-                          : 'text-zinc-500 hover:text-pink-400'
-                      }`}
-                    >
-                      <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                    </button>
-                    <div className="flex-shrink-0 text-sm text-zinc-500">
-                      {formatDuration(track.duration_seconds)}
-                    </div>
-                  </div>
-                  {/* Desktop layout */}
-                  <div
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/track-id', track.id);
-                      e.dataTransfer.effectAllowed = 'copy';
-                    }}
-                    onClick={() => handlePlay(idx)}
-                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                    className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
-                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                    }`}
-                    style={{ gridTemplateColumns: gridColumns }}
-                  >
-                  {/* Track number / Play button */}
-                  <div className="text-center cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                    <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                  </div>
-
-                  {/* Title + artist (mobile: shows artist/album inline) */}
-                  <div className="min-w-0">
-                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                      {track.title || 'Unknown Title'}
-                    </div>
-                    <div className="text-sm text-zinc-400 truncate sm:hidden">
-                      {track.artist || 'Unknown Artist'}
-                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                    </div>
-                  </div>
-
-                  {/* Dynamic columns (hidden on mobile) */}
-                  {visibleColumnIds.map((colId) => {
-                    const colDef = getColumnDef(colId);
-                    if (!colDef) return <div key={colId} />;
-                    const raw = colDef.getValue(fullTrack);
-                    const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
-                    return (
-                      <div
-                        key={colId}
-                        className={`hidden sm:block text-sm text-zinc-400 truncate ${
-                          colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
-                        }`}
-                      >
-                        {String(display)}
-                      </div>
-                    );
-                  })}
-
-                  {/* Favorite button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(track.id);
-                    }}
-                    className={`p-1 transition-colors ${
-                      isFavorite(track.id)
-                        ? 'text-pink-500 hover:text-pink-400'
-                        : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                    }`}
-                    title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-                  >
-                    <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                  </button>
-
-                  {/* Duration */}
-                  <div className="text-sm text-zinc-500 text-right">
-                    {formatDuration(track.duration_seconds)}
-                  </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-12 text-zinc-500">
-          <Music className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No tracks in this playlist</p>
-        </div>
-      )}
-
-      {/* Context menu */}
-      {contextMenu.isOpen && contextMenu.track && (
-        <TrackContextMenu
-          track={contextMenu.track}
-          position={contextMenu.position}
-          isSelected={false}
-          onClose={closeContextMenu}
-          onPlay={() => {
-            const idx = filteredTracks.findIndex(t => t.id === contextMenu.track?.id);
-            if (idx !== -1) handlePlay(idx);
-          }}
-          onQueue={() => {
-            if (contextMenu.track) addToQueue(contextMenu.track);
-          }}
-          onGoToArtist={() => {
-            if (contextMenu.track?.artist) navigateToArtist(contextMenu.track.artist);
-          }}
-          onGoToAlbum={() => {
-            if (contextMenu.track?.artist && contextMenu.track?.album) {
-              navigateToAlbum(contextMenu.track.artist, contextMenu.track.album);
-            }
-          }}
-          onToggleSelect={() => {}}
-          onAddToPlaylist={() => {
-            if (contextMenu.track) {
-              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
-            }
-          }}
-          onEditMetadata={() => {
-            if (contextMenu.track) {
-              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
-            }
-          }}
-          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
-          onToggleFavorite={() => {
-            if (contextMenu.track) toggleFavorite(contextMenu.track.id);
-          }}
-        />
-      )}
+      <PlaylistTrackList
+        items={searchedTracks}
+        getTrack={toFullTrack}
+        onPlay={handlePlay}
+        emptyMessage="No tracks in this playlist"
+      />
     </div>
   );
 }

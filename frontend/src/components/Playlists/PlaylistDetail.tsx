@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2, Music, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Search, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Search, RotateCw } from 'lucide-react';
 import { playlistsApi, tracksApi } from '../../api';
-import { PlayIndicator } from '../common/PlayIndicator';
 import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
-import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadStore, getPlaylistJobId } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
@@ -16,16 +14,10 @@ import { useAutoDownload } from '../../hooks/useAutoDownload';
 import { DiscoveryPanel, usePlaylistDiscovery, type DiscoveryItem } from '../Discovery';
 import * as offlineService from '../../services/offlineService';
 import * as playlistCache from '../../services/playlistCache';
-import { TrackContextMenu } from '../Library/TrackContextMenu';
-import type { ContextMenuState } from '../Library/types';
-import { initialContextMenuState } from '../Library/types';
-import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
-import { getColumnDef } from '../Library/columnDefinitions';
-import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
-import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
-import { useUIStore } from '../../stores/uiStore';
 import type { Track } from '../../types';
 import type { PlaylistDetail as PlaylistDetailType, PlaylistTrack as PlaylistTrackType } from '../../api';
+import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
+import { formatDuration } from '../../utils/format';
 
 import { createLogger } from '../../utils/logger';
 
@@ -87,7 +79,6 @@ function PlaylistDiscoverySection({
     if (!item.inLibrary && item.name) {
       try {
         if (item.entityType === 'artist') {
-          // For artists, add a placeholder track
           await playlistsApi.addToWishlist({
             title: `Tracks by ${item.name}`,
             artist: item.name,
@@ -142,21 +133,12 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
   const { isFavorite, toggle: toggleFavorite, isExternalFavorite, toggleExternal } = useFavorites();
   const { isOffline } = useOfflineStatus();
-  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const { navigateToArtist } = useAppNavigation();
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
-  // Column + sort state
-  const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort();
-  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
-  const gridColumns = useMemo(
-    () => buildGridColumns(columns, ['3rem', '3rem', '4.5rem']),
-    [columns],
-  );
   const getTrackFromPlaylistItem = useCallback(
     (t: PlaylistTrackType): Track | null => {
       if (t.type === 'external') return null;
@@ -194,43 +176,20 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
-  // Selection state
-  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
-  const [lastClickedId, setLastClickedId] = useState<string | null>(null);
-
-  // Context menu handlers
-  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({
-      isOpen: true,
-      track,
-      position: { x: e.clientX, y: e.clientY },
-    });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(initialContextMenuState);
-  }, []);
-
   const { data: playlist, isLoading } = useQuery({
     queryKey: ['playlist', playlistId],
     queryFn: async () => {
       try {
         const data = await playlistsApi.get(playlistId);
-        // Cache successful fetch for offline use
         await playlistCache.cachePlaylist(data);
         setUsingCachedData(false);
         return data;
       } catch (error) {
-        // If offline, try to load from cache
         if (isOffline) {
           const cached = await playlistCache.getCachedPlaylist(playlistId);
           if (cached) {
-            // Resolve track metadata from cached tracks
             const tracks = await playlistCache.resolveTrackIds(cached.track_ids);
             setUsingCachedData(true);
-            // Convert to PlaylistDetail format
             return {
               id: cached.id,
               name: cached.name,
@@ -240,7 +199,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
               generation_prompt: cached.generation_prompt,
               tracks: tracks.map((t, idx) => ({
                 id: t.id,
-                playlist_track_id: t.id, // Use track ID as fallback
+                playlist_track_id: t.id,
                 type: 'local' as const,
                 title: t.title,
                 artist: t.artist,
@@ -259,11 +218,11 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     retry: isOffline ? false : 3,
   });
 
-  // Fetch recommendations for AI-generated playlists (not available offline)
+  // Fetch recommendations for AI-generated playlists
   const { data: recommendations, isLoading: recommendationsLoading } = useQuery({
     queryKey: ['playlist-recommendations', playlistId],
     queryFn: () => playlistsApi.getRecommendations(playlistId),
-    staleTime: 1000 * 60 * 10, // 10 minutes
+    staleTime: 1000 * 60 * 10,
     retry: 1,
     enabled: !!playlist?.is_auto_generated && !isOffline && !usingCachedData,
   });
@@ -279,30 +238,16 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
 
   const handleDownloadPlaylist = async () => {
     if (!playlist || playlist.tracks.length === 0) return;
-
-    // Get local tracks that need to be downloaded (can't download external tracks)
     const localTracks = playlist.tracks.filter(t => t.type === 'local');
-    const tracksToDownload = localTracks.filter(
-      (t) => !offlineTrackIds.has(t.id)
-    );
+    const tracksToDownload = localTracks.filter((t) => !offlineTrackIds.has(t.id));
     if (tracksToDownload.length === 0) return;
-
-    // Start download via global store
-    startDownload(
-      jobId,
-      'playlist',
-      playlist.name,
-      tracksToDownload.map((t) => t.id)
-    );
-
-    // Cache the playlist metadata for offline access
+    startDownload(jobId, 'playlist', playlist.name, tracksToDownload.map((t) => t.id));
     await playlistCache.cachePlaylist(playlist);
   };
 
   // Update offline track IDs when download job completes
   useEffect(() => {
     if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
-      // Refresh offline IDs after download completes
       offlineService.getOfflineTrackIds().then((ids) => {
         setOfflineTrackIds(new Set(ids));
       });
@@ -342,23 +287,17 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     return result;
   }, [playlist, showDownloadedOnly, offlineTrackIds, searchFilter]);
 
-  const displayedTracks = useSortedTracks(filteredTracks, sortBy, sortOrder, getTrackFromPlaylistItem);
+  const handlePlay = useCallback((startIndex = 0) => {
+    if (filteredTracks.length === 0) return;
 
-  const handlePlay = (startIndex = 0) => {
-    if (displayedTracks.length === 0) return;
-
-    // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = displayedTracks[startIndex];
+    const clickedTrack = filteredTracks[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    // Build queue tracks with external info for external tracks
-    const queueTracks = displayedTracks.map(t => {
-      // For external tracks with a matched local track, use the matched track ID
+    const queueTracks = filteredTracks.map(t => {
       const trackId = t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id;
-
       return {
         id: trackId,
         file_path: '',
@@ -374,7 +313,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         duration_seconds: t.duration_seconds || null,
         format: t.format ?? null,
         analysis_version: t.analysis_version ?? 0,
-        // Carry external info for the player to handle
         _externalInfo: t.type === 'external' ? {
           type: 'external' as const,
           previewUrl: t.preview_url || null,
@@ -384,24 +322,15 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       };
     });
     setQueue(queueTracks, startIndex, { type: 'playlist', id: playlistId });
-  };
-
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, [filteredTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue, playlistId]);
 
   // Handle playing a discovery item
   const handlePlayDiscoveryItem = useCallback(async (item: DiscoveryItem) => {
     if (item.entityType === 'track' && item.id) {
-      // If clicking on the currently playing track, toggle play/pause
       if (currentTrack?.id === item.id) {
         setIsPlaying(!isPlaying);
         return;
       }
-      // Play the local track
       setQueue([{
         id: item.id,
         file_path: '',
@@ -419,7 +348,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         analysis_version: 0,
       }]);
     } else if (item.entityType === 'artist' && item.inLibrary) {
-      // Play tracks by this artist
       try {
         const response = await tracksApi.list({ artist: item.name, page_size: 50 });
         if (response.items.length > 0) {
@@ -469,11 +397,9 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       return;
     }
 
-    // Remove dragged track and insert at target position
     const [draggedTrack] = tracks.splice(draggedIndex, 1);
     tracks.splice(targetIndex, 0, draggedTrack);
 
-    // Optimistic update
     queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
       if (!old) return old;
       return { ...old, tracks };
@@ -482,13 +408,11 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     setDraggedTrackId(null);
     setDropTargetId(null);
 
-    // Persist to backend using playlist_track_ids
     try {
       await playlistsApi.reorderItems(playlistId, tracks.map(t => t.playlist_track_id));
     } catch (error) {
       log.error('Failed to reorder tracks:', error);
       showError('Failed to reorder tracks');
-      // Revert on error
       queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
     }
   }, [playlist, draggedTrackId, playlistId, queryClient]);
@@ -498,39 +422,10 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     setDropTargetId(null);
   }, []);
 
-  // Selection handlers
-  const handleTrackClick = useCallback((trackId: string, idx: number, e: React.MouseEvent) => {
-    if (!playlist) return;
-
-    if (e.shiftKey && lastClickedId) {
-      // Shift-click: select range
-      const lastIdx = playlist.tracks.findIndex(t => t.id === lastClickedId);
-      const currentIdx = idx;
-      const [start, end] = [Math.min(lastIdx, currentIdx), Math.max(lastIdx, currentIdx)];
-      const rangeIds = playlist.tracks.slice(start, end + 1).map(t => t.id);
-      setSelectedTrackIds(new Set([...selectedTrackIds, ...rangeIds]));
-    } else if (e.metaKey || e.ctrlKey) {
-      // Cmd/Ctrl-click: toggle single selection
-      const newSet = new Set(selectedTrackIds);
-      if (newSet.has(trackId)) {
-        newSet.delete(trackId);
-      } else {
-        newSet.add(trackId);
-      }
-      setSelectedTrackIds(newSet);
-      setLastClickedId(trackId);
-    } else {
-      // Normal click: play track
-      handlePlay(idx);
-      setSelectedTrackIds(new Set());
-      setLastClickedId(trackId);
-    }
-  }, [playlist, lastClickedId, selectedTrackIds]);
-
   // Bulk action handlers
-  const handleQueueSelected = useCallback(() => {
+  const handleQueueSelected = useCallback((selectedIds: Set<string>) => {
     if (!playlist) return;
-    const selectedTracks = playlist.tracks.filter(t => selectedTrackIds.has(t.id));
+    const selectedTracks = playlist.tracks.filter(t => selectedIds.has(t.playlist_track_id));
     selectedTracks.forEach(track => {
       addToQueue({
         id: track.id,
@@ -549,22 +444,19 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         analysis_version: 0,
       });
     });
-    setSelectedTrackIds(new Set());
-  }, [playlist, selectedTrackIds, addToQueue]);
+  }, [playlist, addToQueue]);
 
-  const handleRemoveSelected = useCallback(async () => {
+  const handleRemoveSelected = useCallback(async (selectedIds: Set<string>, clearSelection: () => void) => {
     if (!playlist) return;
-    const remainingTracks = playlist.tracks.filter(t => !selectedTrackIds.has(t.id));
+    const remainingTracks = playlist.tracks.filter(t => !selectedIds.has(t.playlist_track_id));
 
-    // Optimistic update
     queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
       if (!old) return old;
       return { ...old, tracks: remainingTracks };
     });
 
-    setSelectedTrackIds(new Set());
+    clearSelection();
 
-    // Persist by reordering with only remaining tracks
     try {
       await playlistsApi.reorderTracks(playlistId, remainingTracks.map(t => t.id));
     } catch (error) {
@@ -572,12 +464,178 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       showError('Failed to remove tracks');
       queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
     }
-  }, [playlist, selectedTrackIds, playlistId, queryClient]);
+  }, [playlist, playlistId, queryClient]);
 
   const totalDuration = playlist?.tracks.reduce(
     (sum, t) => sum + (t.duration_seconds || 0),
     0
   ) || 0;
+
+  // Item ID uses playlist_track_id for uniqueness (supports duplicate tracks)
+  const getItemId = useCallback((t: PlaylistTrackType) => t.playlist_track_id, []);
+
+  // Render props
+  const renderTitleBadge = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
+    const isExternal = ctx.item.type === 'external';
+    const isMatched = isExternal && ctx.item.is_matched && ctx.item.matched_track_id;
+    if (isExternal && !isMatched) {
+      return (
+        <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
+          Not in library
+        </span>
+      );
+    }
+    return null;
+  }, []);
+
+  const getRowClassName = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
+    const isExternal = ctx.item.type === 'external';
+    const isMatched = isExternal && ctx.item.is_matched && ctx.item.matched_track_id;
+    if (isExternal && !isMatched) return 'opacity-60';
+    return '';
+  }, []);
+
+  const renderDesktopTrailing = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
+    const track = ctx.item;
+    const isExternal = track.type === 'external';
+    const isMatched = isExternal && track.is_matched && track.matched_track_id;
+
+    return (
+      <>
+        {/* Heart + External link */}
+        <div className="flex items-center gap-0.5">
+          {isExternal ? (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleExternal(track.id);
+                }}
+                className={`p-1 transition-colors ${
+                  isExternalFavorite(track.id)
+                    ? 'text-pink-500 hover:text-pink-400'
+                    : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+                }`}
+                title={isExternalFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <Heart className="w-4 h-4" fill={isExternalFavorite(track.id) ? 'currentColor' : 'none'} />
+              </button>
+              {!isMatched && track.external_links && Object.keys(track.external_links).length > 0 && (
+                <a
+                  href={Object.values(track.external_links)[0]}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1 text-zinc-500 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                  title="Open in Spotify"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
+            </>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFavorite(track.id);
+              }}
+              className={`p-1 transition-colors ${
+                isFavorite(track.id)
+                  ? 'text-pink-500 hover:text-pink-400'
+                  : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+              }`}
+              title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
+            </button>
+          )}
+        </div>
+
+        {/* Offline indicator */}
+        <div>
+          {!isExternal && offlineTrackIds.has(track.id) && (
+            <span title="Available offline">
+              <WifiOff className="w-4 h-4 text-green-500" />
+            </span>
+          )}
+        </div>
+
+        {/* Duration */}
+        <div className="text-sm text-zinc-500 text-right">
+          {formatDuration(track.duration_seconds)}
+        </div>
+      </>
+    );
+  }, [isFavorite, isExternalFavorite, toggleFavorite, toggleExternal, offlineTrackIds]);
+
+  const renderMobileTrailing = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
+    const track = ctx.item;
+    const isExternal = track.type === 'external';
+
+    return (
+      <>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isExternal) { toggleExternal(track.id); } else { toggleFavorite(track.id); }
+          }}
+          className={`flex-shrink-0 p-1 transition-colors ${
+            (isExternal ? isExternalFavorite(track.id) : isFavorite(track.id))
+              ? 'text-pink-500 hover:text-pink-400'
+              : 'text-zinc-500 hover:text-pink-400'
+          }`}
+        >
+          <Heart className="w-4 h-4" fill={(isExternal ? isExternalFavorite(track.id) : isFavorite(track.id)) ? 'currentColor' : 'none'} />
+        </button>
+        <div className="flex-shrink-0 text-sm text-zinc-500">
+          {formatDuration(track.duration_seconds)}
+        </div>
+      </>
+    );
+  }, [isFavorite, isExternalFavorite, toggleFavorite, toggleExternal]);
+
+  const renderDragHandle = useCallback((_ctx: TrackRowContext<PlaylistTrackType>) => {
+    if (isOffline || usingCachedData) return null;
+    return (
+      <div className="mr-0.5 transition-opacity opacity-0 group-hover:opacity-50 hover:!opacity-100 cursor-grab active:cursor-grabbing">
+        <GripVertical className="w-3 h-3 text-zinc-500" />
+      </div>
+    );
+  }, [isOffline, usingCachedData]);
+
+  const renderBulkActions = useCallback((selectedIds: Set<string>, clearSelection: () => void) => (
+    <>
+      <button
+        onClick={() => { handleQueueSelected(selectedIds); clearSelection(); }}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-md text-sm transition-colors"
+      >
+        <ListPlus className="w-4 h-4" />
+        Add to Queue
+      </button>
+      {!isOffline && !usingCachedData && (
+        <button
+          onClick={() => handleRemoveSelected(selectedIds, clearSelection)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-md text-sm transition-colors"
+        >
+          <Trash2 className="w-4 h-4" />
+          Remove
+        </button>
+      )}
+    </>
+  ), [handleQueueSelected, handleRemoveSelected, isOffline, usingCachedData]);
+
+  // Drag reorder config
+  const dragReorderDisabled = isOffline || usingCachedData;
+  const dragReorder = useMemo(() => ({
+    onDragStart: (item: PlaylistTrackType, e: React.DragEvent) => handleDragStart(item.playlist_track_id, item.id, e),
+    onDragOver: (item: PlaylistTrackType, e: React.DragEvent) => handleDragOver(e, item.playlist_track_id),
+    onDragLeave: handleDragLeave,
+    onDrop: (item: PlaylistTrackType) => handleDrop(item.playlist_track_id),
+    onDragEnd: handleDragEnd,
+    isDragged: (item: PlaylistTrackType) => draggedTrackId === item.playlist_track_id,
+    isDropTarget: (item: PlaylistTrackType) => dropTargetId === item.playlist_track_id,
+    disabled: dragReorderDisabled,
+  }), [handleDragStart, handleDragOver, handleDragLeave, handleDrop, handleDragEnd, draggedTrackId, dropTargetId, dragReorderDisabled]);
 
   if (isLoading) {
     return (
@@ -653,7 +711,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <button
             onClick={() => handlePlay()}
-            disabled={displayedTracks.length === 0}
+            disabled={filteredTracks.length === 0}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 rounded-full transition-colors"
           >
             <Play className="w-4 h-4" fill="currentColor" />
@@ -765,250 +823,22 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         )}
       </div>
 
-      {/* Bulk action toolbar */}
-      {selectedTrackIds.size > 0 && (
-        <div className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm p-3 rounded-lg flex items-center gap-3 border border-zinc-700">
-          <span className="text-sm text-zinc-300 font-medium">
-            {selectedTrackIds.size} track{selectedTrackIds.size !== 1 ? 's' : ''} selected
-          </span>
-          <div className="flex-1" />
-          <button
-            onClick={handleQueueSelected}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-md text-sm transition-colors"
-          >
-            <ListPlus className="w-4 h-4" />
-            Add to Queue
-          </button>
-          {!isOffline && !usingCachedData && (
-            <button
-              onClick={handleRemoveSelected}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-md text-sm transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-              Remove
-            </button>
-          )}
-          <button
-            onClick={() => setSelectedTrackIds(new Set())}
-            className="p-1.5 hover:bg-zinc-700 rounded-md transition-colors"
-            title="Clear selection"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Track list */}
-      {displayedTracks.length > 0 ? (
-        <div>
-          <PlaylistColumnHeader
-            columns={columns}
-            gridColumns={gridColumns}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            toggleSort={toggleSort}
-            trailingCount={3}
-          />
-          <div className="space-y-1">
-          {displayedTracks.map((track, idx) => {
-            const isExternal = track.type === 'external';
-            const isMatched = isExternal && track.is_matched && track.matched_track_id;
-
-            // Convert playlist track to full Track type for context menu (only for local tracks)
-            const fullTrack = getTrackFromPlaylistItem(track);
-            const isSelected = selectedTrackIds.has(track.playlist_track_id);
-            const isDragged = draggedTrackId === track.playlist_track_id;
-            const isDropTarget = dropTargetId === track.playlist_track_id;
-            return (
-            <div key={track.playlist_track_id}>
-              {/* Mobile layout */}
-              <div
-                onClick={(e) => handleTrackClick(track.id, idx, e)}
-                onContextMenu={(e) => fullTrack && handleContextMenu(fullTrack, e)}
-                className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''
-                } ${isExternal && !isMatched ? 'opacity-60' : ''}`}
-              >
-                <div className="w-8 flex-shrink-0 text-center" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                  <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                      {track.title || 'Unknown Title'}
-                    </span>
-                    {isExternal && !isMatched && (
-                      <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
-                        Not in library
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-sm text-zinc-400 truncate">
-                    {track.artist || 'Unknown Artist'}
-                    {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (isExternal) { toggleExternal(track.id); } else { toggleFavorite(track.id); }
-                  }}
-                  className={`flex-shrink-0 p-1 transition-colors ${
-                    (isExternal ? isExternalFavorite(track.id) : isFavorite(track.id))
-                      ? 'text-pink-500 hover:text-pink-400'
-                      : 'text-zinc-500 hover:text-pink-400'
-                  }`}
-                >
-                  <Heart className="w-4 h-4" fill={(isExternal ? isExternalFavorite(track.id) : isFavorite(track.id)) ? 'currentColor' : 'none'} />
-                </button>
-                <div className="flex-shrink-0 text-sm text-zinc-500">
-                  {formatDuration(track.duration_seconds)}
-                </div>
-              </div>
-              {/* Desktop layout */}
-              <div
-                draggable={!isOffline && !usingCachedData}
-                onDragStart={(e) => !isOffline && !usingCachedData && handleDragStart(track.playlist_track_id, track.id, e)}
-                onDragOver={(e) => !isOffline && !usingCachedData && handleDragOver(e, track.playlist_track_id)}
-                onDragLeave={handleDragLeave}
-                onDrop={() => !isOffline && !usingCachedData && handleDrop(track.playlist_track_id)}
-                onDragEnd={handleDragEnd}
-                onClick={(e) => handleTrackClick(track.id, idx, e)}
-                onContextMenu={(e) => fullTrack && handleContextMenu(fullTrack, e)}
-                className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
-                  currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''
-                } ${isDragged ? 'opacity-50' : ''
-                } ${isDropTarget ? 'border-t-2 border-green-500' : ''
-                } ${isExternal && !isMatched ? 'opacity-60' : ''}`}
-                style={{ gridTemplateColumns: gridColumns }}
-              >
-              {/* Index cell (drag handle + track number) */}
-              <div className="flex items-center">
-                <div className={`mr-0.5 transition-opacity ${
-                  isOffline || usingCachedData ? 'hidden' : 'opacity-0 group-hover:opacity-50 hover:!opacity-100 cursor-grab active:cursor-grabbing'
-                }`}>
-                  <GripVertical className="w-3 h-3 text-zinc-500" />
-                </div>
-                <div className="flex-1 text-center cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                  <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                </div>
-              </div>
-
-              {/* Title + artist (mobile: shows artist/album inline) */}
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                    {track.title || 'Unknown Title'}
-                  </span>
-                  {isExternal && !isMatched && (
-                    <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
-                      Not in library
-                    </span>
-                  )}
-                </div>
-                <div className="text-sm text-zinc-400 truncate sm:hidden">
-                  {track.artist || 'Unknown Artist'}
-                  {track.album && (
-                    <span className="text-zinc-500"> • {track.album}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Dynamic columns (hidden on mobile) */}
-              {visibleColumnIds.map((colId) => {
-                const colDef = getColumnDef(colId);
-                if (!colDef) return <div key={colId} />;
-                if (!fullTrack) return <div key={colId} className="hidden sm:block text-sm text-zinc-500">-</div>;
-                const raw = colDef.getValue(fullTrack);
-                const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
-                return (
-                  <div
-                    key={colId}
-                    className={`hidden sm:block text-sm text-zinc-400 truncate ${
-                      colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
-                    }`}
-                  >
-                    {String(display)}
-                  </div>
-                );
-              })}
-
-              {/* Heart + External link */}
-              <div className="flex items-center gap-0.5">
-                {isExternal ? (
-                  <>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleExternal(track.id);
-                      }}
-                      className={`p-1 transition-colors ${
-                        isExternalFavorite(track.id)
-                          ? 'text-pink-500 hover:text-pink-400'
-                          : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                      }`}
-                      title={isExternalFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-                    >
-                      <Heart className="w-4 h-4" fill={isExternalFavorite(track.id) ? 'currentColor' : 'none'} />
-                    </button>
-                    {!isMatched && track.external_links && Object.keys(track.external_links).length > 0 && (
-                      <a
-                        href={Object.values(track.external_links)[0]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1 text-zinc-500 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                        title="Open in Spotify"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    )}
-                  </>
-                ) : (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(track.id);
-                    }}
-                    className={`p-1 transition-colors ${
-                      isFavorite(track.id)
-                        ? 'text-pink-500 hover:text-pink-400'
-                        : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                    }`}
-                    title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-                  >
-                    <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                  </button>
-                )}
-              </div>
-
-              {/* Offline indicator */}
-              <div>
-                {!isExternal && offlineTrackIds.has(track.id) && (
-                  <span title="Available offline">
-                    <WifiOff className="w-4 h-4 text-green-500" />
-                  </span>
-                )}
-              </div>
-
-              {/* Duration */}
-              <div className="text-sm text-zinc-500 text-right">
-                {formatDuration(track.duration_seconds)}
-              </div>
-              </div>
-            </div>
-            );
-          })}
-        </div>
-        </div>
-      ) : (
-        <div className="text-center py-12 text-zinc-500">
-          <Music className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No tracks in this playlist</p>
-        </div>
-      )}
+      <PlaylistTrackList
+        items={filteredTracks}
+        getTrack={getTrackFromPlaylistItem}
+        getItemId={getItemId}
+        onPlay={handlePlay}
+        trailingColumns={['3rem', '3rem', '4.5rem']}
+        renderDesktopTrailing={renderDesktopTrailing}
+        renderMobileTrailing={renderMobileTrailing}
+        renderTitleBadge={renderTitleBadge}
+        getRowClassName={getRowClassName}
+        renderBulkActions={renderBulkActions}
+        dragReorder={dragReorder}
+        renderDragHandle={renderDragHandle}
+        emptyMessage="No tracks in this playlist"
+      />
 
       {/* Recommendations (only for AI-generated playlists) */}
       {playlist.is_auto_generated && (
@@ -1019,58 +849,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
             navigateToArtist(artistName);
           }}
           onPlayItem={handlePlayDiscoveryItem}
-        />
-      )}
-
-      {/* Context menu */}
-      {contextMenu.isOpen && contextMenu.track && (
-        <TrackContextMenu
-          track={contextMenu.track}
-          position={contextMenu.position}
-          isSelected={false}
-          onClose={closeContextMenu}
-          onPlay={() => {
-            const idx = displayedTracks.findIndex(t => t.id === contextMenu.track?.id);
-            if (idx !== -1) handlePlay(idx);
-          }}
-          onQueue={() => {
-            if (contextMenu.track) {
-              addToQueue(contextMenu.track);
-            }
-          }}
-          onGoToArtist={() => {
-            if (contextMenu.track?.artist) {
-              navigateToArtist(contextMenu.track.artist);
-            }
-          }}
-          onGoToAlbum={() => {
-            if (contextMenu.track?.artist && contextMenu.track?.album) {
-              navigateToAlbum(contextMenu.track.artist, contextMenu.track.album);
-            }
-          }}
-          onToggleSelect={() => {
-            // Not applicable in playlists
-          }}
-          onAddToPlaylist={() => {
-            if (contextMenu.track) {
-              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
-            }
-          }}
-          onEditMetadata={() => {
-            if (contextMenu.track) {
-              if (selectedTrackIds.size > 1 && selectedTrackIds.has(contextMenu.track.id)) {
-                useSelectionStore.getState().selectAll(Array.from(selectedTrackIds));
-              }
-              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
-            }
-          }}
         />
       )}
     </div>

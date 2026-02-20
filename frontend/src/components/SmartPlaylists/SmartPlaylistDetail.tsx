@@ -1,29 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2, Music, Zap, Clock, Download, Check, Heart, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api';
-import { PlayIndicator } from '../common/PlayIndicator';
 import type { SmartPlaylist, SmartPlaylistTracksResponse } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
-import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadStore, getSmartPlaylistJobId } from '../../stores/downloadStore';
-import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { useAutoDownload } from '../../hooks/useAutoDownload';
 import * as offlineService from '../../services/offlineService';
 import * as playlistCache from '../../services/playlistCache';
-import { TrackContextMenu } from '../Library/TrackContextMenu';
-import type { ContextMenuState } from '../Library/types';
-import { initialContextMenuState } from '../Library/types';
-import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
-import { getColumnDef } from '../Library/columnDefinitions';
-import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
-import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
-import { useUIStore } from '../../stores/uiStore';
+import { PlaylistTrackList } from '../shared/PlaylistTrackList';
 
 import { createLogger } from '../../utils/logger';
 
@@ -125,25 +114,14 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { isOffline } = useOfflineStatus();
-  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const { navigateToArtist } = useAppNavigation();
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [usingCachedData, setUsingCachedData] = useState(false);
   const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
   const [searchFilter, setSearchFilter] = useState('');
 
-  // Column + sort state
-  const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort();
-  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
-  const gridColumns = useMemo(
-    () => buildGridColumns(columns, ['3rem', '4.5rem']),
-    [columns],
-  );
   const getTrackFromItem = useCallback(
     (t: SmartPlaylistTracksResponse['tracks'][0]): Track => ({
       id: t.id,
@@ -251,10 +229,8 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
     return result;
   }, [allTracks, showDownloadedOnly, offlineTrackIds, searchFilter]);
 
-  const tracks = useSortedTracks(filteredTracks, sortBy, sortOrder, getTrackFromItem);
-
   // Fetch discovery data based on the first track in the playlist (not available offline)
-  const firstTrackId = tracks[0]?.id;
+  const firstTrackId = filteredTracks[0]?.id;
   const { data: discoverData, isLoading: discoverLoading } = useQuery({
     queryKey: ['track-discover', firstTrackId],
     queryFn: () => tracksApi.getDiscover(firstTrackId!, 6, 8),
@@ -269,21 +245,6 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
       similar_artists: discoverData.similar_artists,
     } : undefined,
   });
-
-  // Context menu handlers
-  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({
-      isOpen: true,
-      track,
-      position: { x: e.clientX, y: e.clientY },
-    });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(initialContextMenuState);
-  }, []);
 
   // Check which tracks are already offline
   useEffect(() => {
@@ -351,24 +312,17 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const offlineCount = allTracks.filter(t => offlineTrackIds.has(t.id)).length;
 
   const handlePlay = (startIndex = 0) => {
-    if (tracks.length === 0) return;
+    if (filteredTracks.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = tracks[startIndex];
+    const clickedTrack = filteredTracks[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = tracks.map(t => getTrackFromItem(t));
+    const queueTracks = filteredTracks.map(t => getTrackFromItem(t));
     setQueue(queueTracks, startIndex);
-  };
-
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Format rule for display
@@ -392,7 +346,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
 
     const operatorLabels: Record<string, string> = {
       equals: '=',
-      not_equals: '≠',
+      not_equals: '\u2260',
       contains: 'contains',
       greater_than: '>',
       less_than: '<',
@@ -406,7 +360,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
     return `${field} ${op} ${value}`;
   };
 
-  const totalDuration = tracks.reduce(
+  const totalDuration = filteredTracks.reduce(
     (sum, t) => sum + (t.duration_seconds || 0),
     0
   );
@@ -449,7 +403,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
           )}
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-zinc-500">
-            <span>{tracks.length} tracks</span>
+            <span>{filteredTracks.length} tracks</span>
             <span className="flex items-center gap-1">
               <Clock className="w-4 h-4" />
               {Math.floor(totalDuration / 60)} min
@@ -478,7 +432,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <button
             onClick={() => handlePlay()}
-            disabled={tracks.length === 0}
+            disabled={filteredTracks.length === 0}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:hover:bg-green-600 rounded-full transition-colors"
           >
             <Play className="w-4 h-4" fill="currentColor" />
@@ -584,140 +538,15 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
       </div>
 
       {/* Track list */}
-      {tracks.length > 0 ? (
-        <div>
-          <PlaylistColumnHeader
-            columns={columns}
-            gridColumns={gridColumns}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            toggleSort={toggleSort}
-          />
-          <div className="space-y-1">
-            {tracks.map((track, idx) => {
-              const fullTrack = getTrackFromItem(track);
-              return (
-                <div key={track.id}>
-                  {/* Mobile layout */}
-                  <div
-                    onClick={() => handlePlay(idx)}
-                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                    className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                    }`}
-                  >
-                    <div className="w-8 flex-shrink-0 text-center" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                      <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                        {track.title || 'Unknown Title'}
-                      </div>
-                      <div className="text-sm text-zinc-400 truncate">
-                        {track.artist || 'Unknown Artist'}
-                        {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleFavorite(track.id);
-                      }}
-                      className={`flex-shrink-0 p-1 transition-colors ${
-                        isFavorite(track.id)
-                          ? 'text-pink-500 hover:text-pink-400'
-                          : 'text-zinc-500 hover:text-pink-400'
-                      }`}
-                    >
-                      <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                    </button>
-                    <div className="flex-shrink-0 text-sm text-zinc-500">
-                      {formatDuration(track.duration_seconds)}
-                    </div>
-                  </div>
-                  {/* Desktop layout */}
-                  <div
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/track-id', track.id);
-                      e.dataTransfer.effectAllowed = 'copy';
-                    }}
-                    onClick={() => handlePlay(idx)}
-                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                    className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${
-                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                    }`}
-                    style={{ gridTemplateColumns: gridColumns }}
-                  >
-                  {/* Track number / Play button */}
-                  <div className="w-8 text-center">
-                    <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                  </div>
-
-                  {/* Title + artist */}
-                  <div className="min-w-0">
-                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                      {track.title || 'Unknown Title'}
-                    </div>
-                    <div className="text-sm text-zinc-400 truncate sm:hidden">
-                      {track.artist || 'Unknown Artist'}
-                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                    </div>
-                  </div>
-
-                  {/* Dynamic columns */}
-                  {visibleColumnIds.map((colId) => {
-                    const colDef = getColumnDef(colId);
-                    if (!colDef) return <div key={colId} />;
-                    const raw = colDef.getValue(fullTrack);
-                    const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
-                    return (
-                      <div
-                        key={colId}
-                        className={`hidden sm:block text-sm text-zinc-400 truncate ${
-                          colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
-                        }`}
-                      >
-                        {String(display)}
-                      </div>
-                    );
-                  })}
-
-                  {/* Favorite button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFavorite(track.id);
-                    }}
-                    className={`p-1 transition-colors ${
-                      isFavorite(track.id)
-                        ? 'text-pink-500 hover:text-pink-400'
-                        : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                    }`}
-                    title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-                  >
-                    <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-                  </button>
-
-                  {/* Duration */}
-                  <div className="text-sm text-zinc-500 text-right">
-                    {formatDuration(track.duration_seconds)}
-                  </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-12 text-zinc-500">
-          <Music className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No tracks match these rules</p>
-        </div>
-      )}
+      <PlaylistTrackList
+        items={filteredTracks}
+        getTrack={getTrackFromItem}
+        onPlay={handlePlay}
+        emptyMessage="No tracks match these rules"
+      />
 
       {/* Discovery section */}
-      {tracks.length > 0 && (
+      {filteredTracks.length > 0 && (
         <SmartPlaylistDiscoverySection
           sections={discoverySections}
           hasDiscovery={hasDiscovery}
@@ -752,53 +581,9 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
           }}
         />
       )}
-
-      {/* Context menu */}
-      {contextMenu.isOpen && contextMenu.track && (
-        <TrackContextMenu
-          track={contextMenu.track}
-          position={contextMenu.position}
-          isSelected={false}
-          onClose={closeContextMenu}
-          onPlay={() => {
-            const idx = tracks.findIndex(t => t.id === contextMenu.track?.id);
-            if (idx !== -1) handlePlay(idx);
-          }}
-          onQueue={() => {
-            if (contextMenu.track) {
-              addToQueue(contextMenu.track);
-            }
-          }}
-          onGoToArtist={() => {
-            if (contextMenu.track?.artist) {
-              navigateToArtist(contextMenu.track.artist);
-            }
-          }}
-          onGoToAlbum={() => {
-            if (contextMenu.track?.artist && contextMenu.track?.album) {
-              navigateToAlbum(contextMenu.track.artist, contextMenu.track.album);
-            }
-          }}
-          onToggleSelect={() => {}}
-          onAddToPlaylist={() => {
-            if (contextMenu.track) {
-              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
-            }
-          }}
-          onEditMetadata={() => {
-            if (contextMenu.track) {
-              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
+
+// Import needed for navigateToArtist
+import { useAppNavigation } from '../../hooks/useAppNavigation';

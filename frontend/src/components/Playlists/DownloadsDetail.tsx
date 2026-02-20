@@ -1,22 +1,12 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Download, Music, Trash2, HardDrive, X, Search } from 'lucide-react';
+import { ArrowLeft, Play, Trash2, HardDrive, X, Search } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
-import { PlayIndicator } from '../common/PlayIndicator';
-import { useSelectionStore } from '../../stores/selectionStore';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
-import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { removeOfflineTrack, clearAllOfflineTracks } from '../../services/offlineService';
-import { TrackContextMenu } from '../Library/TrackContextMenu';
-import type { ContextMenuState } from '../Library/types';
-import { initialContextMenuState } from '../Library/types';
-import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
-import { getColumnDef } from '../Library/columnDefinitions';
-import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
-import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
 import { showError, showSuccess } from '../../stores/toastStore';
-import { useUIStore } from '../../stores/uiStore';
+import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
 
 import { createLogger } from '../../utils/logger';
 
@@ -26,30 +16,21 @@ interface Props {
   onBack?: () => void;
 }
 
+type DownloadedTrack = ReturnType<typeof useDownloadedTracks>['tracks'][number];
+
 export function DownloadsDetail({ onBack: onBackProp }: Props) {
   const routeNavigate = useNavigate();
   const onBack = onBackProp || (() => routeNavigate(-1));
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { tracks, total, totalSizeFormatted, refresh } = useDownloadedTracks();
-  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
 
   const [searchFilter, setSearchFilter] = useState('');
 
-  // Column + sort state
-  const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort();
-  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
-  const gridColumns = useMemo(
-    () => buildGridColumns(columns, ['4rem', '3rem']),
-    [columns],
-  );
   const getTrackFromDownload = useCallback(
-    (t: { id: string; title?: string; artist?: string; album?: string }): Track => ({
+    (t: DownloadedTrack): Track => ({
       id: t.id,
       file_path: '',
       title: t.title || null,
@@ -71,25 +52,6 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   // Clear all confirmation state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Selection state for bulk delete
-  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
-  const [lastClickedId, setLastClickedId] = useState<string | null>(null);
-
-  // Context menu handlers
-  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({
-      isOpen: true,
-      track,
-      position: { x: e.clientX, y: e.clientY },
-    });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(initialContextMenuState);
-  }, []);
-
   const searchedTracks = useMemo(() => {
     if (!searchFilter) return tracks;
     const q = searchFilter.toLowerCase();
@@ -100,19 +62,17 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
     );
   }, [tracks, searchFilter]);
 
-  const filteredTracks = useSortedTracks(searchedTracks, sortBy, sortOrder, getTrackFromDownload);
-
   const handlePlay = useCallback((startIndex = 0) => {
-    if (filteredTracks.length === 0) return;
+    if (searchedTracks.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = filteredTracks[startIndex];
+    const clickedTrack = searchedTracks[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = filteredTracks.map(t => ({
+    const queueTracks = searchedTracks.map(t => ({
       id: t.id,
       file_path: '',
       title: t.title || 'Unknown',
@@ -129,7 +89,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
       analysis_version: 0,
     }));
     setQueue(queueTracks, startIndex);
-  }, [filteredTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+  }, [searchedTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
   const handleRemoveFromDownloads = async (trackId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -148,7 +108,6 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
       await clearAllOfflineTracks();
       await refresh();
       setShowClearConfirm(false);
-      setSelectedTrackIds(new Set());
       showSuccess('Downloads cleared');
     } catch (error) {
       log.error('Failed to clear downloads:', error);
@@ -156,48 +115,56 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
     }
   };
 
-  // Selection handlers
-  const handleTrackClick = useCallback((trackId: string, idx: number, e: React.MouseEvent) => {
-    if (e.shiftKey && lastClickedId) {
-      // Shift-click: select range
-      const lastIdx = filteredTracks.findIndex(t => t.id === lastClickedId);
-      const currentIdx = idx;
-      const [start, end] = [Math.min(lastIdx, currentIdx), Math.max(lastIdx, currentIdx)];
-      const rangeIds = filteredTracks.slice(start, end + 1).map(t => t.id);
-      setSelectedTrackIds(new Set([...selectedTrackIds, ...rangeIds]));
-    } else if (e.metaKey || e.ctrlKey) {
-      // Cmd/Ctrl-click: toggle single selection
-      const newSet = new Set(selectedTrackIds);
-      if (newSet.has(trackId)) {
-        newSet.delete(trackId);
-      } else {
-        newSet.add(trackId);
-      }
-      setSelectedTrackIds(newSet);
-      setLastClickedId(trackId);
-    } else {
-      // Normal click: play track
-      handlePlay(idx);
-      setSelectedTrackIds(new Set());
-      setLastClickedId(trackId);
-    }
-  }, [filteredTracks, lastClickedId, selectedTrackIds, handlePlay]);
-
   // Bulk delete handler
-  const handleBulkDelete = async () => {
-    const count = selectedTrackIds.size;
+  const handleBulkDelete = useCallback(async (selectedIds: Set<string>, clearSelection: () => void) => {
+    const count = selectedIds.size;
     try {
-      for (const trackId of selectedTrackIds) {
+      for (const trackId of selectedIds) {
         await removeOfflineTrack(trackId);
       }
       await refresh();
-      setSelectedTrackIds(new Set());
+      clearSelection();
       showSuccess(`Removed ${count} track${count !== 1 ? 's' : ''} from downloads`);
     } catch (error) {
       log.error('Failed to remove selected tracks:', error);
       showError('Failed to remove selected tracks');
     }
-  };
+  }, [refresh]);
+
+  // Render props for PlaylistTrackList
+  const renderDesktopTrailing = useCallback((ctx: TrackRowContext<DownloadedTrack>) => (
+    <>
+      {/* Size */}
+      <div className="text-xs text-zinc-500 text-right">
+        {ctx.item.sizeFormatted}
+      </div>
+
+      {/* Remove button */}
+      <button
+        onClick={(e) => handleRemoveFromDownloads(ctx.item.id, e)}
+        className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+        title="Remove from downloads"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
+    </>
+  ), []);
+
+  const renderMobileTrailing = useCallback((ctx: TrackRowContext<DownloadedTrack>) => (
+    <div className="flex-shrink-0 text-xs text-zinc-500">
+      {ctx.item.sizeFormatted}
+    </div>
+  ), []);
+
+  const renderBulkActions = useCallback((selectedIds: Set<string>, clearSelection: () => void) => (
+    <button
+      onClick={() => handleBulkDelete(selectedIds, clearSelection)}
+      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-md text-sm transition-colors"
+    >
+      <Trash2 className="w-4 h-4" />
+      Remove from Downloads
+    </button>
+  ), [handleBulkDelete]);
 
   return (
     <div className="space-y-4 p-4">
@@ -212,7 +179,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
 
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <Download className="w-5 h-5 text-green-500" />
+            <HardDrive className="w-5 h-5 text-green-500" />
             <h2 className="text-xl font-bold">Downloads</h2>
           </div>
 
@@ -267,208 +234,29 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
         )}
       </div>
 
-      {/* Bulk action toolbar */}
-      {selectedTrackIds.size > 0 && (
-        <div className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm p-3 rounded-lg flex items-center gap-3 border border-zinc-700">
-          <span className="text-sm text-zinc-300 font-medium">
-            {selectedTrackIds.size} track{selectedTrackIds.size !== 1 ? 's' : ''} selected
-          </span>
-          <div className="flex-1" />
-          <button
-            onClick={handleBulkDelete}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-md text-sm transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            Remove from Downloads
-          </button>
-          <button
-            onClick={() => setSelectedTrackIds(new Set())}
-            className="p-1.5 hover:bg-zinc-700 rounded-md transition-colors"
-            title="Clear selection"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* Track list */}
-      {filteredTracks.length > 0 ? (
-        <div>
-          <PlaylistColumnHeader
-            columns={columns}
-            gridColumns={gridColumns}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            toggleSort={toggleSort}
-            trailingCount={2}
-          />
-          <div className="space-y-1">
-            {filteredTracks.map((track, idx) => {
-              const fullTrack = getTrackFromDownload(track);
-              const isSelected = selectedTrackIds.has(track.id);
-              return (
-                <div key={track.id}>
-                  {/* Mobile layout */}
-                  <div
-                    onClick={(e) => handleTrackClick(track.id, idx, e)}
-                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                    className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                    } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
-                  >
-                    <div className="w-8 flex-shrink-0 text-center" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                      <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                        {track.title || 'Unknown Title'}
-                      </div>
-                      <div className="text-sm text-zinc-400 truncate">
-                        {track.artist || 'Unknown Artist'}
-                        {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                      </div>
-                    </div>
-                    <div className="flex-shrink-0 text-xs text-zinc-500">
-                      {track.sizeFormatted}
-                    </div>
-                  </div>
-                  {/* Desktop layout */}
-                  <div
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/track-id', track.id);
-                      e.dataTransfer.effectAllowed = 'copy';
-                    }}
-                    onClick={(e) => handleTrackClick(track.id, idx, e)}
-                    onContextMenu={(e) => handleContextMenu(fullTrack, e)}
-                    className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${
-                      currentTrack?.id === track.id ? 'bg-zinc-800/30' : ''
-                    } ${isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : ''}`}
-                    style={{ gridTemplateColumns: gridColumns }}
-                  >
-                  {/* Track number / Play button */}
-                  <div className="text-center cursor-pointer" onClick={(e) => { e.stopPropagation(); handlePlay(idx); }}>
-                    <PlayIndicator isCurrent={currentTrack?.id === track.id} isPlaying={isPlaying} index={idx + 1} />
-                  </div>
-
-                  {/* Title + artist (mobile: shows artist/album inline) */}
-                  <div className="min-w-0">
-                    <div className={`font-medium truncate ${currentTrack?.id === track.id ? 'text-green-500' : ''}`}>
-                      {track.title || 'Unknown Title'}
-                    </div>
-                    <div className="text-sm text-zinc-400 truncate sm:hidden">
-                      {track.artist || 'Unknown Artist'}
-                      {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-                    </div>
-                  </div>
-
-                  {/* Dynamic columns (hidden on mobile) */}
-                  {visibleColumnIds.map((colId) => {
-                    const colDef = getColumnDef(colId);
-                    if (!colDef) return <div key={colId} />;
-                    const raw = colDef.getValue(fullTrack);
-                    const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
-                    return (
-                      <div
-                        key={colId}
-                        className={`hidden sm:block text-sm text-zinc-400 truncate ${
-                          colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
-                        }`}
-                      >
-                        {String(display)}
-                      </div>
-                    );
-                  })}
-
-                  {/* Size */}
-                  <div className="text-xs text-zinc-500 text-right">
-                    {track.sizeFormatted}
-                  </div>
-
-                  {/* Remove button */}
-                  <button
-                    onClick={(e) => handleRemoveFromDownloads(track.id, e)}
-                    className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                    title="Remove from downloads"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        <div className="text-center py-12 text-zinc-500">
-          <Music className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>No downloaded tracks yet</p>
-          <p className="text-sm mt-1">Download tracks from playlists or the library for offline playback</p>
-        </div>
-      )}
-
-      {/* Context menu */}
-      {contextMenu.isOpen && contextMenu.track && (
-        <TrackContextMenu
-          track={contextMenu.track}
-          position={contextMenu.position}
-          isSelected={false}
-          onClose={closeContextMenu}
-          onPlay={() => {
-            const idx = filteredTracks.findIndex(t => t.id === contextMenu.track?.id);
-            if (idx !== -1) handlePlay(idx);
-          }}
-          onQueue={() => {
-            if (contextMenu.track) {
-              addToQueue(contextMenu.track);
+      <PlaylistTrackList
+        items={searchedTracks}
+        getTrack={getTrackFromDownload}
+        onPlay={handlePlay}
+        trailingColumns={['4rem', '3rem']}
+        renderDesktopTrailing={renderDesktopTrailing}
+        renderMobileTrailing={renderMobileTrailing}
+        renderBulkActions={renderBulkActions}
+        emptyMessage="No downloaded tracks yet"
+        emptySubMessage="Download tracks from playlists or the library for offline playback"
+        contextMenuOptions={{
+          onRemoveFromDownloads: async (track) => {
+            try {
+              await removeOfflineTrack(track.id);
+              await refresh();
+            } catch (error) {
+              log.error('Failed to remove track from downloads:', error);
+              showError('Failed to remove track from downloads');
             }
-          }}
-          onGoToArtist={() => {
-            if (contextMenu.track?.artist) {
-              navigateToArtist(contextMenu.track.artist);
-            }
-          }}
-          onGoToAlbum={() => {
-            if (contextMenu.track?.artist && contextMenu.track?.album) {
-              navigateToAlbum(contextMenu.track.artist, contextMenu.track.album);
-            }
-          }}
-          onToggleSelect={() => {
-            // Not applicable in downloads
-          }}
-          onAddToPlaylist={() => {
-            if (contextMenu.track) {
-              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
-            }
-          }}
-          onEditMetadata={() => {
-            if (contextMenu.track) {
-              if (selectedTrackIds.size > 1 && selectedTrackIds.has(contextMenu.track.id)) {
-                useSelectionStore.getState().selectAll(Array.from(selectedTrackIds));
-              }
-              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
-            }
-          }}
-          onRemoveFromDownloads={async () => {
-            if (contextMenu.track) {
-              try {
-                await removeOfflineTrack(contextMenu.track.id);
-                await refresh();
-              } catch (error) {
-                log.error('Failed to remove track from downloads:', error);
-                showError('Failed to remove track from downloads');
-              }
-            }
-          }}
-        />
-      )}
+          },
+        }}
+      />
 
       {/* Clear all confirmation modal */}
       {showClearConfirm && (
