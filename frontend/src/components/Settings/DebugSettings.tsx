@@ -13,6 +13,7 @@ import { useDownloadStore } from '../../stores/downloadStore';
 import * as offlineService from '../../services/offlineService';
 import { apiErrorTracker } from '../../utils/apiErrorTracker';
 import type { TrackedError } from '../../utils/apiErrorTracker';
+import { BUILD_TIME } from '../../main';
 
 // Capture console logs
 const logBuffer: { time: string; level: string; message: string }[] = [];
@@ -143,7 +144,7 @@ export function DebugSettings() {
             Debug Info
           </h4>
           <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
-            Platform detection, audio state, and console logs
+            Build: {BUILD_TIME === 'dev' ? 'dev' : new Date(BUILD_TIME).toLocaleString()}
           </p>
         </div>
         <span className="text-zinc-400">{expanded ? '▼' : '▶'}</span>

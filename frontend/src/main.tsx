@@ -6,9 +6,10 @@ import { createLogger } from './utils/logger';
 
 const log = createLogger('App');
 
-// Version for debugging cache issues
-const APP_VERSION = 'v3-ios-fix-2024-01-23';
-log.info(`${APP_VERSION} loaded`);
+// Build timestamp injected by Vite at build time
+declare const __BUILD_TIME__: string;
+export const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev';
+console.log(`[App] Build: ${BUILD_TIME}`);
 
 // Global handler for unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
