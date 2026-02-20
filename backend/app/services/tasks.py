@@ -20,7 +20,7 @@ from uuid import UUID
 from sqlalchemy import and_
 from sqlalchemy.orm.exc import StaleDataError
 
-from app.config import ANALYSIS_VERSION, settings
+from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, settings
 from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
 logger = logging.getLogger(__name__)
@@ -529,7 +529,7 @@ async def run_library_sync(
     from sqlalchemy import func, select
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    from app.db.models import Track
+    from app.db.models import Track, TrackAnalysis
 
     progress = SyncProgressReporter()
 
@@ -600,8 +600,8 @@ async def run_library_sync(
                     total_tracks = total_result.scalar() or 0
 
                     analyzed_result = await db.execute(
-                        select(func.count(Track.id)).where(
-                            Track.analysis_version >= ANALYSIS_VERSION
+                        select(func.count(TrackAnalysis.id)).where(
+                            TrackAnalysis.features_version >= FEATURES_VERSION
                         )
                     )
                     features_done = analyzed_result.scalar() or 0
@@ -645,12 +645,12 @@ async def run_library_sync(
                     async with local_session_maker() as db:
                         from app.db.models import TrackAnalysis
 
-                        # Count tracks with successful embeddings
+                        # Count tracks with current embeddings
                         embeddings_success_result = await db.execute(
                             select(func.count(TrackAnalysis.id)).where(
                                 and_(
-                                    TrackAnalysis.version >= ANALYSIS_VERSION,
-                                    TrackAnalysis.embedding.is_not(None),
+                                    TrackAnalysis.features_version >= FEATURES_VERSION,
+                                    TrackAnalysis.embedding_version >= EMBEDDING_VERSION,
                                 )
                             )
                         )
@@ -661,8 +661,8 @@ async def run_library_sync(
                         embeddings_failed_result = await db.execute(
                             select(func.count(TrackAnalysis.id)).where(
                                 and_(
-                                    TrackAnalysis.version >= ANALYSIS_VERSION,
-                                    TrackAnalysis.embedding.is_(None),
+                                    TrackAnalysis.features_version >= FEATURES_VERSION,
+                                    TrackAnalysis.embedding_version < EMBEDDING_VERSION,
                                     TrackAnalysis.embedding_failed_at.is_not(None),
                                     TrackAnalysis.embedding_failed_at >= failure_cutoff,
                                 )
@@ -677,7 +677,7 @@ async def run_library_sync(
                         # (NOT total Track count - those without features shouldn't count yet)
                         total_result = await db.execute(
                             select(func.count(TrackAnalysis.id)).where(
-                                TrackAnalysis.version >= ANALYSIS_VERSION
+                                TrackAnalysis.features_version >= FEATURES_VERSION
                             )
                         )
                         total_with_features = total_result.scalar() or 0
@@ -750,7 +750,7 @@ async def run_library_sync(
                     backfill_done_result = await db.execute(
                         select(func.count(TrackAnalysis.id)).where(
                             and_(
-                                TrackAnalysis.version >= ANALYSIS_VERSION,
+                                TrackAnalysis.features_version >= FEATURES_VERSION,
                                 TrackAnalysis.analysis_detail.is_not(None),
                             )
                         )
@@ -760,7 +760,7 @@ async def run_library_sync(
                     # Total tracks with current version
                     backfill_total_result = await db.execute(
                         select(func.count(TrackAnalysis.id)).where(
-                            TrackAnalysis.version >= ANALYSIS_VERSION,
+                            TrackAnalysis.features_version >= FEATURES_VERSION,
                         )
                     )
                     backfill_total = backfill_total_result.scalar() or 0
@@ -829,8 +829,8 @@ async def run_library_sync(
                         melodic_done_result = await db.execute(
                             select(func.count(TrackAnalysis.id)).where(
                                 and_(
-                                    TrackAnalysis.version >= ANALYSIS_VERSION,
-                                    TrackAnalysis.has_melodic.is_(True),
+                                    TrackAnalysis.features_version >= FEATURES_VERSION,
+                                    TrackAnalysis.melodic_version >= MELODIC_VERSION,
                                 )
                             )
                         )
@@ -840,7 +840,7 @@ async def run_library_sync(
                         melodic_total_result = await db.execute(
                             select(func.count(TrackAnalysis.id)).where(
                                 and_(
-                                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                                    TrackAnalysis.features_version >= FEATURES_VERSION,
                                     TrackAnalysis.analysis_detail.is_not(None),
                                 )
                             )
@@ -956,6 +956,25 @@ class _SyncProgressAdapter:
         self.sync_progress.error(msg)
 
 
+def _ensure_track_analysis_row(db: Any, track_id: "UUID", version: int) -> None:
+    """Create or update TrackAnalysis to record attempt version.
+
+    Used for failures/skips so the queue logic (LEFT JOIN track_analysis)
+    knows this track was already attempted at this version.
+    """
+    from sqlalchemy import select as _select
+
+    from app.db.models import TrackAnalysis
+
+    existing = db.execute(
+        _select(TrackAnalysis).where(TrackAnalysis.track_id == track_id)
+    ).scalar_one_or_none()
+    if existing:
+        existing.features_version = version
+    else:
+        db.add(TrackAnalysis(track_id=track_id, features_version=version))
+
+
 def run_track_features(track_id: str) -> dict[str, Any]:
     """Extract audio features for a track - runs in subprocess via ProcessPoolExecutor.
 
@@ -1011,7 +1030,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
             if not file_path.exists():
                 # Mark as analyzed so it won't be re-queued (file is missing)
-                track.analysis_version = ANALYSIS_VERSION
+                _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
                 track.analyzed_at = datetime.utcnow()
                 track.analysis_error = "File not found"
                 db.commit()
@@ -1032,7 +1051,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
                 if skip_reason:
                     # Mark as analyzed so it won't be re-queued
-                    track.analysis_version = ANALYSIS_VERSION
+                    _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
                     track.analyzed_at = datetime.utcnow()
                     track.analysis_error = skip_reason
                     db.commit()
@@ -1206,11 +1225,10 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
             # Create or update analysis record (without embedding - that comes in phase 2)
             # Query by track_id only - NOT by version, to avoid creating duplicates
-            # when ANALYSIS_VERSION is bumped
+            # when FEATURES_VERSION is bumped
             existing = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == track.id)
-                .order_by(TrackAnalysis.version.desc())  # Get newest version if multiple
             )
             existing_analysis = existing.scalar_one_or_none()
 
@@ -1222,14 +1240,14 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                         setattr(existing_analysis, col, val)
                 existing_analysis.features_source = features_source
                 existing_analysis.acoustid = acoustid_fingerprint
-                existing_analysis.version = ANALYSIS_VERSION
+                existing_analysis.features_version = FEATURES_VERSION
                 if analysis_detail is not None:
                     existing_analysis.analysis_detail = analysis_detail
                 # Keep existing embedding if present
             else:
                 analysis = TrackAnalysis(
                     track_id=track.id,
-                    version=ANALYSIS_VERSION,
+                    features_version=FEATURES_VERSION,
                     features_source=features_source,
                     embedding=None,  # Embedding extracted in phase 2
                     acoustid=acoustid_fingerprint,
@@ -1243,7 +1261,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 db.add(analysis)
 
             # Update track analysis status
-            track.analysis_version = ANALYSIS_VERSION
             track.analyzed_at = datetime.utcnow()
             track.analysis_error = None
             track.analysis_failed_at = None
@@ -1286,9 +1303,8 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 if track:
                     track.analysis_error = error_msg
                     track.analysis_failed_at = datetime.utcnow()
-                    # Mark as "analyzed" so sync loop doesn't block on failed tracks
-                    track.analysis_version = ANALYSIS_VERSION
                     track.analyzed_at = datetime.utcnow()
+                    _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
                     db.commit()
         except Exception as db_error:
             logger.warning(f"Could not record analysis failure to DB: {db_error}")
@@ -1311,9 +1327,8 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 if track:
                     track.analysis_error = error_msg
                     track.analysis_failed_at = datetime.utcnow()
-                    # Mark as "analyzed" so sync loop doesn't block on failed tracks
-                    track.analysis_version = ANALYSIS_VERSION
                     track.analyzed_at = datetime.utcnow()
+                    _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
                     db.commit()
         except Exception as db_error:
             logger.warning(f"Could not record analysis failure to DB: {db_error}")
@@ -1337,7 +1352,6 @@ def _record_embedding_failure(track_id: str, error_msg: str) -> None:
             result = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == UUID(track_id))
-                .order_by(TrackAnalysis.version.desc())
             )
             analysis = result.scalar_one_or_none()
 
@@ -1409,7 +1423,6 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
             analysis_result = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == track.id)
-                .order_by(TrackAnalysis.version.desc())
             )
             existing_analysis = analysis_result.scalar_one_or_none()
 
@@ -1474,7 +1487,7 @@ def run_track_embedding(track_id: str) -> dict[str, Any]:
             if existing_analysis:
                 existing_analysis.embedding = embedding
                 existing_analysis.embedding_source = embedding_source
-                existing_analysis.version = ANALYSIS_VERSION  # Ensure version is current
+                existing_analysis.embedding_version = EMBEDDING_VERSION
                 db.commit()
                 logger.info(f"Embedding saved for {track.title} (source={embedding_source})")
             else:
@@ -1544,9 +1557,9 @@ async def queue_tracks_for_features(limit: int = 500) -> int:
     This includes tracks that haven't been analyzed or have old analysis version.
     Returns the number of tracks queued.
     """
-    from sqlalchemy import and_, or_, select
+    from sqlalchemy import or_, select
 
-    from app.db.models import Track
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.background import get_background_manager
 
@@ -1555,32 +1568,21 @@ async def queue_tracks_for_features(limit: int = 500) -> int:
         failure_cutoff = datetime.utcnow() - timedelta(hours=24)
 
         # Find tracks that need analysis:
-        # 1. Never analyzed (version=0, analyzed_at=NULL)
-        # 2. Outdated analysis version
+        # 1. No TrackAnalysis row (never attempted)
+        # 2. Outdated features_version
         # 3. Previously failed but 24h has passed (retry window open)
         result = await db.execute(
             select(Track.id)
+            .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
                 or_(
-                    # Never analyzed or outdated version
-                    and_(
-                        or_(
-                            Track.analysis_version == 0,
-                            Track.analysis_version < ANALYSIS_VERSION,
-                            Track.analyzed_at.is_(None),
-                        ),
-                        or_(
-                            Track.analysis_failed_at.is_(None),
-                            Track.analysis_failed_at < failure_cutoff,
-                        ),
-                    ),
-                    # Previously failed, 24h passed - retry
-                    and_(
-                        Track.analysis_error.is_not(None),
-                        Track.analysis_failed_at.is_not(None),
-                        Track.analysis_failed_at < failure_cutoff,
-                    ),
-                )
+                    TrackAnalysis.id.is_(None),
+                    TrackAnalysis.features_version < FEATURES_VERSION,
+                ),
+                or_(
+                    Track.analysis_failed_at.is_(None),
+                    Track.analysis_failed_at < failure_cutoff,
+                ),
             )
             .limit(limit)
         )
@@ -1617,15 +1619,15 @@ async def queue_tracks_for_embeddings(limit: int = 500) -> int:
     async with async_session_maker() as db:
         failure_cutoff = datetime.utcnow() - timedelta(hours=24)
 
-        # Find tracks with analysis record but no embedding
+        # Find tracks with analysis record but outdated/missing embedding
         # Exclude tracks that recently failed embedding (within 24h) to avoid infinite retry
         result = await db.execute(
             select(Track.id)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
                 and_(
-                    TrackAnalysis.version >= ANALYSIS_VERSION,
-                    TrackAnalysis.embedding.is_(None),
+                    TrackAnalysis.features_version >= FEATURES_VERSION,
+                    TrackAnalysis.embedding_version < EMBEDDING_VERSION,
                     # Exclude recently-failed embeddings (use TrackAnalysis.embedding_failed_at)
                     or_(
                         TrackAnalysis.embedding_failed_at.is_(None),
@@ -1664,9 +1666,9 @@ async def queue_tracks_for_melodic(limit: int = 500) -> int:
             select(TrackAnalysis.track_id)
             .where(
                 and_(
-                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                    TrackAnalysis.features_version >= FEATURES_VERSION,
                     TrackAnalysis.analysis_detail.is_not(None),
-                    TrackAnalysis.has_melodic.is_(False),
+                    TrackAnalysis.melodic_version < MELODIC_VERSION,
                 )
             )
             .limit(limit)
@@ -1683,10 +1685,12 @@ async def queue_tracks_for_melodic(limit: int = 500) -> int:
 
 
 async def queue_tracks_for_backfill(limit: int = 500) -> int:
-    """Queue tracks that need analysis backfill.
+    """Queue tracks that need analysis backfill (deprecated, self-eliminating).
 
-    Finds tracks with current analysis version but no analysis_detail,
-    and queues them for cheap section analysis.
+    Populates analysis_detail for tracks that have features but no structural data.
+    Once all tracks have analysis_detail, this phase is a no-op.
+    Remove after 2026-06-01.
+
     Returns the number of tracks queued.
     """
     from sqlalchemy import and_, select
@@ -1701,7 +1705,7 @@ async def queue_tracks_for_backfill(limit: int = 500) -> int:
             select(TrackAnalysis.track_id)
             .where(
                 and_(
-                    TrackAnalysis.version >= ANALYSIS_VERSION,
+                    TrackAnalysis.features_version >= FEATURES_VERSION,
                     TrackAnalysis.analysis_detail.is_(None),
                 )
             )
@@ -1742,18 +1746,16 @@ async def queue_unanalyzed_tracks(limit: int = 500) -> int:
 
         result = await db.execute(
             select(Track.id)
+            .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
-                and_(
-                    or_(
-                        Track.analysis_version == 0,
-                        Track.analysis_version < ANALYSIS_VERSION,
-                        Track.analyzed_at.is_(None),
-                    ),
-                    or_(
-                        Track.analysis_failed_at.is_(None),
-                        Track.analysis_failed_at < failure_cutoff,
-                    ),
-                )
+                or_(
+                    TrackAnalysis.id.is_(None),
+                    TrackAnalysis.features_version < FEATURES_VERSION,
+                ),
+                or_(
+                    Track.analysis_failed_at.is_(None),
+                    Track.analysis_failed_at < failure_cutoff,
+                ),
             )
             .limit(limit)
         )
@@ -1767,9 +1769,8 @@ async def queue_unanalyzed_tracks(limit: int = 500) -> int:
                 .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
                 .where(
                     and_(
-                        TrackAnalysis.version >= ANALYSIS_VERSION,  # Must check analysis record version!
-                        TrackAnalysis.embedding.is_(None),
-                        Track.analysis_version >= ANALYSIS_VERSION,
+                        TrackAnalysis.features_version >= FEATURES_VERSION,
+                        TrackAnalysis.embedding_version < EMBEDDING_VERSION,
                         or_(
                             Track.analysis_failed_at.is_(None),
                             Track.analysis_failed_at < failure_cutoff,

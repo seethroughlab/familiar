@@ -16,10 +16,9 @@ from uuid import UUID
 
 import numpy as np
 
-logger = logging.getLogger(__name__)
+from app.config import MELODIC_VERSION
 
-# Independent version from ANALYSIS_VERSION (which covers CLAP/librosa features)
-TRACK_ANALYSIS_VERSION = 5
+logger = logging.getLogger(__name__)
 
 # Minimum track duration for analysis (seconds)
 MIN_DURATION_SECONDS = 30
@@ -404,14 +403,13 @@ def run_analysis(track_id: str) -> dict[str, Any]:
             analysis = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == UUID(track_id))
-                .order_by(TrackAnalysis.version.desc())
             ).scalar_one_or_none()
 
             if not analysis:
                 return {"status": "error", "error": "No analysis row exists — run Phase 1 first"}
 
             # Check cache: if analysis_detail exists and has melodic, return cached
-            if analysis.analysis_detail and analysis.has_melodic:
+            if analysis.analysis_detail and analysis.has_melodic and "melodic" in analysis.analysis_detail:
                 return {"status": "cached", "track_id": track_id}
 
             # Load audio
@@ -427,7 +425,9 @@ def run_analysis(track_id: str) -> dict[str, Any]:
             shared = _precompute_shared(y, sr)
 
             need_cheap = analysis.analysis_detail is None
-            need_melodic = not analysis.has_melodic
+            need_melodic = not analysis.has_melodic or (
+                analysis.analysis_detail is not None and "melodic" not in analysis.analysis_detail
+            )
 
             results = dict(analysis.analysis_detail) if analysis.analysis_detail else {}
             section_errors: list[dict[str, str]] = []
@@ -463,7 +463,7 @@ def run_analysis(track_id: str) -> dict[str, Any]:
             elapsed = time.time() - start_time
 
             analysis.analysis_detail = results
-            analysis.melodic_version = TRACK_ANALYSIS_VERSION
+            analysis.melodic_version = MELODIC_VERSION
             db.commit()
 
             logger.info(
@@ -517,7 +517,6 @@ def run_backfill(track_id: str) -> dict[str, Any]:
             analysis = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == UUID(track_id))
-                .order_by(TrackAnalysis.version.desc())
             ).scalar_one_or_none()
 
             if not analysis:
@@ -593,13 +592,12 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
             analysis = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == UUID(track_id))
-                .order_by(TrackAnalysis.version.desc())
             ).scalar_one_or_none()
 
             if not analysis:
                 return {"status": "error", "error": "No analysis row"}
 
-            if analysis.has_melodic:
+            if analysis.melodic_version >= MELODIC_VERSION:
                 return {"status": "cached", "track_id": track_id}
 
             import librosa
@@ -632,7 +630,7 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
             if midi_path:
                 analysis.midi_path = midi_path
             analysis.has_melodic = not melodic_result.get("degraded", False)
-            analysis.melodic_version = TRACK_ANALYSIS_VERSION
+            analysis.melodic_version = MELODIC_VERSION
             db.commit()
 
             elapsed = time.time() - start_time

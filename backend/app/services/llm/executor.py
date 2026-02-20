@@ -319,8 +319,6 @@ Respond with ONLY the playlist name, nothing else."""
         stmt = (
             select(TrackAnalysis.embedding)
             .where(TrackAnalysis.track_id == UUID(track_id))
-            .order_by(TrackAnalysis.version.desc())
-            .limit(1)
         )
         result = await self.db.execute(stmt)
         embedding = result.scalar_one_or_none()
@@ -850,8 +848,6 @@ Respond with ONLY the playlist name, nothing else."""
         analysis_stmt = (
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == UUID(track_id))
-            .order_by(TrackAnalysis.version.desc())
-            .limit(1)
         )
         analysis_result = await self.db.execute(analysis_stmt)
         analysis = analysis_result.scalar_one_or_none()
@@ -1903,7 +1899,6 @@ Respond with ONLY the playlist name, nothing else."""
                     await self.db.execute(
                         select(TrackAnalysis)
                         .where(TrackAnalysis.track_id == UUID(tid))
-                        .order_by(TrackAnalysis.version.desc())
                     )
                 ).scalar_one_or_none()
 
@@ -1920,8 +1915,7 @@ Respond with ONLY the playlist name, nothing else."""
                             await self.db.execute(
                                 select(TrackAnalysis)
                                 .where(TrackAnalysis.track_id == UUID(tid))
-                                .order_by(TrackAnalysis.version.desc())
-                            )
+                                    )
                         ).scalar_one_or_none()
                         if analysis and analysis.analysis_detail:
                             break

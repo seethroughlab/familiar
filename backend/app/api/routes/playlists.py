@@ -185,8 +185,8 @@ async def create_playlist(
         except ValueError:
             continue
 
-        # Verify track exists
-        track = await db.get(Track, track_id)
+        # Verify track exists (load analyses for analysis_version property)
+        track = await db.get(Track, track_id, options=[selectinload(Track.analyses)])
         if not track:
             continue
 
@@ -371,7 +371,7 @@ async def get_playlist(
         .where(PlaylistTrack.playlist_id == playlist_id)
         .order_by(PlaylistTrack.position)
         .options(
-            selectinload(PlaylistTrack.track),
+            selectinload(PlaylistTrack.track).selectinload(Track.analyses),
             selectinload(PlaylistTrack.external_track),
         )
     )

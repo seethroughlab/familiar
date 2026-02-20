@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Track, TrackStatus
+from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.services.normalize import normalize_for_matching
 
 logger = logging.getLogger(__name__)
@@ -407,17 +407,18 @@ class EmbeddingMapService:
             - first_track_id: UUID for artwork lookup
             - representative_track_id: track closest to centroid (best for preview)
         """
-        from app.config import ANALYSIS_VERSION
+        from app.config import FEATURES_VERSION
 
         # Fetch all tracks with embeddings
         query = (
             select(Track)
+            .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .options(selectinload(Track.analyses))
             .where(
                 Track.status == TrackStatus.ACTIVE,
                 Track.artist.isnot(None),
                 Track.artist != "",
-                Track.analysis_version >= ANALYSIS_VERSION,
+                TrackAnalysis.features_version >= FEATURES_VERSION,
             )
         )
         result = await db.execute(query)
@@ -438,7 +439,7 @@ class EmbeddingMapService:
                 continue
 
             # Get latest analysis with embedding
-            latest = max(track.analyses, key=lambda a: a.version)
+            latest = track.analyses[0]
             if latest.embedding is None:
                 continue
 
@@ -496,16 +497,17 @@ class EmbeddingMapService:
 
         Returns dict mapping "Artist - Album" to embedding data.
         """
-        from app.config import ANALYSIS_VERSION
+        from app.config import FEATURES_VERSION
 
         query = (
             select(Track)
+            .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .options(selectinload(Track.analyses))
             .where(
                 Track.status == TrackStatus.ACTIVE,
                 Track.album.isnot(None),
                 Track.album != "",
-                Track.analysis_version >= ANALYSIS_VERSION,
+                TrackAnalysis.features_version >= FEATURES_VERSION,
             )
         )
         result = await db.execute(query)
@@ -520,7 +522,7 @@ class EmbeddingMapService:
             if not track.analyses:
                 continue
 
-            latest = max(track.analyses, key=lambda a: a.version)
+            latest = track.analyses[0]
             if latest.embedding is None:
                 continue
 

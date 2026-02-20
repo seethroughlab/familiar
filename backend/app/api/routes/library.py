@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import String, func, select
+from sqlalchemy import String, delete, func, select
 
 from app.api.deps import DbSession
 from app.api.exceptions import sanitize_error_for_client
@@ -1338,25 +1338,9 @@ async def get_mood_distribution(
 
     cell_size = 1.0 / grid_size
 
-    # Subquery: latest analysis per track (highest version)
-    latest_analysis = (
-        select(
-            TrackAnalysis.track_id,
-            TrackAnalysis.energy,
-            TrackAnalysis.valence,
-            func.row_number()
-            .over(
-                partition_by=TrackAnalysis.track_id,
-                order_by=TrackAnalysis.version.desc(),
-            )
-            .label("rn"),
-        )
-        .subquery("latest_analysis")
-    )
-
-    # Use typed columns directly
-    energy_expr = latest_analysis.c.energy
-    valence_expr = latest_analysis.c.valence
+    # Use typed columns directly (one row per track via UniqueConstraint)
+    energy_expr = TrackAnalysis.energy
+    valence_expr = TrackAnalysis.valence
 
     # Bin into grid cells, clamped to [0, grid_size-1]
     energy_cell = func.least(
@@ -1375,12 +1359,11 @@ async def get_mood_distribution(
             valence_cell.label("v_cell"),
             func.count().label("cnt"),
             # Collect up to 5 sample track IDs per cell
-            array_agg(cast(latest_analysis.c.track_id, String)).label("sample_ids"),
+            array_agg(cast(TrackAnalysis.track_id, String)).label("sample_ids"),
         )
-        .select_from(latest_analysis)
-        .join(Track, Track.id == latest_analysis.c.track_id)
+        .select_from(TrackAnalysis)
+        .join(Track, Track.id == TrackAnalysis.track_id)
         .where(
-            latest_analysis.c.rn == 1,
             Track.status == TrackStatus.ACTIVE,
             energy_expr.isnot(None),
             valence_expr.isnot(None),
@@ -1825,7 +1808,7 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
     """Get library statistics in a single query using conditional aggregation."""
     from sqlalchemy import case
 
-    from app.config import ANALYSIS_VERSION
+    from app.config import FEATURES_VERSION
 
     result = await db.execute(
         select(
@@ -1835,13 +1818,16 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
             func.sum(case((Track.album_type == AlbumType.ALBUM, 1), else_=0)).label("albums"),
             func.sum(case((Track.album_type == AlbumType.COMPILATION, 1), else_=0)).label("compilations"),
             func.sum(case((Track.album_type == AlbumType.SOUNDTRACK, 1), else_=0)).label("soundtracks"),
-            func.sum(case((Track.analysis_version >= ANALYSIS_VERSION, 1), else_=0)).label("analyzed"),
         )
     )
     row = result.one()
 
     total_tracks = row.total_tracks or 0
-    analyzed_tracks = row.analyzed or 0
+    analyzed_tracks = await db.scalar(
+        select(func.count(TrackAnalysis.id)).where(
+            TrackAnalysis.features_version >= FEATURES_VERSION
+        )
+    ) or 0
 
     return LibraryStats(
         total_tracks=total_tracks,
@@ -2699,8 +2685,10 @@ async def import_execute(
                 existing.duration_seconds = metadata.get("duration_seconds")
 
                 # Reset analysis to trigger re-analysis
-                existing.analysis_version = 0
                 existing.analyzed_at = None
+                existing.analysis_error = None
+                existing.analysis_failed_at = None
+                await db.execute(delete(TrackAnalysis).where(TrackAnalysis.track_id == existing.id))
 
                 replaced_count += 1
 
@@ -2778,7 +2766,7 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
 
     from sqlalchemy import or_
 
-    from app.config import ANALYSIS_VERSION
+    from app.config import FEATURES_VERSION
     from app.services.analysis import get_analysis_capabilities
 
     # Get analysis capabilities
@@ -2787,7 +2775,9 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
     # Get counts from database
     total = await db.scalar(select(func.count(Track.id))) or 0
     analyzed = await db.scalar(
-        select(func.count(Track.id)).where(Track.analysis_version >= ANALYSIS_VERSION)
+        select(func.count(TrackAnalysis.id)).where(
+            TrackAnalysis.features_version >= FEATURES_VERSION
+        )
     ) or 0
     failed = await db.scalar(
         select(func.count(Track.id)).where(Track.analysis_failed_at.isnot(None))
@@ -2799,11 +2789,16 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
     ) or 0
     without_embeddings = analyzed - with_embeddings
 
-    # Pending = not analyzed and not recently failed
+    # Pending = no TrackAnalysis row or outdated version, and not recently failed
     failure_cutoff = datetime.utcnow() - timedelta(hours=24)
     pending = await db.scalar(
-        select(func.count(Track.id)).where(
-            Track.analysis_version < ANALYSIS_VERSION,
+        select(func.count(Track.id))
+        .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        .where(
+            or_(
+                TrackAnalysis.id.is_(None),
+                TrackAnalysis.features_version < FEATURES_VERSION,
+            ),
             or_(
                 Track.analysis_failed_at.is_(None),
                 Track.analysis_failed_at < failure_cutoff,

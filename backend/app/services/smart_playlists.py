@@ -310,30 +310,7 @@ class SmartPlaylistService:
         query = select(Track)
 
         if needs_analysis:
-            # Subquery to get latest analysis per track
-            latest_analysis = (
-                select(
-                    TrackAnalysis.track_id,
-                    func.max(TrackAnalysis.version).label("max_version"),
-                )
-                .group_by(TrackAnalysis.track_id)
-                .subquery()
-            )
-
-            query = (
-                query
-                .join(
-                    latest_analysis,
-                    Track.id == latest_analysis.c.track_id,
-                )
-                .join(
-                    TrackAnalysis,
-                    and_(
-                        Track.id == TrackAnalysis.track_id,
-                        TrackAnalysis.version == latest_analysis.c.max_version,
-                    ),
-                )
-            )
+            query = query.join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
 
         if needs_play_history:
             # Left join with ProfilePlayHistory for the current profile

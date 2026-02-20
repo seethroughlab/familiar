@@ -12,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from app.api.deps import CurrentProfile, DbSession
-from app.config import ANALYSIS_VERSION, get_app_version
+from app.config import FEATURES_VERSION, get_app_version
 
 router = APIRouter(tags=["diagnostics"])
 
@@ -97,7 +97,7 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
     from sqlalchemy import func, select
 
     from app.api.routes.health import is_running_in_docker, system_health_check
-    from app.db.models import Track
+    from app.db.models import Track, TrackAnalysis
     from app.logging_config import get_recent_logs
     from app.services.app_settings import get_app_settings_service
     from app.services.tasks import get_recent_failures
@@ -118,14 +118,16 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
     try:
         total_tracks = await db.scalar(select(func.count(Track.id))) or 0
         analyzed_tracks = await db.scalar(
-            select(func.count(Track.id)).where(Track.analysis_version >= ANALYSIS_VERSION)
+            select(func.count(TrackAnalysis.id)).where(
+                TrackAnalysis.features_version >= FEATURES_VERSION
+            )
         ) or 0
 
         library_stats = {
             "total_tracks": total_tracks,
             "analyzed_tracks": analyzed_tracks,
             "pending_analysis": total_tracks - analyzed_tracks,
-            "analysis_version": ANALYSIS_VERSION,
+            "analysis_version": FEATURES_VERSION,
         }
     except Exception as e:
         library_stats = {"error": str(e)}

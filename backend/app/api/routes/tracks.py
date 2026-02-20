@@ -202,15 +202,7 @@ async def list_track_ids(
         query = query.where(Track.year <= year_to)
 
     if has_feature_filter:
-        analysis_subq = (
-            select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-            .group_by(TrackAnalysis.track_id)
-            .subquery()
-        )
-        query = query.join(analysis_subq, Track.id == analysis_subq.c.track_id).join(
-            TrackAnalysis,
-            (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
-        )
+        query = query.join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
         if energy_min is not None:
             query = query.where(TrackAnalysis.energy >= energy_min)
         if energy_max is not None:
@@ -237,15 +229,7 @@ async def list_track_ids(
                 query = query.order_by(Track.artist, Track.album, Track.track_number)
         else:
             if not has_feature_filter:
-                analysis_subq = (
-                    select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-                    .group_by(TrackAnalysis.track_id)
-                    .subquery()
-                )
-                query = query.outerjoin(analysis_subq, Track.id == analysis_subq.c.track_id).outerjoin(
-                    TrackAnalysis,
-                    (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
-                )
+                query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             sort_col_attr = getattr(TrackAnalysis, sort_by, None)
             sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
@@ -575,7 +559,7 @@ async def list_tracks(
                     continue
                 response = TrackResponse.model_validate(track)
                 if include_features and track.analyses:
-                    latest = max(track.analyses, key=lambda a: a.version)
+                    latest = track.analyses[0]
                     if latest.bpm is not None:
                         response.features = TrackFeaturesResponse(
                             bpm=latest.bpm,
@@ -636,22 +620,9 @@ async def list_tracks(
 
     # Audio feature filters
     if has_feature_filter:
-        analysis_subq = (
-            select(
-                TrackAnalysis.track_id,
-                func.max(TrackAnalysis.version).label("max_version")
-            )
-            .where(TrackAnalysis.bpm.isnot(None))
-            .group_by(TrackAnalysis.track_id)
-            .subquery()
-        )
         query = query.join(
-            analysis_subq,
-            Track.id == analysis_subq.c.track_id
-        ).join(
             TrackAnalysis,
-            (TrackAnalysis.track_id == analysis_subq.c.track_id) &
-            (TrackAnalysis.version == analysis_subq.c.max_version)
+            (Track.id == TrackAnalysis.track_id) & (TrackAnalysis.bpm.isnot(None))
         )
         if energy_min is not None:
             query = query.where(TrackAnalysis.energy >= energy_min)
@@ -682,22 +653,7 @@ async def list_tracks(
                 query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
         else:
             if not has_feature_filter:
-                analysis_subq = (
-                    select(
-                        TrackAnalysis.track_id,
-                        func.max(TrackAnalysis.version).label("max_version")
-                    )
-                    .where(TrackAnalysis.bpm.isnot(None))
-                    .group_by(TrackAnalysis.track_id)
-                    .subquery()
-                )
-                query = query.outerjoin(
-                    analysis_subq, Track.id == analysis_subq.c.track_id
-                ).outerjoin(
-                    TrackAnalysis,
-                    (TrackAnalysis.track_id == analysis_subq.c.track_id) &
-                    (TrackAnalysis.version == analysis_subq.c.max_version)
-                )
+                query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             sort_col_attr = getattr(TrackAnalysis, sort_by, None)
             sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
@@ -728,7 +684,7 @@ async def list_tracks(
     for track in tracks:
         response = TrackResponse.model_validate(track)
         if include_features and track.analyses:
-            latest = max(track.analyses, key=lambda a: a.version)
+            latest = track.analyses[0]
             if latest.bpm is not None:
                 response.features = TrackFeaturesResponse(
                     bpm=latest.bpm,
@@ -856,15 +812,9 @@ async def get_track_index(
         base_query = base_query.where(Track.year <= year_to)
 
     if has_feature_filter:
-        analysis_subq = (
-            select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-            .where(TrackAnalysis.bpm.isnot(None))
-            .group_by(TrackAnalysis.track_id)
-            .subquery()
-        )
-        base_query = base_query.join(analysis_subq, Track.id == analysis_subq.c.track_id).join(
+        base_query = base_query.join(
             TrackAnalysis,
-            (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
+            (Track.id == TrackAnalysis.track_id) & (TrackAnalysis.bpm.isnot(None))
         )
         if energy_min is not None:
             base_query = base_query.where(TrackAnalysis.energy >= energy_min)
@@ -896,16 +846,7 @@ async def get_track_index(
         order_clauses = [Track.artist, Track.album, Track.track_number]
 
     if needs_analysis_join:
-        analysis_subq = (
-            select(TrackAnalysis.track_id, func.max(TrackAnalysis.version).label("max_version"))
-            .where(TrackAnalysis.bpm.isnot(None))
-            .group_by(TrackAnalysis.track_id)
-            .subquery()
-        )
-        base_query = base_query.outerjoin(analysis_subq, Track.id == analysis_subq.c.track_id).outerjoin(
-            TrackAnalysis,
-            (TrackAnalysis.track_id == analysis_subq.c.track_id) & (TrackAnalysis.version == analysis_subq.c.max_version)
-        )
+        base_query = base_query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
 
     row_num = func.row_number().over(order_by=order_clauses).label("row_num")
     base_query = base_query.add_columns(row_num)
@@ -940,7 +881,7 @@ async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
 
     # Get latest analysis features
     if track.analyses:
-        latest = max(track.analyses, key=lambda a: a.version)
+        latest = track.analyses[0]
         if latest.bpm is not None:
             response.features = TrackFeaturesResponse(
                 bpm=latest.bpm,
@@ -990,28 +931,13 @@ async def get_album_gain(
     if not album_artist:
         return AlbumGainResponse()
 
-    # Get loudness_lufs for all tracks in this album from their latest analysis
-    analysis_subq = (
-        select(
-            TrackAnalysis.track_id,
-            func.max(TrackAnalysis.version).label("max_version"),
-        )
-        .where(TrackAnalysis.bpm.isnot(None))
-        .group_by(TrackAnalysis.track_id)
-        .subquery()
-    )
-
+    # Get loudness_lufs for all tracks in this album
     album_query = (
         select(
             TrackAnalysis.loudness_lufs.label("lufs"),
             TrackAnalysis.track_peak.label("peak"),
         )
         .join(Track, Track.id == TrackAnalysis.track_id)
-        .join(
-            analysis_subq,
-            (TrackAnalysis.track_id == analysis_subq.c.track_id)
-            & (TrackAnalysis.version == analysis_subq.c.max_version),
-        )
         .where(
             Track.album == track.album,
             (Track.album_artist == album_artist) | (Track.artist == album_artist),
@@ -1058,8 +984,6 @@ async def get_similar_tracks(
     query = (
         select(TrackAnalysis.embedding)
         .where(TrackAnalysis.track_id == track_id)
-        .order_by(TrackAnalysis.version.desc())
-        .limit(1)
     )
     result = await db.execute(query)
     embedding = result.scalar_one_or_none()
@@ -1147,8 +1071,6 @@ async def get_track_discover(
     embedding_query = (
         select(TrackAnalysis.embedding)
         .where(TrackAnalysis.track_id == track_id)
-        .order_by(TrackAnalysis.version.desc())
-        .limit(1)
     )
     embedding_result = await db.execute(embedding_query)
     embedding = embedding_result.scalar_one_or_none()
@@ -1922,7 +1844,7 @@ async def update_track_metadata(
 
     # Get latest analysis features
     if track.analyses:
-        latest = max(track.analyses, key=lambda a: a.version)
+        latest = track.analyses[0]
         if latest.bpm is not None:
             # Merge user overrides with analysis features
             features_data: dict[str, Any] = {
@@ -2001,7 +1923,7 @@ async def get_track_metadata(
 
     # Get latest analysis features with user overrides applied
     if track.analyses:
-        latest = max(track.analyses, key=lambda a: a.version)
+        latest = track.analyses[0]
         if latest.bpm is not None:
             features_data: dict[str, Any] = {
                 "bpm": latest.bpm,

@@ -16,7 +16,7 @@ import musicbrainzngs
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import ANALYSIS_VERSION
+from app.config import FEATURES_VERSION
 from app.db.models import Track, TrackAnalysis
 
 logger = logging.getLogger(__name__)
@@ -188,7 +188,7 @@ class AudioIdentificationService:
         query = (
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == track_id)
-            .where(TrackAnalysis.version == ANALYSIS_VERSION)
+            .where(TrackAnalysis.features_version == FEATURES_VERSION)
         )
         result = await db.execute(query)
         return result.scalar_one_or_none()

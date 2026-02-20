@@ -10,11 +10,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AUDIO_EXTENSIONS
-from app.db.models import Track, TrackStatus
+from app.db.models import Track, TrackAnalysis, TrackStatus
 
 
 class LibraryValidationError(Exception):
@@ -484,6 +484,10 @@ class LibraryScanner:
                         existing, file_hash, file_mtime, file_size, reset_analysis=reset_analysis
                     )
                     if reset_analysis:
+                        # Delete TrackAnalysis so track gets re-queued
+                        await self.db.execute(
+                            delete(TrackAnalysis).where(TrackAnalysis.track_id == track.id)
+                        )
                         pending_analysis_ids.append(str(track.id))
                         results["queued"] += 1
                     results["updated"] += 1
@@ -810,8 +814,9 @@ class LibraryScanner:
 
         # Only reset analysis status if requested (when file content changed)
         if reset_analysis:
-            track.analysis_version = 0
             track.analyzed_at = None
+            track.analysis_error = None
+            track.analysis_failed_at = None
 
         # Note: Analysis is queued by the caller after commit
         return track

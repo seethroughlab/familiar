@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, text
 
 from app.api.deps import DbSession
-from app.config import ANALYSIS_VERSION, get_app_version
-from app.db.models import Track
+from app.config import FEATURES_VERSION, get_app_version
+from app.db.models import Track, TrackAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -210,7 +210,7 @@ async def system_health_check(db: DbSession) -> SystemHealth:
     try:
         total_tracks = await db.scalar(select(func.count(Track.id))) or 0
         analyzed_tracks = await db.scalar(
-            select(func.count(Track.id)).where(Track.analysis_version >= ANALYSIS_VERSION)
+            select(func.count(TrackAnalysis.id)).where(TrackAnalysis.features_version >= FEATURES_VERSION)
         ) or 0
         pending = total_tracks - analyzed_tracks
 
@@ -314,7 +314,7 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
     """Get detailed status of background processing and task queues."""
     from datetime import datetime
 
-    from app.config import ANALYSIS_VERSION
+    from app.config import FEATURES_VERSION
     from app.services.background import get_background_manager
     from app.services.tasks import get_recent_failures
 
@@ -373,7 +373,7 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
     # Get analysis progress
     total_tracks = await db.scalar(select(func.count(Track.id))) or 0
     analyzed_tracks = await db.scalar(
-        select(func.count(Track.id)).where(Track.analysis_version >= ANALYSIS_VERSION)
+        select(func.count(TrackAnalysis.id)).where(TrackAnalysis.features_version >= FEATURES_VERSION)
     ) or 0
 
     analysis_progress = {

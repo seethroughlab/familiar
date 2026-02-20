@@ -80,7 +80,6 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
             await db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == UUID(tid))
-                .order_by(TrackAnalysis.version.desc())
             )
         ).scalar_one_or_none()
 
@@ -126,7 +125,6 @@ async def trigger_analysis(track_id: UUID, db: DbSession):
         await db.execute(
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == track_id)
-            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
@@ -146,7 +144,6 @@ async def get_analysis(track_id: UUID, db: DbSession):
         await db.execute(
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == track_id)
-            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
@@ -158,7 +155,7 @@ async def get_analysis(track_id: UUID, db: DbSession):
 
     return {
         "track_id": str(track_id),
-        "version": analysis.version,
+        "features_version": analysis.features_version,
         "results": analysis.analysis_detail,
         "midi_path": analysis.midi_path,
         "has_melodic": analysis.has_melodic,
@@ -174,7 +171,6 @@ async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md")
         await db.execute(
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == track_id)
-            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
@@ -215,7 +211,6 @@ async def get_similarity_image(track_id: UUID, db: DbSession):
         await db.execute(
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == track_id)
-            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 
@@ -250,7 +245,6 @@ async def get_analysis_midi(track_id: UUID, db: DbSession):
         await db.execute(
             select(TrackAnalysis)
             .where(TrackAnalysis.track_id == track_id)
-            .order_by(TrackAnalysis.version.desc())
         )
     ).scalar_one_or_none()
 

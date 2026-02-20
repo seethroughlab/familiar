@@ -10,8 +10,8 @@ Privacy:
 - Contribution is opt-in
 
 Versioning:
-- Embeddings are versioned by ANALYSIS_VERSION and CLAP model version
-- Features are versioned by ANALYSIS_VERSION
+- Embeddings are versioned by EMBEDDING_VERSION and CLAP model version
+- Features are versioned by FEATURES_VERSION
 - Prevents mixing data from incompatible analysis pipelines
 """
 
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 import httpx
 import numpy as np
 
-from app.config import ANALYSIS_VERSION
+from app.config import EMBEDDING_VERSION, FEATURES_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -76,20 +76,20 @@ class CommunityCacheService:
         cache = CommunityCacheService()
 
         # Check cache before computing locally (embeddings)
-        cached = await cache.lookup_embedding(acoustid_fingerprint, ANALYSIS_VERSION)
+        cached = await cache.lookup_embedding(acoustid_fingerprint, EMBEDDING_VERSION)
         if cached:
             embedding = cached.embedding
         else:
             embedding = compute_clap_embedding(audio_file)
-            await cache.contribute_embedding(acoustid_fingerprint, embedding, ANALYSIS_VERSION)
+            await cache.contribute_embedding(acoustid_fingerprint, embedding, EMBEDDING_VERSION)
 
         # Check cache for features
-        cached_feat = await cache.lookup_features(acoustid_fingerprint, ANALYSIS_VERSION)
+        cached_feat = await cache.lookup_features(acoustid_fingerprint, FEATURES_VERSION)
         if cached_feat:
             features = cached_feat
         else:
             features = extract_features(audio_file)
-            await cache.contribute_features(acoustid_fingerprint, features, ANALYSIS_VERSION)
+            await cache.contribute_features(acoustid_fingerprint, features, FEATURES_VERSION)
     """
 
     def __init__(
@@ -189,13 +189,13 @@ class CommunityCacheService:
 
         Args:
             acoustid_fingerprint: The raw AcoustID fingerprint string
-            analysis_version: Version to match (defaults to current ANALYSIS_VERSION)
+            analysis_version: Version to match (defaults to current EMBEDDING_VERSION)
 
         Returns:
             CachedEmbedding if found, None otherwise
         """
         if analysis_version is None:
-            analysis_version = ANALYSIS_VERSION
+            analysis_version = EMBEDDING_VERSION
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
@@ -263,7 +263,7 @@ class CommunityCacheService:
             True if contribution was accepted, False otherwise
         """
         if analysis_version is None:
-            analysis_version = ANALYSIS_VERSION
+            analysis_version = EMBEDDING_VERSION
 
         if len(embedding) != EMBEDDING_DIM:
             logger.warning(f"Cannot contribute embedding with wrong dimension: {len(embedding)}")
@@ -308,13 +308,13 @@ class CommunityCacheService:
 
         Args:
             acoustid_fingerprint: The raw AcoustID fingerprint string
-            analysis_version: Version to match (defaults to current ANALYSIS_VERSION)
+            analysis_version: Version to match (defaults to current FEATURES_VERSION)
 
         Returns:
             CachedFeatures if found, None otherwise
         """
         if analysis_version is None:
-            analysis_version = ANALYSIS_VERSION
+            analysis_version = FEATURES_VERSION
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
@@ -381,7 +381,7 @@ class CommunityCacheService:
             True if contribution was accepted, False otherwise
         """
         if analysis_version is None:
-            analysis_version = ANALYSIS_VERSION
+            analysis_version = FEATURES_VERSION
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
