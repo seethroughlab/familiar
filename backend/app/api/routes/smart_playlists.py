@@ -260,6 +260,68 @@ async def refresh_smart_playlist(
     return playlist_to_response(playlist)
 
 
+class ConvertToStaticResponse(BaseModel):
+    """Response for converting a smart playlist to a static playlist."""
+
+    playlist_id: str
+    name: str
+    track_count: int
+
+
+@router.post("/{playlist_id}/convert-to-static", response_model=ConvertToStaticResponse)
+async def convert_to_static(
+    playlist_id: UUID,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> ConvertToStaticResponse:
+    """Convert a smart playlist to a static playlist.
+
+    Resolves the current matching tracks and creates a new static Playlist.
+    The smart playlist is NOT deleted.
+    """
+    from app.db.models import Playlist, PlaylistTrack
+
+    service = SmartPlaylistService(db)
+    playlist = await service.get_by_id(playlist_id, profile.id)
+
+    if not playlist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Smart playlist not found",
+        )
+
+    # Resolve current tracks
+    raw_tracks, _total = await service.get_tracks_unified(playlist, limit=10000, offset=0)
+    local_tracks = [t for t in raw_tracks if isinstance(t, Track)]
+
+    # Create static playlist
+    static = Playlist(
+        profile_id=profile.id,
+        name=playlist.name,
+        description=f"Converted from smart playlist: {playlist.description or playlist.name}",
+        is_auto_generated=False,
+    )
+    db.add(static)
+    await db.flush()
+
+    # Add tracks
+    for i, track in enumerate(local_tracks):
+        pt = PlaylistTrack(
+            playlist_id=static.id,
+            track_id=track.id,
+            position=i,
+        )
+        db.add(pt)
+
+    await db.commit()
+
+    return ConvertToStaticResponse(
+        playlist_id=str(static.id),
+        name=static.name,
+        track_count=len(local_tracks),
+    )
+
+
 @router.get("/fields/available")
 async def get_available_fields() -> dict[str, Any]:
     """Get list of available fields and operators for building rules."""

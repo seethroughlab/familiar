@@ -22,6 +22,7 @@ interface Props {
   textClass: string;
   hoverClass: string;
   countClass: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export function SidebarPlaylistItem({
@@ -34,6 +35,7 @@ export function SidebarPlaylistItem({
   textClass,
   hoverClass,
   countClass,
+  onContextMenu,
 }: Props) {
   const [isDragOver, setIsDragOver] = useState(false);
   const queryClient = useQueryClient();
@@ -77,6 +79,7 @@ export function SidebarPlaylistItem({
   return (
     <Link
       to={to}
+      onContextMenu={onContextMenu}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}

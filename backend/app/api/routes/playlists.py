@@ -532,6 +532,54 @@ async def delete_playlist(
     await db.commit()
 
 
+@router.post("/{playlist_id}/duplicate", response_model=PlaylistDetailResponse, status_code=status.HTTP_201_CREATED)
+async def duplicate_playlist(
+    playlist_id: UUID,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> PlaylistDetailResponse:
+    """Duplicate a playlist with all its tracks."""
+    playlist = await db.get(Playlist, playlist_id)
+
+    if not playlist or playlist.profile_id != profile.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Playlist not found",
+        )
+
+    # Create a copy
+    new_playlist = Playlist(
+        profile_id=profile.id,
+        name=f"{playlist.name} (Copy)",
+        description=playlist.description,
+        is_auto_generated=playlist.is_auto_generated,
+        generation_prompt=playlist.generation_prompt,
+    )
+    db.add(new_playlist)
+    await db.flush()
+
+    # Copy all playlist tracks
+    result = await db.execute(
+        select(PlaylistTrack)
+        .where(PlaylistTrack.playlist_id == playlist_id)
+        .order_by(PlaylistTrack.position)
+    )
+    original_tracks = result.scalars().all()
+
+    for pt in original_tracks:
+        new_pt = PlaylistTrack(
+            playlist_id=new_playlist.id,
+            track_id=pt.track_id,
+            external_track_id=pt.external_track_id,
+            position=pt.position,
+        )
+        db.add(new_pt)
+
+    await db.commit()
+
+    return await get_playlist(new_playlist.id, db, profile)
+
+
 @router.post("/{playlist_id}/tracks", response_model=PlaylistDetailResponse)
 async def add_tracks_to_playlist(
     playlist_id: UUID,

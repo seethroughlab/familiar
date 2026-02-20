@@ -2,6 +2,7 @@
  * Sidebar - Persistent navigation sidebar.
  *
  * Sections: Library browsers, Collections (with counts), Playlists, Smart Playlists, Footer.
+ * Right-click context menus on playlist items, collection items, and library items.
  */
 import { useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
@@ -18,9 +19,16 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { useContextMenu } from '../../hooks/useContextMenu';
 import { playlistsApi, smartPlaylistsApi } from '../../api/client';
-import type { Playlist } from '../../api/client';
+import type { Playlist, SmartPlaylist } from '../../api/client';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
+import { PlaylistContextMenu } from './PlaylistContextMenu';
+import { SmartPlaylistContextMenu } from './SmartPlaylistContextMenu';
+import { EphemeralPlaylistContextMenu } from './EphemeralPlaylistContextMenu';
+import { PlaylistEditModal } from './PlaylistEditModal';
+import { CollectionContextMenu } from './CollectionContextMenu';
+import { LibraryItemContextMenu } from './LibraryItemContextMenu';
 
 const LIBRARY_ITEMS = [
   { path: '/library/tracks', label: 'Tracks', icon: List },
@@ -49,6 +57,16 @@ export function Sidebar() {
   // Section collapse state
   const [playlistsExpanded, setPlaylistsExpanded] = useState(true);
   const [smartPlaylistsExpanded, setSmartPlaylistsExpanded] = useState(true);
+
+  // Context menu state
+  const playlistMenu = useContextMenu<Playlist>();
+  const smartPlaylistMenu = useContextMenu<SmartPlaylist>();
+  const ephemeralMenu = useContextMenu<string>(); // stores ephemeral playlist ID
+  const collectionMenu = useContextMenu<string>(); // stores collection path
+  const libraryMenu = useContextMenu<string>(); // stores library item path
+
+  // Playlist edit modal
+  const [editModal, setEditModal] = useState<{ id: string; name: string; description: string } | null>(null);
 
   // Collection counts
   const { total: favoritesCount } = useFavorites();
@@ -121,6 +139,7 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onContextMenu={(e) => libraryMenu.open(item.path, e)}
               className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
                 isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
               }`}
@@ -134,6 +153,7 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onContextMenu={(e) => collectionMenu.open(item.path, e)}
               className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
                 isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
               }`}
@@ -159,6 +179,22 @@ export function Sidebar() {
             <PanelLeft className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Context menus (rendered even when collapsed) */}
+        {libraryMenu.state.isOpen && libraryMenu.state.item && (
+          <LibraryItemContextMenu
+            path={libraryMenu.state.item}
+            position={libraryMenu.state.position}
+            onClose={libraryMenu.close}
+          />
+        )}
+        {collectionMenu.state.isOpen && collectionMenu.state.item && (
+          <CollectionContextMenu
+            collectionPath={collectionMenu.state.item}
+            position={collectionMenu.state.position}
+            onClose={collectionMenu.close}
+          />
+        )}
       </div>
     );
   }
@@ -176,6 +212,7 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onContextMenu={(e) => libraryMenu.open(item.path, e)}
               className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                 isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
               }`}
@@ -197,6 +234,7 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onContextMenu={(e) => collectionMenu.open(item.path, e)}
               className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                 isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
               }`}
@@ -226,6 +264,7 @@ export function Sidebar() {
                 <Link
                   key={pl.id}
                   to={`/ephemeral/${pl.id}`}
+                  onContextMenu={(e) => ephemeralMenu.open(pl.id, e)}
                   className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors border border-dashed ${
                     isEphemeralActive(pl.id)
                       ? 'border-amber-500/30 bg-amber-900/20 text-amber-300'
@@ -267,6 +306,7 @@ export function Sidebar() {
                   textClass={textClass}
                   hoverClass={hoverClass}
                   countClass={light ? 'text-zinc-400' : 'text-zinc-500'}
+                  onContextMenu={(e) => playlistMenu.open(pl, e)}
                 />
               ))
             ) : (
@@ -294,6 +334,7 @@ export function Sidebar() {
                 <Link
                   key={pl.id}
                   to={`/smart-playlists/${pl.id}`}
+                  onContextMenu={(e) => smartPlaylistMenu.open(pl, e)}
                   className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
                     isSmartPlaylistActive(pl.id) ? activeClass : `${textClass} ${hoverClass}`
                   }`}
@@ -330,6 +371,58 @@ export function Sidebar() {
           </button>
         </div>
       </div>
+
+      {/* Context menus */}
+      {playlistMenu.state.isOpen && playlistMenu.state.item && (
+        <PlaylistContextMenu
+          playlist={playlistMenu.state.item}
+          position={playlistMenu.state.position}
+          onClose={playlistMenu.close}
+          onRename={() => {
+            const pl = playlistMenu.state.item!;
+            setEditModal({ id: pl.id, name: pl.name, description: pl.description || '' });
+          }}
+        />
+      )}
+      {smartPlaylistMenu.state.isOpen && smartPlaylistMenu.state.item && (
+        <SmartPlaylistContextMenu
+          playlist={smartPlaylistMenu.state.item}
+          position={smartPlaylistMenu.state.position}
+          onClose={smartPlaylistMenu.close}
+        />
+      )}
+      {ephemeralMenu.state.isOpen && ephemeralMenu.state.item && (
+        <EphemeralPlaylistContextMenu
+          playlistId={ephemeralMenu.state.item}
+          position={ephemeralMenu.state.position}
+          onClose={ephemeralMenu.close}
+        />
+      )}
+      {collectionMenu.state.isOpen && collectionMenu.state.item && (
+        <CollectionContextMenu
+          collectionPath={collectionMenu.state.item}
+          position={collectionMenu.state.position}
+          onClose={collectionMenu.close}
+        />
+      )}
+      {libraryMenu.state.isOpen && libraryMenu.state.item && (
+        <LibraryItemContextMenu
+          path={libraryMenu.state.item}
+          position={libraryMenu.state.position}
+          onClose={libraryMenu.close}
+        />
+      )}
+
+      {/* Edit modal */}
+      {editModal && (
+        <PlaylistEditModal
+          playlistId={editModal.id}
+          initialName={editModal.name}
+          initialDescription={editModal.description}
+          isOpen={true}
+          onClose={() => setEditModal(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1415,6 +1415,11 @@ export const smartPlaylistsApi = {
     const { data } = await api.get('/smart-playlists/fields/available');
     return data;
   },
+
+  convertToStatic: async (id: string): Promise<{ playlist_id: string; name: string; track_count: number }> => {
+    const { data } = await api.post(`/smart-playlists/${id}/convert-to-static`);
+    return data;
+  },
 };
 
 // Playlists API (static playlists with track IDs)
@@ -1564,6 +1569,11 @@ export const playlistsApi = {
     const { data } = await api.put(`/playlists/${id}/tracks/reorder`, {
       playlist_track_ids: playlistTrackIds,
     });
+    return data;
+  },
+
+  duplicate: async (id: string): Promise<PlaylistDetail> => {
+    const { data } = await api.post(`/playlists/${id}/duplicate`);
     return data;
   },
 
@@ -3120,6 +3130,44 @@ export const s3BackupApi = {
   getRestoreProgress: async (): Promise<S3BackupProgress> => {
     const { data } = await api.get('/s3-backup/restore/progress');
     return data;
+  },
+};
+
+// Download API (ZIP downloads for playlists and track collections)
+function triggerBlobDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export const downloadApi = {
+  playlist: async (playlistId: string, name: string): Promise<void> => {
+    const response = await api.get(`/download/playlist/${playlistId}`, {
+      responseType: 'blob',
+      timeout: 300000, // 5 minutes for large playlists
+    });
+    triggerBlobDownload(response.data, `${name}.zip`);
+  },
+
+  smartPlaylist: async (playlistId: string, name: string): Promise<void> => {
+    const response = await api.get(`/download/smart-playlist/${playlistId}`, {
+      responseType: 'blob',
+      timeout: 300000,
+    });
+    triggerBlobDownload(response.data, `${name}.zip`);
+  },
+
+  tracks: async (trackIds: string[], name: string): Promise<void> => {
+    const response = await api.post('/download/tracks', { track_ids: trackIds, name }, {
+      responseType: 'blob',
+      timeout: 300000,
+    });
+    triggerBlobDownload(response.data, `${name}.zip`);
   },
 };
 

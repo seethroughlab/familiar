@@ -3,7 +3,6 @@
  *
  * Shows on right-click with options like Play, Queue, Go to Artist, etc.
  */
-import { useEffect, useRef } from 'react';
 import { useAnalysis } from '../../hooks/useAnalysis';
 import {
   Play,
@@ -25,6 +24,7 @@ import {
 import type { Track } from '../../types';
 import { isExternalTrack } from '../../types';
 import { generateAllSearchUrls } from '../../utils/storeLinks';
+import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
 
 interface TrackContextMenuProps {
   track: Track;
@@ -51,31 +51,6 @@ interface TrackContextMenuProps {
   onClearSelection?: () => void;
 }
 
-interface MenuItemProps {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  iconClassName?: string;
-}
-
-function MenuItem({ icon, label, onClick, disabled, iconClassName }: MenuItemProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="w-full flex items-center gap-3 px-3 py-2 text-sm text-left hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-    >
-      <span className={iconClassName || "text-zinc-400"}>{icon}</span>
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function MenuDivider() {
-  return <div className="my-1 border-t border-zinc-700" />;
-}
-
 export function TrackContextMenu({
   track,
   position,
@@ -98,64 +73,7 @@ export function TrackContextMenu({
   onAddSelectedToPlaylist,
   onClearSelection,
 }: TrackContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
   const { downloadAnalysis } = useAnalysis();
-
-  // Close on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [onClose]);
-
-  // Adjust position to keep menu in viewport
-  useEffect(() => {
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const isMobile = viewportWidth < 768;
-
-      if (isMobile) {
-        // On mobile, center horizontally with padding
-        const padding = 16;
-        const menuWidth = Math.min(rect.width, viewportWidth - padding * 2);
-        menuRef.current.style.left = `${(viewportWidth - menuWidth) / 2}px`;
-        menuRef.current.style.width = `${menuWidth}px`;
-
-        // Adjust vertical position if menu would go off-screen
-        if (rect.bottom > viewportHeight) {
-          menuRef.current.style.top = `${Math.max(padding, viewportHeight - rect.height - padding)}px`;
-        }
-      } else {
-        // Desktop: adjust horizontal position if menu would go off-screen
-        if (rect.right > viewportWidth) {
-          menuRef.current.style.left = `${position.x - rect.width}px`;
-        }
-
-        // Adjust vertical position if menu would go off-screen
-        if (rect.bottom > viewportHeight) {
-          menuRef.current.style.top = `${position.y - rect.height}px`;
-        }
-      }
-    }
-  }, [position]);
 
   const handleAction = (action: () => void) => {
     action();
@@ -165,14 +83,7 @@ export function TrackContextMenu({
   const showBulkActions = selectedCount > 1;
 
   return (
-    <div
-      ref={menuRef}
-      className="fixed z-50 min-w-[200px] py-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl"
-      style={{
-        left: position.x,
-        top: position.y,
-      }}
-    >
+    <ContextMenuContainer position={position} onClose={onClose}>
       {/* Bulk actions section (shown when multiple tracks selected) */}
       {showBulkActions && (
         <>
@@ -207,14 +118,10 @@ export function TrackContextMenu({
       )}
 
       {/* Track info header */}
-      <div className="px-3 py-2 border-b border-zinc-700">
-        <div className="text-sm font-medium text-white truncate">
-          {track.title || 'Unknown'}
-        </div>
-        <div className="text-xs text-zinc-400 truncate">
-          {track.artist || 'Unknown Artist'}
-        </div>
-      </div>
+      <MenuHeader
+        title={track.title || 'Unknown'}
+        subtitle={track.artist || 'Unknown Artist'}
+      />
 
       {/* Playback actions */}
       <MenuItem
@@ -329,7 +236,6 @@ export function TrackContextMenu({
         label="Make Playlist From This..."
         onClick={() => handleAction(onMakePlaylist)}
       />
-    </div>
+    </ContextMenuContainer>
   );
 }
-

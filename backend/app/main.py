@@ -33,6 +33,7 @@ from app.api.routes import (
     bandcamp,
     chat,
     diagnostics,
+    download,
     export_import,
     external_tracks,
     favorites,
@@ -308,6 +309,7 @@ app.include_router(export_import.router, prefix="/api/v1")
 app.include_router(s3_backup.router, prefix="/api/v1")
 app.include_router(subsonic_credentials.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
+app.include_router(download.router, prefix="/api/v1")
 
 # Subsonic API mounted at /rest (Subsonic clients expect this path)
 app.include_router(subsonic.router, prefix="/rest")
