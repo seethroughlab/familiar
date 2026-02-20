@@ -1,13 +1,23 @@
 /**
- * Rain Window Visualizer.
+ * Rain Window Visualizer — Three.js + GLSL rewrite.
  *
- * Simulates looking through a rain-covered window at soft, blurry lights.
- * Perfect for slow, ambient, or melancholic music.
+ * Two-pass FBO rendering:
+ *   Pass 1: Bokeh background + trails → WebGLRenderTarget
+ *   Pass 2: Compositor samples FBO with per-droplet refraction, SSS, caustics
+ *
+ * Droplets act as tiny lenses — refracting, tinting, and concentrating background light.
  */
-import { useRef, useEffect } from 'react';
-import { useAudioAnalyser } from '../../../hooks/useAudioAnalyser';
+import { useRef, useMemo, useEffect } from 'react';
+import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
+import { shaderMaterial } from '@react-three/drei';
+import * as THREE from 'three';
+import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { useArtworkPalette } from '../hooks/useArtworkPalette';
 import { registerVisualizer, type VisualizerProps } from '../types';
+import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+
+const MAX_DROPLETS = 60;
+const MAX_TRAIL = 30;
 
 // ============================================================================
 // Droplet Physics
@@ -21,100 +31,97 @@ interface Droplet {
   velocityX: number;
   trail: Array<{ x: number; y: number; age: number }>;
   opacity: number;
+  stuck: boolean;
+  mass: number;
+  releaseThreshold: number;
+}
+
+interface ResidualDrop {
+  x: number;
+  y: number;
+  radius: number;
+  opacity: number;
 }
 
 function createDroplet(canvasWidth: number): Droplet {
-  const radius = 2 + Math.random() * 4;
+  const radius = 2 + Math.random() * Math.random() * 6;
   return {
     x: Math.random() * canvasWidth,
     y: -radius * 2,
     radius,
-    velocityY: 0.3 + Math.random() * 0.7, // Slow fall
-    velocityX: (Math.random() - 0.5) * 0.3, // Slight horizontal drift
+    velocityY: 0.15 + Math.random() * 0.35,
+    velocityX: (Math.random() - 0.5) * 0.15,
     trail: [],
     opacity: 0.4 + Math.random() * 0.4,
+    stuck: false,
+    mass: 0,
+    releaseThreshold: 0.3 + Math.random() * 0.7,
   };
 }
 
-function updateDroplet(droplet: Droplet, canvasHeight: number): boolean {
-  // Apply gravity (very gentle)
-  droplet.velocityY += 0.02;
-  droplet.velocityY = Math.min(droplet.velocityY, 3); // Terminal velocity
+function updateDroplet(
+  droplet: Droplet,
+  canvasHeight: number,
+  residuals: ResidualDrop[]
+): boolean {
+  if (droplet.stuck) {
+    // Surface tension holds the drop — no gravity
+    droplet.velocityY = 0;
+    droplet.velocityX = (Math.random() - 0.5) * 0.02;
+    droplet.mass += 0.01;
 
-  // Apply slight friction on glass
-  droplet.velocityX *= 0.99;
+    if (droplet.mass > droplet.releaseThreshold) {
+      // Release with burst velocity
+      droplet.stuck = false;
+      droplet.velocityY = 0.3 + droplet.mass * 0.8;
+      droplet.mass = 0;
 
-  // Store trail point
-  droplet.trail.push({
-    x: droplet.x,
-    y: droplet.y,
-    age: 0,
-  });
+      // Shed a residual bead at release point (pinch-off)
+      residuals.push({
+        x: droplet.x,
+        y: droplet.y,
+        radius: droplet.radius * (0.3 + Math.random() * 0.3),
+        opacity: 0.3 + Math.random() * 0.2,
+      });
+    }
+  } else {
+    // Moving state — normal physics
+    droplet.velocityY += 0.008;
+    droplet.velocityY = Math.min(droplet.velocityY, 1.5);
+    droplet.velocityX *= 0.995;
 
-  // Age trail points and remove old ones
+    // 2% per-frame chance of micro-friction (glass imperfections)
+    if (Math.random() < 0.02) {
+      droplet.velocityY *= 0.4 + Math.random() * 0.3;
+    }
+
+    // When slow, 5% chance to become stuck
+    if (droplet.velocityY < 0.25 && Math.random() < 0.05) {
+      droplet.stuck = true;
+      droplet.mass = 0;
+      droplet.releaseThreshold = 0.3 + Math.random() * 0.7;
+    }
+
+    // ~3% chance per frame to shed a residual bead
+    if (Math.random() < 0.03) {
+      residuals.push({
+        x: droplet.x,
+        y: droplet.y,
+        radius: droplet.radius * (0.3 + Math.random() * 0.3),
+        opacity: 0.3 + Math.random() * 0.2,
+      });
+    }
+  }
+
+  droplet.trail.push({ x: droplet.x, y: droplet.y, age: 0 });
   droplet.trail = droplet.trail
     .map((p) => ({ ...p, age: p.age + 1 }))
-    .filter((p) => p.age < 30); // Trail persists for ~30 frames
+    .filter((p) => p.age < MAX_TRAIL);
 
-  // Update position
   droplet.x += droplet.velocityX;
   droplet.y += droplet.velocityY;
 
-  // Return false if droplet is off screen
   return droplet.y < canvasHeight + droplet.radius * 2;
-}
-
-function drawDroplet(
-  ctx: CanvasRenderingContext2D,
-  droplet: Droplet,
-  _glassColor: string
-) {
-  // Draw trail
-  if (droplet.trail.length > 1) {
-    ctx.beginPath();
-    ctx.moveTo(droplet.trail[0].x, droplet.trail[0].y);
-
-    for (let i = 1; i < droplet.trail.length; i++) {
-      const point = droplet.trail[i];
-      ctx.lineTo(point.x, point.y);
-    }
-
-    ctx.strokeStyle = `rgba(200, 220, 255, ${droplet.opacity * 0.2})`;
-    ctx.lineWidth = droplet.radius * 0.8;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-  }
-
-  // Draw droplet body with refraction effect
-  const gradient = ctx.createRadialGradient(
-    droplet.x - droplet.radius * 0.3,
-    droplet.y - droplet.radius * 0.3,
-    0,
-    droplet.x,
-    droplet.y,
-    droplet.radius
-  );
-
-  gradient.addColorStop(0, `rgba(255, 255, 255, ${droplet.opacity * 0.8})`);
-  gradient.addColorStop(0.5, `rgba(200, 220, 255, ${droplet.opacity * 0.4})`);
-  gradient.addColorStop(1, `rgba(150, 180, 220, ${droplet.opacity * 0.1})`);
-
-  ctx.beginPath();
-  ctx.arc(droplet.x, droplet.y, droplet.radius, 0, Math.PI * 2);
-  ctx.fillStyle = gradient;
-  ctx.fill();
-
-  // Highlight
-  ctx.beginPath();
-  ctx.arc(
-    droplet.x - droplet.radius * 0.3,
-    droplet.y - droplet.radius * 0.3,
-    droplet.radius * 0.3,
-    0,
-    Math.PI * 2
-  );
-  ctx.fillStyle = `rgba(255, 255, 255, ${droplet.opacity * 0.6})`;
-  ctx.fill();
 }
 
 // ============================================================================
@@ -155,187 +162,511 @@ function updateBokeh(
   canvasHeight: number,
   time: number
 ) {
-  // Very slow drift
   bokeh.x += bokeh.velocityX;
   bokeh.y += bokeh.velocityY;
-
-  // Gentle pulsing
   bokeh.brightness = 0.3 + Math.sin(time * 0.5 + bokeh.phase) * 0.15;
 
-  // Wrap around edges
   if (bokeh.x < -bokeh.radius) bokeh.x = canvasWidth + bokeh.radius;
   if (bokeh.x > canvasWidth + bokeh.radius) bokeh.x = -bokeh.radius;
   if (bokeh.y < -bokeh.radius) bokeh.y = canvasHeight + bokeh.radius;
   if (bokeh.y > canvasHeight + bokeh.radius) bokeh.y = -bokeh.radius;
 }
 
-function drawBokeh(
-  ctx: CanvasRenderingContext2D,
-  bokeh: BokehCircle,
-  bassBoost: number
-) {
-  const brightness = bokeh.brightness + bassBoost * 0.2;
+// ============================================================================
+// GLSL Shaders
+// ============================================================================
 
-  // Create soft gradient for bokeh effect
-  const gradient = ctx.createRadialGradient(
-    bokeh.x,
-    bokeh.y,
-    0,
-    bokeh.x,
-    bokeh.y,
-    bokeh.radius
-  );
+const BOKEH_VERT = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
 
-  // Parse hex color and create rgba
-  const hex = bokeh.color.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
+const BOKEH_FRAG = `
+  uniform vec2 uBokehPos[12];
+  uniform vec3 uBokehColor[12];
+  uniform float uBokehRadius[12];
+  uniform float uBokehBrightness[12];
+  uniform vec2 uResolution;
 
-  gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${brightness * 0.6})`);
-  gradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${brightness * 0.3})`);
-  gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+  varying vec2 vUv;
 
-  ctx.beginPath();
-  ctx.arc(bokeh.x, bokeh.y, bokeh.radius, 0, Math.PI * 2);
-  ctx.fillStyle = gradient;
-  ctx.fill();
+  void main() {
+    // Dark night gradient
+    vec3 color = mix(
+      vec3(0.039, 0.063, 0.125),
+      vec3(0.031, 0.063, 0.094),
+      vUv.y
+    );
+    // Slightly lighter mid-band
+    float midBand = smoothstep(0.0, 0.5, vUv.y) * smoothstep(1.0, 0.5, vUv.y);
+    color = mix(color, vec3(0.051, 0.082, 0.145), midBand * 0.5);
+
+    vec2 fragCoord = vUv * uResolution;
+
+    for (int i = 0; i < 12; i++) {
+      vec2 diff = fragCoord - uBokehPos[i];
+      float dist = length(diff);
+      float r = uBokehRadius[i];
+      if (dist > r * 2.0) continue;
+
+      // Soft radial falloff
+      float falloff = smoothstep(r, r * 0.1, dist);
+      color += uBokehColor[i] * falloff * uBokehBrightness[i] * 0.6;
+
+      // Soft outer glow
+      float outerGlow = smoothstep(r * 2.0, r, dist);
+      color += uBokehColor[i] * outerGlow * uBokehBrightness[i] * 0.15;
+    }
+
+    // Dim for out-of-focus glass effect
+    color *= 0.85;
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+const COMPOSITOR_VERT = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const COMPOSITOR_FRAG = /* glsl */ `
+  uniform sampler2D tBackground;
+  uniform vec4 uDroplets[${MAX_DROPLETS}];
+  uniform vec3 uDropletDir[${MAX_DROPLETS}];
+  uniform int uDropletCount;
+  uniform vec2 uResolution;
+  uniform float uTime;
+  uniform float uBass;
+
+  varying vec2 vUv;
+
+  void main() {
+    vec3 color = texture2D(tBackground, vUv).rgb;
+    vec2 fragCoord = vUv * uResolution;
+
+    for (int i = 0; i < ${MAX_DROPLETS}; i++) {
+      if (i >= uDropletCount) break;
+
+      vec2 center = uDroplets[i].xy;
+      float radius = uDroplets[i].z;
+      float opacity = uDroplets[i].w;
+
+      vec2 dir = uDropletDir[i].xy;
+      float stretch = uDropletDir[i].z;
+      float halfLen = radius * stretch;
+
+      vec2 diff = fragCoord - center;
+      float maxDist = radius * 1.5 + halfLen;
+
+      // Early rejection (squared distance avoids sqrt for far pixels)
+      float distSq = dot(diff, diff);
+      if (distSq > maxDist * maxDist) continue;
+
+      // Project onto capsule axis
+      float along = dot(diff, dir);
+      float clampedAlong = clamp(along, -halfLen, halfLen);
+
+      // t: 0 at trailing end, 1 at leading end (epsilon avoids div-by-zero)
+      float t = (clampedAlong + halfLen + 0.001) / (2.0 * halfLen + 0.002);
+
+      // Taper radius: full at leading end, 35% at trailing end
+      float taperRadius = radius * mix(0.35, 1.0, t);
+      // Branchless stationary fallback — pure circle when stretch ≈ 0
+      taperRadius = mix(radius, taperRadius, step(0.01, stretch));
+
+      // Nearest point on capsule centerline
+      vec2 nearest = center + dir * clampedAlong;
+      float capsuleDist = length(fragCoord - nearest);
+      float nd = capsuleDist / taperRadius;
+
+      // Edge softness — antialiased boundary
+      float edge = smoothstep(1.0, 0.85, nd);
+      if (edge < 0.001) continue;
+
+      // --- Refraction: offset UV toward nearest capsule point ---
+      vec2 refractDir = capsuleDist > 0.001
+        ? (nearest - fragCoord) / capsuleDist
+        : vec2(0.0);
+      float refractStrength = (1.0 - nd * nd) * 0.03 * radius;
+      vec2 refractedUv = vUv + refractDir * refractStrength / uResolution;
+
+      // --- Chromatic aberration: sample RGB at offset UVs ---
+      vec2 chromaOffset = refractDir * refractStrength * 0.4 * nd / uResolution;
+      float r = texture2D(tBackground, refractedUv + chromaOffset).r;
+      float g = texture2D(tBackground, refractedUv).g;
+      float b = texture2D(tBackground, refractedUv - chromaOffset).b;
+      vec3 refractedColor = vec3(r, g, b);
+
+      // --- Subsurface scattering: brighten center ---
+      float sss = smoothstep(1.0, 0.0, nd);
+      sss = sss * sss;
+      refractedColor *= 1.0 + sss * 0.5;
+
+      // --- Caustic: bright spot near leading edge ---
+      vec2 frontPt = center + dir * halfLen;
+      vec2 causticCenter = frontPt + vec2(-radius * 0.2, -radius * 0.3);
+      float causticDist = length(fragCoord - causticCenter) / radius;
+      float caustic = exp(-causticDist * causticDist * 3.0) * 0.4;
+      refractedColor += vec3(caustic);
+
+      // --- Fresnel rim: edges reflect more ---
+      float fresnel = pow(nd, 3.0) * 0.5;
+      refractedColor = mix(refractedColor, vec3(0.7, 0.85, 1.0), fresnel);
+
+      // --- Specular highlight: near leading edge ---
+      vec2 specCenter = frontPt + vec2(-radius * 0.3, -radius * 0.3);
+      float specDist = length(fragCoord - specCenter) / radius;
+      float specular = exp(-specDist * specDist * 8.0) * 0.7;
+      refractedColor += vec3(specular);
+
+      // Blend with edge softness and opacity
+      color = mix(color, refractedColor, edge * opacity);
+    }
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+// ============================================================================
+// Compositor Material (shaderMaterial + extend for R3F JSX)
+// ============================================================================
+
+const CompositorMaterial = shaderMaterial(
+  {
+    tBackground: null as THREE.Texture | null,
+    uDroplets: Array.from({ length: MAX_DROPLETS }, () => new THREE.Vector4()),
+    uDropletDir: Array.from({ length: MAX_DROPLETS }, () => new THREE.Vector3()),
+    uDropletCount: 0,
+    uResolution: new THREE.Vector2(),
+    uTime: 0,
+    uBass: 0,
+  },
+  COMPOSITOR_VERT,
+  COMPOSITOR_FRAG
+);
+
+extend({ CompositorMaterial });
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [
+    parseInt(h.substring(0, 2), 16) / 255,
+    parseInt(h.substring(2, 4), 16) / 255,
+    parseInt(h.substring(4, 6), 16) / 255,
+  ];
 }
 
 // ============================================================================
-// Main Component
+// Scene
 // ============================================================================
 
-export function RainWindow({ artworkUrl }: VisualizerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioData = useAudioAnalyser(true);
-  const palette = useArtworkPalette(artworkUrl);
+function RainWindowScene({ palette }: { palette: string[] }) {
+  const { gl, size } = useThree();
+  useAudioAnalyser(true);
 
-  const animationRef = useRef<number | undefined>(undefined);
   const dropletsRef = useRef<Droplet[]>([]);
+  const residualsRef = useRef<ResidualDrop[]>([]);
   const bokehRef = useRef<BokehCircle[]>([]);
   const timeRef = useRef(0);
   const smoothedBassRef = useRef(0);
+  const compositorRef = useRef<THREE.ShaderMaterial>(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Pre-allocate droplet uniform arrays (modified in-place each frame)
+  const dropletUniforms = useMemo(
+    () => Array.from({ length: MAX_DROPLETS }, () => new THREE.Vector4()),
+    []
+  );
+  const dirUniforms = useMemo(
+    () => Array.from({ length: MAX_DROPLETS }, () => new THREE.Vector3()),
+    []
+  );
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-
-      // Reinitialize bokeh on resize
-      const width = canvas.offsetWidth;
-      const height = canvas.offsetHeight;
-      bokehRef.current = Array.from({ length: 12 }, () =>
-        createBokeh(width, height, palette)
-      );
-    };
-
-    resize();
-    window.addEventListener('resize', resize);
-
-    // Initialize bokeh circles
-    const width = canvas.offsetWidth;
-    const height = canvas.offsetHeight;
-    bokehRef.current = Array.from({ length: 12 }, () =>
-      createBokeh(width, height, palette)
-    );
-
-    const animate = () => {
-      const width = canvas.offsetWidth;
-      const height = canvas.offsetHeight;
-
-      // Get audio data with heavy smoothing
-      const bass = audioData?.bass || 0;
-      smoothedBassRef.current += (bass - smoothedBassRef.current) * 0.03;
-      const smoothedBass = smoothedBassRef.current;
-
-      timeRef.current += 0.016;
-
-      // Dark blue-gray background (like night through window)
-      const bgGradient = ctx.createLinearGradient(0, 0, 0, height);
-      bgGradient.addColorStop(0, '#0a1020');
-      bgGradient.addColorStop(0.5, '#0d1525');
-      bgGradient.addColorStop(1, '#081018');
-      ctx.fillStyle = bgGradient;
-      ctx.fillRect(0, 0, width, height);
-
-      // Draw bokeh (background lights)
-      bokehRef.current.forEach((bokeh) => {
-        updateBokeh(bokeh, width, height, timeRef.current);
-        drawBokeh(ctx, bokeh, smoothedBass);
-      });
-
-      // Apply blur effect to background (simulates out-of-focus)
-      // We achieve this by drawing with low opacity multiple times
-      ctx.fillStyle = 'rgba(10, 16, 32, 0.1)';
-      ctx.fillRect(0, 0, width, height);
-
-      // Spawn new droplets (rate slightly affected by bass)
-      const spawnRate = 0.02 + smoothedBass * 0.02; // 1-2 per second base
-      if (Math.random() < spawnRate) {
-        dropletsRef.current.push(createDroplet(width));
-      }
-
-      // Update and draw droplets
-      dropletsRef.current = dropletsRef.current.filter((droplet) => {
-        const alive = updateDroplet(droplet, height);
-        if (alive) {
-          drawDroplet(ctx, droplet, '#1a2030');
-        }
-        return alive;
-      });
-
-      // Limit droplet count for performance
-      if (dropletsRef.current.length > 100) {
-        dropletsRef.current = dropletsRef.current.slice(-100);
-      }
-
-      // Subtle glass condensation effect at edges
-      const edgeGradient = ctx.createRadialGradient(
-        width / 2,
-        height / 2,
-        Math.min(width, height) * 0.3,
-        width / 2,
-        height / 2,
-        Math.max(width, height) * 0.8
-      );
-      edgeGradient.addColorStop(0, 'rgba(20, 30, 50, 0)');
-      edgeGradient.addColorStop(1, 'rgba(20, 30, 50, 0.3)');
-      ctx.fillStyle = edgeGradient;
-      ctx.fillRect(0, 0, width, height);
-
-      // Occasional "flash" effect from passing lights (bass-triggered)
-      if (smoothedBass > 0.6 && Math.random() < 0.02) {
-        ctx.fillStyle = `rgba(255, 250, 240, ${(smoothedBass - 0.5) * 0.1})`;
-        ctx.fillRect(0, 0, width, height);
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-    // Note: audioData is intentionally excluded - we read it inside the animation loop
-    // and don't want to recreate bokeh when it changes every frame
+  // FBO render target (half resolution for performance — bokeh is blurry anyway)
+  const renderTarget = useMemo(
+    () =>
+      new THREE.WebGLRenderTarget(
+        Math.max(1, Math.floor(size.width / 2)),
+        Math.max(1, Math.floor(size.height / 2)),
+        { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter }
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [palette]);
+    []
+  );
+
+  // FBO scene: bokeh background quad + trail line segments
+  const fbo = useMemo(() => {
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+    camera.position.z = 1;
+
+    // — Bokeh background quad —
+    const bokehMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uBokehPos: {
+          value: Array.from({ length: 12 }, () => new THREE.Vector2()),
+        },
+        uBokehColor: {
+          value: Array.from({ length: 12 }, () => new THREE.Vector3(1, 1, 1)),
+        },
+        uBokehRadius: { value: new Float32Array(12).fill(50) },
+        uBokehBrightness: { value: new Float32Array(12).fill(0.3) },
+        uResolution: { value: new THREE.Vector2(1, 1) },
+      },
+      vertexShader: BOKEH_VERT,
+      fragmentShader: BOKEH_FRAG,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const bokehMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      bokehMaterial
+    );
+    scene.add(bokehMesh);
+
+    // — Trail line segments —
+    const trailPositions = new Float32Array(MAX_DROPLETS * MAX_TRAIL * 2 * 3);
+    const trailGeometry = new THREE.BufferGeometry();
+    trailGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(trailPositions, 3)
+    );
+    trailGeometry.setDrawRange(0, 0);
+
+    const trailMaterial = new THREE.LineBasicMaterial({
+      color: 0xc8dcff,
+      transparent: true,
+      opacity: 0.15,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+    });
+    const trailMesh = new THREE.LineSegments(trailGeometry, trailMaterial);
+    scene.add(trailMesh);
+
+    return {
+      scene,
+      camera,
+      bokehMaterial,
+      trailPositions,
+      trailGeometry,
+    };
+  }, []);
+
+  // Initialize bokeh circles when palette or size changes
+  useEffect(() => {
+    bokehRef.current = Array.from({ length: 12 }, () =>
+      createBokeh(size.width, size.height, palette)
+    );
+  }, [palette, size.width, size.height]);
+
+  // Resize render target + update bokeh resolution uniform
+  useEffect(() => {
+    renderTarget.setSize(
+      Math.max(1, Math.floor(size.width / 2)),
+      Math.max(1, Math.floor(size.height / 2))
+    );
+    fbo.bokehMaterial.uniforms.uResolution.value.set(size.width, size.height);
+  }, [size.width, size.height, renderTarget, fbo.bokehMaterial]);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      renderTarget.dispose();
+      fbo.bokehMaterial.dispose();
+      fbo.trailGeometry.dispose();
+    };
+  }, [renderTarget, fbo]);
+
+  // Main animation loop
+  useFrame(() => {
+    const width = size.width;
+    const height = size.height;
+    if (width === 0 || height === 0) return;
+
+    // --- Audio ---
+    const audioData = getAudioData();
+    const bass = audioData?.bass ?? 0;
+    smoothedBassRef.current += (bass - smoothedBassRef.current) * 0.03;
+    const smoothedBass = smoothedBassRef.current;
+
+    timeRef.current += 0.016;
+
+    // --- Update bokeh uniforms ---
+    const bokehPos = fbo.bokehMaterial.uniforms.uBokehPos
+      .value as THREE.Vector2[];
+    const bokehColor = fbo.bokehMaterial.uniforms.uBokehColor
+      .value as THREE.Vector3[];
+    const bokehRadius = fbo.bokehMaterial.uniforms.uBokehRadius
+      .value as Float32Array;
+    const bokehBrightness = fbo.bokehMaterial.uniforms.uBokehBrightness
+      .value as Float32Array;
+
+    bokehRef.current.forEach((bokeh, i) => {
+      updateBokeh(bokeh, width, height, timeRef.current);
+      bokehPos[i].set(bokeh.x, height - bokeh.y);
+      const [r, g, b] = hexToRgb(bokeh.color);
+      bokehColor[i].set(r, g, b);
+      bokehRadius[i] = bokeh.radius;
+      bokehBrightness[i] = bokeh.brightness + smoothedBass * 0.2;
+    });
+
+    // --- Update trail vertices (NDC coords for ortho camera) ---
+    const tp = fbo.trailPositions;
+    let vertexCount = 0;
+    const maxVerts = MAX_DROPLETS * MAX_TRAIL * 2;
+
+    for (const droplet of dropletsRef.current) {
+      if (droplet.trail.length < 2) continue;
+      for (let j = 0; j < droplet.trail.length - 1; j++) {
+        if (vertexCount >= maxVerts) break;
+        const a = droplet.trail[j];
+        const b = droplet.trail[j + 1];
+        // Pixel coords → NDC (-1..1)
+        const ax = (a.x / width) * 2 - 1;
+        const ay = 1 - (a.y / height) * 2;
+        const bx = (b.x / width) * 2 - 1;
+        const by = 1 - (b.y / height) * 2;
+
+        const idx = vertexCount * 3;
+        tp[idx] = ax;
+        tp[idx + 1] = ay;
+        tp[idx + 2] = 0;
+        tp[idx + 3] = bx;
+        tp[idx + 4] = by;
+        tp[idx + 5] = 0;
+        vertexCount += 2;
+      }
+      if (vertexCount >= maxVerts) break;
+    }
+
+    (
+      fbo.trailGeometry.attributes.position as THREE.BufferAttribute
+    ).needsUpdate = true;
+    fbo.trailGeometry.setDrawRange(0, vertexCount);
+
+    // --- Render FBO (bokeh + trails → texture) ---
+    gl.setRenderTarget(renderTarget);
+    gl.render(fbo.scene, fbo.camera);
+    gl.setRenderTarget(null);
+
+    // --- Spawn droplets (rate slightly boosted by bass) ---
+    const spawnRate = 0.02 + smoothedBass * 0.02;
+    if (Math.random() < spawnRate) {
+      dropletsRef.current.push(createDroplet(width));
+    }
+
+    // --- Update droplet physics ---
+    const residuals = residualsRef.current;
+    dropletsRef.current = dropletsRef.current.filter((d) =>
+      updateDroplet(d, height, residuals)
+    );
+    if (dropletsRef.current.length > MAX_DROPLETS) {
+      dropletsRef.current = dropletsRef.current.slice(-MAX_DROPLETS);
+    }
+
+    // --- Fade and cull residual beads ---
+    for (let i = residuals.length - 1; i >= 0; i--) {
+      residuals[i].opacity -= 0.001;
+      if (residuals[i].opacity < 0.05) {
+        residuals.splice(i, 1);
+      }
+    }
+    if (residuals.length > 120) {
+      residuals.splice(0, residuals.length - 120);
+    }
+
+    // --- Pack active droplets + residuals into uniform arrays ---
+    const activeCount = Math.min(dropletsRef.current.length, MAX_DROPLETS);
+    for (let i = 0; i < activeCount; i++) {
+      const d = dropletsRef.current[i];
+      dropletUniforms[i].set(d.x, height - d.y, d.radius, d.opacity);
+
+      // Direction + stretch for capsule SDF
+      const speed = Math.sqrt(d.velocityX * d.velocityX + d.velocityY * d.velocityY);
+      if (speed > 0.001) {
+        dirUniforms[i].set(
+          d.velocityX / speed,        // normalized X
+          -d.velocityY / speed,       // flip Y for shader coords
+          Math.min(speed * 3, 4)      // stretch
+        );
+      } else {
+        dirUniforms[i].set(0, -1, 0); // stationary — circle
+      }
+    }
+    // Fill remaining slots with most recent residuals
+    const residualSlots = MAX_DROPLETS - activeCount;
+    const residualStart = Math.max(0, residuals.length - residualSlots);
+    const residualCount = Math.min(residuals.length, residualSlots);
+    for (let i = 0; i < residualCount; i++) {
+      const r = residuals[residualStart + i];
+      dropletUniforms[activeCount + i].set(r.x, height - r.y, r.radius, r.opacity);
+      dirUniforms[activeCount + i].set(0, -1, 0); // residuals are stationary circles
+    }
+    const count = activeCount + residualCount;
+    for (let i = count; i < MAX_DROPLETS; i++) {
+      dropletUniforms[i].set(0, 0, 0, 0);
+      dirUniforms[i].set(0, 0, 0);
+    }
+
+    // --- Update compositor uniforms ---
+    const mat = compositorRef.current;
+    if (mat) {
+      mat.uniforms.tBackground.value = renderTarget.texture;
+      mat.uniforms.uDroplets.value = dropletUniforms;
+      mat.uniforms.uDropletDir.value = dirUniforms;
+      mat.uniforms.uDropletCount.value = count;
+      mat.uniforms.uResolution.value.set(width, height);
+      mat.uniforms.uTime.value = timeRef.current;
+      mat.uniforms.uBass.value = smoothedBass;
+    }
+  });
+
+  return (
+    <>
+      <mesh>
+        <planeGeometry args={[5, 5]} />
+        {/* @ts-expect-error - Custom R3F element registered via extend() */}
+        <compositorMaterial ref={compositorRef} />
+      </mesh>
+
+      <AudioReactiveEffects
+        enableBloom
+        enableVignette
+        bloomIntensity={0.8}
+        bloomThreshold={0.6}
+        vignetteIntensity={0.4}
+      />
+    </>
+  );
+}
+
+// ============================================================================
+// Root Component
+// ============================================================================
+
+export function RainWindow({ artworkUrl }: VisualizerProps) {
+  const palette = useArtworkPalette(artworkUrl);
 
   return (
     <div className="w-full h-full bg-[#0a1020]">
-      <canvas ref={canvasRef} className="w-full h-full" />
+      <Canvas
+        camera={{ position: [0, 0, 1], fov: 90 }}
+        dpr={[1, 2]}
+        gl={{ antialias: false, powerPreference: 'high-performance' }}
+      >
+        <RainWindowScene palette={palette} />
+      </Canvas>
     </div>
   );
 }
