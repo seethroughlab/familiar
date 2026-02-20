@@ -4,10 +4,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useAudioControls } from '../useAudioControls'
-import { usePlayerStore } from '../../stores/playerStore'
+import { usePlayerStore } from '../playerStore'
 
 // Mock persistence (playerStore dependency)
-vi.mock('../../services/playerPersistence', () => ({
+vi.mock('../persistence', () => ({
   debouncedSavePlayerState: vi.fn(),
   loadPlayerState: vi.fn(() => Promise.resolve(null)),
   fetchTracksBatched: vi.fn(() => Promise.resolve([])),

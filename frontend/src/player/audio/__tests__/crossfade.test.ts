@@ -23,7 +23,7 @@ vi.mock('../platform', () => ({
 // We'll import the mocked module to toggle modes
 import * as platform from '../platform';
 
-vi.mock('../../../stores/playerStore', () => ({
+vi.mock('../../playerStore', () => ({
   usePlayerStore: Object.assign(vi.fn(), {
     getState: () => ({ currentTrack: { id: 'track-1', title: 'Test' } }),
   }),

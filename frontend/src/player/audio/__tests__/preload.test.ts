@@ -17,7 +17,7 @@ vi.mock('../platform', () => ({
   },
 }));
 
-vi.mock('../../../stores/playerStore', () => ({
+vi.mock('../../playerStore', () => ({
   usePlayerStore: Object.assign(vi.fn(), {
     getState: () => ({ currentTrack: null }),
   }),

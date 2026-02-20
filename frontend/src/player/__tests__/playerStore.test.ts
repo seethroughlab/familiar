@@ -6,7 +6,7 @@ import { usePlayerStore } from '../playerStore'
 import type { Track } from '../../types'
 
 // Mock the persistence functions
-vi.mock('../../services/playerPersistence', () => ({
+vi.mock('../persistence', () => ({
   debouncedSavePlayerState: vi.fn(),
   loadPlayerState: vi.fn(() => Promise.resolve(null)),
   fetchTracksBatched: vi.fn(() => Promise.resolve([])),
@@ -15,7 +15,7 @@ vi.mock('../../services/playerPersistence', () => ({
 
 // Mock audioGraph so playerStore's playPrevious can set element.currentTime
 const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
-vi.mock('../../hooks/audio/audioGraph', () => ({
+vi.mock('../audio/audioGraph', () => ({
   getCurrentElement: () => mockGetCurrentElement(),
 }))
 
