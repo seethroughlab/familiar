@@ -195,44 +195,22 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                         cache_service.lookup_features(acoustid_fingerprint)
                     )
                     if cached_features:
-                        # Basic features
-                        features = {
-                            "bpm": cached_features.bpm,
-                            "key": cached_features.key,
-                            "energy": cached_features.energy,
-                            "danceability": cached_features.danceability,
-                            "valence": cached_features.valence,
-                            "acousticness": cached_features.acousticness,
-                            "instrumentalness": cached_features.instrumentalness,
-                            "speechiness": cached_features.speechiness,
-                            "liveness": cached_features.liveness,
-                            "loudness": cached_features.loudness,
+                        # Split cached dict into basic features and deep scalars
+                        # using ANALYSIS_FEATURE_COLUMNS as source of truth
+                        _BASIC_KEYS = {
+                            "bpm", "key", "energy", "danceability", "valence",
+                            "acousticness", "instrumentalness", "speechiness",
+                            "liveness", "loudness_lufs",
                         }
-                        features = {k: v for k, v in features.items() if v is not None}
-
-                        # Deep analysis scalars from cache
-                        _deep_from_cache = {
-                            "harmonic_complexity": cached_features.harmonic_complexity,
-                            "key_stability": cached_features.key_stability,
-                            "modal_character": cached_features.modal_character,
-                            "modal_confidence": cached_features.modal_confidence,
-                            "swing_ratio": cached_features.swing_ratio,
-                            "syncopation": cached_features.syncopation,
-                            "tempo_character": cached_features.tempo_character,
-                            "brightness": cached_features.brightness,
-                            "dynamic_range_db": cached_features.dynamic_range_db,
-                            "energy_shape": cached_features.energy_shape,
-                            "section_count": cached_features.section_count,
-                            "form_string": cached_features.form_string,
-                            "avg_section_length": cached_features.avg_section_length,
-                            "replaygain_track_gain": cached_features.replaygain_track_gain,
-                            "track_peak": cached_features.track_peak,
-                            "note_density": cached_features.note_density,
-                            "interval_character": cached_features.interval_character,
-                            "pitch_range": cached_features.pitch_range,
+                        cached = cached_features.features
+                        features = {
+                            k: cached[k] for k in _BASIC_KEYS
+                            if k in cached and cached[k] is not None
                         }
                         deep_scalars = {
-                            k: v for k, v in _deep_from_cache.items() if v is not None
+                            k: cached[k] for k in ANALYSIS_FEATURE_COLUMNS
+                            if k not in _BASIC_KEYS
+                            and k in cached and cached[k] is not None
                         }
 
                         # Try to fetch analysis_detail from cache too

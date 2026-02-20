@@ -18,7 +18,8 @@ Versioning:
 import asyncio
 import hashlib
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 import numpy as np
@@ -54,38 +55,7 @@ class CachedFeatures:
 
     fingerprint_hash: str  # SHA256 hash of AcoustID fingerprint
     analysis_version: int
-    # Original 10 basic features
-    bpm: float | None = None
-    key: str | None = None
-    energy: float | None = None
-    danceability: float | None = None
-    valence: float | None = None
-    acousticness: float | None = None
-    instrumentalness: float | None = None
-    speechiness: float | None = None
-    liveness: float | None = None
-    loudness: float | None = None
-    # Phase 1 deep analysis scalars
-    harmonic_complexity: float | None = None
-    key_stability: str | None = None
-    modal_character: str | None = None
-    modal_confidence: float | None = None
-    swing_ratio: float | None = None
-    syncopation: float | None = None
-    tempo_character: str | None = None
-    brightness: float | None = None
-    dynamic_range_db: float | None = None
-    energy_shape: str | None = None
-    section_count: int | None = None
-    form_string: str | None = None
-    avg_section_length: float | None = None
-    # Phase 1 additional scalars
-    replaygain_track_gain: float | None = None
-    track_peak: float | None = None
-    # Phase 3 melodic features
-    note_density: float | None = None
-    interval_character: str | None = None
-    pitch_range: int | None = None
+    features: dict[str, Any] = field(default_factory=dict)  # All features as a flat dict
     contributor_count: int = 1
 
 
@@ -377,7 +347,6 @@ class CommunityCacheService:
 
         try:
             data = response.json()
-            features = data.get("features", {})
 
             logger.info(
                 f"Community cache features hit for {fp_hash[:16]}... "
@@ -387,50 +356,12 @@ class CommunityCacheService:
             return CachedFeatures(
                 fingerprint_hash=fp_hash,
                 analysis_version=data.get("analysis_version", analysis_version),
-                bpm=features.get("bpm"),
-                key=features.get("key"),
-                energy=features.get("energy"),
-                danceability=features.get("danceability"),
-                valence=features.get("valence"),
-                acousticness=features.get("acousticness"),
-                instrumentalness=features.get("instrumentalness"),
-                speechiness=features.get("speechiness"),
-                liveness=features.get("liveness"),
-                loudness=features.get("loudness"),
-                harmonic_complexity=features.get("harmonic_complexity"),
-                key_stability=features.get("key_stability"),
-                modal_character=features.get("modal_character"),
-                modal_confidence=features.get("modal_confidence"),
-                swing_ratio=features.get("swing_ratio"),
-                syncopation=features.get("syncopation"),
-                tempo_character=features.get("tempo_character"),
-                brightness=features.get("brightness"),
-                dynamic_range_db=features.get("dynamic_range_db"),
-                energy_shape=features.get("energy_shape"),
-                section_count=features.get("section_count"),
-                form_string=features.get("form_string"),
-                avg_section_length=features.get("avg_section_length"),
-                replaygain_track_gain=features.get("replaygain_track_gain"),
-                track_peak=features.get("track_peak"),
-                note_density=features.get("note_density"),
-                interval_character=features.get("interval_character"),
-                pitch_range=features.get("pitch_range"),
+                features=data.get("features", {}),
                 contributor_count=data.get("contributor_count", 1),
             )
         except Exception as e:
             logger.warning(f"Community cache features lookup failed to parse response: {e}")
             return None
-
-    # All feature keys accepted by the cache server
-    _ALL_FEATURE_KEYS = [
-        "bpm", "key", "energy", "danceability", "valence", "acousticness",
-        "instrumentalness", "speechiness", "liveness", "loudness",
-        "harmonic_complexity", "key_stability", "modal_character", "modal_confidence",
-        "swing_ratio", "syncopation", "tempo_character", "brightness",
-        "dynamic_range_db", "energy_shape", "section_count", "form_string",
-        "avg_section_length", "replaygain_track_gain", "track_peak",
-        "note_density", "interval_character", "pitch_range",
-    ]
 
     async def contribute_features(
         self,
@@ -442,7 +373,7 @@ class CommunityCacheService:
 
         Args:
             acoustid_fingerprint: The raw AcoustID fingerprint string
-            features: Dict with any subset of feature keys (all 28 accepted)
+            features: Dict of feature key-value pairs (server accepts anything)
             analysis_version: Version of the analysis (defaults to current)
 
         Returns:
@@ -453,11 +384,8 @@ class CommunityCacheService:
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
-        # Send all available features (server ignores unknown keys via Pydantic)
-        features_payload = {
-            k: features[k] for k in self._ALL_FEATURE_KEYS
-            if k in features and features[k] is not None
-        }
+        # Strip None values and send everything — server is schema-agnostic
+        features_payload = {k: v for k, v in features.items() if v is not None}
 
         response = await self._request_with_retry(
             "POST",
