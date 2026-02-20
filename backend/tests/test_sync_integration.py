@@ -1,4 +1,4 @@
-"""Tests for library sync integration (tasks.py).
+"""Tests for library sync integration (tasks/).
 
 Tests cover the SyncProgressReporter, sync flow, progress reporting, and failure handling.
 """
@@ -32,7 +32,7 @@ class TestSyncProgressReporter:
     @pytest.fixture
     def reporter(self, mock_redis):
         """Create SyncProgressReporter with mocked Redis."""
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
             return SyncProgressReporter()
 
     def test_init_sets_initial_progress(self, reporter, mock_redis):
@@ -125,7 +125,7 @@ class TestTaskFailureRecording:
 
     def test_record_task_failure_pushes_to_list(self, mock_redis):
         """Should push failure to Redis list."""
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             _record_task_failure("analysis", "Audio file corrupted", "track_123")
 
             mock_redis.lpush.assert_called_once()
@@ -140,7 +140,7 @@ class TestTaskFailureRecording:
 
     def test_record_task_failure_trims_list(self, mock_redis):
         """Should trim failure list to max size."""
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             _record_task_failure("analysis", "Error")
 
             mock_redis.ltrim.assert_called_once_with(
@@ -149,7 +149,7 @@ class TestTaskFailureRecording:
 
     def test_record_task_failure_sets_expiry(self, mock_redis):
         """Should set 24-hour expiry on failures list."""
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             _record_task_failure("analysis", "Error")
 
             mock_redis.expire.assert_called_once_with(TASK_FAILURES_KEY, 86400)
@@ -158,7 +158,7 @@ class TestTaskFailureRecording:
         """Should handle Redis errors gracefully."""
         mock_redis.lpush.side_effect = Exception("Redis connection failed")
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             # Should not raise
             _record_task_failure("analysis", "Error")
 
@@ -177,7 +177,7 @@ class TestGetRecentFailures:
             json.dumps({"task": "scan", "error": "Error 2"}).encode(),
         ]
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             failures = get_recent_failures(limit=10)
 
             assert len(failures) == 2
@@ -188,7 +188,7 @@ class TestGetRecentFailures:
         """Should request limited number of failures."""
         mock_redis.lrange.return_value = []
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             get_recent_failures(limit=5)
 
             mock_redis.lrange.assert_called_once_with(TASK_FAILURES_KEY, 0, 4)
@@ -197,7 +197,7 @@ class TestGetRecentFailures:
         """Should return empty list on Redis error."""
         mock_redis.lrange.side_effect = Exception("Redis error")
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             failures = get_recent_failures()
             assert failures == []
 
@@ -209,7 +209,7 @@ class TestClearTaskFailures:
         """Should delete the failures key from Redis."""
         mock_redis = MagicMock()
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             clear_task_failures()
 
             mock_redis.delete.assert_called_once_with(TASK_FAILURES_KEY)
@@ -219,7 +219,7 @@ class TestClearTaskFailures:
         mock_redis = MagicMock()
         mock_redis.delete.side_effect = Exception("Redis error")
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.common.get_redis", return_value=mock_redis):
             # Should not raise
             clear_task_failures()
 
@@ -233,7 +233,7 @@ class TestSyncProgressPhases:
 
     @pytest.fixture
     def reporter(self, mock_redis):
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
             return SyncProgressReporter()
 
     def test_phase_transitions(self, reporter, mock_redis):
@@ -270,7 +270,7 @@ class TestProgressPersistence:
         """Progress should be stored at SYNC_PROGRESS_KEY."""
         mock_redis = MagicMock()
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
             SyncProgressReporter()
 
             call_args = mock_redis.set.call_args[0]
@@ -280,7 +280,7 @@ class TestProgressPersistence:
         """All progress updates should be valid JSON."""
         mock_redis = MagicMock()
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
             reporter = SyncProgressReporter()
             reporter.set_discovering(10, 500)
             reporter.set_reading(100, 500, 80, 15, 5)
@@ -302,7 +302,7 @@ class TestSpotifySyncProgressReporter:
 
     @pytest.fixture
     def reporter(self, mock_redis):
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.spotify_sync.get_redis", return_value=mock_redis):
             from app.services.tasks import SpotifySyncProgressReporter
             return SpotifySyncProgressReporter(profile_id="test-profile-123")
 
@@ -391,7 +391,7 @@ class TestNewReleasesProgressReporter:
 
     @pytest.fixture
     def reporter(self, mock_redis):
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.new_releases.get_redis", return_value=mock_redis):
             from app.services.tasks import NewReleasesProgressReporter
             return NewReleasesProgressReporter(profile_id="test-profile")
 
@@ -455,7 +455,7 @@ class TestGetSyncProgress:
         mock_redis = MagicMock()
         mock_redis.get.return_value = json.dumps({"status": "running", "phase": "reading"}).encode()
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
             from app.services.tasks import get_sync_progress
             result = get_sync_progress()
 
@@ -467,7 +467,7 @@ class TestGetSyncProgress:
         mock_redis = MagicMock()
         mock_redis.get.side_effect = Exception("Redis down")
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
             from app.services.tasks import get_sync_progress
             result = get_sync_progress()
 
@@ -482,7 +482,7 @@ class TestGetSpotifySyncProgress:
         mock_redis = MagicMock()
         mock_redis.get.return_value = json.dumps({"status": "running", "matched": 50}).encode()
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.spotify_sync.get_redis", return_value=mock_redis):
             from app.services.tasks import get_spotify_sync_progress
             result = get_spotify_sync_progress()
 
@@ -498,7 +498,7 @@ class TestGetNewReleasesProgress:
         mock_redis = MagicMock()
         mock_redis.get.return_value = json.dumps({"status": "completed", "releases_new": 3}).encode()
 
-        with patch("app.services.tasks.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.new_releases.get_redis", return_value=mock_redis):
             from app.services.tasks import get_new_releases_progress
             result = get_new_releases_progress()
 
@@ -517,7 +517,7 @@ class TestGetMemoryMb:
         assert result >= 0
 
     def test_returns_positive_on_success(self):
-        """Should return positive value on macOS/Linux."""
+        """Should return memory as positive value on macOS/Linux."""
         from app.services.tasks import get_memory_mb
         result = get_memory_mb()
         # On any real system running tests, memory should be > 0
@@ -529,8 +529,8 @@ class TestLogMemory:
 
     def test_calls_get_memory_and_logs(self):
         """Should log memory usage with label."""
-        with patch("app.services.tasks.get_memory_mb", return_value=256.5), \
-             patch("app.services.tasks.logger") as mock_logger:
+        with patch("app.services.tasks.common.get_memory_mb", return_value=256.5), \
+             patch("app.services.tasks.common.logger") as mock_logger:
             from app.services.tasks import log_memory
             log_memory("test phase")
 

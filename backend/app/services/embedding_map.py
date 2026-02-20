@@ -136,7 +136,7 @@ class EmbeddingMapService:
     def _get_cached_map(self, entity_type: str, limit: int) -> MapData | None:
         """Try to get cached map from Redis."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             key = self._get_cache_key(entity_type, limit)
@@ -155,7 +155,7 @@ class EmbeddingMapService:
     def _cache_map(self, entity_type: str, limit: int, map_data: MapData) -> None:
         """Cache computed map to Redis."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             key = self._get_cache_key(entity_type, limit)
@@ -184,7 +184,7 @@ class EmbeddingMapService:
     def invalidate_cache(self) -> None:
         """Invalidate all cached maps (call after library changes)."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             # Delete all music map cache keys
@@ -558,7 +558,7 @@ class EmbeddingMapService:
     def _get_cached_3d_map(self, entity_type: str) -> MapData3D | None:
         """Try to get cached 3D map from Redis."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             key = self._get_3d_cache_key(entity_type)
@@ -591,7 +591,7 @@ class EmbeddingMapService:
     def _cache_3d_map(self, entity_type: str, map_data: MapData3D) -> None:
         """Cache computed 3D map to Redis (1 hour TTL)."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             key = self._get_3d_cache_key(entity_type)

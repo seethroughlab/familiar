@@ -18,7 +18,7 @@ from typing import Any
 import httpx
 
 from app.services.artwork import get_artwork_path, save_artwork
-from app.services.tasks import get_redis
+from app.services.redis_client import get_redis
 
 # Image magic bytes for validation
 IMAGE_MAGIC_BYTES = {

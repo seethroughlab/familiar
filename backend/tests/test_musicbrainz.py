@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import musicbrainzngs
 
-from app.services.musicbrainz import (
+from app.services.metadata.musicbrainz import (
     _normalize_for_comparison,
     _select_best_release,
     enrich_track,
@@ -89,7 +89,7 @@ class TestSelectBestRelease:
 
 
 class TestEnrichTrack:
-    @patch("app.services.musicbrainz.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.get_recording_by_id")
     def test_uses_recording_id_first(self, mock_get):
         mock_get.return_value = {"title": "Track", "artist": "Artist"}
         result = enrich_track(
@@ -99,8 +99,8 @@ class TestEnrichTrack:
         assert result is not None
         mock_get.assert_called_once_with("abc-123", local_album=None)
 
-    @patch("app.services.musicbrainz.search_recording")
-    @patch("app.services.musicbrainz.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.search_recording")
+    @patch("app.services.metadata.musicbrainz.get_recording_by_id")
     def test_falls_back_to_search(self, mock_get, mock_search):
         mock_get.return_value = None
         mock_search.return_value = {"title": "Track", "artist": "Artist"}
@@ -111,15 +111,15 @@ class TestEnrichTrack:
         assert result is not None
         mock_search.assert_called_once()
 
-    @patch("app.services.musicbrainz.search_recording")
-    @patch("app.services.musicbrainz.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.search_recording")
+    @patch("app.services.metadata.musicbrainz.get_recording_by_id")
     def test_returns_none_when_nothing_found(self, mock_get, mock_search):
         mock_get.return_value = None
         mock_search.return_value = None
         result = enrich_track(title="Unknown", artist="Unknown")
         assert result is None
 
-    @patch("app.services.musicbrainz.search_recording")
+    @patch("app.services.metadata.musicbrainz.search_recording")
     def test_search_only_with_title(self, mock_search):
         mock_search.return_value = {"title": "Track"}
         result = enrich_track(title="Track")
@@ -131,8 +131,8 @@ class TestEnrichTrack:
 
 
 class TestSearchRecording:
-    @patch("app.services.musicbrainz.get_recording_by_id")
-    @patch("app.services.musicbrainz.musicbrainzngs.search_recordings")
+    @patch("app.services.metadata.musicbrainz.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_recordings")
     def test_returns_enriched_recording(self, mock_search, mock_get):
         mock_search.return_value = {
             "recording-list": [{"id": "rec-123", "title": "Track"}]
@@ -143,21 +143,21 @@ class TestSearchRecording:
         assert result is not None
         mock_get.assert_called_once_with("rec-123", local_album=None)
 
-    @patch("app.services.musicbrainz.musicbrainzngs.search_recordings")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_recordings")
     def test_returns_none_for_no_results(self, mock_search):
         mock_search.return_value = {"recording-list": []}
         result = search_recording("Unknown Track")
         assert result is None
 
-    @patch("app.services.musicbrainz.musicbrainzngs.search_recordings")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_recordings")
     def test_handles_api_error(self, mock_search):
         import musicbrainzngs
         mock_search.side_effect = musicbrainzngs.WebServiceError("Error")
         result = search_recording("Track")
         assert result is None
 
-    @patch("app.services.musicbrainz.get_recording_by_id")
-    @patch("app.services.musicbrainz.musicbrainzngs.search_recordings")
+    @patch("app.services.metadata.musicbrainz.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_recordings")
     def test_passes_local_album(self, mock_search, mock_get):
         mock_search.return_value = {
             "recording-list": [{"id": "rec-456", "title": "Track"}]
@@ -168,7 +168,7 @@ class TestSearchRecording:
         assert result is not None
         mock_get.assert_called_once_with("rec-456", local_album="My Album")
 
-    @patch("app.services.musicbrainz.musicbrainzngs.search_recordings")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_recordings")
     def test_handles_generic_exception(self, mock_search):
         mock_search.side_effect = RuntimeError("unexpected")
         result = search_recording("Track")
@@ -176,7 +176,7 @@ class TestSearchRecording:
 
 
 class TestGetRecordingById:
-    @patch("app.services.musicbrainz.musicbrainzngs.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_recording_by_id")
     def test_returns_full_metadata(self, mock_get):
         mock_get.return_value = {
             "recording": {
@@ -212,20 +212,20 @@ class TestGetRecordingById:
         assert result["rating"] == 4.2
         assert result["rating_count"] == 100
 
-    @patch("app.services.musicbrainz.musicbrainzngs.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_recording_by_id")
     def test_returns_none_on_empty_recording(self, mock_get):
         mock_get.return_value = {"recording": {}}
         assert get_recording_by_id("bad-id") is None
 
-    @patch("app.services.musicbrainz.musicbrainzngs.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_recording_by_id")
     def test_handles_api_error(self, mock_get):
         mock_get.side_effect = musicbrainzngs.WebServiceError("Error")
         assert get_recording_by_id("bad-id") is None
 
 
 class TestEnrichTrackFull:
-    @patch("app.services.musicbrainz.search_recording")
-    @patch("app.services.musicbrainz.get_recording_by_id")
+    @patch("app.services.metadata.musicbrainz.search_recording")
+    @patch("app.services.metadata.musicbrainz.get_recording_by_id")
     def test_enrich_with_isrc_path(self, mock_get_by_id, mock_search):
         """enrich_track with a recording_id should try get_recording_by_id first."""
         mock_get_by_id.return_value = {
@@ -241,7 +241,7 @@ class TestEnrichTrackFull:
         assert result["musicbrainz_recording_id"] == "rec-999"
         mock_search.assert_not_called()  # Should NOT fall back
 
-    @patch("app.services.musicbrainz.search_recording")
+    @patch("app.services.metadata.musicbrainz.search_recording")
     def test_enrich_passes_album_to_search(self, mock_search):
         mock_search.return_value = {"title": "Song", "album": "My Album"}
         result = enrich_track(title="Song", artist="Band", album="My Album")
@@ -250,7 +250,7 @@ class TestEnrichTrackFull:
 
 
 class TestSearchArtist:
-    @patch("app.services.musicbrainz.musicbrainzngs.search_artists")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_artists")
     def test_returns_best_match(self, mock_search):
         mock_search.return_value = {
             "artist-list": [
@@ -270,19 +270,19 @@ class TestSearchArtist:
         assert result["musicbrainz_artist_id"] == "art-123"
         assert result["score"] == 100
 
-    @patch("app.services.musicbrainz.musicbrainzngs.search_artists")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_artists")
     def test_returns_none_for_no_results(self, mock_search):
         mock_search.return_value = {"artist-list": []}
         assert search_artist("Nonexistent") is None
 
-    @patch("app.services.musicbrainz.musicbrainzngs.search_artists")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.search_artists")
     def test_handles_api_error(self, mock_search):
         mock_search.side_effect = musicbrainzngs.WebServiceError("Error")
         assert search_artist("Radiohead") is None
 
 
 class TestGetArtistById:
-    @patch("app.services.musicbrainz.musicbrainzngs.get_artist_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_artist_by_id")
     def test_returns_artist_metadata(self, mock_get):
         mock_get.return_value = {
             "artist": {
@@ -305,19 +305,19 @@ class TestGetArtistById:
         assert result["tags"] == ["rock"]
         assert len(result["urls"]) == 1
 
-    @patch("app.services.musicbrainz.musicbrainzngs.get_artist_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_artist_by_id")
     def test_handles_empty_artist(self, mock_get):
         mock_get.return_value = {"artist": {}}
         assert get_artist_by_id("bad-id") is None
 
-    @patch("app.services.musicbrainz.musicbrainzngs.get_artist_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_artist_by_id")
     def test_handles_api_error(self, mock_get):
         mock_get.side_effect = musicbrainzngs.WebServiceError("Error")
         assert get_artist_by_id("bad-id") is None
 
 
 class TestGetReleaseById:
-    @patch("app.services.musicbrainz.musicbrainzngs.get_release_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_release_by_id")
     def test_returns_release_metadata(self, mock_get):
         mock_get.return_value = {
             "release": {
@@ -340,14 +340,14 @@ class TestGetReleaseById:
         assert result["label"] == "Parlophone"
         assert result["track_count"] == 12
 
-    @patch("app.services.musicbrainz.musicbrainzngs.get_release_by_id")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.get_release_by_id")
     def test_handles_api_error(self, mock_get):
         mock_get.side_effect = musicbrainzngs.WebServiceError("Error")
         assert get_release_by_id("bad-id") is None
 
 
 class TestGetArtistReleasesRecent:
-    @patch("app.services.musicbrainz.musicbrainzngs.browse_release_groups")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.browse_release_groups")
     def test_returns_recent_releases(self, mock_browse):
         mock_browse.return_value = {
             "release-group-list": [
@@ -370,7 +370,7 @@ class TestGetArtistReleasesRecent:
         # "New Album" should be included (within 365 days of today)
         assert any(r["title"] == "New Album" for r in result)
 
-    @patch("app.services.musicbrainz.musicbrainzngs.browse_release_groups")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.browse_release_groups")
     def test_handles_partial_dates(self, mock_browse):
         mock_browse.return_value = {
             "release-group-list": [
@@ -386,13 +386,13 @@ class TestGetArtistReleasesRecent:
         result = get_artist_releases_recent("art-123", days_back=365)
         assert any(r["title"] == "Year Only" for r in result)
 
-    @patch("app.services.musicbrainz.musicbrainzngs.browse_release_groups")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.browse_release_groups")
     def test_handles_api_error(self, mock_browse):
         mock_browse.side_effect = musicbrainzngs.WebServiceError("Error")
         result = get_artist_releases_recent("art-123")
         assert result == []
 
-    @patch("app.services.musicbrainz.musicbrainzngs.browse_release_groups")
+    @patch("app.services.metadata.musicbrainz.musicbrainzngs.browse_release_groups")
     def test_handles_empty_result(self, mock_browse):
         mock_browse.return_value = {"release-group-list": [], "release-group-count": 0}
         result = get_artist_releases_recent("art-123")

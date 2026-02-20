@@ -23,8 +23,6 @@ from dataclasses import dataclass
 import httpx
 import numpy as np
 
-from app.config import EMBEDDING_VERSION, FEATURES_VERSION
-
 logger = logging.getLogger(__name__)
 
 # Rate limit handling
@@ -96,10 +94,20 @@ class CommunityCacheService:
         self,
         cache_url: str = DEFAULT_CACHE_URL,
         timeout: float = 10.0,
+        embedding_version: int | None = None,
+        features_version: int | None = None,
     ):
         self.cache_url = cache_url.rstrip("/")
         self._client: httpx.AsyncClient | None = None
         self._timeout = timeout
+        # Lazy-import defaults from config only when not explicitly provided
+        if embedding_version is None or features_version is None:
+            from app.config import EMBEDDING_VERSION, FEATURES_VERSION
+            self._embedding_version = embedding_version if embedding_version is not None else EMBEDDING_VERSION
+            self._features_version = features_version if features_version is not None else FEATURES_VERSION
+        else:
+            self._embedding_version = embedding_version
+            self._features_version = features_version
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -195,7 +203,7 @@ class CommunityCacheService:
             CachedEmbedding if found, None otherwise
         """
         if analysis_version is None:
-            analysis_version = EMBEDDING_VERSION
+            analysis_version = self._embedding_version
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
@@ -263,7 +271,7 @@ class CommunityCacheService:
             True if contribution was accepted, False otherwise
         """
         if analysis_version is None:
-            analysis_version = EMBEDDING_VERSION
+            analysis_version = self._embedding_version
 
         if len(embedding) != EMBEDDING_DIM:
             logger.warning(f"Cannot contribute embedding with wrong dimension: {len(embedding)}")
@@ -314,7 +322,7 @@ class CommunityCacheService:
             CachedFeatures if found, None otherwise
         """
         if analysis_version is None:
-            analysis_version = FEATURES_VERSION
+            analysis_version = self._features_version
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
@@ -381,7 +389,7 @@ class CommunityCacheService:
             True if contribution was accepted, False otherwise
         """
         if analysis_version is None:
-            analysis_version = FEATURES_VERSION
+            analysis_version = self._features_version
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 

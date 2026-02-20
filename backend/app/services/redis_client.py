@@ -208,3 +208,13 @@ def get_resilient_redis() -> ResilientRedisClient:
     if _resilient_redis is None:
         _resilient_redis = ResilientRedisClient()
     return _resilient_redis
+
+
+# Convenience alias used throughout the codebase
+def get_redis() -> ResilientRedisClient:
+    """Get resilient Redis client for progress updates.
+
+    The resilient client automatically retries on transient failures
+    and has configured socket timeouts.
+    """
+    return get_resilient_redis()

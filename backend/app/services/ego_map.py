@@ -82,7 +82,7 @@ class EgoMapService:
     def _get_cached_map(self, center: str, limit: int) -> EgoMapData | None:
         """Try to get cached map from Redis."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             key = self._get_map_cache_key(center, limit)
@@ -103,7 +103,7 @@ class EgoMapService:
     def _cache_map(self, center: str, limit: int, data: EgoMapData) -> None:
         """Cache computed map to Redis."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             key = self._get_map_cache_key(center, limit)
@@ -354,7 +354,7 @@ class EgoMapService:
     def invalidate_cache(self) -> None:
         """Invalidate all cached ego maps (call after library changes)."""
         try:
-            from app.services.tasks import get_redis
+            from app.services.redis_client import get_redis
 
             r = get_redis()
             # Delete all ego map cache keys
