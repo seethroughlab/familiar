@@ -194,6 +194,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                         cache_service.lookup_features(acoustid_fingerprint)
                     )
                     if cached_features:
+                        # Basic features
                         features = {
                             "bpm": cached_features.bpm,
                             "key": cached_features.key,
@@ -206,12 +207,54 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                             "liveness": cached_features.liveness,
                             "loudness": cached_features.loudness,
                         }
-                        # Remove None values
                         features = {k: v for k, v in features.items() if v is not None}
+
+                        # Deep analysis scalars from cache
+                        _deep_from_cache = {
+                            "harmonic_complexity": cached_features.harmonic_complexity,
+                            "key_stability": cached_features.key_stability,
+                            "modal_character": cached_features.modal_character,
+                            "modal_confidence": cached_features.modal_confidence,
+                            "swing_ratio": cached_features.swing_ratio,
+                            "syncopation": cached_features.syncopation,
+                            "tempo_character": cached_features.tempo_character,
+                            "brightness": cached_features.brightness,
+                            "dynamic_range_db": cached_features.dynamic_range_db,
+                            "energy_shape": cached_features.energy_shape,
+                            "section_count": cached_features.section_count,
+                            "form_string": cached_features.form_string,
+                            "avg_section_length": cached_features.avg_section_length,
+                            "replaygain_track_gain": cached_features.replaygain_track_gain,
+                            "track_peak": cached_features.track_peak,
+                            "note_density": cached_features.note_density,
+                            "interval_character": cached_features.interval_character,
+                            "pitch_range": cached_features.pitch_range,
+                        }
+                        deep_scalars = {
+                            k: v for k, v in _deep_from_cache.items() if v is not None
+                        }
+
+                        # Try to fetch analysis_detail from cache too
+                        try:
+                            cached_detail = asyncio.run(
+                                cache_service.lookup_analysis_detail(acoustid_fingerprint)
+                            )
+                            if cached_detail:
+                                analysis_detail = cached_detail.detail
+                                logger.info(
+                                    f"Community cache analysis detail hit for "
+                                    f"{track.title}"
+                                )
+                        except Exception as e:
+                            logger.debug(
+                                f"Community cache analysis detail lookup failed: {e}"
+                            )
+
                         features_source = "community_cache"
                         logger.info(
                             f"Community cache features hit for {track.title} "
-                            f"(contributed by {cached_features.contributor_count} users)"
+                            f"(contributed by {cached_features.contributor_count} "
+                            f"users, {len(deep_scalars)} deep scalars)"
                         )
                 except Exception as e:
                     logger.warning(f"Community cache features lookup failed: {e}")
@@ -255,11 +298,24 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                     cache_service = get_community_cache_service(
                         cache_url=app_settings.community_cache_url
                     )
+                    # Send all available features (basic + deep scalars)
+                    all_cache_features = {**features, **deep_scalars}
                     asyncio.run(
-                        cache_service.contribute_features(acoustid_fingerprint, features)
+                        cache_service.contribute_features(
+                            acoustid_fingerprint, all_cache_features
+                        )
                     )
+                    # Also contribute analysis_detail if available
+                    if analysis_detail:
+                        asyncio.run(
+                            cache_service.contribute_analysis_detail(
+                                acoustid_fingerprint, analysis_detail
+                            )
+                        )
                 except Exception as e:
-                    logger.warning(f"Failed to contribute features to community cache: {e}")
+                    logger.warning(
+                        f"Failed to contribute features to community cache: {e}"
+                    )
 
             log_memory("after_features")
 

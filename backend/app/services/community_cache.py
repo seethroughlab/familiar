@@ -54,6 +54,7 @@ class CachedFeatures:
 
     fingerprint_hash: str  # SHA256 hash of AcoustID fingerprint
     analysis_version: int
+    # Original 10 basic features
     bpm: float | None = None
     key: str | None = None
     energy: float | None = None
@@ -64,6 +65,37 @@ class CachedFeatures:
     speechiness: float | None = None
     liveness: float | None = None
     loudness: float | None = None
+    # Phase 1 deep analysis scalars
+    harmonic_complexity: float | None = None
+    key_stability: str | None = None
+    modal_character: str | None = None
+    modal_confidence: float | None = None
+    swing_ratio: float | None = None
+    syncopation: float | None = None
+    tempo_character: str | None = None
+    brightness: float | None = None
+    dynamic_range_db: float | None = None
+    energy_shape: str | None = None
+    section_count: int | None = None
+    form_string: str | None = None
+    avg_section_length: float | None = None
+    # Phase 1 additional scalars
+    replaygain_track_gain: float | None = None
+    track_peak: float | None = None
+    # Phase 3 melodic features
+    note_density: float | None = None
+    interval_character: str | None = None
+    pitch_range: int | None = None
+    contributor_count: int = 1
+
+
+@dataclass
+class CachedAnalysisDetail:
+    """Full structured analysis data retrieved from the community cache."""
+
+    fingerprint_hash: str
+    analysis_version: int
+    detail: dict
     contributor_count: int = 1
 
 
@@ -365,24 +397,52 @@ class CommunityCacheService:
                 speechiness=features.get("speechiness"),
                 liveness=features.get("liveness"),
                 loudness=features.get("loudness"),
+                harmonic_complexity=features.get("harmonic_complexity"),
+                key_stability=features.get("key_stability"),
+                modal_character=features.get("modal_character"),
+                modal_confidence=features.get("modal_confidence"),
+                swing_ratio=features.get("swing_ratio"),
+                syncopation=features.get("syncopation"),
+                tempo_character=features.get("tempo_character"),
+                brightness=features.get("brightness"),
+                dynamic_range_db=features.get("dynamic_range_db"),
+                energy_shape=features.get("energy_shape"),
+                section_count=features.get("section_count"),
+                form_string=features.get("form_string"),
+                avg_section_length=features.get("avg_section_length"),
+                replaygain_track_gain=features.get("replaygain_track_gain"),
+                track_peak=features.get("track_peak"),
+                note_density=features.get("note_density"),
+                interval_character=features.get("interval_character"),
+                pitch_range=features.get("pitch_range"),
                 contributor_count=data.get("contributor_count", 1),
             )
         except Exception as e:
             logger.warning(f"Community cache features lookup failed to parse response: {e}")
             return None
 
+    # All feature keys accepted by the cache server
+    _ALL_FEATURE_KEYS = [
+        "bpm", "key", "energy", "danceability", "valence", "acousticness",
+        "instrumentalness", "speechiness", "liveness", "loudness",
+        "harmonic_complexity", "key_stability", "modal_character", "modal_confidence",
+        "swing_ratio", "syncopation", "tempo_character", "brightness",
+        "dynamic_range_db", "energy_shape", "section_count", "form_string",
+        "avg_section_length", "replaygain_track_gain", "track_peak",
+        "note_density", "interval_character", "pitch_range",
+    ]
+
     async def contribute_features(
         self,
         acoustid_fingerprint: str | bytes,
-        features: dict[str, float | str | None],
+        features: dict[str, float | str | int | None],
         analysis_version: int | None = None,
     ) -> bool:
         """Contribute audio features to the community cache.
 
         Args:
             acoustid_fingerprint: The raw AcoustID fingerprint string
-            features: Dict with keys: bpm, key, energy, danceability, valence,
-                     acousticness, instrumentalness, speechiness, liveness, loudness
+            features: Dict with any subset of feature keys (all 28 accepted)
             analysis_version: Version of the analysis (defaults to current)
 
         Returns:
@@ -393,24 +453,19 @@ class CommunityCacheService:
 
         fp_hash = self.hash_fingerprint(acoustid_fingerprint)
 
+        # Send all available features (server ignores unknown keys via Pydantic)
+        features_payload = {
+            k: features[k] for k in self._ALL_FEATURE_KEYS
+            if k in features and features[k] is not None
+        }
+
         response = await self._request_with_retry(
             "POST",
             f"{self.cache_url}/v1/features",
             json={
                 "fingerprint_hash": fp_hash,
                 "analysis_version": analysis_version,
-                "features": {
-                    "bpm": features.get("bpm"),
-                    "key": features.get("key"),
-                    "energy": features.get("energy"),
-                    "danceability": features.get("danceability"),
-                    "valence": features.get("valence"),
-                    "acousticness": features.get("acousticness"),
-                    "instrumentalness": features.get("instrumentalness"),
-                    "speechiness": features.get("speechiness"),
-                    "liveness": features.get("liveness"),
-                    "loudness": features.get("loudness"),
-                },
+                "features": features_payload,
             },
         )
 
@@ -425,6 +480,122 @@ class CommunityCacheService:
             return True
         else:
             logger.warning(f"Community cache features contribution rejected: {response.status_code}")
+            return False
+
+    async def lookup_analysis_detail(
+        self,
+        acoustid_fingerprint: str | bytes,
+        analysis_version: int | None = None,
+    ) -> CachedAnalysisDetail | None:
+        """Look up full analysis detail from the community cache.
+
+        Args:
+            acoustid_fingerprint: The raw AcoustID fingerprint string
+            analysis_version: Version to match (defaults to current FEATURES_VERSION)
+
+        Returns:
+            CachedAnalysisDetail if found, None otherwise
+        """
+        if analysis_version is None:
+            analysis_version = self._features_version
+
+        fp_hash = self.hash_fingerprint(acoustid_fingerprint)
+
+        response = await self._request_with_retry(
+            "GET",
+            f"{self.cache_url}/v1/analysis-detail/{fp_hash}",
+            params={"analysis_version": analysis_version},
+        )
+
+        if response is None:
+            return None
+
+        if response.status_code == 404:
+            logger.debug(f"Community cache analysis detail miss for {fp_hash[:16]}...")
+            return None
+
+        if response.status_code != 200:
+            logger.warning(
+                f"Community cache analysis detail lookup error: HTTP {response.status_code}"
+            )
+            return None
+
+        try:
+            data = response.json()
+            detail = data.get("detail")
+            if not detail or not isinstance(detail, dict):
+                logger.warning("Community cache returned invalid analysis detail")
+                return None
+
+            logger.info(
+                f"Community cache analysis detail hit for {fp_hash[:16]}... "
+                f"(contributed by {data.get('contributor_count', 1)} users)"
+            )
+
+            return CachedAnalysisDetail(
+                fingerprint_hash=fp_hash,
+                analysis_version=data.get("analysis_version", analysis_version),
+                detail=detail,
+                contributor_count=data.get("contributor_count", 1),
+            )
+        except Exception as e:
+            logger.warning(
+                f"Community cache analysis detail lookup failed to parse response: {e}"
+            )
+            return None
+
+    async def contribute_analysis_detail(
+        self,
+        acoustid_fingerprint: str | bytes,
+        detail: dict,
+        analysis_version: int | None = None,
+    ) -> bool:
+        """Contribute full analysis detail to the community cache.
+
+        Args:
+            acoustid_fingerprint: The raw AcoustID fingerprint string
+            detail: Full structured analysis data dict
+            analysis_version: Version of the analysis (defaults to current)
+
+        Returns:
+            True if contribution was accepted, False otherwise
+        """
+        if analysis_version is None:
+            analysis_version = self._features_version
+
+        if not detail:
+            return False
+
+        fp_hash = self.hash_fingerprint(acoustid_fingerprint)
+
+        response = await self._request_with_retry(
+            "POST",
+            f"{self.cache_url}/v1/analysis-detail",
+            json={
+                "fingerprint_hash": fp_hash,
+                "analysis_version": analysis_version,
+                "detail": detail,
+            },
+        )
+
+        if response is None:
+            return False
+
+        if response.status_code == 201:
+            logger.info(
+                f"Contributed analysis detail to community cache: {fp_hash[:16]}..."
+            )
+            return True
+        elif response.status_code == 200:
+            logger.debug(
+                f"Analysis detail already in cache, confirmed: {fp_hash[:16]}..."
+            )
+            return True
+        else:
+            logger.warning(
+                f"Community cache analysis detail contribution rejected: "
+                f"{response.status_code}"
+            )
             return False
 
     async def health_check(self) -> dict:
