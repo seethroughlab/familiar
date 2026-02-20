@@ -1,4 +1,4 @@
-import type { TrackMetadataUpdate } from '../../../api/client';
+import type { TrackMetadataUpdate } from '../../../api';
 import { AutoPopulateButton } from '../AutoPopulateButton';
 import { MusicBrainzLookup } from '../MusicBrainzLookup';
 

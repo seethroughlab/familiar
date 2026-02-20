@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
-import { tracksApi } from '../api/client';
+import { tracksApi } from '../api';
 
 /**
  * Hook for automatic metadata enrichment when a track plays.

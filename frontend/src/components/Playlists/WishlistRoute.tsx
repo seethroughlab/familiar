@@ -4,7 +4,7 @@
 import { Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { playlistsApi } from '../../api/client';
+import { playlistsApi } from '../../api';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { PlaylistDetail } from './PlaylistDetail';
 

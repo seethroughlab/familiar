@@ -16,7 +16,7 @@ import {
   backupApi,
   type RestorePreviewResponse,
   type RestoreExecuteResponse,
-} from '../../api/client';
+} from '../../api';
 
 import { createLogger } from '../../utils/logger';
 

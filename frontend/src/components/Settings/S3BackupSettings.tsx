@@ -40,7 +40,7 @@ import {
   type S3BackupHistoryEntry,
   type S3ManifestSummary,
   type S3RestoreState,
-} from '../../api/client';
+} from '../../api';
 import { showSuccess, showError, showWarning } from '../../stores/toastStore';
 
 import { createLogger } from '../../utils/logger';

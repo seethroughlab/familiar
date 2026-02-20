@@ -24,7 +24,7 @@ import {
   type ChangeStatus,
   type ChangeScope,
   type ChangePreview,
-} from '../../../api/client';
+} from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 
 import { createLogger } from '../../../utils/logger';

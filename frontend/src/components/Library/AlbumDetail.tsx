@@ -11,7 +11,7 @@ import {
   Download,
   Check,
 } from 'lucide-react';
-import { libraryApi, playlistsApi, downloadApi } from '../../api/client';
+import { libraryApi, playlistsApi, downloadApi } from '../../api';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';

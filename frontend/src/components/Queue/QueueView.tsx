@@ -7,7 +7,7 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { useFavorites } from '../../hooks/useFavorites';
-import { tracksApi } from '../../api/client';
+import { tracksApi } from '../../api';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';

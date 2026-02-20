@@ -7,7 +7,7 @@ import {
   ChevronUp,
   Sparkles,
 } from 'lucide-react';
-import { newReleasesApi, type NewRelease, type NewReleasesStatus } from '../../api/client';
+import { newReleasesApi, type NewRelease, type NewReleasesStatus } from '../../api';
 import { NewReleaseCard } from './NewReleaseCard';
 import { showError } from '../../stores/toastStore';
 

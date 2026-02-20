@@ -9,8 +9,8 @@ import {
   ShoppingCart,
   Clock,
 } from 'lucide-react';
-import { spotifyApi } from '../../api/client';
-import type { UnmatchedTrack } from '../../api/client';
+import { spotifyApi } from '../../api';
+import type { UnmatchedTrack } from '../../api';
 
 // Store icons/colors for visual distinction
 const STORE_STYLES: Record<string, { color: string; abbrev: string }> = {

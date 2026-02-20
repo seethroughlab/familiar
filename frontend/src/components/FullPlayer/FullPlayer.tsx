@@ -22,7 +22,7 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
-import { tracksApi, type LyricLine } from '../../api/client';
+import { tracksApi, type LyricLine } from '../../api';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
 import { EffectsQuickAccess } from './EffectsQuickAccess';
 import { TrackContextMenu } from '../Library/TrackContextMenu';

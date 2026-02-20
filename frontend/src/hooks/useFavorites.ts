@@ -6,7 +6,7 @@
  */
 import { useMemo, useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { favoritesApi, type FavoriteTrack, type ExternalFavoriteTrack, type FavoritesListResponse } from '../api/client';
+import { favoritesApi, type FavoriteTrack, type ExternalFavoriteTrack, type FavoritesListResponse } from '../api';
 import { useOfflineStatus } from './useOfflineStatus';
 import * as playlistCache from '../services/playlistCache';
 import * as offlineService from '../services/offlineService';

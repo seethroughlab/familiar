@@ -1,4 +1,4 @@
-import { tracksApi } from '../../api/client';
+import { tracksApi } from '../../api';
 import {
   getOfflineTrack,
   createOfflineTrackUrl,

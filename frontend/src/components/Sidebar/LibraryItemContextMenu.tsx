@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { ContextMenuContainer, MenuItem, MenuHeader } from '../ui/ContextMenu';
 import { usePlayerStore } from '../../stores/playerStore';
-import { tracksApi } from '../../api/client';
+import { tracksApi } from '../../api';
 import { showSuccess, showError } from '../../stores/toastStore';
 
 interface Props {

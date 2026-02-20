@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Download, Check, Loader2, Heart, Music, FolderOpen } from 'lucide-react';
-import { tracksApi } from '../../api/client';
+import { tracksApi } from '../../api';
 import { useFavorites } from '../../hooks/useFavorites';
 import { usePlayerStore } from '../../stores/playerStore';
 import { PlayIndicator } from '../common/PlayIndicator';

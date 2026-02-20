@@ -11,7 +11,7 @@ import {
   ChevronUp,
   Image,
 } from 'lucide-react';
-import { tracksApi, type TrackMetadataUpdate, type IdentifyCandidate } from '../../api/client';
+import { tracksApi, type TrackMetadataUpdate, type IdentifyCandidate } from '../../api';
 
 interface Props {
   trackId: string;

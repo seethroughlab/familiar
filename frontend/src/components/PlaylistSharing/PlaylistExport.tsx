@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Download, Loader2, Check } from 'lucide-react';
-import { smartPlaylistsApi } from '../../api/client';
-import type { SmartPlaylist } from '../../api/client';
+import { smartPlaylistsApi } from '../../api';
+import type { SmartPlaylist } from '../../api';
 import type { FamiliarPlaylist } from '../../types';
 
 import { createLogger } from '../../utils/logger';

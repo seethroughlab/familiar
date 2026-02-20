@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { DiscoverySection, DiscoveryItem } from '../types';
-import type { PlaylistRecommendations } from '../../../api/client';
+import type { PlaylistRecommendations } from '../../../api';
 
 interface UsePlaylistDiscoveryOptions {
   recommendations: PlaylistRecommendations | null | undefined;

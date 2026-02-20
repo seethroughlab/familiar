@@ -41,7 +41,7 @@ import {
 import { registerBrowser } from '../components/Library/types';
 
 // API client
-import api, { libraryApi, tracksApi } from '../api/client';
+import api, { libraryApi, tracksApi } from '../api';
 
 /**
  * Current plugin API version.

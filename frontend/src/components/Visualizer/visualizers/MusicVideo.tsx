@@ -15,7 +15,7 @@ import {
   Trash2,
   ExternalLink,
 } from 'lucide-react';
-import { videosApi, type VideoSearchResult } from '../../../api/client';
+import { videosApi, type VideoSearchResult } from '../../../api';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { registerVisualizer, type VisualizerProps } from '../types';
 

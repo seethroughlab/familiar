@@ -14,8 +14,8 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
-import { playlistsApi, downloadApi } from '../../api/client';
-import type { Playlist } from '../../api/client';
+import { playlistsApi, downloadApi } from '../../api';
+import type { Playlist } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { showSuccess, showError } from '../../stores/toastStore';
 import type { Track } from '../../types';

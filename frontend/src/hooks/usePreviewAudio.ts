@@ -5,7 +5,7 @@
  * Features debouncing, fade in/out, crossfade, and automatic timeout.
  */
 import { useRef, useCallback, useEffect } from 'react';
-import { tracksApi } from '../api/client';
+import { tracksApi } from '../api';
 import { usePlayerStore } from '../stores/playerStore';
 import { createLogger } from '../utils/logger';
 

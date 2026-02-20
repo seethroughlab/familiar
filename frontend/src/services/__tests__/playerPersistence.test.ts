@@ -28,7 +28,7 @@ const { mockGetBatch } = vi.hoisted(() => ({
   mockGetBatch: vi.fn((_ids: string[]) => Promise.resolve([] as Record<string, unknown>[])),
 }));
 
-vi.mock('../../api/client', () => ({
+vi.mock('../../api', () => ({
   tracksApi: {
     getBatch: mockGetBatch,
   },

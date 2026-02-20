@@ -14,7 +14,7 @@ import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/C
 import { usePlayerStore } from '../../stores/playerStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
-import { downloadApi, favoritesApi, playlistsApi } from '../../api/client';
+import { downloadApi, favoritesApi, playlistsApi } from '../../api';
 import { clearAllOfflineTracks } from '../../services/offlineService';
 import { showSuccess, showError, showInfo } from '../../stores/toastStore';
 import type { Track } from '../../types';

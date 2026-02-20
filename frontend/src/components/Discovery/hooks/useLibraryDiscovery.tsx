@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { DiscoverySection, DiscoveryItem } from '../types';
-import type { LibraryDiscoverResponse } from '../../../api/client';
-import { libraryApi } from '../../../api/client';
+import type { LibraryDiscoverResponse } from '../../../api';
+import { libraryApi } from '../../../api';
 
 interface UseLibraryDiscoveryOptions {
   data: LibraryDiscoverResponse | null | undefined;

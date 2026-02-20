@@ -8,7 +8,7 @@ import { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { ListMusic } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { playlistsApi } from '../../api/client';
+import { playlistsApi } from '../../api';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { showSuccess, showError } from '../../stores/toastStore';
 

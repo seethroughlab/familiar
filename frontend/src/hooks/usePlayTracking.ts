@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
-import { playTrackingApi } from '../api/client';
+import { playTrackingApi } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlayTracking');

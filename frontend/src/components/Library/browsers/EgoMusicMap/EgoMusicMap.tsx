@@ -12,7 +12,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Search, Sparkles, X, Music } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { libraryApi, tracksApi, type EgoMapArtist } from '../../../../api/client';
+import { libraryApi, tracksApi, type EgoMapArtist } from '../../../../api';
 import { registerBrowser, type BrowserProps } from '../../types';
 import { ArtistPicker } from './ArtistPicker';
 

@@ -12,7 +12,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Users, Loader2 } from 'lucide-react';
-import { libraryApi, tracksApi, type ArtistSummary } from '../../../api/client';
+import { libraryApi, tracksApi, type ArtistSummary } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';

@@ -11,7 +11,7 @@ import {
   type CachedFavorites,
   type CachedTrack,
 } from '../db';
-import type { PlaylistDetail, SmartPlaylist } from '../api/client';
+import type { PlaylistDetail, SmartPlaylist } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlaylistCache');

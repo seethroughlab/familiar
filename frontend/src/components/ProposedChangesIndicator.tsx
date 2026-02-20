@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { FileEdit } from 'lucide-react';
-import { proposedChangesApi } from '../api/client';
+import { proposedChangesApi } from '../api';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 
 export function ProposedChangesIndicator() {

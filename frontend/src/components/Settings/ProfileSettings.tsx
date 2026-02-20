@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, RefreshCw, Pencil, X, Check, Camera, Loader2 } from 'lucide-react';
 import { getSelectedProfileId, getProfile, clearSelectedProfile, type Profile } from '../../services/profileService';
-import { profilesApi } from '../../api/client';
+import { profilesApi } from '../../api';
 import { showError, showWarning } from '../../stores/toastStore';
 
 import { createLogger } from '../../utils/logger';

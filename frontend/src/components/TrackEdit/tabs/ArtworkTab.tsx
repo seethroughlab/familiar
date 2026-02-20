@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, Trash2, Image, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-import { tracksApi } from '../../../api/client';
+import { tracksApi } from '../../../api';
 import { showWarning } from '../../../stores/toastStore';
 
 interface Props {

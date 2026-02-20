@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Pause, Heart, Clock, Music, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
-import { favoritesApi } from '../../api/client';
+import { favoritesApi } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -21,7 +21,7 @@ import { getColumnDef } from '../Library/columnDefinitions';
 import { useLocalSort, useSortedTracks, buildGridColumns } from '../shared/PlaylistColumns';
 import { PlaylistColumnHeader } from '../shared/PlaylistColumnHeader';
 import type { Track } from '../../types';
-import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api/client';
+import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api';
 
 type FavoriteItem =
   | (FavoriteTrack & { _kind: 'local' })

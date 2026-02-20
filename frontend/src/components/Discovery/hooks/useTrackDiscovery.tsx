@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { DiscoverySection, DiscoveryItem } from '../types';
-import { libraryApi } from '../../../api/client';
+import { libraryApi } from '../../../api';
 
 // Similar track structure
 interface SimilarTrack {

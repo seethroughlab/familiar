@@ -12,7 +12,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Grid3X3, Loader2 } from 'lucide-react';
-import { libraryApi, type AlbumSummary } from '../../../api/client';
+import { libraryApi, type AlbumSummary } from '../../../api';
 import {
   registerBrowser,
   type BrowserProps,

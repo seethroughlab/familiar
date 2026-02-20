@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { backgroundApi, type BackgroundJob } from '../api/client';
+import { backgroundApi, type BackgroundJob } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('BackgroundJobs');

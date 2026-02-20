@@ -6,7 +6,7 @@ import {
   fetchTracksBatched,
   migrateOldPlayerState,
 } from '../services/playerPersistence';
-import { tracksApi } from '../api/client';
+import { tracksApi } from '../api';
 import { getCurrentElement } from '../hooks/audio/audioGraph';
 import { createLogger } from '../utils/logger';
 

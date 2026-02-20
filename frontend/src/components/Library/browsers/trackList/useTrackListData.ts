@@ -5,7 +5,7 @@
  */
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { tracksApi } from '../../../../api/client';
+import { tracksApi } from '../../../../api';
 import { useColumnStore, getVisibleColumns } from '../../../../stores/columnStore';
 import { COLUMN_DEFINITIONS, getAnalysisColumns, COLUMN_MAP } from '../../columnDefinitions';
 import type { LibraryFilters } from '../../types';

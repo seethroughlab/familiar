@@ -2,7 +2,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioSettingsStore } from '../stores/audioSettingsStore';
-import { tracksApi, externalTracksApi } from '../api/client';
+import { tracksApi, externalTracksApi } from '../api';
 import type { Track } from '../types';
 import { revokeOfflineTrackUrl } from '../services/offlineService';
 import { showError } from '../stores/toastStore';

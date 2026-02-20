@@ -17,7 +17,7 @@ import {
   Download,
   Check,
 } from 'lucide-react';
-import { libraryApi, tracksApi, playlistsApi, downloadApi } from '../../api/client';
+import { libraryApi, tracksApi, playlistsApi, downloadApi } from '../../api';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';

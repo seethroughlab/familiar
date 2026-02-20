@@ -6,7 +6,7 @@
 import { db, isIndexedDBAvailable, type PersistedPlayerState } from '../db';
 import { getSelectedProfileId } from './profileService';
 import type { Track, QueueItem } from '../types';
-import { tracksApi } from '../api/client';
+import { tracksApi } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlayerPersistence');

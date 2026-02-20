@@ -1,5 +1,5 @@
 import { RotateCcw } from 'lucide-react';
-import type { TrackMetadataUpdate, TrackMetadataResponse } from '../../../api/client';
+import type { TrackMetadataUpdate, TrackMetadataResponse } from '../../../api';
 
 interface Props {
   formData: Partial<TrackMetadataUpdate>;

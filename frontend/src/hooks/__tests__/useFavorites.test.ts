@@ -8,7 +8,7 @@ import { act } from 'react';
 // Mock API client
 const mockToggle = vi.fn();
 const mockList = vi.fn();
-vi.mock('../../api/client', () => ({
+vi.mock('../../api', () => ({
   favoritesApi: {
     list: (...args: unknown[]) => mockList(...args),
     toggle: (...args: unknown[]) => mockToggle(...args),

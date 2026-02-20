@@ -67,8 +67,4 @@ api.interceptors.response.use(
   }
 );
 
-// Legacy aliases for backwards compatibility
-export const getOrCreateDeviceProfile = getSelectedProfileId;
-export const clearDeviceProfile = clearSelectedProfile;
-
 export default api;

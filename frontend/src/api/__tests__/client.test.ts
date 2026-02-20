@@ -38,7 +38,7 @@ describe('API client configuration', () => {
 
   it('should create axios instance with correct baseURL', async () => {
     const axios = (await import('axios')).default
-    await import('../client')
+    await import('../base')
 
     expect(axios.create).toHaveBeenCalledWith({
       baseURL: '/api/v1',
@@ -46,25 +46,25 @@ describe('API client configuration', () => {
   })
 
   it('should set up request interceptor for profile header', async () => {
-    await import('../client')
+    await import('../base')
 
     expect(mockApiInstance.interceptors.request.use).toHaveBeenCalled()
   })
 
   it('should set up response interceptor for error handling', async () => {
-    await import('../client')
+    await import('../base')
 
     expect(mockApiInstance.interceptors.response.use).toHaveBeenCalled()
   })
 })
 
 describe('tracksApi', () => {
-  let tracksApi: typeof import('../client').tracksApi
+  let tracksApi: typeof import('..').tracksApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     tracksApi = module.tracksApi
   })
 
@@ -191,12 +191,12 @@ describe('tracksApi', () => {
 })
 
 describe('libraryApi', () => {
-  let libraryApi: typeof import('../client').libraryApi
+  let libraryApi: typeof import('..').libraryApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     libraryApi = module.libraryApi
   })
 
@@ -288,12 +288,12 @@ describe('libraryApi', () => {
 })
 
 describe('playlistsApi', () => {
-  let playlistsApi: typeof import('../client').playlistsApi
+  let playlistsApi: typeof import('..').playlistsApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     playlistsApi = module.playlistsApi
   })
 
@@ -347,12 +347,12 @@ describe('playlistsApi', () => {
 })
 
 describe('favoritesApi', () => {
-  let favoritesApi: typeof import('../client').favoritesApi
+  let favoritesApi: typeof import('..').favoritesApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     favoritesApi = module.favoritesApi
   })
 
@@ -376,8 +376,8 @@ describe('Error handling', () => {
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       vi.resetModules()
 
-      // Import client to set up interceptors
-      await import('../client')
+      // Import base to set up interceptors
+      await import('../base')
 
       // Get the response interceptor error handler
       const errorHandler = mockApiInstance.interceptors.response.use.mock.calls[0][1]
@@ -403,7 +403,7 @@ describe('Error handling', () => {
       const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
       vi.resetModules()
 
-      await import('../client')
+      await import('../base')
 
       const errorHandler = mockApiInstance.interceptors.response.use.mock.calls[0][1]
 
@@ -426,12 +426,12 @@ describe('Error handling', () => {
 })
 
 describe('artworkApi', () => {
-  let artworkApi: typeof import('../client').artworkApi
+  let artworkApi: typeof import('..').artworkApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     artworkApi = module.artworkApi
   })
 
@@ -494,12 +494,12 @@ describe('artworkApi', () => {
 })
 
 describe('exportImportApi', () => {
-  let exportImportApi: typeof import('../client').exportImportApi
+  let exportImportApi: typeof import('..').exportImportApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     exportImportApi = module.exportImportApi
   })
 
@@ -542,12 +542,12 @@ describe('exportImportApi', () => {
 })
 
 describe('profilesApi', () => {
-  let profilesApi: typeof import('../client').profilesApi
+  let profilesApi: typeof import('..').profilesApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     profilesApi = module.profilesApi
   })
 
@@ -592,12 +592,12 @@ describe('profilesApi', () => {
 })
 
 describe('smartPlaylistsApi', () => {
-  let smartPlaylistsApi: typeof import('../client').smartPlaylistsApi
+  let smartPlaylistsApi: typeof import('..').smartPlaylistsApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     smartPlaylistsApi = module.smartPlaylistsApi
   })
 
@@ -636,12 +636,12 @@ describe('smartPlaylistsApi', () => {
 })
 
 describe('spotifyApi', () => {
-  let spotifyApi: typeof import('../client').spotifyApi
+  let spotifyApi: typeof import('..').spotifyApi
 
   beforeEach(async () => {
     vi.clearAllMocks()
     vi.resetModules()
-    const module = await import('../client')
+    const module = await import('..')
     spotifyApi = module.spotifyApi
   })
 

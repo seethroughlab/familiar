@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
-import { lastfmApi } from '../api/client';
+import { lastfmApi } from '../api';
 
 /**
  * Hook for automatic Last.fm scrobbling.

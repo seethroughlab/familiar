@@ -14,7 +14,7 @@ import { useScrobbling } from '../useScrobbling';
 import { usePlayerStore } from '../../stores/playerStore';
 
 // Mock the API client
-vi.mock('../../api/client', () => ({
+vi.mock('../../api', () => ({
   lastfmApi: {
     getStatus: vi.fn(() => Promise.resolve({ connected: true, configured: true, username: 'testuser' })),
     updateNowPlaying: vi.fn(() => Promise.resolve({ status: 'ok', message: '' })),
@@ -83,7 +83,7 @@ describe('useScrobbling', () => {
   });
 
   it('should send now-playing update when a new track starts', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-1');
 
     renderHook(() => useScrobbling());
@@ -103,7 +103,7 @@ describe('useScrobbling', () => {
   });
 
   it('should not send now-playing when not playing', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-1');
 
     renderHook(() => useScrobbling());
@@ -123,7 +123,7 @@ describe('useScrobbling', () => {
   });
 
   it('should not scrobble before 30 seconds of playback', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-1');
 
     const { rerender } = renderHook(() => useScrobbling());
@@ -152,7 +152,7 @@ describe('useScrobbling', () => {
   });
 
   it('should scrobble at 50% of track duration', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-2');
 
     const { rerender } = renderHook(() => useScrobbling());
@@ -182,7 +182,7 @@ describe('useScrobbling', () => {
   });
 
   it('should scrobble at 4 minutes for long tracks instead of 50%', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     // 10-minute track: 50% = 300s, 4min = 240s, so scrobble at 240s
     const track = createMockTrack('track-long');
 
@@ -212,7 +212,7 @@ describe('useScrobbling', () => {
   });
 
   it('should not double-scrobble the same track', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-3');
 
     const { rerender } = renderHook(() => useScrobbling());
@@ -253,7 +253,7 @@ describe('useScrobbling', () => {
   });
 
   it('should not scrobble when paused', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-4');
 
     const { rerender } = renderHook(() => useScrobbling());
@@ -287,7 +287,7 @@ describe('useScrobbling', () => {
   });
 
   it('should not scrobble when no duration is set', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-5');
 
     const { rerender } = renderHook(() => useScrobbling());
@@ -309,7 +309,7 @@ describe('useScrobbling', () => {
   });
 
   it('should send now-playing only once per track', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-6');
 
     const { rerender } = renderHook(() => useScrobbling());
@@ -338,7 +338,7 @@ describe('useScrobbling', () => {
   });
 
   it('should not scrobble when Last.fm is not connected', async () => {
-    const { lastfmApi } = await import('../../api/client');
+    const { lastfmApi } = await import('../../api');
     const { useQuery } = await import('@tanstack/react-query');
 
     vi.mocked(useQuery).mockReturnValue({

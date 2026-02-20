@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, CheckCircle, AlertCircle, Loader2, Music, Music2, FolderSearch, FileText, Cpu, Sparkles } from 'lucide-react';
-import { libraryApi, type SyncStatus, type SyncPhase } from '../../api/client';
+import { libraryApi, type SyncStatus, type SyncPhase } from '../../api';
 
 import { showError } from '../../stores/toastStore';
 import { createLogger } from '../../utils/logger';

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { spotifyApi } from '../../api/client';
-import type { SpotifyStatus, SpotifyExportPreview, SpotifyExportImportOptions } from '../../api/client';
+import { spotifyApi } from '../../api';
+import type { SpotifyStatus, SpotifyExportPreview, SpotifyExportImportOptions } from '../../api';
 import { Music2, RefreshCw, LogOut, ExternalLink, CheckCircle, XCircle, Loader2, AlertTriangle, Upload, FileArchive } from 'lucide-react';
 import { MissingTracks } from '../Library/MissingTracks';
 import { showSuccess, showError } from '../../stores/toastStore';

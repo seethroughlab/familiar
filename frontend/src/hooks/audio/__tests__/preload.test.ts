@@ -29,7 +29,7 @@ vi.mock('../../../services/offlineService', () => ({
   revokeOfflineTrackUrl: vi.fn(),
 }));
 
-vi.mock('../../../api/client', () => ({
+vi.mock('../../../api', () => ({
   tracksApi: {
     getStreamUrl: (id: string) => `/api/v1/tracks/${id}/stream`,
   },

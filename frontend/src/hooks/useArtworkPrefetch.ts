@@ -5,7 +5,7 @@
  * Uses requestIdleCallback to avoid blocking UI during batch operations.
  */
 import { useCallback, useRef, useEffect } from 'react';
-import { artworkApi, type ArtworkQueueRequest } from '../api/client';
+import { artworkApi, type ArtworkQueueRequest } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('ArtworkPrefetch');

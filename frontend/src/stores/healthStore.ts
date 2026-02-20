@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { healthApi, type SystemHealth, type ServiceStatus } from '../api/client';
+import { healthApi, type SystemHealth, type ServiceStatus } from '../api';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Health');

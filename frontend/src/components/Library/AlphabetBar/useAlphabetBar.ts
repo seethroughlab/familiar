@@ -5,7 +5,7 @@
  */
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { libraryApi } from '../../../api/client';
+import { libraryApi } from '../../../api';
 
 interface UseAlphabetBarOptions {
   entityType: 'tracks' | 'artists' | 'albums';

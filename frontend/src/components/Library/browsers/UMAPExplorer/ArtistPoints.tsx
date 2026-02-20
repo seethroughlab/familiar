@@ -8,7 +8,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-import type { MapNode3D } from '../../../../api/client';
+import type { MapNode3D } from '../../../../api';
 
 interface ArtistPointsProps {
   nodes: MapNode3D[];

@@ -5,10 +5,10 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { usePlayTracking } from '../usePlayTracking';
 import { usePlayerStore } from '../../stores/playerStore';
-import { playTrackingApi } from '../../api/client';
+import { playTrackingApi } from '../../api';
 
 // Mock the API client
-vi.mock('../../api/client', () => ({
+vi.mock('../../api', () => ({
   playTrackingApi: {
     recordPlay: vi.fn(() => Promise.resolve({ track_id: 'test-id', play_count: 1, total_play_seconds: 60 })),
   },

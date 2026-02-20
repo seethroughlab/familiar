@@ -15,7 +15,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Download, Check, Loader2, Heart, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
-import { tracksApi, downloadApi } from '../../../api/client';
+import { tracksApi, downloadApi } from '../../../api';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useAudioSettingsStore } from '../../../stores/audioSettingsStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';

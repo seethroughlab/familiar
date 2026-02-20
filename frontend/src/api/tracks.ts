@@ -1,5 +1,6 @@
 import type { Track, TrackListResponse } from '../types';
-import api, { getApiUrl } from './base';
+import api from './base';
+import { getApiUrl } from './base';
 
 // Track IDs response (lightweight for shuffle-all)
 export interface TrackIdsResponse {
@@ -22,6 +23,7 @@ export const tracksApi = {
     valence_min?: number;
     valence_max?: number;
     include_features?: boolean;
+    include_external?: boolean;
     sort_by?: string;
     sort_order?: 'asc' | 'desc';
   }): Promise<TrackListResponse> => {
@@ -47,6 +49,7 @@ export const tracksApi = {
     energy_max?: number;
     valence_min?: number;
     valence_max?: number;
+    include_external?: boolean;
     sort_by?: string;
     sort_order?: 'asc' | 'desc';
   }): Promise<TrackIdsResponse> => {
@@ -105,6 +108,7 @@ export const tracksApi = {
       energy_max?: number;
       valence_min?: number;
       valence_max?: number;
+      include_external?: boolean;
       sort_by?: string;
       sort_order?: 'asc' | 'desc';
     }
@@ -120,6 +124,11 @@ export const tracksApi = {
 
   enrich: async (id: string): Promise<{ status: string; message: string }> => {
     const { data } = await api.post(`/tracks/${id}/enrich`);
+    return data;
+  },
+
+  enrichBatch: async (trackIds: string[]): Promise<{ queued: number; skipped: number; total: number }> => {
+    const { data } = await api.post('/tracks/enrich-batch', { track_ids: trackIds });
     return data;
   },
 

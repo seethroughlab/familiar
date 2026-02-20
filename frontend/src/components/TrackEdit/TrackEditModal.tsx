@@ -14,7 +14,7 @@ import {
   CheckCircle,
   Fingerprint,
 } from 'lucide-react';
-import { tracksApi, type TrackMetadataUpdate } from '../../api/client';
+import { tracksApi, type TrackMetadataUpdate } from '../../api';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { BasicMetadataTab } from './tabs/BasicMetadataTab';
 import { ExtendedMetadataTab } from './tabs/ExtendedMetadataTab';

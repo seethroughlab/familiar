@@ -1,5 +1,6 @@
 import type { LibraryStats } from '../types';
-import api, { encodePathSegment } from './base';
+import api from './base';
+import { getApiUrl, encodePathSegment } from './base';
 
 export interface ImportResult {
   status: string;
@@ -277,47 +278,6 @@ export interface LetterIndexResponse {
   total: number;
 }
 
-// Library Discover types
-export interface DiscoverNewRelease {
-  id: string;
-  artist: string;
-  album: string;
-  release_date: string | null;
-  source: string;
-  image_url: string | null;
-  bandcamp_url: string | null;
-  owned_locally: boolean;
-}
-
-export interface DiscoverRecommendedArtist {
-  name: string;
-  match_score: number;
-  in_library: boolean;
-  track_count: number | null;
-  image_url: string | null;
-  lastfm_url: string | null;
-  bandcamp_url: string | null;
-  based_on_artist: string;
-}
-
-export interface DiscoverUnmatchedFavorite {
-  spotify_track_id: string;
-  name: string;
-  artist: string;
-  album: string | null;
-  image_url: string | null;
-  bandcamp_url: string | null;
-}
-
-export interface LibraryDiscoverResponse {
-  new_releases: DiscoverNewRelease[];
-  new_releases_total: number;
-  recommended_artists: DiscoverRecommendedArtist[];
-  unmatched_favorites: DiscoverUnmatchedFavorite[];
-  unmatched_total: number;
-  recently_added_count: number;
-}
-
 export const libraryApi = {
   getStats: async (): Promise<LibraryStats> => {
     const { data } = await api.get('/library/stats');
@@ -470,7 +430,7 @@ export const libraryApi = {
   ): string => {
     // Cache version param to bust browser cache when image sources change
     const cacheVersion = 'v2';
-    return `/api/v1/library/artists/${encodePathSegment(artistName)}/image?size=${size}&_cv=${cacheVersion}`;
+    return getApiUrl(`/library/artists/${encodePathSegment(artistName)}/image?size=${size}&_cv=${cacheVersion}`);
   },
 
   getLetterIndex: async (params: {
@@ -493,3 +453,44 @@ export const libraryApi = {
     return data;
   },
 };
+
+// Library Discover types
+export interface DiscoverNewRelease {
+  id: string;
+  artist: string;
+  album: string;
+  release_date: string | null;
+  source: string;
+  image_url: string | null;
+  bandcamp_url: string | null;
+  owned_locally: boolean;
+}
+
+export interface DiscoverRecommendedArtist {
+  name: string;
+  match_score: number;
+  in_library: boolean;
+  track_count: number | null;
+  image_url: string | null;
+  lastfm_url: string | null;
+  bandcamp_url: string | null;
+  based_on_artist: string;
+}
+
+export interface DiscoverUnmatchedFavorite {
+  spotify_track_id: string;
+  name: string;
+  artist: string;
+  album: string | null;
+  image_url: string | null;
+  bandcamp_url: string | null;
+}
+
+export interface LibraryDiscoverResponse {
+  new_releases: DiscoverNewRelease[];
+  new_releases_total: number;
+  recommended_artists: DiscoverRecommendedArtist[];
+  unmatched_favorites: DiscoverUnmatchedFavorite[];
+  unmatched_total: number;
+  recently_added_count: number;
+}

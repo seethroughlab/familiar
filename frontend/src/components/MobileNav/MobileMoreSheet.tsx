@@ -15,8 +15,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { playlistsApi, smartPlaylistsApi } from '../../api/client';
-import type { Playlist } from '../../api/client';
+import { playlistsApi, smartPlaylistsApi } from '../../api';
+import type { Playlist } from '../../api';
 
 interface Props {
   onClose: () => void;

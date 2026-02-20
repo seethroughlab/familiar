@@ -16,7 +16,7 @@ import {
   type BulkIdentifyProgress,
   type IdentifyTrackResponse,
   type TrackMetadataUpdate,
-} from '../../api/client';
+} from '../../api';
 
 interface Props {
   trackIds: string[];

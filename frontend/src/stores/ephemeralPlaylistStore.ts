@@ -8,7 +8,7 @@
 
 import { create } from 'zustand';
 import { useQueryClient } from '@tanstack/react-query';
-import { playlistsApi } from '../api/client';
+import { playlistsApi } from '../api';
 
 export interface EphemeralTrack {
   id: string;

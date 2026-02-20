@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { playlistsApi } from '../../api/client';
+import { playlistsApi } from '../../api';
 import { showSuccess, showError } from '../../stores/toastStore';
 
 interface Props {

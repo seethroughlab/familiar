@@ -16,8 +16,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
-import { smartPlaylistsApi, downloadApi } from '../../api/client';
-import type { SmartPlaylist } from '../../api/client';
+import { smartPlaylistsApi, downloadApi } from '../../api';
+import type { SmartPlaylist } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { showSuccess, showError } from '../../stores/toastStore';
 import type { FamiliarPlaylist } from '../../types';

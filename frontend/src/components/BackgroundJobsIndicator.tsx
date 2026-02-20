@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, X, Music, Radio, Disc, Image } from 'lucide-react';
 import { useBackgroundJobsStore } from '../stores/backgroundJobsStore';
-import type { BackgroundJob } from '../api/client';
+import type { BackgroundJob } from '../api';
 
 // Icons for each job type
 const jobIcons: Record<BackgroundJob['type'], typeof Music> = {

@@ -10,7 +10,7 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Users, Disc, Music } from 'lucide-react';
-import { tracksApi, type MapNode, type MusicMapResponse } from '../../../api/client';
+import { tracksApi, type MapNode, type MusicMapResponse } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 
 import { createLogger } from '../../../utils/logger';

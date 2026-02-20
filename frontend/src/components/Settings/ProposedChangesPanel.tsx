@@ -18,7 +18,7 @@ import {
   type ChangeStatus,
   type ChangeScope,
   type ChangePreview,
-} from '../../api/client';
+} from '../../api';
 
 import { createLogger } from '../../utils/logger';
 

@@ -6,8 +6,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { libraryApi } from '../../../../api/client';
-import { tracksApi } from '../../../../api/client';
+import { libraryApi } from '../../../../api';
+import { tracksApi } from '../../../../api';
 
 interface ArtistPickerProps {
   onSelect: (artistName: string) => void;

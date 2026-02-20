@@ -24,7 +24,7 @@ import {
   type ServiceStatus,
   type WorkerStatus,
   type DiagnosticsExport,
-} from '../../api/client';
+} from '../../api';
 
 import { createLogger } from '../../utils/logger';
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Server, Loader2, CheckCircle, Copy, Check, RefreshCw, Trash2, Eye, EyeOff } from 'lucide-react';
-import { subsonicApi } from '../../api/client';
+import { subsonicApi } from '../../api';
 
 export function SubsonicSettings() {
   const queryClient = useQueryClient();

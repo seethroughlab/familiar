@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { pluginsApi, type Plugin, type PluginType } from '../../api/client';
+import { pluginsApi, type Plugin, type PluginType } from '../../api';
 import { pluginLoader } from '../../services/pluginLoader';
 import {
   Puzzle,

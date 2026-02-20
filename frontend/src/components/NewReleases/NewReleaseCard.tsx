@@ -8,7 +8,7 @@ import {
   ChevronUp,
   Disc3,
 } from 'lucide-react';
-import type { NewRelease } from '../../api/client';
+import type { NewRelease } from '../../api';
 
 interface NewReleaseCardProps {
   release: NewRelease;

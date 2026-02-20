@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Search, Loader2, Check, ExternalLink, Music } from 'lucide-react';
-import api from '../../api/client';
-import type { TrackMetadataUpdate } from '../../api/client';
+import api from '../../api';
+import type { TrackMetadataUpdate } from '../../api';
 
 interface MetadataCandidate {
   source: string;

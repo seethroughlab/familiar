@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Loader2, User, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
-import { lastfmApi } from '../../api/client';
+import { lastfmApi } from '../../api';
 import { useSearchParams } from 'react-router-dom';
 
 export function LastfmSettings() {

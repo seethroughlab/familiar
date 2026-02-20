@@ -6,7 +6,7 @@
  */
 import { Suspense } from 'react';
 import type { Track, TrackFeatures } from '../../types';
-import type { LyricLine } from '../../api/client';
+import type { LyricLine } from '../../api';
 import { getVisualizer, DEFAULT_VISUALIZER_ID } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 

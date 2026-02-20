@@ -52,7 +52,7 @@ vi.mock('../../stores/audioSettingsStore', () => ({
   }),
 }))
 
-vi.mock('../../api/client', () => ({
+vi.mock('../../api', () => ({
   tracksApi: {
     getStreamUrl: (id: string) => `/api/v1/tracks/${id}/stream`,
     getArtworkUrl: (id: string) => `/api/v1/tracks/${id}/artwork`,
@@ -111,7 +111,7 @@ describe('Volume handling', () => {
 describe('Track URL resolution', () => {
   it('should return streaming URL for non-offline tracks', async () => {
     const { getOfflineTrack } = await import('../../services/offlineService')
-    const { tracksApi } = await import('../../api/client')
+    const { tracksApi } = await import('../../api')
 
     // Mock getOfflineTrack to return null (track not offline)
     vi.mocked(getOfflineTrack).mockResolvedValue(null)

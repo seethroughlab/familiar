@@ -14,8 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { organizerApi } from '../../api/client';
-import type { OrganizeStats, OrganizeResult } from '../../api/client';
+import { organizerApi } from '../../api';
+import type { OrganizeStats, OrganizeResult } from '../../api';
 
 export function LibraryOrganizer() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');

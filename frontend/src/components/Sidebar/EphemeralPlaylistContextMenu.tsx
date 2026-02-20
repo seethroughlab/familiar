@@ -10,7 +10,7 @@ import {
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
 import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import { tracksApi } from '../../api/client';
+import { tracksApi } from '../../api';
 import { showSuccess, showError } from '../../stores/toastStore';
 import { useNavigate } from 'react-router-dom';
 

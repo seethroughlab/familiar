@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { Upload, FileJson, Loader2, Check, X, AlertCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { playlistSharingApi } from '../../api/client';
-import type { PlaylistImportResult } from '../../api/client';
+import { playlistSharingApi } from '../../api';
+import type { PlaylistImportResult } from '../../api';
 import type { FamiliarPlaylist } from '../../types';
 
 interface Props {

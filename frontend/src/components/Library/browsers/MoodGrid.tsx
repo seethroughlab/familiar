@@ -16,7 +16,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Sparkles, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
-import { libraryApi, type MoodCell } from '../../../api/client';
+import { libraryApi, type MoodCell } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 
 // Register this browser

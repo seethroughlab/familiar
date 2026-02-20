@@ -15,7 +15,7 @@ import {
   Loader2,
   ChevronRight,
 } from 'lucide-react';
-import { libraryApi, playlistsApi } from '../../../api/client';
+import { libraryApi, playlistsApi } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 import {
   useLibraryDiscovery,

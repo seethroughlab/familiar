@@ -1,4 +1,4 @@
-import type { TrackMetadataUpdate } from '../../../api/client';
+import type { TrackMetadataUpdate } from '../../../api';
 
 interface Props {
   formData: Partial<TrackMetadataUpdate>;

@@ -7,7 +7,7 @@
  */
 import type { ComponentType } from 'react';
 import type { Track, TrackFeatures } from '../../types';
-import type { LyricLine } from '../../api/client';
+import type { LyricLine } from '../../api';
 
 /**
  * Metadata about a visualizer for the picker UI.

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Zap, Plus, MoreVertical, Pencil, Trash2, RefreshCw, Play, Loader2, Upload, CloudOff } from 'lucide-react';
-import { smartPlaylistsApi } from '../../api/client';
-import type { SmartPlaylist } from '../../api/client';
+import { smartPlaylistsApi } from '../../api';
+import type { SmartPlaylist } from '../../api';
 import { SmartPlaylistBuilder } from './SmartPlaylistBuilder';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';

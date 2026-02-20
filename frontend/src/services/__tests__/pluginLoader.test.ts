@@ -54,7 +54,7 @@ vi.mock('../../components/Library/types', () => ({
 // Mock the API client
 const mockGet = vi.fn();
 const mockPost = vi.fn();
-vi.mock('../../api/client', () => ({
+vi.mock('../../api', () => ({
   default: {
     get: (...args: unknown[]) => mockGet(...args),
     post: (...args: unknown[]) => mockPost(...args),
