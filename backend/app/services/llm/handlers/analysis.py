@@ -20,7 +20,7 @@ class AnalysisHandlersMixin:
     """Mixin providing analysis tool handlers."""
 
     async def _get_track_analysis(
-        self: ToolExecutor,
+        self: "ToolExecutor",
         track_ids: list[str],
         include_comparative: bool = True,
     ) -> dict[str, Any]:

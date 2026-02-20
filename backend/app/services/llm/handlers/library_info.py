@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class LibraryInfoHandlersMixin:
     """Mixin providing library info tool handlers."""
 
-    async def _get_library_stats(self: ToolExecutor) -> dict[str, Any]:
+    async def _get_library_stats(self: "ToolExecutor") -> dict[str, Any]:
         """Get library statistics."""
         total_result = await self.db.execute(select(func.count(Track.id)))
         total_tracks = total_result.scalar() or 0
@@ -49,7 +49,7 @@ class LibraryInfoHandlersMixin:
             "top_genres": top_genres,
         }
 
-    async def _get_visible_tracks(self: ToolExecutor) -> dict[str, Any]:
+    async def _get_visible_tracks(self: "ToolExecutor") -> dict[str, Any]:
         """Get the tracks currently visible in the user's library view.
 
         Returns the tracks that the user can see right now in the UI.
@@ -92,7 +92,7 @@ class LibraryInfoHandlersMixin:
             "message": f"Found {len(ordered_tracks)} tracks in the current view.",
         }
 
-    async def _get_library_genres(self: ToolExecutor, limit: int = 50) -> dict[str, Any]:
+    async def _get_library_genres(self: "ToolExecutor", limit: int = 50) -> dict[str, Any]:
         """Get all genres in the library with track counts."""
         try:
             limit = int(float(limit)) if limit else 50

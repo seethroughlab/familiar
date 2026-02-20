@@ -185,6 +185,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                         logger.warning(f"External feature lookup failed: {e}")
 
             # Try community cache for features if no external features found
+            deep_scalars: dict[str, Any] = {}
             if not features.get("bpm") and app_settings.community_cache_enabled and acoustid_fingerprint:
                 try:
                     cache_service = get_community_cache_service(
@@ -262,7 +263,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             # Fall back to local librosa extraction if no external/cached features
             computed_locally = False
             analysis_detail = None
-            deep_scalars: dict[str, Any] = {}
             if not features.get("bpm"):
                 # Use unified pipeline: shared precomputation → features + cheap sections
                 y, sr, shared = precompute_shared(file_path)

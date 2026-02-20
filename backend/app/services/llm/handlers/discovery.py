@@ -22,7 +22,7 @@ class DiscoveryHandlersMixin:
     """Mixin providing discovery-related tool handlers."""
 
     async def _search_bandcamp(
-        self: ToolExecutor,
+        self: "ToolExecutor",
         query: str,
         item_type: str = "album",
         limit: int = 10,
@@ -59,7 +59,7 @@ class DiscoveryHandlersMixin:
         finally:
             await bc.close()
 
-    async def _recommend_bandcamp_purchases(self: ToolExecutor, limit: int = 5) -> dict[str, Any]:
+    async def _recommend_bandcamp_purchases(self: "ToolExecutor", limit: int = 5) -> dict[str, Any]:
         """Recommend Bandcamp albums based on unmatched Spotify favorites."""
         try:
             limit = int(float(limit)) if limit else 5
@@ -127,7 +127,7 @@ class DiscoveryHandlersMixin:
         }
 
     async def _get_similar_artists_in_library(
-        self: ToolExecutor,
+        self: "ToolExecutor",
         artist: str,
         limit: int = 20,
     ) -> dict[str, Any]:
@@ -206,7 +206,7 @@ class DiscoveryHandlersMixin:
         }
 
     async def _identify_track(
-        self: ToolExecutor,
+        self: "ToolExecutor",
         title: str,
         artist: str,
     ) -> dict[str, Any]:
@@ -309,7 +309,7 @@ class DiscoveryHandlersMixin:
         }
 
     async def _get_similar_tracks_external(
-        self: ToolExecutor,
+        self: "ToolExecutor",
         artist: str,
         track: str,
         limit: int = 10,

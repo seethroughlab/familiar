@@ -93,6 +93,7 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "app/db/models/*.py" = ["F821"]
+"app/services/llm/handlers/*.py" = ["UP037"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -127,6 +128,11 @@ module = [
     "app.db.models.profiles",
 ]
 disable_error_code = ["name-defined"]
+
+# Mixin classes use `self: "ToolExecutor"` for type narrowing, which mypy flags
+[[tool.mypy.overrides]]
+module = "app.services.llm.handlers.*"
+disable_error_code = ["misc"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
