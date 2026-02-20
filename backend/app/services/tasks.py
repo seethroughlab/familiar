@@ -594,6 +594,12 @@ async def run_library_sync(
         try:
             # Phase 3a: Feature extraction
             # Wait for all tracks to have features extracted
+            features_start_time = time.time()
+            max_features_duration = 8 * 60 * 60  # 8 hours max for entire features phase
+            features_stall_threshold = 5 * 60  # 5 minutes without progress = stalled
+            last_features_progress_time = time.time()
+            last_features_done = 0
+
             while True:
                 async with local_session_maker() as db:
                     total_result = await db.execute(select(func.count(Track.id)))
@@ -610,8 +616,34 @@ async def run_library_sync(
                 if pending_features == 0:
                     break
 
+                # Check for timeout
+                features_elapsed = time.time() - features_start_time
+                if features_elapsed > max_features_duration:
+                    logger.warning(
+                        f"Features phase timed out after {features_elapsed/3600:.1f}h "
+                        f"({features_done} done, {pending_features} still pending)"
+                    )
+                    break
+
+                # Check for stall (no progress in stall_threshold seconds)
+                if features_done > last_features_done:
+                    last_features_progress_time = time.time()
+                    last_features_done = features_done
+                elif time.time() - last_features_progress_time > features_stall_threshold:
+                    logger.warning(
+                        f"Features progress stalled for {features_stall_threshold}s "
+                        f"({pending_features} still pending)"
+                    )
+                    queued = await queue_tracks_for_features(limit=200)
+                    if queued == 0 and pending_features > 0:
+                        logger.warning(
+                            f"Cannot queue more features but {pending_features} "
+                            f"still pending - exiting to avoid infinite loop"
+                        )
+                        break
+                    last_features_progress_time = time.time()
+
                 # Queue more tracks for feature extraction when queue might be low
-                # Always queue if: first iteration OR progress stalled OR making progress
                 # (the queue_tracks_for_features function handles deduplication)
                 if pending_features > 0:
                     await queue_tracks_for_features(limit=100)

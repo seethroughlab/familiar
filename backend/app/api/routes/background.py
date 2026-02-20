@@ -57,7 +57,7 @@ def _build_library_sync_job(progress: dict[str, Any]) -> BackgroundJob:
             current=progress.get("files_processed", 0),
             total=progress.get("files_total", 0),
         )
-    elif phase in ("features", "embeddings"):
+    elif phase in ("features", "embeddings", "backfill", "melodic"):
         job_progress = JobProgress(
             current=progress.get("tracks_analyzed", 0),
             total=progress.get("tracks_total", 0),

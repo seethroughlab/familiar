@@ -20,6 +20,17 @@ const jobNames: Record<BackgroundJob['type'], string> = {
   artwork_fetch: 'Artwork',
 };
 
+const phaseLabels: Record<string, string> = {
+  starting: 'Starting...',
+  discovering: 'Discovering files',
+  reading: 'Reading metadata',
+  features: 'Extracting features',
+  embeddings: 'Generating embeddings',
+  melodic: 'Melodic analysis',
+  backfill: 'Backfill analysis',
+  complete: 'Complete',
+};
+
 function JobProgressBar({ job }: { job: BackgroundJob }) {
   const Icon = jobIcons[job.type];
   const progress = job.progress;
@@ -43,6 +54,12 @@ function JobProgressBar({ job }: { job: BackgroundJob }) {
           {queuedCount !== null && queuedCount > 0 && ` (${queuedCount} queued)`}
         </span>
       </div>
+
+      {job.type === 'library_sync' && job.phase && phaseLabels[job.phase] && (
+        <p className="text-xs text-zinc-400 mb-1">
+          {phaseLabels[job.phase]}
+        </p>
+      )}
 
       {job.current_item && (
         <p className="text-xs text-zinc-400 mb-2 truncate">
