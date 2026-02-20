@@ -91,7 +91,10 @@ export function Sidebar() {
   // Playlists
   const { data: playlists } = useQuery({
     queryKey: ['playlists'],
-    queryFn: () => playlistsApi.list(true),
+    queryFn: async () => {
+      const data = await playlistsApi.list(true);
+      return data.filter((p: Playlist) => !p.is_wishlist);
+    },
     retry: isOffline ? false : 3,
   });
 
