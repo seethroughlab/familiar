@@ -15,15 +15,14 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Download, Check, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
-import { tracksApi, downloadApi } from '../../../api';
+import { tracksApi } from '../../../api';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { useAudioSettingsStore } from '../../../stores/audioSettingsStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
 import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
-import { useFavorites } from '../../../hooks/useFavorites';
+import { useTrackContextMenu } from '../../../hooks/useTrackContextMenu';
 import { useArtworkPrefetchBatch } from '../../../hooks/useArtworkPrefetch';
-import { useUIStore } from '../../../stores/uiStore';
 import { useLongPress } from '../../../hooks/useLongPress';
 import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
 import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns, COLUMN_MAP } from '../columnDefinitions';
@@ -31,15 +30,12 @@ import { OfflineButton } from './trackList/OfflineButton';
 import { FavoriteButton } from './trackList/FavoriteButton';
 import { useOfflineAlbum } from '../../../hooks/useOfflineAlbum';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver'; // Still used for mobile view
-import { registerBrowser, type BrowserProps, type ContextMenuState, initialContextMenuState } from '../types';
-import { TrackContextMenu } from '../TrackContextMenu';
+import { registerBrowser, type BrowserProps } from '../types';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
 import { isExternalTrack } from '../../../types';
 
-import { showLoading, showError } from '../../../stores/toastStore';
-import { toast } from 'sonner';
 import { createLogger } from '../../../utils/logger';
 
 const log = createLogger('TrackListBrowser');
@@ -377,10 +373,31 @@ export function TrackListBrowser({
   const toggleSort = useColumnStore((state) => state.toggleSort);
   const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
   const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
-  const { isFavorite, toggle } = useFavorites();
-
-  // Context menu state
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
+  // Context menu (via hook — bulk actions and favorites handled automatically)
+  const { handleContextMenu, openContextMenu, contextMenuElement } = useTrackContextMenu({
+    onPlay: (track) => {
+      const index = allTracksUnfiltered.findIndex((t) => t.id === track.id);
+      if (index !== -1) handlePlayTrack(track, index);
+    },
+    onQueue: (track) => onQueueTrack(track.id),
+    onGoToArtist: (track) => {
+      if (track.artist) onGoToArtist(track.artist);
+    },
+    onGoToAlbum: (track) => {
+      if (track.album) {
+        const albumArtist = track.album_artist || track.artist;
+        if (albumArtist) onGoToAlbum(albumArtist, track.album);
+      }
+    },
+    onExploreSimilarArtists: (track) => {
+      if (track.artist) handleExploreSimilarArtists(track.artist);
+    },
+    onToggleSelect: (track) => onSelectTrack(track.id, true),
+    selectedTrackIds,
+    onClearSelection,
+    onEditMetadata: (track) => onEditTrack(track.id),
+    resolveSelectedTracks: (ids) => allTracksUnfiltered.filter(t => ids.has(t.id)),
+  });
 
   // Navigate to ego music map with artist
   const handleExploreSimilarArtists = useCallback(
@@ -1211,19 +1228,6 @@ export function TrackListBrowser({
     [handlePlayTrack]
   );
 
-  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
-    e.preventDefault();
-    setContextMenu({
-      isOpen: true,
-      track,
-      position: { x: e.clientX, y: e.clientY },
-    });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(initialContextMenuState);
-  }, []);
-
   // Track loading state for play all (must be before early returns)
   const [isLoadingPlayAll, setIsLoadingPlayAll] = useState(false);
 
@@ -1472,13 +1476,7 @@ export function TrackListBrowser({
               }
             }}
             onContextMenu={(e) => handleContextMenu(track, e)}
-            onLongPress={(position) => {
-              setContextMenu({
-                isOpen: true,
-                track,
-                position,
-              });
-            }}
+            onLongPress={(position) => openContextMenu(track, position)}
           />
         ))}
         {/* Loading indicator for infinite scroll */}
@@ -1675,105 +1673,7 @@ export function TrackListBrowser({
       </div>
 
       {/* Context menu */}
-      {contextMenu.isOpen && contextMenu.track && (
-        <TrackContextMenu
-          track={contextMenu.track}
-          position={contextMenu.position}
-          isSelected={selectedTrackIds.has(contextMenu.track.id)}
-          onClose={closeContextMenu}
-          onPlay={() => {
-            const index = allTracksUnfiltered.findIndex((t) => t.id === contextMenu.track?.id);
-            if (contextMenu.track && index !== -1) {
-              handlePlayTrack(contextMenu.track, index);
-            }
-          }}
-          onQueue={() => {
-            if (contextMenu.track) {
-              onQueueTrack(contextMenu.track.id);
-            }
-          }}
-          onGoToArtist={() => {
-            if (contextMenu.track?.artist) {
-              onGoToArtist(contextMenu.track.artist);
-            }
-          }}
-          onGoToAlbum={() => {
-            if (contextMenu.track?.album) {
-              // Use album_artist if available (for compilations), fallback to artist
-              const albumArtist = contextMenu.track.album_artist || contextMenu.track.artist;
-              if (albumArtist) {
-                onGoToAlbum(albumArtist, contextMenu.track.album);
-              }
-            }
-          }}
-          onExploreSimilarArtists={() => {
-            if (contextMenu.track?.artist) {
-              handleExploreSimilarArtists(contextMenu.track.artist);
-            }
-          }}
-          onToggleSelect={() => {
-            if (contextMenu.track) {
-              onSelectTrack(contextMenu.track.id, true);
-            }
-          }}
-          onAddToPlaylist={() => {
-            if (contextMenu.track) {
-              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
-            }
-          }}
-          onEditMetadata={() => {
-            if (contextMenu.track) {
-              onEditTrack(contextMenu.track.id);
-            }
-          }}
-          isFavorite={contextMenu.track ? isFavorite(contextMenu.track.id) : false}
-          onToggleFavorite={() => {
-            if (contextMenu.track) {
-              toggle(contextMenu.track.id);
-            }
-          }}
-          // Bulk selection props for mobile
-          selectedCount={selectedTrackIds.size}
-          onPlaySelected={() => {
-            // Play selected tracks - get tracks from dense array by IDs
-            const selectedTracks = allTracksUnfiltered.filter((t) => selectedTrackIds.has(t.id));
-            if (selectedTracks.length > 0) {
-              setQueue(selectedTracks, 0);
-              onClearSelection();
-            }
-          }}
-          onDownloadSelectedTracks={async () => {
-            const ids = Array.from(selectedTrackIds);
-            if (ids.length === 0) return;
-            try {
-              await downloadApi.tracks(ids, `${ids.length} Selected Tracks`);
-            } catch {
-              showError('Failed to download tracks');
-            }
-          }}
-          onDownloadSelectedAnalyses={async () => {
-            const ids = Array.from(selectedTrackIds);
-            if (ids.length === 0) return;
-            const toastId = showLoading(`Preparing ${ids.length} analyses...`);
-            try {
-              await downloadApi.analysesZip(ids, `${ids.length} Track Analyses`, (done, total) => {
-                toast.loading(`Analyzing tracks... ${done}/${total}`, { id: toastId });
-              });
-              toast.success('Analyses downloaded!', { id: toastId });
-            } catch {
-              toast.error('Failed to download analyses', { id: toastId });
-            }
-          }}
-          onClearSelection={onClearSelection}
-        />
-      )}
+      {contextMenuElement}
 
       {/* Alphabet bar for quick navigation */}
       <AlphabetBar

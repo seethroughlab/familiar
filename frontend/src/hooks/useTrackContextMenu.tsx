@@ -7,6 +7,9 @@ import { TrackContextMenu } from '../components/Library/TrackContextMenu';
 import type { ContextMenuState } from '../components/Library/types';
 import { initialContextMenuState } from '../components/Library/types';
 import { useUIStore } from '../stores/uiStore';
+import { downloadApi } from '../api';
+import { showLoading, showError } from '../stores/toastStore';
+import { toast } from 'sonner';
 import type { Track } from '../types';
 
 interface UseTrackContextMenuOptions {
@@ -40,11 +43,18 @@ interface UseTrackContextMenuOptions {
   onPlaySelected?: () => void;
   /** Bulk add selected to playlist. */
   onAddSelectedToPlaylist?: () => void;
+  /** Bulk download selected tracks for offline. */
+  onDownloadSelectedTracks?: () => void;
+  /** Bulk download selected track analyses. */
+  onDownloadSelectedAnalyses?: () => void;
+  /** Resolve selected track IDs to Track objects. Required for default onPlaySelected. */
+  resolveSelectedTracks?: (ids: Set<string>) => Track[];
 }
 
 export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const setQueue = usePlayerStore((s) => s.setQueue);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
@@ -72,6 +82,49 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
       ? options.isSelected(track.id)
       : sel ? sel.has(track.id) : false;
     const effectiveSelectedCount = options.selectedCount ?? sel?.size;
+
+    // Default bulk action callbacks (used when caller doesn't override)
+    const defaultPlaySelected = sel && options.resolveSelectedTracks && options.onClearSelection
+      ? () => {
+          const tracks = options.resolveSelectedTracks!(sel);
+          if (tracks.length > 0) {
+            setQueue(tracks, 0);
+            options.onClearSelection!();
+          }
+        }
+      : undefined;
+
+    const defaultAddSelectedToPlaylist = sel
+      ? () => { useUIStore.getState().openPlaylistPicker(Array.from(sel)); }
+      : undefined;
+
+    const defaultDownloadSelectedTracks = sel
+      ? async () => {
+          const ids = Array.from(sel);
+          if (ids.length === 0) return;
+          try {
+            await downloadApi.tracks(ids, `${ids.length} Selected Tracks`);
+          } catch {
+            showError('Failed to download tracks');
+          }
+        }
+      : undefined;
+
+    const defaultDownloadSelectedAnalyses = sel
+      ? async () => {
+          const ids = Array.from(sel);
+          if (ids.length === 0) return;
+          const toastId = showLoading(`Preparing ${ids.length} analyses...`);
+          try {
+            await downloadApi.analysesZip(ids, `${ids.length} Track Analyses`, (done, total) => {
+              toast.loading(`Analyzing tracks... ${done}/${total}`, { id: toastId });
+            });
+            toast.success('Analyses downloaded!', { id: toastId });
+          } catch {
+            toast.error('Failed to download analyses', { id: toastId });
+          }
+        }
+      : undefined;
 
     return (
       <TrackContextMenu
@@ -144,13 +197,15 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
         onToggleFavorite={() => {
           toggleFavorite(track.id);
         }}
-        onPlaySelected={options.onPlaySelected}
-        onAddSelectedToPlaylist={options.onAddSelectedToPlaylist}
+        onPlaySelected={options.onPlaySelected ?? defaultPlaySelected}
+        onAddSelectedToPlaylist={options.onAddSelectedToPlaylist ?? defaultAddSelectedToPlaylist}
+        onDownloadSelectedTracks={options.onDownloadSelectedTracks ?? defaultDownloadSelectedTracks}
+        onDownloadSelectedAnalyses={options.onDownloadSelectedAnalyses ?? defaultDownloadSelectedAnalyses}
         onClearSelection={options.onClearSelection}
       />
     );
   }, [
-    contextMenu, options, closeContextMenu, addToQueue,
+    contextMenu, options, closeContextMenu, addToQueue, setQueue,
     navigateToArtist, navigateToAlbum, isFavorite, toggleFavorite,
   ]);
 

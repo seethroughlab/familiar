@@ -10,23 +10,16 @@ import {
   Download,
   Check,
 } from 'lucide-react';
-import { libraryApi, playlistsApi, downloadApi } from '../../api';
+import { libraryApi, playlistsApi } from '../../api';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
-import { useSelectionStore } from '../../stores/selectionStore';
 import { OfflineButton } from './browsers/trackList/OfflineButton';
 import { FavoriteButton } from './browsers/trackList/FavoriteButton';
 import { useOfflineAlbum } from '../../hooks/useOfflineAlbum';
-import { TrackContextMenu } from './TrackContextMenu';
-import type { ContextMenuState } from './types';
-import { initialContextMenuState } from './types';
+import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useAlbumDiscovery, type DiscoveryItem } from '../Discovery';
-import { useUIStore } from '../../stores/uiStore';
-
-import { showLoading, showError } from '../../stores/toastStore';
-import { toast } from 'sonner';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('AlbumDetail');
@@ -195,26 +188,51 @@ export function AlbumDetail({
   const albumName = albumNameProp || (routeParams.album ? decodeURIComponent(routeParams.album) : '');
   const onBack = onBackProp || (() => routeNavigate(-1));
 
-  const { currentTrack, isPlaying, setQueue, addToQueue, setIsPlaying } =
+  const { currentTrack, isPlaying, setQueue, setIsPlaying } =
     usePlayerStore();
-  const [contextMenu, setContextMenu] =
-    useState<ContextMenuState>(initialContextMenuState);
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
 
-  const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({
-      isOpen: true,
-      track,
-      position: { x: e.clientX, y: e.clientY },
-    });
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    setContextMenu(initialContextMenuState);
-  }, []);
+  // Context menu (via hook — bulk actions, favorites, add-to-playlist handled automatically)
+  const { handleContextMenu, contextMenuElement } = useTrackContextMenu({
+    onPlay: (track) => {
+      const idx = album?.tracks.findIndex(t => t.id === track.id) ?? -1;
+      if (idx !== -1) handlePlayTrack(idx);
+    },
+    onGoToArtist: () => { onGoToArtist?.(album?.artist ?? ''); },
+    onGoToAlbum: () => {},
+    onToggleSelect: (track) => {
+      setSelectedTrackIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(track.id)) newSet.delete(track.id);
+        else newSet.add(track.id);
+        return newSet;
+      });
+    },
+    selectedTrackIds,
+    onClearSelection: () => setSelectedTrackIds(new Set()),
+    resolveSelectedTracks: (ids) => {
+      if (!album) return [];
+      return album.tracks
+        .filter(t => ids.has(t.id))
+        .map(t => ({
+          id: t.id,
+          file_path: '',
+          title: t.title || null,
+          artist: album.artist,
+          album: album.name,
+          album_artist: album.album_artist,
+          album_type: 'album' as const,
+          track_number: t.track_number,
+          disc_number: t.disc_number,
+          year: album.year,
+          genre: album.genre,
+          duration_seconds: t.duration_seconds,
+          format: null,
+          analysis_version: 0,
+        }));
+    },
+  });
 
   const { data: album, isLoading } = useQuery({
     queryKey: ['album', artistName, albumName],
@@ -531,111 +549,7 @@ export function AlbumDetail({
       />
 
       {/* Context menu */}
-      {contextMenu.isOpen && contextMenu.track && (
-        <TrackContextMenu
-          track={contextMenu.track}
-          position={contextMenu.position}
-          isSelected={selectedTrackIds.has(contextMenu.track.id)}
-          selectedCount={selectedTrackIds.size}
-          onClose={closeContextMenu}
-          onPlay={() => {
-            const idx = album.tracks.findIndex(
-              (t) => t.id === contextMenu.track?.id
-            );
-            if (idx !== -1) handlePlayTrack(idx);
-          }}
-          onQueue={() => {
-            if (contextMenu.track) {
-              addToQueue(contextMenu.track);
-            }
-          }}
-          onGoToArtist={() => {
-            onGoToArtist?.(album.artist);
-          }}
-          onGoToAlbum={() => {
-            // Already on this album
-          }}
-          onToggleSelect={() => {
-            if (contextMenu.track) {
-              const newSet = new Set(selectedTrackIds);
-              if (newSet.has(contextMenu.track.id)) {
-                newSet.delete(contextMenu.track.id);
-              } else {
-                newSet.add(contextMenu.track.id);
-              }
-              setSelectedTrackIds(newSet);
-            }
-          }}
-          onPlaySelected={() => {
-            if (!album) return;
-            const selectedTracks = album.tracks
-              .filter((t) => selectedTrackIds.has(t.id))
-              .map((t) => ({
-                id: t.id,
-                file_path: '',
-                title: t.title || 'Unknown',
-                artist: album.artist,
-                album: album.name,
-                album_artist: album.album_artist,
-                album_type: 'album' as const,
-                track_number: t.track_number,
-                disc_number: t.disc_number,
-                year: album.year,
-                genre: album.genre,
-                duration_seconds: t.duration_seconds,
-                format: null,
-                analysis_version: 0,
-              }));
-            if (selectedTracks.length > 0) {
-              setQueue(selectedTracks, 0);
-              setSelectedTrackIds(new Set());
-            }
-          }}
-          onClearSelection={() => setSelectedTrackIds(new Set())}
-          onDownloadSelectedTracks={async () => {
-            const ids = Array.from(selectedTrackIds);
-            if (ids.length === 0) return;
-            try {
-              await downloadApi.tracks(ids, `${ids.length} Selected Tracks`);
-            } catch {
-              showError('Failed to download tracks');
-            }
-          }}
-          onDownloadSelectedAnalyses={async () => {
-            const ids = Array.from(selectedTrackIds);
-            if (ids.length === 0) return;
-            const toastId = showLoading(`Preparing ${ids.length} analyses...`);
-            try {
-              await downloadApi.analysesZip(ids, `${ids.length} Track Analyses`, (done, total) => {
-                toast.loading(`Analyzing tracks... ${done}/${total}`, { id: toastId });
-              });
-              toast.success('Analyses downloaded!', { id: toastId });
-            } catch {
-              toast.error('Failed to download analyses', { id: toastId });
-            }
-          }}
-          onAddToPlaylist={() => {
-            if (contextMenu.track) {
-              useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
-            }
-          }}
-          onEditMetadata={() => {
-            if (contextMenu.track) {
-              if (selectedTrackIds.size > 1 && selectedTrackIds.has(contextMenu.track.id)) {
-                useSelectionStore.getState().selectAll(Array.from(selectedTrackIds));
-              }
-              useSelectionStore.getState().setEditingTrackId(contextMenu.track.id);
-            }
-          }}
-        />
-      )}
+      {contextMenuElement}
     </div>
   );
 }
