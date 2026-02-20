@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
-from app.db.models import Playlist, PlaylistTrack, SmartPlaylist, Track, TrackAnalysis
+from app.db.models import Playlist, PlaylistTrack, Track, TrackAnalysis
 from app.services.smart_playlists import SmartPlaylistService
 
 logger = logging.getLogger(__name__)
