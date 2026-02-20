@@ -1064,8 +1064,10 @@ class TestLibraryExportBuildTrackExport:
         analysis.has_melodic = False
         analysis.melodic_version = 0
         analysis.embedding = None
+        analysis.embedding_version = 6
         analysis.acoustid = "fingerprint_data_abc"
         analysis.acoustid_lookup = {"recording_id": "mb123"}
+        analysis.midi_path = None
 
         result = service._build_track_export(track, analysis, include_embeddings=True, include_acoustid=True)
 
@@ -1105,12 +1107,15 @@ class TestLibraryExportBuildTrackExport:
         analysis.melodic_version = 0
         analysis.embedding = MagicMock()
         analysis.embedding.tolist.return_value = [0.1, 0.2, 0.3]
+        analysis.embedding_version = 6
         analysis.acoustid = None
         analysis.acoustid_lookup = None
+        analysis.midi_path = None
 
         result = service._build_track_export(track, analysis, include_embeddings=True, include_acoustid=False)
 
         assert result["analysis"]["embedding"] == [0.1, 0.2, 0.3]
+        assert result["analysis"]["embedding_version"] == 6
 
     def test_with_analysis_detail(self, service):
         """Should include analysis_detail and melodic metadata when available."""
@@ -1150,14 +1155,156 @@ class TestLibraryExportBuildTrackExport:
         analysis.has_melodic = True
         analysis.melodic_version = 2
         analysis.embedding = None
+        analysis.embedding_version = 6
         analysis.acoustid = None
         analysis.acoustid_lookup = None
+        analysis.midi_path = None
 
         result = service._build_track_export(track, analysis, include_embeddings=False, include_acoustid=False)
 
         assert result["analysis"]["analysis_detail"] == melodic_detail
         assert result["analysis"]["has_melodic"] is True
         assert result["analysis"]["melodic_version"] == 2
+
+    def test_with_midi_file(self, service, tmp_path):
+        """Should include base64 MIDI data when midi_path exists."""
+        track = MagicMock(spec=Track)
+        track.file_hash = None
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = None
+        track.track_number = None
+        track.disc_number = None
+        track.year = None
+        track.genre = None
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        # Create a temp MIDI file
+        midi_file = tmp_path / "test.mid"
+        midi_file.write_bytes(b"MThd\x00\x00\x00\x06")
+
+        analysis = MagicMock()
+        analysis.features_version = 5
+        analysis.to_features_dict.return_value = {}
+        analysis.analysis_detail = None
+        analysis.has_melodic = False
+        analysis.melodic_version = 0
+        analysis.embedding = None
+        analysis.embedding_version = 6
+        analysis.acoustid = None
+        analysis.acoustid_lookup = None
+        analysis.midi_path = str(midi_file)
+
+        result = service._build_track_export(
+            track, analysis, include_embeddings=False, include_acoustid=False,
+            include_midi=True, include_ssm=False,
+        )
+
+        import base64
+        assert result["analysis"]["midi_data"] == base64.b64encode(b"MThd\x00\x00\x00\x06").decode("ascii")
+        assert result["analysis"]["midi_path"] == str(midi_file)
+
+    def test_with_ssm_png(self, service, tmp_path):
+        """Should include base64 SSM data when ssm path exists in analysis_detail."""
+        track = MagicMock(spec=Track)
+        track.file_hash = None
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = None
+        track.track_number = None
+        track.disc_number = None
+        track.year = None
+        track.genre = None
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        # Create a temp PNG file
+        ssm_file = tmp_path / "ssm.png"
+        ssm_png_bytes = b"\x89PNG\r\n\x1a\nfakedata"
+        ssm_file.write_bytes(ssm_png_bytes)
+
+        analysis = MagicMock()
+        analysis.features_version = 5
+        analysis.to_features_dict.return_value = {}
+        analysis.analysis_detail = {
+            "structural": {"self_similarity_png_path": str(ssm_file)},
+        }
+        analysis.has_melodic = False
+        analysis.melodic_version = 0
+        analysis.embedding = None
+        analysis.embedding_version = 6
+        analysis.acoustid = None
+        analysis.acoustid_lookup = None
+        analysis.midi_path = None
+
+        result = service._build_track_export(
+            track, analysis, include_embeddings=False, include_acoustid=False,
+            include_midi=False, include_ssm=True,
+        )
+
+        import base64
+        assert result["analysis"]["ssm_data"] == base64.b64encode(ssm_png_bytes).decode("ascii")
+
+    def test_midi_not_included_when_disabled(self, service, tmp_path):
+        """Should not include MIDI data when include_midi=False."""
+        track = MagicMock(spec=Track)
+        track.file_hash = None
+        track.isrc = None
+        track.musicbrainz_track_id = None
+        track.title = "Song"
+        track.artist = "Artist"
+        track.album = "Album"
+        track.duration_seconds = 200
+        track.album_artist = None
+        track.track_number = None
+        track.disc_number = None
+        track.year = None
+        track.genre = None
+        track.musicbrainz_artist_id = None
+        track.musicbrainz_album_id = None
+        track.composer = None
+        track.conductor = None
+        track.lyricist = None
+        track.user_overrides = None
+
+        midi_file = tmp_path / "test.mid"
+        midi_file.write_bytes(b"MThd\x00\x00\x00\x06")
+
+        analysis = MagicMock()
+        analysis.features_version = 5
+        analysis.to_features_dict.return_value = {}
+        analysis.analysis_detail = None
+        analysis.has_melodic = False
+        analysis.melodic_version = 0
+        analysis.embedding = None
+        analysis.embedding_version = 6
+        analysis.acoustid = None
+        analysis.acoustid_lookup = None
+        analysis.midi_path = str(midi_file)
+
+        result = service._build_track_export(
+            track, analysis, include_embeddings=False, include_acoustid=False,
+            include_midi=False, include_ssm=False,
+        )
+
+        assert "midi_data" not in result["analysis"]
 
 
 class TestLibraryImportBuildLocalIndexes:

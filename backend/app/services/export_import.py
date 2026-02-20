@@ -7,11 +7,13 @@ backup and migration purposes.
 Also handles full library export/import for migration between machines.
 """
 
+import base64
 import gzip
 import json
 import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +21,7 @@ from rapidfuzz import fuzz
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import FEATURES_VERSION, get_app_version
+from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, get_app_version
 from app.db.models import (
     ExternalTrack,
     ExternalTrackSource,
@@ -1147,6 +1149,8 @@ class LibraryExportService:
         self,
         include_embeddings: bool = True,
         include_acoustid: bool = True,
+        include_midi: bool = True,
+        include_ssm: bool = True,
         compress: bool = True,
     ) -> AsyncGenerator[bytes, None]:
         """Stream library export as JSON (optionally gzipped).
@@ -1171,6 +1175,14 @@ class LibraryExportService:
         )
         tracks_with_embeddings = embedding_count_result.scalar() or 0
 
+        melodic_count_result = await self.db.execute(
+            select(func.count(TrackAnalysis.id)).where(
+                TrackAnalysis.features_version == FEATURES_VERSION,
+                TrackAnalysis.has_melodic.is_(True),
+            )
+        )
+        tracks_with_melodic = melodic_count_result.scalar() or 0
+
         # Build header
         header = {
             "version": LIBRARY_EXPORT_VERSION,
@@ -1178,10 +1190,13 @@ class LibraryExportService:
             "exported_at": datetime.utcnow().isoformat() + "Z",
             "familiar_version": get_app_version(),
             "analysis_version": FEATURES_VERSION,
+            "embedding_version": EMBEDDING_VERSION,
+            "melodic_version": MELODIC_VERSION,
             "stats": {
                 "total_tracks": total_tracks,
                 "tracks_with_analysis": tracks_with_analysis,
                 "tracks_with_embeddings": tracks_with_embeddings,
+                "tracks_with_melodic": tracks_with_melodic,
             },
             "options": {
                 "include_embeddings": include_embeddings,
@@ -1217,6 +1232,8 @@ class LibraryExportService:
                     analysis,
                     include_embeddings=include_embeddings,
                     include_acoustid=include_acoustid,
+                    include_midi=include_midi,
+                    include_ssm=include_ssm,
                 )
                 tracks_list.append(track_export)
 
@@ -1238,6 +1255,8 @@ class LibraryExportService:
         analysis: TrackAnalysis | None,
         include_embeddings: bool,
         include_acoustid: bool,
+        include_midi: bool = True,
+        include_ssm: bool = True,
     ) -> dict[str, Any]:
         """Build export dict for a single track."""
         export: dict[str, Any] = {
@@ -1287,12 +1306,28 @@ class LibraryExportService:
                 # Convert numpy array to list for JSON serialization
                 embedding_list = analysis.embedding.tolist() if hasattr(analysis.embedding, "tolist") else list(analysis.embedding)
                 analysis_export["embedding"] = embedding_list
+                analysis_export["embedding_version"] = analysis.embedding_version
 
             if include_acoustid:
                 if analysis.acoustid:
                     analysis_export["acoustid"] = analysis.acoustid
                 if analysis.acoustid_lookup:
                     analysis_export["acoustid_lookup"] = analysis.acoustid_lookup
+
+            # MIDI file content
+            if include_midi and analysis.midi_path:
+                midi_file = Path(analysis.midi_path)
+                if midi_file.exists():
+                    analysis_export["midi_data"] = base64.b64encode(midi_file.read_bytes()).decode("ascii")
+                    analysis_export["midi_path"] = analysis.midi_path
+
+            # SSM PNG content
+            if include_ssm and analysis.analysis_detail:
+                ssm_path_str = (analysis.analysis_detail.get("structural") or {}).get("self_similarity_png_path")
+                if ssm_path_str:
+                    ssm_file = Path(ssm_path_str)
+                    if ssm_file.exists():
+                        analysis_export["ssm_data"] = base64.b64encode(ssm_file.read_bytes()).decode("ascii")
 
             export["analysis"] = analysis_export
 
@@ -1553,6 +1588,7 @@ class LibraryImportService:
                         if analysis:
                             if analysis.embedding is None or mode == "replace":
                                 analysis.embedding = export_analysis["embedding"]
+                                analysis.embedding_version = export_analysis.get("embedding_version", EMBEDDING_VERSION)
                                 analysis.embedding_source = "library_import"
                                 embeddings_imported += 1
 
@@ -1562,6 +1598,31 @@ class LibraryImportService:
                             analysis.acoustid = export_analysis["acoustid"]
                         if export_analysis.get("acoustid_lookup") and not analysis.acoustid_lookup:
                             analysis.acoustid_lookup = export_analysis["acoustid_lookup"]
+
+                    # Apply MIDI file
+                    midi_data = export_analysis.get("midi_data")
+                    if midi_data and analysis:
+                        from app.services.track_analysis import MIDI_DATA_DIR
+                        MIDI_DATA_DIR.mkdir(parents=True, exist_ok=True)
+                        midi_file = MIDI_DATA_DIR / f"{track_id}.mid"
+                        midi_file.write_bytes(base64.b64decode(midi_data))
+                        analysis.midi_path = str(midi_file)
+
+                    # Apply SSM PNG
+                    ssm_data = export_analysis.get("ssm_data")
+                    if ssm_data and analysis:
+                        from app.services.track_analysis import MIDI_DATA_DIR
+                        MIDI_DATA_DIR.mkdir(parents=True, exist_ok=True)
+                        ssm_file = MIDI_DATA_DIR / f"{track_id}_similarity.png"
+                        ssm_file.write_bytes(base64.b64decode(ssm_data))
+                        if analysis.analysis_detail and "structural" in analysis.analysis_detail:
+                            analysis.analysis_detail = {
+                                **analysis.analysis_detail,
+                                "structural": {
+                                    **analysis.analysis_detail["structural"],
+                                    "self_similarity_png_path": str(ssm_file),
+                                },
+                            }
 
                     # Apply user overrides
                     if apply_user_overrides and export_track.get("user_overrides"):
@@ -1844,6 +1905,8 @@ class BackupService:
         include_library_analysis: bool = False,
         include_embeddings: bool = True,
         include_acoustid: bool = True,
+        include_midi: bool = True,
+        include_ssm: bool = True,
         # Output options
         compress: bool = True,
         chat_history: list[dict[str, Any]] | None = None,
@@ -1909,6 +1972,8 @@ class BackupService:
             library_data = await self._build_library_data(
                 include_embeddings=include_embeddings,
                 include_acoustid=include_acoustid,
+                include_midi=include_midi,
+                include_ssm=include_ssm,
             )
             export_data["library"] = library_data
 
@@ -1926,6 +1991,8 @@ class BackupService:
         self,
         include_embeddings: bool,
         include_acoustid: bool,
+        include_midi: bool = True,
+        include_ssm: bool = True,
     ) -> dict[str, Any]:
         """Build library data section for export."""
         # Get counts
@@ -1945,12 +2012,23 @@ class BackupService:
         )
         tracks_with_embeddings = embedding_count_result.scalar() or 0
 
+        melodic_count_result = await self.db.execute(
+            select(func.count(TrackAnalysis.id)).where(
+                TrackAnalysis.features_version == FEATURES_VERSION,
+                TrackAnalysis.has_melodic.is_(True),
+            )
+        )
+        tracks_with_melodic = melodic_count_result.scalar() or 0
+
         library_data: dict[str, Any] = {
             "analysis_version": FEATURES_VERSION,
+            "embedding_version": EMBEDDING_VERSION,
+            "melodic_version": MELODIC_VERSION,
             "stats": {
                 "total_tracks": total_tracks,
                 "tracks_with_analysis": tracks_with_analysis,
                 "tracks_with_embeddings": tracks_with_embeddings,
+                "tracks_with_melodic": tracks_with_melodic,
             },
             "tracks": [],
         }
@@ -1980,6 +2058,8 @@ class BackupService:
                     analysis,
                     include_embeddings=include_embeddings,
                     include_acoustid=include_acoustid,
+                    include_midi=include_midi,
+                    include_ssm=include_ssm,
                 )
                 library_data["tracks"].append(track_export)
 
@@ -1993,6 +2073,8 @@ class BackupService:
         analysis: TrackAnalysis | None,
         include_embeddings: bool,
         include_acoustid: bool,
+        include_midi: bool = True,
+        include_ssm: bool = True,
     ) -> dict[str, Any]:
         """Build export dict for a single track (library section)."""
         export: dict[str, Any] = {
@@ -2036,12 +2118,28 @@ class BackupService:
             if include_embeddings and analysis.embedding is not None:
                 embedding_list = analysis.embedding.tolist() if hasattr(analysis.embedding, "tolist") else list(analysis.embedding)
                 analysis_export["embedding"] = embedding_list
+                analysis_export["embedding_version"] = analysis.embedding_version
 
             if include_acoustid:
                 if analysis.acoustid:
                     analysis_export["acoustid"] = analysis.acoustid
                 if analysis.acoustid_lookup:
                     analysis_export["acoustid_lookup"] = analysis.acoustid_lookup
+
+            # MIDI file content
+            if include_midi and analysis.midi_path:
+                midi_file = Path(analysis.midi_path)
+                if midi_file.exists():
+                    analysis_export["midi_data"] = base64.b64encode(midi_file.read_bytes()).decode("ascii")
+                    analysis_export["midi_path"] = analysis.midi_path
+
+            # SSM PNG content
+            if include_ssm and analysis.analysis_detail:
+                ssm_path_str = (analysis.analysis_detail.get("structural") or {}).get("self_similarity_png_path")
+                if ssm_path_str:
+                    ssm_file = Path(ssm_path_str)
+                    if ssm_file.exists():
+                        analysis_export["ssm_data"] = base64.b64encode(ssm_file.read_bytes()).decode("ascii")
 
             export["analysis"] = analysis_export
 
@@ -2561,6 +2659,7 @@ class RestoreService:
                     if analysis:
                         if analysis.embedding is None or mode == "replace":
                             analysis.embedding = export_analysis["embedding"]
+                            analysis.embedding_version = export_analysis.get("embedding_version", EMBEDDING_VERSION)
                             analysis.embedding_source = "library_import"
                             embeddings_imported += 1
 
@@ -2570,6 +2669,31 @@ class RestoreService:
                         analysis.acoustid = export_analysis["acoustid"]
                     if export_analysis.get("acoustid_lookup") and not analysis.acoustid_lookup:
                         analysis.acoustid_lookup = export_analysis["acoustid_lookup"]
+
+                # Apply MIDI file
+                midi_data = export_analysis.get("midi_data")
+                if midi_data and analysis:
+                    from app.services.track_analysis import MIDI_DATA_DIR
+                    MIDI_DATA_DIR.mkdir(parents=True, exist_ok=True)
+                    midi_file = MIDI_DATA_DIR / f"{track_id}.mid"
+                    midi_file.write_bytes(base64.b64decode(midi_data))
+                    analysis.midi_path = str(midi_file)
+
+                # Apply SSM PNG
+                ssm_data = export_analysis.get("ssm_data")
+                if ssm_data and analysis:
+                    from app.services.track_analysis import MIDI_DATA_DIR
+                    MIDI_DATA_DIR.mkdir(parents=True, exist_ok=True)
+                    ssm_file = MIDI_DATA_DIR / f"{track_id}_similarity.png"
+                    ssm_file.write_bytes(base64.b64decode(ssm_data))
+                    if analysis.analysis_detail and "structural" in analysis.analysis_detail:
+                        analysis.analysis_detail = {
+                            **analysis.analysis_detail,
+                            "structural": {
+                                **analysis.analysis_detail["structural"],
+                                "self_similarity_png_path": str(ssm_file),
+                            },
+                        }
 
                 # Apply user overrides
                 if apply_user_overrides and export_track.get("user_overrides"):

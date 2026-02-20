@@ -273,6 +273,14 @@ class LibraryExportRequest(BaseModel):
         default=True,
         description="Include audio fingerprints",
     )
+    include_midi: bool = Field(
+        default=True,
+        description="Include MIDI transcription files",
+    )
+    include_ssm: bool = Field(
+        default=True,
+        description="Include self-similarity matrix images",
+    )
     compress: bool = Field(
         default=True,
         description="Compress output with gzip",
@@ -351,6 +359,8 @@ async def export_library(
         async for chunk in service.export_library(
             include_embeddings=request.include_embeddings,
             include_acoustid=request.include_acoustid,
+            include_midi=request.include_midi,
+            include_ssm=request.include_ssm,
             compress=request.compress,
         ):
             yield chunk
@@ -515,6 +525,8 @@ class BackupRequest(BaseModel):
     include_library_analysis: bool = Field(default=False, description="Include audio analysis")
     include_embeddings: bool = Field(default=True, description="Include audio embeddings (requires library analysis)")
     include_acoustid: bool = Field(default=True, description="Include audio fingerprints (requires library analysis)")
+    include_midi: bool = Field(default=True, description="Include MIDI transcription files (requires library analysis)")
+    include_ssm: bool = Field(default=True, description="Include self-similarity matrix images (requires library analysis)")
 
     # Output options
     compress: bool = Field(default=True, description="Compress output with gzip")
@@ -616,6 +628,8 @@ async def create_backup(
             include_library_analysis=request.include_library_analysis,
             include_embeddings=request.include_embeddings,
             include_acoustid=request.include_acoustid,
+            include_midi=request.include_midi,
+            include_ssm=request.include_ssm,
             compress=request.compress,
             chat_history=request.chat_history,
         ):
