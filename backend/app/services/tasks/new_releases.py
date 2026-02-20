@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from app.config import settings
 from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -127,8 +126,7 @@ async def run_new_releases_check(
 ) -> dict[str, Any]:
     """Check for new releases from artists in the library."""
 
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
+    from app.db.session import create_task_engine_session
     from app.services.musicbrainz import get_artist_releases_recent, search_artist
     from app.services.new_releases import NewReleasesService
     from app.services.spotify import SpotifyArtistService
@@ -146,18 +144,7 @@ async def run_new_releases_check(
         "musicbrainz_queries": 0,
     }
 
-    local_engine = create_async_engine(
-        settings.database_url,
-        echo=False,
-        future=True,
-    )
-    local_session_maker = async_sessionmaker(
-        local_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autocommit=False,
-        autoflush=False,
-    )
+    local_engine, local_session_maker = create_task_engine_session()
 
     try:
         async with local_session_maker() as db:
@@ -338,8 +325,7 @@ async def run_prioritized_new_releases_check(
     """
     from uuid import UUID as UUIDType
 
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
+    from app.db.session import create_task_engine_session
     from app.services.musicbrainz import get_artist_releases_recent, search_artist
     from app.services.new_releases import NewReleasesService
 
@@ -354,18 +340,7 @@ async def run_prioritized_new_releases_check(
         "musicbrainz_queries": 0,
     }
 
-    local_engine = create_async_engine(
-        settings.database_url,
-        echo=False,
-        future=True,
-    )
-    local_session_maker = async_sessionmaker(
-        local_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autocommit=False,
-        autoflush=False,
-    )
+    local_engine, local_session_maker = create_task_engine_session()
 
     try:
         async with local_session_maker() as db:

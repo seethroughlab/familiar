@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from app.config import settings
 from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -184,7 +183,6 @@ async def run_spotify_sync(
     from spotipy.exceptions import SpotifyException
     from sqlalchemy import delete, func, select
     from sqlalchemy.dialects.postgresql import insert as pg_insert
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     from app.db.models import (
         ExternalTrack,
@@ -194,6 +192,7 @@ async def run_spotify_sync(
         SpotifyFavorite,
         SpotifyProfile,
     )
+    from app.db.session import create_task_engine_session
     from app.services.spotify import SpotifyService
     from app.services.spotify_compat import SpotifyRateLimitError
 
@@ -210,18 +209,7 @@ async def run_spotify_sync(
         "favorited": 0,
     }
 
-    local_engine = create_async_engine(
-        settings.database_url,
-        echo=False,
-        future=True,
-    )
-    local_session_maker = async_sessionmaker(
-        local_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autocommit=False,
-        autoflush=False,
-    )
+    local_engine, local_session_maker = create_task_engine_session()
 
     try:
         async with local_session_maker() as db:

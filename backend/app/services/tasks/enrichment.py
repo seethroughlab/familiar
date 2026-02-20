@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from app.config import settings
-
 logger = logging.getLogger(__name__)
 
 
@@ -29,9 +27,9 @@ async def run_track_enrichment(track_id: str) -> dict[str, Any]:
     7. Update database
     """
     from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     from app.db.models import Track
+    from app.db.session import create_task_engine_session
     from app.services.analysis import lookup_acoustid
     from app.services.app_settings import get_app_settings_service
     from app.services.artwork import compute_album_hash, save_artwork
@@ -55,10 +53,7 @@ async def run_track_enrichment(track_id: str) -> dict[str, Any]:
     app_settings = get_app_settings_service().get()
     overwrite_existing = app_settings.enrich_overwrite_existing
 
-    local_engine = create_async_engine(settings.database_url, echo=False)
-    local_session_maker = async_sessionmaker(
-        local_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    local_engine, local_session_maker = create_task_engine_session()
 
     try:
         async with local_session_maker() as db:
@@ -211,9 +206,9 @@ async def propose_enrichment_for_track(track_id: str) -> dict[str, Any]:
     3. If confident match found (>0.8), create ProposedChange
     """
     from sqlalchemy import select
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     from app.db.models import ChangeSource, ChangeStatus, ProposedChange, Track
+    from app.db.session import create_task_engine_session
     from app.services.metadata_enrichment import get_missing_fields
     from app.services.metadata_lookup import MetadataLookupService
     from app.services.proposed_changes import ProposedChangesService
@@ -225,10 +220,7 @@ async def propose_enrichment_for_track(track_id: str) -> dict[str, Any]:
         "proposal_created": False,
     }
 
-    local_engine = create_async_engine(settings.database_url, echo=False)
-    local_session_maker = async_sessionmaker(
-        local_engine, class_=AsyncSession, expire_on_commit=False
-    )
+    local_engine, local_session_maker = create_task_engine_session()
 
     try:
         async with local_session_maker() as db:

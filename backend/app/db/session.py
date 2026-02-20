@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
@@ -49,6 +49,37 @@ sync_session_maker = sessionmaker(
     autocommit=False,
     autoflush=False,
 )
+
+
+def create_task_engine_session() -> tuple[AsyncEngine, async_sessionmaker[AsyncSession]]:
+    """Create an isolated async engine + session factory for background tasks.
+
+    Each background task call creates (and disposes) its own engine so it
+    doesn't share connection state with the main FastAPI pool.  Pool settings
+    are intentionally smaller than the app engine but include the same
+    reliability knobs (pre-ping, recycle).
+
+    Returns:
+        (AsyncEngine, async_sessionmaker) — caller must ``await engine.dispose()``
+        in a ``finally`` block when done.
+    """
+    task_engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        future=True,
+        pool_size=5,
+        max_overflow=5,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+    )
+    task_session_maker = async_sessionmaker(
+        task_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    return task_engine, task_session_maker
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

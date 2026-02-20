@@ -446,9 +446,9 @@ async def run_library_sync(
     import asyncio
 
     from sqlalchemy import and_, func, select
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
     from app.db.models import Track, TrackAnalysis
+    from app.db.session import create_task_engine_session
     from app.services.tasks.analysis_pipeline import (
         queue_tracks_for_backfill,
         queue_tracks_for_embeddings,
@@ -505,16 +505,7 @@ async def run_library_sync(
         }
 
         # Create engine for analysis tracking
-        local_engine = create_async_engine(
-            settings.database_url,
-            echo=False,
-            future=True,
-        )
-        local_session_maker = async_sessionmaker(
-            local_engine,
-            class_=AsyncSession,
-            expire_on_commit=False,
-        )
+        local_engine, local_session_maker = create_task_engine_session()
 
         try:
             # Phase 3a: Feature extraction
