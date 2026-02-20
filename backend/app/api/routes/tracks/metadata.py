@@ -1,0 +1,443 @@
+"""Track metadata CRUD endpoints: update, get, bulk edit, common values, lookup."""
+
+import logging
+from typing import Any
+from uuid import UUID
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from app.api.deps import DbSession
+from app.db.models import Track
+
+from . import TrackFeaturesResponse
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+class TrackMetadataUpdateRequest(BaseModel):
+    """Request to update track metadata.
+
+    All fields are optional - only provided fields are updated.
+    """
+
+    # Core metadata
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    album_artist: str | None = None
+    track_number: int | None = None
+    disc_number: int | None = None
+    year: int | None = None
+    genre: str | None = None
+
+    # Extended metadata
+    composer: str | None = None
+    conductor: str | None = None
+    lyricist: str | None = None
+    grouping: str | None = None
+    comment: str | None = None
+
+    # Sort fields
+    sort_artist: str | None = None
+    sort_album: str | None = None
+    sort_title: str | None = None
+
+    # Lyrics
+    lyrics: str | None = None
+
+    # User overrides for analysis values (bpm, key, etc.)
+    user_overrides: dict[str, Any] | None = None
+
+    # Whether to write changes to the audio file tags
+    write_to_file: bool = False
+
+
+class TrackMetadataResponse(BaseModel):
+    """Extended track response with all metadata fields."""
+
+    id: UUID
+    file_path: str
+
+    # Core metadata
+    title: str | None
+    artist: str | None
+    album: str | None
+    album_artist: str | None
+    track_number: int | None
+    disc_number: int | None
+    year: int | None
+    genre: str | None
+
+    # Extended metadata
+    composer: str | None = None
+    conductor: str | None = None
+    lyricist: str | None = None
+    grouping: str | None = None
+    comment: str | None = None
+
+    # Sort fields
+    sort_artist: str | None = None
+    sort_album: str | None = None
+    sort_title: str | None = None
+
+    # Lyrics
+    lyrics: str | None = None
+
+    # User overrides
+    user_overrides: dict[str, Any] = {}
+
+    # Audio info
+    duration_seconds: float | None
+    format: str | None
+
+    # Analysis
+    features: TrackFeaturesResponse | None = None
+
+    # Write status (only set after update)
+    file_write_status: str | None = None
+    file_write_error: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkMetadataUpdateRequest(BaseModel):
+    """Request to update metadata for multiple tracks."""
+
+    track_ids: list[UUID]
+    metadata: TrackMetadataUpdateRequest
+    write_to_files: bool = False
+
+
+class BulkEditErrorResponse(BaseModel):
+    """Error for a single track in bulk edit."""
+
+    track_id: str
+    file_path: str
+    error: str
+
+
+class BulkEditResultResponse(BaseModel):
+    """Result of bulk edit operation."""
+
+    total: int
+    successful: int
+    failed: int
+    errors: list[BulkEditErrorResponse]
+    fields_updated: list[str]
+
+
+class CommonValuesRequest(BaseModel):
+    """Request to get common values across tracks."""
+
+    track_ids: list[UUID]
+
+
+class CommonValuesResponse(BaseModel):
+    """Common values across multiple tracks.
+
+    Fields with identical values across all tracks have that value.
+    Fields with different values are None (representing "mixed").
+    """
+
+    # Core metadata
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    album_artist: str | None = None
+    track_number: int | None = None
+    disc_number: int | None = None
+    year: int | None = None
+    genre: str | None = None
+
+    # Extended metadata
+    composer: str | None = None
+    conductor: str | None = None
+    lyricist: str | None = None
+    grouping: str | None = None
+    comment: str | None = None
+
+    # Sort fields
+    sort_artist: str | None = None
+    sort_album: str | None = None
+    sort_title: str | None = None
+
+    # Lyrics
+    lyrics: str | None = None
+
+    # Track count for UI
+    track_count: int = 0
+
+
+class MetadataLookupRequest(BaseModel):
+    """Request to look up track metadata from external sources."""
+
+    title: str
+    artist: str
+    album: str | None = None
+
+
+class MetadataCandidateResponse(BaseModel):
+    """A candidate metadata match."""
+
+    source: str
+    source_id: str
+    confidence: float
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    album_artist: str | None = None
+    year: int | None = None
+    track_number: int | None = None
+    genre: str | None = None
+    artwork_url: str | None = None
+
+
+@router.patch("/{track_id}/metadata", response_model=TrackMetadataResponse)
+async def update_track_metadata(
+    db: DbSession,
+    track_id: UUID,
+    request: TrackMetadataUpdateRequest,
+) -> TrackMetadataResponse:
+    """Update track metadata in the database and optionally write to audio file.
+
+    Only provided fields are updated. Set write_to_file=true to also update
+    the audio file's embedded tags.
+
+    Returns the updated track with all metadata fields.
+    """
+    from pathlib import Path
+
+    # Get track
+    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id)
+    result = await db.execute(query)
+    track = result.scalar_one_or_none()
+
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    # Track which fields were updated for file writing
+    updated_fields: dict[str, Any] = {}
+
+    # Update only provided fields
+    update_data = request.model_dump(exclude_unset=True, exclude={"write_to_file"})
+
+    for field, value in update_data.items():
+        if hasattr(track, field):
+            setattr(track, field, value)
+            updated_fields[field] = value
+
+    # Commit database changes
+    await db.commit()
+    await db.refresh(track)
+
+    # Prepare response
+    response = TrackMetadataResponse.model_validate(track)
+
+    # Get latest analysis features
+    if track.analyses:
+        latest = track.analyses[0]
+        if latest.bpm is not None:
+            # Merge user overrides with analysis features
+            features_data: dict[str, Any] = {
+                "bpm": latest.bpm,
+                "key": latest.key,
+                "energy": latest.energy,
+                "danceability": latest.danceability,
+                "valence": latest.valence,
+                "acousticness": latest.acousticness,
+                "instrumentalness": latest.instrumentalness,
+                "speechiness": latest.speechiness,
+                "loudness_lufs": latest.loudness_lufs,
+                "track_peak": latest.track_peak,
+                "replaygain_track_gain": latest.replaygain_track_gain,
+            }
+            # Apply user overrides
+            if track.user_overrides:
+                for key, val in track.user_overrides.items():
+                    if key in features_data:
+                        features_data[key] = val
+            response.features = TrackFeaturesResponse(**features_data)
+
+    # Optionally write to audio file
+    if request.write_to_file and updated_fields:
+        from app.services.metadata_writer import write_lyrics, write_metadata
+
+        file_path = Path(track.file_path)
+
+        # Separate lyrics from other metadata (needs special handling)
+        lyrics_value = updated_fields.pop("lyrics", None)
+        updated_fields.pop("user_overrides", None)  # Don't write to file
+
+        # Write standard metadata
+        if updated_fields:
+            write_result = write_metadata(file_path, updated_fields)
+            if write_result.success:
+                response.file_write_status = "success"
+            else:
+                response.file_write_status = "partial"
+                response.file_write_error = write_result.error
+
+        # Write lyrics separately if provided
+        if lyrics_value is not None:
+            lyrics_result = write_lyrics(file_path, lyrics_value)
+            if not lyrics_result.success:
+                if response.file_write_status == "success":
+                    response.file_write_status = "partial"
+                response.file_write_error = (
+                    f"{response.file_write_error or ''} Lyrics: {lyrics_result.error}".strip()
+                )
+
+        if response.file_write_status is None:
+            response.file_write_status = "success"
+
+    return response
+
+
+@router.get("/{track_id}/metadata", response_model=TrackMetadataResponse)
+async def get_track_metadata(
+    db: DbSession,
+    track_id: UUID,
+) -> TrackMetadataResponse:
+    """Get full track metadata including extended fields.
+
+    Returns all metadata fields including composer, conductor, lyrics, etc.
+    User overrides are merged with analysis features.
+    """
+    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id)
+    result = await db.execute(query)
+    track = result.scalar_one_or_none()
+
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    response = TrackMetadataResponse.model_validate(track)
+
+    # Get latest analysis features with user overrides applied
+    if track.analyses:
+        latest = track.analyses[0]
+        if latest.bpm is not None:
+            features_data: dict[str, Any] = {
+                "bpm": latest.bpm,
+                "key": latest.key,
+                "energy": latest.energy,
+                "danceability": latest.danceability,
+                "valence": latest.valence,
+                "acousticness": latest.acousticness,
+                "instrumentalness": latest.instrumentalness,
+                "speechiness": latest.speechiness,
+                "loudness_lufs": latest.loudness_lufs,
+                "track_peak": latest.track_peak,
+                "replaygain_track_gain": latest.replaygain_track_gain,
+            }
+            # Apply user overrides
+            if track.user_overrides:
+                for key, val in track.user_overrides.items():
+                    if key in features_data:
+                        features_data[key] = val
+            response.features = TrackFeaturesResponse(**features_data)
+
+    return response
+
+
+@router.post("/bulk/metadata", response_model=BulkEditResultResponse)
+async def bulk_update_metadata(
+    db: DbSession,
+    request: BulkMetadataUpdateRequest,
+) -> BulkEditResultResponse:
+    """Update metadata for multiple tracks at once.
+
+    Only provided (non-None) fields in metadata are applied to all tracks.
+    Set write_to_files=true to also update audio file tags.
+
+    Returns summary with success/failure counts and any errors.
+    """
+    from app.services.bulk_editor import BulkEditorService
+
+    service = BulkEditorService(db)
+
+    # Extract metadata dict (exclude write_to_file as it's handled separately)
+    metadata_dict = request.metadata.model_dump(
+        exclude_unset=True, exclude={"write_to_file"}
+    )
+
+    result = await service.apply_to_tracks(
+        track_ids=request.track_ids,
+        metadata=metadata_dict,
+        write_to_files=request.write_to_files,
+    )
+
+    return BulkEditResultResponse(
+        total=result.total,
+        successful=result.successful,
+        failed=result.failed,
+        errors=[
+            BulkEditErrorResponse(
+                track_id=e.track_id, file_path=e.file_path, error=e.error
+            )
+            for e in result.errors
+        ],
+        fields_updated=result.fields_updated,
+    )
+
+
+@router.post("/bulk/common-values", response_model=CommonValuesResponse)
+async def get_common_values(
+    db: DbSession,
+    request: CommonValuesRequest,
+) -> CommonValuesResponse:
+    """Get common field values across multiple tracks.
+
+    Used to pre-fill the bulk edit form. Fields with different values
+    across the selected tracks are returned as None (indicating "mixed").
+    """
+    from app.services.bulk_editor import BulkEditorService
+
+    service = BulkEditorService(db)
+    common = await service.get_common_values(request.track_ids)
+
+    return CommonValuesResponse(
+        **common,
+        track_count=len(request.track_ids),
+    )
+
+
+@router.post("/lookup/metadata", response_model=list[MetadataCandidateResponse])
+async def lookup_metadata(
+    request: MetadataLookupRequest,
+) -> list[MetadataCandidateResponse]:
+    """Look up track metadata from MusicBrainz.
+
+    Returns a list of candidate matches sorted by confidence.
+    Use this to find correct metadata for tracks with incomplete or wrong info.
+    """
+    from app.services.metadata_lookup import MetadataLookupService
+
+    service = MetadataLookupService()
+    candidates = await service.lookup_track(
+        title=request.title,
+        artist=request.artist,
+        album=request.album,
+        limit=5,
+    )
+
+    return [
+        MetadataCandidateResponse(
+            source=c.source,
+            source_id=c.source_id,
+            confidence=c.confidence,
+            title=c.metadata.get("title"),
+            artist=c.metadata.get("artist"),
+            album=c.metadata.get("album"),
+            album_artist=c.metadata.get("album_artist"),
+            year=c.metadata.get("year"),
+            track_number=c.metadata.get("track_number"),
+            genre=c.metadata.get("genre"),
+            artwork_url=c.artwork_url,
+        )
+        for c in candidates
+    ]

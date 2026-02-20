@@ -207,7 +207,7 @@ class TestExportImportService:
         mock_result.scalars.return_value.all.return_value = []
         mock_db.execute.return_value = mock_result
 
-        with patch("app.services.export_import.get_app_version", return_value="1.0.0"):
+        with patch("app.services.export_import.profile.get_app_version", return_value="1.0.0"):
             export = await service.export_profile(
                 profile,
                 include_play_history=False,
@@ -242,7 +242,7 @@ class TestExportImportService:
             {"role": "assistant", "content": "Hi there!"},
         ]
 
-        with patch("app.services.export_import.get_app_version", return_value="1.0.0"):
+        with patch("app.services.export_import.profile.get_app_version", return_value="1.0.0"):
             export = await service.export_profile(
                 profile,
                 include_play_history=False,

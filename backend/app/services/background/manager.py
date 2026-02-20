@@ -1,0 +1,183 @@
+"""BackgroundManager core: class composition, __init__, startup, shutdown."""
+
+import asyncio
+import json
+import logging
+
+from app.services.redis_client import ResilientRedisClient, get_resilient_redis
+
+from .analysis import AnalysisMixin
+from .backup import BackupMixin
+from .executors import ExecutorMixin
+from .sync import SyncMixin
+
+logger = logging.getLogger(__name__)
+
+
+class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
+    """Manages background tasks in the API process.
+
+    Key features:
+    - ProcessPoolExecutor with spawn context (not fork) to avoid OpenBLAS crashes
+    - APScheduler for periodic tasks
+    - Redis for progress reporting
+    - Task deduplication to prevent running multiple syncs simultaneously
+    """
+
+    def __init__(self):
+        self._scheduler = None
+        self._redis: ResilientRedisClient | None = None
+        # Initialize mixin state
+        self._init_executor_state()
+        self._init_analysis_state()
+        self._init_sync_state()
+
+    @property
+    def redis(self) -> ResilientRedisClient:
+        """Lazy resilient Redis client with automatic retry."""
+        if self._redis is None:
+            self._redis = get_resilient_redis()
+        return self._redis
+
+    def _cleanup_stale_redis_state(self) -> None:
+        """Clean up stale Redis state from previous runs."""
+        try:
+            data: bytes | None = self.redis.get("familiar:sync:progress")  # type: ignore[assignment]
+            if data:
+                progress = json.loads(data)
+                if progress.get("status") == "running":
+                    heartbeat = progress.get("last_heartbeat", "unknown")
+                    phase = progress.get("phase", "unknown")
+                    logger.info(
+                        f"Clearing orphaned sync state on startup "
+                        f"(was in phase '{phase}', last heartbeat: {heartbeat})"
+                    )
+                    self.redis.delete("familiar:sync:lock", "familiar:sync:progress")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup stale Redis state: {e}")
+
+    async def startup(self) -> None:
+        """Initialize scheduler on app startup."""
+        self._cleanup_stale_redis_state()
+
+        # Start artwork fetcher
+        from app.services.artwork_fetcher import get_artwork_fetcher
+        artwork_fetcher = get_artwork_fetcher()
+        await artwork_fetcher.start()
+
+        try:
+            from apscheduler.schedulers.asyncio import AsyncIOScheduler
+            from apscheduler.triggers.cron import CronTrigger
+            from apscheduler.triggers.interval import IntervalTrigger
+
+            self._scheduler = AsyncIOScheduler()
+
+            # Unified library sync every 2 hours
+            self._scheduler.add_job(
+                self._periodic_sync,
+                CronTrigger(hour="*/2", minute=0),
+                id="periodic_sync",
+                replace_existing=True,
+            )
+
+            # Daily new releases check at 3 AM
+            self._scheduler.add_job(
+                self._daily_new_releases_check,
+                CronTrigger(hour=3, minute=0),
+                id="daily_new_releases",
+                replace_existing=True,
+            )
+
+            # Worker health check every 5 minutes
+            self._scheduler.add_job(
+                self._check_and_recover_worker,
+                IntervalTrigger(minutes=5),
+                id="worker_health_check",
+                replace_existing=True,
+            )
+
+            # Daily cleanup of old frontend logs
+            self._scheduler.add_job(
+                self._cleanup_frontend_logs,
+                CronTrigger(hour=4, minute=0),
+                id="frontend_logs_cleanup",
+                replace_existing=True,
+            )
+
+            # Register S3 backup schedule if enabled
+            self._register_s3_backup_schedule()
+
+            self._scheduler.start()
+            logger.info("APScheduler started with periodic sync (every 2 hours) and daily new releases check (3 AM)")
+
+            # Schedule startup sync after a short delay
+            asyncio.create_task(self._startup_sync())
+
+        except ImportError:
+            logger.warning("APScheduler not installed - periodic tasks disabled")
+        except Exception as e:
+            logger.error(f"Failed to start scheduler: {e}")
+
+    async def shutdown(self) -> None:
+        """Cleanup on app shutdown."""
+        logger.info("Shutting down BackgroundManager...")
+
+        # Stop artwork fetcher
+        from app.services.artwork_fetcher import get_artwork_fetcher
+        artwork_fetcher = get_artwork_fetcher()
+        await artwork_fetcher.stop()
+
+        # Cancel running tasks
+        if self._current_sync_task and not self._current_sync_task.done():
+            self._current_sync_task.cancel()
+            try:
+                await self._current_sync_task
+            except asyncio.CancelledError:
+                pass
+
+        for task in self._analysis_tasks.values():
+            if not task.done():
+                task.cancel()
+
+        # Stop scheduler
+        if self._scheduler:
+            self._scheduler.shutdown(wait=False)
+
+        # Shutdown executors
+        if self._executor:
+            self._executor.shutdown(wait=False)
+        if self._ondemand_executor:
+            self._ondemand_executor.shutdown(wait=False)
+
+        logger.info("BackgroundManager shutdown complete")
+
+    async def queue_artwork_fetch(
+        self,
+        album_hash: str,
+        artist: str,
+        album: str,
+        track_id: str | None = None,
+    ) -> bool:
+        """Queue artwork for background fetching."""
+        from app.services.artwork_fetcher import ArtworkFetchRequest, get_artwork_fetcher
+
+        fetcher = get_artwork_fetcher()
+        request = ArtworkFetchRequest(
+            album_hash=album_hash,
+            artist=artist,
+            album=album,
+            track_id=track_id,
+        )
+        return await fetcher.queue(request)
+
+
+# Global singleton instance
+_background_manager: BackgroundManager | None = None
+
+
+def get_background_manager() -> BackgroundManager:
+    """Get the global BackgroundManager instance."""
+    global _background_manager
+    if _background_manager is None:
+        _background_manager = BackgroundManager()
+    return _background_manager
