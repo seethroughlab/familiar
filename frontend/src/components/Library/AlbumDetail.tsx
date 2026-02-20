@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Play,
@@ -17,7 +17,7 @@ import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useFavorites } from '../../hooks/useFavorites';
-import { useOfflineTrack } from '../../hooks/useOfflineTrack';
+import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { useOfflineAlbum } from '../../hooks/useOfflineAlbum';
 import { TrackContextMenu } from './TrackContextMenu';
 import type { ContextMenuState } from './types';
@@ -29,8 +29,41 @@ import { createLogger } from '../../utils/logger';
 
 const log = createLogger('AlbumDetail');
 
-function OfflineButton({ trackId }: { trackId: string }) {
-  const { isOffline, isDownloading, downloadProgress, download, remove } = useOfflineTrack(trackId);
+function OfflineButton({ trackId, isOffline: isOfflineProp, onStatusChange }: {
+  trackId: string;
+  isOffline: boolean;
+  onStatusChange: () => void;
+}) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+
+  const handleDownload = useCallback(async () => {
+    if (isOfflineProp || isDownloading) return;
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    try {
+      const { downloadTrackForOffline } = await import('../../services/offlineService');
+      await downloadTrackForOffline(trackId, (progress) => {
+        setDownloadProgress(progress.percentage);
+      });
+      onStatusChange();
+    } catch {
+      // Download failed silently
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [trackId, isOfflineProp, isDownloading, onStatusChange]);
+
+  const handleRemove = useCallback(async () => {
+    if (!isOfflineProp) return;
+    try {
+      const { removeOfflineTrack } = await import('../../services/offlineService');
+      await removeOfflineTrack(trackId);
+      onStatusChange();
+    } catch {
+      // Remove failed silently
+    }
+  }, [trackId, isOfflineProp, onStatusChange]);
 
   if (isDownloading) {
     return (
@@ -48,12 +81,12 @@ function OfflineButton({ trackId }: { trackId: string }) {
     );
   }
 
-  if (isOffline) {
+  if (isOfflineProp) {
     return (
       <button
         onClick={(e) => {
           e.stopPropagation();
-          remove();
+          handleRemove();
         }}
         className="p-1 text-green-500 hover:text-red-400 transition-colors"
         title="Remove offline copy"
@@ -67,7 +100,7 @@ function OfflineButton({ trackId }: { trackId: string }) {
     <button
       onClick={(e) => {
         e.stopPropagation();
-        download();
+        handleDownload();
       }}
       className="p-1 text-zinc-500 hover:text-white transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
       title="Download for offline"
@@ -257,6 +290,8 @@ export function AlbumDetail({
   // Support both route params and props
   const routeParams = useParams<{ artist: string; album: string }>();
   const routeNavigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const source = searchParams.get('source') || undefined;
   const artistName = artistNameProp || (routeParams.artist ? decodeURIComponent(routeParams.artist) : '');
   const albumName = albumNameProp || (routeParams.album ? decodeURIComponent(routeParams.album) : '');
   const onBack = onBackProp || (() => routeNavigate(-1));
@@ -284,8 +319,11 @@ export function AlbumDetail({
 
   const { data: album, isLoading } = useQuery({
     queryKey: ['album', artistName, albumName],
-    queryFn: () => libraryApi.getAlbum(artistName, albumName),
+    queryFn: () => libraryApi.getAlbum(artistName, albumName, 8, source),
   });
+
+  // Batch offline status check (single IndexedDB read instead of N+1)
+  const { offlineIds, refresh: refreshOfflineIds } = useOfflineTrackIds();
 
   const handlePlayAll = () => {
     if (!album || album.tracks.length === 0) return;
@@ -425,7 +463,7 @@ export function AlbumDetail({
   }
 
   return (
-    <div className="space-y-6 pb-6 px-4 md:px-0">
+    <div className="space-y-6 p-4">
       {/* Header - stacks vertically on mobile */}
       <div className="space-y-4">
         {/* Back button */}
@@ -581,7 +619,7 @@ export function AlbumDetail({
                 </div>
 
                 <FavoriteButton trackId={track.id} />
-                <OfflineButton trackId={track.id} />
+                <OfflineButton trackId={track.id} isOffline={offlineIds.has(track.id)} onStatusChange={refreshOfflineIds} />
               </div>
             );
           })}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlayIndicator } from '../common/PlayIndicator';
 import {
@@ -179,7 +179,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const routeNavigate = useNavigate();
   const artistName = artistNameProp || (routeParams.name ? decodeURIComponent(routeParams.name) : '');
   const onBack = onBackProp || (() => routeNavigate(-1));
-  const goToAlbum = onGoToAlbum || ((artist: string, album: string) => navigateToAlbumDetail(artist, album));
+  const goToAlbum = onGoToAlbum || ((artist: string, album: string) => navigateToAlbumDetail(artist, album, { source: 'artist' }));
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const shuffle = usePlayerStore((s) => s.shuffle);
@@ -256,19 +256,32 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
     queryFn: () => libraryApi.getArtist(artistName),
   });
 
-  // Auto-enrich all tracks when artist detail loads
+  // Auto-enrich all tracks when artist detail loads (single batch request)
   useEffect(() => {
     if (!artist || enrichedArtistsRef.current.has(artistName)) return;
     enrichedArtistsRef.current.add(artistName);
 
-    // Fire-and-forget enrichment for all tracks
-    for (const track of artist.tracks) {
-      tracksApi.enrich(track.id).catch(() => {
+    const trackIds = artist.tracks.map((t) => t.id);
+    if (trackIds.length > 0) {
+      tracksApi.enrichBatch(trackIds).catch(() => {
         // Ignore errors - enrichment is best-effort
       });
     }
     // Note: Artwork is now handled reactively by AlbumArtwork components
   }, [artist, artistName]);
+
+  // Prefetch the first few album details so clicking is near-instant
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!artist?.albums?.length) return;
+    for (const album of artist.albums.slice(0, 5)) {
+      queryClient.prefetchQuery({
+        queryKey: ['album', artist.name, album.name],
+        queryFn: () => libraryApi.getAlbum(artist.name, album.name, 8, 'artist'),
+        staleTime: 60_000,
+      });
+    }
+  }, [artist, queryClient]);
 
   const handleRefreshLastfm = async () => {
     await libraryApi.getArtist(artistName, true);
@@ -441,7 +454,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const bioText = stripHtml(showFullBio ? artist.bio_content : artist.bio_summary);
 
   return (
-    <div className="space-y-6 pb-6 px-4 md:px-0">
+    <div className="space-y-6 p-4">
       {/* Header - stacks vertically on mobile */}
       <div className="space-y-4">
         {/* Back button row */}

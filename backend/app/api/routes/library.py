@@ -978,6 +978,7 @@ async def get_album_detail(
     artist_name: str,
     album_name: str,
     similar_limit: int = Query(8, ge=1, le=20),
+    source: str | None = Query(None, description="Navigation source: 'artist' skips album_artist lookup"),
 ) -> AlbumDetailResponse:
     """Get detailed album information with tracks and similar albums.
 
@@ -988,11 +989,15 @@ async def get_album_detail(
         artist_name: The artist name (URL-encoded)
         album_name: The album name (URL-encoded)
         similar_limit: Maximum number of similar albums to return
+        source: Navigation source hint. 'artist' skips the album_artist query.
     """
     from urllib.parse import unquote
 
     from sqlalchemy import cast
     from sqlalchemy.dialects.postgresql import TEXT
+
+    from app.db.models import ArtistInfo
+    from app.services.search_links import generate_artist_search_url
 
     # URL decode the names
     artist_name = unquote(artist_name)
@@ -1004,22 +1009,25 @@ async def get_album_detail(
     # This ensures compilation/soundtrack albums are found correctly
     album_artist_col = func.coalesce(func.nullif(Track.album_artist, ""), Track.artist)
 
-    # Get album metadata and tracks
-    # First try matching by album_artist (for compilations/soundtracks)
-    album_query = (
-        select(Track)
-        .where(
-            func.lower(func.trim(album_artist_col)) == artist_normalized,
-            func.lower(func.trim(Track.album)) == album_normalized,
-            Track.status == TrackStatus.ACTIVE,
-        )
-        .order_by(Track.disc_number, Track.track_number, Track.title)
-    )
-    result = await db.execute(album_query)
-    tracks_list = result.scalars().all()
+    tracks_list = []
 
-    # If not found by album_artist, try matching by track artist
-    # This handles navigation from ArtistDetail which groups by Track.artist
+    # When navigating from ArtistDetail (source=artist), skip the album_artist query
+    # since ArtistDetail groups by Track.artist, not album_artist
+    if source != "artist":
+        # First try matching by album_artist (for compilations/soundtracks)
+        album_query = (
+            select(Track)
+            .where(
+                func.lower(func.trim(album_artist_col)) == artist_normalized,
+                func.lower(func.trim(Track.album)) == album_normalized,
+                Track.status == TrackStatus.ACTIVE,
+            )
+            .order_by(Track.disc_number, Track.track_number, Track.title)
+        )
+        result = await db.execute(album_query)
+        tracks_list = result.scalars().all()
+
+    # If not found by album_artist (or skipped), try matching by track artist
     if not tracks_list:
         album_query_by_artist = (
             select(Track)
@@ -1055,154 +1063,162 @@ async def get_album_detail(
         for t in tracks_list
     ]
 
-    # Get other albums by the same artist (using album_artist for consistency)
-    other_albums_query = (
-        select(
-            func.max(Track.album).label("name"),
-            func.max(album_artist_col).label("artist"),
-            func.max(Track.year).label("year"),
-            func.count(Track.id).label("track_count"),
-            func.min(cast(Track.id, TEXT)).label("first_track_id"),
+    # --- Phase A: Run other-albums query and ArtistInfo lookup in parallel ---
+
+    async def fetch_other_albums() -> list[SimilarAlbumInfo]:
+        other_albums_query = (
+            select(
+                func.max(Track.album).label("name"),
+                func.max(album_artist_col).label("artist"),
+                func.max(Track.year).label("year"),
+                func.count(Track.id).label("track_count"),
+                func.min(cast(Track.id, TEXT)).label("first_track_id"),
+            )
+            .where(
+                func.lower(func.trim(album_artist_col)) == artist_normalized,
+                func.lower(func.trim(Track.album)) != album_normalized,
+                Track.album.isnot(None),
+                Track.album != "",
+                Track.status == TrackStatus.ACTIVE,
+            )
+            .group_by(func.lower(Track.album))
+            .order_by(func.max(Track.year).desc().nullslast())
         )
-        .where(
-            func.lower(func.trim(album_artist_col)) == artist_normalized,
-            func.lower(func.trim(Track.album)) != album_normalized,
-            Track.album.isnot(None),
-            Track.album != "",
-            Track.status == TrackStatus.ACTIVE,
-        )
-        .group_by(func.lower(Track.album))
-        .order_by(func.max(Track.year).desc().nullslast())
+        other_albums_result = await db.execute(other_albums_query)
+        return [
+            SimilarAlbumInfo(
+                name=row.name or "Unknown Album",
+                artist=row.artist or artist_name,
+                year=row.year,
+                track_count=row.track_count,
+                first_track_id=str(row.first_track_id),
+                similarity_score=1.0,
+            )
+            for row in other_albums_result.all()
+        ]
+
+    async def fetch_artist_info() -> list[dict]:
+        cached_artist = await db.get(ArtistInfo, artist_normalized)
+        return cached_artist.similar_artists if cached_artist else []
+
+    other_albums_by_artist, raw_similar_artists = await asyncio.gather(
+        fetch_other_albums(), fetch_artist_info()
     )
-    other_albums_result = await db.execute(other_albums_query)
-    other_albums_by_artist = [
-        SimilarAlbumInfo(
-            name=row.name or "Unknown Album",
-            artist=row.artist or artist_name,
-            year=row.year,
-            track_count=row.track_count,
-            first_track_id=str(row.first_track_id),
-            similarity_score=1.0,  # Same artist = high relevance
+
+    # --- Phase B: Run similar-albums and discover-albums queries in parallel ---
+    # Both depend on raw_similar_artists from Phase A
+
+    async def fetch_similar_albums() -> list[SimilarAlbumInfo]:
+        if not raw_similar_artists:
+            return []
+
+        similar_artist_names = [s.get("name", "") for s in raw_similar_artists if s.get("name")]
+        similar_normalized = [n.lower().strip() for n in similar_artist_names]
+        if not similar_normalized:
+            return []
+
+        similar_albums_query = (
+            select(
+                func.max(Track.album).label("name"),
+                func.max(Track.artist).label("artist"),
+                func.max(Track.year).label("year"),
+                func.count(Track.id).label("track_count"),
+                func.min(cast(Track.id, TEXT)).label("first_track_id"),
+            )
+            .where(
+                func.lower(func.trim(Track.artist)).in_(similar_normalized),
+                Track.album.isnot(None),
+                Track.album != "",
+                Track.status == TrackStatus.ACTIVE,
+            )
+            .group_by(
+                func.lower(func.trim(Track.artist)),
+                func.lower(func.trim(Track.album)),
+            )
+            .order_by(func.max(Track.year).desc().nullslast())
+            .limit(similar_limit)
         )
-        for row in other_albums_result.all()
-    ]
 
-    # Find similar albums using Last.fm similar artists data
-    # This finds albums from artists similar to this album's artist that ARE in the library
-    similar_albums: list[SimilarAlbumInfo] = []
-    from app.db.models import ArtistInfo
+        similar_result = await db.execute(similar_albums_query)
 
-    cached_artist = await db.get(ArtistInfo, artist_normalized)
-    raw_similar_artists = cached_artist.similar_artists if cached_artist else []
-
-    if raw_similar_artists:
-        # Get similar artist names that are IN the library
-        similar_artist_names = [s.get("name", "") for s in raw_similar_artists if s.get("name")]
-        similar_normalized = [n.lower().strip() for n in similar_artist_names]
-
-        if similar_normalized:
-            # Find albums from similar artists in library
-            similar_albums_query = (
-                select(
-                    func.max(Track.album).label("name"),
-                    func.max(Track.artist).label("artist"),
-                    func.max(Track.year).label("year"),
-                    func.count(Track.id).label("track_count"),
-                    func.min(cast(Track.id, TEXT)).label("first_track_id"),
-                )
-                .where(
-                    func.lower(func.trim(Track.artist)).in_(similar_normalized),
-                    Track.album.isnot(None),
-                    Track.album != "",
-                    Track.status == TrackStatus.ACTIVE,
-                )
-                .group_by(
-                    func.lower(func.trim(Track.artist)),
-                    func.lower(func.trim(Track.album)),
-                )
-                .order_by(func.max(Track.year).desc().nullslast())
-                .limit(similar_limit)
-            )
-
-            similar_result = await db.execute(similar_albums_query)
-            # Build a map of artist normalized name to match score
-            # Use position-based scores (1.0 for first, decreasing) as fallback
-            match_scores = {}
-            for idx, s in enumerate(raw_similar_artists):
-                name = s.get("name", "")
-                if name:
-                    # Try to get match from Last.fm, otherwise use position-based score
-                    raw_match = s.get("match")
-                    if raw_match:
-                        try:
-                            match_scores[name.lower().strip()] = float(raw_match)
-                        except (ValueError, TypeError):
-                            match_scores[name.lower().strip()] = max(0.3, 1.0 - (idx * 0.1))
-                    else:
-                        # Position-based: first artist gets ~0.9, decreasing
+        # Build match score map
+        match_scores = {}
+        for idx, s in enumerate(raw_similar_artists):
+            name = s.get("name", "")
+            if name:
+                raw_match = s.get("match")
+                if raw_match:
+                    try:
+                        match_scores[name.lower().strip()] = float(raw_match)
+                    except (ValueError, TypeError):
                         match_scores[name.lower().strip()] = max(0.3, 1.0 - (idx * 0.1))
+                else:
+                    match_scores[name.lower().strip()] = max(0.3, 1.0 - (idx * 0.1))
 
-            for row in similar_result.all():
-                artist_norm = (row.artist or "").lower().strip()
-                match_score = match_scores.get(artist_norm, 0.5)
-                similar_albums.append(
-                    SimilarAlbumInfo(
-                        name=row.name or "Unknown Album",
-                        artist=row.artist or "Unknown Artist",
-                        year=row.year,
-                        track_count=row.track_count,
-                        first_track_id=str(row.first_track_id),
-                        similarity_score=round(match_score, 3),
-                    )
+        albums = []
+        for row in similar_result.all():
+            artist_norm = (row.artist or "").lower().strip()
+            match_score = match_scores.get(artist_norm, 0.5)
+            albums.append(
+                SimilarAlbumInfo(
+                    name=row.name or "Unknown Album",
+                    artist=row.artist or "Unknown Artist",
+                    year=row.year,
+                    track_count=row.track_count,
+                    first_track_id=str(row.first_track_id),
+                    similarity_score=round(match_score, 3),
                 )
+            )
+        return albums
 
-    # Get albums to discover from similar artists (not in library)
-    discover_albums: list[DiscoverAlbumInfo] = []
-    from app.services.search_links import generate_artist_search_url
+    async def fetch_discover_albums() -> list[DiscoverAlbumInfo]:
+        if not raw_similar_artists:
+            return []
 
-    # Re-use raw_similar_artists from above
-    if raw_similar_artists:
-        # Get similar artist names
         similar_artist_names = [s.get("name", "") for s in raw_similar_artists if s.get("name")]
         similar_normalized = [n.lower().strip() for n in similar_artist_names]
+        if not similar_normalized:
+            return []
 
-        # Check which similar artists are NOT in library
-        if similar_normalized:
-            library_artists_query = (
-                select(func.lower(func.trim(Track.artist)).label("artist_normalized"))
-                .where(
-                    func.lower(func.trim(Track.artist)).in_(similar_normalized),
-                    Track.status == TrackStatus.ACTIVE,
-                )
-                .group_by(func.lower(func.trim(Track.artist)))
+        library_artists_query = (
+            select(func.lower(func.trim(Track.artist)).label("artist_normalized"))
+            .where(
+                func.lower(func.trim(Track.artist)).in_(similar_normalized),
+                Track.status == TrackStatus.ACTIVE,
             )
-            result = await db.execute(library_artists_query)
-            in_library = {row.artist_normalized for row in result.all()}
+            .group_by(func.lower(func.trim(Track.artist)))
+        )
+        result = await db.execute(library_artists_query)
+        in_library = {row.artist_normalized for row in result.all()}
 
-            # For artists NOT in library, suggest exploring their albums
-            for similar in raw_similar_artists[:10]:  # Limit to 10
-                name = similar.get("name", "")
-                if not name:
-                    continue
-                normalized = name.lower().strip()
-                if normalized not in in_library:
-                    # Get image URL from Last.fm data
-                    images = similar.get("image", [])
-                    image_url = None
-                    for img in images:
-                        if img.get("size") == "large" and img.get("#text"):
-                            image_url = img["#text"]
-                            break
+        albums = []
+        for similar in raw_similar_artists[:10]:
+            name = similar.get("name", "")
+            if not name:
+                continue
+            normalized = name.lower().strip()
+            if normalized not in in_library:
+                images = similar.get("image", [])
+                image_url = None
+                for img in images:
+                    if img.get("size") == "large" and img.get("#text"):
+                        image_url = img["#text"]
+                        break
 
-                    discover_albums.append(
-                        DiscoverAlbumInfo(
-                            name=f"Albums by {name}",
-                            artist=name,
-                            image_url=image_url,
-                            lastfm_url=similar.get("url"),
-                            bandcamp_url=generate_artist_search_url("bandcamp", name),
-                        )
+                albums.append(
+                    DiscoverAlbumInfo(
+                        name=f"Albums by {name}",
+                        artist=name,
+                        image_url=image_url,
+                        lastfm_url=similar.get("url"),
+                        bandcamp_url=generate_artist_search_url("bandcamp", name),
                     )
+                )
+        return albums
+
+    similar_albums, discover_albums = await asyncio.gather(
+        fetch_similar_albums(), fetch_discover_albums()
+    )
 
     return AlbumDetailResponse(
         name=album_name,

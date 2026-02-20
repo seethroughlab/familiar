@@ -90,8 +90,10 @@ export function useAppNavigation() {
    * Navigate to album detail view
    */
   const navigateToAlbumDetail = useCallback(
-    (artist: string, album: string) => {
-      navigate(`/library/albums/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`);
+    (artist: string, album: string, params?: Record<string, string>) => {
+      const base = `/library/albums/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`;
+      const search = params ? '?' + new URLSearchParams(params).toString() : '';
+      navigate(base + search);
     },
     [navigate]
   );

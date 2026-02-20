@@ -188,6 +188,11 @@ export const tracksApi = {
     return data;
   },
 
+  enrichBatch: async (trackIds: string[]): Promise<{ queued: number; skipped: number; total: number }> => {
+    const { data } = await api.post('/tracks/enrich-batch', { track_ids: trackIds });
+    return data;
+  },
+
   // Metadata editing
   getMetadata: async (id: string): Promise<TrackMetadataResponse> => {
     const { data } = await api.get(`/tracks/${id}/metadata`);
@@ -1088,11 +1093,12 @@ export const libraryApi = {
   getAlbum: async (
     artistName: string,
     albumName: string,
-    similarLimit = 8
+    similarLimit = 8,
+    source?: string
   ): Promise<AlbumDetailResponse> => {
     const { data } = await api.get(
       `/library/albums/${encodePathSegment(artistName)}/${encodePathSegment(albumName)}`,
-      { params: { similar_limit: similarLimit } }
+      { params: { similar_limit: similarLimit, ...(source && { source }) } }
     );
     return data;
   },

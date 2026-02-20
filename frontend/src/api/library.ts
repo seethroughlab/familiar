@@ -360,11 +360,12 @@ export const libraryApi = {
   getAlbum: async (
     artistName: string,
     albumName: string,
-    similarLimit = 8
+    similarLimit = 8,
+    source?: string
   ): Promise<AlbumDetailResponse> => {
     const { data } = await api.get(
       `/library/albums/${encodePathSegment(artistName)}/${encodePathSegment(albumName)}`,
-      { params: { similar_limit: similarLimit } }
+      { params: { similar_limit: similarLimit, ...(source && { source }) } }
     );
     return data;
   },
