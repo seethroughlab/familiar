@@ -182,7 +182,7 @@ async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md")
         await bg.run_cpu_bound_ondemand(run_analysis, str(track_id))
 
         # Re-fetch with updated melodic data (expire to bypass identity map cache)
-        await db.expire_all()
+        db.expire_all()
         analysis = (
             await db.execute(
                 select(TrackAnalysis)
