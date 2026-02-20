@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from pathlib import Path
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
@@ -1009,7 +1010,7 @@ async def get_album_detail(
     # This ensures compilation/soundtrack albums are found correctly
     album_artist_col = func.coalesce(func.nullif(Track.album_artist, ""), Track.artist)
 
-    tracks_list = []
+    tracks_list: Sequence[Track] = []
 
     # When navigating from ArtistDetail (source=artist), skip the album_artist query
     # since ArtistDetail groups by Track.artist, not album_artist
@@ -1049,7 +1050,7 @@ async def get_album_detail(
     album_artist = first_track.album_artist
     year = first_track.year
     genre = first_track.genre
-    total_duration = sum(t.duration_seconds or 0 for t in tracks_list)
+    total_duration = sum((t.duration_seconds or 0) for t in tracks_list)
 
     # Build tracks list
     tracks = [

@@ -148,13 +148,18 @@ def upgrade() -> None:
     """))
 
     # ── Step 3: Migrate track_deep_analysis → track_analysis ─────────
-    # Wrapped in DO block so the UPDATE is skipped if table was already dropped
+    # Wrapped in DO block so the UPDATE is skipped if table was already dropped.
+    # Also checks for 'version' column (won't exist on fresh DBs where
+    # baseline creates 'features_version' directly from current models).
     op.execute(sa.text("""
         DO $$
         BEGIN
             IF EXISTS (
                 SELECT 1 FROM information_schema.tables
                 WHERE table_name = 'track_deep_analysis'
+            ) AND EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'track_analysis' AND column_name = 'version'
             ) THEN
                 -- Extract scalar features from deep analysis results and merge into track_analysis
                 UPDATE track_analysis ta SET
