@@ -19,7 +19,7 @@ from rapidfuzz import fuzz
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import ANALYSIS_VERSION, get_app_version
+from app.config import FEATURES_VERSION, get_app_version
 from app.db.models import (
     ExternalTrack,
     ExternalTrackSource,
@@ -1101,7 +1101,7 @@ class ImportService:
 # ============================================================================
 
 # Library export schema version - separate from profile export
-LIBRARY_EXPORT_VERSION = 2
+LIBRARY_EXPORT_VERSION = 3
 
 
 class LibraryImportPreviewSession:
@@ -1159,13 +1159,13 @@ class LibraryExportService:
 
         # Get analysis counts
         analysis_count_result = await self.db.execute(
-            select(func.count(TrackAnalysis.id)).where(TrackAnalysis.version == ANALYSIS_VERSION)
+            select(func.count(TrackAnalysis.id)).where(TrackAnalysis.features_version == FEATURES_VERSION)
         )
         tracks_with_analysis = analysis_count_result.scalar() or 0
 
         embedding_count_result = await self.db.execute(
             select(func.count(TrackAnalysis.id)).where(
-                TrackAnalysis.version == ANALYSIS_VERSION,
+                TrackAnalysis.features_version == FEATURES_VERSION,
                 TrackAnalysis.embedding.isnot(None),
             )
         )
@@ -1177,7 +1177,7 @@ class LibraryExportService:
             "export_type": "library",
             "exported_at": datetime.utcnow().isoformat() + "Z",
             "familiar_version": get_app_version(),
-            "analysis_version": ANALYSIS_VERSION,
+            "analysis_version": FEATURES_VERSION,
             "stats": {
                 "total_tracks": total_tracks,
                 "tracks_with_analysis": tracks_with_analysis,
@@ -1200,7 +1200,7 @@ class LibraryExportService:
                 select(Track, TrackAnalysis)
                 .outerjoin(
                     TrackAnalysis,
-                    (TrackAnalysis.track_id == Track.id) & (TrackAnalysis.version == ANALYSIS_VERSION),
+                    (TrackAnalysis.track_id == Track.id) & (TrackAnalysis.features_version == FEATURES_VERSION),
                 )
                 .order_by(Track.id)
                 .offset(offset)
@@ -1272,9 +1272,16 @@ class LibraryExportService:
         # Analysis data
         if analysis:
             analysis_export: dict[str, Any] = {
-                "version": analysis.version,
+                "features_version": analysis.features_version,
                 "features": analysis.to_features_dict(),
             }
+
+            # Full analysis detail (melodic, harmonic, rhythmic, spectral, structural, energy)
+            if analysis.analysis_detail:
+                analysis_export["analysis_detail"] = analysis.analysis_detail
+            if analysis.has_melodic:
+                analysis_export["has_melodic"] = True
+                analysis_export["melodic_version"] = analysis.melodic_version
 
             if include_embeddings and analysis.embedding is not None:
                 # Convert numpy array to list for JSON serialization
@@ -1491,7 +1498,7 @@ class LibraryImportService:
                     analysis_result = await self.db.execute(
                         select(TrackAnalysis).where(
                             TrackAnalysis.track_id == track_id,
-                            TrackAnalysis.version == ANALYSIS_VERSION,
+                            TrackAnalysis.features_version == FEATURES_VERSION,
                         )
                     )
                     analysis = analysis_result.scalar_one_or_none()
@@ -1503,7 +1510,7 @@ class LibraryImportService:
                         if not analysis:
                             analysis = TrackAnalysis(
                                 track_id=track_id,
-                                version=ANALYSIS_VERSION,
+                                features_version=FEATURES_VERSION,
                             )
                             self.db.add(analysis)
 
@@ -1524,7 +1531,22 @@ class LibraryImportService:
                         # Update track analysis status
                         if not track.analyzed_at:
                             track.analyzed_at = datetime.utcnow()
-                            track.analysis_version = ANALYSIS_VERSION
+
+                    # Apply analysis_detail JSONB
+                    imported_detail = export_analysis.get("analysis_detail")
+                    if imported_detail and analysis:
+                        if mode == "replace" or not analysis.analysis_detail:
+                            analysis.analysis_detail = imported_detail
+                        else:
+                            # Merge: imported sections fill gaps
+                            merged = {**imported_detail, **analysis.analysis_detail}
+                            analysis.analysis_detail = merged
+
+                    # Apply melodic metadata
+                    if export_analysis.get("has_melodic") and analysis:
+                        if not analysis.has_melodic or mode == "replace":
+                            analysis.has_melodic = True
+                            analysis.melodic_version = export_analysis.get("melodic_version", 0)
 
                     # Apply embeddings
                     if apply_embeddings and export_analysis.get("embedding"):
@@ -1911,20 +1933,20 @@ class BackupService:
         total_tracks = count_result.scalar() or 0
 
         analysis_count_result = await self.db.execute(
-            select(func.count(TrackAnalysis.id)).where(TrackAnalysis.version == ANALYSIS_VERSION)
+            select(func.count(TrackAnalysis.id)).where(TrackAnalysis.features_version == FEATURES_VERSION)
         )
         tracks_with_analysis = analysis_count_result.scalar() or 0
 
         embedding_count_result = await self.db.execute(
             select(func.count(TrackAnalysis.id)).where(
-                TrackAnalysis.version == ANALYSIS_VERSION,
+                TrackAnalysis.features_version == FEATURES_VERSION,
                 TrackAnalysis.embedding.isnot(None),
             )
         )
         tracks_with_embeddings = embedding_count_result.scalar() or 0
 
         library_data: dict[str, Any] = {
-            "analysis_version": ANALYSIS_VERSION,
+            "analysis_version": FEATURES_VERSION,
             "stats": {
                 "total_tracks": total_tracks,
                 "tracks_with_analysis": tracks_with_analysis,
@@ -1941,7 +1963,7 @@ class BackupService:
                 select(Track, TrackAnalysis)
                 .outerjoin(
                     TrackAnalysis,
-                    (TrackAnalysis.track_id == Track.id) & (TrackAnalysis.version == ANALYSIS_VERSION),
+                    (TrackAnalysis.track_id == Track.id) & (TrackAnalysis.features_version == FEATURES_VERSION),
                 )
                 .order_by(Track.id)
                 .offset(offset)
@@ -2000,9 +2022,16 @@ class BackupService:
 
         if analysis:
             analysis_export: dict[str, Any] = {
-                "version": analysis.version,
+                "features_version": analysis.features_version,
                 "features": analysis.to_features_dict(),
             }
+
+            # Full analysis detail (melodic, harmonic, rhythmic, spectral, structural, energy)
+            if analysis.analysis_detail:
+                analysis_export["analysis_detail"] = analysis.analysis_detail
+            if analysis.has_melodic:
+                analysis_export["has_melodic"] = True
+                analysis_export["melodic_version"] = analysis.melodic_version
 
             if include_embeddings and analysis.embedding is not None:
                 embedding_list = analysis.embedding.tolist() if hasattr(analysis.embedding, "tolist") else list(analysis.embedding)
@@ -2478,7 +2507,7 @@ class RestoreService:
                 analysis_result = await self.db.execute(
                     select(TrackAnalysis).where(
                         TrackAnalysis.track_id == track_id,
-                        TrackAnalysis.version == ANALYSIS_VERSION,
+                        TrackAnalysis.features_version == FEATURES_VERSION,
                     )
                 )
                 analysis = analysis_result.scalar_one_or_none()
@@ -2490,7 +2519,7 @@ class RestoreService:
                     if not analysis:
                         analysis = TrackAnalysis(
                             track_id=track_id,
-                            version=ANALYSIS_VERSION,
+                            features_version=FEATURES_VERSION,
                         )
                         self.db.add(analysis)
 
@@ -2510,7 +2539,22 @@ class RestoreService:
 
                     if not track.analyzed_at:
                         track.analyzed_at = datetime.utcnow()
-                        track.analysis_version = ANALYSIS_VERSION
+
+                # Apply analysis_detail JSONB
+                imported_detail = export_analysis.get("analysis_detail")
+                if imported_detail and analysis:
+                    if mode == "replace" or not analysis.analysis_detail:
+                        analysis.analysis_detail = imported_detail
+                    else:
+                        # Merge: imported sections fill gaps
+                        merged = {**imported_detail, **analysis.analysis_detail}
+                        analysis.analysis_detail = merged
+
+                # Apply melodic metadata
+                if export_analysis.get("has_melodic") and analysis:
+                    if not analysis.has_melodic or mode == "replace":
+                        analysis.has_melodic = True
+                        analysis.melodic_version = export_analysis.get("melodic_version", 0)
 
                 # Apply embeddings
                 if apply_embeddings and export_analysis.get("embedding"):
