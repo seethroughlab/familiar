@@ -25,7 +25,12 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Indexes managed manually via migrations (alembic autogenerate can't diff them)
-_MANUAL_INDEXES = {"ix_track_analysis_embedding_hnsw"}
+_MANUAL_INDEXES = {
+    "ix_track_analysis_embedding_hnsw",
+    "ix_tracks_artist_lower",
+    "ix_tracks_album_lower",
+    "ix_tracks_album_artist_lower",
+}
 
 
 def include_object(obj, name, type_, reflected, compare_to):
