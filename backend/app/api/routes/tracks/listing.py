@@ -67,8 +67,8 @@ async def list_track_ids(
     """
 
     has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
-    has_fx = fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
-    has_fy = fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    has_fx = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
+    has_fy = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx or has_fy
     use_external = include_external and not has_feature_filter and not genre and sort_by not in SORT_FEATURE_FIELDS and sort_by != 'lastPlayed'
 
@@ -320,8 +320,8 @@ async def list_tracks(
     """
 
     has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
-    has_fx_list = fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
-    has_fy_list = fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    has_fx_list = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
+    has_fy_list = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx_list or has_fy_list
     # External tracks can't participate in feature sorts/filters
     use_external = include_external and not has_feature_filter and not genre and sort_by not in SORT_FEATURE_FIELDS and sort_by != 'lastPlayed'
@@ -644,8 +644,8 @@ async def get_track_index(
     has_feature_filter = any(
         x is not None for x in [energy_min, energy_max, valence_min, valence_max]
     )
-    has_fx_idx = fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
-    has_fy_idx = fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    has_fx_idx = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
+    has_fy_idx = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx_idx or has_fy_idx
     use_external = include_external and not has_feature_filter and not genre and sort_by not in SORT_FEATURE_FIELDS and sort_by != 'lastPlayed'
 
