@@ -177,6 +177,7 @@ class ArtworkStatusBatchResponse(BaseModel):
 
     status: dict[str, bool]  # hash -> exists
     failed: list[str] = []  # hashes that failed to fetch (stop polling)
+    generated: list[str] = []  # hashes where art is generated (not real)
 
 
 @router.post("/status/batch")
@@ -186,16 +187,20 @@ async def check_artwork_batch(request: ArtworkStatusBatchRequest) -> ArtworkStat
     Returns a map of hash -> exists (bool) and list of failed hashes.
     Used by frontend to poll for artwork completion.
     """
+    from app.services.artwork import is_generated_artwork
     from app.services.artwork_fetcher import get_artwork_fetcher
 
     fetcher = get_artwork_fetcher()
     result = {}
     failed = []
+    generated = []
 
     for h in request.hashes:
         thumb_path = get_artwork_path(h, "thumb")
         if thumb_path.exists():
             result[h] = True
+            if is_generated_artwork(h):
+                generated.append(h)
         elif fetcher.is_failed(h):
             result[h] = False
             failed.append(h)
@@ -203,7 +208,45 @@ async def check_artwork_batch(request: ArtworkStatusBatchRequest) -> ArtworkStat
             # Still pending - not yet processed or currently in progress
             result[h] = False
 
-    return ArtworkStatusBatchResponse(status=result, failed=failed)
+    return ArtworkStatusBatchResponse(status=result, failed=failed, generated=generated)
+
+
+class ArtworkRegenerateRequest(BaseModel):
+    """Request to regenerate artwork for an album."""
+
+    artist: str
+    album: str
+
+
+@router.post("/regenerate")
+async def regenerate_artwork(request: ArtworkRegenerateRequest) -> dict[str, Any]:
+    """Force-regenerate artwork from audio analysis features.
+
+    Only works if artwork is currently generated or missing (refuses to
+    overwrite real art). Useful after re-analysis to get updated generative art.
+    """
+    from app.services.artwork import is_generated_artwork
+
+    album_hash = compute_album_hash(request.artist, request.album)
+    full_path = get_artwork_path(album_hash, "full")
+
+    if full_path.exists() and not is_generated_artwork(album_hash):
+        raise HTTPException(
+            status_code=409,
+            detail="Album has real artwork — will not overwrite with generated art",
+        )
+
+    from app.services.generative_art import generate_album_art
+
+    success = await generate_album_art(album_hash, request.artist, request.album)
+
+    if success:
+        return {"status": "regenerated", "album_hash": album_hash}
+    else:
+        raise HTTPException(
+            status_code=422,
+            detail="No analyzed tracks available for generation",
+        )
 
 
 @router.head("/check/{artist}/{album}")

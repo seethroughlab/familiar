@@ -151,10 +151,13 @@ class ArtworkFetcher:
 
         Returns True if queued, False if skipped (already exists, failed recently, in progress, or already queued).
         """
-        # Skip if artwork already exists
+        # Skip if artwork already exists (unless it's generated — allow re-queue
+        # so real art can replace generated art on retry)
         full_path = get_artwork_path(request.album_hash, "full")
         if full_path.exists():
-            return False
+            from app.services.artwork import is_generated_artwork
+            if not is_generated_artwork(request.album_hash):
+                return False
 
         # Skip if recently failed
         failed_time = self._failed_cache.get(request.album_hash)
@@ -278,6 +281,18 @@ class ArtworkFetcher:
             if saved:
                 logger.info(f"Downloaded artwork for {request.artist} - {request.album}")
                 return True
+
+        # All external sources failed — try generative art as final fallback
+        try:
+            from app.services.generative_art import generate_album_art
+            generated = await generate_album_art(
+                request.album_hash, request.artist, request.album
+            )
+            if generated:
+                logger.info(f"Generated artwork for {request.artist} - {request.album}")
+                return True
+        except Exception as e:
+            logger.debug(f"Generative art error for {request.artist} - {request.album}: {e}")
 
         logger.info(f"No artwork found for {request.artist} - {request.album}")
         return False

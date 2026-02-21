@@ -21,6 +21,27 @@ ARTWORK_SIZES = {
 }
 
 
+def _generated_marker_path(album_hash: str) -> Path:
+    """Get the path for the .generated marker file."""
+    return settings.art_path / f"{album_hash}.generated"
+
+
+def is_generated_artwork(album_hash: str) -> bool:
+    """Check if artwork for this album hash was generated (not real art)."""
+    return _generated_marker_path(album_hash).exists()
+
+
+def mark_as_generated(album_hash: str) -> None:
+    """Create a .generated marker file for this album hash."""
+    settings.art_path.mkdir(parents=True, exist_ok=True)
+    _generated_marker_path(album_hash).touch()
+
+
+def clear_generated_marker(album_hash: str) -> None:
+    """Remove the .generated marker (real art is replacing generated art)."""
+    _generated_marker_path(album_hash).unlink(missing_ok=True)
+
+
 def get_artwork_path(album_hash: str, size: str = "full") -> Path:
     """Get the file path for artwork.
 
@@ -189,6 +210,9 @@ def save_artwork(
     settings.art_path.mkdir(parents=True, exist_ok=True)
 
     saved_paths: dict[str, Path] = {}
+
+    # Clear generated marker — real art replaces generated
+    clear_generated_marker(album_hash)
 
     try:
         # Open image with Pillow
