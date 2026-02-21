@@ -24,6 +24,7 @@ class ArtistSummary(BaseModel):
     track_count: int
     album_count: int
     first_track_id: str  # For artwork lookup
+    first_album: str | None = None
 
 
 class ArtistListResponse(BaseModel):
@@ -66,6 +67,7 @@ async def list_artists(
             func.count(Track.id).label("track_count"),
             func.count(func.distinct(Track.album)).label("album_count"),
             func.min(cast(Track.id, TEXT)).label("first_track_id"),  # Cast to text for min()
+            func.min(Track.album).label("first_album"),
         )
         .where(
             Track.artist.isnot(None),
@@ -115,6 +117,7 @@ async def list_artists(
             track_count=row.track_count,
             album_count=row.album_count,
             first_track_id=str(row.first_track_id),
+            first_album=row.first_album,
         )
         for row in rows
     ]

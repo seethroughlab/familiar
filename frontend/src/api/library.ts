@@ -60,6 +60,7 @@ export interface ArtistSummary {
   track_count: number;
   album_count: number;
   first_track_id: string;
+  first_album: string | null;
 }
 
 export interface ArtistListResponse {

@@ -12,7 +12,8 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Users, Loader2 } from 'lucide-react';
-import { libraryApi, tracksApi, type ArtistSummary } from '../../../api';
+import { libraryApi, type ArtistSummary } from '../../../api';
+import { AlbumArtwork } from '../../AlbumArtwork';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
@@ -371,6 +372,7 @@ interface ArtistCardProps {
     track_count: number;
     album_count: number;
     first_track_id: string;
+    first_album: string | null;
   };
   index: number;
   onClick: () => void;
@@ -378,7 +380,6 @@ interface ArtistCardProps {
 
 function ArtistCard({ artist, index, onClick }: ArtistCardProps) {
   const [imageError, setImageError] = useState(false);
-  const [albumArtError, setAlbumArtError] = useState(false);
 
   return (
     <button
@@ -395,18 +396,15 @@ function ArtistCard({ artist, index, onClick }: ArtistCardProps) {
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={() => setImageError(true)}
           />
-        ) : !albumArtError ? (
-          // Fallback to album artwork from first track
-          <img
-            src={tracksApi.getArtworkUrl(artist.first_track_id, 'thumb')}
-            alt={artist.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={() => setAlbumArtError(true)}
-          />
         ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Users className="w-12 h-12 text-zinc-500" />
-          </div>
+          // Fallback to album artwork (includes generated art)
+          <AlbumArtwork
+            artist={artist.name}
+            album={artist.first_album}
+            trackId={artist.first_track_id}
+            size="thumb"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
         )}
 
         {/* Track count badge */}
