@@ -35,6 +35,13 @@ export interface LibraryFilters {
   energyMax?: number;
   valenceMin?: number;
   valenceMax?: number;
+  // Generic feature range filters (for MoodGrid non-default axes)
+  fx?: string;
+  fxMin?: number;
+  fxMax?: number;
+  fy?: string;
+  fyMin?: number;
+  fyMax?: number;
   // Offline filter
   downloadedOnly?: boolean;
 }
@@ -82,7 +89,7 @@ export interface BrowserProps {
   onGoToYear: (year: number) => void;
   onGoToYearRange: (yearFrom: number, yearTo: number) => void;
   onGoToGenre: (genre: string) => void;
-  onGoToMood: (energyMin: number, energyMax: number, valenceMin: number, valenceMax: number) => void;
+  onGoToMood: (xAxis: string, xMin: number, xMax: number, yAxis: string, yMin: number, yMax: number) => void;
 
   // Playback
   onPlayTrack: (trackId: string) => void;

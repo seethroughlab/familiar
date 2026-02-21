@@ -50,6 +50,12 @@ export function LibraryView({ browserId }: LibraryViewProps) {
       energyMax: searchParams.get('energyMax') ? Number(searchParams.get('energyMax')) : undefined,
       valenceMin: searchParams.get('valenceMin') ? Number(searchParams.get('valenceMin')) : undefined,
       valenceMax: searchParams.get('valenceMax') ? Number(searchParams.get('valenceMax')) : undefined,
+      fx: searchParams.get('fx') || undefined,
+      fxMin: searchParams.get('fxMin') ? Number(searchParams.get('fxMin')) : undefined,
+      fxMax: searchParams.get('fxMax') ? Number(searchParams.get('fxMax')) : undefined,
+      fy: searchParams.get('fy') || undefined,
+      fyMin: searchParams.get('fyMin') ? Number(searchParams.get('fyMin')) : undefined,
+      fyMax: searchParams.get('fyMax') ? Number(searchParams.get('fyMax')) : undefined,
       downloadedOnly: searchParams.get('downloadedOnly') === 'true',
     };
   }, [searchParams]);
@@ -68,6 +74,12 @@ export function LibraryView({ browserId }: LibraryViewProps) {
         next.delete('energyMax');
         next.delete('valenceMin');
         next.delete('valenceMax');
+        next.delete('fx');
+        next.delete('fxMin');
+        next.delete('fxMax');
+        next.delete('fy');
+        next.delete('fyMin');
+        next.delete('fyMax');
         next.delete('downloadedOnly');
         // Set new ones
         if (newFilters.artist) next.set('artist', newFilters.artist);
@@ -79,6 +91,12 @@ export function LibraryView({ browserId }: LibraryViewProps) {
         if (newFilters.energyMax !== undefined) next.set('energyMax', String(newFilters.energyMax));
         if (newFilters.valenceMin !== undefined) next.set('valenceMin', String(newFilters.valenceMin));
         if (newFilters.valenceMax !== undefined) next.set('valenceMax', String(newFilters.valenceMax));
+        if (newFilters.fx) next.set('fx', newFilters.fx);
+        if (newFilters.fxMin !== undefined) next.set('fxMin', String(newFilters.fxMin));
+        if (newFilters.fxMax !== undefined) next.set('fxMax', String(newFilters.fxMax));
+        if (newFilters.fy) next.set('fy', newFilters.fy);
+        if (newFilters.fyMin !== undefined) next.set('fyMin', String(newFilters.fyMin));
+        if (newFilters.fyMax !== undefined) next.set('fyMax', String(newFilters.fyMax));
         if (newFilters.downloadedOnly) next.set('downloadedOnly', 'true');
         return next;
       }, { replace: true });
@@ -129,8 +147,19 @@ export function LibraryView({ browserId }: LibraryViewProps) {
   );
 
   const handleGoToMood = useCallback(
-    (energyMin: number, energyMax: number, valenceMin: number, valenceMax: number) => {
-      navigate(`/library/tracks?energyMin=${energyMin}&energyMax=${energyMax}&valenceMin=${valenceMin}&valenceMax=${valenceMax}`);
+    (xAxis: string, xMin: number, xMax: number, yAxis: string, yMin: number, yMax: number) => {
+      if (xAxis === 'valence' && yAxis === 'energy') {
+        navigate(`/library/tracks?energyMin=${yMin}&energyMax=${yMax}&valenceMin=${xMin}&valenceMax=${xMax}`);
+      } else {
+        const params = new URLSearchParams();
+        params.set('fx', xAxis);
+        params.set('fxMin', String(xMin));
+        params.set('fxMax', String(xMax));
+        params.set('fy', yAxis);
+        params.set('fyMin', String(yMin));
+        params.set('fyMax', String(yMax));
+        navigate(`/library/tracks?${params.toString()}`);
+      }
     },
     [navigate]
   );
@@ -195,7 +224,7 @@ export function LibraryView({ browserId }: LibraryViewProps) {
       </div>
 
       {/* Filter breadcrumbs */}
-      {(filters.artist || filters.album || filters.genre || filters.yearFrom || filters.energyMin !== undefined) && (
+      {(filters.artist || filters.album || filters.genre || filters.yearFrom || filters.energyMin !== undefined || filters.fx) && (
         <div className="flex items-center gap-2 px-4 py-2 text-sm bg-zinc-800/50">
           <span className="text-zinc-400">Viewing:</span>
           {filters.artist && (
@@ -231,6 +260,17 @@ export function LibraryView({ browserId }: LibraryViewProps) {
               Energy {Math.round(filters.energyMin * 100)}-{Math.round((filters.energyMax ?? 1) * 100)}%
               {' / '}
               Valence {Math.round((filters.valenceMin ?? 0) * 100)}-{Math.round((filters.valenceMax ?? 1) * 100)}%
+            </span>
+          )}
+          {filters.fx && (
+            <span className="px-2 py-0.5 bg-purple-700 rounded text-white">
+              {filters.fx} {Math.round((filters.fxMin ?? 0) * 100)}-{Math.round((filters.fxMax ?? 1) * 100)}%
+              {filters.fy && (
+                <>
+                  {' / '}
+                  {filters.fy} {Math.round((filters.fyMin ?? 0) * 100)}-{Math.round((filters.fyMax ?? 1) * 100)}%
+                </>
+              )}
             </span>
           )}
           <button

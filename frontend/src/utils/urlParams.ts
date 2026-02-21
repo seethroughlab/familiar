@@ -15,6 +15,8 @@ export const FILTER_GROUPS: Record<string, string[]> = {
   year: ['yearFrom', 'yearTo'],
   // Mood quadrant
   mood: ['energyMin', 'energyMax', 'valenceMin', 'valenceMax'],
+  // Generic feature range (MoodGrid non-default axes)
+  featureRange: ['fx', 'fxMin', 'fxMax', 'fy', 'fyMin', 'fyMax'],
   // Genre
   genre: ['genre'],
 };

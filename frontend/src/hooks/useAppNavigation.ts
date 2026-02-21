@@ -127,19 +127,34 @@ export function useAppNavigation() {
   );
 
   /**
-   * Navigate to a mood filter (energy/valence quadrant)
+   * Navigate to a mood/feature filter.
+   * For energy/valence axes, uses legacy params for backward compat.
+   * For other axes, uses generic fx/fy params.
    */
   const navigateToMood = useCallback(
-    (energyMin: number, energyMax: number, valenceMin: number, valenceMax: number) => {
-      navigateToLibrary({
-        browser: 'track-list',
-        energyMin,
-        energyMax,
-        valenceMin,
-        valenceMax,
-      });
+    (xAxis: string, xMin: number, xMax: number, yAxis: string, yMin: number, yMax: number) => {
+      if (xAxis === 'valence' && yAxis === 'energy') {
+        // Legacy energy/valence path
+        navigateToLibrary({
+          browser: 'track-list',
+          energyMin: yMin,
+          energyMax: yMax,
+          valenceMin: xMin,
+          valenceMax: xMax,
+        });
+      } else {
+        // Generic feature axes
+        const params = new URLSearchParams();
+        params.set('fx', xAxis);
+        params.set('fxMin', String(xMin));
+        params.set('fxMax', String(xMax));
+        params.set('fy', yAxis);
+        params.set('fyMin', String(yMin));
+        params.set('fyMax', String(yMax));
+        navigate(`/library/tracks?${params.toString()}`);
+      }
     },
-    [navigateToLibrary]
+    [navigateToLibrary, navigate]
   );
 
   /**

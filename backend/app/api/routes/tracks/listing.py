@@ -12,6 +12,7 @@ from app.api.deps import CurrentProfile, DbSession
 from app.db.models import ExternalTrack, ProfilePlayHistory, Track, TrackAnalysis
 
 from . import (
+    FEATURE_FILTER_AXES,
     SORT_FEATURE_FIELDS,
     SORT_FIELD_MAP,
     BatchTracksRequest,
@@ -47,6 +48,12 @@ async def list_track_ids(
     energy_max: float | None = Query(None, ge=0, le=1, description="Maximum energy (0-1)"),
     valence_min: float | None = Query(None, ge=0, le=1, description="Minimum valence (0-1)"),
     valence_max: float | None = Query(None, ge=0, le=1, description="Maximum valence (0-1)"),
+    fx: str | None = Query(None, description="Feature name for X-axis filter"),
+    fx_min: float | None = Query(None, ge=0, le=1),
+    fx_max: float | None = Query(None, ge=0, le=1),
+    fy: str | None = Query(None, description="Feature name for Y-axis filter"),
+    fy_min: float | None = Query(None, ge=0, le=1),
+    fy_max: float | None = Query(None, ge=0, le=1),
     include_external: bool = Query(False, description="Include unmatched external tracks (ext: prefixed)"),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_order: str = Query('asc', pattern='^(asc|desc)$', description="Sort direction"),
@@ -60,6 +67,9 @@ async def list_track_ids(
     """
 
     has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
+    has_fx = fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
+    has_fy = fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    has_feature_filter = has_feature_filter or has_fx or has_fy
     use_external = include_external and not has_feature_filter and not genre and sort_by not in SORT_FEATURE_FIELDS and sort_by != 'lastPlayed'
 
     if use_external:
@@ -149,6 +159,18 @@ async def list_track_ids(
             query = query.where(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
             query = query.where(TrackAnalysis.valence <= valence_max)
+        if has_fx:
+            fx_col = getattr(TrackAnalysis, fx)
+            if fx_min is not None:
+                query = query.where(fx_col >= fx_min)
+            if fx_max is not None:
+                query = query.where(fx_col <= fx_max)
+        if has_fy:
+            fy_col = getattr(TrackAnalysis, fy)
+            if fy_min is not None:
+                query = query.where(fy_col >= fy_min)
+            if fy_max is not None:
+                query = query.where(fy_col <= fy_max)
 
     count_query = select(func.count()).select_from(query.subquery())
     total = await db.scalar(count_query) or 0
@@ -279,6 +301,12 @@ async def list_tracks(
     energy_max: float | None = Query(None, ge=0, le=1, description="Maximum energy (0-1)"),
     valence_min: float | None = Query(None, ge=0, le=1, description="Minimum valence (0-1)"),
     valence_max: float | None = Query(None, ge=0, le=1, description="Maximum valence (0-1)"),
+    fx: str | None = Query(None, description="Feature name for X-axis filter"),
+    fx_min: float | None = Query(None, ge=0, le=1),
+    fx_max: float | None = Query(None, ge=0, le=1),
+    fy: str | None = Query(None, description="Feature name for Y-axis filter"),
+    fy_min: float | None = Query(None, ge=0, le=1),
+    fy_max: float | None = Query(None, ge=0, le=1),
     include_features: bool = Query(False, description="Include audio analysis features"),
     include_external: bool = Query(False, description="Include unmatched external tracks interleaved"),
     sort_by: str | None = Query(None, description="Column to sort by"),
@@ -292,6 +320,9 @@ async def list_tracks(
     """
 
     has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
+    has_fx_list = fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
+    has_fy_list = fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    has_feature_filter = has_feature_filter or has_fx_list or has_fy_list
     # External tracks can't participate in feature sorts/filters
     use_external = include_external and not has_feature_filter and not genre and sort_by not in SORT_FEATURE_FIELDS and sort_by != 'lastPlayed'
 
@@ -490,6 +521,18 @@ async def list_tracks(
             query = query.where(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
             query = query.where(TrackAnalysis.valence <= valence_max)
+        if has_fx_list:
+            fx_col = getattr(TrackAnalysis, fx)
+            if fx_min is not None:
+                query = query.where(fx_col >= fx_min)
+            if fx_max is not None:
+                query = query.where(fx_col <= fx_max)
+        if has_fy_list:
+            fy_col = getattr(TrackAnalysis, fy)
+            if fy_min is not None:
+                query = query.where(fy_col >= fy_min)
+            if fy_max is not None:
+                query = query.where(fy_col <= fy_max)
 
     # Get total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -580,6 +623,12 @@ async def get_track_index(
     energy_max: float | None = Query(None, ge=0, le=1),
     valence_min: float | None = Query(None, ge=0, le=1),
     valence_max: float | None = Query(None, ge=0, le=1),
+    fx: str | None = Query(None),
+    fx_min: float | None = Query(None, ge=0, le=1),
+    fx_max: float | None = Query(None, ge=0, le=1),
+    fy: str | None = Query(None),
+    fy_min: float | None = Query(None, ge=0, le=1),
+    fy_max: float | None = Query(None, ge=0, le=1),
     include_external: bool = Query(False),
     sort_by: str | None = Query(None),
     sort_order: str = Query('asc', pattern='^(asc|desc)$'),
@@ -595,6 +644,9 @@ async def get_track_index(
     has_feature_filter = any(
         x is not None for x in [energy_min, energy_max, valence_min, valence_max]
     )
+    has_fx_idx = fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
+    has_fy_idx = fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    has_feature_filter = has_feature_filter or has_fx_idx or has_fy_idx
     use_external = include_external and not has_feature_filter and not genre and sort_by not in SORT_FEATURE_FIELDS and sort_by != 'lastPlayed'
 
     if use_external:
@@ -676,6 +728,18 @@ async def get_track_index(
             base_query = base_query.where(TrackAnalysis.valence >= valence_min)
         if valence_max is not None:
             base_query = base_query.where(TrackAnalysis.valence <= valence_max)
+        if has_fx_idx:
+            fx_col = getattr(TrackAnalysis, fx)
+            if fx_min is not None:
+                base_query = base_query.where(fx_col >= fx_min)
+            if fx_max is not None:
+                base_query = base_query.where(fx_col <= fx_max)
+        if has_fy_idx:
+            fy_col = getattr(TrackAnalysis, fy)
+            if fy_min is not None:
+                base_query = base_query.where(fy_col >= fy_min)
+            if fy_max is not None:
+                base_query = base_query.where(fy_col <= fy_max)
 
     needs_analysis_join = False
     order_clauses: list[Any] = []

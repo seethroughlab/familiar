@@ -3,7 +3,7 @@
 import logging
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import String, func, select
 
@@ -90,13 +90,19 @@ async def get_year_distribution(db: DbSession) -> YearDistributionResponse:
     )
 
 
+MOOD_GRID_AXES = {
+    "energy", "valence", "danceability", "acousticness", "instrumentalness",
+    "speechiness", "brightness", "harmonic_complexity", "swing_ratio", "syncopation",
+}
+
+
 class MoodCell(BaseModel):
     """A cell in the mood grid with track count."""
 
-    energy_min: float
-    energy_max: float
-    valence_min: float
-    valence_max: float
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
     track_count: int
     # Sample track IDs for this cell (for preview/playback)
     sample_track_ids: list[str]
@@ -109,44 +115,54 @@ class MoodDistributionResponse(BaseModel):
     grid_size: int  # Number of cells per axis
     total_with_mood: int
     total_without_mood: int
+    x_axis: str
+    y_axis: str
 
 
 @router.get("/mood-distribution", response_model=MoodDistributionResponse)
 async def get_mood_distribution(
     db: DbSession,
     grid_size: int = 10,
+    x_axis: str = Query("valence", description="Feature for X axis"),
+    y_axis: str = Query("energy", description="Feature for Y axis"),
 ) -> MoodDistributionResponse:
-    """Get mood (energy x valence) distribution for heatmap visualization.
+    """Get feature distribution for heatmap visualization.
 
     Divides the 0-1 x 0-1 space into a grid and counts tracks per cell.
     Returns sample track IDs per cell for preview/playback.
+    Axes are configurable (default: valence x energy for backward compat).
 
     Uses SQL aggregation instead of loading all tracks into Python.
     """
     from sqlalchemy import Integer, cast, literal_column
     from sqlalchemy.dialects.postgresql import array_agg
 
+    if x_axis not in MOOD_GRID_AXES:
+        x_axis = "valence"
+    if y_axis not in MOOD_GRID_AXES:
+        y_axis = "energy"
+
     cell_size = 1.0 / grid_size
 
     # Use typed columns directly (one row per track via UniqueConstraint)
-    energy_expr = TrackAnalysis.energy
-    valence_expr = TrackAnalysis.valence
+    x_expr = getattr(TrackAnalysis, x_axis)
+    y_expr = getattr(TrackAnalysis, y_axis)
 
     # Bin into grid cells, clamped to [0, grid_size-1]
-    energy_cell = func.least(
-        cast(func.floor(energy_expr * grid_size), Integer),
+    x_cell = func.least(
+        cast(func.floor(x_expr * grid_size), Integer),
         grid_size - 1,
     )
-    valence_cell = func.least(
-        cast(func.floor(valence_expr * grid_size), Integer),
+    y_cell = func.least(
+        cast(func.floor(y_expr * grid_size), Integer),
         grid_size - 1,
     )
 
     # Aggregate: count and sample track IDs per cell
     grid_query = (
         select(
-            energy_cell.label("e_cell"),
-            valence_cell.label("v_cell"),
+            x_cell.label("x_cell"),
+            y_cell.label("y_cell"),
             func.count().label("cnt"),
             # Collect up to 5 sample track IDs per cell
             array_agg(cast(TrackAnalysis.track_id, String)).label("sample_ids"),
@@ -155,10 +171,10 @@ async def get_mood_distribution(
         .join(Track, Track.id == TrackAnalysis.track_id)
         .where(
             Track.status == TrackStatus.ACTIVE,
-            energy_expr.isnot(None),
-            valence_expr.isnot(None),
+            x_expr.isnot(None),
+            y_expr.isnot(None),
         )
-        .group_by(literal_column("e_cell"), literal_column("v_cell"))
+        .group_by(literal_column("x_cell"), literal_column("y_cell"))
     )
 
     result = await db.execute(grid_query)
@@ -174,10 +190,10 @@ async def get_mood_distribution(
 
     mood_cells = [
         MoodCell(
-            energy_min=row.e_cell * cell_size,
-            energy_max=(row.e_cell + 1) * cell_size,
-            valence_min=row.v_cell * cell_size,
-            valence_max=(row.v_cell + 1) * cell_size,
+            x_min=row.x_cell * cell_size,
+            x_max=(row.x_cell + 1) * cell_size,
+            y_min=row.y_cell * cell_size,
+            y_max=(row.y_cell + 1) * cell_size,
             track_count=row.cnt,
             sample_track_ids=row.sample_ids[:5] if row.sample_ids else [],
         )
@@ -189,6 +205,8 @@ async def get_mood_distribution(
         grid_size=grid_size,
         total_with_mood=total_with_mood,
         total_without_mood=total_without_mood,
+        x_axis=x_axis,
+        y_axis=y_axis,
     )
 
 

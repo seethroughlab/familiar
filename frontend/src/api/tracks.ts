@@ -22,6 +22,12 @@ export const tracksApi = {
     energy_max?: number;
     valence_min?: number;
     valence_max?: number;
+    fx?: string;
+    fx_min?: number;
+    fx_max?: number;
+    fy?: string;
+    fy_min?: number;
+    fy_max?: number;
     include_features?: boolean;
     include_external?: boolean;
     sort_by?: string;
@@ -49,6 +55,12 @@ export const tracksApi = {
     energy_max?: number;
     valence_min?: number;
     valence_max?: number;
+    fx?: string;
+    fx_min?: number;
+    fx_max?: number;
+    fy?: string;
+    fy_min?: number;
+    fy_max?: number;
     include_external?: boolean;
     sort_by?: string;
     sort_order?: 'asc' | 'desc';
@@ -108,6 +120,12 @@ export const tracksApi = {
       energy_max?: number;
       valence_min?: number;
       valence_max?: number;
+      fx?: string;
+      fx_min?: number;
+      fx_max?: number;
+      fy?: string;
+      fy_min?: number;
+      fy_max?: number;
       include_external?: boolean;
       sort_by?: string;
       sort_order?: 'asc' | 'desc';

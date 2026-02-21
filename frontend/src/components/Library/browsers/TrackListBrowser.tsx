@@ -568,6 +568,12 @@ export function TrackListBrowser({
         energyMax: filters.energyMax,
         valenceMin: filters.valenceMin,
         valenceMax: filters.valenceMax,
+        fx: filters.fx,
+        fxMin: filters.fxMin,
+        fxMax: filters.fxMax,
+        fy: filters.fy,
+        fyMin: filters.fyMin,
+        fyMax: filters.fyMax,
         include_features: needsFeatures,
         include_external: true,
         sortBy: sortField,
@@ -585,6 +591,12 @@ export function TrackListBrowser({
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         page: pageParam,
         page_size: PAGE_SIZE,
         include_features: needsFeatures,
@@ -628,6 +640,12 @@ export function TrackListBrowser({
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         include_features: needsFeatures,
         include_external: true,
         sort_by: sortField,
@@ -641,8 +659,9 @@ export function TrackListBrowser({
       log.error(`Failed to fetch page ${pageNumber}:`, error);
     }
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax, needsFeatures,
-      sortField, sortOrder]);
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
+      needsFeatures, sortField, sortOrder]);
 
   // Reset sparse pages and loaded tracking when filters or sort changes
   useEffect(() => {
@@ -650,6 +669,7 @@ export function TrackListBrowser({
     setSparsePages(new Map());
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
       filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
       sortField, sortOrder]);
 
   // Track which pages came from infinite query
@@ -825,6 +845,12 @@ export function TrackListBrowser({
           energy_max: filters.energyMax,
           valence_min: filters.valenceMin,
           valence_max: filters.valenceMax,
+          fx: filters.fx,
+          fx_min: filters.fxMin,
+          fx_max: filters.fxMax,
+          fy: filters.fy,
+          fy_min: filters.fyMin,
+          fy_max: filters.fyMax,
           include_external: true,
           sort_by: sortField,
           sort_order: sortOrder,
@@ -930,6 +956,12 @@ export function TrackListBrowser({
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         include_features: needsFeatures,
         include_external: true,
         sort_by: sortField,
@@ -974,6 +1006,12 @@ export function TrackListBrowser({
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         include_features: needsFeatures,
         include_external: true,
         sort_by: sortField,
@@ -1016,6 +1054,12 @@ export function TrackListBrowser({
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         include_features: needsFeatures,
         include_external: true,
         sort_by: sortField,
@@ -1075,6 +1119,7 @@ export function TrackListBrowser({
     setPrevSentinelReady(false);
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
       filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
       sortField, sortOrder]);
 
   // Unified mobile rendering: use jump tracks or regular infinite query
@@ -1149,6 +1194,12 @@ export function TrackListBrowser({
     energy_max: filters.energyMax,
     valence_min: filters.valenceMin,
     valence_max: filters.valenceMax,
+    fx: filters.fx,
+    fx_min: filters.fxMin,
+    fx_max: filters.fxMax,
+    fy: filters.fy,
+    fy_min: filters.fyMin,
+    fy_max: filters.fyMax,
     include_external: true,
     sort_by: sortField,
     sort_order: sortOrder,

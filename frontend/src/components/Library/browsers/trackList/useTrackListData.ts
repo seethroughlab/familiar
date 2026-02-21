@@ -138,6 +138,12 @@ export function useTrackListData(
         energyMax: filters.energyMax,
         valenceMin: filters.valenceMin,
         valenceMax: filters.valenceMax,
+        fx: filters.fx,
+        fxMin: filters.fxMin,
+        fxMax: filters.fxMax,
+        fy: filters.fy,
+        fyMin: filters.fyMin,
+        fyMax: filters.fyMax,
         include_features: needsFeatures,
         sortBy: sortField,
         sortOrder,
@@ -154,6 +160,12 @@ export function useTrackListData(
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         page: pageParam,
         page_size: PAGE_SIZE,
         include_features: needsFeatures,
@@ -200,6 +212,12 @@ export function useTrackListData(
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         include_features: needsFeatures,
         sort_by: sortField,
         sort_order: sortOrder,
@@ -212,8 +230,9 @@ export function useTrackListData(
       log.error(`Failed to fetch page ${pageNumber}:`, error);
     }
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax, needsFeatures,
-      sortField, sortOrder]);
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
+      needsFeatures, sortField, sortOrder]);
 
   // Reset sparse pages and loaded tracking when filters or sort changes
   useEffect(() => {
@@ -221,6 +240,7 @@ export function useTrackListData(
     setSparsePages(new Map());
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
       filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
       sortField, sortOrder]);
 
   // Track which pages came from infinite query
@@ -284,6 +304,12 @@ export function useTrackListData(
     energy_max: filters.energyMax,
     valence_min: filters.valenceMin,
     valence_max: filters.valenceMax,
+    fx: filters.fx,
+    fx_min: filters.fxMin,
+    fx_max: filters.fxMax,
+    fy: filters.fy,
+    fy_min: filters.fyMin,
+    fy_max: filters.fyMax,
     sort_by: sortField,
     sort_order: sortOrder,
   }), [filters, sortField, sortOrder]);
@@ -310,6 +336,12 @@ export function useTrackListData(
         energy_max: filters.energyMax,
         valence_min: filters.valenceMin,
         valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
         include_features: needsFeatures,
         sort_by: sortField,
         sort_order: sortOrder,
@@ -334,6 +366,7 @@ export function useTrackListData(
     setMobileJump(null);
   }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
       filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
       sortField, sortOrder]);
 
   // Unified mobile rendering: use jump tracks or regular infinite query

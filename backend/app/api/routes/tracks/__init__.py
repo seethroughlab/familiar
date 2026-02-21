@@ -121,6 +121,12 @@ SORT_FEATURE_FIELDS = {
     'acousticness', 'instrumentalness', 'key',
 }
 
+# Allowlist of TrackAnalysis columns usable as generic feature filters (fx/fy)
+FEATURE_FILTER_AXES = {
+    "energy", "valence", "danceability", "acousticness", "instrumentalness",
+    "speechiness", "brightness", "harmonic_complexity", "swing_ratio", "syncopation",
+}
+
 # MIME types for audio formats
 AUDIO_MIME_TYPES = {
     ".mp3": "audio/mpeg",

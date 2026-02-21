@@ -193,10 +193,10 @@ export interface YearDistributionResponse {
 
 // Mood Distribution (for MoodGrid browser)
 export interface MoodCell {
-  energy_min: number;
-  energy_max: number;
-  valence_min: number;
-  valence_max: number;
+  x_min: number;
+  x_max: number;
+  y_min: number;
+  y_max: number;
   track_count: number;
   sample_track_ids: string[];
 }
@@ -206,6 +206,8 @@ export interface MoodDistributionResponse {
   grid_size: number;
   total_with_mood: number;
   total_without_mood: number;
+  x_axis: string;
+  y_axis: string;
 }
 
 // Music Map (for MusicMap browser)
@@ -335,9 +337,13 @@ export const libraryApi = {
     return data;
   },
 
-  getMoodDistribution: async (gridSize = 10): Promise<MoodDistributionResponse> => {
+  getMoodDistribution: async (gridSize = 10, xAxis?: string, yAxis?: string): Promise<MoodDistributionResponse> => {
     const { data } = await api.get('/library/mood-distribution', {
-      params: { grid_size: gridSize },
+      params: {
+        grid_size: gridSize,
+        ...(xAxis && { x_axis: xAxis }),
+        ...(yAxis && { y_axis: yAxis }),
+      },
     });
     return data;
   },

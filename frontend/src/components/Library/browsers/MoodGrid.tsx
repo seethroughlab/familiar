@@ -1,17 +1,11 @@
 /**
- * MoodGrid Browser - 2D heatmap of tracks by energy and valence.
+ * MoodGrid Browser - 2D heatmap of tracks by configurable audio features.
  *
- * X-axis: Valence (sad to happy)
- * Y-axis: Energy (calm to energetic)
+ * Default axes: X=Valence, Y=Energy (backward compatible).
+ * Users can select any 0-1 feature for either axis via dropdowns.
  *
- * Creates four quadrants:
- * - Top-right: Happy/Energetic
- * - Top-left: Angry/Intense
- * - Bottom-right: Relaxed/Peaceful
- * - Bottom-left: Sad/Melancholic
- *
- * Uses aggregated endpoint for efficient display of large libraries.
- * Click a cell to view tracks from that mood region.
+ * When using the default energy/valence combo, shows mood quadrant labels.
+ * Click a cell to navigate to filtered track list for that region.
  */
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -33,6 +27,23 @@ registerBrowser(
   MoodGrid
 );
 
+const AXIS_OPTIONS = [
+  { value: 'energy', label: 'Energy', low: 'Calm', high: 'Energetic' },
+  { value: 'valence', label: 'Valence', low: 'Sad', high: 'Happy' },
+  { value: 'danceability', label: 'Danceability', low: 'Still', high: 'Danceable' },
+  { value: 'acousticness', label: 'Acousticness', low: 'Produced', high: 'Acoustic' },
+  { value: 'brightness', label: 'Brightness', low: 'Dark', high: 'Bright' },
+  { value: 'harmonic_complexity', label: 'Harmonic Complexity', low: 'Simple', high: 'Complex' },
+  { value: 'instrumentalness', label: 'Instrumentalness', low: 'Vocal', high: 'Instrumental' },
+  { value: 'speechiness', label: 'Speechiness', low: 'Singing', high: 'Spoken' },
+  { value: 'swing_ratio', label: 'Swing', low: 'Straight', high: 'Swung' },
+  { value: 'syncopation', label: 'Syncopation', low: 'On-beat', high: 'Syncopated' },
+] as const;
+
+function getAxisMeta(value: string) {
+  return AXIS_OPTIONS.find((a) => a.value === value) ?? AXIS_OPTIONS[0];
+}
+
 interface HoveredCell {
   cell: MoodCell;
   screenX: number;
@@ -44,6 +55,11 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+
+  // Configurable axes
+  const [xAxis, setXAxis] = useState('valence');
+  const [yAxis, setYAxis] = useState('energy');
+  const isDefaultAxes = xAxis === 'valence' && yAxis === 'energy';
 
   // Pan and zoom state
   const [zoom, setZoom] = useState(1);
@@ -72,8 +88,8 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
 
   // Fetch aggregated mood distribution
   const { data, isLoading, error } = useQuery({
-    queryKey: ['library-mood-distribution'],
-    queryFn: () => libraryApi.getMoodDistribution(10), // 10x10 grid
+    queryKey: ['library-mood-distribution', xAxis, yAxis],
+    queryFn: () => libraryApi.getMoodDistribution(10, xAxis, yAxis),
   });
 
   // Calculate max count for color scaling
@@ -82,15 +98,19 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
     return Math.max(...data.cells.map((c) => c.track_count), 1);
   }, [data]);
 
+  // Axis metadata for labels
+  const xMeta = getAxisMeta(xAxis);
+  const yMeta = getAxisMeta(yAxis);
+
   // Handle navigating to tracks in a cell
   const handleCellClick = useCallback(
     (cell: MoodCell) => {
       // Ignore click if we were panning
       if (didPanRef.current) return;
       if (cell.track_count === 0) return;
-      onGoToMood(cell.energy_min, cell.energy_max, cell.valence_min, cell.valence_max);
+      onGoToMood(xAxis, cell.x_min, cell.x_max, yAxis, cell.y_min, cell.y_max);
     },
-    [onGoToMood]
+    [onGoToMood, xAxis, yAxis]
   );
 
   // Zoom via native wheel event (React uses passive listeners by default)
@@ -209,26 +229,28 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
     return `rgba(168, 85, 247, ${alpha})`; // purple-500
   };
 
-  // Quadrant labels (in data space center of each quadrant)
-  const quadrants = [
-    { label: 'Angry', sublabel: 'Intense', valence: 0.25, energy: 0.75 },
-    { label: 'Happy', sublabel: 'Energetic', valence: 0.75, energy: 0.75 },
-    { label: 'Sad', sublabel: 'Melancholic', valence: 0.25, energy: 0.25 },
-    { label: 'Relaxed', sublabel: 'Peaceful', valence: 0.75, energy: 0.25 },
-  ];
+  // Quadrant labels (only for default energy/valence combo)
+  const quadrants = isDefaultAxes
+    ? [
+        { label: 'Angry', sublabel: 'Intense', x: 0.25, y: 0.75 },
+        { label: 'Happy', sublabel: 'Energetic', x: 0.75, y: 0.75 },
+        { label: 'Sad', sublabel: 'Melancholic', x: 0.25, y: 0.25 },
+        { label: 'Relaxed', sublabel: 'Peaceful', x: 0.75, y: 0.25 },
+      ]
+    : [];
 
   // Convert data coordinates (0-1) to SVG coordinates
-  const dataToSvg = (valence: number, energy: number) => ({
-    x: padding.left + offsetX + valence * gridSide,
-    y: padding.top + offsetY + (1 - energy) * gridSide,
+  const dataToSvg = (xVal: number, yVal: number) => ({
+    x: padding.left + offsetX + xVal * gridSide,
+    y: padding.top + offsetY + (1 - yVal) * gridSide,
   });
 
   return (
     <div className="flex flex-col h-full p-4">
       {/* Stats and controls */}
-      <div className="flex items-center justify-between mb-2 flex-shrink-0">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-4 text-sm text-zinc-400">
-          <span>{data.total_with_mood.toLocaleString()} tracks with mood data</span>
+          <span>{data.total_with_mood.toLocaleString()} tracks</span>
           {data.total_without_mood > 0 && (
             <span className="text-zinc-500">
               ({data.total_without_mood.toLocaleString()} without analysis)
@@ -236,30 +258,58 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
           )}
         </div>
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">{Math.round(zoom * 100)}%</span>
-          <button
-            onClick={handleZoomOut}
-            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
-            title="Zoom out"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleZoomIn}
-            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
-            title="Zoom in"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleReset}
-            className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
-            title="Reset view"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Axis selectors */}
+          <div className="flex items-center gap-1.5 text-sm">
+            <label className="text-zinc-500">X:</label>
+            <select
+              value={xAxis}
+              onChange={(e) => setXAxis(e.target.value)}
+              className="bg-zinc-800 text-zinc-200 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-purple-500"
+            >
+              {AXIS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5 text-sm">
+            <label className="text-zinc-500">Y:</label>
+            <select
+              value={yAxis}
+              onChange={(e) => setYAxis(e.target.value)}
+              className="bg-zinc-800 text-zinc-200 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-purple-500"
+            >
+              {AXIS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-2 ml-2">
+            <span className="text-xs text-zinc-500">{Math.round(zoom * 100)}%</span>
+            <button
+              onClick={handleZoomOut}
+              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+              title="Zoom out"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleZoomIn}
+              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+              title="Zoom in"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleReset}
+              className="p-1.5 bg-zinc-800 hover:bg-zinc-700 rounded transition-colors"
+              title="Reset view"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -345,7 +395,7 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
               className="fill-zinc-400"
               style={{ fontSize: 11 }}
             >
-              Valence (Sad → Happy)
+              {xMeta.label} ({xMeta.low} → {xMeta.high})
             </text>
             <text
               x={padding.left + offsetX - 25}
@@ -355,12 +405,12 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
               style={{ fontSize: 11 }}
               transform={`rotate(-90, ${padding.left + offsetX - 25}, ${padding.top + offsetY + gridSide / 2})`}
             >
-              Energy (Calm → Energetic)
+              {yMeta.label} ({yMeta.low} → {yMeta.high})
             </text>
 
-            {/* Quadrant labels */}
+            {/* Quadrant labels (only for default energy/valence) */}
             {quadrants.map((q, i) => {
-              const pos = dataToSvg(q.valence, q.energy);
+              const pos = dataToSvg(q.x, q.y);
               return (
                 <g key={i}>
                   <text
@@ -387,8 +437,8 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
 
             {/* Heatmap cells */}
             {data.cells.map((cell, i) => {
-              const x = padding.left + offsetX + cell.valence_min * gridSide;
-              const y = padding.top + offsetY + (1 - cell.energy_max) * gridSide;
+              const x = padding.left + offsetX + cell.x_min * gridSide;
+              const y = padding.top + offsetY + (1 - cell.y_max) * gridSide;
               const isHovered = hoveredCell?.cell === cell;
 
               return (
@@ -434,12 +484,12 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
               </div>
               <div className="flex gap-3 mt-2 text-xs text-zinc-500">
                 <span>
-                  Energy: {Math.round(hoveredCell.cell.energy_min * 100)}-
-                  {Math.round(hoveredCell.cell.energy_max * 100)}%
+                  {xMeta.label}: {Math.round(hoveredCell.cell.x_min * 100)}-
+                  {Math.round(hoveredCell.cell.x_max * 100)}%
                 </span>
                 <span>
-                  Valence: {Math.round(hoveredCell.cell.valence_min * 100)}-
-                  {Math.round(hoveredCell.cell.valence_max * 100)}%
+                  {yMeta.label}: {Math.round(hoveredCell.cell.y_min * 100)}-
+                  {Math.round(hoveredCell.cell.y_max * 100)}%
                 </span>
               </div>
               {hoveredCell.cell.track_count > 0 && (
