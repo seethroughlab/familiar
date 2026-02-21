@@ -188,6 +188,14 @@ class SearchHandlersMixin:
         section_count_max: int | None = None,
         note_density_min: float | None = None,
         note_density_max: float | None = None,
+        # New filter params
+        harmonic_complexity_min: float | None = None,
+        harmonic_complexity_max: float | None = None,
+        speechiness_min: float | None = None,
+        speechiness_max: float | None = None,
+        tempo_character: str | None = None,
+        pitch_range_min: int | None = None,
+        pitch_range_max: int | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         """Filter tracks by library criteria and/or audio features."""
@@ -244,6 +252,15 @@ class SearchHandlersMixin:
             bpm_min, bpm_max, key, energy_min, energy_max,
             danceability_min, valence_min, valence_max,
             acousticness_min, instrumentalness_min,
+            # Deep analysis features
+            swing_min, swing_max, syncopation_min,
+            brightness_min, brightness_max, dynamic_range_min,
+            energy_shape, modal_character, key_stability,
+            section_count_min, section_count_max,
+            note_density_min, note_density_max,
+            harmonic_complexity_min, harmonic_complexity_max,
+            speechiness_min, speechiness_max,
+            tempo_character, pitch_range_min, pitch_range_max,
         ])
         needs_play_history = any(v is not None for v in [
             min_play_count, max_play_count, played_in_last_days, not_played_in_days,
@@ -360,6 +377,12 @@ class SearchHandlersMixin:
         section_count_max = to_int(section_count_max)
         note_density_min = to_float(note_density_min)
         note_density_max = to_float(note_density_max)
+        harmonic_complexity_min = to_float(harmonic_complexity_min)
+        harmonic_complexity_max = to_float(harmonic_complexity_max)
+        speechiness_min = to_float(speechiness_min)
+        speechiness_max = to_float(speechiness_max)
+        pitch_range_min = to_int(pitch_range_min)
+        pitch_range_max = to_int(pitch_range_max)
 
         if swing_min is not None:
             conditions.append(TrackAnalysis.swing_ratio >= swing_min)
@@ -377,6 +400,8 @@ class SearchHandlersMixin:
             conditions.append(TrackAnalysis.energy_shape == energy_shape)
         if modal_character is not None:
             conditions.append(TrackAnalysis.modal_character.ilike(f"%{modal_character}%"))
+            # Quality gate: only trust mode detection with reasonable confidence
+            conditions.append(TrackAnalysis.modal_confidence >= 0.4)
         if key_stability is not None:
             conditions.append(TrackAnalysis.key_stability == key_stability)
         if section_count_min is not None:
@@ -387,6 +412,20 @@ class SearchHandlersMixin:
             conditions.append(TrackAnalysis.note_density >= note_density_min)
         if note_density_max is not None:
             conditions.append(TrackAnalysis.note_density <= note_density_max)
+        if harmonic_complexity_min is not None:
+            conditions.append(TrackAnalysis.harmonic_complexity >= harmonic_complexity_min)
+        if harmonic_complexity_max is not None:
+            conditions.append(TrackAnalysis.harmonic_complexity <= harmonic_complexity_max)
+        if speechiness_min is not None:
+            conditions.append(TrackAnalysis.speechiness >= speechiness_min)
+        if speechiness_max is not None:
+            conditions.append(TrackAnalysis.speechiness <= speechiness_max)
+        if tempo_character is not None:
+            conditions.append(TrackAnalysis.tempo_character == tempo_character)
+        if pitch_range_min is not None:
+            conditions.append(TrackAnalysis.pitch_range >= pitch_range_min)
+        if pitch_range_max is not None:
+            conditions.append(TrackAnalysis.pitch_range <= pitch_range_max)
 
         for condition in conditions:
             stmt = stmt.where(condition)

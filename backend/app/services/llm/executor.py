@@ -69,6 +69,7 @@ class ToolExecutor(
             "filter_tracks_by_features": self._filter_tracks,  # backwards compat alias
             "get_library_stats": self._get_library_stats,
             "get_library_genres": self._get_library_genres,
+            "get_feature_distribution": self._get_feature_distribution,
             "queue_tracks": self._queue_tracks,
             "control_playback": self._control_playback,
             "get_track_details": self._get_track_details,

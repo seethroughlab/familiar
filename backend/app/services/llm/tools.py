@@ -113,6 +113,13 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 "section_count_max": {"type": "integer", "description": "Maximum number of song sections"},
                 "note_density_min": {"type": "number", "description": "Minimum melodic note density (notes per beat)"},
                 "note_density_max": {"type": "number", "description": "Maximum melodic note density"},
+                "harmonic_complexity_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum harmonic complexity (0=simple triads, 1=dense jazz chords)"},
+                "harmonic_complexity_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum harmonic complexity"},
+                "speechiness_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum speechiness (0=singing/instrumental, 1=spoken word)"},
+                "speechiness_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum speechiness"},
+                "tempo_character": {"type": "string", "enum": ["grid-locked", "slight drift", "breathing"], "description": "Tempo feel: 'grid-locked' (tight quantized), 'slight drift' (natural), 'breathing' (rubato/expressive)"},
+                "pitch_range_min": {"type": "integer", "description": "Minimum pitch range in semitones (narrow=<12, wide=24+)"},
+                "pitch_range_max": {"type": "integer", "description": "Maximum pitch range in semitones"},
                 "limit": {"type": "integer", "default": 20}
             }
         }
@@ -137,6 +144,27 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                     "default": 50
                 }
             }
+        }
+    },
+    {
+        "name": "get_feature_distribution",
+        "description": "Get min/max/mean/median statistics for an audio feature across the library. Use this to calibrate filter values to the user's actual collection before filtering — e.g., know that 'high energy' in a folk library is different from an EDM library.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "feature": {
+                    "type": "string",
+                    "enum": [
+                        "energy", "valence", "danceability", "bpm",
+                        "acousticness", "instrumentalness", "speechiness",
+                        "brightness", "dynamic_range_db", "harmonic_complexity",
+                        "swing_ratio", "syncopation", "note_density", "pitch_range",
+                        "section_count",
+                    ],
+                    "description": "The audio feature to get statistics for"
+                }
+            },
+            "required": ["feature"]
         }
     },
     {
@@ -762,10 +790,50 @@ can preview or purchase. The current setting is shown at the end of these instru
 - No results after 2 tries → STOP, tell user you couldn't find anything
 
 ## Audio Features Reference
+
+Use filter_tracks with these features. Use get_feature_distribution first to calibrate values to the user's library.
+
+**Basic (0-1 scale unless noted):**
 - energy: 0=calm, 1=intense
-- valence: 0=sad, 1=happy
-- danceability: 0=not danceable, 1=danceable
-- bpm: typical range 60-180
+- valence: 0=sad/dark, 1=happy/bright
+- danceability: 0=not danceable, 1=very danceable
+- bpm: tempo in beats per minute (typical 60-180)
+- acousticness: 0=electronic/produced, 1=acoustic
+- instrumentalness: 0=vocals, 1=instrumental
+- speechiness: 0=singing/instrumental, 1=spoken word/rap
+
+**Rhythmic:**
+- swing_min/max (0-1): 0=straight/quantized, 0.5+=swung (jazz, shuffle)
+- syncopation_min (0-1): rhythmic complexity, off-beat emphasis
+- tempo_character: "grid-locked" (electronic/quantized), "slight drift" (live band), "breathing" (rubato/expressive)
+
+**Harmonic:**
+- key: musical key (e.g., "C", "F#", "Bb")
+- modal_character: "dorian", "mixolydian", "lydian", "phrygian", "aeolian", "ionian", "chromatic"
+- key_stability: "stable", "drifting", "modulating"
+- harmonic_complexity_min/max (0-1): 0=simple triads, 0.5=pop complexity, 0.8+=jazz/progressive
+
+**Spectral/Dynamic:**
+- brightness_min/max (0-1): 0=dark/warm, 1=bright/crisp
+- dynamic_range_min (dB): higher=more dynamic, lower=compressed (typical 5-25)
+
+**Structural:**
+- section_count_min/max: number of song sections (simple=3-5, complex=8+)
+- energy_shape: "gradual_build", "fade_out", "peak_middle", "consistent", "dynamic"
+
+**Melodic:**
+- note_density_min/max: notes per beat (sparse=0.5, busy=4+)
+- pitch_range_min/max: range in semitones (narrow=<12, octave=12, wide=24+)
+
+**Mood mapping examples:**
+- "chill" → energy<0.4, valence 0.3-0.6
+- "upbeat/happy" → energy>0.6, valence>0.6, danceability>0.5
+- "melancholy" → valence<0.3, energy<0.5
+- "aggressive/intense" → energy>0.8, brightness>0.6
+- "dreamy/ambient" → energy<0.3, acousticness>0.4, dynamic_range_min<10
+- "jazzy" → swing_min>0.3, harmonic_complexity_min>0.5
+- "tight electronic" → tempo_character="grid-locked", energy>0.5
+- "loose live feel" → tempo_character="breathing", swing_min>0.2
 
 ## Metadata Corrections
 

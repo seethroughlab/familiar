@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, text
 
-from app.db.models import Track
+from app.db.models import Track, TrackAnalysis
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -113,4 +113,46 @@ class LibraryInfoHandlersMixin:
             "genres": genres,
             "total": len(genres),
             "hint": "Use these genre names in search_library to find tracks.",
+        }
+
+    async def _get_feature_distribution(self: "ToolExecutor", feature: str) -> dict[str, Any]:
+        """Get min/max/mean/median for an audio feature across the library."""
+        allowed = {
+            "energy", "valence", "danceability", "bpm",
+            "acousticness", "instrumentalness", "speechiness",
+            "brightness", "dynamic_range_db", "harmonic_complexity",
+            "swing_ratio", "syncopation", "note_density", "pitch_range",
+            "section_count",
+        }
+        if feature not in allowed:
+            return {"error": f"Unknown feature '{feature}'. Allowed: {sorted(allowed)}"}
+
+        col = getattr(TrackAnalysis, feature)
+
+        stmt = select(
+            func.min(col).label("min"),
+            func.max(col).label("max"),
+            func.avg(col).label("mean"),
+            func.percentile_cont(0.5).within_group(col).label("median"),
+            func.count(col).label("count"),
+        ).where(col.isnot(None))
+
+        result = await self.db.execute(stmt)
+        row = result.one()
+
+        if row.count == 0:
+            return {"feature": feature, "error": "No tracks have this feature analyzed yet"}
+
+        def _round(v: Any) -> Any:
+            if v is None:
+                return None
+            return round(float(v), 3)
+
+        return {
+            "feature": feature,
+            "min": _round(row.min),
+            "max": _round(row.max),
+            "mean": _round(row.mean),
+            "median": _round(row.median),
+            "analyzed_tracks": row.count,
         }
