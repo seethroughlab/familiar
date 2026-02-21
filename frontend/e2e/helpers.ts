@@ -58,7 +58,35 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
  * Labels: 'Tracks', 'Artists', 'Albums', 'Mood Grid', 'Music Map', '3D Explorer', 'Discover', 'Changes'
  */
 export async function navigateToView(page: Page, label: string) {
-  await page.getByRole('link', { name: label, exact: true }).click();
+  // Desktop: sidebar link is visible
+  const link = page.getByRole('link', { name: label, exact: true });
+  if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await link.click();
+    await page.waitForTimeout(300);
+    return;
+  }
+
+  // Mobile: try bottom nav button directly (Tracks, Artists, Favorites, Chat)
+  const mobileButton = page.locator(`nav button:has-text("${label}")`);
+  if (await mobileButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await mobileButton.click();
+    await page.waitForTimeout(300);
+    return;
+  }
+
+  // Mobile: open "More" sheet and find the link there
+  const moreButton = page.locator('nav button:has-text("More")');
+  if (await moreButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await moreButton.click();
+    await page.waitForTimeout(300);
+    const sheetLink = page.getByRole('link', { name: label, exact: true });
+    await sheetLink.click();
+    await page.waitForTimeout(300);
+    return;
+  }
+
+  // Fallback: try clicking the link anyway (will fail with a clear error)
+  await link.click();
   await page.waitForTimeout(300);
 }
 
