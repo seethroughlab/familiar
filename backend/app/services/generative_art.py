@@ -527,7 +527,7 @@ def _draw_arc_text(
         ellipsis = "..."
         ellipsis_width = sum(font.getbbox(c)[2] - font.getbbox(c)[0] for c in ellipsis)
         budget = arc_length * 0.75 - ellipsis_width
-        accum = 0
+        accum: float = 0
         cut = 0
         for i, w in enumerate(char_widths):
             if accum + w > budget:
@@ -585,13 +585,13 @@ def _draw_arc_text(
         ]:
             if draw_color is None:
                 continue
-            char_img = Image.new("RGBA", (char_img_size, char_img_size), (0, 0, 0, 0))
+            char_img = Image.new("RGBA", (int(char_img_size), int(char_img_size)), (0, 0, 0, 0))
             char_draw = ImageDraw.Draw(char_img)
             tx = char_img_size // 2 - ch_w // 2 - bbox[0]
             ty = char_img_size // 2 - ch_h // 2 - bbox[1]
             char_draw.text((tx + offset, ty + offset), ch, font=font, fill=draw_color)
 
-            rotated = char_img.rotate(-rot, resample=Image.BICUBIC, expand=True)
+            rotated = char_img.rotate(-rot, resample=Image.Resampling.BICUBIC, expand=True)
 
             # Paste centered on position
             paste_x = int(x - rotated.width / 2)
