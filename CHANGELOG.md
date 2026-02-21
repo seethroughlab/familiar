@@ -5,7 +5,64 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0-alpha.11] - 2026-02-21
+
+Sidebar Context Menus, Virtualized Grids, Melodic Analysis & Codebase Restructure
+
+### Added
+
+- **Sidebar context menus** — Right-click any sidebar item for contextual actions
+  - Playlists: Play/Shuffle/Queue/Download ZIP/Edit/Duplicate/Delete
+  - Smart Playlists: Play/Shuffle/Queue/ZIP/Export .familiar/Convert to Static/Edit Rules/Delete
+  - Ephemeral: Play/Shuffle/Save to Library/Discard
+  - Collections: Favorites (Play/ZIP/Create Playlist/Clear), Downloads (Play/Clear/Storage Info), Wishlist (Clear)
+  - Library nav items: Play All/Shuffle/Random Album
+- **Shared context menu primitives** — Extracted `ContextMenuContainer`, `MenuItem`, `MenuDivider`, `MenuHeader` components, eliminating ~60 lines of boilerplate per menu
+- **Multi-select track download and analysis ZIP** — Bulk download tracks or analysis reports as ZIP from context menu
+  - Backend: `run_analyses_for_download()` with Redis progress tracking, three new download endpoints
+  - Frontend: `downloadApi.analysesZip()` with polling and toast progress
+- **Virtualized album and artist grids** — Replaced intersection-observer infinite scroll with `@tanstack/react-virtual` row-based virtualization on desktop
+  - Instant alphabet bar scroll-to-index for any position via sparse page fetching
+  - `useGridColumns` hook tracks responsive column counts via `matchMedia`
+  - Mobile retains simpler infinite scroll approach
+- **Create Empty Playlist button** — "+" button next to Playlists section header opens `PlaylistEditModal` in create mode
+- **Play selected tracks in album detail** — Queue and play multi-selected tracks from album view
+- **Build timestamp in debug settings** — Injected via Vite `define` at build time, displayed in Debug Info header
+- **Community analysis cache expanded** — Cache hits now populate deep_scalars and analysis_detail, potentially skipping the entire local analysis pipeline
+  - 18 new cached fields (deep analysis, melodic)
+  - `lookup_analysis_detail` / `contribute_analysis_detail` methods
+- **Melodic analysis improvements**
+  - Density-based phrase detection fallback when gap detection yields < 4 phrases
+  - Fixed-window register movement (30-second windows, decoupled from phrase count)
+  - Interval histogram excluding-unisons variant at global and per-register levels
+  - Melodic version checking on report endpoints (version bumps trigger re-analysis without library scan)
+
+### Changed
+
+- **Codebase restructure for LLM comprehension** — Split 6 large files (1,500–3,500 lines each) into well-bounded subpackages
+  - Backend: `export_import.py` → 4 modules, `routes/tracks.py` → 6 route files, `background.py` → 4 mixin modules, `tasks.py` → 6 modules, `track_analysis.py` → 5 modules, `executor.py` → 8 handler mixins
+  - Frontend: `api/client.ts` (3,219 lines) → 13 domain-specific API files, `routes/library.py` (3,533 lines) → 9 domain route files
+  - All `__init__.py` / barrel re-exports preserve backward compatibility
+- **Player core extracted to `src/player/` module** — Consolidated playerStore, audioSettingsStore, useAudioEngine, useAudioControls, playerPersistence, and audio graph files from 4 scattered directories into a single module
+- **Shared PlaylistTrackList component** — Replaced ~1,600 lines of duplicated track list rendering across 5 playlist detail views (Playlist, Favorites, Downloads, Ephemeral, Smart Playlist) with one shared component; extracted `useMultiSelect` hook for shift-range/ctrl-toggle selection
+- **Consolidated useTrackContextMenu hook** — Moved 4 duplicated bulk action callbacks (play selected, add to playlist, download tracks, download analyses) into the hook with default implementations; gives TrackListBrowser/AlbumDetail the previously missing "Add to Playlist" bulk action
+- **JSONB features cache** — Cache server stores features as a single JSONB blob; client simplified to match
+- **Task session factory consolidated** — 6 background task functions' inline `create_async_engine` calls replaced with shared `create_task_engine_session()` with proper pool tuning
+- **Single track analysis uses full pipeline** — `run_track_analysis_full` replaces `run_track_analysis` to run all missing phases
+- **Screenshots regenerated** — 16 screenshots updated for sidebar navigation UI; README layout refreshed with collapsible section
+- **FEATURES_VERSION 6→7** (section labeling + key timeline fixes), **MELODIC_VERSION 5→6** (melodic pipeline improvements)
+
+### Fixed
+
+- **Key timeline overlaps** — Snap overlapping key timeline windows so each entry's end aligns with the next entry's start
+- **Section labeling too aggressive** — Tightened similarity thresholds (chroma 0.75→0.97, mfcc 0.7→0.95, energy 6→3 dB) so sections get distinct labels instead of all being labeled "A"
+- **Context menu clipped by overflow-hidden ancestors** — Render via `createPortal` to `document.body` with max-height and viewport clamping
+- **Sidebar context menus not firing on Link components** — Move `onContextMenu` handlers to wrapper `<div>` elements (React Router v7 / React 19 event issue)
+- **Wishlist duplicated in sidebar** — Filter wishlist from Playlists section (already shown in Collections)
+- **`isExternalTrack` crash on undefined track** — Added null safety check
+- **`loudness_lufs` silent data loss** — Cache now stores/returns `loudness_lufs` verbatim instead of the old `loudness` key
+- **Deploy script missing code copy** — Added `docker cp` steps so code changes are available inside the running container
+- **CI fixes** — Resolved ruff lint errors, mypy attr-defined errors in background task mixins, E2E test stability improvements
 
 ## [0.1.0-alpha.10] - 2026-02-20
 
