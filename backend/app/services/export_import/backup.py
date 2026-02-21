@@ -11,7 +11,6 @@ import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession

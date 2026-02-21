@@ -11,8 +11,6 @@ from sqlalchemy import select
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import ProfilePlayHistory, Track
 
-from . import TrackResponse
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()

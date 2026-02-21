@@ -22,34 +22,38 @@ Most music players search by artist, album, or genre. Familiar searches by *how 
 
 ## Screenshots
 
-| Library Track List | AI Chat |
+| Library | AI Chat |
 |:--:|:--:|
 | ![Library](screenshots/01-library-tracks.png) | ![Chat](screenshots/08-chat-panel.png) |
 
+| Artists | 3D Explorer |
+|:--:|:--:|
+| ![Artists](screenshots/02-library-artists.png) | ![Explorer](screenshots/06-library-explorer.png) |
+
 | Music Map | Mood Grid |
 |:--:|:--:|
-| ![Music Map](screenshots/03-library-music-map.png) | ![Mood Grid](screenshots/02-library-mood-grid.png) |
-
-| Full Player | Visualizer |
-|:--:|:--:|
-| ![Full Player](screenshots/14-mobile-full-player.png) | ![Visualizer](screenshots/06-visualizer.png) |
+| ![Music Map](screenshots/05-library-music-map.png) | ![Mood Grid](screenshots/04-library-mood-grid.png) |
 
 <details>
 <summary><strong>More screenshots</strong></summary>
 
-| Albums | Playlists |
+| Albums | Discover |
 |:--:|:--:|
-| ![Albums](screenshots/04-library-albums.png) | ![Playlists](screenshots/05-playlists.png) |
+| ![Albums](screenshots/03-library-albums.png) | ![Discover](screenshots/07-library-discover.png) |
+
+| Full Player | Playlist Detail |
+|:--:|:--:|
+| ![Full Player](screenshots/10-full-player.png) | ![Playlist](screenshots/09-playlist-detail.png) |
 
 | Settings | Admin Setup |
 |:--:|:--:|
-| ![Settings](screenshots/07-settings.png) | ![Admin Setup](screenshots/11-admin-setup.png) |
+| ![Settings](screenshots/12-settings.png) | ![Admin Setup](screenshots/13-admin-setup.png) |
 
 ### Mobile Interface
 
-| Library (Mobile) | Settings (Mobile) |
+| Library (Mobile) | Full Player (Mobile) |
 |:--:|:--:|
-| ![Mobile Library](screenshots/12-mobile-library.png) | ![Mobile Settings](screenshots/13-mobile-settings.png) |
+| ![Mobile Library](screenshots/14-mobile-library.png) | ![Mobile Full Player](screenshots/15-mobile-full-player.png) |
 
 </details>
 

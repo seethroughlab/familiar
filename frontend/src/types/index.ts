@@ -27,8 +27,8 @@ export interface Track {
   spotify_id?: string | null;
 }
 
-export function isExternalTrack(track: Track): boolean {
-  return track.track_type === 'external';
+export function isExternalTrack(track: Track | null | undefined): boolean {
+  return track?.track_type === 'external';
 }
 
 export interface TrackFeatures {

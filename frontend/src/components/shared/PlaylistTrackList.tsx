@@ -151,8 +151,12 @@ export function PlaylistTrackList<T>({
     onClearSelection: clearSelection,
     onRemoveFromDownloads: contextMenuOptions?.onRemoveFromDownloads,
     resolveSelectedTracks: (ids) => sortedItems
+      .filter(item => {
+        const itemId = getItemId ? getItemId(item) : getTrack(item)?.id ?? '';
+        return ids.has(itemId);
+      })
       .map(item => getTrack(item))
-      .filter((t): t is Track => t !== null && ids.has(t.id)),
+      .filter((t): t is Track => t !== null),
   });
 
   // Row click handler: single click = select, double click = play

@@ -1,14 +1,23 @@
 """SyncMixin: Redis locks, run_sync, spotify_sync, new_releases, maintenance."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.services.background._typing import _BackgroundManagerProtocol
+
+    _SyncBase = _BackgroundManagerProtocol
+else:
+    _SyncBase = object
 
 logger = logging.getLogger(__name__)
 
 
-class SyncMixin:
+class SyncMixin(_SyncBase):
     """Mixin providing sync and maintenance task management for BackgroundManager."""
 
     def _init_sync_state(self) -> None:

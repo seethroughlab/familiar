@@ -1,15 +1,24 @@
 """AnalysisMixin: run_analysis, phase orchestration, batch, on-demand."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.services.background._typing import _BackgroundManagerProtocol
+
+    _AnalysisBase = _BackgroundManagerProtocol
+else:
+    _AnalysisBase = object
 
 logger = logging.getLogger(__name__)
 
 
-class AnalysisMixin:
+class AnalysisMixin(_AnalysisBase):
     """Mixin providing analysis task management for BackgroundManager."""
 
     def _init_analysis_state(self) -> None:

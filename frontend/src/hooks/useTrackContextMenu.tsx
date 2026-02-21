@@ -94,29 +94,36 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
         }
       : undefined;
 
-    const defaultAddSelectedToPlaylist = sel
-      ? () => { useUIStore.getState().openPlaylistPicker(Array.from(sel)); }
+    const defaultAddSelectedToPlaylist = sel && options.resolveSelectedTracks
+      ? () => {
+          const tracks = options.resolveSelectedTracks!(sel);
+          if (tracks.length > 0) {
+            useUIStore.getState().openPlaylistPicker(tracks.map(t => t.id));
+          }
+        }
       : undefined;
 
-    const defaultDownloadSelectedTracks = sel
+    const defaultDownloadSelectedTracks = sel && options.resolveSelectedTracks
       ? async () => {
-          const ids = Array.from(sel);
-          if (ids.length === 0) return;
+          const tracks = options.resolveSelectedTracks!(sel);
+          if (tracks.length === 0) return;
+          const trackIds = tracks.map(t => t.id);
           try {
-            await downloadApi.tracks(ids, `${ids.length} Selected Tracks`);
+            await downloadApi.tracks(trackIds, `${trackIds.length} Selected Tracks`);
           } catch {
             showError('Failed to download tracks');
           }
         }
       : undefined;
 
-    const defaultDownloadSelectedAnalyses = sel
+    const defaultDownloadSelectedAnalyses = sel && options.resolveSelectedTracks
       ? async () => {
-          const ids = Array.from(sel);
-          if (ids.length === 0) return;
-          const toastId = showLoading(`Preparing ${ids.length} analyses...`);
+          const tracks = options.resolveSelectedTracks!(sel);
+          if (tracks.length === 0) return;
+          const trackIds = tracks.map(t => t.id);
+          const toastId = showLoading(`Preparing ${trackIds.length} analyses...`);
           try {
-            await downloadApi.analysesZip(ids, `${ids.length} Track Analyses`, (done, total) => {
+            await downloadApi.analysesZip(trackIds, `${trackIds.length} Track Analyses`, (done, total) => {
               toast.loading(`Analyzing tracks... ${done}/${total}`, { id: toastId });
             });
             toast.success('Analyses downloaded!', { id: toastId });

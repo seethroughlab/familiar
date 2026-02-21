@@ -6,10 +6,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 
 from app.api.deps import DbSession
-from app.db.models import Track
 
 logger = logging.getLogger(__name__)
 

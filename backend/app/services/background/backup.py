@@ -1,13 +1,22 @@
 """BackupMixin: S3 backup, Glacier restore, schedule registration."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.services.background._typing import _BackgroundManagerProtocol
+
+    _BackupBase = _BackgroundManagerProtocol
+else:
+    _BackupBase = object
 
 logger = logging.getLogger(__name__)
 
 
-class BackupMixin:
+class BackupMixin(_BackupBase):
     """Mixin providing S3 backup and restore management for BackgroundManager."""
 
     async def _post_sync_backup(self) -> None:

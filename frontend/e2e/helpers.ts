@@ -36,8 +36,47 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
     await page.waitForTimeout(500);
   }
 
-  // Wait for main app to load - sidebar nav link indicates we're in the app
-  await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 10000 });
+  // Wait for main app to load - sidebar links (desktop) or bottom nav buttons (mobile)
+  // Use waitForFunction because waitForSelector picks the first DOM match which may be
+  // a hidden sidebar link on mobile viewports
+  await page.waitForFunction(() => {
+    const links = document.querySelectorAll('a');
+    const buttons = document.querySelectorAll('nav button');
+    const hasVisibleLink = Array.from(links).some(
+      el => (el.textContent?.includes('Tracks') || el.textContent?.includes('Artists'))
+        && el.offsetParent !== null
+    );
+    const hasVisibleButton = Array.from(buttons).some(
+      el => el.textContent?.includes('Tracks') && el.offsetParent !== null
+    );
+    return hasVisibleLink || hasVisibleButton;
+  }, undefined, { timeout: 10000 });
+}
+
+/**
+ * Navigate to a specific view by clicking its sidebar link.
+ * Labels: 'Tracks', 'Artists', 'Albums', 'Mood Grid', 'Music Map', '3D Explorer', 'Discover', 'Changes'
+ */
+export async function navigateToView(page: Page, label: string) {
+  await page.getByRole('link', { name: label, exact: true }).click();
+  await page.waitForTimeout(300);
+}
+
+/**
+ * Open the chat panel via the player bar toggle button, then wait for the chat input.
+ * Falls back to clicking the mobile "Chat" button if the desktop button isn't visible.
+ */
+export async function openChatPanel(page: Page) {
+  const desktopButton = page.locator('button[aria-label="Open chat"]');
+  const mobileButton = page.locator('nav button:has-text("Chat")');
+
+  if (await desktopButton.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await desktopButton.click();
+  } else if (await mobileButton.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await mobileButton.click();
+  }
+
+  await page.locator('[aria-label="Chat message"]').first().waitFor({ timeout: 5000 });
 }
 
 /**
@@ -46,9 +85,7 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
 export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Settings') {
   switch (tabName) {
     case 'Library': {
-      // Click "Tracks" link in sidebar to navigate to library view
-      const tracksLink = page.locator('a:has-text("Tracks")').first();
-      await tracksLink.click();
+      await navigateToView(page, 'Tracks');
       break;
     }
     case 'Settings': {

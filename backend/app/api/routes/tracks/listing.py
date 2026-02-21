@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import Float, String, cast, func, literal, nulls_last, select, union_all
 from sqlalchemy.orm import selectinload
 
@@ -11,9 +12,9 @@ from app.api.deps import CurrentProfile, DbSession
 from app.db.models import ExternalTrack, ProfilePlayHistory, Track, TrackAnalysis
 
 from . import (
-    BatchTracksRequest,
     SORT_FEATURE_FIELDS,
     SORT_FIELD_MAP,
+    BatchTracksRequest,
     TrackFeaturesResponse,
     TrackIdsResponse,
     TrackListResponse,
@@ -23,9 +24,6 @@ from . import (
 )
 
 router = APIRouter()
-
-
-from pydantic import BaseModel
 
 
 class TrackIndexResponse(BaseModel):

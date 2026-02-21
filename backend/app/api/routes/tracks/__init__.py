@@ -5,7 +5,6 @@ can ``from app.api.routes.tracks import TrackResponse, ...`` etc.
 """
 
 import logging
-from collections.abc import Iterator
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -13,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
-from app.db.models import ExternalTrack, ProfilePlayHistory, Track, TrackAnalysis
+from app.db.models import ExternalTrack, ProfilePlayHistory, Track
 
 logger = logging.getLogger(__name__)
 
@@ -197,12 +196,12 @@ def _external_track_to_response(row: Any) -> TrackResponse:
 # Aggregate sub-routers into top-level router
 # ---------------------------------------------------------------------------
 
-from app.api.routes.tracks.listing import router as listing_router
-from app.api.routes.tracks.streaming import router as streaming_router
-from app.api.routes.tracks.metadata import router as metadata_router
-from app.api.routes.tracks.discovery import router as discovery_router
-from app.api.routes.tracks.playback import router as playback_router
-from app.api.routes.tracks.identification import router as identification_router
+from app.api.routes.tracks.discovery import router as discovery_router  # noqa: E402
+from app.api.routes.tracks.identification import router as identification_router  # noqa: E402
+from app.api.routes.tracks.listing import router as listing_router  # noqa: E402
+from app.api.routes.tracks.metadata import router as metadata_router  # noqa: E402
+from app.api.routes.tracks.playback import router as playback_router  # noqa: E402
+from app.api.routes.tracks.streaming import router as streaming_router  # noqa: E402
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 router.include_router(listing_router)
