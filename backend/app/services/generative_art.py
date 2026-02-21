@@ -422,7 +422,7 @@ def _render_texture(
 def _post_process(img: Image.Image, features: dict) -> Image.Image:
     """Apply post-processing: blur, vignette, or light flare."""
     # Slight Gaussian blur to blend layers
-    img = img.filter(ImageFilter.GaussianBlur(radius=12))
+    img = img.filter(ImageFilter.GaussianBlur(radius=18))
 
     brightness = features.get("brightness", 0.5)
 
@@ -466,29 +466,28 @@ def _post_process(img: Image.Image, features: dict) -> Image.Image:
 _FONT_PATH = Path(__file__).parent.parent / "assets" / "fonts" / "Inter-SemiBold.ttf"
 
 
-def _get_initials(artist: str, album: str) -> str:
-    """Extract initials from artist and album names.
+def _get_initials(artist: str) -> str:
+    """Derive 2-letter initials from artist name only.
 
-    Skips common prefixes like 'The', 'A', 'An' for the artist.
+    Strips common prefixes ('The', 'A', 'An'), then:
+    - 2+ words: first letter of the first two significant words
+    - 1 word: first two letters of that word
     """
-    a_initial = ""
-    if artist:
-        # Skip common prefixes
-        name = artist.strip()
-        for prefix in ("The ", "A ", "An "):
-            if name.startswith(prefix) and len(name) > len(prefix):
-                name = name[len(prefix):]
-                break
-        if name:
-            a_initial = name[0].upper()
-
-    b_initial = ""
-    if album:
-        name = album.strip()
-        if name:
-            b_initial = name[0].upper()
-
-    return a_initial + b_initial
+    if not artist:
+        return ""
+    name = artist.strip()
+    for prefix in ("The ", "A ", "An "):
+        if name.startswith(prefix) and len(name) > len(prefix):
+            name = name[len(prefix):]
+            break
+    words = name.split()
+    if len(words) >= 2:
+        return (words[0][0] + words[1][0]).upper()
+    if words and len(words[0]) >= 2:
+        return words[0][:2].upper()
+    if words:
+        return words[0][0].upper()
+    return ""
 
 
 def _draw_arc_text(
@@ -620,7 +619,7 @@ def _render_vinyl_label(
     draw = ImageDraw.Draw(label)
 
     cx, cy = SIZE // 2, SIZE // 2
-    radius = 180
+    radius = 195
 
     # Dark backdrop disc for text contrast
     draw.ellipse(
@@ -682,7 +681,7 @@ def _render_vinyl_label(
     )
 
     # Centered initials
-    initials = _get_initials(artist, album)
+    initials = _get_initials(artist)
     if initials:
         # Shadow
         bbox = font_initials.getbbox(initials)

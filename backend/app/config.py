@@ -103,7 +103,8 @@ MELODIC_VERSION = 6
 #   v1: Layered composition (gradient, geometry, flow field, texture)
 #   v2: Added vinyl label overlay (arc text, initials)
 #   v3: Heavy blur for color-wash background, label after post-process, dark backdrop
-GENERATIVE_ART_VERSION = 3
+#   v4: Larger label radius for text padding, artist-only initials
+GENERATIVE_ART_VERSION = 4
 
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}
