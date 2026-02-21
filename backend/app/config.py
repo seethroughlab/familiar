@@ -99,6 +99,12 @@ EMBEDDING_VERSION = 6
 #   v6: Density phrase fallback, fixed-window register movement, no-unison intervals
 MELODIC_VERSION = 6
 
+# Generative art history:
+#   v1: Layered composition (gradient, geometry, flow field, texture)
+#   v2: Added vinyl label overlay (arc text, initials)
+#   v3: Heavy blur for color-wash background, label after post-process, dark backdrop
+GENERATIVE_ART_VERSION = 3
+
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}
 

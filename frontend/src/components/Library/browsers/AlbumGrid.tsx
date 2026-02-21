@@ -191,7 +191,7 @@ export function AlbumGrid({
     overscan: 3,
   });
 
-  // Re-measure when column count changes
+  // Re-measure when column count changes (container width affects row height)
   useEffect(() => {
     virtualizer.measure();
   }, [cols, virtualizer]);
@@ -368,12 +368,13 @@ export function AlbumGrid({
               return (
                 <div
                   key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
                   style={{
                     position: 'absolute',
                     top: 0,
                     left: 0,
                     width: '100%',
-                    height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
                   }}
                 >

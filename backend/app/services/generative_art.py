@@ -12,9 +12,10 @@ import math
 import random
 from collections import Counter
 from io import BytesIO
+from pathlib import Path
 from statistics import median
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 logger = logging.getLogger(__name__)
 
@@ -421,7 +422,7 @@ def _render_texture(
 def _post_process(img: Image.Image, features: dict) -> Image.Image:
     """Apply post-processing: blur, vignette, or light flare."""
     # Slight Gaussian blur to blend layers
-    img = img.filter(ImageFilter.GaussianBlur(radius=1))
+    img = img.filter(ImageFilter.GaussianBlur(radius=12))
 
     brightness = features.get("brightness", 0.5)
 
@@ -458,6 +459,244 @@ def _post_process(img: Image.Image, features: dict) -> Image.Image:
         img = Image.alpha_composite(img.convert("RGBA"), flare).convert("RGB")
 
     return img
+
+
+# ── Vinyl Label ──────────────────────────────────────────────────────────
+
+_FONT_PATH = Path(__file__).parent.parent / "assets" / "fonts" / "Inter-SemiBold.ttf"
+
+
+def _get_initials(artist: str, album: str) -> str:
+    """Extract initials from artist and album names.
+
+    Skips common prefixes like 'The', 'A', 'An' for the artist.
+    """
+    a_initial = ""
+    if artist:
+        # Skip common prefixes
+        name = artist.strip()
+        for prefix in ("The ", "A ", "An "):
+            if name.startswith(prefix) and len(name) > len(prefix):
+                name = name[len(prefix):]
+                break
+        if name:
+            a_initial = name[0].upper()
+
+    b_initial = ""
+    if album:
+        name = album.strip()
+        if name:
+            b_initial = name[0].upper()
+
+    return a_initial + b_initial
+
+
+def _draw_arc_text(
+    img: Image.Image,
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    center: tuple[int, int],
+    radius: int,
+    start_angle: float,
+    end_angle: float,
+    color: tuple[int, int, int, int],
+    shadow_color: tuple[int, int, int, int] | None = None,
+    clockwise: bool = True,
+) -> None:
+    """Render text along a circular arc by placing each character individually."""
+    if not text:
+        return
+
+    cx, cy = center
+
+    # Measure total text width and individual char widths
+    char_widths = []
+    for ch in text:
+        bbox = font.getbbox(ch)
+        char_widths.append(bbox[2] - bbox[0])
+    total_width = sum(char_widths)
+
+    # Calculate available arc length
+    arc_span = abs(end_angle - start_angle)
+    arc_length = radius * arc_span
+
+    # Truncate with ellipsis if text is too wide
+    display_text = text
+    display_widths = char_widths
+    if total_width > arc_length * 0.75:
+        ellipsis = "..."
+        ellipsis_width = sum(font.getbbox(c)[2] - font.getbbox(c)[0] for c in ellipsis)
+        budget = arc_length * 0.75 - ellipsis_width
+        accum = 0
+        cut = 0
+        for i, w in enumerate(char_widths):
+            if accum + w > budget:
+                cut = i
+                break
+            accum += w
+        else:
+            cut = len(char_widths)
+        display_text = text[:cut] + ellipsis
+        display_widths = char_widths[:cut] + [
+            font.getbbox(c)[2] - font.getbbox(c)[0] for c in ellipsis
+        ]
+        total_width = sum(display_widths)
+
+    # Calculate angle per pixel
+    angle_per_px = arc_span / (radius if radius > 0 else 1)
+
+    # Center the text within the arc
+    text_arc_span = total_width * angle_per_px
+    if clockwise:
+        current_angle = start_angle + (arc_span - text_arc_span) / 2
+    else:
+        current_angle = start_angle - (arc_span - text_arc_span) / 2
+
+    for i, ch in enumerate(display_text):
+        char_w = display_widths[i]
+        char_arc = char_w * angle_per_px
+
+        if clockwise:
+            char_angle = current_angle + char_arc / 2
+        else:
+            char_angle = current_angle - char_arc / 2
+
+        # Position on circle
+        x = cx + radius * math.cos(char_angle)
+        y = cy + radius * math.sin(char_angle)
+
+        # Render character to small image
+        bbox = font.getbbox(ch)
+        ch_w = bbox[2] - bbox[0]
+        ch_h = bbox[3] - bbox[1]
+        pad = 4
+        char_img_size = max(ch_w, ch_h) + pad * 2
+
+        # Rotation angle: tangent to circle
+        if clockwise:
+            rot = math.degrees(char_angle) + 90
+        else:
+            rot = math.degrees(char_angle) - 90
+
+        # Draw shadow first, then main character
+        for draw_color, offset in [
+            (shadow_color, 1),
+            (color, 0),
+        ]:
+            if draw_color is None:
+                continue
+            char_img = Image.new("RGBA", (char_img_size, char_img_size), (0, 0, 0, 0))
+            char_draw = ImageDraw.Draw(char_img)
+            tx = char_img_size // 2 - ch_w // 2 - bbox[0]
+            ty = char_img_size // 2 - ch_h // 2 - bbox[1]
+            char_draw.text((tx + offset, ty + offset), ch, font=font, fill=draw_color)
+
+            rotated = char_img.rotate(-rot, resample=Image.BICUBIC, expand=True)
+
+            # Paste centered on position
+            paste_x = int(x - rotated.width / 2)
+            paste_y = int(y - rotated.height / 2)
+            img.paste(rotated, (paste_x, paste_y), rotated)
+
+        if clockwise:
+            current_angle += char_arc
+        else:
+            current_angle -= char_arc
+
+
+def _render_vinyl_label(
+    img: Image.Image,
+    palette: list[tuple[int, int, int]],
+    features: dict,
+    artist: str,
+    album: str,
+) -> None:
+    """Render a vinyl record label with arc text and centered initials."""
+    if not _FONT_PATH.exists():
+        logger.warning("Font not found at %s, skipping vinyl label", _FONT_PATH)
+        return
+
+    label = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(label)
+
+    cx, cy = SIZE // 2, SIZE // 2
+    radius = 180
+
+    # Dark backdrop disc for text contrast
+    draw.ellipse(
+        [cx - radius + 4, cy - radius + 4, cx + radius - 4, cy + radius - 4],
+        fill=(0, 0, 0, 50),
+    )
+
+    # Semi-transparent ring
+    ring_color = (255, 255, 255, 80)
+    ring_width = 2
+    draw.ellipse(
+        [cx - radius, cy - radius, cx + radius, cy + radius],
+        outline=ring_color,
+        width=ring_width,
+    )
+
+    # Separator dots at 3 o'clock and 9 o'clock
+    dot_r = 3
+    dot_color = (255, 255, 255, 100)
+    for angle in [0, math.pi]:  # 3 o'clock and 9 o'clock
+        dx = int(cx + radius * math.cos(angle))
+        dy = int(cy + radius * math.sin(angle))
+        draw.ellipse(
+            [dx - dot_r, dy - dot_r, dx + dot_r, dy + dot_r],
+            fill=dot_color,
+        )
+
+    # Text colors
+    text_color = (255, 255, 255, 230)
+    shadow = (0, 0, 0, 180)
+
+    # Load fonts at different sizes
+    font_artist = ImageFont.truetype(str(_FONT_PATH), 22)
+    font_album = ImageFont.truetype(str(_FONT_PATH), 18)
+    font_initials = ImageFont.truetype(str(_FONT_PATH), 90)
+
+    # Artist name - arc along top of circle (120° span centered at top)
+    # 0 rad = 3 o'clock, -π/2 = top; span from -150° to -30°
+    artist_text = artist.upper() if artist else ""
+    text_radius = radius - 14  # Slightly inside the ring
+    _draw_arc_text(
+        label, artist_text, font_artist, (cx, cy), text_radius,
+        start_angle=-math.pi * 5 / 6,  # -150 degrees
+        end_angle=-math.pi / 6,        # -30 degrees
+        color=text_color,
+        shadow_color=shadow,
+        clockwise=True,
+    )
+
+    # Album name - arc along bottom of circle (120° span centered at bottom)
+    album_text = album.upper() if album else ""
+    _draw_arc_text(
+        label, album_text, font_album, (cx, cy), text_radius,
+        start_angle=math.pi * 5 / 6,   # 150 degrees
+        end_angle=math.pi / 6,         # 30 degrees
+        color=text_color,
+        shadow_color=shadow,
+        clockwise=False,
+    )
+
+    # Centered initials
+    initials = _get_initials(artist, album)
+    if initials:
+        # Shadow
+        bbox = font_initials.getbbox(initials)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+        ix = cx - tw // 2 - bbox[0]
+        iy = cy - th // 2 - bbox[1]
+        draw.text((ix + 2, iy + 2), initials, font=font_initials, fill=(0, 0, 0, 160))
+        draw.text((ix, iy), initials, font=font_initials, fill=text_color)
+
+    # Composite label onto main image
+    img_rgba = img.convert("RGBA")
+    composited = Image.alpha_composite(img_rgba, label)
+    img.paste(composited.convert("RGB"))
 
 
 # ── Public Entry Point ───────────────────────────────────────────────────
@@ -498,6 +737,7 @@ async def generate_album_art(album_hash: str, artist: str, album: str) -> bool:
         _render_flow_field(img, palette, features, rng)
         _render_texture(img, palette, features, rng)
         img = _post_process(img, features)
+        _render_vinyl_label(img, palette, features, artist, album)
 
         # Encode to JPEG bytes
         buf = BytesIO()

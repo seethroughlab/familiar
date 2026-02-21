@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.api.deps import DbSession
 from app.services.artwork import compute_album_hash, get_artwork_path
 from app.services.background import get_background_manager
 
@@ -247,6 +248,45 @@ async def regenerate_artwork(request: ArtworkRegenerateRequest) -> dict[str, Any
             status_code=422,
             detail="No analyzed tracks available for generation",
         )
+
+
+@router.post("/regenerate-stale")
+async def regenerate_stale_artwork(db: DbSession) -> dict[str, Any]:
+    """Regenerate all generated artwork that is older than the current art version.
+
+    Returns count of albums queued for regeneration.
+    """
+    from sqlalchemy import distinct, select
+
+    from app.config import GENERATIVE_ART_VERSION
+    from app.db.models import Track
+    from app.services.artwork import is_generated_art_current, is_generated_artwork
+    from app.services.generative_art import generate_album_art
+
+    # Find all distinct artist/album pairs
+    stmt = select(distinct(Track.artist), Track.album).where(
+        Track.artist.isnot(None), Track.album.isnot(None)
+    )
+    result = await db.execute(stmt)
+    albums = result.all()
+
+    regenerated = 0
+    failed = 0
+    for artist, album in albums:
+        album_hash = compute_album_hash(artist, album)
+        if is_generated_artwork(album_hash) and not is_generated_art_current(album_hash):
+            success = await generate_album_art(album_hash, artist, album)
+            if success:
+                regenerated += 1
+            else:
+                failed += 1
+
+    return {
+        "status": "done",
+        "version": GENERATIVE_ART_VERSION,
+        "regenerated": regenerated,
+        "failed": failed,
+    }
 
 
 @router.head("/check/{artist}/{album}")

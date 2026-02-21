@@ -12,7 +12,7 @@ from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
 from PIL import Image
 
-from app.config import settings
+from app.config import GENERATIVE_ART_VERSION, settings
 
 # Standard sizes for artwork
 ARTWORK_SIZES = {
@@ -32,9 +32,23 @@ def is_generated_artwork(album_hash: str) -> bool:
 
 
 def mark_as_generated(album_hash: str) -> None:
-    """Create a .generated marker file for this album hash."""
+    """Create a .generated marker file with current art version."""
     settings.art_path.mkdir(parents=True, exist_ok=True)
-    _generated_marker_path(album_hash).touch()
+    _generated_marker_path(album_hash).write_text(str(GENERATIVE_ART_VERSION))
+
+
+def is_generated_art_current(album_hash: str) -> bool:
+    """Check if generated artwork matches the current art version.
+
+    Returns False if not generated, marker missing, or version is stale.
+    """
+    marker = _generated_marker_path(album_hash)
+    if not marker.exists():
+        return False
+    try:
+        return int(marker.read_text().strip()) >= GENERATIVE_ART_VERSION
+    except (ValueError, OSError):
+        return False
 
 
 def clear_generated_marker(album_hash: str) -> None:
