@@ -10,15 +10,19 @@
 
 **Community-powered analysis.** Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.
 
-## Why Familiar?
+## How Familiar Compares
 
-Most music players search by artist, album, or genre. Familiar searches by *how music sounds*.
-
-- **Semantic audio search** - "Find me something melancholy with piano" searches the actual audio, not just tags
-- **CLAP embeddings** - AI model that understands the sound of your music, trained on millions of audio-text pairs
-- **AI that knows YOUR library** - Not generic recommendations. Claude searches, filters, and creates playlists from tracks you actually own
-- **Community cache** - Analysis results shared anonymously via hashed fingerprints. New users benefit instantly from the community's processing
-- **Privacy-first** - Runs on your NAS or home server. Your listening data stays yours
+| | Familiar | Navidrome | Jellyfin | Plex |
+|---|---|---|---|---|
+| AI chat + playlist creation | Yes | — | — | — |
+| Semantic audio search | Yes (CLAP) | — | — | — |
+| Audio feature analysis | BPM, key, energy, mood | — | Basic | Basic |
+| Community analysis cache | Yes | — | — | — |
+| Self-hosted / no cloud | Yes | Yes | Yes | Partial |
+| Subsonic API | Yes | Yes | — | — |
+| Music video playback | Yes | — | Yes | Yes |
+| Smart playlists | Rules-based | — | — | Yes |
+| Mobile PWA | Yes | Web only | Web + apps | Apps |
 
 ## Screenshots
 
@@ -61,14 +65,14 @@ Most music players search by artist, album, or genre. Familiar searches by *how 
 
 ### Discovery & Search
 - **Semantic audio search** - Describe the sound you want: "upbeat with synths", "acoustic and melancholy"
-- **AI chat assistant** - 25 tools for search, playback, metadata correction, and playlist creation
+- **AI chat assistant** - 33 tools for search, playback, metadata correction, and playlist creation
 - **Find similar tracks** - Click any track to find sonically similar music via CLAP embeddings
 - **Mood Grid** - 2D scatter plot by energy and valence (happy/sad × calm/energetic)
 - **Music Map** - Ego-centric similarity map. Click any artist to center the view
 - **3D Explorer** - Navigate a 3D space of artists with hover-to-preview audio
 
 <details>
-<summary><strong>Available AI Tools (25)</strong></summary>
+<summary><strong>Available AI Tools (33)</strong></summary>
 
 | Tool | Description |
 |------|-------------|
@@ -76,25 +80,32 @@ Most music players search by artist, album, or genre. Familiar searches by *how 
 | `search_library` | Text search across title, artist, album, genre |
 | `semantic_search` | Natural language search by mood/style via CLAP embeddings |
 | `find_similar_tracks` | Find sonically similar tracks using audio embeddings |
-| `filter_tracks_by_features` | Filter by BPM, energy, key, danceability, valence |
+| `filter_tracks` | Filter by BPM, energy, key, danceability, valence, favorites, play history |
 | `get_similar_artists_in_library` | Find similar artists (via Last.fm) that exist in your library |
 | **Library Info** | |
 | `get_library_stats` | Total tracks, artists, albums, top genres |
 | `get_library_genres` | List all genres with track counts |
 | `get_visible_tracks` | Get tracks currently shown in the UI |
 | `get_track_details` | Detailed track info including audio features |
+| `get_track_analysis` | Deep musical analysis (harmonic, melodic, rhythmic, structural) |
 | **Playback** | |
 | `queue_tracks` | Add tracks to the playback queue |
 | `control_playback` | Play, pause, next, previous, shuffle |
 | `select_diverse_tracks` | Ensure variety across artists/albums |
+| `create_playlist_from_items` | Create playlist from a list of artists/albums/tracks |
 | **Spotify Integration** | |
 | `get_spotify_status` | Check if Spotify is connected |
 | `get_spotify_favorites` | Get Spotify likes matched to local library |
-| `unmatched_spotify_favorites` | Spotify likes you don't have locally |
+| `get_unmatched_spotify_favorites` | Spotify likes you don't have locally |
 | `get_spotify_sync_stats` | Match rate and sync statistics |
+| `list_spotify_playlists` | List user's Spotify playlists |
+| `get_spotify_playlist_tracks` | Get tracks from a Spotify playlist with local match status |
+| `import_spotify_playlist` | Import a Spotify playlist to Familiar |
 | **Discovery** | |
 | `search_bandcamp` | Search Bandcamp for albums/tracks to purchase |
 | `recommend_bandcamp_purchases` | Suggest albums based on unmatched Spotify favorites |
+| `get_similar_tracks_external` | Get similar tracks from Last.fm for discovery |
+| `fetch_webpage` | Extract music references from a URL for playlist creation |
 | **Metadata Correction** | |
 | `lookup_correct_metadata` | Look up correct metadata from MusicBrainz |
 | `propose_metadata_change` | Propose a metadata fix for user review |
@@ -103,12 +114,14 @@ Most music players search by artist, album, or genre. Familiar searches by *how 
 | `propose_album_artwork` | Search and propose album artwork from Cover Art Archive |
 | `find_duplicate_artists` | Find artists with variant spellings |
 | `merge_duplicate_artists` | Propose merging duplicate artist names |
+| **Track Identification** | |
+| `identify_track` | Find a track by title and artist in library or externally |
 
 </details>
 
 ### Playback & Experience
 - **Synced lyrics** - Auto-scrolling lyrics display fetched from LRCLIB.net
-- **6 audio visualizers** - Cosmic Orb, Frequency Bars, Album Kaleidoscope, Color Flow, Lyric Storm, Typography Wave
+- **6 audio visualizers** - Cosmic Orb, Frequency Bars, Album Kaleidoscope, Rain Window, Lyrics, Music Video
 - **Visualizer plugins** - Open API for community visualizers ([create your own](docs/VISUALIZER_API.md))
 - **Music video playback** - Download and match music videos from YouTube
 - **Keyboard shortcuts** - Full keyboard control (press `?` for help)
@@ -149,6 +162,13 @@ docker compose -f docker-compose.prod.yml up -d
 Access at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
 
 See the **[Installation Guide](docs/INSTALLATION.md)** for detailed platform-specific instructions (OpenMediaVault, Synology NAS, development setup).
+
+## Requirements
+
+- Docker Engine 24.0+ / Docker Compose v2
+- 2 GB RAM minimum (4 GB recommended for large libraries)
+- x86_64 or ARM64 (ARM64: CLAP embeddings can be disabled if needed)
+- Music library accessible via filesystem mount
 
 ## Keyboard Shortcuts
 
@@ -217,20 +237,19 @@ familiar/
 │   ├── app/
 │   │   ├── api/      # API routes
 │   │   ├── db/       # Database models
-│   │   ├── services/ # Business logic
-│   │   └── workers/  # Background tasks
+│   │   ├── services/ # Business logic + background tasks
+│   │   └── utils/    # Utilities
 │   └── tests/
 ├── frontend/         # React + TypeScript PWA
 │   ├── src/
-│   │   ├── api/      # API client
+│   │   ├── api/      # API client modules
 │   │   ├── components/
 │   │   ├── hooks/
+│   │   ├── player/   # Audio engine, stores, persistence
 │   │   ├── services/ # Offline, sync services
 │   │   └── stores/   # Zustand state
 ├── docker/           # Docker configuration
-└── data/             # Runtime data (gitignored)
-    ├── art/          # Extracted album art
-    └── videos/       # Downloaded music videos
+└── docs/             # Documentation
 ```
 
 ## Contributing
