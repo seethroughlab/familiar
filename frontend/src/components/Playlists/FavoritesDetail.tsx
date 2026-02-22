@@ -13,6 +13,7 @@ import * as offlineService from '../../services/offlineService';
 import type { Track } from '../../types';
 import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
+import { StoreSearchLinks } from '../shared/StoreSearchLinks';
 import { formatDuration } from '../../utils/format';
 
 type FavoriteItem =
@@ -192,9 +193,16 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       const isMatched = ctx.item.is_matched && ctx.item.matched_track_id;
       if (!isMatched) {
         return (
-          <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
-            Not in library
-          </span>
+          <>
+            <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
+              Not in library
+            </span>
+            <StoreSearchLinks
+              artist={ctx.item.artist || 'Unknown Artist'}
+              title={ctx.item.title || 'Unknown Title'}
+              album={ctx.item.album}
+            />
+          </>
         );
       }
     }

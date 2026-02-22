@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Music,
-  ExternalLink,
   Loader2,
   ChevronDown,
   ChevronUp,
@@ -11,16 +10,7 @@ import {
 } from 'lucide-react';
 import { spotifyApi } from '../../api';
 import type { UnmatchedTrack } from '../../api';
-
-// Store icons/colors for visual distinction
-const STORE_STYLES: Record<string, { color: string; abbrev: string }> = {
-  bandcamp: { color: 'bg-teal-600 hover:bg-teal-500', abbrev: 'BC' },
-  discogs: { color: 'bg-orange-600 hover:bg-orange-500', abbrev: 'DC' },
-  qobuz: { color: 'bg-blue-600 hover:bg-blue-500', abbrev: 'QB' },
-  '7digital': { color: 'bg-purple-600 hover:bg-purple-500', abbrev: '7D' },
-  itunes: { color: 'bg-pink-600 hover:bg-pink-500', abbrev: 'IT' },
-  amazon: { color: 'bg-yellow-600 hover:bg-yellow-500', abbrev: 'AZ' },
-};
+import { StoreSearchLinks } from '../shared/StoreSearchLinks';
 
 interface Props {
   onImportClick?: () => void;
@@ -140,11 +130,6 @@ export function MissingTracks({ onImportClick }: Props) {
 }
 
 function TrackRow({ track }: { track: UnmatchedTrack }) {
-  const [showAllLinks, setShowAllLinks] = useState(false);
-
-  const links = Object.entries(track.search_links);
-  const visibleLinks = showAllLinks ? links : links.slice(0, 3);
-
   return (
     <div className="px-4 py-3 border-b border-zinc-800 last:border-0 hover:bg-zinc-800/30 transition-colors">
       <div className="flex items-start justify-between gap-4">
@@ -158,32 +143,11 @@ function TrackRow({ track }: { track: UnmatchedTrack }) {
         </div>
 
         {/* Search links */}
-        <div className="flex items-center gap-1 flex-wrap justify-end">
-          {visibleLinks.map(([key, link]) => {
-            const style = STORE_STYLES[key] || { color: 'bg-zinc-600 hover:bg-zinc-500', abbrev: key.slice(0, 2).toUpperCase() };
-            return (
-              <a
-                key={key}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={`Search on ${link.name}`}
-                className={`px-2 py-1 text-xs font-medium rounded transition-colors flex items-center gap-1 ${style.color}`}
-              >
-                {style.abbrev}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            );
-          })}
-          {links.length > 3 && !showAllLinks && (
-            <button
-              onClick={() => setShowAllLinks(true)}
-              className="px-2 py-1 text-xs text-zinc-400 hover:text-white transition-colors"
-            >
-              +{links.length - 3}
-            </button>
-          )}
-        </div>
+        <StoreSearchLinks
+          artist={track.artist || 'Unknown Artist'}
+          title={track.name || 'Unknown Track'}
+          album={track.album}
+        />
       </div>
     </div>
   );

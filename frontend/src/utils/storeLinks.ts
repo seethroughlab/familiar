@@ -33,6 +33,16 @@ const STORES: Record<string, { name: string; urlTemplate: string }> = {
 export const DEFAULT_STORE = 'bandcamp';
 export const STORE_ORDER = ['bandcamp', 'discogs', 'qobuz', '7digital', 'itunes', 'amazon'];
 
+// Store icons/colors for visual distinction in UI pills
+export const STORE_STYLES: Record<string, { color: string; abbrev: string }> = {
+  bandcamp: { color: 'bg-teal-600 hover:bg-teal-500', abbrev: 'BC' },
+  discogs: { color: 'bg-orange-600 hover:bg-orange-500', abbrev: 'DC' },
+  qobuz: { color: 'bg-blue-600 hover:bg-blue-500', abbrev: 'QB' },
+  '7digital': { color: 'bg-purple-600 hover:bg-purple-500', abbrev: '7D' },
+  itunes: { color: 'bg-pink-600 hover:bg-pink-500', abbrev: 'IT' },
+  amazon: { color: 'bg-yellow-600 hover:bg-yellow-500', abbrev: 'AZ' },
+};
+
 export function generateSearchUrl(storeKey: string, artist: string, title: string, album?: string): string | null {
   const store = STORES[storeKey];
   if (!store) return null;
