@@ -679,9 +679,9 @@ export function TrackListBrowser({
     }
   }, [data?.pages]);
 
-  // Flatten all pages into a single array
+  // Flatten all pages into a single array (filter out any undefined/null entries defensively)
   const allTracksUnfiltered = useMemo(
-    () => data?.pages.flatMap((page) => page.items) ?? [],
+    () => (data?.pages.flatMap((page) => page.items) ?? []).filter((t): t is Track => t != null),
     [data]
   );
 
@@ -1510,7 +1510,7 @@ export function TrackListBrowser({
             <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
           </div>
         )}
-        {mobileTracks.map((track, index) => (
+        {mobileTracks.map((track, index) => track ? (
           <MobileTrackCard
             key={track.id}
             track={track}
@@ -1529,7 +1529,7 @@ export function TrackListBrowser({
             onContextMenu={(e) => handleContextMenu(track, e)}
             onLongPress={(position) => openContextMenu(track, position)}
           />
-        ))}
+        ) : null)}
         {/* Loading indicator for infinite scroll */}
         {mobileIsLoading && (
           <div className="flex items-center justify-center py-4">
