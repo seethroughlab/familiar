@@ -104,7 +104,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   // Support both route params and props
   const routeParams = useParams<{ name: string }>();
   const routeNavigate = useNavigate();
-  const artistName = artistNameProp || (routeParams.name ? decodeURIComponent(routeParams.name) : '');
+  const artistName = artistNameProp || routeParams.name || '';
   const onBack = onBackProp || (() => routeNavigate(-1));
   const goToAlbum = onGoToAlbum || ((artist: string, album: string) => navigateToAlbumDetail(artist, album, { source: 'artist' }));
   const currentTrack = usePlayerStore((s) => s.currentTrack);

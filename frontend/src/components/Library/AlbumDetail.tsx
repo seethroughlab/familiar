@@ -184,8 +184,8 @@ export function AlbumDetail({
   const routeNavigate = useNavigate();
   const [searchParams] = useSearchParams();
   const source = searchParams.get('source') || undefined;
-  const artistName = artistNameProp || (routeParams.artist ? decodeURIComponent(routeParams.artist) : '');
-  const albumName = albumNameProp || (routeParams.album ? decodeURIComponent(routeParams.album) : '');
+  const artistName = artistNameProp || routeParams.artist || '';
+  const albumName = albumNameProp || routeParams.album || '';
   const onBack = onBackProp || (() => routeNavigate(-1));
 
   const { currentTrack, isPlaying, setQueue, setIsPlaying } =
