@@ -204,12 +204,17 @@ def _external_track_to_response(row: Any) -> TrackResponse:
 
 from app.api.routes.tracks.discovery import router as discovery_router  # noqa: E402
 from app.api.routes.tracks.identification import router as identification_router  # noqa: E402
+from app.api.routes.tracks.listing import list_tracks  # noqa: E402
 from app.api.routes.tracks.listing import router as listing_router  # noqa: E402
 from app.api.routes.tracks.metadata import router as metadata_router  # noqa: E402
 from app.api.routes.tracks.playback import router as playback_router  # noqa: E402
 from app.api.routes.tracks.streaming import router as streaming_router  # noqa: E402
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
+# Register list_tracks directly on the parent router so its path is ""
+# (matches /tracks without trailing slash). Using "/" on a sub-router
+# only matches /tracks/ and the SPA catch-all intercepts the redirect.
+router.get("", response_model=TrackListResponse)(list_tracks)
 router.include_router(listing_router)
 router.include_router(streaming_router)
 router.include_router(discovery_router)
