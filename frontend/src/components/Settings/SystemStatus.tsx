@@ -16,14 +16,18 @@ import {
   Check,
   ExternalLink,
   X,
+  Download,
 } from 'lucide-react';
 import {
   healthApi,
   diagnosticsApi,
+  updatesApi,
+  appSettingsApi,
   type SystemHealth,
   type ServiceStatus,
   type WorkerStatus,
   type DiagnosticsExport,
+  type UpdateStatus,
 } from '../../api';
 
 import { createLogger } from '../../utils/logger';
@@ -40,6 +44,14 @@ export function SystemStatus() {
   const [diagnostics, setDiagnostics] = useState<DiagnosticsExport | null>(null);
   const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [updateChannel, setUpdateChannel] = useState<string>('disabled');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  // Load update channel from settings
+  useEffect(() => {
+    appSettingsApi.get().then((s) => setUpdateChannel(s.update_channel)).catch(() => {});
+  }, []);
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -50,6 +62,8 @@ export function SystemStatus() {
       ]);
       setHealth(healthData);
       setWorkerStatus(workerData);
+      // Non-blocking update check
+      updatesApi.getStatus().then(setUpdateStatus).catch(() => {});
     } catch (err) {
       setError('Failed to fetch system status');
       log.error('Failed to fetch system health:', err);
@@ -187,6 +201,33 @@ export function SystemStatus() {
 
   const openGitHubIssues = () => {
     window.open('https://github.com/seethroughlab/familiar/issues/new', '_blank');
+  };
+
+  const handleCheckNow = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const result = await updatesApi.checkNow();
+      setUpdateStatus(result);
+    } catch (err) {
+      log.error('Update check failed:', err);
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleChannelChange = async (channel: string) => {
+    setUpdateChannel(channel);
+    try {
+      await appSettingsApi.update({ update_channel: channel });
+      // Trigger a check if enabling
+      if (channel !== 'disabled') {
+        handleCheckNow();
+      } else {
+        setUpdateStatus(null);
+      }
+    } catch (err) {
+      log.error('Failed to update channel:', err);
+    }
   };
 
   const getStatusIcon = (status: string) => {
@@ -385,6 +426,29 @@ export function SystemStatus() {
           ))}
       </div>
 
+      {/* Update available banner */}
+      {updateStatus?.update_available && (
+        <div className="mt-3 flex items-center justify-between p-3 bg-purple-900/20 border border-purple-800/50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Download className="w-4 h-4 text-purple-400" />
+            <span className="text-sm text-purple-200">
+              Version {updateStatus.latest_version} is available
+            </span>
+          </div>
+          {updateStatus.release_url && (
+            <a
+              href={updateStatus.release_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors"
+            >
+              Release notes
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      )}
+
       {/* Warnings (always visible if present) */}
       {hasWarnings && (
         <div className="mt-3 space-y-2">
@@ -484,6 +548,49 @@ export function SystemStatus() {
               ))}
             </div>
           )}
+
+          {/* Update Notifications */}
+          <div className="space-y-2">
+            <h5 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+              Update Notifications
+            </h5>
+            <div className="p-3 bg-zinc-800/50 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-zinc-300">Release channel</label>
+                <select
+                  value={updateChannel}
+                  onChange={(e) => handleChannelChange(e.target.value)}
+                  className="bg-zinc-700 text-sm text-white rounded px-2 py-1 border border-zinc-600 focus:outline-none focus:border-purple-500"
+                >
+                  <option value="disabled">Disabled</option>
+                  <option value="stable">Stable</option>
+                  <option value="beta">Beta</option>
+                  <option value="alpha">Alpha</option>
+                </select>
+              </div>
+              {updateChannel !== 'disabled' && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">
+                    {updateStatus?.checked_at
+                      ? `Last checked ${new Date(updateStatus.checked_at).toLocaleString()}`
+                      : 'Not checked yet'}
+                  </span>
+                  <button
+                    onClick={handleCheckNow}
+                    disabled={isCheckingUpdate}
+                    className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {isCheckingUpdate ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                    Check Now
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -496,7 +603,14 @@ export function SystemStatus() {
           <Bug className="w-4 h-4" />
           Report Issue
         </button>
-        <span className="text-xs text-zinc-600">{health.version}</span>
+        <span className="text-xs text-zinc-600">
+          {health.version}
+          {updateStatus?.update_available && updateStatus.latest_version && (
+            <span className="text-purple-500 ml-1">
+              ({updateStatus.latest_version} available)
+            </span>
+          )}
+        </span>
       </div>
 
       {/* Report Issue Modal */}

@@ -114,3 +114,28 @@ export const backgroundApi = {
     return data;
   },
 };
+
+// Update Notifications API
+export interface UpdateStatus {
+  update_available: boolean;
+  current_version: string;
+  latest_version: string | null;
+  release_url: string | null;
+  release_name: string | null;
+  published_at: string | null;
+  channel: string;
+  checked_at: string | null;
+  error?: string | null;
+}
+
+export const updatesApi = {
+  getStatus: async (): Promise<UpdateStatus> => {
+    const { data } = await api.get('/updates');
+    return data;
+  },
+
+  checkNow: async (): Promise<UpdateStatus> => {
+    const { data } = await api.post('/updates/check');
+    return data;
+  },
+};

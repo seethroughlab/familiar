@@ -104,6 +104,14 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
+            # Daily update check at 3:30 AM
+            self._scheduler.add_job(
+                self._check_for_app_updates,
+                CronTrigger(hour=3, minute=30),
+                id="daily_update_check",
+                replace_existing=True,
+            )
+
             # Register S3 backup schedule if enabled
             self._register_s3_backup_schedule()
 
@@ -112,6 +120,9 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
 
             # Schedule startup sync after a short delay
             asyncio.create_task(self._startup_sync())
+
+            # Check for updates on startup (30s delay)
+            asyncio.create_task(self._startup_update_check())
 
         except ImportError:
             logger.warning("APScheduler not installed - periodic tasks disabled")
@@ -169,6 +180,19 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
             track_id=track_id,
         )
         return await fetcher.queue(request)
+
+    async def _startup_update_check(self) -> None:
+        """Check for updates on startup after a short delay."""
+        await asyncio.sleep(30)
+        await self._check_for_app_updates()
+
+    async def _check_for_app_updates(self) -> None:
+        """Check GitHub for available updates."""
+        try:
+            from app.services.update_checker import check_for_updates
+            await check_for_updates()
+        except Exception as e:
+            logger.warning(f"Update check failed: {e}")
 
 
 # Global singleton instance

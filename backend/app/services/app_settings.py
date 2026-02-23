@@ -91,6 +91,9 @@ class AppSettings(BaseModel):
     s3_backup_prefix: str = ""
     s3_backup_schedule: str = "weekly"  # daily, weekly, monthly
 
+    # Update notifications
+    update_channel: str = "disabled"  # "disabled", "stable", "beta", "alpha"
+
 
 class AppSettingsService:
     """Service for managing user-configurable app settings."""

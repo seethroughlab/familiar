@@ -32,6 +32,8 @@ export interface AppSettingsResponse {
   s3_backup_prefix: string;
   s3_backup_schedule: string;
   s3_backup_configured: boolean;
+  // Update notifications
+  update_channel: string;
 }
 
 export interface AppSettingsUpdate {
@@ -50,6 +52,8 @@ export interface AppSettingsUpdate {
   // S3 Backup
   s3_backup_enabled?: boolean;
   s3_backup_schedule?: string;
+  // Update notifications
+  update_channel?: string;
 }
 
 export const appSettingsApi = {

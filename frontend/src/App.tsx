@@ -9,6 +9,7 @@ const log = createLogger('App');
 
 import { ProfileSelector } from './components/Profiles';
 import { WorkerAlert } from './components/WorkerAlert';
+import { useUpdateNotification } from './hooks/useUpdateNotification';
 import { pluginLoader } from './services/pluginLoader';
 import { initializeProfile, type Profile } from './services/profileService';
 
@@ -216,6 +217,8 @@ function App() {
       log.error('Failed to load plugins:', err);
     });
   }, []);
+
+  useUpdateNotification();
 
   if (checkingProfile) {
     return (

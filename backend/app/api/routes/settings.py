@@ -72,6 +72,9 @@ class SettingsResponse(BaseModel):
     s3_backup_prefix: str
     s3_backup_schedule: str
 
+    # Update notifications
+    update_channel: str
+
     # Computed status fields
     spotify_configured: bool
     lastfm_configured: bool
@@ -113,6 +116,9 @@ class SettingsUpdateRequest(BaseModel):
     # S3 Backup
     s3_backup_enabled: bool | None = None
     s3_backup_schedule: str | None = None
+
+    # Update notifications
+    update_channel: str | None = None
 
 
 def _get_library_status() -> LibraryStatus:
