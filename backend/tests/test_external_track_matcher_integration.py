@@ -180,6 +180,102 @@ class TestRematchAllUnmatched:
         assert stats["matched"] >= 1
 
 
+class TestFindMatchCandidates:
+    @pytest.mark.asyncio
+    async def test_isrc_match_first_with_confidence_1(self, async_db, matcher):
+        track = await insert_test_track(
+            async_db, title="ISRC Candidate", artist="Artist", isrc="USRC99990001"
+        )
+        await async_db.commit()
+
+        candidates = await matcher.find_match_candidates(
+            title="ISRC Candidate", artist="Artist", isrc="USRC99990001"
+        )
+        assert len(candidates) >= 1
+        assert candidates[0]["track_id"] == str(track.id)
+        assert candidates[0]["match_method"] == "isrc"
+        assert candidates[0]["confidence"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_exact_match_found(self, async_db, matcher):
+        track = await insert_test_track(
+            async_db, title="Exact Candidate", artist="Exact Band"
+        )
+        await async_db.commit()
+
+        candidates = await matcher.find_match_candidates(
+            title="Exact Candidate", artist="Exact Band"
+        )
+        assert len(candidates) >= 1
+        assert candidates[0]["track_id"] == str(track.id)
+        assert candidates[0]["match_method"] == "exact"
+
+    @pytest.mark.asyncio
+    async def test_fuzzy_below_normal_threshold_included(self, async_db, matcher):
+        """Candidates with 50-85% similarity should appear (below auto-match threshold)."""
+        track = await insert_test_track(
+            async_db, title="Stairway to Heaven", artist="Led Zeppelin"
+        )
+        await async_db.commit()
+
+        # Use a somewhat different name that won't hit 85% but should hit 50%
+        candidates = await matcher.find_match_candidates(
+            title="Stairway to Heaven (Live)", artist="Led Zeppelin"
+        )
+        assert len(candidates) >= 1
+        found = [c for c in candidates if c["track_id"] == str(track.id)]
+        assert len(found) == 1
+
+    @pytest.mark.asyncio
+    async def test_deduplication_across_methods(self, async_db, matcher):
+        """A track matched by ISRC should not appear again in fuzzy results."""
+        track = await insert_test_track(
+            async_db, title="Dedup Song", artist="Dedup Artist", isrc="GBDUP0000001"
+        )
+        await async_db.commit()
+
+        candidates = await matcher.find_match_candidates(
+            title="Dedup Song", artist="Dedup Artist", isrc="GBDUP0000001"
+        )
+        track_ids = [c["track_id"] for c in candidates]
+        assert track_ids.count(str(track.id)) == 1
+
+    @pytest.mark.asyncio
+    async def test_limit_respected(self, async_db, matcher):
+        for i in range(5):
+            await insert_test_track(
+                async_db, title=f"Limit Song {i}", artist="Same Artist"
+            )
+        await async_db.commit()
+
+        candidates = await matcher.find_match_candidates(
+            title="Limit Song", artist="Same Artist", limit=3
+        )
+        assert len(candidates) <= 3
+
+    @pytest.mark.asyncio
+    async def test_empty_title_artist_returns_isrc_only(self, async_db, matcher):
+        track = await insert_test_track(
+            async_db, title="ISRC Only", artist="Artist", isrc="USRC88880001"
+        )
+        await async_db.commit()
+
+        candidates = await matcher.find_match_candidates(
+            title="", artist="", isrc="USRC88880001"
+        )
+        assert len(candidates) == 1
+        assert candidates[0]["track_id"] == str(track.id)
+        assert candidates[0]["match_method"] == "isrc"
+
+    @pytest.mark.asyncio
+    async def test_no_title_no_artist_no_isrc_returns_empty(self, async_db, matcher):
+        await insert_test_track(async_db, title="Something", artist="Someone")
+        await async_db.commit()
+
+        candidates = await matcher.find_match_candidates(title="", artist="")
+        assert candidates == []
+
+
 class TestCreateDedupesBySpotifyId:
     @pytest.mark.asyncio
     async def test_returns_existing_on_duplicate_spotify_id(self, async_db, matcher):

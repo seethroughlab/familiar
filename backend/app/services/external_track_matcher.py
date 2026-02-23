@@ -597,6 +597,127 @@ class ExternalTrackMatcher:
 
         return None, None, None
 
+    async def find_match_candidates(
+        self,
+        title: str,
+        artist: str,
+        album: str | None = None,
+        isrc: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Find candidate local tracks for manual matching.
+
+        Uses the same matching pipeline as _find_match() but returns multiple
+        candidates with a lower fuzzy threshold (50 instead of 85), since the
+        user will visually confirm the match.
+
+        Args:
+            title: Track title
+            artist: Artist name
+            album: Album name (optional)
+            isrc: ISRC code (optional)
+            limit: Maximum number of candidates to return
+
+        Returns:
+            List of candidate dicts with track info, match_method, and confidence
+        """
+        candidates: list[dict[str, Any]] = []
+        seen_ids: set = set()
+
+        def _track_to_candidate(track: Track, method: str, confidence: float) -> dict[str, Any]:
+            return {
+                "track_id": str(track.id),
+                "title": track.title,
+                "artist": track.artist,
+                "album": track.album,
+                "duration_seconds": track.duration_seconds,
+                "format": track.format,
+                "year": track.year,
+                "match_method": method,
+                "confidence": round(confidence, 3),
+            }
+
+        def _add_candidate(track: Track, method: str, confidence: float) -> None:
+            if track.id not in seen_ids:
+                seen_ids.add(track.id)
+                candidates.append(_track_to_candidate(track, method, confidence))
+
+        # 1. ISRC match
+        if isrc:
+            result = await self.db.execute(
+                select(Track).where(Track.isrc == isrc)
+            )
+            match = result.scalar_one_or_none()
+            if match:
+                _add_candidate(match, "isrc", 1.0)
+
+        if not title and not artist:
+            return candidates[:limit]
+
+        title_lower = title.lower().strip() if title else ""
+        artist_lower = artist.lower().strip() if artist else ""
+        normalized_title = normalize_for_matching(title) if title else ""
+        normalized_artist = normalize_for_matching(artist) if artist else ""
+
+        # 2. Exact match
+        if title_lower and artist_lower:
+            result = await self.db.execute(
+                select(Track).where(
+                    func.lower(Track.title) == title_lower,
+                    func.lower(Track.artist) == artist_lower,
+                ).limit(1)
+            )
+            match = result.scalars().first()
+            if match:
+                _add_candidate(match, "exact", 1.0)
+
+        # 3. Partial match (contains)
+        if title_lower and artist_lower:
+            result = await self.db.execute(
+                select(Track).where(
+                    func.lower(Track.title).contains(title_lower),
+                    func.lower(Track.artist).contains(artist_lower),
+                ).limit(5)
+            )
+            for match in result.scalars().all():
+                _add_candidate(match, "partial", 0.9)
+
+        # 4. Fuzzy match with lower threshold for manual confirmation
+        CANDIDATE_THRESHOLD = 50
+        result = await self.db.execute(
+            select(Track)
+            .where(Track.title.isnot(None), Track.artist.isnot(None))
+            .limit(5000)
+        )
+        all_tracks = result.scalars().all()
+
+        fuzzy_scored: list[tuple[Track, float]] = []
+        for track in all_tracks:
+            if not track.title or not track.artist:
+                continue
+            if track.id in seen_ids:
+                continue
+
+            local_title = normalize_for_matching(track.title)
+            local_artist = normalize_for_matching(track.artist)
+
+            title_score = fuzz.ratio(normalized_title, local_title) if normalized_title else 0
+            artist_score = fuzz.ratio(normalized_artist, local_artist) if normalized_artist else 0
+            combined = (title_score * 0.6) + (artist_score * 0.4)
+
+            if combined >= CANDIDATE_THRESHOLD:
+                fuzzy_scored.append((track, combined))
+
+        # Sort by score descending
+        fuzzy_scored.sort(key=lambda x: x[1], reverse=True)
+
+        for track, score in fuzzy_scored:
+            _add_candidate(track, "fuzzy", score / 100.0)
+            if len(candidates) >= limit:
+                break
+
+        return candidates[:limit]
+
     async def create_external_track(
         self,
         title: str,

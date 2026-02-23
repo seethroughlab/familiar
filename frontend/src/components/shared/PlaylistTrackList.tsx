@@ -6,7 +6,7 @@
  *
  * Customized via render props for per-view trailing cells, badges, bulk actions, etc.
  */
-import { useMemo, useCallback, type ReactNode } from 'react';
+import { useMemo, useCallback, useRef, useEffect, type ReactNode } from 'react';
 import { Music, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
 import { PlayIndicator } from '../common/PlayIndicator';
@@ -110,6 +110,14 @@ export function PlaylistTrackList<T>({
   // Player state
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+
+  // Auto-scroll to currently playing track
+  const currentTrackRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (currentTrackRef.current) {
+      currentTrackRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
+  }, [currentTrack?.id]);
 
   // Column + sort state
   const columns = useColumnStore((s) => s.columns);
@@ -278,7 +286,7 @@ export function PlaylistTrackList<T>({
             : '';
 
           return (
-            <div key={id}>
+            <div key={id} ref={ctx.isCurrentTrack ? currentTrackRef : undefined}>
               {/* Mobile layout */}
               <div
                 onClick={(e) => handleRowClick(item, idx, e)}

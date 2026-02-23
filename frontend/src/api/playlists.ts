@@ -359,6 +359,18 @@ export interface ExternalTrackStats {
   by_source: Record<string, number>;
 }
 
+export interface MatchCandidate {
+  track_id: string;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  duration_seconds: number | null;
+  format: string | null;
+  year: number | null;
+  match_method: string;
+  confidence: number;
+}
+
 export const externalTracksApi = {
   list: async (params?: {
     matched?: boolean;
@@ -422,6 +434,13 @@ export const externalTracksApi = {
   resolvePreviewUrl: async (externalTrackId: string): Promise<{ preview_url: string | null; preview_source: string | null }> => {
     const { data } = await api.get(`/external-tracks/${externalTrackId}/preview-url`);
     return data;
+  },
+
+  getMatchCandidates: async (externalTrackId: string, limit = 10): Promise<MatchCandidate[]> => {
+    const { data } = await api.get(`/external-tracks/${externalTrackId}/match-candidates`, {
+      params: { limit },
+    });
+    return data.candidates;
   },
 
   matchByAlbum: async (

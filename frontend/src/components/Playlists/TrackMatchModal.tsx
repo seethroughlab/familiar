@@ -5,9 +5,9 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X, Search, Loader2, Music, Check, Album } from 'lucide-react';
+import { X, Search, Loader2, Music, Check, Album, Sparkles } from 'lucide-react';
 import { tracksApi, externalTracksApi } from '../../api';
-import type { ExternalFavoriteTrack } from '../../api';
+import type { ExternalFavoriteTrack, MatchCandidate } from '../../api';
 import type { Track, TrackListResponse } from '../../types';
 import { formatDuration } from '../../utils/format';
 import { showSuccess, showError } from '../../stores/toastStore';
@@ -19,11 +19,26 @@ interface Props {
   onClose: () => void;
 }
 
+/** Convert a MatchCandidate to a Track-compatible object for the existing handleMatch flow. */
+function candidateToTrack(c: MatchCandidate): Track {
+  return {
+    id: c.track_id,
+    title: c.title,
+    artist: c.artist,
+    album: c.album,
+    duration_seconds: c.duration_seconds,
+    format: c.format,
+    year: c.year,
+  } as Track;
+}
+
 export function TrackMatchModal({ externalTrack, unmatchedExternals, onClose }: Props) {
-  const [search, setSearch] = useState(externalTrack.artist || '');
+  const [search, setSearch] = useState(externalTrack.title || '');
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [results, setResults] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
+  const [candidates, setCandidates] = useState<MatchCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(true);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [matching, setMatching] = useState(false);
   // After a successful match, show album batch prompt
@@ -36,6 +51,26 @@ export function TrackMatchModal({ externalTrack, unmatchedExternals, onClose }: 
   useEffect(() => {
     setTimeout(() => searchRef.current?.focus(), 50);
   }, []);
+
+  // Fetch smart-matched candidates on mount
+  useEffect(() => {
+    let cancelled = false;
+    setCandidatesLoading(true);
+
+    externalTracksApi.getMatchCandidates(externalTrack.id).then((result) => {
+      if (!cancelled) {
+        setCandidates(result);
+        setCandidatesLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setCandidates([]);
+        setCandidatesLoading(false);
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [externalTrack.id]);
 
   // Debounce search input
   useEffect(() => {
@@ -121,6 +156,10 @@ export function TrackMatchModal({ externalTrack, unmatchedExternals, onClose }: 
       setBatchMatching(false);
     }
   }, [matchedAlbum, queryClient, onClose]);
+
+  // Dedup: filter search results that already appear in candidates
+  const candidateIds = new Set(candidates.map((c) => c.track_id));
+  const filteredResults = results.filter((r) => !candidateIds.has(r.id));
 
   // Album batch prompt view
   if (matchedAlbum) {
@@ -212,42 +251,93 @@ export function TrackMatchModal({ externalTrack, unmatchedExternals, onClose }: 
 
         {/* Results */}
         <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+          {/* Suggested matches */}
+          {candidatesLoading ? (
+            <div className="flex items-center gap-2 px-2 py-3 text-xs text-zinc-500">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Finding matches...
+            </div>
+          ) : candidates.length > 0 ? (
+            <div className="mb-2">
+              <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-zinc-400">
+                <Sparkles className="w-3 h-3" />
+                Suggested matches
+              </div>
+              {candidates.map((candidate) => {
+                const track = candidateToTrack(candidate);
+                const isSelected = selectedTrack?.id === track.id;
+                return (
+                  <button
+                    key={track.id}
+                    onClick={() => setSelectedTrack(isSelected ? null : track)}
+                    className={`w-full flex items-center gap-3 px-2 py-2 rounded transition-colors text-left ${
+                      isSelected
+                        ? 'bg-green-600/20 ring-1 ring-green-500/50'
+                        : 'hover:bg-zinc-700/50'
+                    }`}
+                  >
+                    <Music className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-white truncate">{track.title || 'Unknown'}</div>
+                      <div className="text-xs text-zinc-500 truncate">
+                        {track.artist || 'Unknown'} &middot; {track.album || 'Unknown'}
+                      </div>
+                    </div>
+                    <div className="text-xs text-zinc-500 shrink-0">
+                      {Math.round(candidate.confidence * 100)}%
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-green-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {/* Search results */}
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
             </div>
-          ) : results.length === 0 ? (
+          ) : filteredResults.length === 0 && candidates.length === 0 ? (
             <div className="text-center py-8 text-sm text-zinc-500">
               {debouncedSearch.trim() ? 'No matches found' : 'Type to search your library'}
             </div>
-          ) : (
-            results.map((track) => {
-              const isSelected = selectedTrack?.id === track.id;
-              return (
-                <button
-                  key={track.id}
-                  onClick={() => setSelectedTrack(isSelected ? null : track)}
-                  className={`w-full flex items-center gap-3 px-2 py-2 rounded transition-colors text-left ${
-                    isSelected
-                      ? 'bg-green-600/20 ring-1 ring-green-500/50'
-                      : 'hover:bg-zinc-700/50'
-                  }`}
-                >
-                  <Music className="w-4 h-4 text-zinc-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-white truncate">{track.title || 'Unknown'}</div>
-                    <div className="text-xs text-zinc-500 truncate">
-                      {track.artist || 'Unknown'} &middot; {track.album || 'Unknown'}
+          ) : filteredResults.length > 0 ? (
+            <>
+              {candidates.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-zinc-400">
+                  <Search className="w-3 h-3" />
+                  Search results
+                </div>
+              )}
+              {filteredResults.map((track) => {
+                const isSelected = selectedTrack?.id === track.id;
+                return (
+                  <button
+                    key={track.id}
+                    onClick={() => setSelectedTrack(isSelected ? null : track)}
+                    className={`w-full flex items-center gap-3 px-2 py-2 rounded transition-colors text-left ${
+                      isSelected
+                        ? 'bg-green-600/20 ring-1 ring-green-500/50'
+                        : 'hover:bg-zinc-700/50'
+                    }`}
+                  >
+                    <Music className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-white truncate">{track.title || 'Unknown'}</div>
+                      <div className="text-xs text-zinc-500 truncate">
+                        {track.artist || 'Unknown'} &middot; {track.album || 'Unknown'}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-xs text-zinc-500 shrink-0">
-                    {formatDuration(track.duration_seconds)}
-                  </div>
-                  {isSelected && <Check className="w-4 h-4 text-green-400 shrink-0" />}
-                </button>
-              );
-            })
-          )}
+                    <div className="text-xs text-zinc-500 shrink-0">
+                      {formatDuration(track.duration_seconds)}
+                    </div>
+                    {isSelected && <Check className="w-4 h-4 text-green-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
         </div>
 
         {/* Match button */}

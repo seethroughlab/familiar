@@ -182,6 +182,59 @@ async def get_external_track(
     return _external_track_to_response(external_track)
 
 
+class MatchCandidate(BaseModel):
+    """A candidate local track for manual matching."""
+
+    track_id: str
+    title: str | None
+    artist: str | None
+    album: str | None
+    duration_seconds: float | None
+    format: str | None
+    year: int | None
+    match_method: str
+    confidence: float
+
+
+class MatchCandidatesResponse(BaseModel):
+    """Response with candidate matches for an external track."""
+
+    candidates: list[MatchCandidate]
+
+
+@router.get("/{external_track_id}/match-candidates", response_model=MatchCandidatesResponse)
+async def get_match_candidates(
+    external_track_id: UUID,
+    db: DbSession,
+    profile: RequiredProfile,
+    limit: int = Query(10, ge=1, le=50),
+) -> MatchCandidatesResponse:
+    """Get smart-matched candidate local tracks for manual matching.
+
+    Uses the same matching algorithm as automatic matching (ISRC, exact,
+    partial, fuzzy) but with a lower threshold, returning multiple candidates
+    for the user to choose from.
+    """
+    external_track = await db.get(ExternalTrack, external_track_id)
+
+    if not external_track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="External track not found",
+        )
+
+    matcher = ExternalTrackMatcher(db)
+    candidates = await matcher.find_match_candidates(
+        title=external_track.title,
+        artist=external_track.artist,
+        album=external_track.album,
+        isrc=external_track.isrc,
+        limit=limit,
+    )
+
+    return MatchCandidatesResponse(candidates=[MatchCandidate(**c) for c in candidates])
+
+
 @router.delete("/{external_track_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_external_track(
     external_track_id: UUID,
