@@ -400,6 +400,117 @@ class ExternalTrackMatcher:
             "playlist_entries_replaced": total_replaced,
         }
 
+    async def match_by_album(
+        self,
+        source_album: str,
+        target_album: str,
+        target_artist: str | None = None,
+    ) -> dict[str, Any]:
+        """Match unmatched external tracks by album name.
+
+        Finds all unmatched external tracks from source_album and tries to
+        fuzzy-match their titles against local tracks from target_album.
+        Uses a lower threshold (70) since album context confirms same content.
+
+        Args:
+            source_album: Album name on external tracks
+            target_album: Album name on local tracks
+            target_artist: Optional artist filter for local tracks
+
+        Returns:
+            Dict with matched, failed counts and details
+        """
+        # Get unmatched external tracks from source album
+        result = await self.db.execute(
+            select(ExternalTrack).where(
+                ExternalTrack.matched_track_id.is_(None),
+                func.lower(ExternalTrack.album) == source_album.lower(),
+            )
+        )
+        unmatched = result.scalars().all()
+
+        if not unmatched:
+            return {"matched": 0, "failed": 0, "details": []}
+
+        # Get local tracks from target album
+        local_query = select(Track).where(
+            func.lower(Track.album) == target_album.lower(),
+        )
+        if target_artist:
+            local_query = local_query.where(
+                func.lower(Track.artist) == target_artist.lower(),
+            )
+        result = await self.db.execute(local_query)
+        local_tracks = result.scalars().all()
+
+        if not local_tracks:
+            return {
+                "matched": 0,
+                "failed": len(unmatched),
+                "details": [
+                    {
+                        "external_track_id": str(ext.id),
+                        "title": ext.title,
+                        "matched_track_id": None,
+                        "status": "no_local_tracks",
+                    }
+                    for ext in unmatched
+                ],
+            }
+
+        matched_count = 0
+        failed_count = 0
+        details: list[dict[str, Any]] = []
+
+        for ext in unmatched:
+            normalized_ext_title = normalize_for_matching(ext.title)
+            best_match: Track | None = None
+            best_score: float = 0.0
+
+            for local in local_tracks:
+                if not local.title:
+                    continue
+                local_title = normalize_for_matching(local.title)
+                score = fuzz.ratio(normalized_ext_title, local_title)
+                if score > best_score:
+                    best_score = score
+                    best_match = local
+
+            # Lower threshold since album context confirms same content
+            if best_match and best_score >= 70:
+                ext.matched_track_id = best_match.id
+                ext.matched_at = datetime.utcnow()
+                ext.match_method = "album_batch"
+                ext.match_confidence = best_score / 100.0
+                await self._replace_in_playlists(ext.id, best_match.id)
+                matched_count += 1
+                details.append({
+                    "external_track_id": str(ext.id),
+                    "title": ext.title,
+                    "matched_track_id": str(best_match.id),
+                    "status": "matched",
+                })
+            else:
+                failed_count += 1
+                details.append({
+                    "external_track_id": str(ext.id),
+                    "title": ext.title,
+                    "matched_track_id": None,
+                    "status": "no_match",
+                })
+
+        await self.db.commit()
+        logger.info(
+            f"Album batch match '{source_album}' -> '{target_album}': "
+            f"{matched_count} matched, {failed_count} failed"
+        )
+
+        return {
+            "matched": matched_count,
+            "failed": failed_count,
+            "details": details,
+        }
+
     async def _find_match(
         self,
         title: str,

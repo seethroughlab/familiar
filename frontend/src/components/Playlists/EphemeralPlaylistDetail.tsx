@@ -80,17 +80,18 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
     );
   }, [playlistTracks, searchFilter]);
 
-  const handlePlay = useCallback((startIndex = 0) => {
-    if (searchedTracks.length === 0 || !playlist) return;
+  const handlePlay = useCallback((startIndex = 0, sortedItems?: EphemeralTrack[]) => {
+    const items = sortedItems ?? searchedTracks;
+    if (items.length === 0 || !playlist) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = searchedTracks[startIndex];
+    const clickedTrack = items[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = searchedTracks.map(toFullTrack);
+    const queueTracks = items.map(toFullTrack);
     setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
   }, [searchedTracks, playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 

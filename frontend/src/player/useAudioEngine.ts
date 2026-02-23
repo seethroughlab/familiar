@@ -279,7 +279,7 @@ export function useAudioEngine() {
       const isCurrent = target === getCurrentElement();
       const state = usePlayerStore.getState();
       // Only log if we didn't initiate the pause (external interruption)
-      if (isCurrent && state.isPlaying) {
+      if (isCurrent && state.isPlaying && !target.ended) {
         log.warn('pause event — external interruption (browser/OS paused playback)', {
           trackId: state.currentTrack?.id,
           trackTitle: state.currentTrack?.title,

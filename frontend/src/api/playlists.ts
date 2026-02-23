@@ -423,4 +423,17 @@ export const externalTracksApi = {
     const { data } = await api.get(`/external-tracks/${externalTrackId}/preview-url`);
     return data;
   },
+
+  matchByAlbum: async (
+    sourceAlbum: string,
+    targetAlbum: string,
+    targetArtist?: string,
+  ): Promise<{ matched: number; failed: number; details: Array<{ external_track_id: string; title: string; matched_track_id: string | null; status: string }> }> => {
+    const { data } = await api.post('/external-tracks/match-by-album', {
+      source_album: sourceAlbum,
+      target_album: targetAlbum,
+      target_artist: targetArtist,
+    });
+    return data;
+  },
 };

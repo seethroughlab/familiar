@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Heart, Clock, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Play, Heart, Clock, Search, X, Download, Check, Loader2, RotateCw, ExternalLink, Link } from 'lucide-react';
 import { favoritesApi } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
@@ -14,6 +14,7 @@ import type { Track } from '../../types';
 import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
 import { StoreSearchLinks } from '../shared/StoreSearchLinks';
+import { TrackMatchModal } from './TrackMatchModal';
 import { formatDuration } from '../../utils/format';
 
 type FavoriteItem =
@@ -38,6 +39,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const { isOffline } = useOfflineStatus();
   const [searchFilter, setSearchFilter] = useState('');
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+  const [matchingTrack, setMatchingTrack] = useState<ExternalFavoriteTrack | null>(null);
 
   const getTrack = useCallback(
     (item: FavoriteItem): Track => {
@@ -167,8 +169,9 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
     return all;
   }, [searchedFavorites, searchedExternalFavorites]);
 
-  const handlePlay = useCallback((startIndex = 0) => {
-    const item = mergedFavorites[startIndex];
+  const handlePlay = useCallback((startIndex = 0, sortedItems?: FavoriteItem[]) => {
+    const items = sortedItems ?? mergedFavorites;
+    const item = items[startIndex];
     if (!item) return;
 
     // If clicking on the currently playing track, toggle play/pause
@@ -178,7 +181,20 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       return;
     }
 
-    const queueTracks = mergedFavorites.map(t => getTrack(t));
+    const queueTracks = items.map(t => {
+      const track = getTrack(t);
+      if (t._kind === 'external') {
+        return Object.assign(track, {
+          _externalInfo: {
+            type: 'external' as const,
+            previewUrl: t.preview_url || null,
+            matchedTrackId: t.matched_track_id || null,
+            originalId: t.id,
+          },
+        });
+      }
+      return track;
+    });
     setQueue(queueTracks, startIndex);
   }, [mergedFavorites, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
@@ -197,6 +213,17 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
             <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
               Not in library
             </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setMatchingTrack(ctx.item as ExternalFavoriteTrack);
+              }}
+              className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded transition-colors flex items-center gap-0.5"
+              title="Match to library track"
+            >
+              <Link className="w-3 h-3" />
+              Match
+            </button>
             <StoreSearchLinks
               artist={ctx.item.artist || 'Unknown Artist'}
               title={ctx.item.title || 'Unknown Title'}
@@ -437,6 +464,15 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
         emptySubMessage="Click the heart icon on any track to add it here"
         sortPersistKey="favorites"
       />
+
+      {/* Track match modal */}
+      {matchingTrack && (
+        <TrackMatchModal
+          externalTrack={matchingTrack}
+          unmatchedExternals={searchedExternalFavorites}
+          onClose={() => setMatchingTrack(null)}
+        />
+      )}
     </div>
   );
 }

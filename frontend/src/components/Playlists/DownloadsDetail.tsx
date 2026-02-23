@@ -62,17 +62,18 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
     );
   }, [tracks, searchFilter]);
 
-  const handlePlay = useCallback((startIndex = 0) => {
-    if (searchedTracks.length === 0) return;
+  const handlePlay = useCallback((startIndex = 0, sortedItems?: DownloadedTrack[]) => {
+    const items = sortedItems ?? searchedTracks;
+    if (items.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = searchedTracks[startIndex];
+    const clickedTrack = items[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = searchedTracks.map(t => ({
+    const queueTracks = items.map(t => ({
       id: t.id,
       file_path: '',
       title: t.title || 'Unknown',

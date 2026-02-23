@@ -286,6 +286,48 @@ async def rematch_all(
         )
 
 
+class AlbumMatchRequest(BaseModel):
+    """Request to batch-match external tracks by album."""
+
+    source_album: str = Field(..., description="Album name on external tracks")
+    target_album: str = Field(..., description="Album name on local tracks")
+    target_artist: str | None = Field(None, description="Optional artist filter for local tracks")
+
+
+class AlbumMatchDetail(BaseModel):
+    external_track_id: str
+    title: str
+    matched_track_id: str | None
+    status: str
+
+
+class AlbumMatchResponse(BaseModel):
+    matched: int
+    failed: int
+    details: list[AlbumMatchDetail]
+
+
+@router.post("/match-by-album", response_model=AlbumMatchResponse)
+async def match_by_album(
+    request: AlbumMatchRequest,
+    db: DbSession,
+    profile: RequiredProfile,
+) -> AlbumMatchResponse:
+    """Batch-match unmatched external tracks by album name.
+
+    Finds all unmatched external tracks from source_album and fuzzy-matches
+    their titles against local tracks from target_album. Uses a lower threshold
+    since album context confirms they're the same content.
+    """
+    matcher = ExternalTrackMatcher(db)
+    result = await matcher.match_by_album(
+        source_album=request.source_album,
+        target_album=request.target_album,
+        target_artist=request.target_artist,
+    )
+    return AlbumMatchResponse(**result)
+
+
 class MigrateMatchedResponse(BaseModel):
     """Response from migrate-matched operation."""
 

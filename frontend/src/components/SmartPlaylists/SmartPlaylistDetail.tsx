@@ -311,17 +311,18 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const allTracksOffline = allTracks.every(t => offlineTrackIds.has(t.id));
   const offlineCount = allTracks.filter(t => offlineTrackIds.has(t.id)).length;
 
-  const handlePlay = (startIndex = 0) => {
-    if (filteredTracks.length === 0) return;
+  const handlePlay = (startIndex = 0, sortedItems?: SmartPlaylistTracksResponse['tracks']) => {
+    const items = sortedItems ?? filteredTracks;
+    if (items.length === 0) return;
 
     // If clicking on the currently playing track, toggle play/pause
-    const clickedTrack = filteredTracks[startIndex];
+    const clickedTrack = items[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = filteredTracks.map(t => getTrackFromItem(t));
+    const queueTracks = items.map(t => getTrackFromItem(t));
     setQueue(queueTracks, startIndex);
   };
 

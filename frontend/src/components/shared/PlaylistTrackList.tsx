@@ -38,7 +38,7 @@ export interface PlaylistTrackListProps<T> {
   /** Unique ID for each item (defaults to getTrack(item)?.id). */
   getItemId?: (item: T) => string;
   /** Called when user double-clicks or clicks the play indicator to play from an index. */
-  onPlay: (index: number) => void;
+  onPlay: (index: number, sortedItems: T[]) => void;
 
   // --- Column customization ---
   /** Grid widths for trailing columns (default: ['3rem', '4.5rem'] for heart + duration). */
@@ -148,7 +148,7 @@ export function PlaylistTrackList<T>({
         const id = getItemId ? getItemId(item) : getTrack(item)?.id;
         return id === track.id;
       });
-      if (idx !== -1) onPlay(idx);
+      if (idx !== -1) onPlay(idx, sortedItems);
     },
     selectedTrackIds: selectedIds,
     onToggleSelect: (track) => toggleItem(track.id),
@@ -177,15 +177,15 @@ export function PlaylistTrackList<T>({
 
   const handleRowDoubleClick = useCallback((_item: T, index: number) => {
     clearSelection();
-    onPlay(index);
-  }, [onPlay, clearSelection]);
+    onPlay(index, sortedItems);
+  }, [onPlay, clearSelection, sortedItems]);
 
   // Play indicator click handler (always plays)
   const handlePlayClick = useCallback((index: number, e: React.MouseEvent) => {
     e.stopPropagation();
     clearSelection();
-    onPlay(index);
-  }, [onPlay, clearSelection]);
+    onPlay(index, sortedItems);
+  }, [onPlay, clearSelection, sortedItems]);
 
   // Build row context
   const buildCtx = useCallback((item: T, index: number): TrackRowContext<T> => {

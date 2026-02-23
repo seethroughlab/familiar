@@ -148,4 +148,38 @@ describe('usePlayTracking', () => {
       expect(playTrackingApi.recordPlay).not.toHaveBeenCalled();
     });
   });
+
+  it('should not record play for external tracks', async () => {
+    const track = {
+      ...createMockTrack('ext-1'),
+      track_type: 'external' as const,
+      preview_url: 'https://example.com/preview.mp3',
+    };
+
+    const { rerender } = renderHook(() => usePlayTracking());
+
+    // Start playing a 120-second external track at time 0
+    act(() => {
+      usePlayerStore.setState({
+        currentTrack: track,
+        isPlaying: true,
+        duration: 120,
+        currentTime: 0,
+      });
+    });
+
+    rerender();
+
+    // Jump past threshold (60 seconds for 50% of 120)
+    act(() => {
+      usePlayerStore.setState({ currentTime: 65 });
+    });
+
+    rerender();
+
+    // Should not record for external tracks
+    await waitFor(() => {
+      expect(playTrackingApi.recordPlay).not.toHaveBeenCalled();
+    });
+  });
 });

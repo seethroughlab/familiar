@@ -287,16 +287,17 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     return result;
   }, [playlist, showDownloadedOnly, offlineTrackIds, searchFilter]);
 
-  const handlePlay = useCallback((startIndex = 0) => {
-    if (filteredTracks.length === 0) return;
+  const handlePlay = useCallback((startIndex = 0, sortedItems?: PlaylistTrackType[]) => {
+    const items = sortedItems ?? filteredTracks;
+    if (items.length === 0) return;
 
-    const clickedTrack = filteredTracks[startIndex];
+    const clickedTrack = items[startIndex];
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = filteredTracks.map(t => {
+    const queueTracks = items.map(t => {
       const trackId = t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id;
       return {
         id: trackId,
