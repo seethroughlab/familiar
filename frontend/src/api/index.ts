@@ -13,5 +13,6 @@ export * from './backup';
 export * from './plugins';
 export * from './download';
 export * from './analysis';
+export * from './torrent';
 // Default export: shared axios instance (for pluginLoader, MusicBrainzLookup)
 export { default } from './base';

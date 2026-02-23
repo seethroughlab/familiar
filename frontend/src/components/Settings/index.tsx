@@ -150,3 +150,4 @@ export { SpotifySettings } from './SpotifySettings';
 export { LastfmSettings } from './LastfmSettings';
 export { OfflineSettings } from './OfflineSettings';
 export { DataManagement } from './DataManagement';
+export { TorrentSearchSettings } from './TorrentSearchSettings';

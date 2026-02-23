@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Heart, Clock, Search, X, Download, Check, Loader2, RotateCw, ExternalLink } from 'lucide-react';
-import { favoritesApi } from '../../api';
+import { favoritesApi, appSettingsApi } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import { useDownloadStore } from '../../stores/downloadStore';
@@ -14,6 +14,7 @@ import type { Track } from '../../types';
 import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
 import { StoreSearchLinks } from '../shared/StoreSearchLinks';
+import { TorrentSearchButton } from '../Library/TorrentSearchResults';
 import { formatDuration } from '../../utils/format';
 
 type FavoriteItem =
@@ -36,6 +37,12 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
   const { favorites, total, toggle, externalFavorites, toggleExternal } = useFavorites();
   const { isOffline } = useOfflineStatus();
+  const { data: torrentSettings } = useQuery({
+    queryKey: ['app-settings-torrent'],
+    queryFn: () => appSettingsApi.get(),
+    staleTime: 60 * 1000,
+    select: (s) => ({ torrentEnabled: s.torrent_search_configured }),
+  });
   const [searchFilter, setSearchFilter] = useState('');
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
 
@@ -197,6 +204,13 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
             <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
               Not in library
             </span>
+            {torrentSettings?.torrentEnabled && ctx.item.artist && (
+              <TorrentSearchButton
+                artist={ctx.item.artist}
+                title={ctx.item.title || undefined}
+                album={ctx.item.album || undefined}
+              />
+            )}
             <StoreSearchLinks
               artist={ctx.item.artist || 'Unknown Artist'}
               title={ctx.item.title || 'Unknown Title'}
@@ -207,7 +221,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       }
     }
     return null;
-  }, []);
+  }, [torrentSettings?.torrentEnabled]);
 
   const getRowClassName = useCallback((ctx: TrackRowContext<FavoriteItem>) => {
     if (ctx.item._kind === 'external') {

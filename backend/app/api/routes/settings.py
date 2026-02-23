@@ -65,6 +65,16 @@ class SettingsResponse(BaseModel):
     # Playlist generation
     playlist_discovery_mode: str  # "library_only" or "suggest_missing"
 
+    # Torrent search (Jackett/Prowlarr)
+    torrent_search_enabled: bool
+    torrent_search_provider: str
+    torrent_search_url: str | None
+    torrent_search_prefer_lossless: bool
+
+    # Download client (Transmission)
+    download_client_url: str | None
+    download_client_username: str | None
+
     # S3 Backup
     s3_backup_enabled: bool
     s3_backup_bucket: str | None
@@ -72,12 +82,16 @@ class SettingsResponse(BaseModel):
     s3_backup_prefix: str
     s3_backup_schedule: str
 
+    # Update notifications
+    update_channel: str
+
     # Computed status fields
     spotify_configured: bool
     lastfm_configured: bool
     anthropic_configured: bool
     acoustid_configured: bool
     s3_backup_configured: bool
+    torrent_search_configured: bool
     music_library_configured: bool
 
 
@@ -110,9 +124,24 @@ class SettingsUpdateRequest(BaseModel):
     # Playlist generation
     playlist_discovery_mode: str | None = None  # "library_only" or "suggest_missing"
 
+    # Torrent search
+    torrent_search_enabled: bool | None = None
+    torrent_search_provider: str | None = None
+    torrent_search_url: str | None = None
+    torrent_search_api_key: str | None = None
+    torrent_search_prefer_lossless: bool | None = None
+
+    # Download client
+    download_client_url: str | None = None
+    download_client_username: str | None = None
+    download_client_password: str | None = None
+
     # S3 Backup
     s3_backup_enabled: bool | None = None
     s3_backup_schedule: str | None = None
+
+    # Update notifications
+    update_channel: str | None = None
 
 
 def _get_library_status() -> LibraryStatus:
@@ -164,6 +193,8 @@ async def get_settings() -> SettingsResponse:
     masked.pop("music_library_paths", None)
     masked.pop("s3_backup_access_key_id", None)
     masked.pop("s3_backup_secret_access_key", None)
+    masked.pop("torrent_search_api_key", None)
+    masked.pop("download_client_password", None)
 
     # Use effective values for S3 bucket/region/prefix (env var fallback)
     masked["s3_backup_bucket"] = service.get_effective("s3_backup_bucket")
@@ -182,6 +213,7 @@ async def get_settings() -> SettingsResponse:
         anthropic_configured=service.has_anthropic_key(),
         acoustid_configured=service.has_acoustid_key(),
         s3_backup_configured=service.has_s3_credentials(),
+        torrent_search_configured=service.has_torrent_search(),
         music_library_configured=service.has_music_library_configured(),
     )
 
@@ -217,6 +249,8 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
     masked.pop("music_library_paths", None)
     masked.pop("s3_backup_access_key_id", None)
     masked.pop("s3_backup_secret_access_key", None)
+    masked.pop("torrent_search_api_key", None)
+    masked.pop("download_client_password", None)
 
     # Use effective values for S3 bucket/region/prefix (env var fallback)
     masked["s3_backup_bucket"] = service.get_effective("s3_backup_bucket")
@@ -235,6 +269,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         anthropic_configured=service.has_anthropic_key(),
         acoustid_configured=service.has_acoustid_key(),
         s3_backup_configured=service.has_s3_credentials(),
+        torrent_search_configured=service.has_torrent_search(),
         music_library_configured=service.has_music_library_configured(),
     )
 

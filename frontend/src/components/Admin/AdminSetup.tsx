@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 import { S3BackupSettings } from '../Settings/S3BackupSettings';
+import { TorrentSearchSettings } from '../Settings/TorrentSearchSettings';
 import { getApiUrl } from '../../api/base';
 
 import { createLogger } from '../../utils/logger';
@@ -36,6 +37,12 @@ interface SettingsData {
   community_cache_enabled: boolean;
   community_cache_contribute: boolean;
   community_cache_url: string;
+  torrent_search_enabled: boolean;
+  torrent_search_provider: string;
+  torrent_search_url: string | null;
+  torrent_search_prefer_lossless: boolean;
+  torrent_search_configured: boolean;
+  download_client_url: string | null;
 }
 
 export function AdminSetup() {
@@ -265,6 +272,19 @@ export function AdminSetup() {
           {/* Cloud Backup */}
           <section>
             <S3BackupSettings />
+          </section>
+
+          {/* Torrent Search */}
+          <section>
+            <TorrentSearchSettings
+              initialEnabled={settings?.torrent_search_enabled}
+              initialProvider={settings?.torrent_search_provider}
+              initialUrl={settings?.torrent_search_url || ''}
+              initialPreferLossless={settings?.torrent_search_prefer_lossless}
+              initialConfigured={settings?.torrent_search_configured}
+              initialDownloadClientUrl={settings?.download_client_url || ''}
+              onSaved={loadSettings}
+            />
           </section>
 
           {/* Info */}

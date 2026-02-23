@@ -8,9 +8,10 @@ import {
   ShoppingCart,
   Clock,
 } from 'lucide-react';
-import { spotifyApi } from '../../api';
+import { spotifyApi, appSettingsApi } from '../../api';
 import type { UnmatchedTrack } from '../../api';
 import { StoreSearchLinks } from '../shared/StoreSearchLinks';
+import { TorrentSearchButton } from './TorrentSearchResults';
 
 interface Props {
   onImportClick?: () => void;
@@ -24,6 +25,13 @@ export function MissingTracks({ onImportClick }: Props) {
     queryKey: ['spotify-unmatched', limit],
     queryFn: () => spotifyApi.getUnmatched({ sort_by: 'added_at', limit }),
     staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const { data: settings } = useQuery({
+    queryKey: ['app-settings-torrent'],
+    queryFn: () => appSettingsApi.get(),
+    staleTime: 60 * 1000,
+    select: (s) => ({ torrentEnabled: s.torrent_search_configured }),
   });
 
   if (isLoading) {
@@ -108,7 +116,7 @@ export function MissingTracks({ onImportClick }: Props) {
           {/* Track list */}
           <div className="max-h-96 overflow-y-auto">
             {tracks.map((track) => (
-              <TrackRow key={track.spotify_id} track={track} />
+              <TrackRow key={track.spotify_id} track={track} torrentEnabled={settings?.torrentEnabled} />
             ))}
           </div>
 
@@ -129,7 +137,7 @@ export function MissingTracks({ onImportClick }: Props) {
   );
 }
 
-function TrackRow({ track }: { track: UnmatchedTrack }) {
+function TrackRow({ track, torrentEnabled }: { track: UnmatchedTrack; torrentEnabled?: boolean }) {
   return (
     <div className="px-4 py-3 border-b border-zinc-800 last:border-0 hover:bg-zinc-800/30 transition-colors">
       <div className="flex items-start justify-between gap-4">
@@ -143,11 +151,20 @@ function TrackRow({ track }: { track: UnmatchedTrack }) {
         </div>
 
         {/* Search links */}
-        <StoreSearchLinks
-          artist={track.artist || 'Unknown Artist'}
-          title={track.name || 'Unknown Track'}
-          album={track.album}
-        />
+        <div className="flex items-center gap-2">
+          {torrentEnabled && track.artist && (
+            <TorrentSearchButton
+              artist={track.artist}
+              title={track.name || undefined}
+              album={track.album || undefined}
+            />
+          )}
+          <StoreSearchLinks
+            artist={track.artist || 'Unknown Artist'}
+            title={track.name || 'Unknown Track'}
+            album={track.album}
+          />
+        </div>
       </div>
     </div>
   );

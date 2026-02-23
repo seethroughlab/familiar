@@ -54,7 +54,9 @@ from app.api.routes import (
     spotify,
     subsonic,
     subsonic_credentials,
+    torrent_search,
     tracks,
+    updates,
     videos,
 )
 from app.api.routes import settings as settings_routes
@@ -310,6 +312,8 @@ app.include_router(s3_backup.router, prefix="/api/v1")
 app.include_router(subsonic_credentials.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(download.router, prefix="/api/v1")
+app.include_router(torrent_search.router, prefix="/api/v1")
+app.include_router(updates.router, prefix="/api/v1")
 
 # Subsonic API mounted at /rest (Subsonic clients expect this path)
 app.include_router(subsonic.router, prefix="/rest")

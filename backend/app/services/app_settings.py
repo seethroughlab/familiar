@@ -82,6 +82,18 @@ class AppSettings(BaseModel):
     normalization_preamp: float = 0.0  # dB
     normalization_prevent_clipping: bool = True
 
+    # Torrent search (Jackett/Prowlarr)
+    torrent_search_enabled: bool = False
+    torrent_search_provider: str = "jackett"  # "jackett" or "prowlarr"
+    torrent_search_url: str | None = None  # e.g. http://localhost:9117
+    torrent_search_api_key: str | None = None
+    torrent_search_prefer_lossless: bool = True
+
+    # Download client (Transmission)
+    download_client_url: str | None = None  # e.g. http://localhost:9091
+    download_client_username: str | None = None
+    download_client_password: str | None = None
+
     # S3 Glacier Deep Archive backup
     s3_backup_enabled: bool = False
     s3_backup_bucket: str | None = None
@@ -90,6 +102,9 @@ class AppSettings(BaseModel):
     s3_backup_secret_access_key: str | None = None
     s3_backup_prefix: str = ""
     s3_backup_schedule: str = "weekly"  # daily, weekly, monthly
+
+    # Update notifications
+    update_channel: str = "disabled"  # "disabled", "stable", "beta", "alpha"
 
 
 class AppSettingsService:
@@ -160,6 +175,8 @@ class AppSettingsService:
             "lastfm_api_key", "lastfm_api_secret",
             "anthropic_api_key", "acoustid_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
+            "torrent_search_api_key",
+            "download_client_password",
         }
 
         # Mask only secret values
@@ -199,6 +216,15 @@ class AppSettingsService:
         access_key = self.get_effective("s3_backup_access_key_id")
         secret_key = self.get_effective("s3_backup_secret_access_key")
         return bool(access_key and secret_key)
+
+    def has_torrent_search(self) -> bool:
+        """Check if torrent search is configured (enabled + url + api_key)."""
+        settings = self.get()
+        return bool(
+            settings.torrent_search_enabled
+            and settings.torrent_search_url
+            and settings.torrent_search_api_key
+        )
 
     def has_music_library_configured(self) -> bool:
         """Check if the music library is accessible at /music."""
