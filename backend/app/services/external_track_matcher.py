@@ -440,8 +440,8 @@ class ExternalTrackMatcher:
             local_query = local_query.where(
                 func.lower(Track.artist) == target_artist.lower(),
             )
-        result = await self.db.execute(local_query)
-        local_tracks = result.scalars().all()
+        local_result = await self.db.execute(local_query)
+        local_tracks = local_result.scalars().all()
 
         if not local_tracks:
             return {
