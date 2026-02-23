@@ -21,7 +21,9 @@ import {
   ExternalLink,
   FileText,
   Download,
+  Copy,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Track } from '../../types';
 import { isExternalTrack } from '../../types';
 import { generateAllSearchUrls } from '../../utils/storeLinks';
@@ -198,7 +200,7 @@ export function TrackContextMenu({
       )}
 
       {/* Edit Metadata */}
-      {onEditMetadata && (
+      {onEditMetadata && !(isExternalTrack(track) && !track.matched_track_id) && (
         <MenuItem
           icon={<Edit3 className="w-4 h-4" />}
           label="Edit Metadata..."
@@ -211,6 +213,16 @@ export function TrackContextMenu({
         icon={<FileText className="w-4 h-4" />}
         label="Download Track Analysis"
         onClick={() => handleAction(() => downloadAnalysis(track))}
+      />
+
+      {/* Copy Track ID */}
+      <MenuItem
+        icon={<Copy className="w-4 h-4" />}
+        label="Copy Track ID"
+        onClick={() => handleAction(() => {
+          navigator.clipboard.writeText(track.id);
+          toast.success('Track ID copied to clipboard');
+        })}
       />
 
       {/* Remove from Downloads */}
