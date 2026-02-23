@@ -286,7 +286,7 @@ export function PlaylistTrackList<T>({
                   <PlayIndicator isCurrent={ctx.isCurrentTrack} isPlaying={ctx.isPlaying} index={idx + 1} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
                     <span className={`font-medium truncate ${ctx.isCurrentTrack ? 'text-green-500' : ''}`}>
                       {ctx.track.title || 'Unknown Title'}
                     </span>
@@ -331,7 +331,7 @@ export function PlaylistTrackList<T>({
 
                 {/* Title + artist */}
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
                     <span className={`font-medium truncate ${ctx.isCurrentTrack ? 'text-green-500' : ''}`}>
                       {ctx.track.title || 'Unknown Title'}
                     </span>
