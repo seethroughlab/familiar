@@ -14,6 +14,8 @@ import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
 import { getColumnDef } from '../Library/columnDefinitions';
 import { useLocalSort, useSortedTracks, buildGridColumns } from './PlaylistColumns';
 import { PlaylistColumnHeader } from './PlaylistColumnHeader';
+import { useClientAlphabetBar } from './useClientAlphabetBar';
+import { AlphabetBar } from '../Library/AlphabetBar';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
 import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
 import { formatDuration } from '../../utils/format';
@@ -130,6 +132,10 @@ export function PlaylistTrackList<T>({
 
   // Sort items
   const sortedItems = useSortedTracks(items, sortBy, sortOrder, getTrack);
+
+  // Alphabet bar (client-side, no backend call needed)
+  const { letterIndex, activeLetter, isVisible: alphabetBarVisible, jumpToLetter } =
+    useClientAlphabetBar({ sortedItems, getTrack, sortBy });
 
   // Multi-select
   const {
@@ -286,7 +292,7 @@ export function PlaylistTrackList<T>({
             : '';
 
           return (
-            <div key={id} ref={ctx.isCurrentTrack ? currentTrackRef : undefined}>
+            <div key={id} data-list-index={idx} ref={ctx.isCurrentTrack ? currentTrackRef : undefined}>
               {/* Mobile layout */}
               <div
                 onClick={(e) => handleRowClick(item, idx, e)}
@@ -383,6 +389,14 @@ export function PlaylistTrackList<T>({
 
       {/* Context menu */}
       {contextMenuElement}
+
+      {/* Alphabet bar (A-Z quick navigation for large sorted lists) */}
+      <AlphabetBar
+        letterIndex={letterIndex}
+        activeLetter={activeLetter}
+        onLetterSelect={jumpToLetter}
+        visible={alphabetBarVisible}
+      />
     </div>
   );
 }
