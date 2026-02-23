@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ShoppingCart, ExternalLink } from 'lucide-react';
 import { generateAllSearchUrls, STORE_STYLES } from '../../utils/storeLinks';
@@ -11,11 +11,11 @@ interface Props {
 
 export function StoreSearchLinks({ artist, title, album }: Props) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const links = generateAllSearchUrls(artist, title, album ?? undefined);
-  if (links.length === 0) return null;
 
   const toggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -44,31 +44,30 @@ export function StoreSearchLinks({ artist, title, album }: Props) {
     };
   }, [open]);
 
-  // Compute dropdown position
-  const getPosition = () => {
-    if (!buttonRef.current) return { top: 0, left: 0 };
+  // Compute dropdown position when opening
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const menuWidth = 220;
-    const menuHeight = links.length * 40 + 16; // rough estimate
+    const menuHeight = links.length * 40 + 16;
 
     let top = rect.bottom + 4;
     let left = rect.right - menuWidth;
 
-    // Flip up if near bottom
     if (top + menuHeight > window.innerHeight - 16) {
       top = rect.top - menuHeight - 4;
     }
-    // Push right if overflowing left
     if (left < 8) {
       left = 8;
     }
-    // Push left if overflowing right
     if (left + menuWidth > window.innerWidth - 8) {
       left = window.innerWidth - menuWidth - 8;
     }
 
-    return { top, left };
-  };
+    setPosition({ top, left });
+  }, [open, links.length]);
+
+  if (links.length === 0) return null;
 
   return (
     <>
@@ -86,7 +85,7 @@ export function StoreSearchLinks({ artist, title, album }: Props) {
           <div
             ref={menuRef}
             className="fixed z-50 w-[220px] py-2 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl"
-            style={getPosition()}
+            style={position}
           >
             {links.map(({ key, name, url }) => {
               const style = STORE_STYLES[key] || {

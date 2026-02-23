@@ -8,7 +8,7 @@ the result in Redis with a 24-hour TTL.
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from packaging.version import Version
@@ -77,7 +77,7 @@ async def check_for_updates() -> dict:
             "release_name": None,
             "published_at": None,
             "channel": channel,
-            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "checked_at": datetime.now(tz=UTC).isoformat(),
         }
         _cache_result(result)
         return result
@@ -127,7 +127,7 @@ async def check_for_updates() -> dict:
         "release_name": best.get("name") if best else None,
         "published_at": best.get("published_at") if best else None,
         "channel": channel,
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(tz=UTC).isoformat(),
     }
 
     _cache_result(result)
@@ -169,7 +169,7 @@ def _error_result(current_version: str, channel: str, error: str) -> dict:
         "release_name": None,
         "published_at": None,
         "channel": channel,
-        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "checked_at": datetime.now(tz=UTC).isoformat(),
         "error": error,
     }
     _cache_result(result)
