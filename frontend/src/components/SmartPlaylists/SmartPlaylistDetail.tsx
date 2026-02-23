@@ -543,6 +543,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
         getTrack={getTrackFromItem}
         onPlay={handlePlay}
         emptyMessage="No tracks match these rules"
+        sortPersistKey={`smart-playlist-${playlistId}`}
       />
 
       {/* Discovery section */}

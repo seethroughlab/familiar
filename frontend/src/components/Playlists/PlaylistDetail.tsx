@@ -838,6 +838,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         dragReorder={dragReorder}
         renderDragHandle={renderDragHandle}
         emptyMessage="No tracks in this playlist"
+        sortPersistKey={`playlist-${playlistId}`}
       />
 
       {/* Recommendations (only for AI-generated playlists) */}

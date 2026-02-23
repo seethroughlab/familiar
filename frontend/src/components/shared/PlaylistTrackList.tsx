@@ -84,6 +84,9 @@ export interface PlaylistTrackListProps<T> {
   contextMenuOptions?: {
     onRemoveFromDownloads?: (track: Track) => void;
   };
+
+  /** Persist sort preferences to localStorage under this key. */
+  sortPersistKey?: string;
 }
 
 export function PlaylistTrackList<T>({
@@ -102,6 +105,7 @@ export function PlaylistTrackList<T>({
   emptyMessage = 'No tracks',
   emptySubMessage,
   contextMenuOptions,
+  sortPersistKey,
 }: PlaylistTrackListProps<T>) {
   // Player state
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -109,7 +113,7 @@ export function PlaylistTrackList<T>({
 
   // Column + sort state
   const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort();
+  const { sortBy, sortOrder, toggleSort } = useLocalSort(sortPersistKey);
   const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
   const gridColumns = useMemo(
     () => buildGridColumns(columns, trailingColumns),

@@ -435,6 +435,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
         getRowClassName={getRowClassName}
         emptyMessage="No favorites yet"
         emptySubMessage="Click the heart icon on any track to add it here"
+        sortPersistKey="favorites"
       />
     </div>
   );

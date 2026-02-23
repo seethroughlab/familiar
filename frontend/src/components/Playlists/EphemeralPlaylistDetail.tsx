@@ -203,6 +203,7 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
         getTrack={toFullTrack}
         onPlay={handlePlay}
         emptyMessage="No tracks in this playlist"
+        sortPersistKey="ephemeral"
       />
     </div>
   );

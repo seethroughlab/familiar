@@ -39,7 +39,23 @@ export function ArtistList({
   filters,
   onGoToArtist,
 }: BrowserProps) {
-  const [sortBy, setSortBy] = useState<'name' | 'track_count' | 'album_count'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'track_count' | 'album_count'>(() => {
+    try {
+      const stored = localStorage.getItem('familiar-sort-artist-list');
+      if (stored === 'track_count' || stored === 'album_count') return stored;
+    } catch { /* ignore */ }
+    return 'name';
+  });
+  const handleSortChange = useCallback((value: typeof sortBy) => {
+    setSortBy(value);
+    try {
+      if (value === 'name') {
+        localStorage.removeItem('familiar-sort-artist-list');
+      } else {
+        localStorage.setItem('familiar-sort-artist-list', value);
+      }
+    } catch { /* ignore */ }
+  }, []);
   const cols = useGridColumns();
 
   // --- Infinite query (shared by mobile & desktop) ---
@@ -257,7 +273,7 @@ export function ArtistList({
         ].map((option) => (
           <button
             key={option.value}
-            onClick={() => setSortBy(option.value as typeof sortBy)}
+            onClick={() => handleSortChange(option.value as typeof sortBy)}
             className={`px-3 py-1 text-sm rounded-md transition-colors ${
               sortBy === option.value
                 ? 'bg-purple-500/30 text-purple-300'
