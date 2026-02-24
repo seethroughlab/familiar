@@ -181,7 +181,7 @@ export function AppShell() {
 
   return (
     <GlobalDropZone onFilesDropped={setImportFiles}>
-      <div className={`h-screen h-[100dvh] flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
+      <div className={`h-dynamic-screen flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
         {/* Main content area */}
         <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Sidebar - hidden on mobile */}

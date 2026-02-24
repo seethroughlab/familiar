@@ -104,6 +104,12 @@ body {
   .pb-safe-bottom {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
+  /* Safe padding only on desktop (md+) — avoids double padding when MobileBottomNav is present */
+  @media (min-width: 768px) {
+    .pb-safe-bottom-desktop {
+      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+  }
 }
 
 /* iOS PWA standalone mode adjustments */
@@ -139,6 +145,13 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border-width: 0;
+}
+
+/* Dynamic viewport height — 100dvh with 100vh fallback.
+   Using a single rule guarantees cascade order so dvh always wins when supported. */
+.h-dynamic-screen {
+  height: 100vh;
+  height: 100dvh;
 }
 
 /* Mobile-specific fixes */
