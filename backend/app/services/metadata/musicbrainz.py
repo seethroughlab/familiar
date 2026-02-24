@@ -495,6 +495,7 @@ def get_artist_releases_recent(
                             "release_type": rg.get("type") or rg.get("primary-type"),
                             "release_date": first_release,
                             "release_date_parsed": release_date.isoformat(),
+                            "artwork_url": f"https://coverartarchive.org/release-group/{rg.get('id')}/front-250",
                         })
                 except ValueError:
                     continue
