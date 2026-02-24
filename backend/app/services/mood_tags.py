@@ -93,6 +93,7 @@ def _get_descriptor_embeddings() -> np.ndarray | None:
     # Try Redis cache first
     try:
         import json
+
         from app.services.tasks.common import get_redis
 
         redis = get_redis()

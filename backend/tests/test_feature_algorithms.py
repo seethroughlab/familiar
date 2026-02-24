@@ -152,7 +152,11 @@ class TestDeriveFeatures:
 
     def test_returns_tuple(self):
         """derive_features should return (features, confidence) tuple."""
-        from app.services.analysis import derive_features, precompute_shared
+        from pathlib import Path
+
+        import librosa
+
+        from app.services.analysis import derive_features
 
         # Create a simple test signal (sine wave at 440Hz)
         sr = 22050
@@ -161,8 +165,6 @@ class TestDeriveFeatures:
         y = (np.sin(2 * np.pi * 440 * t) * 0.3).astype(np.float32)
 
         # Manually build shared dict
-        import librosa
-        from pathlib import Path
 
         n_fft = 2048
         hop_length = 512
@@ -201,8 +203,9 @@ class TestDeriveFeatures:
 
     def test_key_has_mode(self):
         """Key should include mode suffix for minor keys."""
-        from app.services.analysis import derive_features
         from pathlib import Path
+
+        from app.services.analysis import derive_features
 
         sr = 22050
         duration = 5
@@ -248,8 +251,9 @@ class TestDeriveFeatures:
 
     def test_confidence_scores_present(self):
         """Confidence dict should have expected keys."""
-        from app.services.analysis import derive_features
         from pathlib import Path
+
+        from app.services.analysis import derive_features
 
         sr = 22050
         duration = 5
