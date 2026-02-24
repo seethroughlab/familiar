@@ -91,7 +91,8 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 # Audio feature criteria
                 "bpm_min": {"type": "number", "description": "Minimum BPM"},
                 "bpm_max": {"type": "number", "description": "Maximum BPM"},
-                "key": {"type": "string", "description": "Musical key to filter by (e.g., 'C', 'F', 'G#', 'Bb', 'F minor', 'C major')"},
+                "key": {"type": "string", "description": "Musical key to filter by. Supports major keys ('C', 'F', 'G#', 'Bb') and minor keys ('Am', 'F#m', 'A minor'). Plain letter matches both major and minor (e.g., 'A' matches 'A' and 'Am')."},
+                "mood_tag": {"type": "string", "description": "Filter by mood/genre/instrumentation tag (e.g., 'dreamy', 'jazz', 'piano', 'energetic'). Use get_available_mood_tags to see all available tags."},
                 "energy_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum energy (0-1)"},
                 "energy_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum energy (0-1)"},
                 "danceability_min": {"type": "number", "minimum": 0, "maximum": 1},
@@ -165,6 +166,20 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 }
             },
             "required": ["feature"]
+        }
+    },
+    {
+        "name": "get_available_mood_tags",
+        "description": "Get all available mood/genre/instrumentation tags with track counts. Use this to see what mood tags exist in the library before filtering by mood_tag.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["mood", "genre", "instrumentation", "energy"],
+                    "description": "Filter to a specific category (optional, returns all if omitted)"
+                }
+            }
         }
     },
     {
@@ -808,7 +823,7 @@ Use filter_tracks with these features. Use get_feature_distribution first to cal
 - tempo_character: "grid-locked" (electronic/quantized), "slight drift" (live band), "breathing" (rubato/expressive)
 
 **Harmonic:**
-- key: musical key (e.g., "C", "F#", "Bb")
+- key: musical key with mode (e.g., "C" for C major, "Am" for A minor, "F#m" for F# minor). Plain letter matches both major and minor.
 - modal_character: "dorian", "mixolydian", "lydian", "phrygian", "aeolian", "ionian", "chromatic"
 - key_stability: "stable", "drifting", "modulating"
 - harmonic_complexity_min/max (0-1): 0=simple triads, 0.5=pop complexity, 0.8+=jazz/progressive
@@ -824,6 +839,15 @@ Use filter_tracks with these features. Use get_feature_distribution first to cal
 **Melodic:**
 - note_density_min/max: notes per beat (sparse=0.5, busy=4+)
 - pitch_range_min/max: range in semitones (narrow=<12, octave=12, wide=24+)
+
+**Mood/Genre Tags:**
+- mood_tag: CLAP-based tags (mood, genre, instrumentation, energy). Use get_available_mood_tags to see what's available.
+- Examples: "dreamy", "jazz", "piano", "energetic", "dark", "acoustic guitar", "fast"
+- These are computed from audio similarity and complement genre metadata tags.
+
+**Feature Confidence:**
+- Features have confidence scores (0-1) stored in feature_confidence. Most reliable: energy (0.95), key (varies). Least reliable: valence (0.4), speechiness (0.3 without VAD).
+- When external features (ReccoBeats) exist, local analysis is also run for cross-validation. Disagreements are flagged.
 
 **Mood mapping examples:**
 - "chill" → energy<0.4, valence 0.3-0.6

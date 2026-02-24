@@ -238,32 +238,51 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 except Exception as e:
                     logger.warning(f"Community cache features lookup failed: {e}")
 
-            # Fall back to local librosa extraction if no external/cached features
+            # Always run local librosa analysis for features + cross-validation
             computed_locally = False
             analysis_detail = None
-            if not features.get("bpm"):
-                # Use unified pipeline: shared precomputation → features + cheap sections
-                y, sr, shared = precompute_shared(file_path)
-                features = derive_features(y, sr, shared, file_path)
+            feature_confidence: dict[str, float] = {}
+            local_features_dict: dict[str, Any] | None = None
+            has_external = bool(features.get("bpm"))
+
+            # Use unified pipeline: shared precomputation → features + cheap sections
+            y, sr, shared = precompute_shared(file_path)
+            local_result = derive_features(y, sr, shared, file_path)
+            local_feats, local_confidence = local_result
+
+            if not has_external:
+                # No external features — use local as primary
+                features = local_feats
                 features_source = "local"
                 computed_locally = True
+                feature_confidence = local_confidence
+            else:
+                # External features are primary — store local for cross-validation
+                local_features_dict = local_feats
+                feature_confidence = local_confidence
+                # Compute disagreements between local and external
+                disagreements = _compute_disagreements(local_feats, features)
+                for feat_key, disagreement_val in disagreements.items():
+                    feature_confidence[f"{feat_key}_cross_validated"] = True
+                    if disagreement_val is not None:
+                        feature_confidence[f"{feat_key}_disagreement"] = disagreement_val
 
-                # Run cheap analysis sections (harmonic, rhythmic, spectral, structural, energy)
-                # Only if track is long enough for meaningful analysis
-                if track.duration_seconds and track.duration_seconds >= 30:
-                    try:
-                        analysis_detail, deep_scalars, section_errors = run_cheap_sections(
-                            y, sr, shared, str(file_path), track_id
+            # Run cheap analysis sections (harmonic, rhythmic, spectral, structural, energy)
+            # Only if track is long enough for meaningful analysis
+            if track.duration_seconds and track.duration_seconds >= 30:
+                try:
+                    analysis_detail, deep_scalars, section_errors = run_cheap_sections(
+                        y, sr, shared, str(file_path), track_id
+                    )
+                    if section_errors:
+                        logger.warning(
+                            f"Analysis section errors for {track.title}: {section_errors}"
                         )
-                        if section_errors:
-                            logger.warning(
-                                f"Analysis section errors for {track.title}: {section_errors}"
-                            )
-                    except Exception as e:
-                        logger.warning(f"Cheap sections failed for {track.title}: {e}")
+                except Exception as e:
+                    logger.warning(f"Cheap sections failed for {track.title}: {e}")
 
-                del y, shared
-                gc.collect()
+            del y, shared
+            gc.collect()
 
             # Contribute features to community cache if computed locally
             if (
@@ -340,6 +359,10 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 existing_analysis.features_version = FEATURES_VERSION
                 if analysis_detail is not None:
                     existing_analysis.analysis_detail = analysis_detail
+                if feature_confidence:
+                    existing_analysis.feature_confidence = feature_confidence
+                if local_features_dict is not None:
+                    existing_analysis.local_features = local_features_dict
                 # Keep existing embedding if present
             else:
                 analysis = TrackAnalysis(
@@ -349,6 +372,8 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                     embedding=None,  # Embedding extracted in phase 2
                     acoustid=acoustid_fingerprint,
                     analysis_detail=analysis_detail,
+                    feature_confidence=feature_confidence or None,
+                    local_features=local_features_dict,
                 )
                 # Set typed columns from features
                 for col in ANALYSIS_FEATURE_COLUMNS:
@@ -904,3 +929,145 @@ async def queue_unanalyzed_tracks(limit: int = 500) -> int:
         logger.info(f"Queued {queued} tracks for analysis")
 
     return queued
+
+
+def _compute_disagreements(
+    local: dict[str, Any], external: dict[str, Any]
+) -> dict[str, str | None]:
+    """Compare local and external features and flag disagreements.
+
+    Returns dict keyed by feature name, value is disagreement type or None if agreement.
+    """
+    disagreements: dict[str, str | None] = {}
+
+    # BPM: flag half/double tempo
+    local_bpm = local.get("bpm")
+    ext_bpm = external.get("bpm")
+    if local_bpm and ext_bpm and ext_bpm > 0:
+        ratio = local_bpm / ext_bpm
+        if abs(ratio - 0.5) < 0.1:
+            disagreements["bpm"] = "half_tempo"
+        elif abs(ratio - 2.0) < 0.2:
+            disagreements["bpm"] = "double_tempo"
+        elif abs(ratio - 1.0) > 0.15:
+            disagreements["bpm"] = "different"
+        else:
+            disagreements["bpm"] = None
+    else:
+        disagreements["bpm"] = None
+
+    # Key: flag if root pitch class differs
+    local_key = local.get("key", "")
+    ext_key = external.get("key", "")
+    if local_key and ext_key:
+        local_root = local_key.rstrip("m")
+        ext_root = ext_key.rstrip("m")
+        if local_root != ext_root:
+            disagreements["key"] = "different_root"
+        elif local_key != ext_key:
+            disagreements["key"] = "different_mode"
+        else:
+            disagreements["key"] = None
+    else:
+        disagreements["key"] = None
+
+    # Numeric features: flag if difference > 0.3
+    for feat in ("energy", "valence", "danceability"):
+        local_val = local.get(feat)
+        ext_val = external.get(feat)
+        if local_val is not None and ext_val is not None:
+            diff = abs(float(local_val) - float(ext_val))
+            disagreements[feat] = "large_difference" if diff > 0.3 else None
+        else:
+            disagreements[feat] = None
+
+    return disagreements
+
+
+async def queue_tracks_for_mood_tags(limit: int = 500) -> int:
+    """Queue tracks that need mood tag computation (Phase 4).
+
+    Selects tracks with CLAP embeddings but outdated/missing mood_tags_version.
+    Returns the number of tracks queued.
+    """
+    from sqlalchemy import and_, select
+
+    from app.config import MOOD_TAGS_VERSION
+    from app.db.models import TrackAnalysis
+    from app.db.session import async_session_maker
+    from app.services.background import get_background_manager
+
+    queued = 0
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(TrackAnalysis.track_id)
+            .where(
+                and_(
+                    TrackAnalysis.embedding.isnot(None),
+                    TrackAnalysis.mood_tags_version < MOOD_TAGS_VERSION,
+                )
+            )
+            .limit(limit)
+        )
+        track_ids = [str(row[0]) for row in result.fetchall()]
+
+    if track_ids:
+        manager = get_background_manager()
+        for track_id in track_ids:
+            await manager.run_analysis(track_id, phase="mood_tags")
+            queued += 1
+
+    return queued
+
+
+def run_track_mood_tags(track_id: str) -> dict[str, Any]:
+    """Compute mood tags for a track using its CLAP embedding.
+
+    Phase 4 of analysis: mood/genre/instrumentation tags from CLAP similarity.
+    Very fast per track (numpy dot product, no model inference).
+    """
+    import logging
+    logging.basicConfig(level=logging.INFO, format='%(message)s', force=True)
+
+    from sqlalchemy import select
+
+    from app.config import MOOD_TAGS_VERSION
+    from app.db.models import TrackAnalysis
+    from app.db.session import sync_session_maker
+    from app.services.mood_tags import compute_mood_tags
+
+    try:
+        with sync_session_maker() as db:
+            result = db.execute(
+                select(TrackAnalysis)
+                .where(TrackAnalysis.track_id == UUID(track_id))
+            )
+            analysis = result.scalar_one_or_none()
+
+            if not analysis:
+                return {"error": f"No analysis record for {track_id}", "permanent": True}
+
+            if analysis.embedding is None:
+                return {"error": "No CLAP embedding available", "permanent": True}
+
+            embedding = list(analysis.embedding)
+            tags = compute_mood_tags(embedding)
+
+            analysis.mood_tags = tags
+            analysis.mood_tags_version = MOOD_TAGS_VERSION
+            db.commit()
+
+            tag_names = [t["tag"] for t in tags] if tags else []
+            logger.info(f"Mood tags computed for {track_id}: {tag_names}")
+
+            return {
+                "track_id": track_id,
+                "status": "success",
+                "phase": "mood_tags",
+                "tags": tag_names,
+            }
+
+    except Exception as e:
+        error_msg = str(e)[:500]
+        logger.error(f"Mood tag computation failed for {track_id}: {error_msg}")
+        return {"error": error_msg, "status": "failed"}

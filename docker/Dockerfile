@@ -93,6 +93,11 @@ COPY backend/migrations ./migrations
 # Copy built frontend
 COPY --from=frontend-builder /app/frontend/dist ./static
 
+# Download silero-vad ONNX model (~2MB) for voice activity detection
+RUN mkdir -p /app/data/models \
+    && curl -fsSL -o /app/data/models/silero_vad.onnx \
+       https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
+
 # Create non-root user and directories
 RUN useradd --create-home --shell /bin/bash familiar \
     && mkdir -p /data/music /data/art /data/videos /app/data \

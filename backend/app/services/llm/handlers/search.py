@@ -196,6 +196,7 @@ class SearchHandlersMixin:
         tempo_character: str | None = None,
         pitch_range_min: int | None = None,
         pitch_range_max: int | None = None,
+        mood_tag: str | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         """Filter tracks by library criteria and/or audio features."""
@@ -261,6 +262,7 @@ class SearchHandlersMixin:
             harmonic_complexity_min, harmonic_complexity_max,
             speechiness_min, speechiness_max,
             tempo_character, pitch_range_min, pitch_range_max,
+            mood_tag,
         ])
         needs_play_history = any(v is not None for v in [
             min_play_count, max_play_count, played_in_last_days, not_played_in_days,
@@ -340,17 +342,49 @@ class SearchHandlersMixin:
         if bpm_max is not None:
             conditions.append(TrackAnalysis.bpm <= bpm_max)
         if key is not None:
-            key_normalized = key.strip().upper()
-            key_root = key_normalized.split()[0].rstrip("M")
-            if "SHARP" in key_normalized:
+            key_normalized = key.strip()
+            key_upper = key_normalized.upper()
+
+            # Detect minor mode from input
+            is_minor = False
+            if key_upper.endswith("M") and not key_upper.endswith("#M"):
+                is_minor = True
+                key_upper = key_upper[:-1]
+            elif "MINOR" in key_upper:
+                is_minor = True
+                key_upper = key_upper.replace("MINOR", "").strip()
+            elif "MAJOR" in key_upper:
+                key_upper = key_upper.replace("MAJOR", "").strip()
+
+            # Normalize root note
+            key_root = key_upper.split()[0]
+            if "SHARP" in key_upper:
                 key_root = key_root.rstrip("#") + "#"
-            elif "FLAT" in key_normalized or "B" in key_normalized.split()[-1:]:
+            elif "FLAT" in key_upper:
                 flat_to_sharp = {"BB": "A#", "EB": "D#", "AB": "G#", "DB": "C#", "GB": "F#"}
-                if key_root + "B" in flat_to_sharp:
-                    key_root = flat_to_sharp[key_root + "B"]
-                elif key_root in flat_to_sharp:
+                clean = key_root.rstrip("B")
+                lookup = clean + "B" if clean + "B" in flat_to_sharp else key_root
+                if lookup in flat_to_sharp:
+                    key_root = flat_to_sharp[lookup]
+            else:
+                flat_to_sharp = {"BB": "A#", "EB": "D#", "AB": "G#", "DB": "C#", "GB": "F#"}
+                if key_root in flat_to_sharp:
                     key_root = flat_to_sharp[key_root]
-            conditions.append(TrackAnalysis.key == key_root)
+
+            if is_minor:
+                # Explicitly minor: match only "Am", "F#m", etc.
+                conditions.append(TrackAnalysis.key == key_root + "m")
+            elif key_normalized.endswith("m") and len(key_normalized) <= 4:
+                # Short minor notation like "Am", "F#m"
+                conditions.append(TrackAnalysis.key == key_normalized)
+            else:
+                # Plain key like "A" — match both major ("A") and minor ("Am")
+                conditions.append(
+                    or_(
+                        TrackAnalysis.key == key_root,
+                        TrackAnalysis.key == key_root + "m",
+                    )
+                )
         if energy_min is not None:
             conditions.append(TrackAnalysis.energy >= energy_min)
         if energy_max is not None:
@@ -426,6 +460,14 @@ class SearchHandlersMixin:
             conditions.append(TrackAnalysis.pitch_range >= pitch_range_min)
         if pitch_range_max is not None:
             conditions.append(TrackAnalysis.pitch_range <= pitch_range_max)
+        if mood_tag is not None:
+            # JSONB containment query: mood_tags @> '[{"tag": "dreamy"}]'
+            import json
+            conditions.append(
+                TrackAnalysis.mood_tags.op("@>")(
+                    json.dumps([{"tag": mood_tag.lower().strip()}])
+                )
+            )
 
         for condition in conditions:
             stmt = stmt.where(condition)

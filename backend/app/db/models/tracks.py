@@ -210,6 +210,7 @@ class TrackAnalysis(Base):
         Index("ix_track_analysis_key", "key"),
         Index("ix_track_analysis_swing_ratio", "swing_ratio"),
         Index("ix_track_analysis_brightness", "brightness"),
+        Index("ix_track_analysis_mood_tags", "mood_tags", postgresql_using="gin"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -257,6 +258,17 @@ class TrackAnalysis(Base):
     has_melodic: Mapped[bool] = mapped_column(Boolean, default=False)
     midi_path: Mapped[str | None] = mapped_column(String(500))
     melodic_version: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ── Confidence & cross-validation ──────────────────────────────────────
+    # Per-feature confidence scores and cross-validation results
+    feature_confidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Locally-computed features when external features are primary (for cross-validation)
+    local_features: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+    # ── Mood/genre tags ──────────────────────────────────────────────────
+    # CLAP-based mood, genre, instrumentation, and energy tags
+    mood_tags: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    mood_tags_version: Mapped[int] = mapped_column(Integer, default=0)
 
     # ── Existing columns ─────────────────────────────────────────────────
     # Vector embedding for similarity search (CLAP produces 512-dim embeddings)

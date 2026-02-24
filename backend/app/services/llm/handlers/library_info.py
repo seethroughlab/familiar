@@ -156,3 +156,53 @@ class LibraryInfoHandlersMixin:
             "median": _round(row.median),
             "analyzed_tracks": row.count,
         }
+
+    async def _get_available_mood_tags(
+        self: "ToolExecutor", category: str | None = None
+    ) -> dict[str, Any]:
+        """Get available mood tags with track counts."""
+        from sqlalchemy import text
+
+        from app.services.mood_tags import DESCRIPTORS
+
+        # Query distinct tags with counts from JSONB
+        query = text("""
+            SELECT tag_elem->>'tag' AS tag,
+                   tag_elem->>'category' AS category,
+                   COUNT(*) AS track_count
+            FROM track_analysis,
+                 jsonb_array_elements(mood_tags) AS tag_elem
+            WHERE mood_tags IS NOT NULL
+            GROUP BY tag, category
+            ORDER BY track_count DESC
+        """)
+        result = await self.db.execute(query)
+        rows = result.fetchall()
+
+        tags = []
+        for row in rows:
+            if category and row.category != category:
+                continue
+            tags.append({
+                "tag": row.tag,
+                "category": row.category,
+                "track_count": row.track_count,
+            })
+
+        # Also include tags with 0 tracks if not in DB yet
+        existing_tags = {t["tag"] for t in tags}
+        for desc in DESCRIPTORS:
+            if desc["tag"] not in existing_tags:
+                if category and desc["category"] != category:
+                    continue
+                tags.append({
+                    "tag": desc["tag"],
+                    "category": desc["category"],
+                    "track_count": 0,
+                })
+
+        return {
+            "tags": tags,
+            "total_tags": len(tags),
+            "total_tagged_tracks": sum(t["track_count"] for t in tags if t["track_count"] > 0),
+        }

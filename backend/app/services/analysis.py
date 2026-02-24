@@ -377,58 +377,249 @@ def precompute_shared(file_path: Path) -> tuple:
     return y, sr, shared
 
 
+# ── Krumhansl-Kessler key profiles ────────────────────────────────────────────
+# Empirically derived pitch-class profiles for major and minor keys.
+# Each 12-element array represents the "ideal" chroma distribution.
+_KK_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+_KK_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+
+_KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+
+def _detect_key_kk(chroma: np.ndarray) -> tuple[str, float]:
+    """Detect key using Krumhansl-Kessler profile correlation.
+
+    Correlates mean chroma against all 24 key profiles (12 roots × major + minor).
+
+    Returns:
+        (key_string, confidence) where key_string includes mode suffix
+        (e.g., "C", "Am", "F#m") and confidence is the correlation score (0-1).
+    """
+    mean_chroma = np.mean(chroma, axis=1)
+    if np.sum(mean_chroma) < 1e-8:
+        return ("C", 0.0)
+
+    best_corr = -1.0
+    best_key = "C"
+
+    for root in range(12):
+        # Rotate chroma so root is at index 0
+        rotated = np.roll(mean_chroma, -root)
+
+        # Major correlation
+        corr_major = float(np.corrcoef(rotated, _KK_MAJOR)[0, 1])
+        if corr_major > best_corr:
+            best_corr = corr_major
+            best_key = _KEY_NAMES[root]
+
+        # Minor correlation
+        corr_minor = float(np.corrcoef(rotated, _KK_MINOR)[0, 1])
+        if corr_minor > best_corr:
+            best_corr = corr_minor
+            best_key = _KEY_NAMES[root] + "m"
+
+    # Normalize confidence to 0-1 (correlation ranges from -1 to 1)
+    confidence = float(np.clip((best_corr + 1) / 2, 0, 1))
+    return (best_key, confidence)
+
+
+def _compute_acousticness(y: np.ndarray, sr: int, shared: dict) -> float:
+    """Compute acousticness using MFCC + spectral heuristic.
+
+    Weighted combination of:
+    - MFCC1 mean (spectral shape, 30%)
+    - Spectral flatness (tonal vs noisy, 30%)
+    - Spectral rolloff (20%)
+    - MFCC temporal variance (natural variation, 10%)
+    - Crest factor (peak/RMS ratio, 10%)
+    """
+    import librosa
+
+    mfcc = shared["mfcc"]
+    rms = shared["rms"]
+
+    # MFCC1 mean — acoustic instruments tend to have higher MFCC1
+    mfcc1_mean = float(np.mean(mfcc[0]))
+    # Normalize: typical range -200 to 200, map to 0-1
+    mfcc1_score = float(np.clip((mfcc1_mean + 200) / 400, 0, 1))
+
+    # Spectral flatness — lower = more tonal (acoustic), higher = more noisy (electronic)
+    flatness = librosa.feature.spectral_flatness(y=y)[0]
+    flatness_mean = float(np.mean(flatness))
+    # Invert: low flatness = high acousticness
+    flatness_score = float(np.clip(1.0 - flatness_mean * 10, 0, 1))
+
+    # Spectral rolloff — acoustic tends to have lower rolloff
+    rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr)[0]
+    rolloff_norm = float(np.mean(rolloff)) / (sr / 2)
+    rolloff_score = float(np.clip(1.0 - rolloff_norm, 0, 1))
+
+    # MFCC temporal variance — acoustic instruments have more natural variation
+    mfcc_var = float(np.mean(np.var(mfcc, axis=1)))
+    mfcc_var_score = float(np.clip(mfcc_var / 500, 0, 1))
+
+    # Crest factor — acoustic tends to have higher crest factor
+    rms_mean = float(np.mean(rms))
+    peak = float(np.max(np.abs(y)))
+    crest = peak / (rms_mean + 1e-10)
+    crest_score = float(np.clip(crest / 20, 0, 1))
+
+    acousticness = (
+        mfcc1_score * 0.30 +
+        flatness_score * 0.30 +
+        rolloff_score * 0.20 +
+        mfcc_var_score * 0.10 +
+        crest_score * 0.10
+    )
+
+    return float(np.clip(acousticness, 0, 1))
+
+
+def _compute_harmonic_tension(chroma: np.ndarray) -> float:
+    """Compute harmonic tension from chroma co-occurrence.
+
+    Measures the ratio of dissonant interval energy to consonant interval energy.
+    Higher values = more tension/dissonance.
+
+    Returns:
+        Tension score (0-1), where 0 = purely consonant, 1 = highly dissonant.
+    """
+    # Consonant intervals (in semitones): unison(0), octave(12->0), fifth(7), fourth(5), major third(4), minor third(3)
+    consonant_intervals = {0, 3, 4, 5, 7}
+    # Dissonant intervals: minor second(1), major second(2), tritone(6)
+    dissonant_intervals = {1, 2, 6}
+
+    # Compute co-occurrence matrix from chroma
+    mean_chroma = np.mean(chroma, axis=1)
+    consonant_energy = 0.0
+    dissonant_energy = 0.0
+
+    for i in range(12):
+        for j in range(i + 1, 12):
+            interval = (j - i) % 12
+            co_energy = mean_chroma[i] * mean_chroma[j]
+            if interval in consonant_intervals:
+                consonant_energy += co_energy
+            elif interval in dissonant_intervals:
+                dissonant_energy += co_energy
+
+    total = consonant_energy + dissonant_energy
+    if total < 1e-10:
+        return 0.5
+
+    tension = dissonant_energy / total
+    return float(np.clip(tension, 0, 1))
+
+
 def derive_features(
     y: np.ndarray, sr: int, shared: dict, file_path: Path
-) -> dict[str, float | str | None]:
+) -> tuple[dict[str, float | str | None], dict[str, float]]:
     """Derive classic scalar features from shared librosa intermediates.
 
-    Returns a flat dict of typed values matching TrackAnalysis typed columns.
+    Returns:
+        (features, confidence) tuple where:
+        - features: flat dict of typed values matching TrackAnalysis typed columns
+        - confidence: per-feature confidence scores (0-1)
     """
     import librosa
 
     features: dict[str, float | str | None] = {}
+    confidence: dict[str, float] = {}
 
     chroma = shared["chroma"]
     spec = shared["spec"]
     rms = shared["rms"]
     n_fft = shared["n_fft"]
     bpm = shared["bpm"]
+    onset_env = shared["onset_env"]
 
     features["bpm"] = bpm
 
-    # Key detection
-    key_idx = np.argmax(np.mean(chroma, axis=1))
-    key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    features["key"] = key_names[key_idx]
+    # BPM confidence: onset envelope energy variance (high variance = strong beat)
+    onset_var = float(np.var(onset_env))
+    confidence["bpm"] = float(np.clip(onset_var / 0.5, 0.2, 1.0))
+
+    # Key detection — Krumhansl-Kessler profiles
+    key_str, key_conf = _detect_key_kk(chroma)
+    features["key"] = key_str
+    confidence["key"] = key_conf
 
     # Energy (RMS energy normalized to 0-1 using dB scale)
     rms_mean = float(np.mean(rms))
     rms_db = 20 * np.log10(rms_mean + 1e-10)
     features["energy"] = float(np.clip((rms_db + 60) / 54, 0, 1))
+    confidence["energy"] = 0.95  # Direct measurement
 
-    # Spectral centroid
+    # Spectral centroid (used by multiple features)
     spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
 
     # Danceability
     pulse = shared["pulse"]
     features["danceability"] = float(np.mean(pulse))
+    # PLP pulse variance — consistent pulse = high confidence
+    pulse_var = float(np.var(pulse))
+    confidence["danceability"] = float(np.clip(1.0 - pulse_var * 5, 0.3, 0.95))
 
-    # Zero crossing rate
-    zcr = librosa.feature.zero_crossing_rate(y)[0]
+    # Acousticness — MFCC + spectral heuristic
+    features["acousticness"] = _compute_acousticness(y, sr, shared)
+    confidence["acousticness"] = 0.6  # Heuristic
 
-    # Acousticness
-    centroid_norm = np.mean(spectral_centroid) / (sr / 2)
-    features["acousticness"] = float(max(0, 1 - centroid_norm * 2))
+    # Instrumentalness — silero-vad
+    vad_result = None
+    try:
+        from app.services.vocal_detection import detect_speech
+        vad_result = detect_speech(y, sr)
+    except Exception as e:
+        logger.debug(f"VAD detection failed, using spectral fallback: {e}")
 
-    # Instrumentalness
-    freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-    vocal_mask = (freqs >= 300) & (freqs <= 3000)
-    vocal_energy = np.mean(spec[vocal_mask, :])
-    total_energy = np.mean(spec)
-    vocal_ratio = vocal_energy / (total_energy + 1e-6)
-    features["instrumentalness"] = float(max(0, 1 - vocal_ratio))
+    if vad_result is not None:
+        mean_speech_prob, _speech_frac = vad_result
+        features["instrumentalness"] = float(np.clip(1.0 - mean_speech_prob * 1.5, 0, 1))
+        confidence["instrumentalness"] = float(np.clip(0.5 + mean_speech_prob * 0.4, 0.5, 0.9))
+    else:
+        # Spectral fallback
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        vocal_mask = (freqs >= 300) & (freqs <= 3000)
+        vocal_energy = np.mean(spec[vocal_mask, :])
+        total_energy = np.mean(spec)
+        vocal_ratio = vocal_energy / (total_energy + 1e-6)
+        features["instrumentalness"] = float(max(0, 1 - vocal_ratio))
+        confidence["instrumentalness"] = 0.3  # Spectral fallback is unreliable
 
-    # Valence
+    # Speechiness — VAD + periodicity
+    if vad_result is not None:
+        mean_speech_prob, _speech_frac = vad_result
+        # Distinguish speech from singing via RMS envelope periodicity
+        # Compute autocorrelation of RMS envelope
+        rms_centered = rms - np.mean(rms)
+        if np.std(rms_centered) > 1e-8:
+            autocorr = np.correlate(rms_centered, rms_centered, mode='full')
+            autocorr = autocorr[len(autocorr) // 2:]
+            autocorr = autocorr / (autocorr[0] + 1e-10)
+            # Look for periodicity in singing range (0.5-4 Hz ~ frames 5-50)
+            if len(autocorr) > 50:
+                periodicity = float(np.max(autocorr[5:50]))
+            else:
+                periodicity = float(np.max(autocorr[1:]))
+            periodicity = float(np.clip(periodicity, 0, 1))
+        else:
+            periodicity = 0.0
+
+        # High VAD + low periodicity = speech; high VAD + high periodicity = singing
+        features["speechiness"] = float(np.clip(mean_speech_prob * (1.0 - periodicity), 0, 1))
+        confidence["speechiness"] = confidence["instrumentalness"]
+    else:
+        # ZCR fallback
+        zcr = librosa.feature.zero_crossing_rate(y)[0]
+        zcr_mean = np.mean(zcr)
+        features["speechiness"] = float(min(1, zcr_mean * 2))
+        confidence["speechiness"] = 0.3
+
+    # Valence — enhanced with harmonic tension + tonality
+    # Extract key root for mode detection
+    key_root_str = key_str.rstrip("m")
+    key_idx = _KEY_NAMES.index(key_root_str) if key_root_str in _KEY_NAMES else 0
+
     chroma_rotated = np.roll(chroma, -key_idx, axis=0)
     major_thirds = chroma_rotated[[0, 4, 7], :]
     minor_thirds = chroma_rotated[[0, 3, 7], :]
@@ -449,21 +640,27 @@ def derive_features(
     rms_std = np.std(rms)
     dynamics_score = np.clip(rms_std / 0.08, 0, 1)
 
+    # New valence components
+    harmonic_tension = _compute_harmonic_tension(chroma)
+    tension_score = 1.0 - harmonic_tension  # Low tension = higher valence
+
+    flatness = librosa.feature.spectral_flatness(y=y)[0]
+    tonality_score = float(np.clip(1.0 - np.mean(flatness) * 10, 0, 1))
+
     raw_valence = (
-        mode_score * 0.30 +
-        brightness_score * 0.25 +
-        tempo_score * 0.20 +
-        contrast_score * 0.15 +
-        dynamics_score * 0.10
+        mode_score * 0.25 +
+        brightness_score * 0.20 +
+        tempo_score * 0.18 +
+        contrast_score * 0.10 +
+        dynamics_score * 0.07 +
+        tension_score * 0.12 +
+        tonality_score * 0.08
     )
 
     centered = raw_valence - 0.5
     spread = np.sign(centered) * (np.abs(centered) ** 0.6) * 1.8
     features["valence"] = float(np.clip(spread + 0.5, 0, 1))
-
-    # Speechiness
-    zcr_mean = np.mean(zcr)
-    features["speechiness"] = float(min(1, zcr_mean * 2))
+    confidence["valence"] = 0.4  # Inherently subjective heuristic
 
     # Loudness / ReplayGain
     rg_tags = read_replaygain_tags(file_path)
@@ -491,13 +688,12 @@ def derive_features(
                 features["track_peak"] = peak
                 features["replaygain_track_gain"] = None
         except Exception as e:
-            import logging
             logging.getLogger(__name__).warning(f"Loudness measurement failed: {e}")
             features["loudness_lufs"] = None
             features["track_peak"] = None
             features["replaygain_track_gain"] = None
 
-    return features
+    return features, confidence
 
 
 def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
@@ -510,7 +706,8 @@ def _extract_features_impl(file_path_str: str) -> dict[str, float | str | None]:
 
     file_path = Path(file_path_str)
     y, sr, shared = precompute_shared(file_path)
-    return derive_features(y, sr, shared, file_path)
+    features, _confidence = derive_features(y, sr, shared, file_path)
+    return features
 
 
 def extract_features(file_path: Path) -> dict[str, float | str | None]:

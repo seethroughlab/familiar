@@ -68,6 +68,8 @@ class AnalysisMixin(_AnalysisBase):
             task = asyncio.create_task(self._do_backfill(track_id))
         elif phase == "melodic":
             task = asyncio.create_task(self._do_melodic(track_id))
+        elif phase == "mood_tags":
+            task = asyncio.create_task(self._do_mood_tags(track_id))
         else:
             task = asyncio.create_task(self._do_analysis(track_id))
 
@@ -148,6 +150,24 @@ class AnalysisMixin(_AnalysisBase):
             return result
         except Exception as e:
             logger.error(f"Melodic analysis failed for {track_id}: {e}")
+            return {"status": "error", "error": str(e)}
+        finally:
+            self._current_track_id = None
+            self._last_task_started_at = None
+            self._analysis_tasks.pop(task_key, None)
+
+    async def _do_mood_tags(self, track_id: str) -> dict[str, Any]:
+        """Execute mood tag computation only (Phase 4)."""
+        from app.services.tasks.analysis_pipeline import run_track_mood_tags
+
+        task_key = f"{track_id}:mood_tags"
+        try:
+            self._current_track_id = track_id
+            self._last_task_started_at = time.monotonic()
+            result = await self.run_cpu_bound(run_track_mood_tags, track_id)
+            return result
+        except Exception as e:
+            logger.error(f"Mood tag computation failed for {track_id}: {e}")
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None

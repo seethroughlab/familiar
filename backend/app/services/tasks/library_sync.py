@@ -832,6 +832,20 @@ async def run_library_sync(
 
                     await asyncio.sleep(5)
 
+            # Phase 6: Mood tags (CLAP-based, fast — numpy only)
+            from app.services.tasks.analysis_pipeline import queue_tracks_for_mood_tags
+
+            mood_tags_queued = await queue_tracks_for_mood_tags(limit=500)
+            if mood_tags_queued > 0:
+                logger.info(f"Queued {mood_tags_queued} tracks for mood tag computation")
+                # Brief wait for mood tags (they're fast — numpy dot products only)
+                mood_start = time.time()
+                while time.time() - mood_start < 300:  # 5 min max
+                    remaining = await queue_tracks_for_mood_tags(limit=100)
+                    if remaining == 0:
+                        break
+                    await asyncio.sleep(3)
+
         finally:
             await local_engine.dispose()
 

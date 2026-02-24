@@ -70,6 +70,7 @@ class ToolExecutor(
             "get_library_stats": self._get_library_stats,
             "get_library_genres": self._get_library_genres,
             "get_feature_distribution": self._get_feature_distribution,
+            "get_available_mood_tags": self._get_available_mood_tags,
             "queue_tracks": self._queue_tracks,
             "control_playback": self._control_playback,
             "get_track_details": self._get_track_details,

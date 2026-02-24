@@ -86,7 +86,8 @@ class Settings(BaseSettings):
 #   v5: Re-extract (psutil fix enabled proper RAM detection)
 #   v6: Added loudness measurement (EBU R128 / ReplayGain)
 #   v7: Tightened section labeling thresholds, fixed key timeline overlaps
-FEATURES_VERSION = 7
+#   v8: KK key profiles with mode, MFCC acousticness, silero-vad instrumentalness/speechiness, valence harmonic tension
+FEATURES_VERSION = 8
 
 # Embedding history:
 #   v2: First CLAP 512-dim embeddings
@@ -105,6 +106,10 @@ MELODIC_VERSION = 6
 #   v3: Heavy blur for color-wash background, label after post-process, dark backdrop
 #   v4: Larger label radius for text padding, artist-only initials
 GENERATIVE_ART_VERSION = 4
+
+# Mood tags history:
+#   v1: CLAP-based mood/genre/instrumentation/energy tags
+MOOD_TAGS_VERSION = 1
 
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}

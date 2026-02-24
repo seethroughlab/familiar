@@ -255,7 +255,7 @@ class SmartPlaylistService:
 
     def _validate_rules(self, rules: list[dict[str, Any]]) -> None:
         """Validate rule structure."""
-        all_valid_fields = TRACK_FIELDS | ANALYSIS_FIELDS | PLAY_HISTORY_FIELDS
+        all_valid_fields = TRACK_FIELDS | ANALYSIS_FIELDS | PLAY_HISTORY_FIELDS | {"mood_tag"}
         string_operators = {"contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"}
         date_operators = {
             "within_days", "not_within_days", "is_empty", "is_not_empty",
@@ -301,7 +301,8 @@ class SmartPlaylistService:
         # Start with base query
         # Join with latest analysis for feature queries
         needs_analysis = any(
-            rule["field"] in ANALYSIS_FIELDS for rule in playlist.rules
+            rule["field"] in ANALYSIS_FIELDS or rule["field"] == "mood_tag"
+            for rule in playlist.rules
         )
         needs_play_history = any(
             rule["field"] in PLAY_HISTORY_FIELDS for rule in playlist.rules
@@ -351,6 +352,23 @@ class SmartPlaylistService:
                 return ProfilePlayHistory.track_id.is_(None)
             else:  # never_played = false -> tracks that have been played
                 return ProfilePlayHistory.track_id.isnot(None)
+
+        # Handle special "mood_tag" field (JSONB containment on mood_tags)
+        if field == "mood_tag" and has_analysis_join:
+            import json
+            if operator == "equals":
+                return TrackAnalysis.mood_tags.op("@>")(
+                    json.dumps([{"tag": value}])
+                )
+            elif operator == "contains":
+                return TrackAnalysis.mood_tags.op("@>")(
+                    json.dumps([{"tag": value}])
+                )
+            elif operator == "not_equals":
+                return ~TrackAnalysis.mood_tags.op("@>")(
+                    json.dumps([{"tag": value}])
+                )
+            return None
 
         # Get the column or JSONB path
         if field in TRACK_FIELDS:
