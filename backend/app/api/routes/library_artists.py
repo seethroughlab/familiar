@@ -226,6 +226,12 @@ async def get_artist_detail(
     artist_name = unquote(artist_name)
     artist_normalized = artist_name.lower().strip()
 
+    # Match tracks where either artist or album_artist matches
+    artist_match = (
+        (func.lower(func.trim(Track.artist)) == artist_normalized)
+        | (func.lower(func.trim(Track.album_artist)) == artist_normalized)
+    )
+
     # Get library stats for this artist
     stats_query = (
         select(
@@ -235,7 +241,7 @@ async def get_artist_detail(
             func.min(cast(Track.id, TEXT)).label("first_track_id"),
         )
         .where(
-            func.lower(func.trim(Track.artist)) == artist_normalized,
+            artist_match,
             Track.status == TrackStatus.ACTIVE,
         )
     )
@@ -254,7 +260,7 @@ async def get_artist_detail(
             func.min(cast(Track.id, TEXT)).label("first_track_id"),
         )
         .where(
-            func.lower(func.trim(Track.artist)) == artist_normalized,
+            artist_match,
             Track.status == TrackStatus.ACTIVE,
             Track.album.isnot(None),
             Track.album != "",
@@ -277,7 +283,7 @@ async def get_artist_detail(
     tracks_query = (
         select(Track)
         .where(
-            func.lower(func.trim(Track.artist)) == artist_normalized,
+            artist_match,
             Track.status == TrackStatus.ACTIVE,
         )
         .order_by(Track.album, Track.disc_number, Track.track_number, Track.title)
@@ -653,10 +659,14 @@ async def get_artist_image(
             logger.debug(f"Spotify artist image lookup failed for '{artist_name}': {e}")
 
     # Step 4: Fallback to first album's artwork
+    artist_match = (
+        (func.lower(func.trim(Track.artist)) == artist_normalized)
+        | (func.lower(func.trim(Track.album_artist)) == artist_normalized)
+    )
     track_query = (
         select(Track)
         .where(
-            func.lower(func.trim(Track.artist)) == artist_normalized,
+            artist_match,
             Track.status == TrackStatus.ACTIVE,
         )
         .order_by(Track.album, Track.track_number)

@@ -73,6 +73,61 @@ _PAREN_SUFFIX_RE = re.compile(
 _LEADING_ARTICLE_RE = re.compile(r'^(?:the|a|an)\s+', re.IGNORECASE)
 
 
+_FEAT_RE = re.compile(
+    r"""
+    \s*                           # optional leading whitespace
+    (?:                           # either parenthesized/bracketed…
+        [\(\[]                    #   open paren or bracket
+        \s*(?:feat\.?|ft\.?|featuring)\s+
+        (.+?)                     #   guest artist(s)
+        \s*[\)\]]                 #   close paren or bracket
+    |                             # …or bare suffix
+        \s+(?:feat\.?|ft\.?|featuring)\s+
+        (.+)                      #   guest artist(s) to end of string
+    )
+    \s*$                          # end of string
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def extract_primary_artist(artist: str | None) -> tuple[str, str | None]:
+    """Extract primary artist and featuring guests from an artist string.
+
+    Splits strings like "Massive Attack Feat. Damon Albarn" into
+    ("Massive Attack", "Damon Albarn").
+
+    Handles: feat., ft., featuring, Feat — with/without parens/brackets,
+    case-insensitive.
+
+    Returns:
+        (primary_artist, featuring_artists_or_None)
+
+    Examples:
+        >>> extract_primary_artist("Massive Attack feat. Damon Albarn")
+        ('Massive Attack', 'Damon Albarn')
+        >>> extract_primary_artist("Radiohead")
+        ('Radiohead', None)
+        >>> extract_primary_artist("Artist (ft. Guest A & Guest B)")
+        ('Artist', 'Guest A & Guest B')
+    """
+    if not artist or not artist.strip():
+        return (artist or "", None)
+
+    m = _FEAT_RE.search(artist)
+    if not m:
+        return (artist, None)
+
+    primary = artist[: m.start()].strip()
+    featuring = (m.group(1) or m.group(2) or "").strip()
+
+    # Safety: don't return an empty primary artist
+    if not primary:
+        return (artist, None)
+
+    return (primary, featuring or None)
+
+
 def normalize_for_duplicate_matching(
     name: str | None, *, strip_articles: bool = False
 ) -> str:

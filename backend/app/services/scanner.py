@@ -727,6 +727,14 @@ class LibraryScanner:
         # Find albums with multiple artists (compilation candidates)
         # Only consider tracks where album_artist is not already set
         # Use lower(album) for case-insensitive grouping
+        # Strip "feat./ft./featuring" suffixes so that tracks like
+        # "Massive Attack feat. Damon Albarn" don't cause false compilation detection
+        stripped_artist = func.regexp_replace(
+            Track.artist,
+            r'\s+(feat\.?|ft\.?|featuring)\s+.*$',
+            '',
+            'i',
+        )
         compilation_query = (
             select(func.lower(Track.album).label("album_lower"))
             .where(
@@ -736,7 +744,7 @@ class LibraryScanner:
                 (Track.album_artist.is_(None) | (Track.album_artist == "")),
             )
             .group_by(func.lower(Track.album))
-            .having(func.count(func.distinct(func.lower(Track.artist))) > 1)
+            .having(func.count(func.distinct(func.lower(stripped_artist))) > 1)
         )
 
         result = await self.db.execute(compilation_query)
