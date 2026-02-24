@@ -4,11 +4,17 @@ Provides speech probability estimation for instrumentalness and speechiness
 feature computation. Falls back gracefully if the model is unavailable.
 """
 
+from __future__ import annotations
+
 import logging
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import onnxruntime
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +29,7 @@ _WINDOW_SIZE = 512
 
 
 @lru_cache(maxsize=1)
-def _load_vad_model() -> "onnxruntime.InferenceSession | None":
+def _load_vad_model() -> onnxruntime.InferenceSession | None:
     """Load silero-vad ONNX model, downloading if necessary."""
     model_path = _MODEL_PATH
 
