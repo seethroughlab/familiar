@@ -241,7 +241,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             # Always run local librosa analysis for features + cross-validation
             computed_locally = False
             analysis_detail = None
-            feature_confidence: dict[str, float] = {}
+            feature_confidence: dict[str, Any] = {}
             local_features_dict: dict[str, Any] | None = None
             has_external = bool(features.get("bpm"))
 
@@ -255,11 +255,11 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 features = local_feats
                 features_source = "local"
                 computed_locally = True
-                feature_confidence = local_confidence
+                feature_confidence = dict(local_confidence)
             else:
                 # External features are primary — store local for cross-validation
                 local_features_dict = local_feats
-                feature_confidence = local_confidence
+                feature_confidence = dict(local_confidence)
                 # Compute disagreements between local and external
                 disagreements = _compute_disagreements(local_feats, features)
                 for feat_key, disagreement_val in disagreements.items():

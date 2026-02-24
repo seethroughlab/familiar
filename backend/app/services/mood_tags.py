@@ -179,7 +179,7 @@ def compute_mood_tags(
     similarities = desc_normalized @ audio_vec
 
     # Get top-K above threshold
-    results = []
+    results: list[dict[str, Any]] = []
     for idx in np.argsort(similarities)[::-1]:
         sim = float(similarities[idx])
         if sim < min_confidence:
