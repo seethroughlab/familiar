@@ -183,6 +183,7 @@ async def run_new_releases_check(
 
                 stats["artists_checked"] += 1
                 spotify_artist_id = None
+                mb_id_to_use = mb_artist_id
                 releases_for_artist: list[dict[str, Any]] = []
 
                 # Try Spotify first
@@ -214,7 +215,8 @@ async def run_new_releases_check(
                                     "spotify_artist_id": spotify_artist_id,
                                 })
 
-                        await asyncio.sleep(2.0)  # Rate limiting: ~4s per artist with throttled API calls
+                        if spotify_artist:
+                            await asyncio.sleep(2.0)  # Rate limiting: ~4s per artist with throttled API calls
 
                     except SpotifyRateLimitError as e:
                         logger.warning(
@@ -224,18 +226,19 @@ async def run_new_releases_check(
                         spotify_service = None  # Fall back to MusicBrainz for remaining artists
                     except Exception as e:
                         logger.warning(f"Spotify lookup failed for {artist_name}: {e}")
+                        spotify_service = None  # Don't keep retrying broken Spotify
 
                 # Fall back to MusicBrainz
                 if not releases_for_artist:
                     try:
                         mb_id_to_use = mb_artist_id
                         if not mb_id_to_use:
-                            mb_result = search_artist(artist_name)
+                            mb_result = await asyncio.to_thread(search_artist, artist_name)
                             if mb_result and mb_result.get("score", 0) >= 80:
                                 mb_id_to_use = mb_result["musicbrainz_artist_id"]
 
                         if mb_id_to_use:
-                            recent = get_artist_releases_recent(mb_id_to_use, days_back=days_back)
+                            recent = await asyncio.to_thread(get_artist_releases_recent, mb_id_to_use, days_back=days_back)
                             stats["musicbrainz_queries"] += 1
 
                             for release in recent:
@@ -280,11 +283,16 @@ async def run_new_releases_check(
                     if saved:
                         stats["releases_new"] += 1
 
-                await service.update_artist_cache(
-                    artist_normalized=normalized,
-                    musicbrainz_id=mb_artist_id,
-                    spotify_id=spotify_artist_id,
-                )
+                # Only cache if lookup resolved to an actual artist
+                if spotify_artist_id or mb_id_to_use:
+                    await service.update_artist_cache(
+                        artist_normalized=normalized,
+                        musicbrainz_id=mb_id_to_use or mb_artist_id,
+                        spotify_id=spotify_artist_id,
+                    )
+
+                if (i + 1) % 25 == 0:
+                    await db.commit()
 
             await db.commit()
 
@@ -385,12 +393,12 @@ async def run_prioritized_new_releases_check(
                 # Query MusicBrainz for releases
                 try:
                     if not mb_id_to_use:
-                        mb_result = search_artist(artist_name)
+                        mb_result = await asyncio.to_thread(search_artist, artist_name)
                         if mb_result and mb_result.get("score", 0) >= 80:
                             mb_id_to_use = mb_result["musicbrainz_artist_id"]
 
                     if mb_id_to_use:
-                        recent = get_artist_releases_recent(mb_id_to_use, days_back=days_back)
+                        recent = await asyncio.to_thread(get_artist_releases_recent, mb_id_to_use, days_back=days_back)
                         stats["musicbrainz_queries"] += 1
 
                         for release in recent:
@@ -431,11 +439,15 @@ async def run_prioritized_new_releases_check(
                     if saved:
                         stats["releases_new"] += 1
 
-                # Update cache for this artist
-                await service.update_artist_cache(
-                    artist_normalized=normalized,
-                    musicbrainz_id=mb_id_to_use,
-                )
+                # Only cache if lookup resolved to an actual artist
+                if mb_id_to_use:
+                    await service.update_artist_cache(
+                        artist_normalized=normalized,
+                        musicbrainz_id=mb_id_to_use,
+                    )
+
+                if (i + 1) % 25 == 0:
+                    await db.commit()
 
             await db.commit()
 

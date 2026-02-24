@@ -452,7 +452,7 @@ def get_artist_releases_recent(
     from datetime import datetime, timedelta
 
     if release_types is None:
-        release_types = ["Album", "Single", "EP"]
+        release_types = ["album", "single", "ep"]
 
     cutoff_date = datetime.now() - timedelta(days=days_back)
     recent_releases = []
