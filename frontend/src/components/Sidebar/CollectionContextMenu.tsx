@@ -8,13 +8,14 @@ import {
   ListPlus,
   Trash2,
   HardDrive,
+  RefreshCw,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
-import { downloadApi, favoritesApi, playlistsApi } from '../../api';
+import { downloadApi, favoritesApi, playlistsApi, newReleasesApi } from '../../api';
 import { clearAllOfflineTracks } from '../../services/offlineService';
 import { showSuccess, showError, showInfo } from '../../stores/toastStore';
 import type { Track } from '../../types';
@@ -35,6 +36,32 @@ export function CollectionContextMenu({ collectionPath, position, onClose }: Pro
     action();
     onClose();
   };
+
+  // New Releases
+  if (collectionPath === '/new-releases') {
+    const handleCheck = async () => {
+      try {
+        await newReleasesApi.check({ days_back: 90 });
+        queryClient.invalidateQueries({ queryKey: ['new-releases-status'] });
+        showSuccess('Checking for new releases...');
+      } catch {
+        showError('Failed to start check');
+      }
+      onClose();
+    };
+
+    return (
+      <ContextMenuContainer position={position} onClose={onClose}>
+        <MenuHeader title="New Releases" />
+
+        <MenuItem
+          icon={<RefreshCw className="w-4 h-4" />}
+          label="Check for New Releases"
+          onClick={handleCheck}
+        />
+      </ContextMenuContainer>
+    );
+  }
 
   // Favorites
   if (collectionPath === '/favorites') {

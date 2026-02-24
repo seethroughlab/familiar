@@ -218,12 +218,25 @@ export function NewReleasesView({ defaultExpanded = false }: NewReleasesViewProp
           {!isLoading && !releases.length && (
             <div className="p-8 text-center">
               <Disc3 className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-              <p className="text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
-                No new releases found
-              </p>
-              <p className="text-xs text-zinc-500 mt-1">
-                Click "Check Now" to search for new music from artists in your library
-              </p>
+              {status && status.total_releases_found > 0 ? (
+                <>
+                  <p className="text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+                    {status.total_releases_found} release{status.total_releases_found !== 1 ? 's' : ''} found, but all are already in your library
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    View details to see them
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+                    No new releases found
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Click "Check Now" to search for new music from artists in your library
+                  </p>
+                </>
+              )}
             </div>
           )}
 

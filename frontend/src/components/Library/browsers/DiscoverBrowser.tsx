@@ -7,7 +7,7 @@
  * - Unmatched Spotify favorites
  */
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Disc,
   Music,
@@ -182,10 +182,10 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
               New Releases from Your Artists
             </h3>
             {new_releases_total > newReleasesSection.items.length && (
-              <button className="text-sm text-zinc-400 hover:text-white flex items-center gap-1">
+              <Link to="/new-releases" className="text-sm text-zinc-400 hover:text-white flex items-center gap-1">
                 View all {new_releases_total}
                 <ChevronRight className="w-4 h-4" />
-              </button>
+              </Link>
             )}
           </div>
           <DiscoverySectionView

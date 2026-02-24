@@ -9,7 +9,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download, Gift,
+  Heart, Download, Gift, Disc3,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
@@ -20,7 +20,7 @@ import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { playlistsApi, smartPlaylistsApi, newReleasesApi } from '../../api';
 import type { Playlist, SmartPlaylist } from '../../api';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
 import { PlaylistContextMenu } from './PlaylistContextMenu';
@@ -42,6 +42,7 @@ const LIBRARY_ITEMS = [
 ];
 
 const COLLECTION_ITEMS = [
+  { path: '/new-releases', label: 'New Releases', icon: Disc3, countKey: 'newReleases' as const },
   { path: '/favorites', label: 'Favorites', icon: Heart, countKey: 'favorites' as const },
   { path: '/downloads', label: 'Downloads', icon: Download, countKey: 'downloads' as const },
   { path: '/wishlist', label: 'Wishlist', icon: Gift, countKey: 'wishlist' as const },
@@ -82,7 +83,17 @@ export function Sidebar() {
   });
   const wishlistCount = wishlist?.tracks?.length ?? 0;
 
+  // New Releases count
+  const { data: newReleasesStatus } = useQuery({
+    queryKey: ['new-releases-status'],
+    queryFn: () => newReleasesApi.getStatus(),
+    staleTime: 60_000,
+    retry: isOffline ? false : 3,
+  });
+  const newReleasesCount = newReleasesStatus?.new_releases_available ?? 0;
+
   const counts = {
+    newReleases: newReleasesCount,
     favorites: favoritesCount,
     downloads: downloadsCount,
     wishlist: wishlistCount,
