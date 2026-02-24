@@ -7,9 +7,10 @@ interface Props {
   onChange: (field: keyof TrackMetadataUpdate, value: unknown) => void;
   isBulkEdit?: boolean;
   trackId?: string;
+  disabledFields?: Set<string>;
 }
 
-export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Props) {
+export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId, disabledFields }: Props) {
   // Handle applying metadata from lookup (MusicBrainz or AutoPopulate)
   const handleApplyLookup = (metadata: Partial<TrackMetadataUpdate>) => {
     Object.entries(metadata).forEach(([field, value]) => {
@@ -29,7 +30,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
           value={formData.title ?? ''}
           onChange={(e) => onChange('title', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Track title'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('title')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('title') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -41,7 +43,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
           value={formData.artist ?? ''}
           onChange={(e) => onChange('artist', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Artist name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('artist')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('artist') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -53,7 +56,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
           value={formData.album ?? ''}
           onChange={(e) => onChange('album', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Album name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('album')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('album') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -65,7 +69,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
           value={formData.album_artist ?? ''}
           onChange={(e) => onChange('album_artist', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Album artist (for compilations)'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('album_artist')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('album_artist') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -79,7 +84,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
             value={formData.track_number ?? ''}
             onChange={(e) => onChange('track_number', e.target.value ? parseInt(e.target.value) : null)}
             placeholder={isBulkEdit ? '(Mixed)' : '#'}
-            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            disabled={disabledFields?.has('track_number')}
+            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('track_number') ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
         </div>
         <div>
@@ -90,7 +96,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
             value={formData.disc_number ?? ''}
             onChange={(e) => onChange('disc_number', e.target.value ? parseInt(e.target.value) : null)}
             placeholder={isBulkEdit ? '(Mixed)' : '#'}
-            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            disabled={disabledFields?.has('disc_number')}
+            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('disc_number') ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
         </div>
       </div>
@@ -106,7 +113,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
             value={formData.year ?? ''}
             onChange={(e) => onChange('year', e.target.value ? parseInt(e.target.value) : null)}
             placeholder={isBulkEdit ? '(Mixed)' : 'YYYY'}
-            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            disabled={disabledFields?.has('year')}
+            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('year') ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
         </div>
         <div>
@@ -116,7 +124,8 @@ export function BasicMetadataTab({ formData, onChange, isBulkEdit, trackId }: Pr
             value={formData.genre ?? ''}
             onChange={(e) => onChange('genre', e.target.value || null)}
             placeholder={isBulkEdit ? '(Mixed)' : 'Genre'}
-            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            disabled={disabledFields?.has('genre')}
+            className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('genre') ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
         </div>
       </div>

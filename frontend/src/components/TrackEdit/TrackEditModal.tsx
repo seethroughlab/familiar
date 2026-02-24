@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X,
@@ -14,7 +14,7 @@ import {
   CheckCircle,
   Fingerprint,
 } from 'lucide-react';
-import { tracksApi, type TrackMetadataUpdate } from '../../api';
+import { tracksApi, bulkTracksApi, type TrackMetadataUpdate } from '../../api';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { BasicMetadataTab } from './tabs/BasicMetadataTab';
 import { ExtendedMetadataTab } from './tabs/ExtendedMetadataTab';
@@ -56,6 +56,7 @@ export function TrackEditModal() {
   const queryClient = useQueryClient();
   const { editingTrackId, setEditingTrackId, getSelectedIds } = useSelectionStore();
   const [formData, setFormData] = useState<Partial<TrackMetadataUpdate>>({});
+  const [changedFields, setChangedFields] = useState<Set<string>>(new Set());
   const [isDirty, setIsDirty] = useState(false);
   const [writeToFile, setWriteToFile] = useState(true);
 
@@ -70,37 +71,53 @@ export function TrackEditModal() {
   // Get the appropriate tabs based on mode
   const currentTabs = isBulkEdit ? BULK_TABS : TABS;
 
-  // Fetch track metadata
-  const { data: metadata, isLoading, error } = useQuery({
+  // Fetch single-track metadata (single edit mode)
+  const { data: metadata, isLoading: isLoadingSingle, error: errorSingle } = useQuery({
     queryKey: ['track-metadata', trackId],
     queryFn: () => tracksApi.getMetadata(trackId!),
-    enabled: !!trackId,
+    enabled: !!trackId && !isBulkEdit,
   });
 
-  // Update mutation
+  // Fetch common values across selected tracks (bulk edit mode)
+  const { data: commonValues, isLoading: isLoadingCommon, error: errorCommon } = useQuery({
+    queryKey: ['track-common-values', selectedIds],
+    queryFn: () => bulkTracksApi.getCommonValues(selectedIds),
+    enabled: isBulkEdit && selectedIds.length > 1,
+  });
+
+  const isLoading = isBulkEdit ? isLoadingCommon : isLoadingSingle;
+  const error = isBulkEdit ? errorCommon : errorSingle;
+
+  // Single-track update mutation
   const updateMutation = useMutation({
     mutationFn: async (update: TrackMetadataUpdate) => {
-      if (isBulkEdit) {
-        // For bulk edit, update all selected tracks
-        const results = await Promise.all(
-          selectedIds.map((id) => tracksApi.updateMetadata(id, update))
-        );
-        return results[0]; // Return first result for status
-      }
       return tracksApi.updateMetadata(trackId!, update);
     },
     onSuccess: () => {
-      // Invalidate track queries to refresh lists
       queryClient.invalidateQueries({ queryKey: ['tracks'] });
       queryClient.invalidateQueries({ queryKey: ['track-metadata'] });
-      // Close modal
       handleClose();
     },
   });
 
-  // Initialize form data when metadata loads
+  // Bulk update mutation — uses dedicated bulk endpoint
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ metadata, writeToFiles }: { metadata: Partial<TrackMetadataUpdate>; writeToFiles: boolean }) => {
+      return bulkTracksApi.updateMetadata(selectedIds, metadata, writeToFiles);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tracks'] });
+      queryClient.invalidateQueries({ queryKey: ['track-metadata'] });
+      queryClient.invalidateQueries({ queryKey: ['track-common-values'] });
+      handleClose();
+    },
+  });
+
+  const activeMutation = isBulkEdit ? bulkUpdateMutation : updateMutation;
+
+  // Initialize form data from single-track metadata
   useEffect(() => {
-    if (metadata && !isDirty) {
+    if (metadata && !isDirty && !isBulkEdit) {
       setFormData({
         title: metadata.title,
         artist: metadata.artist,
@@ -122,11 +139,51 @@ export function TrackEditModal() {
         user_overrides: metadata.user_overrides,
       });
     }
-  }, [metadata, isDirty]);
+  }, [metadata, isDirty, isBulkEdit]);
+
+  // Initialize form data from common values in bulk mode
+  // null values = mixed across tracks, shown as empty with "(Mixed)" placeholder
+  useEffect(() => {
+    if (commonValues && !isDirty && isBulkEdit) {
+      setFormData({
+        title: commonValues.title,
+        artist: commonValues.artist,
+        album: commonValues.album,
+        album_artist: commonValues.album_artist,
+        track_number: commonValues.track_number,
+        disc_number: commonValues.disc_number,
+        year: commonValues.year,
+        genre: commonValues.genre,
+        composer: commonValues.composer,
+        conductor: commonValues.conductor,
+        lyricist: commonValues.lyricist,
+        grouping: commonValues.grouping,
+        comment: commonValues.comment,
+        sort_artist: commonValues.sort_artist,
+        sort_album: commonValues.sort_album,
+        sort_title: commonValues.sort_title,
+        lyrics: commonValues.lyrics,
+      });
+    }
+  }, [commonValues, isDirty, isBulkEdit]);
+
+  // Derive which fields are mixed (null in commonValues = different across tracks)
+  const disabledFields = useMemo(() => {
+    if (!isBulkEdit || !commonValues) return new Set<string>();
+    const disabled = new Set<string>();
+    const fields = ['title','artist','album','album_artist','track_number','disc_number',
+      'year','genre','composer','conductor','lyricist','grouping','comment',
+      'sort_artist','sort_album','sort_title','lyrics'] as const;
+    for (const f of fields) {
+      if (commonValues[f] === null) disabled.add(f);
+    }
+    return disabled;
+  }, [isBulkEdit, commonValues]);
 
   const handleClose = () => {
     setEditingTrackId(null);
     setFormData({});
+    setChangedFields(new Set());
     setIsDirty(false);
     setActiveTab('basic');
   };
@@ -151,16 +208,25 @@ export function TrackEditModal() {
 
   const handleFieldChange = (field: keyof TrackMetadataUpdate, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setChangedFields((prev) => new Set(prev).add(field));
     setIsDirty(true);
   };
 
   const handleSave = () => {
-    // Only include changed fields
-    const update: TrackMetadataUpdate = {
-      ...formData,
-      write_to_file: writeToFile,
-    };
-    updateMutation.mutate(update);
+    if (isBulkEdit) {
+      // Only send fields the user actually changed
+      const changedData: Partial<TrackMetadataUpdate> = {};
+      for (const field of changedFields) {
+        changedData[field as keyof TrackMetadataUpdate] = formData[field as keyof TrackMetadataUpdate] as never;
+      }
+      bulkUpdateMutation.mutate({ metadata: changedData, writeToFiles: writeToFile });
+    } else {
+      const update: TrackMetadataUpdate = {
+        ...formData,
+        write_to_file: writeToFile,
+      };
+      updateMutation.mutate(update);
+    }
   };
 
   // Don't render if no track is being edited
@@ -228,6 +294,7 @@ export function TrackEditModal() {
                   onChange={handleFieldChange}
                   isBulkEdit={isBulkEdit}
                   trackId={trackId}
+                  disabledFields={disabledFields}
                 />
               )}
               {activeTab === 'extended' && (
@@ -235,6 +302,7 @@ export function TrackEditModal() {
                   formData={formData}
                   onChange={handleFieldChange}
                   isBulkEdit={isBulkEdit}
+                  disabledFields={disabledFields}
                 />
               )}
               {activeTab === 'sort' && (
@@ -242,6 +310,7 @@ export function TrackEditModal() {
                   formData={formData}
                   onChange={handleFieldChange}
                   isBulkEdit={isBulkEdit}
+                  disabledFields={disabledFields}
                 />
               )}
               {activeTab === 'artwork' && (
@@ -281,13 +350,13 @@ export function TrackEditModal() {
           </label>
 
           <div className="flex items-center gap-3">
-            {updateMutation.isSuccess && (
+            {activeMutation.isSuccess && (
               <span className="flex items-center gap-1 text-sm text-green-400">
                 <CheckCircle className="w-4 h-4" />
                 Saved
               </span>
             )}
-            {updateMutation.isError && (
+            {activeMutation.isError && (
               <span className="flex items-center gap-1 text-sm text-red-400">
                 <AlertCircle className="w-4 h-4" />
                 Error saving
@@ -302,10 +371,10 @@ export function TrackEditModal() {
             </button>
             <button
               onClick={handleSave}
-              disabled={!isDirty || updateMutation.isPending}
+              disabled={!isDirty || activeMutation.isPending}
               className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg text-sm font-medium transition-colors"
             >
-              {updateMutation.isPending ? (
+              {activeMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />

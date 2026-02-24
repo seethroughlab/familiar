@@ -239,6 +239,42 @@ export interface BulkIdentifyProgress {
   started_at: string | null;
 }
 
+// Bulk edit types
+export interface BulkEditErrorResponse {
+  track_id: string;
+  file_path: string;
+  error: string;
+}
+
+export interface BulkEditResultResponse {
+  total: number;
+  successful: number;
+  failed: number;
+  errors: BulkEditErrorResponse[];
+  fields_updated: string[];
+}
+
+export interface CommonValuesResponse {
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  album_artist: string | null;
+  track_number: number | null;
+  disc_number: number | null;
+  year: number | null;
+  genre: string | null;
+  composer: string | null;
+  conductor: string | null;
+  lyricist: string | null;
+  grouping: string | null;
+  comment: string | null;
+  sort_artist: string | null;
+  sort_album: string | null;
+  sort_title: string | null;
+  lyrics: string | null;
+  track_count: number;
+}
+
 export const bulkTracksApi = {
   startIdentify: async (trackIds: string[]): Promise<BulkIdentifyTaskResponse> => {
     const { data } = await api.post('/tracks/bulk/identify', {
@@ -249,6 +285,26 @@ export const bulkTracksApi = {
 
   getIdentifyProgress: async (taskId: string): Promise<BulkIdentifyProgress> => {
     const { data } = await api.get(`/tracks/bulk/identify/${taskId}`);
+    return data;
+  },
+
+  updateMetadata: async (
+    trackIds: string[],
+    metadata: Partial<TrackMetadataUpdate>,
+    writeToFiles: boolean
+  ): Promise<BulkEditResultResponse> => {
+    const { data } = await api.post('/tracks/bulk/metadata', {
+      track_ids: trackIds,
+      metadata,
+      write_to_files: writeToFiles,
+    });
+    return data;
+  },
+
+  getCommonValues: async (trackIds: string[]): Promise<CommonValuesResponse> => {
+    const { data } = await api.post('/tracks/bulk/common-values', {
+      track_ids: trackIds,
+    });
     return data;
   },
 };

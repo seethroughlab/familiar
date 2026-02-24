@@ -4,9 +4,10 @@ interface Props {
   formData: Partial<TrackMetadataUpdate>;
   onChange: (field: keyof TrackMetadataUpdate, value: unknown) => void;
   isBulkEdit?: boolean;
+  disabledFields?: Set<string>;
 }
 
-export function SortFieldsTab({ formData, onChange, isBulkEdit }: Props) {
+export function SortFieldsTab({ formData, onChange, isBulkEdit, disabledFields }: Props) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-zinc-400 mb-4">
@@ -22,7 +23,8 @@ export function SortFieldsTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.sort_artist ?? ''}
           onChange={(e) => onChange('sort_artist', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : formData.artist || 'Sort artist name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('sort_artist')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('sort_artist') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
         <p className="text-xs text-zinc-500 mt-1">
           Example: "Beatles, The" for "The Beatles"
@@ -37,7 +39,8 @@ export function SortFieldsTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.sort_album ?? ''}
           onChange={(e) => onChange('sort_album', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : formData.album || 'Sort album name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('sort_album')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('sort_album') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -49,7 +52,8 @@ export function SortFieldsTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.sort_title ?? ''}
           onChange={(e) => onChange('sort_title', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : formData.title || 'Sort title'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('sort_title')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('sort_title') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
     </div>

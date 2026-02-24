@@ -4,9 +4,10 @@ interface Props {
   formData: Partial<TrackMetadataUpdate>;
   onChange: (field: keyof TrackMetadataUpdate, value: unknown) => void;
   isBulkEdit?: boolean;
+  disabledFields?: Set<string>;
 }
 
-export function ExtendedMetadataTab({ formData, onChange, isBulkEdit }: Props) {
+export function ExtendedMetadataTab({ formData, onChange, isBulkEdit, disabledFields }: Props) {
   return (
     <div className="space-y-4">
       {/* Composer */}
@@ -17,7 +18,8 @@ export function ExtendedMetadataTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.composer ?? ''}
           onChange={(e) => onChange('composer', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Composer name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('composer')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('composer') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -29,7 +31,8 @@ export function ExtendedMetadataTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.conductor ?? ''}
           onChange={(e) => onChange('conductor', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Conductor name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('conductor')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('conductor') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -41,7 +44,8 @@ export function ExtendedMetadataTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.lyricist ?? ''}
           onChange={(e) => onChange('lyricist', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Lyricist name'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('lyricist')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('lyricist') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
 
@@ -53,7 +57,8 @@ export function ExtendedMetadataTab({ formData, onChange, isBulkEdit }: Props) {
           value={formData.grouping ?? ''}
           onChange={(e) => onChange('grouping', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Grouping or category'}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+          disabled={disabledFields?.has('grouping')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent ${disabledFields?.has('grouping') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
         <p className="text-xs text-zinc-500 mt-1">
           Use grouping to organize tracks by theme, mood, or custom categories
@@ -68,7 +73,8 @@ export function ExtendedMetadataTab({ formData, onChange, isBulkEdit }: Props) {
           onChange={(e) => onChange('comment', e.target.value || null)}
           placeholder={isBulkEdit ? '(Mixed)' : 'Notes or comments about this track'}
           rows={3}
-          className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+          disabled={disabledFields?.has('comment')}
+          className={`w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none ${disabledFields?.has('comment') ? 'opacity-50 cursor-not-allowed' : ''}`}
         />
       </div>
     </div>
