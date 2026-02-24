@@ -5,6 +5,63 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha.12] - 2026-02-24
+
+Analysis Overhaul, Generative Album Art, New Releases Browsing & Matching Improvements
+
+### Added
+
+- **Audio analysis overhaul (FEATURES_VERSION 7 → 8)** — Major improvements to core feature extraction
+  - Key detection using Krumhansl-Kessler profile correlation with major/minor mode
+  - Acousticness as weighted composite of MFCC, spectral flatness, rolloff, and crest factor
+  - Instrumentalness via silero-vad ONNX speech detection with spectral fallback
+  - Speechiness using VAD + RMS periodicity to distinguish speech from singing
+  - Valence expanded with harmonic tension (12%) and tonality (8%) components
+  - Per-feature confidence scores stored in `feature_confidence` JSONB column
+  - Cross-validation: local analysis always runs, disagreements flagged against external features
+  - 48 CLAP-based mood/genre/instrumentation/energy tags with GIN-indexed JSONB storage
+  - LLM `mood_tag` filter and `get_available_mood_tags` tool
+  - Smart playlist `mood_tag` rule support
+  - Mode-aware key filtering (`Am`, `A minor`, plain `A` matches both)
+- **Generative album art** — Deterministic artwork generated from audio analysis features for albums without cover art
+  - Vinyl label overlay with artist initials
+  - Versioned art regeneration when analysis features change
+  - Dynamic row sizing in album grid view
+  - Shown in artist grid view alongside real album art
+- **New Releases detail page** — Dedicated `/new-releases` route with infinite scroll, search filter, show/hide dismissed and owned toggles
+  - Sidebar entry with live release count
+  - Mobile nav entry
+  - Context menu with "Check for New Releases" action
+  - "View all" link from Discover browser
+  - Improved empty state when all releases are already in library
+- **Cover art for MusicBrainz new releases** — Artwork URLs from Cover Art Archive using predictable release group URL pattern
+- **Bulk metadata editing** — Dedicated bulk edit endpoint that fetches common values across selected tracks, pre-populates the form, and only sends changed fields
+- **Alphabet bar for playlist views** — Client-side alphabet index for playlists, favorites, smart playlists, ephemeral playlists, and downloads (100+ tracks, alphabetic sort)
+- **Persistent sort preferences** — Sort state in playlist views and artist browser persists across navigation via localStorage
+- **Update checker** — GitHub release notifications on startup and daily, with configurable release channel (stable/beta/alpha/disabled)
+- **Store search links** — Shopping cart dropdown on unmatched favorites and missing tracks linking to music stores
+- **LLM feature distribution tool** — `get_feature_distribution` tool and expanded search filters for mood grid axes
+- **Configurable mood grid axes** — Generic feature filters for mood grid visualization
+
+### Changed
+
+- **Artist normalization** — Strip feat./ft./featuring suffixes in SQL during compilation detection instead of persisted columns; match both `artist` and `album_artist` in artist detail queries
+- **Store search links UI** — Converted from inline pills to a dropdown menu to save horizontal space
+- **New releases check** — Use `asyncio.to_thread` for blocking MusicBrainz calls, disable Spotify after failure instead of retrying, only cache resolved artists, periodic commits every 25 artists
+
+### Fixed
+
+- Playlist column headers now sticky during scroll
+- Correct track plays when column sort is active in playlist views
+- Edit Metadata option hidden for unmatched external tracks
+- `/api/v1/tracks` route without trailing slash now resolves correctly
+- Guard against undefined tracks in TrackListBrowser
+- Artist grid row overlap on initial load
+- Dynamic viewport height (`100dvh` with `100vh` fallback) and safe-area padding
+- S3 backup job now appears in background jobs indicator
+- Album batch matching mypy type error
+- Various ruff and mypy lint fixes across backend
+
 ## [0.1.0-alpha.11] - 2026-02-21
 
 Sidebar Context Menus, Virtualized Grids, Melodic Analysis & Codebase Restructure
