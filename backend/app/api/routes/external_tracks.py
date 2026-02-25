@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from app.api.deps import DbSession, RequiredProfile
+from app.api.deps import CurrentProfile, DbSession, RequiredProfile
 from app.api.exceptions import sanitize_error_for_client
 from app.db.models import ExternalTrack, ExternalTrackSource
 from app.services.external_track_matcher import ExternalTrackMatcher
@@ -75,9 +75,12 @@ class RematchResponse(BaseModel):
 @router.get("", response_model=list[ExternalTrackResponse])
 async def list_external_tracks(
     db: DbSession,
-    profile: RequiredProfile,
+    profile: CurrentProfile,
     matched: bool | None = Query(None, description="Filter by matched status"),
     source: str | None = Query(None, description="Filter by source"),
+    search: str | None = Query(None, description="Search title, artist, or album"),
+    artist: str | None = Query(None, description="Filter by artist"),
+    album: str | None = Query(None, description="Filter by album"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[ExternalTrackResponse]:
@@ -97,6 +100,20 @@ async def list_external_tracks(
         except ValueError:
             pass  # Invalid source, ignore filter
 
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(
+            ExternalTrack.title.ilike(pattern)
+            | ExternalTrack.artist.ilike(pattern)
+            | ExternalTrack.album.ilike(pattern)
+        )
+
+    if artist:
+        query = query.where(ExternalTrack.artist.ilike(f"%{artist}%"))
+
+    if album:
+        query = query.where(ExternalTrack.album.ilike(f"%{album}%"))
+
     query = query.order_by(ExternalTrack.created_at.desc()).limit(limit).offset(offset)
 
     result = await db.execute(query)
@@ -105,10 +122,54 @@ async def list_external_tracks(
     return [_external_track_to_response(t) for t in tracks]
 
 
+@router.get("/count")
+async def count_external_tracks(
+    db: DbSession,
+    profile: CurrentProfile,
+    matched: bool | None = Query(None, description="Filter by matched status"),
+    source: str | None = Query(None, description="Filter by source"),
+    search: str | None = Query(None, description="Search title, artist, or album"),
+    artist: str | None = Query(None, description="Filter by artist"),
+    album: str | None = Query(None, description="Filter by album"),
+) -> dict:
+    """Count external tracks with optional filtering."""
+    query = select(func.count(ExternalTrack.id))
+
+    if matched is not None:
+        if matched:
+            query = query.where(ExternalTrack.matched_track_id.isnot(None))
+        else:
+            query = query.where(ExternalTrack.matched_track_id.is_(None))
+
+    if source:
+        try:
+            source_enum = ExternalTrackSource(source)
+            query = query.where(ExternalTrack.source == source_enum)
+        except ValueError:
+            pass
+
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(
+            ExternalTrack.title.ilike(pattern)
+            | ExternalTrack.artist.ilike(pattern)
+            | ExternalTrack.album.ilike(pattern)
+        )
+
+    if artist:
+        query = query.where(ExternalTrack.artist.ilike(f"%{artist}%"))
+
+    if album:
+        query = query.where(ExternalTrack.album.ilike(f"%{album}%"))
+
+    count = await db.scalar(query) or 0
+    return {"count": count}
+
+
 @router.get("/stats")
 async def get_external_track_stats(
     db: DbSession,
-    profile: RequiredProfile,
+    profile: CurrentProfile,
 ) -> dict:
     """Get statistics about external tracks."""
     # Total count
