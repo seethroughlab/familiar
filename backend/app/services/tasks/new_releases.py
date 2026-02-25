@@ -8,12 +8,24 @@ import asyncio
 import json
 import logging
 from datetime import datetime
+from difflib import SequenceMatcher
 from typing import Any
 from uuid import UUID
 
 from app.services.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
+
+
+def _artist_names_match(searched: str, found: str) -> bool:
+    """Check if a found artist name is a close match to the searched name."""
+    from app.services.new_releases import normalize_artist_name
+
+    a = normalize_artist_name(searched)
+    b = normalize_artist_name(found)
+    if a == b:
+        return True
+    return SequenceMatcher(None, a, b).ratio() >= 0.85
 
 NEW_RELEASES_PROGRESS_KEY = "familiar:new_releases:progress"
 
@@ -192,6 +204,9 @@ async def run_new_releases_check(
                         spotify_artist = await spotify_service.search_artist(
                             UUID(profile_id), artist_name
                         )
+                        if spotify_artist and not _artist_names_match(artist_name, spotify_artist["name"]):
+                            logger.debug(f"Spotify match rejected: '{artist_name}' != '{spotify_artist['name']}'")
+                            spotify_artist = None
                         if spotify_artist:
                             spotify_artist_id = spotify_artist["id"]
                             recent = await spotify_service.get_artist_albums_recent(
@@ -235,7 +250,10 @@ async def run_new_releases_check(
                         if not mb_id_to_use:
                             mb_result = await asyncio.to_thread(search_artist, artist_name)
                             if mb_result and mb_result.get("score", 0) >= 80:
-                                mb_id_to_use = mb_result["musicbrainz_artist_id"]
+                                if _artist_names_match(artist_name, mb_result.get("name", "")):
+                                    mb_id_to_use = mb_result["musicbrainz_artist_id"]
+                                else:
+                                    logger.debug(f"MusicBrainz match rejected: '{artist_name}' != '{mb_result.get('name')}'")
 
                         if mb_id_to_use:
                             recent = await asyncio.to_thread(get_artist_releases_recent, mb_id_to_use, days_back=days_back)
@@ -249,6 +267,7 @@ async def run_new_releases_check(
                                     "release_type": release.get("release_type"),
                                     "release_date_str": release.get("release_date"),
                                     "release_date": release.get("release_date_parsed"),
+                                    "artwork_url": release.get("artwork_url"),
                                     "musicbrainz_artist_id": mb_id_to_use,
                                 })
 
@@ -395,7 +414,10 @@ async def run_prioritized_new_releases_check(
                     if not mb_id_to_use:
                         mb_result = await asyncio.to_thread(search_artist, artist_name)
                         if mb_result and mb_result.get("score", 0) >= 80:
-                            mb_id_to_use = mb_result["musicbrainz_artist_id"]
+                            if _artist_names_match(artist_name, mb_result.get("name", "")):
+                                mb_id_to_use = mb_result["musicbrainz_artist_id"]
+                            else:
+                                logger.debug(f"MusicBrainz match rejected: '{artist_name}' != '{mb_result.get('name')}'")
 
                     if mb_id_to_use:
                         recent = await asyncio.to_thread(get_artist_releases_recent, mb_id_to_use, days_back=days_back)
@@ -409,6 +431,7 @@ async def run_prioritized_new_releases_check(
                                 "release_type": release.get("release_type"),
                                 "release_date_str": release.get("release_date"),
                                 "release_date": release.get("release_date_parsed"),
+                                "artwork_url": release.get("artwork_url"),
                                 "musicbrainz_artist_id": mb_id_to_use,
                             })
 
@@ -434,6 +457,7 @@ async def run_prioritized_new_releases_check(
                         release_name=release["release_name"],
                         release_type=release.get("release_type"),
                         release_date=release_date,
+                        artwork_url=release.get("artwork_url"),
                         musicbrainz_artist_id=release.get("musicbrainz_artist_id"),
                     )
                     if saved:

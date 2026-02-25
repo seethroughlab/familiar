@@ -18,6 +18,7 @@ interface NewReleaseCardProps {
 export function NewReleaseCard({ release, onDismiss }: NewReleaseCardProps) {
   const [showPurchaseLinks, setShowPurchaseLinks] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const handleDismiss = async () => {
     setIsDismissing(true);
@@ -54,11 +55,12 @@ export function NewReleaseCard({ release, onDismiss }: NewReleaseCardProps) {
       <div className="flex gap-4 p-4">
         {/* Artwork */}
         <div className="flex-shrink-0 w-20 h-20 rounded-md bg-zinc-700 dark:bg-zinc-700 light:bg-zinc-200 overflow-hidden">
-          {release.artwork_url ? (
+          {release.artwork_url && !imgError ? (
             <img
               src={release.artwork_url}
               alt={`${release.release_name} artwork`}
               className="w-full h-full object-cover"
+              onError={() => setImgError(true)}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">

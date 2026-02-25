@@ -106,17 +106,17 @@ async def get_discover_dashboard(
 
     new_releases = []
     for r in releases_data:
-        search_urls = generate_release_search_urls(r.get("artist", ""), r.get("album", ""))
+        search_urls = generate_release_search_urls(r.get("artist_name", ""), r.get("release_name", ""))
         new_releases.append(
             DiscoverNewRelease(
                 id=str(r.get("id", "")),
-                artist=r.get("artist", ""),
-                album=r.get("album", ""),
+                artist=r.get("artist_name", ""),
+                album=r.get("release_name", ""),
                 release_date=r.get("release_date"),
                 source=r.get("source", ""),
-                image_url=r.get("image_url"),
+                image_url=r.get("artwork_url"),
                 bandcamp_url=search_urls.get("bandcamp", {}).get("url"),
-                owned_locally=r.get("owned_locally", False),
+                owned_locally=r.get("local_album_match", False),
             )
         )
 

@@ -298,7 +298,13 @@ class NewReleasesService:
                 "release_name": release.release_name,
                 "release_type": release.release_type,
                 "release_date": release.release_date.isoformat() if release.release_date else None,
-                "artwork_url": release.artwork_url,
+                "artwork_url": release.artwork_url
+                    if release.artwork_url
+                    else (
+                        f"https://coverartarchive.org/release-group/{release.release_id}/front-250"
+                        if release.source == "musicbrainz"
+                        else None
+                    ),
                 "external_url": release.external_url,
                 "track_count": release.track_count,
                 "source": release.source,
