@@ -247,6 +247,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
         emptyMessage="No downloaded tracks yet"
         emptySubMessage="Download tracks from playlists or the library for offline playback"
         sortPersistKey="downloads"
+        defaultSortBy="artist"
         contextMenuOptions={{
           onRemoveFromDownloads: async (track) => {
             try {

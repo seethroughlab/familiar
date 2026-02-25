@@ -89,6 +89,9 @@ export interface PlaylistTrackListProps<T> {
 
   /** Persist sort preferences to localStorage under this key. */
   sortPersistKey?: string;
+
+  /** Default sort field when user hasn't explicitly chosen one (e.g. 'artist'). */
+  defaultSortBy?: string;
 }
 
 export function PlaylistTrackList<T>({
@@ -108,6 +111,7 @@ export function PlaylistTrackList<T>({
   emptySubMessage,
   contextMenuOptions,
   sortPersistKey,
+  defaultSortBy,
 }: PlaylistTrackListProps<T>) {
   // Player state
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -123,7 +127,7 @@ export function PlaylistTrackList<T>({
 
   // Column + sort state
   const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort(sortPersistKey);
+  const { sortBy, sortOrder, toggleSort } = useLocalSort(sortPersistKey, defaultSortBy ?? null);
   const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
   const gridColumns = useMemo(
     () => buildGridColumns(columns, trailingColumns),

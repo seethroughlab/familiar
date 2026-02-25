@@ -509,6 +509,15 @@ export function useAudioEngine() {
           elementReadyState: el.readyState,
         });
 
+        // External preview URLs (iTunes CDN) don't send CORS headers.
+        // crossOrigin='anonymous' is needed for Web Audio (visualizer/effects)
+        // but must be removed for cross-origin previews to avoid decode errors.
+        if (externalInfo) {
+          el.removeAttribute('crossorigin');
+        } else if (!el.crossOrigin) {
+          el.crossOrigin = 'anonymous';
+        }
+
         el.src = url;
         el.setAttribute('data-track-id', currentTrack.id);
         el.load();

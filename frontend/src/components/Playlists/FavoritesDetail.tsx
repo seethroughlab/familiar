@@ -463,6 +463,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
         emptyMessage="No favorites yet"
         emptySubMessage="Click the heart icon on any track to add it here"
         sortPersistKey="favorites"
+        defaultSortBy="artist"
       />
 
       {/* Track match modal */}

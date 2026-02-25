@@ -10,7 +10,7 @@ import { getColumnDef } from '../Library/columnDefinitions';
 import type { Track } from '../../types';
 
 // Minimum items before showing alphabet bar (matches library browser threshold)
-const MIN_ITEMS_THRESHOLD = 100;
+const MIN_ITEMS_THRESHOLD = 30;
 
 // Sort fields that support alphabetic navigation
 const ALPHABETIC_SORT_FIELDS = ['artist', 'album', 'title', 'name'];

@@ -39,24 +39,24 @@ export function buildGridColumns(
  * so playlist sort doesn't affect library sort and vice versa.
  * Uses the same tri-state cycle: asc -> desc -> clear.
  */
-export function useLocalSort(persistKey?: string) {
+export function useLocalSort(persistKey?: string, defaultSortBy: string | null = null, defaultSortOrder: 'asc' | 'desc' = 'asc') {
   const storageKey = persistKey ? `familiar-sort-${persistKey}` : null;
 
   const [sortBy, setSortBy] = useState<string | null>(() => {
-    if (!storageKey) return null;
+    if (!storageKey) return defaultSortBy;
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) return JSON.parse(stored).sortBy ?? null;
     } catch { /* ignore */ }
-    return null;
+    return defaultSortBy;
   });
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
-    if (!storageKey) return 'asc';
+    if (!storageKey) return defaultSortOrder;
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) return JSON.parse(stored).sortOrder ?? 'asc';
     } catch { /* ignore */ }
-    return 'asc';
+    return defaultSortOrder;
   });
 
   const persist = useCallback((newSortBy: string | null, newSortOrder: 'asc' | 'desc') => {
@@ -79,18 +79,18 @@ export function useLocalSort(persistKey?: string) {
         persist(columnId, 'desc');
         return columnId;
       } else {
-        setSortOrder('asc');
-        persist(null, 'asc');
-        return null;
+        setSortOrder(defaultSortOrder);
+        persist(defaultSortBy, defaultSortOrder);
+        return defaultSortBy;
       }
     });
-  }, [sortOrder, persist]);
+  }, [sortOrder, persist, defaultSortBy, defaultSortOrder]);
 
   const clearSort = useCallback(() => {
-    setSortBy(null);
-    setSortOrder('asc');
-    persist(null, 'asc');
-  }, [persist]);
+    setSortBy(defaultSortBy);
+    setSortOrder(defaultSortOrder);
+    persist(defaultSortBy, defaultSortOrder);
+  }, [persist, defaultSortBy, defaultSortOrder]);
 
   return { sortBy, sortOrder, toggleSort, clearSort };
 }
