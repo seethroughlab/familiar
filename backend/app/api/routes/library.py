@@ -11,6 +11,7 @@ from app.api.routes.library_aggregations import router as aggregations_router
 from app.api.routes.library_albums import router as albums_router
 from app.api.routes.library_analysis import router as analysis_router
 from app.api.routes.library_artists import router as artists_router
+from app.api.routes.library_deduplicate import router as deduplicate_router
 from app.api.routes.library_discover import router as discover_router
 from app.api.routes.library_import import router as import_router
 from app.api.routes.library_maps import router as maps_router
@@ -82,5 +83,6 @@ router.include_router(maps_router)
 router.include_router(sync_router)
 router.include_router(analysis_router)
 router.include_router(import_router)
+router.include_router(deduplicate_router)
 router.include_router(missing_router)
 router.include_router(discover_router)
