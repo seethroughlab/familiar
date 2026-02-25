@@ -123,6 +123,68 @@ class ImportService:
                 shutil.rmtree(import_dir, ignore_errors=True)
             raise MusicImportError(f"Import failed: {str(e)}") from e
 
+    def process_local_directory(self, source_dir: Path) -> dict[str, Any]:
+        """Import audio files from a local directory on the filesystem.
+
+        Copies audio files (preserving subdirectory structure) into a
+        timestamped import directory under _imports/.
+
+        Args:
+            source_dir: Path to the source directory containing audio files.
+
+        Returns:
+            Dict with import results (same format as process_upload).
+        """
+        if not source_dir.exists():
+            raise MusicImportError(f"Source directory does not exist: {source_dir}")
+        if not source_dir.is_dir():
+            raise MusicImportError(f"Source path is not a directory: {source_dir}")
+
+        import_dir = self.create_import_dir()
+
+        try:
+            # Copy the directory tree, filtering to only audio files
+            def audio_filter(entry: str, entries: list[str]) -> set[str]:
+                """Return entries to IGNORE (shutil.copytree ignore pattern)."""
+                ignored = set()
+                base = Path(entry)
+                for name in entries:
+                    full = base / name
+                    if full.is_file() and full.suffix.lower() not in AUDIO_EXTENSIONS:
+                        ignored.add(name)
+                return ignored
+
+            shutil.copytree(source_dir, import_dir, dirs_exist_ok=True, ignore=audio_filter)
+
+            # Find all copied audio files
+            audio_files = [
+                f for f in import_dir.rglob("*")
+                if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+            ]
+
+            # Remove any empty directories left by filtering
+            for dirpath in sorted(import_dir.rglob("*"), reverse=True):
+                if dirpath.is_dir() and not any(dirpath.iterdir()):
+                    dirpath.rmdir()
+
+            if not audio_files:
+                shutil.rmtree(import_dir, ignore_errors=True)
+                raise MusicImportError(f"No audio files found in {source_dir}")
+
+            return {
+                "status": "success",
+                "import_path": str(import_dir),
+                "files_found": len(audio_files),
+                "files": [str(f.relative_to(import_dir)) for f in audio_files],
+            }
+
+        except MusicImportError:
+            raise
+        except Exception as e:
+            if import_dir.exists():
+                shutil.rmtree(import_dir, ignore_errors=True)
+            raise MusicImportError(f"Import failed: {str(e)}") from e
+
     def get_recent_imports(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get list of recent import directories."""
         if not self.imports_dir.exists():
@@ -509,6 +571,73 @@ class ImportPreviewService:
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
             raise MusicImportError(f"Preview failed: {str(e)}") from e
 
+    def create_preview_from_path(self, source_path: Path) -> dict[str, Any]:
+        """Create a preview session from a local directory path.
+
+        Unlike create_preview_session, this does NOT copy files - it reads
+        them in-place and marks the session as is_local_path so execute
+        won't delete the source.
+        """
+        if not source_path.exists():
+            raise MusicImportError(f"Source directory does not exist: {source_path}")
+        if not source_path.is_dir():
+            raise MusicImportError(f"Source path is not a directory: {source_path}")
+
+        self.session_id = str(uuid.uuid4())
+        self.temp_dir = source_path  # Point directly at source
+
+        tracks = []
+        total_size = 0
+
+        try:
+            for audio_file in source_path.rglob("*"):
+                if audio_file.is_file() and audio_file.suffix.lower() in AUDIO_EXTENSIONS:
+                    track_info = self._extract_track_info(audio_file)
+                    tracks.append(track_info)
+                    total_size += track_info["file_size_bytes"]
+
+            if not tracks:
+                raise MusicImportError(f"No audio files found in {source_path}")
+
+            tracks.sort(key=lambda t: (t["detected_track_num"] or 999, t["filename"]))
+
+            has_convertible = any(
+                t["format"].lower() in [f.lstrip(".") for f in CONVERTIBLE_FORMATS]
+                for t in tracks
+            )
+
+            estimated_sizes = {
+                "original": total_size,
+                "flac": sum(
+                    estimate_converted_size(t["file_size_bytes"], t["format"], "flac")
+                    for t in tracks
+                ),
+                "mp3_320": sum(
+                    estimate_converted_size(t["file_size_bytes"], t["format"], "mp3_320")
+                    for t in tracks
+                ),
+            }
+
+            _import_sessions[self.session_id] = {
+                "temp_dir": str(self.temp_dir),
+                "tracks": tracks,
+                "created_at": datetime.now().isoformat(),
+                "is_local_path": True,
+            }
+
+            return {
+                "session_id": self.session_id,
+                "tracks": tracks,
+                "total_size_bytes": total_size,
+                "estimated_sizes": estimated_sizes,
+                "has_convertible_formats": has_convertible,
+            }
+
+        except MusicImportError:
+            raise
+        except Exception as e:
+            raise MusicImportError(f"Preview failed: {str(e)}") from e
+
     def _extract_track_info(self, audio_path: Path) -> dict[str, Any]:
         """Extract full track info including metadata."""
         # Get file metadata using existing service
@@ -694,9 +823,10 @@ class ImportExecuteService:
                 errors.append(f"Failed to import {track.get('filename', 'unknown')}: {str(e)}")
                 logger.error(f"Import error: {e}")
 
-        # Clean up session
+        # Clean up session (skip rmtree for local-path sessions)
         try:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            if not session.get("is_local_path"):
+                shutil.rmtree(temp_dir, ignore_errors=True)
             del _import_sessions[session_id]
         except Exception:
             pass

@@ -81,6 +81,7 @@ services:
         tag: "familiar-api"
     volumes:
       - ${MUSIC_LIBRARY_PATH:-/data/music}:/music:rw  # Single library mount, rw for imports
+      - ${IMPORTS_INCOMING_PATH:-/data/downloads}:/imports-incoming:ro  # External files available for local-path import
       - app_data:/app/data  # Persists settings.json
       - art_data:/data/art
       - videos_data:/data/videos

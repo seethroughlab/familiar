@@ -109,6 +109,100 @@ async def import_music(
         temp_path.unlink(missing_ok=True)
 
 
+class ScanPathEntry(BaseModel):
+    """A directory entry from scan-path."""
+    name: str
+    file_count: int
+    total_size_bytes: int
+
+
+class ImportFromPathRequest(BaseModel):
+    """Request body for importing from a local path."""
+    source_path: str
+
+
+@router.get("/import/scan-path", response_model=list[ScanPathEntry])
+async def scan_path(path: str) -> list[ScanPathEntry]:
+    """List subdirectories at a local path with audio file counts.
+
+    Useful for discovering what's available for import at a given path
+    (e.g. a mounted volume of downloaded music).
+
+    Args:
+        path: Absolute path inside the container to scan.
+    """
+    from app.config import AUDIO_EXTENSIONS
+
+    scan_dir = Path(path)
+    if not scan_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Path does not exist: {path}")
+    if not scan_dir.is_dir():
+        raise HTTPException(status_code=400, detail=f"Path is not a directory: {path}")
+
+    entries = []
+    for child in sorted(scan_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        audio_files = [
+            f for f in child.rglob("*")
+            if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+        ]
+        if audio_files:
+            entries.append(ScanPathEntry(
+                name=child.name,
+                file_count=len(audio_files),
+                total_size_bytes=sum(f.stat().st_size for f in audio_files),
+            ))
+
+    return entries
+
+
+@router.post("/import/from-path", response_model=ImportResult)
+async def import_from_path(
+    request: ImportFromPathRequest,
+    background_tasks: BackgroundTasks,
+) -> ImportResult:
+    """Import audio files from a local filesystem path.
+
+    Copies audio files from the given directory into the library's _imports/
+    folder and triggers a background metadata scan.
+    """
+    source = Path(request.source_path)
+
+    try:
+        import_service = ImportService()
+        result = import_service.process_local_directory(source)
+
+        # Schedule scan of the import directory (same pattern as POST /import)
+        import_dir = Path(result["import_path"])
+
+        async def scan_import():
+            from app.db.session import async_session_maker
+            async with async_session_maker() as bg_db:
+                try:
+                    scanner = LibraryScanner(bg_db)
+                    await scanner.scan(import_dir, full_scan=True)
+                    await bg_db.commit()
+                except Exception as e:
+                    await bg_db.rollback()
+                    logger.error(f"Background scan failed: {e}")
+
+        background_tasks.add_task(scan_import)
+
+        return ImportResult(
+            status="processing",
+            message=f"Imported {result['files_found']} files from {source.name}, scanning for metadata...",
+            import_path=result["import_path"],
+            files_found=result["files_found"],
+            files=result.get("files", []),
+        )
+
+    except MusicImportError as e:
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Import failed"))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Import failed")
+
+
 @router.get("/imports/recent", response_model=list[RecentImport])
 async def get_recent_imports(limit: int = 10) -> list[RecentImport]:
     """Get list of recent import directories."""
@@ -280,6 +374,61 @@ async def _find_import_duplicate(
     return None, ""
 
 
+async def _enrich_tracks_with_duplicates(
+    db: "AsyncSession",
+    tracks: list[dict],
+) -> None:
+    """Enrich track dicts with duplicate detection and quality comparison info.
+
+    Mutates tracks in-place, adding duplicate_of, trump_status, etc.
+    """
+    from app.services.quality import calculate_quality_score, compare_quality
+
+    for track in tracks:
+        artist = track.get("detected_artist") or ""
+        album = track.get("detected_album") or ""
+        title = track.get("detected_title") or ""
+
+        if not (artist and title):
+            continue
+
+        existing, match_type = await _find_import_duplicate(
+            db, artist, album, title
+        )
+
+        if not existing:
+            continue
+
+        track["duplicate_of"] = str(existing.id)
+        track["duplicate_info"] = (
+            f"{existing.artist} - {existing.album} - {existing.title}"
+        )
+        track["duplicate_match_type"] = match_type
+
+        incoming_score = calculate_quality_score(
+            format=track.get("format"),
+            bitrate=track.get("bitrate"),
+            sample_rate=track.get("sample_rate"),
+            bit_depth=track.get("bit_depth"),
+            bitrate_mode=track.get("bitrate_mode"),
+        )
+        existing_score = calculate_quality_score(
+            format=existing.format,
+            bitrate=existing.bitrate,
+            sample_rate=existing.sample_rate,
+            bit_depth=existing.bit_depth,
+            bitrate_mode=existing.bitrate_mode,
+        )
+
+        trump_status, trump_reason = compare_quality(
+            incoming_score, existing_score
+        )
+        track["trump_status"] = trump_status
+        track["trump_reason"] = trump_reason
+        track["incoming_quality"] = incoming_score.to_dict()
+        track["existing_quality"] = existing_score.to_dict()
+
+
 @router.post("/import/preview", response_model=ImportPreviewResponse)
 async def import_preview(
     db: DbSession,
@@ -313,54 +462,11 @@ async def import_preview(
         raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
 
     try:
-        from app.services.quality import calculate_quality_score, compare_quality
-
         preview_service = ImportPreviewService()
         result = preview_service.create_preview_session(temp_path, file.filename)
 
-        # Check for duplicates in the library and compare quality
         tracks = result["tracks"]
-        for track in tracks:
-            artist = track.get("detected_artist") or ""
-            album = track.get("detected_album") or ""
-            title = track.get("detected_title") or ""
-
-            # Only check if we have enough metadata to match
-            if artist and title:
-                existing, match_type = await _find_import_duplicate(
-                    db, artist, album, title
-                )
-
-                if existing:
-                    track["duplicate_of"] = str(existing.id)
-                    track["duplicate_info"] = (
-                        f"{existing.artist} - {existing.album} - {existing.title}"
-                    )
-                    track["duplicate_match_type"] = match_type
-
-                    # Calculate quality scores and compare
-                    incoming_score = calculate_quality_score(
-                        format=track.get("format"),
-                        bitrate=track.get("bitrate"),
-                        sample_rate=track.get("sample_rate"),
-                        bit_depth=track.get("bit_depth"),
-                        bitrate_mode=track.get("bitrate_mode"),
-                    )
-                    existing_score = calculate_quality_score(
-                        format=existing.format,
-                        bitrate=existing.bitrate,
-                        sample_rate=existing.sample_rate,
-                        bit_depth=existing.bit_depth,
-                        bitrate_mode=existing.bitrate_mode,
-                    )
-
-                    trump_status, trump_reason = compare_quality(
-                        incoming_score, existing_score
-                    )
-                    track["trump_status"] = trump_status
-                    track["trump_reason"] = trump_reason
-                    track["incoming_quality"] = incoming_score.to_dict()
-                    track["existing_quality"] = existing_score.to_dict()
+        await _enrich_tracks_with_duplicates(db, tracks)
 
         return ImportPreviewResponse(
             session_id=result["session_id"],
@@ -377,6 +483,40 @@ async def import_preview(
     finally:
         # Clean up temp file (session has its own copy)
         temp_path.unlink(missing_ok=True)
+
+
+@router.post("/import/preview-from-path", response_model=ImportPreviewResponse)
+async def import_preview_from_path(
+    db: DbSession,
+    request: ImportFromPathRequest,
+) -> ImportPreviewResponse:
+    """Preview an import from a local filesystem path.
+
+    Scans audio files at the given path, extracts metadata, detects
+    duplicates and compares quality — without copying anything yet.
+    Returns a session_id for later execution via POST /import/execute.
+    """
+    from app.services.import_service import ImportPreviewService, MusicImportError
+
+    try:
+        preview_service = ImportPreviewService()
+        result = preview_service.create_preview_from_path(Path(request.source_path))
+
+        tracks = result["tracks"]
+        await _enrich_tracks_with_duplicates(db, tracks)
+
+        return ImportPreviewResponse(
+            session_id=result["session_id"],
+            tracks=[ImportTrackPreview(**t) for t in tracks],
+            total_size_bytes=result["total_size_bytes"],
+            estimated_sizes=result["estimated_sizes"],
+            has_convertible_formats=result["has_convertible_formats"],
+        )
+
+    except MusicImportError as e:
+        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Preview failed"))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Preview failed")
 
 
 @router.post("/import/execute", response_model=ImportExecuteResponse)
