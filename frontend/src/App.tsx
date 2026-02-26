@@ -18,7 +18,6 @@ import { AppShell } from './components/AppShell';
 import { LibraryBrowser } from './components/Library/LibraryBrowser';
 
 // Lazy-loaded route components
-const AdminSetup = lazy(() => import('./components/Admin').then(m => ({ default: m.AdminSetup })));
 const ArtistDetail = lazy(() => import('./components/Library/ArtistDetail').then(m => ({ default: m.ArtistDetail })));
 const AlbumDetail = lazy(() => import('./components/Library/AlbumDetail').then(m => ({ default: m.AlbumDetail })));
 const PlaylistDetail = lazy(() => import('./components/Playlists/PlaylistDetail').then(m => ({ default: m.PlaylistDetail })));
@@ -229,9 +228,7 @@ function App() {
     );
   }
 
-  const isAdminRoute = window.location.pathname === '/admin';
-
-  if (profile === null && !isAdminRoute) {
+  if (profile === null) {
     return (
       <ProfileSelector onProfileSelected={(p) => setProfile(p)} />
     );
@@ -254,15 +251,10 @@ function App() {
         {/* Legacy URL redirect handler */}
         <LegacyRedirect />
         <Routes>
-          {/* Admin route - outside AppShell */}
-          <Route path="/admin" element={
-            <Suspense fallback={<LazyLoadSpinner />}>
-              <AdminSetup />
-            </Suspense>
-          } />
-
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
+            {/* Legacy /admin redirect */}
+            <Route path="/admin" element={<Navigate to="/" replace />} />
             {/* Library browser views */}
             {BROWSER_ROUTES.map(({ path, browserId }) => (
               <Route

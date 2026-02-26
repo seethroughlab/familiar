@@ -298,13 +298,6 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
         </div>
       </dialog>
 
-      {/* Admin link */}
-      <a
-        href="/admin"
-        className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-      >
-        Configure API Keys
-      </a>
     </div>
   );
 }

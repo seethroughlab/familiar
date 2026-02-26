@@ -17,6 +17,11 @@ export interface AppSettingsResponse {
   anthropic_api_key: string | null;
   spotify_configured: boolean;
   lastfm_configured: boolean;
+  anthropic_configured: boolean;
+  acoustid_configured: boolean;
+  // Community cache
+  community_cache_enabled: boolean;
+  community_cache_contribute: boolean;
   // Metadata enrichment
   auto_enrich_metadata: boolean;
   enrich_overwrite_existing: boolean;
@@ -42,6 +47,9 @@ export interface AppSettingsUpdate {
   lastfm_api_key?: string;
   lastfm_api_secret?: string;
   anthropic_api_key?: string;
+  // Community cache
+  community_cache_enabled?: boolean;
+  community_cache_contribute?: boolean;
   // Metadata enrichment
   auto_enrich_metadata?: boolean;
   enrich_overwrite_existing?: boolean;

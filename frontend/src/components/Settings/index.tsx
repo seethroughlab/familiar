@@ -16,6 +16,9 @@ import { RemoteLogsPanel } from './RemoteLogsPanel';
 import { AISettings } from './AISettings';
 import { DataManagement } from './DataManagement';
 import { SubsonicSettings } from './SubsonicSettings';
+import { ApiKeyStatus } from './ApiKeyStatus';
+import { CommunityCache } from './CommunityCache';
+import { S3BackupSettings } from './S3BackupSettings';
 
 export function SettingsPanel() {
   return (
@@ -33,6 +36,7 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <SystemStatus />
+            <ApiKeyStatus />
           </div>
         </section>
 
@@ -44,6 +48,7 @@ export function SettingsPanel() {
             <LibrarySync />
             <MetadataSettings />
             <AnalysisSettings />
+            <CommunityCache />
           </div>
         </section>
 
@@ -128,6 +133,7 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <DataManagement />
+            <S3BackupSettings />
           </div>
         </section>
 

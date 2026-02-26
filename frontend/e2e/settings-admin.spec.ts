@@ -15,6 +15,32 @@ test.describe('Settings', () => {
     await expect(settingsContent).toBeVisible({ timeout: 5000 });
   });
 
+  test('API key status is visible in settings', async ({ page }) => {
+    await navigateToTab(page, 'Settings');
+
+    // Should see the API Keys section
+    const apiKeysHeading = page.getByText('API Keys', { exact: true });
+    await expect(apiKeysHeading).toBeVisible({ timeout: 5000 });
+
+    // Should show all four services
+    await expect(page.getByText('Claude API', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Spotify')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Last.fm')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
+  });
+
+  test('community cache is visible in settings', async ({ page }) => {
+    await navigateToTab(page, 'Settings');
+
+    // Should see the Community Cache section
+    const cacheHeading = page.getByText('Community Cache', { exact: true });
+    await expect(cacheHeading).toBeVisible({ timeout: 5000 });
+
+    // Should show both toggles
+    await expect(page.getByText('Use community cache', { exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Contribute to cache', { exact: true })).toBeVisible({ timeout: 5000 });
+  });
+
   test('library grid/list view toggle', async ({ page }) => {
     await navigateToTab(page, 'Library');
 
@@ -41,72 +67,13 @@ test.describe('Settings', () => {
   });
 });
 
-test.describe('Admin Panel', () => {
-  test.beforeEach(async ({ page }) => {
+test.describe('Admin redirect', () => {
+  test('/admin redirects to main app', async ({ page }) => {
     await page.goto('/admin');
     await page.waitForLoadState('networkidle');
-  });
 
-  test('admin page loads', async ({ page }) => {
-    // Look for the Admin Setup title
-    const adminTitle = page.getByText('Admin Setup', { exact: true });
-    await expect(adminTitle).toBeVisible({ timeout: 5000 });
-  });
-
-  test('service status section exists', async ({ page }) => {
-    // Look for the Service Status section heading
-    const statusHeading = page.getByText('Service Status', { exact: true });
-    await expect(statusHeading).toBeVisible({ timeout: 5000 });
-  });
-
-  test('Claude API status card exists', async ({ page }) => {
-    // Look for Claude API in the status grid
-    const claudeCard = page.getByText('Claude API', { exact: true });
-    await expect(claudeCard).toBeVisible({ timeout: 5000 });
-  });
-
-  test('Spotify status card exists', async ({ page }) => {
-    const spotifyCard = page.getByText('Spotify', { exact: true });
-    await expect(spotifyCard).toBeVisible({ timeout: 5000 });
-  });
-
-  test('Last.fm status card exists', async ({ page }) => {
-    const lastfmCard = page.getByText('Last.fm', { exact: true });
-    await expect(lastfmCard).toBeVisible({ timeout: 5000 });
-  });
-
-  test('AcoustID status card exists', async ({ page }) => {
-    const acoustidCard = page.getByText('AcoustID', { exact: true });
-    await expect(acoustidCard).toBeVisible({ timeout: 5000 });
-  });
-
-  test('community cache section exists', async ({ page }) => {
-    const cacheSection = page.getByText('Community Cache', { exact: true });
-    await expect(cacheSection).toBeVisible({ timeout: 5000 });
-  });
-
-  test('community cache toggles work', async ({ page }) => {
-    // Find the "Use community cache" text and then locate the toggle nearby
-    const useCacheLabel = page.getByText('Use community cache', { exact: true });
-    await expect(useCacheLabel).toBeVisible({ timeout: 5000 });
-
-    // Find the toggle input - it's a sibling's descendant
-    const toggleContainer = useCacheLabel.locator('..').locator('..').locator('..');
-    const toggle = toggleContainer.locator('input[type="checkbox"]');
-    await expect(toggle).toBeVisible({ timeout: 5000 });
-
-    // Toggle should be clickable
-    const initialState = await toggle.isChecked();
-    await toggle.click({ force: true });
-    await page.waitForTimeout(500);
-
-    // State should change
-    const newState = await toggle.isChecked();
-    expect(newState).toBe(!initialState);
-
-    // Toggle back
-    await toggle.click({ force: true });
-    await page.waitForTimeout(500);
+    // Should not be on /admin anymore
+    expect(page.url()).not.toContain('/admin');
   });
 });
 

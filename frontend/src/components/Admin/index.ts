@@ -1,1 +1,0 @@
-export { AdminSetup } from './AdminSetup';
