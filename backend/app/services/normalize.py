@@ -70,6 +70,12 @@ _PAREN_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
+_DASH_SUFFIX_RE = re.compile(
+    r'\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|deluxe|expanded|special|anniversary|'
+    r'collector|bonus\s*track|edition|version|remix|edit|radio\s+edit|mono|stereo)\b.*$',
+    re.IGNORECASE,
+)
+
 _LEADING_ARTICLE_RE = re.compile(r'^(?:the|a|an)\s+', re.IGNORECASE)
 
 
@@ -156,6 +162,9 @@ def normalize_for_duplicate_matching(
 
     # Strip parenthetical suffixes (remaster, deluxe, feat, remix, etc.)
     s = _PAREN_SUFFIX_RE.sub("", s)
+
+    # Strip dash-prefixed suffixes (Spotify style: "Song - 2011 Remaster")
+    s = _DASH_SUFFIX_RE.sub("", s)
 
     # Strip leading articles for artist matching
     if strip_articles:

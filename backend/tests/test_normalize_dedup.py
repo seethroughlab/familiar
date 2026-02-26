@@ -125,3 +125,18 @@ class TestNormalizeForDuplicateMatching:
         assert normalize_for_duplicate_matching(
             "Björk - Homogenic (Remastered)"
         ) == "bjork - homogenic"
+
+    # --- Dash-prefixed suffix stripping (Spotify style) ---
+
+    def test_dash_remastered_with_year(self):
+        assert normalize_for_duplicate_matching("Hey Jude - Remastered 2009") == "hey jude"
+
+    def test_dash_radio_edit(self):
+        assert normalize_for_duplicate_matching("Song - Radio Edit") == "song"
+
+    def test_dash_remaster_with_year(self):
+        assert normalize_for_duplicate_matching("Song - 2015 Remaster") == "song"
+
+    def test_dash_preserves_non_suffix(self):
+        """Non-suffix dashes should be preserved."""
+        assert normalize_for_duplicate_matching("Rock - Roll") == "rock - roll"

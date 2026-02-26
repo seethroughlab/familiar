@@ -62,3 +62,23 @@ class TestNormalizeForMatching:
     def test_case_insensitive_feat(self):
         result = normalize_for_matching("Song (FEAT. Artist)")
         assert result == "song"
+
+    # --- Dash-prefixed suffix stripping (Spotify style) ---
+
+    def test_dash_remaster_with_year(self):
+        assert normalize_for_matching("Suedehead - 2011 Remaster") == "suedehead"
+
+    def test_dash_remaster_with_year_2(self):
+        assert normalize_for_matching("Today - 2011 Remaster") == "today"
+
+    def test_dash_remastered_with_year(self):
+        assert normalize_for_matching("Stupid Girl - Remastered 2015") == "stupid girl"
+
+    def test_dash_radio_edit(self):
+        assert normalize_for_matching("Blind - Radio Edit") == "blind"
+
+    def test_dash_deluxe_version(self):
+        assert normalize_for_matching("Song - Deluxe Version") == "song"
+
+    def test_dash_remastered(self):
+        assert normalize_for_matching("Song - Remastered") == "song"

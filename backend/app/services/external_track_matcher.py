@@ -32,9 +32,17 @@ def normalize_for_matching(s: str) -> str:
         s,
         flags=re.IGNORECASE
     )
-    # Remove remaster/remix annotations
+    # Remove remaster/remix annotations in parentheses/brackets
     s = re.sub(
-        r'\s*[\(\[][^\)\]]*(?:remaster|remix|version|edit|deluxe|bonus)[^\)\]]*[\)\]]',
+        r'\s*[\(\[][^\)\]]*(?:remaster(?:ed)?|remix|version|edit|deluxe|bonus)[^\)\]]*[\)\]]',
+        '',
+        s,
+        flags=re.IGNORECASE
+    )
+    # Remove dash-prefixed remaster/remix/edit annotations (Spotify style)
+    # e.g. "Song - 2011 Remaster", "Track - Remastered", "Song - Radio Edit"
+    s = re.sub(
+        r'\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|remix|version|edit|deluxe|bonus|radio\s+edit)\b.*$',
         '',
         s,
         flags=re.IGNORECASE
@@ -540,7 +548,7 @@ class ExternalTrackMatcher:
         normalized_title = normalize_for_matching(title)
         normalized_artist = normalize_for_matching(artist)
 
-        # 2. Try exact artist + title match
+        # 2. Try exact artist + title match (raw)
         result = await self.db.execute(
             select(Track).where(
                 func.lower(Track.title) == title_lower,
@@ -550,6 +558,19 @@ class ExternalTrackMatcher:
         match = result.scalars().first()
         if match:
             return match, "exact", 1.0
+
+        # 2b. Try exact match with normalized title/artist
+        # Catches "Suedehead - 2011 Remaster" matching library's "Suedehead"
+        if normalized_title != title_lower or normalized_artist != artist_lower:
+            result = await self.db.execute(
+                select(Track).where(
+                    func.lower(Track.title) == normalized_title,
+                    func.lower(Track.artist) == normalized_artist,
+                ).limit(1)
+            )
+            match = result.scalars().first()
+            if match:
+                return match, "exact_normalized", 0.95
 
         # 3. Try partial match (title contains, artist contains)
         result = await self.db.execute(
