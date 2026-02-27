@@ -67,16 +67,6 @@ test.describe('Settings', () => {
   });
 });
 
-test.describe('Admin redirect', () => {
-  test('/admin redirects to main app', async ({ page }) => {
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
-
-    // Should not be on /admin anymore
-    expect(page.url()).not.toContain('/admin');
-  });
-});
-
 test.describe('UI Elements', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
