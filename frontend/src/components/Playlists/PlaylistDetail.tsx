@@ -141,9 +141,8 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
 
   const getTrackFromPlaylistItem = useCallback(
     (t: PlaylistTrackType): Track | null => {
-      if (t.type === 'external') return null;
       return {
-        id: t.id,
+        id: t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id,
         file_path: '',
         title: t.title,
         artist: t.artist,
