@@ -24,8 +24,8 @@ test.describe('Settings', () => {
 
     // Should show all four services
     await expect(page.getByText('Claude API', { exact: true })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Spotify')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Last.fm')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Spotify', { exact: true }).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Last.fm', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 

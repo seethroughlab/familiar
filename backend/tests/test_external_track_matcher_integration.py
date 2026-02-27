@@ -76,7 +76,7 @@ class TestMatchByFuzzy:
         result = await matcher.match_external_track(ext)
         # This may match via partial or fuzzy depending on normalization
         assert result is not None
-        assert ext.match_method in ("exact", "partial", "fuzzy")
+        assert ext.match_method in ("exact", "exact_normalized", "partial", "fuzzy")
 
 
 class TestNoMatch:
