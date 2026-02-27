@@ -7,18 +7,23 @@ import {
   ChevronDown,
   ChevronUp,
   Disc3,
+  Plus,
+  Check,
 } from 'lucide-react';
 import type { NewRelease } from '../../api';
 
 interface NewReleaseCardProps {
   release: NewRelease;
   onDismiss: (id: string) => void;
+  onAddToWishlist?: (release: NewRelease) => Promise<void>;
 }
 
-export function NewReleaseCard({ release, onDismiss }: NewReleaseCardProps) {
+export function NewReleaseCard({ release, onDismiss, onAddToWishlist }: NewReleaseCardProps) {
   const [showPurchaseLinks, setShowPurchaseLinks] = useState(false);
   const [isDismissing, setIsDismissing] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isAdded, setIsAdded] = useState(false);
 
   const handleDismiss = async () => {
     setIsDismissing(true);
@@ -26,6 +31,19 @@ export function NewReleaseCard({ release, onDismiss }: NewReleaseCardProps) {
       await onDismiss(release.id);
     } finally {
       setIsDismissing(false);
+    }
+  };
+
+  const handleAddToWishlist = async () => {
+    if (!onAddToWishlist || isAdding || isAdded) return;
+    setIsAdding(true);
+    try {
+      await onAddToWishlist(release);
+      setIsAdded(true);
+    } catch {
+      // Parent handles error toast
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -135,6 +153,18 @@ export function NewReleaseCard({ release, onDismiss }: NewReleaseCardProps) {
             ) : (
               <ChevronDown className="w-3 h-3" />
             )}
+          </button>
+        )}
+
+        {/* Wishlist button */}
+        {!release.local_album_match && onAddToWishlist && (
+          <button
+            onClick={handleAddToWishlist}
+            disabled={isAdding || isAdded}
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 disabled:opacity-60 disabled:cursor-default transition-colors"
+          >
+            {isAdded ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+            {isAdded ? 'Added' : 'Wishlist'}
           </button>
         )}
       </div>

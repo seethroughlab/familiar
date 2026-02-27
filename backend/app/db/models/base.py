@@ -70,3 +70,4 @@ class ExternalTrackSource(enum.Enum):
     PLAYLIST_IMPORT = "playlist_import"
     LLM_RECOMMENDATION = "llm_recommendation"
     MANUAL = "manual"
+    NEW_RELEASE = "new_release"

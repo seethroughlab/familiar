@@ -326,6 +326,16 @@ export const playlistsApi = {
     const { data } = await api.post('/playlists/wishlist/add', request);
     return data;
   },
+
+  addReleaseToWishlist: async (releaseId: string): Promise<{
+    tracks_added: number;
+    tracks_skipped: number;
+    release_name: string;
+    artist_name: string;
+  }> => {
+    const { data } = await api.post('/playlists/wishlist/add-release', { release_id: releaseId });
+    return data;
+  },
 };
 
 // External Tracks API

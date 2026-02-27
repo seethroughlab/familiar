@@ -11,9 +11,9 @@ import {
   EyeOff,
   Loader2,
 } from 'lucide-react';
-import { newReleasesApi, type NewRelease } from '../../api';
+import { newReleasesApi, playlistsApi, type NewRelease } from '../../api';
 import { NewReleaseCard } from './NewReleaseCard';
-import { showError } from '../../stores/toastStore';
+import { showError, showSuccess } from '../../stores/toastStore';
 import { useIntersectionObserver } from '../../hooks/useIntersectionObserver';
 
 export function NewReleasesDetail() {
@@ -140,6 +140,35 @@ export function NewReleasesDetail() {
     },
     [queryClient, showDismissed, showOwned, releasesData],
   );
+
+  const handleAddToWishlist = useCallback(async (release: NewRelease) => {
+    try {
+      if (release.source === 'spotify') {
+        const result = await playlistsApi.addReleaseToWishlist(release.id);
+        if (result.tracks_added > 0) {
+          showSuccess(`Added ${result.tracks_added} track${result.tracks_added !== 1 ? 's' : ''} from "${release.release_name}" to Wishlist`);
+        } else {
+          showSuccess(`"${release.release_name}" already in Wishlist`);
+        }
+      } else {
+        await playlistsApi.addToWishlist({
+          title: release.release_name,
+          artist: release.artist_name,
+          album: release.release_name,
+          external_data: {
+            artwork_url: release.artwork_url,
+            external_url: release.external_url,
+            source: release.source,
+            release_type: release.release_type,
+          },
+        });
+        showSuccess(`Added "${release.release_name}" to Wishlist`);
+      }
+    } catch {
+      showError('Failed to add to wishlist');
+      throw new Error('Failed to add to wishlist');
+    }
+  }, []);
 
   const formatLastChecked = (dateStr: string | null) => {
     if (!dateStr) return 'Never checked';
@@ -305,6 +334,7 @@ export function NewReleasesDetail() {
                 key={release.id}
                 release={release}
                 onDismiss={handleDismiss}
+                onAddToWishlist={handleAddToWishlist}
               />
             ))}
           </div>
