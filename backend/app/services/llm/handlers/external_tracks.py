@@ -156,6 +156,6 @@ class ExternalTrackHandlersMixin:
             "status": "matched",
             "external_track_id": str(ext_uuid),
             "matched_track_id": str(local_uuid),
-            "message": f"Successfully matched external track to local library. "
-                       f"Playlist references have been updated.",
+            "message": "Successfully matched external track to local library. "
+                       "Playlist references have been updated.",
         }
