@@ -190,6 +190,21 @@ export function useAudioEngine() {
         elementDuration: target.duration,
       });
       if (willHandle) {
+        // On mobile, try to transition synchronously within the ended event
+        // handler to keep the audio session alive. If the next track is already
+        // preloaded, executeCrossfade(0) calls nextElement.play() synchronously,
+        // which iOS allows because we're still in the event handler chain.
+        if (useDirectPlayback) {
+          const nextTrack = state.getNextTrack();
+          const nextEl = getNextElement();
+          if (nextTrack && nextEl && nextEl.readyState > 0 && nextEl.getAttribute('data-track-id') === nextTrack.id) {
+            log.debug('ended: mobile sync transition to preloaded next track', { nextTrackId: nextTrack.id });
+            setQueueTransition(true);
+            executeCrossfade(0, nextTrack);
+            setTimeout(() => { setQueueTransition(false); }, 1000);
+            return;
+          }
+        }
         playNext();
       }
     };
@@ -214,11 +229,31 @@ export function useAudioEngine() {
         cancelCrossfadeModule(setCrossfadeState, setNextTrackPreloaded);
       }
 
-      // action is 'stop' or 'cancel-crossfade-and-stop'
       const state = usePlayerStore.getState();
       const mediaError = target.error;
       const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
       log.error('Playback error for "%s":', trackName, mediaError);
+
+      // Report to backend for re-encoding (fire-and-forget) — both initial and mid-playback
+      if (state.currentTrack?.id && state.currentTrack.track_type !== 'external') {
+        tracksApi.reportPlaybackError(state.currentTrack.id).catch(() => {});
+      }
+
+      // Auto-advance if possible (regardless of initial vs mid-playback)
+      const hasNextTrack = !!state.getNextTrack();
+      if (hasNextTrack && (action === 'stop' || action === 'cancel-crossfade-and-stop')) {
+        const isMidPlayback = target.currentTime > 0;
+        log.info('%s decode error for "%s" at %.1fs, auto-advancing',
+          isMidPlayback ? 'Mid-playback' : 'Initial',
+          trackName, target.currentTime);
+        showError('Skipping track', {
+          description: `${trackName}: decode error — fixing for next time`,
+        });
+
+        setIsLoadingAudio(false);
+        playNext();
+        return;
+      }
 
       showError('Playback error', {
         description: `${trackName}: ${mediaError?.message || 'Failed to play track'}`
@@ -308,7 +343,7 @@ export function useAudioEngine() {
         el.removeEventListener('pause', handlePause);
       });
     };
-  }, [isInitialized, playNext, setIsPlaying, setIsLoadingAudio]);
+  }, [isInitialized, playNext, setIsPlaying, setIsLoadingAudio, executeCrossfade]);
 
   // --------------------------------------------------------------------------
   // Update Media Session
@@ -525,7 +560,19 @@ export function useAudioEngine() {
 
         if (isPlaying) {
           const p = el.play();
-          if (p) p.then(() => setIsLoadingAudio(false)).catch(e => {
+          if (p) p.then(() => {
+            setIsLoadingAudio(false);
+            // Eagerly preload next track after a short delay so it's ready
+            // even when rAF isn't running (e.g. phone locked)
+            const loadedId = currentTrack.id;
+            setTimeout(() => {
+              if (usePlayerStore.getState().currentTrack?.id !== loadedId) return;
+              const nextTrack = usePlayerStore.getState().getNextTrack();
+              if (nextTrack && nextTrack.id !== getPreloadingTrackId()) {
+                preloadNextTrackModule(nextTrack.id);
+              }
+            }, 2000);
+          }).catch(e => {
             if (e.name !== 'AbortError') {
               log.error('Play failed after load', e);
               setIsLoadingAudio(false);
@@ -664,6 +711,54 @@ export function useAudioEngine() {
     }, 15000);
     return () => clearTimeout(timeout);
   }, [isLoadingAudio, setIsLoadingAudio, setIsPlaying]);
+
+  // --------------------------------------------------------------------------
+  // Effect: timeupdate-based crossfade timing (primary mobile fix)
+  // timeupdate fires even when the page is backgrounded (media engine runs
+  // independently from the render loop), unlike rAF which is suspended when
+  // the phone is locked or the browser is in the background.
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isInitialized || !isPlaying || !currentTrack) return;
+
+    const el = getCurrentElement();
+    if (!el) return;
+
+    const handleTimeUpdate = () => {
+      if (getCrossfadeContext()?.isActive || getQueueTransition()) return;
+      if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+
+      const timeRemaining = el.duration - el.currentTime;
+      const trigger = getCrossfadeTrigger(
+        timeRemaining, crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
+      );
+
+      if (trigger === 'preload') {
+        const nextTrack = usePlayerStore.getState().getNextTrack();
+        if (nextTrack && nextTrack.id !== getPreloadingTrackId()) {
+          preloadNextTrackModule(nextTrack.id);
+        }
+      }
+
+      if (trigger === 'crossfade') {
+        const nextTrack = usePlayerStore.getState().getNextTrack();
+        if (nextTrack) {
+          const nextEl = getNextElement();
+          if (nextEl && nextEl.readyState > 0) {
+            const effectiveDuration = getEffectiveCrossfadeDuration(
+              crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
+            );
+            setQueueTransition(true);
+            executeCrossfade(effectiveDuration, nextTrack);
+            setTimeout(() => { setQueueTransition(false); }, 1000);
+          }
+        }
+      }
+    };
+
+    el.addEventListener('timeupdate', handleTimeUpdate);
+    return () => el.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [isPlaying, isInitialized, currentTrack, executeCrossfade, crossfadeEnabled, crossfadeDuration]);
 
   // --------------------------------------------------------------------------
   // Animation/Update Loop

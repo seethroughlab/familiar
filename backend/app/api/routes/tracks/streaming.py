@@ -147,6 +147,87 @@ async def _stream_transcoded(file_path: Path) -> StreamingResponse:
     )
 
 
+@router.post("/{track_id}/report-playback-error")
+async def report_playback_error(
+    db: DbSession,
+    track_id: UUID,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """Report a client-side playback/decode error for a track.
+
+    Triggers background validation and re-encoding of the audio file
+    so it works on next playback.
+    """
+    from sqlalchemy import select
+
+    query = select(Track).where(Track.id == track_id)
+    result = await db.execute(query)
+    track = result.scalar_one_or_none()
+
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    file_path = Path(track.file_path)
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    logger.info("Playback error reported for track %s (%s)", track.title, file_path.name)
+    background_tasks.add_task(_validate_and_fix_track, str(track_id))
+    return {"status": "queued"}
+
+
+async def _validate_and_fix_track(track_id: str) -> None:
+    """Background task: validate audio file and re-encode if errors found."""
+    from sqlalchemy import select
+
+    from app.db.session import async_session_maker
+
+    async with async_session_maker() as db:
+        query = select(Track).where(Track.id == track_id)
+        result = await db.execute(query)
+        track = result.scalar_one_or_none()
+        if not track:
+            return
+
+        file_path = Path(track.file_path)
+        if not file_path.exists():
+            return
+
+        from app.services.flac_remux import (
+            REMUX_FORMATS,
+            has_decode_errors,
+            reencode_flac_in_place,
+            remux_audio_in_place,
+        )
+
+        try:
+            if not await has_decode_errors(file_path):
+                logger.info("No decode errors found in %s, skipping re-encode", file_path.name)
+                return
+
+            suffix = file_path.suffix.lower()
+            if suffix == ".flac":
+                logger.info("Re-encoding %s to fix decode errors", file_path.name)
+                await reencode_flac_in_place(file_path)
+            elif suffix in REMUX_FORMATS:
+                logger.info("Re-muxing %s to fix container/header issues", file_path.name)
+                await remux_audio_in_place(file_path)
+            else:
+                logger.warning("Unsupported format for repair: %s", file_path.name)
+                return
+
+            # Update hash/size so scanner doesn't detect false change
+            from app.services.scanner import compute_file_hash
+
+            track.file_hash = compute_file_hash(file_path)
+            track.file_size = file_path.stat().st_size
+            track.file_modified_at = datetime.fromtimestamp(file_path.stat().st_mtime)
+            await db.commit()
+            logger.info("Successfully re-encoded %s", file_path.name)
+        except Exception:
+            logger.exception("Failed to validate/re-encode %s", file_path.name)
+
+
 @router.get("/{track_id}/artwork")
 async def get_track_artwork(
     db: DbSession,

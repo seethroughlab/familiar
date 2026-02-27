@@ -103,6 +103,10 @@ export const tracksApi = {
     return data;
   },
 
+  reportPlaybackError: async (id: string): Promise<void> => {
+    await api.post(`/tracks/${id}/report-playback-error`);
+  },
+
   /**
    * Get the 0-based index of a track in the sorted/filtered list.
    * Used for auto-scrolling to the current track after navigation.
