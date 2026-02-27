@@ -6,6 +6,7 @@ that are composed into the ToolExecutor class via multiple inheritance.
 
 from .analysis import AnalysisHandlersMixin
 from .discovery import DiscoveryHandlersMixin
+from .external_tracks import ExternalTrackHandlersMixin
 from .library_info import LibraryInfoHandlersMixin
 from .metadata import MetadataHandlersMixin
 from .playback import PlaybackHandlersMixin
@@ -16,6 +17,7 @@ from .spotify import SpotifyHandlersMixin
 __all__ = [
     "AnalysisHandlersMixin",
     "DiscoveryHandlersMixin",
+    "ExternalTrackHandlersMixin",
     "LibraryInfoHandlersMixin",
     "MetadataHandlersMixin",
     "PlaybackHandlersMixin",

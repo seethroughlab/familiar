@@ -16,6 +16,7 @@ from app.services.app_settings import get_app_settings_service
 from .handlers import (
     AnalysisHandlersMixin,
     DiscoveryHandlersMixin,
+    ExternalTrackHandlersMixin,
     LibraryInfoHandlersMixin,
     MetadataHandlersMixin,
     PlaybackHandlersMixin,
@@ -39,6 +40,7 @@ class ToolExecutor(
     DiscoveryHandlersMixin,
     MetadataHandlersMixin,
     PlaylistHandlersMixin,
+    ExternalTrackHandlersMixin,
 ):
     """Executes tools called by the LLM."""
 
@@ -106,6 +108,10 @@ class ToolExecutor(
             "get_similar_tracks_external": self._get_similar_tracks_external,
             # Analysis tools
             "get_track_analysis": self._get_track_analysis,
+            # External track matching tools
+            "get_unmatched_external_tracks": self._get_unmatched_external_tracks,
+            "get_external_track_match_candidates": self._get_external_track_match_candidates,
+            "match_external_track": self._match_external_track,
         }
 
         handler = handlers.get(tool_name)

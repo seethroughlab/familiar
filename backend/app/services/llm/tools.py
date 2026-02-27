@@ -636,6 +636,69 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             "required": ["artist", "track"]
         }
     },
+    # External track matching tools
+    {
+        "name": "get_unmatched_external_tracks",
+        "description": "List external tracks (from Spotify, imported playlists, etc.) that haven't been matched to local library tracks. Use when the user asks about missing tracks, unmatched imports, or wants help resolving matching failures.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "artist": {
+                    "type": "string",
+                    "description": "Filter by artist name (case-insensitive partial match)"
+                },
+                "album": {
+                    "type": "string",
+                    "description": "Filter by album name (case-insensitive partial match)"
+                },
+                "source": {
+                    "type": "string",
+                    "description": "Filter by source (e.g., 'spotify', 'playlist_import')"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 50, max 200)",
+                    "default": 50
+                }
+            }
+        }
+    },
+    {
+        "name": "get_external_track_match_candidates",
+        "description": "Find potential local library matches for a specific unmatched external track. Returns scored candidates ranked by confidence. Use after get_unmatched_external_tracks to investigate why a track wasn't auto-matched.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "external_track_id": {
+                    "type": "string",
+                    "description": "UUID of the external track to find matches for"
+                }
+            },
+            "required": ["external_track_id"]
+        }
+    },
+    {
+        "name": "match_external_track",
+        "description": "Confirm a match between an external track and a local library track. This directly applies the match (not a proposal) and updates all playlist references. Reversible via unmatch in the UI.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "external_track_id": {
+                    "type": "string",
+                    "description": "UUID of the external track"
+                },
+                "track_id": {
+                    "type": "string",
+                    "description": "UUID of the local library track to match to"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Optional explanation of why this match is correct"
+                }
+            },
+            "required": ["external_track_id", "track_id"]
+        }
+    },
     # Deep analysis tools
     {
         "name": "get_track_analysis",
@@ -921,5 +984,22 @@ Example workflow:
 - Analyze content, extract: [{"artist": "...", "album": "...", "year": 2024}, ...]
 - create_playlist_from_items(name="Best Albums 2024", items=[...], description="From: https://...")
 - Response: "Created playlist with X tracks. Y are in your library, Z are marked as missing."
+
+## External Track Matching
+
+You can help resolve unmatched external tracks (from Spotify imports, playlist imports, etc.) that failed automatic matching.
+
+**Workflow:**
+1. Use get_unmatched_external_tracks to list what's unmatched (optionally filter by artist/album)
+2. Use get_external_track_match_candidates on specific tracks to see potential local matches
+3. Use match_external_track to confirm correct matches
+
+**Common reasons auto-matching fails:**
+- Punctuation differences ("Livin'" vs "Living", smart quotes vs straight quotes)
+- Remaster/deluxe annotations ("Track (2021 Remaster)" vs "Track")
+- Featuring artist variations ("feat." vs "ft." vs "featuring", or featuring in title vs artist field)
+- Character encoding issues (accented characters, special symbols)
+
+When reviewing candidates, explain to the user why you believe a match is correct (same artist, similar title, matching duration, etc.).
 
 NEVER make up track names. Only mention tracks returned by tools."""
