@@ -40,6 +40,10 @@ export interface TrackFeatures {
   acousticness: number | null;
   instrumentalness: number | null;
   speechiness: number | null;
+  brightness: number | null;
+  harmonic_complexity: number | null;
+  swing_ratio: number | null;
+  syncopation: number | null;
   loudness_lufs: number | null;
   track_peak: number | null;
   replaygain_track_gain: number | null;

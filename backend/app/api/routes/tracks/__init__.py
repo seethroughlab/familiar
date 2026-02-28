@@ -32,6 +32,10 @@ class TrackFeaturesResponse(BaseModel):
     acousticness: float | None = None
     instrumentalness: float | None = None
     speechiness: float | None = None
+    brightness: float | None = None
+    harmonic_complexity: float | None = None
+    swing_ratio: float | None = None
+    syncopation: float | None = None
     loudness_lufs: float | None = None
     track_peak: float | None = None
     replaygain_track_gain: float | None = None
@@ -119,6 +123,7 @@ SORT_FIELD_MAP: dict[str, Any] = {
 SORT_FEATURE_FIELDS = {
     'bpm', 'energy', 'danceability', 'valence',
     'acousticness', 'instrumentalness', 'key',
+    'speechiness', 'brightness', 'harmonic_complexity', 'swing_ratio', 'syncopation',
 }
 
 # Allowlist of TrackAnalysis columns usable as generic feature filters (fx/fy)
