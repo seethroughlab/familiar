@@ -85,6 +85,7 @@ export interface PlaylistTrackListProps<T> {
   /** Additional context menu options. */
   contextMenuOptions?: {
     onRemoveFromDownloads?: (track: Track) => void;
+    onRemoveFromPlaylist?: (track: Track) => void;
   };
 
   /** Persist sort preferences to localStorage under this key. */
@@ -172,6 +173,7 @@ export function PlaylistTrackList<T>({
     onToggleSelect: (track) => toggleItem(track.id),
     onClearSelection: clearSelection,
     onRemoveFromDownloads: contextMenuOptions?.onRemoveFromDownloads,
+    onRemoveFromPlaylist: contextMenuOptions?.onRemoveFromPlaylist,
     resolveSelectedTracks: (ids) => sortedItems
       .filter(item => {
         const itemId = getItemId ? getItemId(item) : getTrack(item)?.id ?? '';

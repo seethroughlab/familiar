@@ -44,6 +44,7 @@ interface TrackContextMenuProps {
   onMakePlaylist: () => void;
   onEditMetadata?: () => void;
   onRemoveFromDownloads?: () => void;
+  onRemoveFromPlaylist?: () => void;
   // Favorite toggle
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
@@ -71,6 +72,7 @@ export function TrackContextMenu({
   onMakePlaylist,
   onEditMetadata,
   onRemoveFromDownloads,
+  onRemoveFromPlaylist,
   isFavorite,
   onToggleFavorite,
   selectedCount = 0,
@@ -231,6 +233,15 @@ export function TrackContextMenu({
           icon={<Trash2 className="w-4 h-4" />}
           label="Remove from Downloads"
           onClick={() => handleAction(onRemoveFromDownloads)}
+        />
+      )}
+
+      {/* Remove from Playlist */}
+      {onRemoveFromPlaylist && (
+        <MenuItem
+          icon={<Trash2 className="w-4 h-4" />}
+          label="Remove from Playlist"
+          onClick={() => handleAction(onRemoveFromPlaylist)}
         />
       )}
 

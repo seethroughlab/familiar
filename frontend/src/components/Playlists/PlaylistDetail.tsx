@@ -446,6 +446,37 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     });
   }, [playlist, addToQueue]);
 
+  const handleRemoveFromPlaylist = useCallback(async (track: Track) => {
+    if (!playlist) return;
+    const playlistTrack = playlist.tracks.find(t => {
+      const trackId = t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id;
+      return trackId === track.id;
+    });
+    if (!playlistTrack) return;
+
+    // Optimistically remove from cache
+    const previousTracks = playlist.tracks;
+    queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
+      if (!old) return old;
+      return { ...old, tracks: old.tracks.filter(t => t.playlist_track_id !== playlistTrack.playlist_track_id) };
+    });
+
+    try {
+      await playlistsApi.removeItem(playlistId, playlistTrack.playlist_track_id);
+      if (playlist.is_wishlist) {
+        queryClient.invalidateQueries({ queryKey: ['wishlist'] });
+      }
+    } catch (error) {
+      log.error('Failed to remove track from playlist:', error);
+      showError('Failed to remove track');
+      // Rollback
+      queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
+        if (!old) return old;
+        return { ...old, tracks: previousTracks };
+      });
+    }
+  }, [playlist, playlistId, queryClient]);
+
   const handleRemoveSelected = useCallback(async (selectedIds: Set<string>, clearSelection: () => void) => {
     if (!playlist) return;
     const remainingTracks = playlist.tracks.filter(t => !selectedIds.has(t.playlist_track_id));
@@ -837,6 +868,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         renderBulkActions={renderBulkActions}
         dragReorder={dragReorder}
         renderDragHandle={renderDragHandle}
+        contextMenuOptions={{ onRemoveFromPlaylist: handleRemoveFromPlaylist }}
         emptyMessage="No tracks in this playlist"
         sortPersistKey={`playlist-${playlistId}`}
       />

@@ -39,6 +39,8 @@ interface UseTrackContextMenuOptions {
   onExploreSimilarArtists?: (track: Track) => void;
   /** Extra handler: remove from downloads (DownloadsDetail). */
   onRemoveFromDownloads?: (track: Track) => void;
+  /** Extra handler: remove from playlist (PlaylistDetail). */
+  onRemoveFromPlaylist?: (track: Track) => void;
   /** Bulk play selected handler. */
   onPlaySelected?: () => void;
   /** Bulk add selected to playlist. */
@@ -198,6 +200,11 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
         onRemoveFromDownloads={
           options.onRemoveFromDownloads
             ? () => options.onRemoveFromDownloads!(track)
+            : undefined
+        }
+        onRemoveFromPlaylist={
+          options.onRemoveFromPlaylist
+            ? () => options.onRemoveFromPlaylist!(track)
             : undefined
         }
         isFavorite={isFavorite(track.id)}
