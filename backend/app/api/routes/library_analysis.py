@@ -2,6 +2,8 @@
 
 import logging
 
+from app.utils.time import utcnow
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -121,7 +123,7 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
     without_embeddings = analyzed - with_embeddings
 
     # Pending = no TrackAnalysis row or outdated version, and not recently failed
-    failure_cutoff = datetime.utcnow() - timedelta(hours=24)
+    failure_cutoff = utcnow() - timedelta(hours=24)
     pending = await db.scalar(
         select(func.count(Track.id))
         .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)

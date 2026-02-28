@@ -7,6 +7,7 @@ backup and migration purposes.
 
 import logging
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -95,7 +96,7 @@ class ExportImportService:
         """
         export_data: dict[str, Any] = {
             "version": EXPORT_VERSION,
-            "exported_at": datetime.utcnow().isoformat() + "Z",
+            "exported_at": utcnow().isoformat() + "Z",
             "familiar_version": get_app_version(),
             "profile": {
                 "name": profile.name,
@@ -663,7 +664,7 @@ class ImportService:
                     track_id=track_id,
                     favorited_at=(
                         datetime.fromisoformat(favorited_at.replace("Z", "+00:00"))
-                        if favorited_at else datetime.utcnow()
+                        if favorited_at else utcnow()
                     ),
                 )
                 self.db.add(fav)

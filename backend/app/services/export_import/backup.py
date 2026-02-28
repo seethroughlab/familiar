@@ -10,6 +10,7 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Any
 
 from sqlalchemy import func, select
@@ -72,7 +73,7 @@ class BackupService:
         export_data: dict[str, Any] = {
             "version": BACKUP_VERSION,
             "export_type": "backup",
-            "exported_at": datetime.utcnow().isoformat() + "Z",
+            "exported_at": utcnow().isoformat() + "Z",
             "familiar_version": get_app_version(),
             "includes": {
                 "profile_data": any([
@@ -711,7 +712,7 @@ class RestoreService:
                     analysis_imported += 1
 
                     if not track.analyzed_at:
-                        track.analyzed_at = datetime.utcnow()
+                        track.analyzed_at = utcnow()
 
                 # Apply analysis_detail JSONB
                 imported_detail = export_analysis.get("analysis_detail")

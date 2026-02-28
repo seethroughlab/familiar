@@ -7,6 +7,8 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from app.utils.time import utcnow
+
 if TYPE_CHECKING:
     from app.services.background._typing import _BackgroundManagerProtocol
 
@@ -46,7 +48,7 @@ class SyncMixin(_SyncBase):
                     if heartbeat:
                         try:
                             hb_time = datetime.fromisoformat(heartbeat)
-                            age = datetime.utcnow() - hb_time
+                            age = utcnow() - hb_time
                             if age < timedelta(seconds=60):
                                 return True
                             elif has_lock:
@@ -85,7 +87,7 @@ class SyncMixin(_SyncBase):
                     heartbeat = progress.get("last_heartbeat")
                     if heartbeat:
                         hb_time = datetime.fromisoformat(heartbeat)
-                        age = datetime.utcnow() - hb_time
+                        age = utcnow() - hb_time
                         if age > timedelta(seconds=60):
                             logger.info(
                                 f"Clearing stale sync lock before acquire "
@@ -247,7 +249,7 @@ class SyncMixin(_SyncBase):
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
         from app.config import settings
-        from app.services.audio_identification import get_audio_identification_service
+        from app.services.metadata.audio_identification import get_audio_identification_service
 
         logger.info(f"Starting bulk identify task {task_id} for {len(track_ids)} tracks")
 
@@ -259,7 +261,7 @@ class SyncMixin(_SyncBase):
             "current_track": None,
             "results": [],
             "errors": [],
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": utcnow().isoformat(),
         }
         self.redis.set(
             f"familiar:identify:{task_id}",
@@ -340,7 +342,7 @@ class SyncMixin(_SyncBase):
         try:
             engine = create_async_engine(settings.database_url)
             async_session = async_sessionmaker(engine, class_=AsyncSession)
-            cutoff = datetime.utcnow() - timedelta(days=7)
+            cutoff = utcnow() - timedelta(days=7)
 
             async with async_session() as db:
                 result = await db.execute(

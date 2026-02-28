@@ -1,6 +1,7 @@
 """Smart playlist service for rule-based auto-updating playlists."""
 
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -74,14 +75,14 @@ OPERATORS = {
 
 # Date keywords for after/before/on operators
 DATE_KEYWORDS = {
-    "today": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0),
-    "yesterday": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1),
-    "this_week": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=datetime.utcnow().weekday()),
-    "last_week": lambda: datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=datetime.utcnow().weekday() + 7),
-    "this_month": lambda: datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0),
-    "last_month": lambda: (datetime.utcnow().replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
-    "this_year": lambda: datetime.utcnow().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
-    "last_year": lambda: datetime.utcnow().replace(year=datetime.utcnow().year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+    "today": lambda: utcnow().replace(hour=0, minute=0, second=0, microsecond=0),
+    "yesterday": lambda: utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1),
+    "this_week": lambda: utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=utcnow().weekday()),
+    "last_week": lambda: utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=utcnow().weekday() + 7),
+    "this_month": lambda: utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+    "last_month": lambda: (utcnow().replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+    "this_year": lambda: utcnow().replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
+    "last_year": lambda: utcnow().replace(year=utcnow().year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0),
 }
 
 
@@ -112,13 +113,13 @@ def resolve_relative_date(value: Any) -> datetime | None:
         return None
 
     if unit == "days":
-        return datetime.utcnow() - timedelta(days=amount)
+        return utcnow() - timedelta(days=amount)
     elif unit == "weeks":
-        return datetime.utcnow() - timedelta(weeks=amount)
+        return utcnow() - timedelta(weeks=amount)
     elif unit == "months":
-        return datetime.utcnow() - timedelta(days=amount * 30)  # Approximate
+        return utcnow() - timedelta(days=amount * 30)  # Approximate
     elif unit == "years":
-        return datetime.utcnow() - timedelta(days=amount * 365)  # Approximate
+        return utcnow() - timedelta(days=amount * 365)  # Approximate
     return None
 
 
@@ -248,7 +249,7 @@ class SmartPlaylistService:
         """Refresh the cached track count."""
         count = await self.get_track_count(playlist)
         playlist.cached_track_count = count
-        playlist.last_refreshed_at = datetime.utcnow()
+        playlist.last_refreshed_at = utcnow()
         await self.db.commit()
         await self.db.refresh(playlist)
         return count
@@ -447,7 +448,7 @@ class SmartPlaylistService:
             try:
                 days = int(value) if value is not None else None
                 if days is not None:
-                    cutoff = datetime.utcnow() - timedelta(days=days)
+                    cutoff = utcnow() - timedelta(days=days)
                     return column >= cutoff
             except (ValueError, TypeError):
                 pass
@@ -457,7 +458,7 @@ class SmartPlaylistService:
             try:
                 days = int(value) if value is not None else None
                 if days is not None:
-                    cutoff = datetime.utcnow() - timedelta(days=days)
+                    cutoff = utcnow() - timedelta(days=days)
                     # Either never played (NULL) or played before the cutoff
                     return or_(column.is_(None), column < cutoff)
             except (ValueError, TypeError):

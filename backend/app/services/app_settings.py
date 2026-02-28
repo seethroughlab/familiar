@@ -28,10 +28,13 @@ Settings by Source
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class AppSettings(BaseModel):
@@ -110,8 +113,10 @@ class AppSettingsService:
                 with open(self.settings_path) as f:
                     data = json.load(f)
                 return AppSettings(**data)
-            except (json.JSONDecodeError, Exception):
-                pass
+            except (json.JSONDecodeError, ValidationError) as e:
+                logger.warning(f"Failed to load settings from {self.settings_path}: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error loading settings from {self.settings_path}: {e}")
         return AppSettings()
 
     def _save(self, settings: AppSettings) -> None:

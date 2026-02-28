@@ -77,7 +77,7 @@ async def stream_track(
         raise HTTPException(status_code=404, detail="Track not found")
 
     # Trigger auto-enrichment in background if track has incomplete metadata
-    from app.services.metadata_enrichment import needs_enrichment
+    from app.services.metadata.enrichment import needs_enrichment
     from app.services.tasks import propose_enrichment_for_track
 
     if needs_enrichment(track, check_artwork=False):
@@ -295,7 +295,7 @@ async def upload_track_artwork(
     from sqlalchemy import select
 
     from app.services.artwork import compute_album_hash, save_artwork
-    from app.services.metadata_writer import write_artwork
+    from app.services.metadata.writer import write_artwork
 
     # Validate content type
     if file.content_type not in ALLOWED_IMAGE_TYPES:

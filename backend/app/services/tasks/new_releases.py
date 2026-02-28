@@ -139,7 +139,7 @@ async def run_new_releases_check(
     """Check for new releases from artists in the library."""
 
     from app.db.session import create_task_engine_session
-    from app.services.musicbrainz import get_artist_releases_recent, search_artist
+    from app.services.metadata.musicbrainz import get_artist_releases_recent, search_artist
     from app.services.new_releases import NewReleasesService
     from app.services.spotify import SpotifyArtistService
     from app.services.spotify_compat import SpotifyRateLimitError
@@ -353,7 +353,7 @@ async def run_prioritized_new_releases_check(
     from uuid import UUID as UUIDType
 
     from app.db.session import create_task_engine_session
-    from app.services.musicbrainz import get_artist_releases_recent, search_artist
+    from app.services.metadata.musicbrainz import get_artist_releases_recent, search_artist
     from app.services.new_releases import NewReleasesService
 
     progress = NewReleasesProgressReporter(profile_id)

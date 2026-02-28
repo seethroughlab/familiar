@@ -3,6 +3,7 @@
 import logging
 import unicodedata
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -110,7 +111,7 @@ class NewReleasesService:
         if not cache:
             return True
 
-        cutoff = datetime.utcnow() - timedelta(hours=cache_hours)
+        cutoff = utcnow() - timedelta(hours=cache_hours)
         return cache.last_checked_at < cutoff
 
     async def update_artist_cache(
@@ -123,7 +124,7 @@ class NewReleasesService:
         cache = await self.get_artist_check_cache(artist_normalized)
 
         if cache:
-            cache.last_checked_at = datetime.utcnow()
+            cache.last_checked_at = utcnow()
             if musicbrainz_id:
                 cache.musicbrainz_artist_id = musicbrainz_id
             if spotify_id:
@@ -133,7 +134,7 @@ class NewReleasesService:
                 artist_name_normalized=artist_normalized,
                 musicbrainz_artist_id=musicbrainz_id,
                 spotify_artist_id=spotify_id,
-                last_checked_at=datetime.utcnow(),
+                last_checked_at=utcnow(),
             )
             self.db.add(cache)
 
@@ -406,7 +407,7 @@ class NewReleasesService:
         max_plays = max_plays_result.scalar() or 1  # Avoid division by zero
 
         # Calculate cutoff date for cache
-        cache_cutoff = datetime.utcnow() - timedelta(days=min_days_since_check)
+        cache_cutoff = utcnow() - timedelta(days=min_days_since_check)
 
         # Main query: select artists with priority scores
         # Priority = recency (60%) + frequency (40%)
@@ -487,7 +488,7 @@ class NewReleasesService:
         total_in_rotation = total_in_rotation_result.scalar() or 0
 
         # Count artists checked in last 7 days
-        week_ago = datetime.utcnow() - timedelta(days=7)
+        week_ago = utcnow() - timedelta(days=7)
         checked_this_week_result = await self.db.execute(
             select(func.count(ArtistCheckCache.artist_name_normalized))
             .where(ArtistCheckCache.last_checked_at >= week_ago)

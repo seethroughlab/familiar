@@ -15,7 +15,7 @@ from app.db.models import (
     ProposedChange,
     Track,
 )
-from app.services.metadata_lookup import get_metadata_lookup_service
+from app.services.metadata.lookup import get_metadata_lookup_service
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor

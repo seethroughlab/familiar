@@ -5,6 +5,7 @@ with real data in the database.
 """
 
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 
 import pytest
 
@@ -264,11 +265,11 @@ class TestLastPlayedInTheLast:
         t_old = await insert_test_track(async_db, title="OldPlay")
         await insert_test_play_history(
             async_db, profile.id, t_recent.id,
-            last_played_at=datetime.utcnow() - timedelta(days=2),
+            last_played_at=utcnow() - timedelta(days=2),
         )
         await insert_test_play_history(
             async_db, profile.id, t_old.id,
-            last_played_at=datetime.utcnow() - timedelta(days=60),
+            last_played_at=utcnow() - timedelta(days=60),
         )
         await async_db.commit()
 

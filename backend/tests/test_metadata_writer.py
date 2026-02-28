@@ -14,7 +14,7 @@ from mutagen.id3 import ID3
 from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 
-from app.services.metadata_writer import (
+from app.services.metadata.writer import (
     remove_artwork,
     write_lyrics,
     write_metadata,

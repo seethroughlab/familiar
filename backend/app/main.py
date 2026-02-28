@@ -134,10 +134,11 @@ def validate_library_path() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events."""
     # Startup
-    print(f"Starting Familiar API (debug={app_config.debug})")
+    logger.info(f"Starting Familiar API (debug={app_config.debug})")
 
     # Validate library path and log warnings
-    validate_library_path()
+    import asyncio
+    await asyncio.to_thread(validate_library_path)
 
     # Check analysis capabilities (warns if embeddings disabled)
     from app.services.analysis import check_analysis_capabilities
@@ -147,14 +148,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from app.services.background import get_background_manager
     bg = get_background_manager()
     await bg.startup()
-    print("Background task manager started")
+    logger.info("Background task manager started")
 
     yield
 
     # Shutdown
-    print("Shutting down Familiar API")
+    logger.info("Shutting down Familiar API")
     await bg.shutdown()
-    print("Background task manager stopped")
+    logger.info("Background task manager stopped")
 
 
 app = FastAPI(

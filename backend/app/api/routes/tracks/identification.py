@@ -173,7 +173,7 @@ async def identify_track(
     - chromaprint/fpcalc installed on the system
     - AcoustID API key configured in Settings > API Keys
     """
-    from app.services.audio_identification import get_audio_identification_service
+    from app.services.metadata.audio_identification import get_audio_identification_service
 
     service = get_audio_identification_service()
     result = await service.identify_track(

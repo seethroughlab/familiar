@@ -10,6 +10,7 @@ import json
 import logging
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -90,7 +91,7 @@ class LibraryExportService:
         header = {
             "version": LIBRARY_EXPORT_VERSION,
             "export_type": "library",
-            "exported_at": datetime.utcnow().isoformat() + "Z",
+            "exported_at": utcnow().isoformat() + "Z",
             "familiar_version": get_app_version(),
             "analysis_version": FEATURES_VERSION,
             "embedding_version": EMBEDDING_VERSION,
@@ -468,7 +469,7 @@ class LibraryImportService:
 
                         # Update track analysis status
                         if not track.analyzed_at:
-                            track.analyzed_at = datetime.utcnow()
+                            track.analyzed_at = utcnow()
 
                     # Apply analysis_detail JSONB
                     imported_detail = export_analysis.get("analysis_detail")

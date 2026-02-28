@@ -7,6 +7,7 @@ Used for Spotify imports, LLM recommendations, and wishlist functionality.
 import logging
 import re
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -125,7 +126,7 @@ class ExternalTrackMatcher:
 
         if match:
             external_track.matched_track_id = match.id
-            external_track.matched_at = datetime.utcnow()
+            external_track.matched_at = utcnow()
             external_track.match_method = method
             external_track.match_confidence = confidence
 
@@ -205,7 +206,7 @@ class ExternalTrackMatcher:
 
             for ext in isrc_matches:
                 ext.matched_track_id = track.id
-                ext.matched_at = datetime.utcnow()
+                ext.matched_at = utcnow()
                 ext.match_method = "isrc"
                 ext.match_confidence = 1.0
                 # Replace external track with local track in all playlists
@@ -244,7 +245,7 @@ class ExternalTrackMatcher:
                 # Try exact match
                 if ext_title == normalized_title and ext_artist == normalized_artist:
                     ext.matched_track_id = track.id
-                    ext.matched_at = datetime.utcnow()
+                    ext.matched_at = utcnow()
                     ext.match_method = "exact"
                     ext.match_confidence = 1.0
                     # Replace external track with local track in all playlists
@@ -259,7 +260,7 @@ class ExternalTrackMatcher:
 
                 if combined >= self.FUZZY_THRESHOLD:
                     ext.matched_track_id = track.id
-                    ext.matched_at = datetime.utcnow()
+                    ext.matched_at = utcnow()
                     ext.match_method = "fuzzy"
                     ext.match_confidence = combined / 100.0
                     # Replace external track with local track in all playlists
@@ -333,7 +334,7 @@ class ExternalTrackMatcher:
             raise ValueError(f"Track {track_id} not found")
 
         external_track.matched_track_id = track.id
-        external_track.matched_at = datetime.utcnow()
+        external_track.matched_at = utcnow()
         external_track.match_method = "manual"
         external_track.match_confidence = 1.0
 
@@ -487,7 +488,7 @@ class ExternalTrackMatcher:
             # Lower threshold since album context confirms same content
             if best_match and best_score >= 70:
                 ext.matched_track_id = best_match.id
-                ext.matched_at = datetime.utcnow()
+                ext.matched_at = utcnow()
                 ext.match_method = "album_batch"
                 ext.match_confidence = best_score / 100.0
                 await self._replace_in_playlists(ext.id, best_match.id)

@@ -7,6 +7,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
+
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -427,7 +429,7 @@ async def run_spotify_sync(
                     db.add(ProfileExternalFavorite(
                         profile_id=profile_uuid,
                         external_track_id=external_track.id,
-                        favorited_at=fav.added_at or dt.utcnow(),
+                        favorited_at=fav.added_at or utcnow(),
                     ))
                     promoted += 1
 
@@ -468,7 +470,7 @@ async def run_spotify_sync(
             )
             spotify_profile = profile_result.scalar_one_or_none()
             if spotify_profile:
-                spotify_profile.last_sync_at = dt.utcnow()
+                spotify_profile.last_sync_at = utcnow()
 
             await db.commit()
 

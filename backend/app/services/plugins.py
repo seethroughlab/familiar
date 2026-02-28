@@ -9,6 +9,7 @@ import hashlib
 import re
 import shutil
 from datetime import datetime
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -358,7 +359,7 @@ class PluginService:
             manifest = await self.fetch_manifest(user, repo, "main")
 
             # Update last check timestamp
-            plugin.last_update_check = datetime.utcnow()
+            plugin.last_update_check = utcnow()
             await db.commit()
 
             # Compare versions (simple string comparison for now)

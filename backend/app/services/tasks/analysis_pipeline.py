@@ -7,6 +7,7 @@ and all queue_* functions for the background analysis pipeline.
 import gc
 import logging
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -94,7 +95,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             if not file_path.exists():
                 # Mark as analyzed so it won't be re-queued (file is missing)
                 _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
-                track.analyzed_at = datetime.utcnow()
+                track.analyzed_at = utcnow()
                 track.analysis_error = "File not found"
                 db.commit()
                 return {"error": f"File not found: {track.file_path}", "permanent": True}
@@ -115,7 +116,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 if skip_reason:
                     # Mark as analyzed so it won't be re-queued
                     _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
-                    track.analyzed_at = datetime.utcnow()
+                    track.analyzed_at = utcnow()
                     track.analysis_error = skip_reason
                     db.commit()
                     return {
@@ -326,7 +327,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                     musicbrainz_recording_id = acoustid_metadata.get("musicbrainz_recording_id")
 
             # Enrich with MusicBrainz metadata
-            from app.services.musicbrainz import enrich_track
+            from app.services.metadata.musicbrainz import enrich_track
             enrich_track(
                 title=track.title,
                 artist=track.artist,
@@ -383,7 +384,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 db.add(analysis)
 
             # Update track analysis status
-            track.analyzed_at = datetime.utcnow()
+            track.analyzed_at = utcnow()
             track.analysis_error = None
             track.analysis_failed_at = None
 
@@ -424,8 +425,8 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 track = result.scalar_one_or_none()
                 if track:
                     track.analysis_error = error_msg
-                    track.analysis_failed_at = datetime.utcnow()
-                    track.analyzed_at = datetime.utcnow()
+                    track.analysis_failed_at = utcnow()
+                    track.analyzed_at = utcnow()
                     _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
                     db.commit()
         except Exception as db_error:
@@ -448,8 +449,8 @@ def run_track_features(track_id: str) -> dict[str, Any]:
                 track = result.scalar_one_or_none()
                 if track:
                     track.analysis_error = error_msg
-                    track.analysis_failed_at = datetime.utcnow()
-                    track.analyzed_at = datetime.utcnow()
+                    track.analysis_failed_at = utcnow()
+                    track.analyzed_at = utcnow()
                     _ensure_track_analysis_row(db, track.id, FEATURES_VERSION)
                     db.commit()
         except Exception as db_error:
@@ -479,7 +480,7 @@ def _record_embedding_failure(track_id: str, error_msg: str) -> None:
 
             if analysis:
                 analysis.embedding_error = error_msg[:500]
-                analysis.embedding_failed_at = datetime.utcnow()
+                analysis.embedding_failed_at = utcnow()
                 db.commit()
                 logger.info(f"Recorded embedding failure for track {track_id}")
             else:
@@ -687,7 +688,7 @@ async def queue_tracks_for_features(limit: int = 500) -> int:
 
     queued = 0
     async with async_session_maker() as db:
-        failure_cutoff = datetime.utcnow() - timedelta(hours=24)
+        failure_cutoff = utcnow() - timedelta(hours=24)
 
         # Find tracks that need analysis:
         # 1. No TrackAnalysis row (never attempted)
@@ -739,7 +740,7 @@ async def queue_tracks_for_embeddings(limit: int = 500) -> int:
 
     queued = 0
     async with async_session_maker() as db:
-        failure_cutoff = datetime.utcnow() - timedelta(hours=24)
+        failure_cutoff = utcnow() - timedelta(hours=24)
 
         # Find tracks with analysis record but outdated/missing embedding
         # Exclude tracks that recently failed embedding (within 24h) to avoid infinite retry
@@ -864,7 +865,7 @@ async def queue_unanalyzed_tracks(limit: int = 500) -> int:
 
     queued = 0
     async with async_session_maker() as db:
-        failure_cutoff = datetime.utcnow() - timedelta(hours=24)
+        failure_cutoff = utcnow() - timedelta(hours=24)
 
         result = await db.execute(
             select(Track.id)

@@ -4,6 +4,8 @@ import logging
 from typing import Any
 from uuid import UUID
 
+from app.utils.time import utcnow
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -91,7 +93,7 @@ async def record_play(
     if play_history:
         # Update existing record
         play_history.play_count += 1
-        play_history.last_played_at = datetime.utcnow()
+        play_history.last_played_at = utcnow()
         if request and request.duration_seconds:
             play_history.total_play_seconds += request.duration_seconds
     else:
@@ -100,7 +102,7 @@ async def record_play(
             profile_id=profile.id,
             track_id=track_id,
             play_count=1,
-            last_played_at=datetime.utcnow(),
+            last_played_at=utcnow(),
             total_play_seconds=request.duration_seconds if request and request.duration_seconds else 0.0,
         )
         db.add(play_history)
@@ -128,7 +130,7 @@ async def enrich_track_metadata(
     Fetches data from MusicBrainz/AcoustID, updates ID3 tags, and saves artwork.
     """
     from app.services.app_settings import get_app_settings_service
-    from app.services.metadata_enrichment import needs_enrichment
+    from app.services.metadata.enrichment import needs_enrichment
     from app.services.tasks import run_track_enrichment
 
     # Check if auto-enrichment is enabled
@@ -164,7 +166,7 @@ async def enrich_tracks_batch(
     Checks which tracks need enrichment and queues them in background.
     """
     from app.services.app_settings import get_app_settings_service
-    from app.services.metadata_enrichment import needs_enrichment
+    from app.services.metadata.enrichment import needs_enrichment
     from app.services.tasks import run_track_enrichment
 
     total = len(body.track_ids)

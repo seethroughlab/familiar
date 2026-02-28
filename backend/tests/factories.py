@@ -13,6 +13,7 @@ Usage (DB-level):
 """
 
 from datetime import datetime
+from app.utils.time import utcnow
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -265,7 +266,7 @@ async def insert_test_play_history(
         profile_id=profile_id,
         track_id=track_id,
         play_count=play_count,
-        last_played_at=last_played_at or datetime.utcnow(),
+        last_played_at=last_played_at or utcnow(),
         total_play_seconds=total_play_seconds,
     )
     db.add(history)

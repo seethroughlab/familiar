@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from app.services.metadata_enrichment import get_missing_fields, is_field_missing
+from app.services.metadata.enrichment import get_missing_fields, is_field_missing
 
 
 class TestIsFieldMissing:

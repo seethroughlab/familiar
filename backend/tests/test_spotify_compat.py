@@ -1,7 +1,7 @@
 """Tests for Spotify rate limiting and SpotifyCompat wrapper."""
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -33,24 +33,26 @@ def compat(mock_spotipy):
 class TestThrottle:
     """Test centralized request throttling."""
 
-    def test_throttle_enforces_minimum_delay(self, compat):
+    @pytest.mark.asyncio
+    async def test_throttle_enforces_minimum_delay(self, compat):
         """Back-to-back calls should be spaced by at least _MIN_REQUEST_INTERVAL."""
         # First call — no delay
-        compat._throttle()
+        await compat._throttle()
         t0 = time.monotonic()
 
         # Second call — should sleep
-        compat._throttle()
+        await compat._throttle()
         elapsed = time.monotonic() - t0
 
         assert elapsed >= _MIN_REQUEST_INTERVAL * 0.9  # Allow 10% tolerance
 
-    def test_throttle_no_delay_after_interval(self, compat):
+    @pytest.mark.asyncio
+    async def test_throttle_no_delay_after_interval(self, compat):
         """If enough time has passed, _throttle() should not sleep."""
         compat._last_request_time = time.monotonic() - _MIN_REQUEST_INTERVAL - 1.0
 
         t0 = time.monotonic()
-        compat._throttle()
+        await compat._throttle()
         elapsed = time.monotonic() - t0
 
         assert elapsed < 0.1  # Should not have slept
@@ -60,20 +62,17 @@ class TestDelegatedThrottling:
     """Test that delegated spotipy methods are automatically throttled."""
 
     def test_delegated_method_is_throttled(self, compat, mock_spotipy):
-        """Delegated methods (via __getattr__) should go through _throttle()."""
-        with patch.object(compat, "_throttle") as mock_throttle:
-            compat.search(q="test", type="artist", limit=1)
+        """Delegated methods (via __getattr__) should enforce throttle inline."""
+        # First call sets _last_request_time
+        compat.search(q="test", type="artist", limit=1)
+        t0 = time.monotonic()
 
-        mock_throttle.assert_called_once()
-        mock_spotipy.search.assert_called_once_with(q="test", type="artist", limit=1)
+        # Second call should be delayed
+        compat.search(q="test2", type="artist", limit=1)
+        elapsed = time.monotonic() - t0
 
-    def test_multiple_delegated_calls_throttled(self, compat, mock_spotipy):
-        """Multiple delegated calls should each be throttled."""
-        with patch.object(compat, "_throttle") as mock_throttle:
-            compat.search(q="a", type="artist", limit=1)
-            compat.artist_albums("id1")
-
-        assert mock_throttle.call_count == 2
+        assert elapsed >= _MIN_REQUEST_INTERVAL * 0.9
+        assert mock_spotipy.search.call_count == 2
 
     def test_non_callable_attributes_not_wrapped(self, compat, mock_spotipy):
         """Non-callable attributes should be returned directly without wrapping."""
@@ -85,7 +84,8 @@ class TestDelegatedThrottling:
 class TestPlaylistItemsRetry:
     """Test playlist_items() retry logic on 429."""
 
-    def test_retry_on_429_then_success(self, compat):
+    @pytest.mark.asyncio
+    async def test_retry_on_429_then_success(self, compat):
         """Should retry on 429 and succeed when the API recovers."""
         rate_limited = httpx.Response(
             status_code=429,
@@ -98,13 +98,18 @@ class TestPlaylistItemsRetry:
             request=httpx.Request("GET", "https://api.spotify.com/v1/playlists/test/items"),
         )
 
-        with patch("app.services.spotify_compat.httpx.get", side_effect=[rate_limited, ok_response]):
-            with patch("app.services.spotify_compat.time.sleep"):  # Don't actually sleep
-                result = compat.playlist_items("test")
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[rate_limited, ok_response])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.spotify_compat.httpx.AsyncClient", return_value=mock_client):
+            result = await compat.playlist_items("test")
 
         assert result == {"items": []}
 
-    def test_raises_after_max_retries(self, compat):
+    @pytest.mark.asyncio
+    async def test_raises_after_max_retries(self, compat):
         """Should raise SpotifyRateLimitError after exhausting retries."""
         rate_limited = httpx.Response(
             status_code=429,
@@ -112,10 +117,14 @@ class TestPlaylistItemsRetry:
             request=httpx.Request("GET", "https://api.spotify.com/v1/playlists/test/items"),
         )
 
-        with patch("app.services.spotify_compat.httpx.get", return_value=rate_limited):
-            with patch("app.services.spotify_compat.time.sleep"):
-                with pytest.raises(SpotifyRateLimitError) as exc_info:
-                    compat.playlist_items("test")
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=rate_limited)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.spotify_compat.httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(SpotifyRateLimitError) as exc_info:
+                await compat.playlist_items("test")
 
         assert exc_info.value.retry_after == 1
 

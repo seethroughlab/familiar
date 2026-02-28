@@ -7,6 +7,8 @@ import random
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from app.utils.time import utcnow
+
 from sqlalchemy import and_, func, or_, select
 
 from app.db.models import (
@@ -200,7 +202,7 @@ class SearchHandlersMixin:
         limit: int = 20,
     ) -> dict[str, Any]:
         """Filter tracks by library criteria and/or audio features."""
-        from datetime import UTC, datetime, timedelta
+        from datetime import datetime, timedelta
 
         # --- Type coercion helpers (LLM may pass strings) ---
         def to_float(v: Any) -> float | None:
@@ -307,7 +309,7 @@ class SearchHandlersMixin:
         if year_max is not None:
             conditions.append(Track.year <= year_max)
         if added_in_last_days is not None:
-            cutoff = datetime.now(UTC) - timedelta(days=added_in_last_days)
+            cutoff = utcnow() - timedelta(days=added_in_last_days)
             conditions.append(Track.created_at >= cutoff)
 
         # Play count filters (require profile + play history join)
@@ -325,10 +327,10 @@ class SearchHandlersMixin:
                         func.coalesce(ProfilePlayHistory.play_count, 0) <= max_play_count
                     )
             if played_in_last_days is not None:
-                cutoff = datetime.now(UTC) - timedelta(days=played_in_last_days)
+                cutoff = utcnow() - timedelta(days=played_in_last_days)
                 conditions.append(ProfilePlayHistory.last_played_at >= cutoff)
             if not_played_in_days is not None:
-                cutoff = datetime.now(UTC) - timedelta(days=not_played_in_days)
+                cutoff = utcnow() - timedelta(days=not_played_in_days)
                 conditions.append(
                     or_(
                         ProfilePlayHistory.last_played_at.is_(None),

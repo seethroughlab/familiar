@@ -71,7 +71,7 @@ def with_retry(
                             f"Redis operation {func.__name__} failed (attempt {attempt + 1}/{max_retries + 1}): {e}. "
                             f"Retrying in {delay:.2f}s..."
                         )
-                        time.sleep(delay)
+                        time.sleep(delay)  # Note: sync sleep is intentional — sync redis client
                     else:
                         logger.error(
                             f"Redis operation {func.__name__} failed after {max_retries + 1} attempts: {e}"

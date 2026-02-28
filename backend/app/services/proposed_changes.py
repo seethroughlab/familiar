@@ -7,6 +7,7 @@ Changes can affect database records, ID3 tags, and file organization depending o
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -20,7 +21,7 @@ from app.db.models import (
     ProposedChange,
     Track,
 )
-from app.services.metadata_writer import WriteResult, write_metadata
+from app.services.metadata.writer import WriteResult, write_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -338,7 +339,7 @@ class ProposedChangesService:
 
             # Mark change as applied
             change.status = ChangeStatus.APPLIED
-            change.applied_at = datetime.utcnow()
+            change.applied_at = utcnow()
             await self.db.commit()
 
             logger.info(f"Applied change {change_id} with scope {scope.value}")

@@ -5,6 +5,7 @@ Contains run_track_enrichment and propose_enrichment_for_track.
 
 import logging
 from datetime import datetime
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -34,12 +35,12 @@ async def run_track_enrichment(track_id: str) -> dict[str, Any]:
     from app.services.app_settings import get_app_settings_service
     from app.services.artwork import compute_album_hash, save_artwork
     from app.services.import_service import embed_artwork
-    from app.services.metadata_enrichment import (
+    from app.services.metadata.enrichment import (
         fetch_cover_art,
         needs_enrichment,
         write_metadata_to_file,
     )
-    from app.services.musicbrainz import enrich_track
+    from app.services.metadata.musicbrainz import enrich_track
 
     result: dict[str, Any] = {
         "track_id": track_id,
@@ -172,7 +173,7 @@ async def run_track_enrichment(track_id: str) -> dict[str, Any]:
             if updates:
                 for key, value in updates.items():
                     setattr(track, key, value)
-                track.updated_at = datetime.utcnow()
+                track.updated_at = utcnow()
                 await db.commit()
 
             result["status"] = "success"
@@ -209,8 +210,8 @@ async def propose_enrichment_for_track(track_id: str) -> dict[str, Any]:
 
     from app.db.models import ChangeSource, ChangeStatus, ProposedChange, Track
     from app.db.session import create_task_engine_session
-    from app.services.metadata_enrichment import get_missing_fields
-    from app.services.metadata_lookup import MetadataLookupService
+    from app.services.metadata.enrichment import get_missing_fields
+    from app.services.metadata.lookup import MetadataLookupService
     from app.services.proposed_changes import ProposedChangesService
 
     result: dict[str, Any] = {

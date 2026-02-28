@@ -3,6 +3,7 @@
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
+from app.utils.time import utcnow
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -280,7 +281,7 @@ class SessionManager:
             session.playback_state.is_playing = is_playing
         if position_ms is not None:
             session.playback_state.position_ms = position_ms
-        session.playback_state.updated_at = datetime.utcnow()
+        session.playback_state.updated_at = utcnow()
 
     async def broadcast(
         self,

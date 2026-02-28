@@ -3,6 +3,7 @@
 import logging
 import secrets
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -121,7 +122,7 @@ class SpotifyService:
         spotify_user = sp.current_user()
 
         # Calculate token expiry
-        expires_at = datetime.utcnow() + timedelta(seconds=token_info.get("expires_in", 3600))
+        expires_at = utcnow() + timedelta(seconds=token_info.get("expires_in", 3600))
 
         # Upsert SpotifyProfile
         result = await db.execute(
@@ -164,7 +165,7 @@ class SpotifyService:
             return None
 
         # Check if token needs refresh
-        if spotify_profile.token_expires_at and spotify_profile.token_expires_at < datetime.utcnow():
+        if spotify_profile.token_expires_at and spotify_profile.token_expires_at < utcnow():
             logger.info(f"Token expired for {profile_id}, refreshing...")
             if spotify_profile.refresh_token:
                 try:
@@ -206,7 +207,7 @@ class SpotifyService:
         spotify_profile.access_token = token_info["access_token"]
         if "refresh_token" in token_info:
             spotify_profile.refresh_token = token_info["refresh_token"]
-        spotify_profile.token_expires_at = datetime.utcnow() + timedelta(
+        spotify_profile.token_expires_at = utcnow() + timedelta(
             seconds=token_info.get("expires_in", 3600)
         )
 
@@ -315,7 +316,7 @@ class SpotifySyncService:
         )
         spotify_profile = profile_result.scalar_one_or_none()
         if spotify_profile:
-            spotify_profile.last_sync_at = datetime.utcnow()
+            spotify_profile.last_sync_at = utcnow()
 
         await self.db.commit()
         logger.info(f"Spotify sync completed for profile {profile_id}: {stats}")
@@ -478,7 +479,7 @@ class SpotifySyncService:
             pef = ProfileExternalFavorite(
                 profile_id=profile_id,
                 external_track_id=external_track.id,
-                favorited_at=fav.added_at or datetime.utcnow(),
+                favorited_at=fav.added_at or utcnow(),
             )
             self.db.add(pef)
             created += 1
@@ -701,7 +702,7 @@ class SpotifyPlaylistService:
         playlist_info = client.playlist(spotify_playlist_id, fields="name,description")
 
         # Get tracks
-        results = client.playlist_items(spotify_playlist_id, limit=limit)
+        results = await client.playlist_items(spotify_playlist_id, limit=limit)
         tracks = []
         in_library = 0
 
@@ -789,7 +790,7 @@ class SpotifyPlaylistService:
         position = 0
 
         while True:
-            results = client.playlist_items(
+            results = await client.playlist_items(
                 spotify_playlist_id,
                 limit=limit,
                 offset=offset

@@ -8,6 +8,7 @@ import gzip
 import json
 import logging
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
@@ -121,7 +122,7 @@ async def export_profile_data(
     )
 
     # Generate filename
-    date_str = datetime.utcnow().strftime("%Y%m%d")
+    date_str = utcnow().strftime("%Y%m%d")
     safe_name = profile.name.replace(" ", "_").replace("/", "-")[:20]
     filename = f"familiar-export-{safe_name}-{date_str}.json"
 
@@ -350,7 +351,7 @@ async def export_library(
     service = LibraryExportService(db)
 
     # Generate filename
-    date_str = datetime.utcnow().strftime("%Y%m%d")
+    date_str = utcnow().strftime("%Y%m%d")
     extension = ".json.gz" if request.compress else ".json"
     filename = f"familiar-library-export-{date_str}{extension}"
 
@@ -596,7 +597,7 @@ async def create_backup(
     service = BackupService(db)
 
     # Generate filename
-    date_str = datetime.utcnow().strftime("%Y%m%d")
+    date_str = utcnow().strftime("%Y%m%d")
     safe_name = profile.name.replace(" ", "_").replace("/", "-")[:20]
 
     # Describe what's included

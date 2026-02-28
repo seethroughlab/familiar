@@ -4,6 +4,7 @@ Tests cover OAuth flow, token refresh, favorites sync, and track matching.
 """
 
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -158,7 +159,7 @@ class TestSpotifyServiceTokenRefresh:
         expired_profile.profile_id = profile_id
         expired_profile.access_token = "old_token"
         expired_profile.refresh_token = "refresh_token"
-        expired_profile.token_expires_at = datetime.utcnow() - timedelta(hours=1)  # Expired
+        expired_profile.token_expires_at = utcnow() - timedelta(hours=1)  # Expired
 
         mock_db.execute.return_value = MagicMock()
         mock_db.execute.return_value.scalar_one_or_none.return_value = expired_profile
@@ -199,7 +200,7 @@ class TestSpotifyServiceTokenRefresh:
         expired_profile = MagicMock(spec=SpotifyProfile)
         expired_profile.access_token = "old_token"
         expired_profile.refresh_token = "refresh_token"
-        expired_profile.token_expires_at = datetime.utcnow() - timedelta(hours=1)
+        expired_profile.token_expires_at = utcnow() - timedelta(hours=1)
 
         mock_db.execute.return_value = MagicMock()
         mock_db.execute.return_value.scalar_one_or_none.return_value = expired_profile

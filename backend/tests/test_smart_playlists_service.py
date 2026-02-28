@@ -1,6 +1,7 @@
 """Tests for SmartPlaylistService - rule validation, date resolution, and query building."""
 
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,22 +20,22 @@ class TestResolveRelativeDate:
     def test_days(self):
         result = resolve_relative_date({"amount": 7, "unit": "days"})
         assert result is not None
-        assert (datetime.utcnow() - result).total_seconds() < 7 * 86400 + 5
+        assert (utcnow() - result).total_seconds() < 7 * 86400 + 5
 
     def test_weeks(self):
         result = resolve_relative_date({"amount": 2, "unit": "weeks"})
         assert result is not None
-        assert (datetime.utcnow() - result).total_seconds() < 14 * 86400 + 5
+        assert (utcnow() - result).total_seconds() < 14 * 86400 + 5
 
     def test_months(self):
         result = resolve_relative_date({"amount": 1, "unit": "months"})
         assert result is not None
-        assert (datetime.utcnow() - result).total_seconds() < 31 * 86400 + 5
+        assert (utcnow() - result).total_seconds() < 31 * 86400 + 5
 
     def test_years(self):
         result = resolve_relative_date({"amount": 1, "unit": "years"})
         assert result is not None
-        assert (datetime.utcnow() - result).total_seconds() < 366 * 86400 + 5
+        assert (utcnow() - result).total_seconds() < 366 * 86400 + 5
 
     def test_invalid_type(self):
         assert resolve_relative_date("not a dict") is None
@@ -54,12 +55,12 @@ class TestResolveDateValue:
         assert result is not None
         assert result.hour == 0
         assert result.minute == 0
-        assert result.date() == datetime.utcnow().date()
+        assert result.date() == utcnow().date()
 
     def test_keyword_yesterday(self):
         result = resolve_date_value("yesterday")
         assert result is not None
-        yesterday = datetime.utcnow().date() - timedelta(days=1)
+        yesterday = utcnow().date() - timedelta(days=1)
         assert result.date() == yesterday
 
     def test_keyword_this_year(self):
@@ -67,7 +68,7 @@ class TestResolveDateValue:
         assert result is not None
         assert result.month == 1
         assert result.day == 1
-        assert result.year == datetime.utcnow().year
+        assert result.year == utcnow().year
 
     def test_iso_string(self):
         result = resolve_date_value("2024-06-15T00:00:00Z")

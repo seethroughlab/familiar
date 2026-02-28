@@ -6,6 +6,7 @@ exact match, and fuzzy matching strategies.
 
 import logging
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import Any
 
 from rapidfuzz import fuzz
@@ -193,7 +194,7 @@ class ImportPreviewSession:
         self.matching_results = matching_results
         self.summary = summary
         self.warnings = warnings
-        self.created_at = datetime.utcnow()
+        self.created_at = utcnow()
 
 
 class LibraryImportPreviewSession:
@@ -212,7 +213,7 @@ class LibraryImportPreviewSession:
         self.matching_results = matching_results
         self.summary = summary
         self.warnings = warnings
-        self.created_at = datetime.utcnow()
+        self.created_at = utcnow()
 
 
 class BackupPreviewSession:
@@ -233,7 +234,7 @@ class BackupPreviewSession:
         self.library_matching_results = library_matching_results
         self.summary = summary
         self.warnings = warnings
-        self.created_at = datetime.utcnow()
+        self.created_at = utcnow()
 
 
 # Module-level session dicts shared across modules

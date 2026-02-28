@@ -1,5 +1,6 @@
 """App settings endpoints for user-configurable settings."""
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter
@@ -181,7 +182,7 @@ async def get_settings() -> SettingsResponse:
 
     return SettingsResponse(
         **masked,
-        library_status=_get_library_status(),
+        library_status=await asyncio.to_thread(_get_library_status),
         clap_status=ClapStatus(**clap_status_data),
         spotify_configured=service.has_spotify_credentials(),
         lastfm_configured=service.has_lastfm_credentials(),
@@ -234,7 +235,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
 
     return SettingsResponse(
         **masked,
-        library_status=_get_library_status(),
+        library_status=await asyncio.to_thread(_get_library_status),
         clap_status=ClapStatus(**clap_status_data),
         spotify_configured=service.has_spotify_credentials(),
         lastfm_configured=service.has_lastfm_credentials(),

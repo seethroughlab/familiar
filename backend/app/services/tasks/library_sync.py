@@ -9,6 +9,7 @@ import logging
 import time
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -585,7 +586,7 @@ async def run_library_sync(
                 stall_threshold = 5 * 60  # 5 minutes without progress = stalled
                 last_progress_time = time.time()
                 last_embeddings_done = 0
-                failure_cutoff = datetime.utcnow() - timedelta(hours=24)
+                failure_cutoff = utcnow() - timedelta(hours=24)
 
                 while True:
                     async with local_session_maker() as db:

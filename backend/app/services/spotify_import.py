@@ -10,6 +10,7 @@ import tempfile
 import uuid
 import zipfile
 from datetime import datetime
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +187,7 @@ class SpotifyImportPreviewSession:
         self.parsed_data = parsed_data
         self.match_results = match_results
         self.summary = summary
-        self.created_at = datetime.utcnow()
+        self.created_at = utcnow()
 
 
 # In-memory session storage

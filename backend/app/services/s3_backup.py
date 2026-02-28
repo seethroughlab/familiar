@@ -19,6 +19,7 @@ import subprocess
 import tempfile
 import time
 from datetime import datetime
+from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -87,7 +88,7 @@ class BackupProgressReporter:
             "files_skipped": 0,
             "bytes_uploaded": 0,
             "current_file": None,
-            "started_at": datetime.utcnow().isoformat(),
+            "started_at": utcnow().isoformat(),
             "error": None,
         }
         self._flush()
@@ -437,7 +438,7 @@ class S3BackupService:
                 "s3_key": db_key,
                 "size_bytes": db_size,
                 "checksum": db_checksum,
-                "backed_up_at": datetime.utcnow().isoformat(),
+                "backed_up_at": utcnow().isoformat(),
             }
             progress.update(bytes_uploaded=progress.get()["bytes_uploaded"] + db_size)
 
@@ -553,7 +554,7 @@ class S3BackupService:
 
             # Write manifest
             progress.update(phase="manifest", current_file="manifest.json")
-            manifest["last_backup_at"] = datetime.utcnow().isoformat()
+            manifest["last_backup_at"] = utcnow().isoformat()
             self._save_manifest(client, bucket, prefix, manifest)
 
             duration = time.monotonic() - start_time
@@ -562,7 +563,7 @@ class S3BackupService:
 
             # Save to history
             self._save_history_entry({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": utcnow().isoformat(),
                 "duration_seconds": round(duration, 1),
                 "files_uploaded": final["files_uploaded"],
                 "files_skipped": final["files_skipped"],
@@ -582,7 +583,7 @@ class S3BackupService:
             logger.error(f"Backup failed: {e}", exc_info=True)
             progress.update(phase="error", status="error", error=str(e))
             self._save_history_entry({
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": utcnow().isoformat(),
                 "duration_seconds": round(time.monotonic() - start_time, 1),
                 "files_uploaded": progress.get()["files_uploaded"],
                 "files_skipped": progress.get()["files_skipped"],
@@ -646,7 +647,7 @@ class S3BackupService:
             size = os.path.getsize(tmp_path)
             checksum = _hash_file(Path(tmp_path))
 
-            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            timestamp = utcnow().strftime("%Y%m%d_%H%M%S")
             s3_key = _s3_key(prefix, f"database/familiar_{timestamp}.sql.gz")
 
             client.upload_file(
@@ -904,7 +905,7 @@ class S3BackupService:
         redis = get_resilient_redis()
         state = {
             "status": "retrieving",
-            "initiated_at": datetime.utcnow().isoformat(),
+            "initiated_at": utcnow().isoformat(),
             "total_files": total,
             "files_requested": requested,
             "files_available": already_available,
@@ -1074,7 +1075,7 @@ class S3BackupService:
             progress.update(phase="complete", status="complete", current_file=None)
 
             # Update restore state
-            state = {"status": "complete", "completed_at": datetime.utcnow().isoformat()}
+            state = {"status": "complete", "completed_at": utcnow().isoformat()}
             redis.set(REDIS_RESTORE_STATE, json.dumps(state), ex=7 * 86400)
 
             return {

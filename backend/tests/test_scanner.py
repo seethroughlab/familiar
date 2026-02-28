@@ -31,6 +31,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from app.utils.time import utcnow
 import pytest_asyncio
 from sqlalchemy import delete, select
 
@@ -553,7 +554,7 @@ class TestConcurrentSyncPrevention:
             progress = {
                 "status": "running",
                 "phase": "reading",
-                "last_heartbeat": datetime.utcnow().isoformat(),
+                "last_heartbeat": utcnow().isoformat(),
             }
             r.set("familiar:sync:progress", json.dumps(progress), ex=60)
 

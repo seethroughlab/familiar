@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track
-from app.services.metadata_writer import write_metadata
+from app.services.metadata.writer import write_metadata
 
 logger = logging.getLogger(__name__)
 

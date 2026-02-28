@@ -2,6 +2,8 @@
 
 import logging
 
+from app.utils.time import utcnow
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -274,7 +276,7 @@ async def get_discover_dashboard(
         pass  # Spotify tables might not exist
 
     # 4. Get recently added count (last 30 days)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = utcnow() - timedelta(days=30)
     recent_query = (
         select(func.count(Track.id))
         .where(

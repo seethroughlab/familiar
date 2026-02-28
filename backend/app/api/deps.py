@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from app.utils.time import utcnow
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -56,9 +57,8 @@ async def get_current_profile(
     if not profile:
         raise HTTPException(401, "Invalid profile ID - please re-register")
 
-    # Update last_seen timestamp
-    profile.last_seen_at = datetime.utcnow()
-    await db.commit()
+    # Update last_seen timestamp (committed by get_db's auto-commit)
+    profile.last_seen_at = utcnow()
 
     return profile
 
@@ -88,9 +88,8 @@ async def require_profile(
     if not profile:
         raise HTTPException(401, "Invalid profile ID - please re-register")
 
-    # Update last_seen timestamp
-    profile.last_seen_at = datetime.utcnow()
-    await db.commit()
+    # Update last_seen timestamp (committed by get_db's auto-commit)
+    profile.last_seen_at = utcnow()
 
     return profile
 

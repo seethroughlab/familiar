@@ -6,7 +6,9 @@ Tests the Last.fm similar-artists match-score flow:
 - Cache staleness detection when cached entries lack the 'match' key
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
+
+from app.utils.time import utcnow
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -105,7 +107,7 @@ class TestCacheStaleness:
             artist_name="Test Artist",
             similar_artists=[{"name": "Stale Artist"}],
             tags=["rock"],
-            fetched_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+            fetched_at=utcnow() - timedelta(days=1),
         )
         async_db.add(stale_cache)
         await async_db.commit()

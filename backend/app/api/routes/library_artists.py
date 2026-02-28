@@ -4,6 +4,8 @@ import asyncio
 import logging
 from pathlib import Path
 
+from app.utils.time import utcnow
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
@@ -311,7 +313,7 @@ async def get_artist_detail(
     cached = await db.get(ArtistInfo, artist_normalized)
 
     if cached and not refresh_lastfm:
-        cache_age = datetime.utcnow() - cached.fetched_at
+        cache_age = utcnow() - cached.fetched_at
         # Auto-refresh if similar_artists is empty (stale cache from before feature)
         needs_similar_refresh = not cached.fetch_error and (
             not cached.similar_artists
@@ -370,7 +372,7 @@ async def get_artist_detail(
                         )
                         cached.similar_artists = similar
                         cached.tags = tags
-                        cached.fetched_at = datetime.utcnow()
+                        cached.fetched_at = utcnow()
                         cached.fetch_error = None
                     else:
                         cached = ArtistInfo(
@@ -731,7 +733,7 @@ async def _cache_artist_images(
             cached.image_large = image_urls["large"]
         if image_urls.get("extralarge"):
             cached.image_extralarge = image_urls["extralarge"]
-        cached.fetched_at = datetime.utcnow()
+        cached.fetched_at = utcnow()
     else:
         cached = ArtistInfo(
             artist_name_normalized=artist_normalized,

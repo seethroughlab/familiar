@@ -3,7 +3,9 @@
 import os
 import platform
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
+
+from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -181,7 +183,7 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
         frontend_logs_list = [{"error": str(e)}]
 
     return DiagnosticsExport(
-        exported_at=datetime.now(UTC).isoformat(),
+        exported_at=utcnow().isoformat(),
         version=get_app_version(),
         deployment_mode="docker" if is_running_in_docker() else "local",
         system_info=get_system_info(),
@@ -224,7 +226,7 @@ async def ingest_frontend_logs(
             if client_ts.tzinfo is not None:
                 client_ts = client_ts.replace(tzinfo=None)
         except (ValueError, TypeError):
-            client_ts = datetime.utcnow()
+            client_ts = utcnow()
 
         values.append({
             "id": uuid4(),

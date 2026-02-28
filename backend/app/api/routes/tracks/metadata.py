@@ -265,7 +265,7 @@ async def update_track_metadata(
 
     # Optionally write to audio file
     if request.write_to_file and updated_fields:
-        from app.services.metadata_writer import write_lyrics, write_metadata
+        from app.services.metadata.writer import write_lyrics, write_metadata
 
         file_path = Path(track.file_path)
 
@@ -415,7 +415,7 @@ async def lookup_metadata(
     Returns a list of candidate matches sorted by confidence.
     Use this to find correct metadata for tracks with incomplete or wrong info.
     """
-    from app.services.metadata_lookup import MetadataLookupService
+    from app.services.metadata.lookup import MetadataLookupService
 
     service = MetadataLookupService()
     candidates = await service.lookup_track(

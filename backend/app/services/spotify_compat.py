@@ -11,6 +11,7 @@ It also enforces centralized rate limiting (1 req/sec) across all Spotify API
 calls to avoid 429 responses and escalating rate-limit penalties.
 """
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -44,30 +45,38 @@ class SpotifyCompat:
         self._token = token
         self._last_request_time: float = 0.0
 
-    def _throttle(self) -> None:
+    async def _throttle(self) -> None:
         """Enforce minimum delay between Spotify API requests."""
         now = time.monotonic()
         elapsed = now - self._last_request_time
         if elapsed < _MIN_REQUEST_INTERVAL:
             sleep_time = _MIN_REQUEST_INTERVAL - elapsed
             logger.debug(f"Spotify throttle: sleeping {sleep_time:.2f}s")
-            time.sleep(sleep_time)
+            await asyncio.sleep(sleep_time)
         self._last_request_time = time.monotonic()
 
     def __getattr__(self, name: str) -> Any:
         """Delegate all unhandled attributes to the underlying spotipy client.
 
         Callable attributes (API methods) are wrapped with throttling.
+        Spotipy is a sync library, so these remain sync — callers that need
+        non-blocking behavior should use asyncio.to_thread().
         """
         attr = getattr(self._client, name)
         if callable(attr):
             def throttled_call(*args: Any, **kwargs: Any) -> Any:
-                self._throttle()
+                now = time.monotonic()
+                elapsed = now - self._last_request_time
+                if elapsed < _MIN_REQUEST_INTERVAL:
+                    sleep_time = _MIN_REQUEST_INTERVAL - elapsed
+                    logger.debug(f"Spotify throttle: sleeping {sleep_time:.2f}s")
+                    time.sleep(sleep_time)  # Note: sync sleep — spotipy is a sync library
+                self._last_request_time = time.monotonic()
                 return attr(*args, **kwargs)
             return throttled_call
         return attr
 
-    def playlist_items(
+    async def playlist_items(
         self,
         playlist_id: str,
         limit: int = 100,
@@ -91,30 +100,31 @@ class SpotifyCompat:
         headers = {"Authorization": f"Bearer {self._token}"}
 
         max_retries = 5
-        for attempt in range(max_retries):
-            self._throttle()
-            try:
-                response = httpx.get(url, params=params, headers=headers, timeout=30)
-                if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", "5"))
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            f"Spotify 429 on playlist_items (attempt {attempt + 1}/{max_retries}), "
-                            f"waiting {retry_after}s"
-                        )
-                        time.sleep(retry_after)
-                        continue
-                    else:
-                        raise SpotifyRateLimitError(retry_after=retry_after)
-                response.raise_for_status()
-                data = response.json()
-                return self._normalize_playlist_response(data)
-            except httpx.HTTPStatusError as e:
-                logger.error(f"Spotify API error for playlist_items: {e.response.status_code}")
-                raise
-            except httpx.RequestError as e:
-                logger.error(f"Request error for playlist_items: {e}")
-                raise
+        async with httpx.AsyncClient() as http_client:
+            for attempt in range(max_retries):
+                await self._throttle()
+                try:
+                    response = await http_client.get(url, params=params, headers=headers, timeout=30)
+                    if response.status_code == 429:
+                        retry_after = int(response.headers.get("Retry-After", "5"))
+                        if attempt < max_retries - 1:
+                            logger.warning(
+                                f"Spotify 429 on playlist_items (attempt {attempt + 1}/{max_retries}), "
+                                f"waiting {retry_after}s"
+                            )
+                            await asyncio.sleep(retry_after)
+                            continue
+                        else:
+                            raise SpotifyRateLimitError(retry_after=retry_after)
+                    response.raise_for_status()
+                    data = response.json()
+                    return self._normalize_playlist_response(data)
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"Spotify API error for playlist_items: {e.response.status_code}")
+                    raise
+                except httpx.RequestError as e:
+                    logger.error(f"Request error for playlist_items: {e}")
+                    raise
 
         # Should not reach here, but just in case
         raise SpotifyRateLimitError(message="Spotify rate limit: max retries exhausted")
@@ -123,8 +133,16 @@ class SpotifyCompat:
         """Delegate to spotipy but normalize playlist track counts.
 
         The API renamed 'tracks' to 'items' in playlist objects.
+        Note: Uses sync spotipy client, so throttle is inline.
         """
-        self._throttle()
+        now = time.monotonic()
+        elapsed = now - self._last_request_time
+        if elapsed < _MIN_REQUEST_INTERVAL:
+            sleep_time = _MIN_REQUEST_INTERVAL - elapsed
+            logger.debug(f"Spotify throttle: sleeping {sleep_time:.2f}s")
+            time.sleep(sleep_time)  # Note: sync sleep — spotipy is a sync library
+        self._last_request_time = time.monotonic()
+
         result = self._client.current_user_playlists(limit=limit, offset=offset)
 
         # Normalize: ensure each playlist has 'tracks' field with total
