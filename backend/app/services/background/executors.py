@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Rate limiting for executor recreation to prevent runaway process spawning
 EXECUTOR_RESET_COOLDOWN = 30.0  # Minimum seconds between executor resets
 EXECUTOR_MAX_CONSECUTIVE_FAILURES = 5  # Max failures before giving up
-EXECUTOR_AUTO_RECOVERY_DELAY = 300.0  # Auto-recover after 5 minutes of being disabled
+EXECUTOR_AUTO_RECOVERY_DELAY = 300.0  # Legacy: no longer used for auto-recovery
 
 # Force spawn context to avoid fork issues with numpy/OpenBLAS
 mp_context = mp.get_context("spawn")
@@ -68,8 +68,9 @@ class ExecutorMixin:
             max_workers=1,
             mp_context=mp_context,
             initializer=_analysis_worker_init,
+            max_tasks_per_child=1,  # Fresh process per task to prevent memory accumulation
         )
-        logger.info("ProcessPoolExecutor initialized with spawn context (1 worker, nice=10)")
+        logger.info("ProcessPoolExecutor initialized with spawn context (1 worker, nice=10, max_tasks_per_child=1)")
 
         if not self._atexit_registered:
             atexit.register(self._atexit_cleanup)
@@ -88,8 +89,9 @@ class ExecutorMixin:
             max_workers=1,
             mp_context=mp_context,
             initializer=_analysis_worker_init,
+            max_tasks_per_child=1,  # Fresh process per task to prevent memory accumulation
         )
-        logger.info("On-demand ProcessPoolExecutor initialized (1 worker, nice=10)")
+        logger.info("On-demand ProcessPoolExecutor initialized (1 worker, nice=10, max_tasks_per_child=1)")
 
     def _reset_executor(self) -> bool:
         """Reset the executor after a crash. Returns True if reset succeeded."""
@@ -112,7 +114,7 @@ class ExecutorMixin:
             self._executor_disabled_at = time.monotonic()
             logger.error(
                 f"Executor disabled after {self._consecutive_executor_failures} consecutive "
-                f"failures - will auto-recover in {EXECUTOR_AUTO_RECOVERY_DELAY}s"
+                f"failures. Manual reset required (POST /api/v1/analysis/reset-executor)."
             )
             return False
 
@@ -229,27 +231,11 @@ class ExecutorMixin:
         recreated and the operation retried once.
         """
         if self._executor_disabled:
-            time_since_disabled = time.monotonic() - self._executor_disabled_at
-            if time_since_disabled >= EXECUTOR_AUTO_RECOVERY_DELAY:
-                logger.info(
-                    f"Auto-recovering executor after {time_since_disabled:.0f}s "
-                    f"(threshold: {EXECUTOR_AUTO_RECOVERY_DELAY}s)"
-                )
-                self._executor_disabled = False
-                self._consecutive_executor_failures = 0
-                self._executor_disabled_at = 0.0
-                if self._executor is not None:
-                    try:
-                        self._executor.shutdown(wait=False, cancel_futures=True)
-                    except Exception:
-                        pass
-                    self._executor = None
-            else:
-                remaining = EXECUTOR_AUTO_RECOVERY_DELAY - time_since_disabled
-                raise RuntimeError(
-                    f"Process pool executor is disabled due to repeated failures. "
-                    f"Will auto-recover in {remaining:.0f}s."
-                )
+            raise RuntimeError(
+                "Process pool executor is disabled due to repeated OOM failures. "
+                "Reset manually via POST /api/v1/analysis/reset-executor "
+                "or restart the container with more memory."
+            )
 
         loop = asyncio.get_event_loop()
         retries = 0
@@ -288,6 +274,16 @@ class ExecutorMixin:
 
                     retries += 1
                 else:
+                    # Count exhausted retries toward circuit breaker
+                    self._consecutive_executor_failures += 1
+                    if self._consecutive_executor_failures >= EXECUTOR_MAX_CONSECUTIVE_FAILURES:
+                        self._executor_disabled = True
+                        self._executor_disabled_at = time.monotonic()
+                        logger.error(
+                            f"Executor disabled after {self._consecutive_executor_failures} "
+                            f"consecutive failures. Manual reset required "
+                            f"(POST /api/v1/analysis/reset-executor)."
+                        )
                     raise
         raise last_error  # type: ignore[misc]
 

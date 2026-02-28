@@ -183,7 +183,7 @@ async def _validate_and_fix_track(track_id: str) -> None:
     from app.db.session import async_session_maker
 
     async with async_session_maker() as db:
-        query = select(Track).where(Track.id == track_id)
+        query = select(Track).where(Track.id == UUID(track_id))
         result = await db.execute(query)
         track = result.scalar_one_or_none()
         if not track:

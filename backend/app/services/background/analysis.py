@@ -53,6 +53,9 @@ class AnalysisMixin(_AnalysisBase):
                 - "features": Only extract features
                 - "embedding": Only generate CLAP embedding
         """
+        if self._executor_disabled:
+            return {"status": "skipped", "reason": "executor_disabled"}
+
         task_key = f"{track_id}:{phase}"
 
         if task_key in self._analysis_tasks:
@@ -81,6 +84,9 @@ class AnalysisMixin(_AnalysisBase):
         from app.services.tasks import run_track_features
 
         task_key = f"{track_id}:features"
+        if self._executor_disabled:
+            self._analysis_tasks.pop(task_key, None)
+            return {"status": "skipped", "reason": "executor_disabled"}
         try:
             self._current_track_id = track_id
             self._last_task_started_at = time.monotonic()
@@ -101,6 +107,9 @@ class AnalysisMixin(_AnalysisBase):
         from app.services.tasks import run_track_embedding
 
         task_key = f"{track_id}:embedding"
+        if self._executor_disabled:
+            self._analysis_tasks.pop(task_key, None)
+            return {"status": "skipped", "reason": "executor_disabled"}
         try:
             clap_disabled = os.environ.get("DISABLE_CLAP_EMBEDDINGS", "").lower() in (
                 "1", "true", "yes"
@@ -125,6 +134,9 @@ class AnalysisMixin(_AnalysisBase):
         from app.services.track_analysis import run_backfill
 
         task_key = f"{track_id}:deep_backfill"
+        if self._executor_disabled:
+            self._analysis_tasks.pop(task_key, None)
+            return {"status": "skipped", "reason": "executor_disabled"}
         try:
             self._current_track_id = track_id
             self._last_task_started_at = time.monotonic()
@@ -143,6 +155,9 @@ class AnalysisMixin(_AnalysisBase):
         from app.services.track_analysis import run_track_melodic
 
         task_key = f"{track_id}:melodic"
+        if self._executor_disabled:
+            self._analysis_tasks.pop(task_key, None)
+            return {"status": "skipped", "reason": "executor_disabled"}
         try:
             self._current_track_id = track_id
             self._last_task_started_at = time.monotonic()
@@ -161,6 +176,9 @@ class AnalysisMixin(_AnalysisBase):
         from app.services.tasks.analysis_pipeline import run_track_mood_tags
 
         task_key = f"{track_id}:mood_tags"
+        if self._executor_disabled:
+            self._analysis_tasks.pop(task_key, None)
+            return {"status": "skipped", "reason": "executor_disabled"}
         try:
             self._current_track_id = track_id
             self._last_task_started_at = time.monotonic()

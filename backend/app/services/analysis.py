@@ -671,13 +671,11 @@ def derive_features(
     else:
         try:
             import pyloudnorm as pyln
-            import soundfile as sf
 
-            data, rate = sf.read(str(file_path))
-            peak = float(np.max(np.abs(data)))
+            peak = float(np.max(np.abs(y)))
 
-            meter = pyln.Meter(rate)
-            loudness = meter.integrated_loudness(data)
+            meter = pyln.Meter(sr)
+            loudness = meter.integrated_loudness(y.reshape(-1, 1))
 
             if np.isfinite(loudness):
                 features["loudness_lufs"] = float(loudness)
@@ -732,8 +730,8 @@ def extract_features(file_path: Path) -> dict[str, float | str | None]:
 def generate_fingerprint(file_path: Path) -> tuple[int, str] | None:
     """Generate AcoustID fingerprint for an audio file.
 
-    Requires chromaprint/fpcalc to be installed on the system.
-    Install via: brew install chromaprint (macOS) or apt install libchromaprint-tools (Linux)
+    Runs chromaprint in an isolated subprocess to prevent C-level assertion
+    failures (e.g. channel count mismatches) from killing the analysis worker.
 
     Args:
         file_path: Path to audio file
@@ -741,11 +739,33 @@ def generate_fingerprint(file_path: Path) -> tuple[int, str] | None:
     Returns:
         Tuple of (duration_seconds, fingerprint_string) or None on error
     """
+    import json
+    import subprocess
+    import sys
+
     try:
-        duration, fingerprint = acoustid.fingerprint_file(str(file_path))
-        return (duration, fingerprint)
-    except acoustid.FingerprintGenerationError as e:
-        logger.error(f"Error generating fingerprint for {file_path}: {e}")
+        result = subprocess.run(
+            [
+                sys.executable, "-c",
+                "import acoustid, json, sys; "
+                "d, f = acoustid.fingerprint_file(sys.argv[1]); "
+                "print(json.dumps([d, f.decode() if isinstance(f, bytes) else f]))",
+                str(file_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            duration, fingerprint = json.loads(result.stdout.strip())
+            return (duration, fingerprint)
+        else:
+            stderr = result.stderr.strip()
+            if stderr:
+                logger.warning(f"Fingerprint subprocess failed for {file_path}: {stderr[:200]}")
+            return None
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Fingerprint generation timed out for {file_path}")
         return None
     except Exception as e:
         logger.error(f"Unexpected error generating fingerprint for {file_path}: {e}")
