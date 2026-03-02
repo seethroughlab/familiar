@@ -15,7 +15,7 @@ export type EngineEvent =
   | { type: 'remotePlay' }
   | { type: 'remotePause' }
   | { type: 'remoteNext' }
-  | { type: 'remotePrevious' }
+  | { type: 'remotePrevious'; nativeAction?: 'restart' }
   | { type: 'remoteSeek'; time: number };
 
 /**
@@ -66,6 +66,12 @@ export interface AudioEngine {
     artist: string;
     album: string;
     artworkUrl?: string;
+  }): void;
+
+  // Optional: Pending track sync for lock screen (CapacitorEngine only)
+  syncPendingTracks?(info: {
+    next: { url: string; trackId: string; title: string; artist: string; album: string; artworkUrl?: string } | null;
+    previous: { url: string; trackId: string; title: string; artist: string; album: string; artworkUrl?: string } | null;
   }): void;
 
   // Optional: Crossfade (WebAudioEngine only)

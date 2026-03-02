@@ -20,8 +20,15 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setReverb", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDelay", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setDistortion", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setCompressor", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setFilter", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setChorus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setStereoWidth", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setTremolo", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setBitcrusher", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMasterBypass", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setNowPlayingInfo", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setPendingTrackInfo", returnType: CAPPluginReturnPromise),
     ]
 
     private lazy var audioEngine: NativeAudioEngine = {
@@ -110,7 +117,8 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let preset = call.getString("preset") ?? "medium-room"
         let wetDryMix = call.getFloat("wetDryMix") ?? 0
         let enabled = call.getBool("enabled") ?? false
-        audioEngine.setReverb(preset: preset, wetDryMix: wetDryMix, enabled: enabled)
+        let preDelay = call.getFloat("preDelay") ?? 0
+        audioEngine.setReverb(preset: preset, wetDryMix: wetDryMix, enabled: enabled, preDelay: preDelay)
         call.resolve()
     }
 
@@ -119,7 +127,8 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let feedback = call.getFloat("feedback") ?? 0
         let wetDryMix = call.getFloat("wetDryMix") ?? 0
         let enabled = call.getBool("enabled") ?? false
-        audioEngine.setDelay(time: time, feedback: feedback, wetDryMix: wetDryMix, enabled: enabled)
+        let pingPong = call.getBool("pingPong") ?? false
+        audioEngine.setDelay(time: time, feedback: feedback, wetDryMix: wetDryMix, enabled: enabled, pingPong: pingPong)
         call.resolve()
     }
 
@@ -127,7 +136,67 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let preset = call.getString("preset") ?? "warm"
         let wetDryMix = call.getFloat("wetDryMix") ?? 0
         let enabled = call.getBool("enabled") ?? false
-        audioEngine.setDistortion(preset: preset, wetDryMix: wetDryMix, enabled: enabled)
+        let drive = call.getFloat("drive") ?? 1
+        audioEngine.setDistortion(preset: preset, wetDryMix: wetDryMix, enabled: enabled, drive: drive)
+        call.resolve()
+    }
+
+    @objc func setCompressor(_ call: CAPPluginCall) {
+        let threshold = call.getFloat("threshold") ?? -24
+        let ratio = call.getFloat("ratio") ?? 4
+        let attack = call.getFloat("attack") ?? 0.003
+        let release = call.getFloat("release") ?? 0.25
+        let knee = call.getFloat("knee") ?? 30
+        let makeupGain = call.getFloat("makeupGain") ?? 0
+        let enabled = call.getBool("enabled") ?? false
+        audioEngine.setCompressor(threshold: threshold, ratio: ratio, attack: attack,
+                                  release: release, knee: knee, makeupGain: makeupGain, enabled: enabled)
+        call.resolve()
+    }
+
+    @objc func setFilter(_ call: CAPPluginCall) {
+        let highpassFreq = call.getFloat("highpassFreq") ?? 20
+        let lowpassFreq = call.getFloat("lowpassFreq") ?? 20000
+        let highpassQ = call.getFloat("highpassQ") ?? 0.7
+        let lowpassQ = call.getFloat("lowpassQ") ?? 0.7
+        let enabled = call.getBool("enabled") ?? false
+        audioEngine.setFilter(highpassFreq: highpassFreq, lowpassFreq: lowpassFreq,
+                              highpassQ: highpassQ, lowpassQ: lowpassQ, enabled: enabled)
+        call.resolve()
+    }
+
+    @objc func setChorus(_ call: CAPPluginCall) {
+        let rate = call.getFloat("rate") ?? 1.5
+        let depth = call.getFloat("depth") ?? 3
+        let voices = call.getInt("voices") ?? 2
+        let mix = call.getFloat("mix") ?? 0.5
+        let enabled = call.getBool("enabled") ?? false
+        audioEngine.setChorus(rate: rate, depth: depth, voices: voices, mix: mix, enabled: enabled)
+        call.resolve()
+    }
+
+    @objc func setStereoWidth(_ call: CAPPluginCall) {
+        let width = call.getFloat("width") ?? 1
+        let enabled = call.getBool("enabled") ?? false
+        audioEngine.setStereoWidth(width: width, enabled: enabled)
+        call.resolve()
+    }
+
+    @objc func setTremolo(_ call: CAPPluginCall) {
+        let rate = call.getFloat("rate") ?? 4
+        let depth = call.getFloat("depth") ?? 0.5
+        let shape = call.getString("shape") ?? "sine"
+        let enabled = call.getBool("enabled") ?? false
+        audioEngine.setTremolo(rate: rate, depth: depth, shape: shape, enabled: enabled)
+        call.resolve()
+    }
+
+    @objc func setBitcrusher(_ call: CAPPluginCall) {
+        let bits = call.getFloat("bits") ?? 8
+        let sampleRateReduction = call.getFloat("sampleRateReduction") ?? 4
+        let mix = call.getFloat("mix") ?? 1
+        let enabled = call.getBool("enabled") ?? false
+        audioEngine.setBitcrusher(bits: bits, sampleRateReduction: sampleRateReduction, mix: mix, enabled: enabled)
         call.resolve()
     }
 
@@ -146,6 +215,34 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let artworkUrl = call.getString("artworkUrl")
         audioEngine.updateNowPlayingInfo(title: title, artist: artist, album: album)
         audioEngine.updateNowPlayingArtwork(url: artworkUrl)
+        call.resolve()
+    }
+
+    @objc func setPendingTrackInfo(_ call: CAPPluginCall) {
+        let nextUrl = call.getString("nextUrl")
+        let nextTrackId = call.getString("nextTrackId")
+        let nextTitle = call.getString("nextTitle")
+        let nextArtist = call.getString("nextArtist")
+        let nextAlbum = call.getString("nextAlbum")
+        let nextArtworkUrl = call.getString("nextArtworkUrl")
+        audioEngine.setPendingNext(
+            url: nextUrl, trackId: nextTrackId,
+            title: nextTitle, artist: nextArtist,
+            album: nextAlbum, artworkUrl: nextArtworkUrl
+        )
+
+        let prevUrl = call.getString("prevUrl")
+        let prevTrackId = call.getString("prevTrackId")
+        let prevTitle = call.getString("prevTitle")
+        let prevArtist = call.getString("prevArtist")
+        let prevAlbum = call.getString("prevAlbum")
+        let prevArtworkUrl = call.getString("prevArtworkUrl")
+        audioEngine.setPendingPrevious(
+            url: prevUrl, trackId: prevTrackId,
+            title: prevTitle, artist: prevArtist,
+            album: prevAlbum, artworkUrl: prevArtworkUrl
+        )
+
         call.resolve()
     }
 }
@@ -176,12 +273,17 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
         notifyListeners("remotePause", data: [:])
     }
 
-    func audioEngineRemoteNext() {
-        notifyListeners("remoteNext", data: [:])
+    func audioEngineRemoteNext(loadedTrackId: String?) {
+        var data: [String: Any] = [:]
+        if let trackId = loadedTrackId { data["loadedTrackId"] = trackId }
+        notifyListeners("remoteNext", data: data)
     }
 
-    func audioEngineRemotePrevious() {
-        notifyListeners("remotePrevious", data: [:])
+    func audioEngineRemotePrevious(nativeAction: String?, loadedTrackId: String?) {
+        var data: [String: Any] = [:]
+        if let action = nativeAction { data["nativeAction"] = action }
+        if let trackId = loadedTrackId { data["loadedTrackId"] = trackId }
+        notifyListeners("remotePrevious", data: data)
     }
 
     func audioEngineRemoteSeek(time: Double) {
@@ -190,8 +292,8 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
 
     func audioEngineDidUpdateAnalysis(frequencyData: [UInt8], timeDomainData: [UInt8]) {
         notifyListeners("audioAnalysis", data: [
-            "frequencyData": frequencyData.map { Int($0) },
-            "timeDomainData": timeDomainData.map { Int($0) },
+            "frequencyData": frequencyData,
+            "timeDomainData": timeDomainData,
         ])
     }
 }

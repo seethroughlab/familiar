@@ -21,6 +21,11 @@ export class CapacitorEngine implements AudioEngine {
   private masterVolume = 1;
   private normalizationGain = 1;
   private consecutiveLoadFailures = 0;
+  private lastKnownDuration = 0;
+
+  // Pre-allocated analysis buffers (reused each bridge event to avoid per-frame allocations)
+  private analysisFreqBuffer: Uint8Array | null = null;
+  private analysisTimeBuffer: Uint8Array | null = null;
 
   // Event subscribers
   private handlers: Set<EventHandler> = new Set();
@@ -40,6 +45,8 @@ export class CapacitorEngine implements AudioEngine {
 
   dispose(): void {
     clearNativeAnalysisBuffers();
+    this.analysisFreqBuffer = null;
+    this.analysisTimeBuffer = null;
     this.listenerCleanups.forEach(cleanup => cleanup());
     this.listenerCleanups = [];
     this.handlers.clear();
@@ -54,6 +61,15 @@ export class CapacitorEngine implements AudioEngine {
       await FamiliarAudio.load({ url, trackId });
       this.loadedTrackId = trackId;
       this.consecutiveLoadFailures = 0;
+
+      // Query duration eagerly so progress bar works even if early timeUpdate events lack it
+      try {
+        const { duration } = await FamiliarAudio.getDuration();
+        if (Number.isFinite(duration) && duration > 0) {
+          this.lastKnownDuration = duration;
+          this.emit({ type: 'timeUpdate', currentTime: 0, duration });
+        }
+      } catch { /* ignore — timer-based updates will provide it later */ }
     } catch (e) {
       this.consecutiveLoadFailures++;
       log.error('Failed to load track (native)', e);
@@ -111,7 +127,7 @@ export class CapacitorEngine implements AudioEngine {
   }
 
   getDuration(): number {
-    return 0; // Duration comes via timeUpdate events
+    return this.lastKnownDuration;
   }
 
   getLoadedTrackId(): string | null {
@@ -159,6 +175,30 @@ export class CapacitorEngine implements AudioEngine {
   }
 
   // ========================================================================
+  // Pending Track Sync (lock screen next/previous)
+  // ========================================================================
+
+  syncPendingTracks(info: {
+    next: { url: string; trackId: string; title: string; artist: string; album: string; artworkUrl?: string } | null;
+    previous: { url: string; trackId: string; title: string; artist: string; album: string; artworkUrl?: string } | null;
+  }): void {
+    FamiliarAudio.setPendingTrackInfo({
+      nextUrl: info.next?.url,
+      nextTrackId: info.next?.trackId,
+      nextTitle: info.next?.title,
+      nextArtist: info.next?.artist,
+      nextAlbum: info.next?.album,
+      nextArtworkUrl: info.next?.artworkUrl,
+      prevUrl: info.previous?.url,
+      prevTrackId: info.previous?.trackId,
+      prevTitle: info.previous?.title,
+      prevArtist: info.previous?.artist,
+      prevAlbum: info.previous?.album,
+      prevArtworkUrl: info.previous?.artworkUrl,
+    }).catch(e => log.warn('Failed to sync pending tracks', e));
+  }
+
+  // ========================================================================
   // Plugin Event Listeners
   // ========================================================================
 
@@ -168,15 +208,16 @@ export class CapacitorEngine implements AudioEngine {
       this.emit({ type: 'ended' });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
-    // timeUpdate
+    // timeUpdate — always forward currentTime; coerce bad duration to last-known or 0
     FamiliarAudio.addListener('timeUpdate', (data) => {
+      const currentTime = data.currentTime ?? 0;
+      const duration = (Number.isFinite(data.duration) && data.duration > 0)
+        ? data.duration
+        : this.lastKnownDuration;
       if (Number.isFinite(data.duration) && data.duration > 0) {
-        this.emit({
-          type: 'timeUpdate',
-          currentTime: data.currentTime,
-          duration: data.duration,
-        });
+        this.lastKnownDuration = data.duration;
       }
+      this.emit({ type: 'timeUpdate', currentTime, duration });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
     // error
@@ -193,12 +234,21 @@ export class CapacitorEngine implements AudioEngine {
       this.emit({ type: 'remotePause' });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
-    FamiliarAudio.addListener('remoteNext', () => {
+    FamiliarAudio.addListener('remoteNext', (data) => {
+      if (data?.loadedTrackId) {
+        this.loadedTrackId = data.loadedTrackId;
+      }
       this.emit({ type: 'remoteNext' });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
-    FamiliarAudio.addListener('remotePrevious', () => {
-      this.emit({ type: 'remotePrevious' });
+    FamiliarAudio.addListener('remotePrevious', (data) => {
+      if (data?.loadedTrackId) {
+        this.loadedTrackId = data.loadedTrackId;
+      }
+      this.emit({
+        type: 'remotePrevious',
+        nativeAction: data?.nativeAction === 'restart' ? 'restart' : undefined,
+      });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
     FamiliarAudio.addListener('remoteSeek', (data) => {
@@ -207,10 +257,18 @@ export class CapacitorEngine implements AudioEngine {
 
     // Audio analysis (native FFT data for visualizers)
     FamiliarAudio.addListener('audioAnalysis', (data) => {
-      setNativeAnalysisBuffers(
-        Uint8Array.from(data.frequencyData),
-        Uint8Array.from(data.timeDomainData),
-      );
+      const freq: number[] = data.frequencyData;
+      const time: number[] = data.timeDomainData;
+      // Lazily allocate buffers, then reuse via element-wise copy
+      if (!this.analysisFreqBuffer || this.analysisFreqBuffer.length !== freq.length) {
+        this.analysisFreqBuffer = new Uint8Array(freq.length);
+      }
+      if (!this.analysisTimeBuffer || this.analysisTimeBuffer.length !== time.length) {
+        this.analysisTimeBuffer = new Uint8Array(time.length);
+      }
+      for (let i = 0; i < freq.length; i++) this.analysisFreqBuffer[i] = freq[i];
+      for (let i = 0; i < time.length; i++) this.analysisTimeBuffer[i] = time[i];
+      setNativeAnalysisBuffers(this.analysisFreqBuffer, this.analysisTimeBuffer);
     }).then(h => this.listenerCleanups.push(() => h.remove()));
   }
 }

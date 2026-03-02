@@ -27,16 +27,58 @@ export interface FamiliarAudioPlugin {
     preset: string;
     wetDryMix: number;
     enabled: boolean;
+    preDelay?: number;
   }): Promise<void>;
   setDelay(options: {
     time: number;
     feedback: number;
     wetDryMix: number;
     enabled: boolean;
+    pingPong?: boolean;
   }): Promise<void>;
   setDistortion(options: {
     preset: string;
     wetDryMix: number;
+    enabled: boolean;
+    drive?: number;
+  }): Promise<void>;
+  setCompressor(options: {
+    threshold: number;
+    ratio: number;
+    attack: number;
+    release: number;
+    knee: number;
+    makeupGain: number;
+    enabled: boolean;
+  }): Promise<void>;
+  setFilter(options: {
+    highpassFreq: number;
+    lowpassFreq: number;
+    highpassQ: number;
+    lowpassQ: number;
+    enabled: boolean;
+  }): Promise<void>;
+  setChorus(options: {
+    rate: number;
+    depth: number;
+    voices: number;
+    mix: number;
+    enabled: boolean;
+  }): Promise<void>;
+  setStereoWidth(options: {
+    width: number;
+    enabled: boolean;
+  }): Promise<void>;
+  setTremolo(options: {
+    rate: number;
+    depth: number;
+    shape: string;
+    enabled: boolean;
+  }): Promise<void>;
+  setBitcrusher(options: {
+    bits: number;
+    sampleRateReduction: number;
+    mix: number;
     enabled: boolean;
   }): Promise<void>;
   setMasterBypass(options: { bypassed: boolean }): Promise<void>;
@@ -47,6 +89,22 @@ export interface FamiliarAudioPlugin {
     artist: string;
     album: string;
     artworkUrl?: string;
+  }): Promise<void>;
+
+  // Pending track info for lock screen next/previous
+  setPendingTrackInfo(options: {
+    nextUrl?: string;
+    nextTrackId?: string;
+    nextTitle?: string;
+    nextArtist?: string;
+    nextAlbum?: string;
+    nextArtworkUrl?: string;
+    prevUrl?: string;
+    prevTrackId?: string;
+    prevTitle?: string;
+    prevArtist?: string;
+    prevAlbum?: string;
+    prevArtworkUrl?: string;
   }): Promise<void>;
 
   // Events
@@ -72,11 +130,11 @@ export interface FamiliarAudioPlugin {
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'remoteNext',
-    handler: () => void,
+    handler: (data: { loadedTrackId?: string }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'remotePrevious',
-    handler: () => void,
+    handler: (data: { nativeAction?: string; loadedTrackId?: string }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'remoteSeek',

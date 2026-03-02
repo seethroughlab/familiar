@@ -248,7 +248,12 @@ export function useAudioEngine() {
           break;
 
         case 'remotePrevious':
-          usePlayerStore.getState().playPrevious();
+          if (event.nativeAction === 'restart') {
+            // Native already seeked to 0 — just sync store state
+            setCurrentTime(0);
+          } else {
+            usePlayerStore.getState().playPrevious();
+          }
           break;
 
         case 'remoteSeek':
@@ -271,6 +276,38 @@ export function useAudioEngine() {
       artworkUrl: currentTrack.id ? tracksApi.getArtworkUrl(currentTrack.id) : undefined,
     });
   }, [currentTrack, engine]);
+
+  // --------------------------------------------------------------------------
+  // Effect: Sync pending next/previous track info to native (lock screen controls)
+  // --------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isInitialized || !currentTrack) return;
+    if (!engine.syncPendingTracks) return; // Only for CapacitorEngine
+
+    const state = usePlayerStore.getState();
+    const nextTrack = state.getNextTrack();
+    const prevTrack = state.history[state.history.length - 1] ?? null;
+
+    engine.syncPendingTracks({
+      next: nextTrack ? {
+        url: tracksApi.getStreamUrl(nextTrack.id),
+        trackId: nextTrack.id,
+        title: nextTrack.title || 'Unknown',
+        artist: nextTrack.artist || 'Unknown',
+        album: nextTrack.album || 'Unknown',
+        artworkUrl: nextTrack.id ? tracksApi.getArtworkUrl(nextTrack.id) : undefined,
+      } : null,
+      previous: prevTrack ? {
+        url: tracksApi.getStreamUrl(prevTrack.id),
+        trackId: prevTrack.id,
+        title: prevTrack.title || 'Unknown',
+        artist: prevTrack.artist || 'Unknown',
+        album: prevTrack.album || 'Unknown',
+        artworkUrl: prevTrack.id ? tracksApi.getArtworkUrl(prevTrack.id) : undefined,
+      } : null,
+    });
+  }, [currentTrack?.id, engine, isInitialized]);
 
   // --------------------------------------------------------------------------
   // Effect: Handle Play/Pause State
