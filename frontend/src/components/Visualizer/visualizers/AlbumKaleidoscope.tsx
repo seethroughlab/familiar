@@ -13,8 +13,11 @@ import { Canvas, useFrame, useLoader, extend } from '@react-three/fiber';
 import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
+import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+
+const mobile = isMobile();
 
 // Shader-based kaleidoscope material with realistic shard movement
 const KaleidoscopeMaterial = shaderMaterial(
@@ -418,14 +421,16 @@ function KaleidoscopeScene({ artworkUrl }: { artworkUrl: string }) {
       <OuterRing />
       <SparkleParticles segments={12} />
 
-      {/* Post-processing - reduced bloom to prevent white-out */}
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={0.6}
-        bloomThreshold={0.7}
-        vignetteIntensity={0.4}
-      />
+      {/* Post-processing (disabled on mobile — expensive) */}
+      {!mobile && (
+        <AudioReactiveEffects
+          enableBloom
+          enableVignette
+          bloomIntensity={0.6}
+          bloomThreshold={0.7}
+          vignetteIntensity={0.4}
+        />
+      )}
     </>
   );
 }
@@ -479,13 +484,15 @@ function FallbackScene() {
 
       <SparkleParticles segments={12} />
 
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={1.2}
-        bloomThreshold={0.5}
-        vignetteIntensity={0.5}
-      />
+      {!mobile && (
+        <AudioReactiveEffects
+          enableBloom
+          enableVignette
+          bloomIntensity={1.2}
+          bloomThreshold={0.5}
+          vignetteIntensity={0.5}
+        />
+      )}
     </>
   );
 }
@@ -509,8 +516,8 @@ export function AlbumKaleidoscope({ artworkUrl }: VisualizerProps) {
     <div className="w-full h-full">
       <Canvas
         camera={{ position: [0, 0, 5], fov: 50 }}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        dpr={[1, 2]}
+        gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
+        dpr={mobile ? [1, 1] : [1, 2]}
       >
         {hasArtwork && artworkUrl ? (
           <KaleidoscopeScene artworkUrl={artworkUrl} />

@@ -11,8 +11,11 @@ import { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
+import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+
+const mobile = isMobile();
 
 // Soft limiter - linear response up to threshold, then compresses
 const softLimit = (value: number, threshold: number, max: number): number => {
@@ -189,15 +192,17 @@ function FrequencyBarsScene() {
         ))}
       </group>
 
-      {/* Post-processing effects - raised threshold to reduce washout */}
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={1.5}
-        bloomThreshold={0.5}
-        bloomRadius={0.6}
-        vignetteIntensity={0.4}
-      />
+      {/* Post-processing effects (disabled on mobile — expensive) */}
+      {!mobile && (
+        <AudioReactiveEffects
+          enableBloom
+          enableVignette
+          bloomIntensity={1.5}
+          bloomThreshold={0.5}
+          bloomRadius={0.6}
+          vignetteIntensity={0.4}
+        />
+      )}
     </>
   );
 }
@@ -207,8 +212,8 @@ export function FrequencyBars(_props: VisualizerProps) {
     <div className="w-full h-full">
       <Canvas
         camera={{ position: [0, 2, 6], fov: 50 }}
-        gl={{ antialias: true, alpha: true }}
-        dpr={[1, 2]}
+        gl={{ antialias: !mobile, alpha: true }}
+        dpr={mobile ? [1, 1] : [1, 2]}
       >
         <FrequencyBarsScene />
       </Canvas>

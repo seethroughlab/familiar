@@ -15,9 +15,12 @@ import { OrbitControls, shaderMaterial, MeshReflectorMaterial } from '@react-thr
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { extractPalette } from '../../../utils/colorExtraction';
+import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { GPUParticles } from '../effects/GPUParticles';
+
+const mobile = isMobile();
 
 const DEFAULT_PALETTE = ['#a855f7', '#06b6d4', '#22c55e', '#f59e0b', '#ec4899'];
 
@@ -493,12 +496,12 @@ function CosmicOrbScene({ palette }: { palette: string[] }) {
       <CircularWaveform color={palette[1] || '#00ffff'} />
       <SecondaryWaveform color={palette[0]} />
 
-      {/* Reflective ground */}
-      <ReflectiveGround palette={palette} />
+      {/* Reflective ground (disabled on mobile — expensive) */}
+      {!mobile && <ReflectiveGround palette={palette} />}
 
-      {/* GPU Particles with album colors */}
+      {/* GPU Particles with album colors (reduced count on mobile) */}
       <GPUParticles
-        count={3000}
+        count={mobile ? 1000 : 3000}
         size={0.025}
         color={palette[0]}
         secondaryColor={palette[1] || palette[0]}
@@ -518,14 +521,16 @@ function CosmicOrbScene({ palette }: { palette: string[] }) {
         minPolarAngle={Math.PI / 4}
       />
 
-      {/* Post-processing effects */}
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={1.2}
-        bloomThreshold={0.4}
-        vignetteIntensity={0.4}
-      />
+      {/* Post-processing effects (disabled on mobile — expensive) */}
+      {!mobile && (
+        <AudioReactiveEffects
+          enableBloom
+          enableVignette
+          bloomIntensity={1.2}
+          bloomThreshold={0.4}
+          vignetteIntensity={0.4}
+        />
+      )}
     </>
   );
 }
@@ -545,8 +550,8 @@ export function CosmicOrb({ artworkUrl }: VisualizerProps) {
     <div className="w-full h-full">
       <Canvas
         camera={{ position: [0, 1, 7], fov: 60 }}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        dpr={[1, 2]}
+        gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
+        dpr={mobile ? [1, 1] : [1, 2]}
       >
         <CosmicOrbScene palette={palette} />
       </Canvas>

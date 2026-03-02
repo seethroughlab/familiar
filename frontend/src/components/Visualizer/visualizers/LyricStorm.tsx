@@ -14,8 +14,11 @@ import { Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { usePlayerStore } from '../../../stores/playerStore';
+import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+
+const mobile = isMobile();
 
 interface Word3D {
   id: number;
@@ -353,13 +356,15 @@ function LyricStormScene({
         currentLineWords={currentLineWords}
       />
 
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={1.5}
-        bloomThreshold={0.3}
-        vignetteIntensity={0.4}
-      />
+      {!mobile && (
+        <AudioReactiveEffects
+          enableBloom
+          enableVignette
+          bloomIntensity={1.5}
+          bloomThreshold={0.3}
+          vignetteIntensity={0.4}
+        />
+      )}
     </>
   );
 }
@@ -505,8 +510,8 @@ export function LyricStorm({ lyrics, track }: VisualizerProps) {
     <div className="relative w-full h-full">
       <Canvas
         camera={{ position: [0, 0, 15], fov: 50 }}
-        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-        dpr={[1, 2]}
+        gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
+        dpr={mobile ? [1, 1] : [1, 2]}
       >
         <LyricStormScene
           allWords={allWords}

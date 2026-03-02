@@ -13,8 +13,11 @@ import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { useArtworkPalette } from '../hooks/useArtworkPalette';
+import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+
+const mobile = isMobile();
 
 const MAX_DROPLETS = 60;
 const MAX_TRAIL = 30;
@@ -640,13 +643,15 @@ function RainWindowScene({ palette }: { palette: string[] }) {
         <compositorMaterial ref={compositorRef} />
       </mesh>
 
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={0.8}
-        bloomThreshold={0.6}
-        vignetteIntensity={0.4}
-      />
+      {!mobile && (
+        <AudioReactiveEffects
+          enableBloom
+          enableVignette
+          bloomIntensity={0.8}
+          bloomThreshold={0.6}
+          vignetteIntensity={0.4}
+        />
+      )}
     </>
   );
 }
@@ -662,7 +667,7 @@ export function RainWindow({ artworkUrl }: VisualizerProps) {
     <div className="w-full h-full bg-[#0a1020]">
       <Canvas
         camera={{ position: [0, 0, 1], fov: 90 }}
-        dpr={[1, 2]}
+        dpr={mobile ? [1, 1] : [1, 2]}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
       >
         <RainWindowScene palette={palette} />

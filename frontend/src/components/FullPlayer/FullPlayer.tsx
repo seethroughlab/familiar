@@ -32,6 +32,7 @@ import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
 import { isMobile } from '../../utils/platform';
+import { isVisualizerAvailable } from '../../player/audio/audioGraph';
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -220,7 +221,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
         {/* Center: visualizer picker + effects */}
         <div className="flex items-center gap-3">
-          {!isMobile() && <VisualizerPicker />}
+          {isVisualizerAvailable() && <VisualizerPicker />}
           <EffectsQuickAccess />
         </div>
 
@@ -237,7 +238,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
       {/* Main content area */}
       <div className="flex-1 relative overflow-hidden">
-        {isMobile() && !isMusicVideo ? (
+        {!isVisualizerAvailable() && !isMusicVideo ? (
           <div className="absolute inset-0 flex items-center justify-center p-8 pb-48">
             {imageError ? (
               <div className="w-72 h-72 sm:w-80 sm:h-80 bg-zinc-800 rounded-2xl flex items-center justify-center shadow-2xl">
@@ -264,7 +265,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
       </div>
 
       {/* Album art thumbnail - z-20 to render above controls gradient */}
-      {!(isMobile() && !isMusicVideo) && !(isFullscreen && !controlsVisible) && (
+      {(isVisualizerAvailable() || isMusicVideo) && !(isFullscreen && !controlsVisible) && (
         <div className="absolute bottom-64 left-8 z-20">
           {imageError ? (
             <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">
