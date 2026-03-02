@@ -55,8 +55,8 @@ final class ChorusAudioUnit: AUAudioUnit {
 
     static let componentDescription = AudioComponentDescription(
         componentType: kAudioUnitType_Effect,
-        componentSubType: FourCharCode("chor"),
-        componentManufacturer: FourCharCode("Fmlr"),
+        componentSubType: fourCC("chor"),
+        componentManufacturer: fourCC("Fmlr"),
         componentFlags: 0,
         componentFlagsMask: 0
     )
@@ -189,15 +189,11 @@ final class ChorusAudioUnit: AUAudioUnit {
 
             let nFrames = Int(frameCount)
 
-            for ch in 0..<min(Int(outputData.pointee.mNumberBuffers), self.channelCount) {
-                let buf = outputData.pointee.mBuffers  // For stereo, access via tuple
-                let ablBuffer: AudioBuffer
-                if ch == 0 {
-                    ablBuffer = outputData.pointee.mBuffers
-                } else {
-                    ablBuffer = UnsafeMutableAudioBufferListPointer(outputData)[ch]
-                }
-                guard let data = ablBuffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+            let numBuffers = min(Int(outputData.pointee.mNumberBuffers), self.channelCount)
+            let buffers = UnsafeMutableAudioBufferListPointer(outputData)
+
+            for ch in 0..<numBuffers {
+                guard let data = buffers[ch].mData?.assumingMemoryBound(to: Float.self) else { continue }
 
                 for i in 0..<nFrames {
                     let inputSample = data[i]
@@ -249,8 +245,8 @@ final class StereoWidthAudioUnit: AUAudioUnit {
 
     static let componentDescription = AudioComponentDescription(
         componentType: kAudioUnitType_Effect,
-        componentSubType: FourCharCode("stwd"),
-        componentManufacturer: FourCharCode("Fmlr"),
+        componentSubType: fourCC("stwd"),
+        componentManufacturer: fourCC("Fmlr"),
         componentFlags: 0,
         componentFlagsMask: 0
     )
@@ -354,8 +350,8 @@ final class TremoloAudioUnit: AUAudioUnit {
 
     static let componentDescription = AudioComponentDescription(
         componentType: kAudioUnitType_Effect,
-        componentSubType: FourCharCode("trem"),
-        componentManufacturer: FourCharCode("Fmlr"),
+        componentSubType: fourCC("trem"),
+        componentManufacturer: fourCC("Fmlr"),
         componentFlags: 0,
         componentFlagsMask: 0
     )
@@ -492,8 +488,8 @@ final class BitcrusherAudioUnit: AUAudioUnit {
 
     static let componentDescription = AudioComponentDescription(
         componentType: kAudioUnitType_Effect,
-        componentSubType: FourCharCode("btcr"),
-        componentManufacturer: FourCharCode("Fmlr"),
+        componentSubType: fourCC("btcr"),
+        componentManufacturer: fourCC("Fmlr"),
         componentFlags: 0,
         componentFlagsMask: 0
     )
