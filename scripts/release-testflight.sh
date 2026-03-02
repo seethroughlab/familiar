@@ -42,7 +42,6 @@ step() {
 [[ -f "$P8_KEY_PATH" ]]  || die "API key not found at $P8_KEY_PATH"
 [[ -f "$EXPORT_OPTIONS" ]] || die "ExportOptions.plist not found at $EXPORT_OPTIONS"
 command -v xcodebuild >/dev/null || die "xcodebuild not found — install Xcode"
-command -v xcrun >/dev/null      || die "xcrun not found — install Xcode CLI tools"
 
 # ── Parse arguments ────────────────────────────────────────────────────────────
 
@@ -125,28 +124,7 @@ xcodebuild -exportArchive \
     -exportOptionsPlist "$EXPORT_OPTIONS" \
     -quiet
 
-IPA_PATH=$(find "$EXPORT_DIR" -name "*.ipa" -print -quit)
-[[ -n "$IPA_PATH" ]] || die "No IPA found in $EXPORT_DIR"
-green "IPA exported → $IPA_PATH"
-
-# ── Step 6: Upload to TestFlight ───────────────────────────────────────────────
-
-step "Uploading to TestFlight"
-
-# altool searches for AuthKey in specific directories — ensure it's available
-ALTOOL_KEY_DIR="$HOME/.private_keys"
-mkdir -p "$ALTOOL_KEY_DIR"
-if [[ ! -f "$ALTOOL_KEY_DIR/AuthKey_${API_KEY_ID}.p8" ]]; then
-    cp "$P8_KEY_PATH" "$ALTOOL_KEY_DIR/AuthKey_${API_KEY_ID}.p8"
-fi
-
-xcrun altool --upload-app \
-    --type ios \
-    --file "$IPA_PATH" \
-    --apiKey "$API_KEY_ID" \
-    --apiIssuer "$API_ISSUER_ID"
-
-green "Upload complete!"
+green "Export + upload complete!"
 echo ""
 bold "Build $BUILD_NUMBER uploaded to TestFlight."
 bold "Check App Store Connect for processing status."
