@@ -5,6 +5,7 @@
  * No passwords needed - protected by Tailscale.
  */
 import { db, type DeviceProfile, type CachedProfile, isIndexedDBAvailable } from '../db';
+import { getApiUrl } from '../api/base';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('ProfileService');
@@ -218,7 +219,7 @@ export async function clearSelectedProfile(): Promise<void> {
  */
 export async function listProfiles(options?: ListProfilesOptions): Promise<Profile[]> {
   try {
-    const response = await fetch('/api/v1/profiles');
+    const response = await fetch(getApiUrl('/profiles'));
     if (!response.ok) {
       throw new Error(`Failed to list profiles: ${response.statusText}`);
     }
@@ -244,7 +245,7 @@ export async function listProfiles(options?: ListProfilesOptions): Promise<Profi
  * Create a new profile.
  */
 export async function createProfile(data: ProfileCreate): Promise<Profile> {
-  const response = await fetch('/api/v1/profiles', {
+  const response = await fetch(getApiUrl('/profiles'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -268,7 +269,7 @@ export async function getProfile(
   options?: { allowCache?: boolean }
 ): Promise<Profile | null> {
   try {
-    const response = await fetch(`/api/v1/profiles/${profileId}`);
+    const response = await fetch(getApiUrl(`/profiles/${profileId}`));
     if (response.status === 404) {
       // Profile deleted on server - clear cache
       await clearCachedProfile(profileId);
@@ -299,7 +300,7 @@ export async function getProfile(
  * Update a profile.
  */
 export async function updateProfile(profileId: string, data: Partial<ProfileCreate>): Promise<Profile> {
-  const response = await fetch(`/api/v1/profiles/${profileId}`, {
+  const response = await fetch(getApiUrl(`/profiles/${profileId}`), {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -318,7 +319,7 @@ export async function updateProfile(profileId: string, data: Partial<ProfileCrea
  * Delete a profile.
  */
 export async function deleteProfile(profileId: string): Promise<void> {
-  const response = await fetch(`/api/v1/profiles/${profileId}`, {
+  const response = await fetch(getApiUrl(`/profiles/${profileId}`), {
     method: 'DELETE',
   });
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, Trash2, Image, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-import { tracksApi } from '../../../api';
+import { tracksApi, getApiUrl } from '../../../api';
 import { showWarning } from '../../../stores/toastStore';
 
 interface Props {
@@ -18,7 +18,7 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Get current artwork URL
-  const artworkUrl = `/api/v1/tracks/${trackId}/artwork?size=full&t=${Date.now()}`;
+  const artworkUrl = getApiUrl(`/tracks/${trackId}/artwork?size=full&t=${Date.now()}`);
 
   // Upload mutation
   const uploadMutation = useMutation({
@@ -27,7 +27,7 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
       formData.append('file', file);
 
       const response = await fetch(
-        `/api/v1/tracks/${trackId}/artwork?embed_in_file=${embedInFile}`,
+        getApiUrl(`/tracks/${trackId}/artwork?embed_in_file=${embedInFile}`),
         {
           method: 'POST',
           body: formData,

@@ -10,6 +10,7 @@
  * - Best-effort: all failures are silently swallowed
  */
 import { db, isIndexedDBAvailable, type RemoteLogEntry } from '../db';
+import { getApiUrl } from '../api/base';
 import { getSelectedProfileId } from './profileService';
 import { setLogSink } from '../utils/logger';
 
@@ -132,7 +133,7 @@ async function submitToBackend(): Promise<void> {
       context: e.context,
     }));
 
-    const res = await fetch('/api/v1/diagnostics/frontend-logs', {
+    const res = await fetch(getApiUrl('/diagnostics/frontend-logs'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entries: payload }),

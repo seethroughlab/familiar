@@ -5,10 +5,81 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('ApiBase');
 
+// ============================================================================
+// Capacitor-aware API origin
+// ============================================================================
+
+const BACKEND_URL_KEY = 'familiar_backend_url';
+
+/** Cached origin string — empty for same-origin (web), full URL for Capacitor. */
+let _apiOrigin = '';
+
+/** True when running inside a Capacitor native shell. */
+function isNativePlatform(): boolean {
+  // Capacitor injects this on the window object
+  return !!(window as unknown as Record<string, unknown>).Capacitor &&
+    (window as unknown as { Capacitor: { isNativePlatform?: () => boolean } })
+      .Capacitor.isNativePlatform?.() === true;
+}
+
+/**
+ * Initialize the API origin. Must be called once at app boot.
+ * In Capacitor, loads the backend URL from Capacitor Preferences (async)
+ * and caches it in localStorage for synchronous access.
+ */
+export async function initApiOrigin(): Promise<void> {
+  if (!isNativePlatform()) {
+    _apiOrigin = '';
+    return;
+  }
+
+  // Try localStorage first (synchronous cache)
+  const cached = localStorage.getItem(BACKEND_URL_KEY);
+  if (cached) {
+    _apiOrigin = cached.replace(/\/+$/, '');
+    log.info('API origin from cache:', _apiOrigin);
+    return;
+  }
+
+  // Try Capacitor Preferences
+  try {
+    const { Preferences } = await import('@capacitor/preferences');
+    const { value } = await Preferences.get({ key: BACKEND_URL_KEY });
+    if (value) {
+      _apiOrigin = value.replace(/\/+$/, '');
+      localStorage.setItem(BACKEND_URL_KEY, _apiOrigin);
+      log.info('API origin from Preferences:', _apiOrigin);
+    }
+  } catch {
+    log.warn('Could not load backend URL from Capacitor Preferences');
+  }
+}
+
+/**
+ * Save a backend URL (called from ServerSettings).
+ * Persists to both localStorage and Capacitor Preferences.
+ */
+export async function setApiOrigin(url: string): Promise<void> {
+  _apiOrigin = url.replace(/\/+$/, '');
+  localStorage.setItem(BACKEND_URL_KEY, _apiOrigin);
+
+  if (isNativePlatform()) {
+    try {
+      const { Preferences } = await import('@capacitor/preferences');
+      await Preferences.set({ key: BACKEND_URL_KEY, value: _apiOrigin });
+    } catch {
+      // localStorage is sufficient as fallback
+    }
+  }
+}
+
 /** Base origin for non-axios URLs (stream, artwork, etc). Empty string for same-origin. */
 export function getApiOrigin(): string {
-  return '';  // Future: return configured backend URL for Capacitor
+  return _apiOrigin;
 }
+
+/** True when running inside a Capacitor native shell (re-exported for guards). */
+export { isNativePlatform };
 
 /** Build a full API URL path, e.g. getApiUrl('/tracks/123/stream') → '/api/v1/tracks/123/stream' */
 export function getApiUrl(path: string): string {
@@ -17,6 +88,14 @@ export function getApiUrl(path: string): string {
 
 const api = axios.create({
   baseURL: '/api/v1',
+});
+
+// Dynamic baseURL: prepend origin on native platform
+api.interceptors.request.use((config) => {
+  if (_apiOrigin) {
+    config.baseURL = `${_apiOrigin}/api/v1`;
+  }
+  return config;
 });
 
 /**

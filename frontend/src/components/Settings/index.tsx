@@ -19,6 +19,8 @@ import { SubsonicSettings } from './SubsonicSettings';
 import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { S3BackupSettings } from './S3BackupSettings';
+import { ServerSettings } from './ServerSettings';
+import { isNativePlatform } from '../../api/base';
 
 export function SettingsPanel() {
   return (
@@ -37,6 +39,7 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <SystemStatus />
             <ApiKeyStatus />
+            {isNativePlatform() && <ServerSettings />}
           </div>
         </section>
 

@@ -10,7 +10,7 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Users, Disc, Music } from 'lucide-react';
-import { tracksApi, type MapNode, type MusicMapResponse } from '../../../api';
+import { tracksApi, getApiUrl, type MapNode, type MusicMapResponse } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 
 import { createLogger } from '../../../utils/logger';
@@ -108,7 +108,7 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
     const fetchWithSSE = async () => {
       try {
         const response = await fetch(
-          `/api/v1/library/map/stream?entity_type=${entityType}&limit=200`,
+          getApiUrl(`/library/map/stream?entity_type=${entityType}&limit=200`),
           { signal: abortController.signal }
         );
 

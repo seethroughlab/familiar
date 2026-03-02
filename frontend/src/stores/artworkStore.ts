@@ -5,6 +5,7 @@
  * Components use this store to display artwork with automatic loading states.
  */
 import { create } from 'zustand';
+import { getApiUrl } from '../api/base';
 import { computeAlbumHash } from '../utils/albumHash';
 import { createLogger } from '../utils/logger';
 
@@ -113,7 +114,7 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
       set({ hashes: newHashes });
 
       // Queue artwork downloads
-      const response = await fetch('/api/v1/artwork/queue/batch', {
+      const response = await fetch(getApiUrl('/artwork/queue/batch'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -185,7 +186,7 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
     if (!hash) return null;
     const status = get().getStatus(artist, album);
     if (status !== 'ready') return null;
-    return `/api/v1/artwork/${hash}/${size}`;
+    return getApiUrl(`/artwork/${hash}/${size}`);
   },
 
   // Internal: start polling for pending artwork
@@ -203,7 +204,7 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
       }
 
       try {
-        const response = await fetch('/api/v1/artwork/status/batch', {
+        const response = await fetch(getApiUrl('/artwork/status/batch'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

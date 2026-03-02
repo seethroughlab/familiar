@@ -9,6 +9,8 @@ const log = createLogger('App');
 
 import { ProfileSelector } from './components/Profiles';
 import { WorkerAlert } from './components/WorkerAlert';
+import { ServerSettings } from './components/Settings/ServerSettings';
+import { isNativePlatform, getApiOrigin } from './api/base';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
 import { pluginLoader } from './services/pluginLoader';
 import { initializeProfile, type Profile } from './services/profileService';
@@ -174,6 +176,9 @@ if (typeof window !== 'undefined') {
 }
 
 function App() {
+  const [serverConfigured, setServerConfigured] = useState(
+    () => !isNativePlatform() || !!getApiOrigin()
+  );
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
@@ -205,11 +210,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!serverConfigured) return;
     checkProfile();
     const handleInvalidated = () => setProfile(null);
     window.addEventListener('profile-invalidated', handleInvalidated);
     return () => window.removeEventListener('profile-invalidated', handleInvalidated);
-  }, [checkProfile]);
+  }, [checkProfile, serverConfigured]);
 
   useEffect(() => {
     pluginLoader.initializeGlobalAPI();
@@ -219,6 +225,22 @@ function App() {
   }, []);
 
   useUpdateNotification();
+
+  if (!serverConfigured) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
+        <div className="w-full max-w-md space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl font-bold text-white">Connect to Server</h1>
+            <p className="text-zinc-400 text-sm">
+              Enter the URL of your Familiar server to get started.
+            </p>
+          </div>
+          <ServerSettings onConnected={() => setServerConfigured(true)} />
+        </div>
+      </div>
+    );
+  }
 
   if (checkingProfile) {
     return (

@@ -3,6 +3,7 @@
  * All IndexedDB operations silently fail if IndexedDB isn't available (iOS private browsing).
  */
 import { db, isIndexedDBAvailable, type PendingAction } from '../db';
+import { getApiUrl } from '../api/base';
 import { getSelectedProfileId } from './profileService';
 import { createLogger } from '../utils/logger';
 import { showSuccess, showWarning } from '../stores/toastStore';
@@ -159,7 +160,7 @@ interface FavoriteTogglePayload {
 }
 
 async function executeScrobble(profileId: string, payload: ScrobblePayload): Promise<void> {
-  const response = await fetch('/api/v1/lastfm/scrobble', {
+  const response = await fetch(getApiUrl('/lastfm/scrobble'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -177,7 +178,7 @@ async function executeScrobble(profileId: string, payload: ScrobblePayload): Pro
 }
 
 async function executeNowPlaying(profileId: string, payload: NowPlayingPayload): Promise<void> {
-  const response = await fetch('/api/v1/lastfm/now-playing', {
+  const response = await fetch(getApiUrl('/lastfm/now-playing'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -192,7 +193,7 @@ async function executeNowPlaying(profileId: string, payload: NowPlayingPayload):
 }
 
 async function executeSyncSpotify(profileId: string): Promise<void> {
-  const response = await fetch('/api/v1/spotify/sync', {
+  const response = await fetch(getApiUrl('/spotify/sync'), {
     method: 'POST',
     headers: {
       'X-Profile-ID': profileId,
@@ -205,7 +206,7 @@ async function executeSyncSpotify(profileId: string): Promise<void> {
 }
 
 async function executeFavoriteToggle(profileId: string, payload: FavoriteTogglePayload): Promise<void> {
-  const response = await fetch(`/api/v1/favorites/${payload.trackId}/toggle`, {
+  const response = await fetch(getApiUrl(`/favorites/${payload.trackId}/toggle`), {
     method: 'POST',
     headers: {
       'X-Profile-ID': profileId,

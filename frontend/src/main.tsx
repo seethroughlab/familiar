@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import { initApiOrigin } from './api/base';
 import { createLogger } from './utils/logger';
 
 const log = createLogger('App');
@@ -40,8 +41,12 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
-// Force service worker update check
-if ('serviceWorker' in navigator) {
+// Force service worker update check (skip in Capacitor — no SW in native app)
+const isCapacitorNative = !!(window as unknown as Record<string, unknown>).Capacitor &&
+  (window as unknown as { Capacitor: { isNativePlatform?: () => boolean } })
+    .Capacitor.isNativePlatform?.() === true;
+
+if ('serviceWorker' in navigator && !isCapacitorNative) {
   navigator.serviceWorker.getRegistration().then((reg) => {
     if (reg) {
       log.info('SW: Checking for updates...');
@@ -52,8 +57,11 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// Initialize API origin (resolves backend URL for Capacitor, no-op on web)
+initApiOrigin().then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});

@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Radio, Volume2, VolumeX, Users, Music2, Loader2 } from 'lucide-react';
 
+import { getApiUrl } from '../../api/base';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('GuestListener');
@@ -207,7 +208,7 @@ export function GuestListener() {
         // Track info is synced via WebRTC audio, but we can show what's playing
         if (data.track_id) {
           // Fetch track info
-          fetch(`/api/v1/tracks/${data.track_id}`)
+          fetch(getApiUrl(`/tracks/${data.track_id}`))
             .then(res => res.json())
             .then(track => {
               setCurrentTrack({
@@ -404,7 +405,7 @@ export function GuestListener() {
               {currentTrack ? (
                 <img
                   src={session.playback_state.track_id
-                    ? `/api/v1/tracks/${session.playback_state.track_id}/artwork`
+                    ? getApiUrl(`/tracks/${session.playback_state.track_id}/artwork`)
                     : undefined}
                   alt=""
                   className="w-full h-full object-cover rounded-xl"

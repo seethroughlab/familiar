@@ -4,6 +4,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const isCapacitorBuild = process.env.BUILD_TARGET === 'capacitor';
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -53,7 +55,8 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
+    // Skip PWA/service worker for Capacitor builds — native app doesn't need it
+    ...(!isCapacitorBuild ? [VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.png', 'icons/*.svg'],
       manifest: false, // Using our custom manifest.json
@@ -125,7 +128,7 @@ export default defineConfig({
       devOptions: {
         enabled: false, // Disable in dev mode
       },
-    }),
+    })] : []),
   ],
   server: {
     port: 3000,

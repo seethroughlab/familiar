@@ -8,6 +8,7 @@ import {
   type CachedTrack,
   type PartialDownload,
 } from '../db';
+import { getApiUrl } from '../api/base';
 import { computeAlbumHash } from '../utils/albumHash';
 import { createLogger } from '../utils/logger';
 
@@ -26,7 +27,7 @@ async function ensureTrackMetadataCached(trackId: string): Promise<CachedTrack |
 
   // Fetch metadata from API
   try {
-    const response = await fetch(`/api/v1/tracks/${trackId}`);
+    const response = await fetch(getApiUrl(`/tracks/${trackId}`));
     if (!response.ok) {
       log.warn('Could not fetch track metadata:', trackId);
       return null;
@@ -136,7 +137,7 @@ export async function downloadTrackForOffline(
   log.info('Fetching track:', trackId, resumeFrom > 0 ? '(resuming)' : '');
   let response: Response;
   try {
-    response = await fetch(`/api/v1/tracks/${trackId}/stream`, {
+    response = await fetch(getApiUrl(`/tracks/${trackId}/stream`), {
       headers,
       signal: controller.signal,
     });
@@ -335,7 +336,7 @@ export async function downloadArtworkForOffline(
   }
 
   // Try to fetch thumb size (smaller, sufficient for offline)
-  const response = await fetch(`/api/v1/artwork/${hash}/thumb`);
+  const response = await fetch(getApiUrl(`/artwork/${hash}/thumb`));
   if (!response.ok) {
     // Artwork not available - not an error, just unavailable
     return null;

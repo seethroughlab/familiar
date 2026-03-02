@@ -243,7 +243,12 @@ export function getWebAudioElementB(): HTMLAudioElement | null {
 function createAudioElement(): HTMLAudioElement {
   const el = new Audio();
   el.preload = 'auto';
-  el.crossOrigin = 'anonymous';
+  // Only set crossOrigin in Web Audio mode (desktop).
+  // In direct playback mode (mobile/Capacitor), omitting it avoids
+  // unnecessary CORS preflight on stream URLs.
+  if (useWebAudio) {
+    el.crossOrigin = 'anonymous';
+  }
   el.style.display = 'none';
   document.body.appendChild(el);
   return el;

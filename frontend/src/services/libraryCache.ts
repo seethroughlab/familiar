@@ -2,6 +2,7 @@
  * Library cache service for offline browsing.
  */
 import { db, type CachedTrack } from '../db';
+import { getApiUrl } from '../api/base';
 
 /**
  * Cache the entire library from the API.
@@ -10,7 +11,7 @@ export async function cacheLibrary(): Promise<{
   cached: number;
 }> {
   // Fetch all tracks from API
-  const response = await fetch('/api/v1/tracks?limit=10000');
+  const response = await fetch(getApiUrl('/tracks?limit=10000'));
   if (!response.ok) {
     throw new Error(`Failed to fetch library: ${response.statusText}`);
   }

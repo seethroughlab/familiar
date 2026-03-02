@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Radio, RefreshCw, Trash2, Send, ToggleLeft, ToggleRight } from 'lucide-react';
+import { getApiUrl } from '../../api/base';
 import { flushNow, getPendingCount, clearLocalLogs } from '../../services/remoteLogService';
 
 interface LogEntry {
@@ -42,7 +43,7 @@ export function RemoteLogsPanel() {
       if (levelFilter) params.set('level', levelFilter);
       if (namespaceFilter) params.set('namespace', namespaceFilter);
       params.set('limit', '100');
-      const res = await fetch(`/api/v1/diagnostics/frontend-logs?${params}`);
+      const res = await fetch(getApiUrl(`/diagnostics/frontend-logs?${params}`));
       if (res.ok) {
         const data = await res.json();
         setEntries(data.entries);
@@ -66,7 +67,7 @@ export function RemoteLogsPanel() {
 
   const handleClear = async () => {
     try {
-      await fetch('/api/v1/diagnostics/frontend-logs', { method: 'DELETE' });
+      await fetch(getApiUrl('/diagnostics/frontend-logs'), { method: 'DELETE' });
       await clearLocalLogs();
       setEntries([]);
       setTotal(0);
