@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Download, X, Share, CheckCircle, Monitor, Smartphone } from 'lucide-react';
 
 import { createLogger } from '../../utils/logger';
+import { isNativePlatform } from '../../api/base';
 
 const log = createLogger('InstallPrompt');
 
@@ -21,6 +22,11 @@ type InstallState =
   | 'unsupported';      // Firefox or other browsers
 
 function detectInstallState(hasPromptEvent: boolean): InstallState {
+  // Native Capacitor app is always "installed"
+  if (isNativePlatform()) {
+    return 'installed';
+  }
+
   // Check if already installed as PWA
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches
     || (navigator as { standalone?: boolean }).standalone === true;
