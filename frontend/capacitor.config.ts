@@ -10,6 +10,12 @@ const config: CapacitorConfig = {
     // Allow cleartext HTTP for LAN/Tailscale backend
     cleartext: true,
   },
+  plugins: {
+    CapacitorHttp: {
+      // Route fetch() through native HTTP layer — bypasses CORS in WKWebView
+      enabled: true,
+    },
+  },
 };
 
 export default config;
