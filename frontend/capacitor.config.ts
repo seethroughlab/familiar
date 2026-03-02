@@ -16,6 +16,8 @@ const config: CapacitorConfig = {
       enabled: true,
     },
   },
+  // Local plugins not in npm packages must be explicitly listed
+  packageClassList: ['PreferencesPlugin', 'FamiliarAudioPlugin'],
 };
 
 export default config;

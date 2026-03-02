@@ -18,6 +18,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             print("Failed to configure audio session: \(error)")
         }
 
+        application.beginReceivingRemoteControlEvents()
+
         return true
     }
 
