@@ -29,16 +29,16 @@ dev-remote:
 
 # Quick deploy to NAS (build + rsync + restart)
 deploy-dev:
-	./dev/scripts/deploy-dev.sh
+	./scripts/deploy-dev.sh
 
 # Deploy frontend only
 deploy-frontend:
-	./dev/scripts/deploy-dev.sh --frontend-only
+	./scripts/deploy-dev.sh --frontend-only
 
 # Deploy backend only
 deploy-backend:
-	./dev/scripts/deploy-dev.sh --backend-only
+	./scripts/deploy-dev.sh --backend-only
 
 # Build and upload iOS app to TestFlight
 release-testflight:
-	./dev/scripts/release-testflight.sh
+	./scripts/release-testflight.sh

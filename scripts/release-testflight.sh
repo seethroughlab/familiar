@@ -4,12 +4,12 @@ set -euo pipefail
 # release-testflight.sh — Build and upload Familiar to TestFlight
 #
 # Usage:
-#   ./dev/scripts/release-testflight.sh             # auto-increment build number
-#   ./dev/scripts/release-testflight.sh --build 5   # set specific build number
+#   ./scripts/release-testflight.sh             # auto-increment build number
+#   ./scripts/release-testflight.sh --build 5   # set specific build number
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 IOS_DIR="$FRONTEND_DIR/ios"
 XCODEPROJ="$IOS_DIR/App/App.xcodeproj"
