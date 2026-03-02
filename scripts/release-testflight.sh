@@ -86,6 +86,16 @@ green "Frontend build complete"
 step "Syncing Capacitor"
 
 npx cap sync ios
+
+# cap sync regenerates capacitor.config.json but doesn't copy packageClassList
+# from the TS config. Re-add local plugins that aren't in npm packages.
+CAP_CONFIG="$IOS_DIR/App/App/capacitor.config.json"
+if ! grep -q 'FamiliarAudioPlugin' "$CAP_CONFIG"; then
+    sed -i '' 's/"PreferencesPlugin"/"PreferencesPlugin",\
+\t\t"FamiliarAudioPlugin"/' "$CAP_CONFIG"
+    green "Re-added FamiliarAudioPlugin to native config"
+fi
+
 green "Capacitor sync complete"
 
 # ── Step 4: Xcode archive ─────────────────────────────────────────────────────
