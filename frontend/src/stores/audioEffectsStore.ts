@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { useNativeAudioEngine } from '../player/audio/platform';
 
 // ============================================================================
 // Types for each effect
@@ -830,3 +831,57 @@ export const useAudioEffectsStore = create<AudioEffectsState>()(
     }
   )
 );
+
+// ============================================================================
+// Native Audio Engine Sync
+// When running on Capacitor native, push effect parameter changes to AVAudioEngine
+// ============================================================================
+
+if (useNativeAudioEngine) {
+  import('../plugins/familiarAudio').then(({ FamiliarAudio }) => {
+    // Sync current state on init
+    const syncEffects = (state: Pick<AudioEffectsState, 'masterEnabled' | 'eq' | 'reverb' | 'delay' | 'saturation'>) => {
+      const bypassed = !state.masterEnabled;
+      FamiliarAudio.setMasterBypass({ bypassed });
+
+      if (!bypassed) {
+        if (state.eq.enabled) {
+          FamiliarAudio.setEQ({
+            lowGain: state.eq.lowGain,
+            midGain: state.eq.midGain,
+            highGain: state.eq.highGain,
+          });
+        } else {
+          FamiliarAudio.setEQ({ lowGain: 0, midGain: 0, highGain: 0 });
+        }
+
+        FamiliarAudio.setReverb({
+          preset: state.reverb.preset,
+          wetDryMix: state.reverb.mix,
+          enabled: state.reverb.enabled,
+        });
+
+        FamiliarAudio.setDelay({
+          time: state.delay.time,
+          feedback: state.delay.feedback,
+          wetDryMix: state.delay.mix,
+          enabled: state.delay.enabled,
+        });
+
+        FamiliarAudio.setDistortion({
+          preset: state.saturation.type,
+          wetDryMix: state.saturation.mix,
+          enabled: state.saturation.enabled,
+        });
+      }
+    };
+
+    // Sync initial state
+    syncEffects(useAudioEffectsStore.getState());
+
+    // Subscribe to changes
+    useAudioEffectsStore.subscribe((state) => {
+      syncEffects(state);
+    });
+  });
+}

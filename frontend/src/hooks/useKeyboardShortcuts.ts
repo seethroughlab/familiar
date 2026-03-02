@@ -4,7 +4,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
-import { getCurrentElement } from './audio/audioGraph';
+import { getEngine } from '../player/audio/engineInstance';
 
 interface ShortcutHandlers {
   onToggleFullPlayer?: () => void;
@@ -138,8 +138,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers = {}) {
           handled();
           if (duration > 0) {
             const newTime = Math.min(duration, currentTime + 10);
-            const el = getCurrentElement();
-            if (el) el.currentTime = newTime;
+            getEngine().seek(newTime);
             usePlayerStore.getState().setCurrentTime(newTime);
           }
           break;
@@ -149,8 +148,7 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers = {}) {
           handled();
           if (duration > 0) {
             const newTime = Math.max(0, currentTime - 10);
-            const el = getCurrentElement();
-            if (el) el.currentTime = newTime;
+            getEngine().seek(newTime);
             usePlayerStore.getState().setCurrentTime(newTime);
           }
           break;

@@ -1,7 +1,7 @@
 // Player module — public API
 //
 // Consolidates playerStore, audioSettingsStore, useAudioEngine, useAudioControls,
-// persistence, and the audio graph into a single module boundary.
+// persistence, and the audio engine into a single module boundary.
 
 // Store & types
 export { usePlayerStore } from './playerStore';
@@ -26,14 +26,14 @@ export {
   debouncedSavePlayerState,
 } from './persistence';
 
-// Audio graph — public getters used by visualizer, effects, keyboard shortcuts, WebRTC
+// Audio engine — public getters used by visualizer, effects, keyboard shortcuts, WebRTC
 export {
+  getEngine,
   getAudioAnalyser,
   getAudioContext,
   getAudioEffectsChain,
   areAudioEffectsAvailable,
   isVisualizerAvailable,
   getCurrentMode,
-  getCurrentElement,
   getGlobalMasterGain,
-} from './audio/audioGraph';
+} from './audio/engineInstance';

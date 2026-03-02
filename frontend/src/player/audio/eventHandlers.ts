@@ -10,13 +10,12 @@
 export function shouldHandleEnded(
   target: HTMLAudioElement,
   elementA: HTMLAudioElement | null,
-  directElementA: HTMLAudioElement | null,
   queueTransition: boolean,
   currentElementIsA: boolean,
   crossfadeActive: boolean,
 ): boolean {
   if (queueTransition) return false;
-  const isA = (target === elementA || target === directElementA);
+  const isA = target === elementA;
   if (currentElementIsA !== isA) return false;
   if (crossfadeActive) return false;
   return true;
@@ -46,18 +45,13 @@ export function getErrorAction(
 }
 
 /**
- * Computes the effective crossfade duration based on settings and playback mode.
- * Centralizes the logic that was duplicated in the animation loop, seek, and getCrossfadeTrigger.
+ * Computes the effective crossfade duration based on settings.
  */
 export function getEffectiveCrossfadeDuration(
   crossfadeEnabled: boolean,
   crossfadeDuration: number,
-  isDirectPlayback: boolean,
-  mobileOverlap: number,
 ): number {
-  return crossfadeEnabled
-    ? (isDirectPlayback ? Math.max(crossfadeDuration, mobileOverlap) : crossfadeDuration)
-    : (isDirectPlayback ? mobileOverlap : 0);
+  return crossfadeEnabled ? crossfadeDuration : 0;
 }
 
 /**
@@ -70,12 +64,8 @@ export function getCrossfadeTrigger(
   timeRemaining: number,
   crossfadeEnabled: boolean,
   crossfadeDuration: number,
-  isDirectPlayback: boolean,
-  mobileOverlap: number,
 ): 'none' | 'preload' | 'crossfade' {
-  const effectiveCrossfade = getEffectiveCrossfadeDuration(
-    crossfadeEnabled, crossfadeDuration, isDirectPlayback, mobileOverlap,
-  );
+  const effectiveCrossfade = getEffectiveCrossfadeDuration(crossfadeEnabled, crossfadeDuration);
 
   if (timeRemaining <= effectiveCrossfade && timeRemaining > 0.1) return 'crossfade';
   if (timeRemaining <= effectiveCrossfade + 15 && timeRemaining > effectiveCrossfade + 1) return 'preload';

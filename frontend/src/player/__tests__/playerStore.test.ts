@@ -13,10 +13,10 @@ vi.mock('../persistence', () => ({
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }))
 
-// Mock audioGraph so playerStore's playPrevious can set element.currentTime
-const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
-vi.mock('../audio/audioGraph', () => ({
-  getCurrentElement: () => mockGetCurrentElement(),
+// Mock engineInstance so playerStore's playPrevious can call seek()
+const mockSeek = vi.fn()
+vi.mock('../audio/engineInstance', () => ({
+  getEngine: () => ({ seek: mockSeek }),
 }))
 
 // Helper to create mock tracks
@@ -57,7 +57,7 @@ describe('playerStore', () => {
       nextTrackPreloaded: false,
       isHydrated: true,
     })
-    mockGetCurrentElement.mockReturnValue(null)
+    mockSeek.mockClear()
   })
 
   describe('volume control', () => {
@@ -817,18 +817,15 @@ describe('playerStore', () => {
   })
 
   describe('playPrevious audio element', () => {
-    it('should seek audio element to 0 when restarting current track', () => {
+    it('should call engine.seek(0) when restarting current track', () => {
       const track1 = createMockTrack('1')
       const { setQueue } = usePlayerStore.getState()
       setQueue([track1], 0)
 
-      const mockEl = { currentTime: 50 }
-      mockGetCurrentElement.mockReturnValue(mockEl as unknown as HTMLAudioElement)
-
       usePlayerStore.setState({ currentTime: 5 })
       usePlayerStore.getState().playPrevious()
 
-      expect(mockEl.currentTime).toBe(0)
+      expect(mockSeek).toHaveBeenCalledWith(0)
       expect(usePlayerStore.getState().currentTime).toBe(0)
     })
   })

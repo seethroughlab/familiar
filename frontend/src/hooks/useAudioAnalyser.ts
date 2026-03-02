@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getAudioAnalyser, getAudioContext } from './audio/audioGraph';
+import { getAudioAnalyser, getAudioContext } from '../player/audio/engineInstance';
 
 export interface AudioAnalysisData {
   frequencyData: Uint8Array;
@@ -26,10 +26,82 @@ let animationFrameId: number | undefined;
 let sharedData: AudioAnalysisData | null = null;
 let lastBinCount = 0;
 
+// ---------------------------------------------------------------------------
+// Native analysis data (set from CapacitorEngine via bridge events)
+// ---------------------------------------------------------------------------
+
+let nativeFrequencyData: Uint8Array | null = null;
+let nativeTimeDomainData: Uint8Array | null = null;
+
+export function setNativeAnalysisBuffers(freq: Uint8Array, time: Uint8Array): void {
+  nativeFrequencyData = freq;
+  nativeTimeDomainData = time;
+}
+
+export function clearNativeAnalysisBuffers(): void {
+  nativeFrequencyData = null;
+  nativeTimeDomainData = null;
+}
+
+// ---------------------------------------------------------------------------
+
+function computeBands(freqData: Uint8Array, binCount: number): void {
+  let sum = 0;
+  for (let i = 0; i < binCount; i++) {
+    sum += freqData[i];
+  }
+
+  const bassEnd = Math.floor(binCount * 0.1);
+  const midEnd = Math.floor(binCount * 0.5);
+
+  let bassSum = 0;
+  for (let i = 0; i < bassEnd; i++) {
+    bassSum += freqData[i];
+  }
+
+  let midSum = 0;
+  for (let i = bassEnd; i < midEnd; i++) {
+    midSum += freqData[i];
+  }
+
+  let trebleSum = 0;
+  for (let i = midEnd; i < binCount; i++) {
+    trebleSum += freqData[i];
+  }
+
+  sharedData!.averageFrequency = sum / binCount;
+  sharedData!.bass = bassSum / bassEnd / 255;
+  sharedData!.mid = midSum / (midEnd - bassEnd) / 255;
+  sharedData!.treble = trebleSum / (binCount - midEnd) / 255;
+}
+
 function analyseLoop() {
   if (!loopRunning) return;
   animationFrameId = requestAnimationFrame(analyseLoop);
 
+  // --- Native analysis path (iOS Capacitor) ---
+  if (nativeFrequencyData && nativeTimeDomainData) {
+    const binCount = nativeFrequencyData.length;
+    if (!sharedData || lastBinCount !== binCount) {
+      lastBinCount = binCount;
+      sharedData = {
+        frequencyData: new Uint8Array(binCount),
+        timeDomainData: new Uint8Array(binCount),
+        averageFrequency: 0,
+        bass: 0,
+        mid: 0,
+        treble: 0,
+      };
+    }
+
+    sharedData.frequencyData.set(nativeFrequencyData);
+    sharedData.timeDomainData.set(nativeTimeDomainData);
+    computeBands(sharedData.frequencyData, binCount);
+    sharedAudioDataRef.current = sharedData;
+    return;
+  }
+
+  // --- Web Audio AnalyserNode path ---
   const analyser = getAudioAnalyser();
   const context = getAudioContext();
 
@@ -57,37 +129,7 @@ function analyseLoop() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   analyser.getByteTimeDomainData(sharedData.timeDomainData as any);
 
-  // Calculate average frequency
-  const freqData = sharedData.frequencyData;
-  let sum = 0;
-  for (let i = 0; i < binCount; i++) {
-    sum += freqData[i];
-  }
-
-  // Split into bass, mid, treble ranges
-  const bassEnd = Math.floor(binCount * 0.1);
-  const midEnd = Math.floor(binCount * 0.5);
-
-  let bassSum = 0;
-  for (let i = 0; i < bassEnd; i++) {
-    bassSum += freqData[i];
-  }
-
-  let midSum = 0;
-  for (let i = bassEnd; i < midEnd; i++) {
-    midSum += freqData[i];
-  }
-
-  let trebleSum = 0;
-  for (let i = midEnd; i < binCount; i++) {
-    trebleSum += freqData[i];
-  }
-
-  sharedData.averageFrequency = sum / binCount;
-  sharedData.bass = bassSum / bassEnd / 255;
-  sharedData.mid = midSum / (midEnd - bassEnd) / 255;
-  sharedData.treble = trebleSum / (binCount - midEnd) / 255;
-
+  computeBands(sharedData.frequencyData, binCount);
   sharedAudioDataRef.current = sharedData;
 }
 

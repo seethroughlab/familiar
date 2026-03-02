@@ -1,2 +1,10 @@
-// DEPRECATED: import from '../../player/audio/audioGraph' instead
-export * from '../../player/audio/audioGraph';
+// DEPRECATED: import from '../../player/audio/engineInstance' instead
+export {
+  getAudioAnalyser,
+  getAudioContext,
+  getAudioEffectsChain,
+  areAudioEffectsAvailable,
+  isVisualizerAvailable,
+  getCurrentMode,
+  getGlobalMasterGain,
+} from '../../player/audio/engineInstance';

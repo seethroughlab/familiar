@@ -14,10 +14,10 @@ vi.mock('../../services/playerPersistence', () => ({
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }))
 
-// Mock audioGraph so keyboard seek tests can verify element.currentTime
-const mockGetCurrentElement = vi.fn<() => Partial<HTMLAudioElement> | null>(() => null)
-vi.mock('../audio/audioGraph', () => ({
-  getCurrentElement: () => mockGetCurrentElement(),
+// Mock engineInstance so keyboard seek tests can verify engine.seek()
+const mockSeek = vi.fn()
+vi.mock('../../player/audio/engineInstance', () => ({
+  getEngine: () => ({ seek: mockSeek }),
 }))
 
 // Helper to simulate keyboard events
@@ -52,7 +52,7 @@ describe('useKeyboardShortcuts', () => {
       nextTrackPreloaded: false,
       isHydrated: true,
     })
-    mockGetCurrentElement.mockReturnValue(null)
+    mockSeek.mockClear()
   })
 
   afterEach(() => {
@@ -299,9 +299,7 @@ describe('useKeyboardShortcuts', () => {
       expect(usePlayerStore.getState().currentTime).toBe(0)
     })
 
-    it('should set audio element currentTime on l key', () => {
-      const mockEl = { currentTime: 0 }
-      mockGetCurrentElement.mockReturnValue(mockEl as unknown as HTMLAudioElement)
+    it('should call engine.seek on l key', () => {
       usePlayerStore.setState({ currentTime: 30, duration: 180 })
       renderHook(() => useKeyboardShortcuts())
 
@@ -309,12 +307,10 @@ describe('useKeyboardShortcuts', () => {
         fireKeyDown('l')
       })
 
-      expect(mockEl.currentTime).toBe(40)
+      expect(mockSeek).toHaveBeenCalledWith(40)
     })
 
-    it('should set audio element currentTime on j key', () => {
-      const mockEl = { currentTime: 0 }
-      mockGetCurrentElement.mockReturnValue(mockEl as unknown as HTMLAudioElement)
+    it('should call engine.seek on j key', () => {
       usePlayerStore.setState({ currentTime: 30, duration: 180 })
       renderHook(() => useKeyboardShortcuts())
 
@@ -322,7 +318,7 @@ describe('useKeyboardShortcuts', () => {
         fireKeyDown('j')
       })
 
-      expect(mockEl.currentTime).toBe(20)
+      expect(mockSeek).toHaveBeenCalledWith(20)
     })
   })
 

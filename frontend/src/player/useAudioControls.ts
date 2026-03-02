@@ -4,30 +4,13 @@
  * Unlike useAudioEngine (which registers event listeners and effects and must only
  * be called once in AppShell), this hook is safe to call from multiple components
  * simultaneously — it contains no effects, only callbacks that operate on the
- * singleton audio graph state.
+ * singleton engine instance.
  */
 import { useCallback } from 'react';
 import { usePlayerStore } from './playerStore';
 import { useAudioSettingsStore } from './audioSettingsStore';
-
-import {
-  getCurrentElement,
-  getCrossfadeContext,
-} from './audio/audioGraph';
-
-import {
-  cancelCrossfade as cancelCrossfadeModule,
-} from './audio/crossfade';
-
-import {
-  getEffectiveCrossfadeDuration,
-} from './audio/eventHandlers';
-
-import {
-  useDirectPlayback,
-  MOBILE_TRANSITION_OVERLAP,
-  log,
-} from './audio/platform';
+import { getEngine, getWebEngine } from './audio/engineInstance';
+import { getEffectiveCrossfadeDuration } from './audio/eventHandlers';
 
 export function useAudioControls() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -38,30 +21,28 @@ export function useAudioControls() {
 
   const { crossfadeDuration, crossfadeEnabled } = useAudioSettingsStore();
 
-  const cancelCrossfade = useCallback(() => {
-    cancelCrossfadeModule(setCrossfadeState, setNextTrackPreloaded);
-  }, [setCrossfadeState, setNextTrackPreloaded]);
-
   const seek = useCallback((time: number) => {
-    const el = getCurrentElement();
-    if (!el) return;
-
-    if (getCrossfadeContext()?.isActive) {
-      const effectiveCrossfade = getEffectiveCrossfadeDuration(
-        crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
-      );
-      if (el.duration - time > effectiveCrossfade + 1) cancelCrossfade();
-    }
-
     if (!Number.isFinite(time)) return;
 
-    try {
-      el.currentTime = time;
-      setCurrentTime(time);
-    } catch (e) {
-      log.error('Seek failed', e);
+    const engine = getEngine();
+
+    // Cancel crossfade if seeking back past the trigger point
+    if (engine.isCrossfading?.()) {
+      const webEngine = getWebEngine();
+      if (webEngine) {
+        const effectiveCrossfade = getEffectiveCrossfadeDuration(crossfadeEnabled, crossfadeDuration);
+        const duration = engine.getDuration();
+        if (duration - time > effectiveCrossfade + 1) {
+          webEngine.cancelCrossfade();
+          setCrossfadeState('idle');
+          setNextTrackPreloaded(false);
+        }
+      }
     }
-  }, [setCurrentTime, crossfadeEnabled, crossfadeDuration, cancelCrossfade]);
+
+    engine.seek(time);
+    setCurrentTime(time);
+  }, [setCurrentTime, crossfadeEnabled, crossfadeDuration, setCrossfadeState, setNextTrackPreloaded]);
 
   const togglePlayPause = useCallback(() => {
     setIsPlaying(!isPlaying);

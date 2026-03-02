@@ -1,58 +1,23 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from './playerStore';
 import { useAudioSettingsStore } from './audioSettingsStore';
 import { tracksApi, externalTracksApi } from '../api';
 import type { Track } from '../types';
-import { revokeOfflineTrackUrl } from '../services/offlineService';
 import { showError } from '../stores/toastStore';
-
+import { getEngine, getWebEngine } from './audio/engineInstance';
+import type { EngineEvent } from './audio/types';
+import { log } from './audio/platform';
 import {
-  initializeAudioGraph,
-  getCurrentElement,
-  getNextElement,
-  getCurrentNormGain,
-  getNextNormGain,
-  getGlobalAudioContext,
-  getGlobalMasterGain,
-  getCrossfadeContext,
-  getCurrentOfflineUrl,
-  setCurrentOfflineUrl,
-  setCurrentMasterVolume,
-  getQueueTransition,
-  setQueueTransition,
-  getPreloadingTrackId,
-  getWebAudioElementA,
-  getWebAudioElementB,
-  getDirectElementA,
-  getDirectElementB,
-  getCurrentElementIsA,
-  setLoadedTrackId,
-  getTrackUrl,
-} from './audio/audioGraph';
-
-import {
-  preloadNextTrack as preloadNextTrackModule,
-  executeCrossfade as executeCrossfadeModule,
-  cancelCrossfade as cancelCrossfadeModule,
-} from './audio/crossfade';
-
-import {
-  shouldHandleEnded,
-  getErrorAction,
   getCrossfadeTrigger,
   getEffectiveCrossfadeDuration,
 } from './audio/eventHandlers';
 
-import {
-  useDirectPlayback,
-  useWebAudio,
-  MOBILE_TRANSITION_OVERLAP,
-  log,
-} from './audio/platform';
-
 // Module-level cache: albumKey -> { avgLufs, albumPeak }
 const albumGainCache = new Map<string, { avgLufs: number; albumPeak: number | null }>();
+
+// Queue transition flag — suppresses ended events during crossfade setup
+let queueTransition = false;
 
 function getAlbumKey(track: Track): string | null {
   if (!track.album) return null;
@@ -67,6 +32,7 @@ function getAlbumKey(track: Track): string | null {
 
 export function useAudioEngine() {
   const [isInitialized, setIsInitialized] = useState(false);
+  const engine = getEngine();
 
   const { currentTrack, isPlaying, volume, isLoadingAudio } = usePlayerStore(
     useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume, isLoadingAudio: s.isLoadingAudio }))
@@ -81,6 +47,12 @@ export function useAudioEngine() {
   const setIsLoadingAudio = usePlayerStore((s) => s.setIsLoadingAudio);
 
   const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationMode, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
+
+  // Refs for stable access in event handler (avoids re-subscribing on every change)
+  const crossfadeEnabledRef = useRef(crossfadeEnabled);
+  const crossfadeDurationRef = useRef(crossfadeDuration);
+  crossfadeEnabledRef.current = crossfadeEnabled;
+  crossfadeDurationRef.current = crossfadeDuration;
 
   // --------------------------------------------------------------------------
   // Normalization
@@ -119,35 +91,44 @@ export function useAudioEngine() {
   }, [normalizationEnabled, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping, shouldUseAlbumGain]);
 
   const applyNormalizationGain = useCallback((track: Track | null, isCurrent: boolean): void => {
-    if (!useWebAudio) return;
-    const normGain = isCurrent ? getCurrentNormGain() : getNextNormGain();
-    if (!normGain) return;
-
     const albumKey = track ? getAlbumKey(track) : null;
     const albumData = albumKey ? albumGainCache.get(albumKey) : undefined;
     const linearGain = computeNormalizationGain(track, albumData);
-    normGain.gain.value = linearGain;
-  }, [computeNormalizationGain]);
+
+    if (isCurrent) {
+      engine.setNormalizationGain(linearGain);
+    } else {
+      // Next track (for crossfade preload)
+      engine.setNextNormalizationGain?.(linearGain);
+    }
+  }, [computeNormalizationGain, engine]);
 
   // --------------------------------------------------------------------------
-  // Crossfade wrappers (delegate to extracted modules)
+  // Crossfade handler (ref for stable access in event callback)
   // --------------------------------------------------------------------------
 
-  const onCrossfadeComplete = useCallback(() => {
-    setIsLoadingAudio(false);
-  }, [setIsLoadingAudio]);
+  const executeCrossfadeRef = useRef<(duration: number, nextTrack: Track) => void>(() => {});
 
   const executeCrossfade = useCallback((duration: number, nextTrack: Track) => {
+    if (!engine.executeCrossfade) return;
+
     applyNormalizationGain(nextTrack, false);
-    executeCrossfadeModule(
-      duration,
-      nextTrack,
-      advanceToNextTrack,
-      setCrossfadeState,
-      setNextTrackPreloaded,
-      onCrossfadeComplete,
-    );
-  }, [advanceToNextTrack, setCrossfadeState, setNextTrackPreloaded, applyNormalizationGain, onCrossfadeComplete]);
+
+    // Set crossfade state in store
+    setCrossfadeState('crossfading');
+
+    engine.executeCrossfade(duration, () => {
+      // Crossfade complete: update store
+      setCrossfadeState('idle');
+      setNextTrackPreloaded(false);
+      setIsLoadingAudio(false);
+    });
+
+    // Advance to next track in the store
+    advanceToNextTrack(nextTrack);
+  }, [engine, advanceToNextTrack, setCrossfadeState, setNextTrackPreloaded, applyNormalizationGain, setIsLoadingAudio]);
+
+  executeCrossfadeRef.current = executeCrossfade;
 
   // --------------------------------------------------------------------------
   // Lifecycle & Initialization
@@ -155,326 +136,197 @@ export function useAudioEngine() {
 
   useEffect(() => {
     if (!isInitialized) {
-      const ok = initializeAudioGraph();
+      const ok = engine.initialize();
       if (ok) setIsInitialized(true);
     }
-  }, [isInitialized]);
+  }, [isInitialized, engine]);
 
-  // Handle errors and ended events
+  // --------------------------------------------------------------------------
+  // Engine Event Subscription
+  // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isInitialized) return;
 
-    const elements = [
-      getWebAudioElementA(), getWebAudioElementB(),
-      getDirectElementA(), getDirectElementB()
-    ].filter((e): e is HTMLAudioElement => e !== null);
+    return engine.on((event: EngineEvent) => {
+      switch (event.type) {
+        case 'ended': {
+          if (queueTransition) return;
+          const state = usePlayerStore.getState();
+          log.debug('ended event', { trackId: state.currentTrack?.id });
+          playNext();
+          break;
+        }
 
-    const handleEnded = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      const willHandle = shouldHandleEnded(
-        target,
-        getWebAudioElementA(),
-        getDirectElementA(),
-        getQueueTransition(),
-        getCurrentElementIsA(),
-        !!getCrossfadeContext()?.isActive,
-      );
-      const state = usePlayerStore.getState();
-      log.debug('ended event', {
-        willHandle,
-        trackId: state.currentTrack?.id,
-        trackTitle: state.currentTrack?.title,
-        queueTransition: getQueueTransition(),
-        crossfadeActive: !!getCrossfadeContext()?.isActive,
-        elementTime: target.currentTime,
-        elementDuration: target.duration,
-      });
-      if (willHandle) {
-        // On mobile, try to transition synchronously within the ended event
-        // handler to keep the audio session alive. If the next track is already
-        // preloaded, executeCrossfade(0) calls nextElement.play() synchronously,
-        // which iOS allows because we're still in the event handler chain.
-        if (useDirectPlayback) {
-          const nextTrack = state.getNextTrack();
-          const nextEl = getNextElement();
-          if (nextTrack && nextEl && nextEl.readyState > 0 && nextEl.getAttribute('data-track-id') === nextTrack.id) {
-            log.debug('ended: mobile sync transition to preloaded next track', { nextTrackId: nextTrack.id });
-            setQueueTransition(true);
-            executeCrossfade(0, nextTrack);
-            setTimeout(() => { setQueueTransition(false); }, 1000);
-            return;
+        case 'error': {
+          const state = usePlayerStore.getState();
+          const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
+          log.error('Playback error for "%s": %s', trackName, event.message);
+
+          if (state.currentTrack?.id && state.currentTrack.track_type !== 'external') {
+            tracksApi.reportPlaybackError(state.currentTrack.id).catch(() => {});
           }
+
+          const hasNextTrack = !!state.getNextTrack();
+          if (hasNextTrack) {
+            showError('Skipping track', { description: `${trackName}: ${event.message}` });
+            setIsLoadingAudio(false);
+            playNext();
+          } else {
+            showError('Playback error', { description: `${trackName}: ${event.message}` });
+            setIsPlaying(false);
+            setIsLoadingAudio(false);
+          }
+          break;
         }
-        playNext();
+
+        case 'playing': {
+          const state = usePlayerStore.getState();
+          if (event.trackId === state.currentTrack?.id) {
+            setIsLoadingAudio(false);
+          }
+          break;
+        }
+
+        case 'waiting':
+          setIsLoadingAudio(true);
+          break;
+
+        case 'timeUpdate': {
+          setCurrentTime(event.currentTime);
+          if (event.duration > 0) setDuration(event.duration);
+
+          // Crossfade timing (only for engines that support it)
+          if (!engine.capabilities.crossfade) break;
+          if (engine.isCrossfading?.() || queueTransition) break;
+          if (event.duration <= 0) break;
+
+          const timeRemaining = event.duration - event.currentTime;
+          const trigger = getCrossfadeTrigger(
+            timeRemaining,
+            crossfadeEnabledRef.current,
+            crossfadeDurationRef.current,
+          );
+
+          if (trigger === 'preload') {
+            const webEngine = getWebEngine();
+            const nextTrack = usePlayerStore.getState().getNextTrack();
+            if (nextTrack && webEngine && nextTrack.id !== webEngine.getPreloadingTrackId()) {
+              // Resolve URL and preload
+              webEngine.resolveTrackUrl(nextTrack.id).then(({ url, isOffline }) => {
+                webEngine.preloadNext(nextTrack.id, url, { isOffline });
+              }).catch(e => log.error('Failed to preload next track:', e));
+            }
+          }
+
+          if (trigger === 'crossfade') {
+            const webEngine = getWebEngine();
+            const nextTrack = usePlayerStore.getState().getNextTrack();
+            if (nextTrack && webEngine?.isNextReady()) {
+              const effectiveDuration = getEffectiveCrossfadeDuration(
+                crossfadeEnabledRef.current,
+                crossfadeDurationRef.current,
+              );
+              queueTransition = true;
+              executeCrossfadeRef.current(effectiveDuration, nextTrack);
+              setTimeout(() => { queueTransition = false; }, 1000);
+            }
+          }
+          break;
+        }
+
+        case 'remotePlay':
+          setIsPlaying(true);
+          break;
+
+        case 'remotePause':
+          setIsPlaying(false);
+          break;
+
+        case 'remoteNext':
+          playNext();
+          break;
+
+        case 'remotePrevious':
+          usePlayerStore.getState().playPrevious();
+          break;
+
+        case 'remoteSeek':
+          setCurrentTime(event.time);
+          break;
       }
-    };
-
-    const handleError = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      const action = getErrorAction(
-        target,
-        getCurrentElement(),
-        !!getCrossfadeContext()?.isActive,
-        usePlayerStore.getState().isPlaying,
-      );
-
-      if (action === 'ignore') return;
-
-      if (action === 'cancel-crossfade') {
-        cancelCrossfadeModule(setCrossfadeState, setNextTrackPreloaded);
-        return;
-      }
-
-      if (action === 'cancel-crossfade-and-stop') {
-        cancelCrossfadeModule(setCrossfadeState, setNextTrackPreloaded);
-      }
-
-      const state = usePlayerStore.getState();
-      const mediaError = target.error;
-      const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
-      log.error('Playback error for "%s":', trackName, mediaError);
-
-      // Report to backend for re-encoding (fire-and-forget) — both initial and mid-playback
-      if (state.currentTrack?.id && state.currentTrack.track_type !== 'external') {
-        tracksApi.reportPlaybackError(state.currentTrack.id).catch(() => {});
-      }
-
-      // Auto-advance if possible (regardless of initial vs mid-playback)
-      const hasNextTrack = !!state.getNextTrack();
-      if (hasNextTrack && (action === 'stop' || action === 'cancel-crossfade-and-stop')) {
-        const isMidPlayback = target.currentTime > 0;
-        log.info('%s decode error for "%s" at %.1fs, auto-advancing',
-          isMidPlayback ? 'Mid-playback' : 'Initial',
-          trackName, target.currentTime);
-        showError('Skipping track', {
-          description: `${trackName}: decode error — fixing for next time`,
-        });
-
-        setIsLoadingAudio(false);
-        playNext();
-        return;
-      }
-
-      showError('Playback error', {
-        description: `${trackName}: ${mediaError?.message || 'Failed to play track'}`
-      });
-
-      setIsPlaying(false);
-      setIsLoadingAudio(false);
-    };
-
-    const handlePlaying = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      const state = usePlayerStore.getState();
-      const matchesCurrentTrack = target.getAttribute('data-track-id') === state.currentTrack?.id;
-      log.debug('playing event', {
-        matchesCurrentTrack,
-        trackId: state.currentTrack?.id,
-        elementTrackId: target.getAttribute('data-track-id'),
-        readyState: target.readyState,
-        currentTime: target.currentTime,
-        audioContextState: getGlobalAudioContext()?.state,
-      });
-      if (matchesCurrentTrack) {
-        setIsLoadingAudio(false);
-      }
-    };
-
-    const handleWaiting = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      const isCurrent = target === getCurrentElement();
-      log.debug('waiting event', {
-        isCurrent,
-        trackId: usePlayerStore.getState().currentTrack?.id,
-        readyState: target.readyState,
-        currentTime: target.currentTime,
-        networkState: target.networkState,
-      });
-      if (isCurrent) {
-        setIsLoadingAudio(true);
-      }
-    };
-
-    const handleStalled = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      const isCurrent = target === getCurrentElement();
-      const state = usePlayerStore.getState();
-      log.warn('stalled event — browser cannot fetch data', {
-        isCurrent,
-        trackId: state.currentTrack?.id,
-        trackTitle: state.currentTrack?.title,
-        readyState: target.readyState,
-        networkState: target.networkState,
-        currentTime: target.currentTime,
-      });
-    };
-
-    const handlePause = (e: Event) => {
-      const target = e.target as HTMLAudioElement;
-      const isCurrent = target === getCurrentElement();
-      const state = usePlayerStore.getState();
-      // Only log if we didn't initiate the pause (external interruption)
-      if (isCurrent && state.isPlaying && !target.ended) {
-        log.warn('pause event — external interruption (browser/OS paused playback)', {
-          trackId: state.currentTrack?.id,
-          trackTitle: state.currentTrack?.title,
-          readyState: target.readyState,
-          currentTime: target.currentTime,
-        });
-      }
-    };
-
-    elements.forEach(el => {
-      el.addEventListener('ended', handleEnded);
-      el.addEventListener('error', handleError);
-      el.addEventListener('playing', handlePlaying);
-      el.addEventListener('waiting', handleWaiting);
-      el.addEventListener('stalled', handleStalled);
-      el.addEventListener('pause', handlePause);
     });
-
-    return () => {
-      elements.forEach(el => {
-        el.removeEventListener('ended', handleEnded);
-        el.removeEventListener('error', handleError);
-        el.removeEventListener('playing', handlePlaying);
-        el.removeEventListener('waiting', handleWaiting);
-        el.removeEventListener('stalled', handleStalled);
-        el.removeEventListener('pause', handlePause);
-      });
-    };
-  }, [isInitialized, playNext, setIsPlaying, setIsLoadingAudio, executeCrossfade]);
-
-  // --------------------------------------------------------------------------
-  // Update Media Session
-  // --------------------------------------------------------------------------
-  const updateMediaSession = useCallback(() => {
-    if (!('mediaSession' in navigator) || !currentTrack) return;
-
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentTrack.title || 'Unknown',
-        artist: currentTrack.artist || 'Unknown',
-        album: currentTrack.album || 'Unknown',
-        artwork: currentTrack.id ? [{ src: tracksApi.getArtworkUrl(currentTrack.id), sizes: '512x512', type: 'image/jpeg' }] : [],
-      });
-
-      navigator.mediaSession.setActionHandler('play', () => setIsPlaying(true));
-      navigator.mediaSession.setActionHandler('pause', () => setIsPlaying(false));
-      navigator.mediaSession.setActionHandler('nexttrack', () => playNext());
-      navigator.mediaSession.setActionHandler('previoustrack', () => usePlayerStore.getState().playPrevious());
-      navigator.mediaSession.setActionHandler('seekto', (details) => {
-        if (details.seekTime === undefined) return;
-        const el = getCurrentElement();
-        if (el && Number.isFinite(details.seekTime)) {
-          el.currentTime = details.seekTime;
-          usePlayerStore.getState().setCurrentTime(details.seekTime);
-        }
-      });
-    } catch (e) {
-      log.warn('Failed to update media session', e);
-    }
-  }, [currentTrack, setIsPlaying, playNext]);
+  }, [isInitialized, engine, playNext, setIsPlaying, setIsLoadingAudio, setCurrentTime, setDuration]);
 
   // --------------------------------------------------------------------------
   // Effect: Update Media Session when track changes
   // --------------------------------------------------------------------------
+
   useEffect(() => {
-    updateMediaSession();
-  }, [updateMediaSession]);
+    if (!currentTrack) return;
+    engine.updateNowPlaying({
+      title: currentTrack.title || 'Unknown',
+      artist: currentTrack.artist || 'Unknown',
+      album: currentTrack.album || 'Unknown',
+      artworkUrl: currentTrack.id ? tracksApi.getArtworkUrl(currentTrack.id) : undefined,
+    });
+  }, [currentTrack, engine]);
 
   // --------------------------------------------------------------------------
   // Effect: Handle Play/Pause State
   // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isInitialized) return;
 
-    const el = getCurrentElement();
-    if (!el) return;
-
     if (isPlaying) {
-      log.debug('play/pause effect — play', {
-        trackId: currentTrack?.id,
-        elementReadyState: el.readyState,
-        elementPaused: el.paused,
-        elementTrackId: el.getAttribute('data-track-id'),
-        audioContextState: getGlobalAudioContext()?.state,
-      });
-
-      // Always resume AudioContext when transitioning to play state
-      const ctx = getGlobalAudioContext();
-      if (ctx && ctx.state === 'suspended') {
-        ctx.resume().catch(e => log.error('Failed to resume audio context', e));
-      }
-
-      // Only call play() if the element has the correct track loaded.
-      // If the track hasn't been loaded yet (empty element or stale track from
-      // a previous session), the loadTrack effect will handle loading + playing.
-      // Without this guard, play() on an empty/wrong element fails and sets
-      // isPlaying=false, which then causes el.pause() to race with loadTrack's
-      // async el.play(), leaving the track loaded but paused.
-      if (!currentTrack || el.getAttribute('data-track-id') !== currentTrack.id) {
-        log.debug('play/pause effect — skipping play, element has wrong track', {
-          elementTrackId: el.getAttribute('data-track-id'),
+      // Only call play() if the correct track is loaded
+      if (!currentTrack || engine.getLoadedTrackId() !== currentTrack.id) {
+        log.debug('play/pause effect — skipping play, wrong track loaded', {
+          loadedTrackId: engine.getLoadedTrackId(),
           currentTrackId: currentTrack?.id,
         });
         return;
       }
 
-      const playPromise = el.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(e => {
-          if (e.name === 'NotAllowedError') {
-            log.warn('Auto-play blocked');
-            setIsPlaying(false);
-          } else if (e.name !== 'AbortError') {
-            log.error('Play failed', e);
-            setIsPlaying(false);
-            setIsLoadingAudio(false);
-          }
-        });
-      }
+      log.debug('play/pause effect — play', { trackId: currentTrack.id });
+      engine.play().catch(e => {
+        if (e?.name === 'NotAllowedError') {
+          log.warn('Auto-play blocked');
+          setIsPlaying(false);
+        } else if (e?.name !== 'AbortError') {
+          log.error('Play failed', e);
+          setIsPlaying(false);
+          setIsLoadingAudio(false);
+        }
+      });
     } else {
       log.debug('play/pause effect — pause', { trackId: currentTrack?.id });
-      el.pause();
+      engine.pause();
     }
-  }, [isPlaying, isInitialized, setIsPlaying, setIsLoadingAudio]);
+  }, [isPlaying, isInitialized, engine, setIsPlaying, setIsLoadingAudio]);
 
   // --------------------------------------------------------------------------
   // Effect: Handle Volume Changes
   // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isInitialized) return;
-
-    setCurrentMasterVolume(volume);
-
-    if (useDirectPlayback) {
-      if (!getCrossfadeContext()?.isActive) {
-        const el = getCurrentElement();
-        const nextEl = getNextElement();
-        if (el) el.volume = Math.max(0, Math.min(1, volume));
-        if (nextEl) nextEl.volume = 0;
-      }
-    } else {
-      const masterGain = getGlobalMasterGain();
-      if (masterGain) {
-        masterGain.gain.setTargetAtTime(volume, getGlobalAudioContext()?.currentTime || 0, 0.1);
-      }
-    }
-  }, [volume, isInitialized]);
+    engine.setVolume(volume);
+  }, [volume, isInitialized, engine]);
 
   // --------------------------------------------------------------------------
-  // Effect: Load track when currentTrack changes (Manual navigation)
+  // Effect: Load track when currentTrack changes
   // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isInitialized || !currentTrack) return;
 
-    if (getCrossfadeContext()?.isActive) return;
+    // Don't load during crossfade (crossfade handles track transition)
+    if (engine.isCrossfading?.()) return;
 
-    const el = getCurrentElement();
-    if (!el) return;
-
-    if (el.getAttribute('data-track-id') === currentTrack.id) {
+    // Already loaded
+    if (engine.getLoadedTrackId() === currentTrack.id) {
       setIsLoadingAudio(false);
       return;
     }
@@ -483,6 +335,7 @@ export function useAudioEngine() {
       try {
         setIsLoadingAudio(true);
 
+        // Check external preview settings
         const state = usePlayerStore.getState();
         const currentQueueItem = state.queue[state.queueIndex];
         const externalInfo = currentQueueItem?.externalInfo;
@@ -494,12 +347,13 @@ export function useAudioEngine() {
           return;
         }
 
+        // Resolve URL
         let url: string;
         let isOffline = false;
+        const isExternal = !!externalInfo;
 
         if (externalInfo) {
           let previewUrl = externalInfo.previewUrl;
-
           if (!previewUrl && externalInfo.originalId) {
             try {
               const result = await externalTracksApi.resolvePreviewUrl(externalInfo.originalId);
@@ -508,84 +362,89 @@ export function useAudioEngine() {
               log.warn('Failed to resolve preview URL', e);
             }
           }
-
           if (!previewUrl) {
             log.info('No preview URL for external track, auto-advancing');
             setIsLoadingAudio(false);
             playNext();
             return;
           }
-
           url = previewUrl;
         } else {
-          const trackUrl = await getTrackUrl(currentTrack.id);
-          url = trackUrl.url;
-          isOffline = trackUrl.isOffline;
+          // Web engine: check offline storage. Native engine: stream directly.
+          const webEngine = getWebEngine();
+          if (webEngine) {
+            const trackUrl = await webEngine.resolveTrackUrl(currentTrack.id);
+            url = trackUrl.url;
+            isOffline = trackUrl.isOffline;
+          } else {
+            url = tracksApi.getStreamUrl(currentTrack.id);
+          }
         }
 
+        // Race condition guard: track changed during async URL resolution
         if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) {
           setIsLoadingAudio(false);
           return;
         }
-        if (getCrossfadeContext()?.isActive) {
-          setIsLoadingAudio(false);
-          return;
-        }
-
-        const oldOfflineUrl = getCurrentOfflineUrl();
-        if (oldOfflineUrl) revokeOfflineTrackUrl(oldOfflineUrl);
-        setCurrentOfflineUrl(isOffline ? url : null);
 
         log.debug('loadTrack', {
           trackId: currentTrack.id,
           trackTitle: currentTrack.title,
           isOffline,
+          isExternal,
           isPlaying,
-          elementReadyState: el.readyState,
         });
 
-        // External preview URLs (iTunes CDN) don't send CORS headers.
-        // crossOrigin='anonymous' is needed for Web Audio (visualizer/effects)
-        // but must be removed for cross-origin previews to avoid decode errors.
-        if (externalInfo) {
-          el.removeAttribute('crossorigin');
-        } else if (!el.crossOrigin) {
-          el.crossOrigin = 'anonymous';
+        await engine.load(currentTrack.id, url, { isOffline, isExternal });
+
+        // Another race condition guard after load
+        if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) {
+          setIsLoadingAudio(false);
+          return;
         }
 
-        el.src = url;
-        el.setAttribute('data-track-id', currentTrack.id);
-        el.load();
-        setLoadedTrackId(currentTrack.id);
-
         if (isPlaying) {
-          const p = el.play();
-          if (p) p.then(() => {
+          try {
+            await engine.play();
             setIsLoadingAudio(false);
-            // Eagerly preload next track after a short delay so it's ready
-            // even when rAF isn't running (e.g. phone locked)
-            const loadedId = currentTrack.id;
-            setTimeout(() => {
-              if (usePlayerStore.getState().currentTrack?.id !== loadedId) return;
-              const nextTrack = usePlayerStore.getState().getNextTrack();
-              if (nextTrack && nextTrack.id !== getPreloadingTrackId()) {
-                preloadNextTrackModule(nextTrack.id);
-              }
-            }, 2000);
-          }).catch(e => {
-            if (e.name !== 'AbortError') {
+
+            // Eager preload: after a short delay, preload the next track
+            if (engine.capabilities.crossfade) {
+              const loadedId = currentTrack.id;
+              const webEngine = getWebEngine();
+              setTimeout(() => {
+                if (usePlayerStore.getState().currentTrack?.id !== loadedId) return;
+                const nextTrack = usePlayerStore.getState().getNextTrack();
+                if (nextTrack && webEngine && nextTrack.id !== webEngine.getPreloadingTrackId()) {
+                  webEngine.resolveTrackUrl(nextTrack.id).then(({ url: nextUrl, isOffline: nextIsOffline }) => {
+                    webEngine.preloadNext(nextTrack.id, nextUrl, { isOffline: nextIsOffline });
+                  }).catch(e => log.error('Eager preload failed:', e));
+                }
+              }, 2000);
+            }
+          } catch (e: unknown) {
+            const err = e as { name?: string };
+            if (err.name !== 'AbortError') {
               log.error('Play failed after load', e);
               setIsLoadingAudio(false);
               setIsPlaying(false);
             }
-          });
+          }
         } else {
-          // Track preloaded (e.g. hydration) — no spinner needed
           setIsLoadingAudio(false);
         }
       } catch (e) {
         log.error('Failed to load track', e);
         setIsLoadingAudio(false);
+
+        // Auto-advance on error
+        const state = usePlayerStore.getState();
+        const hasNextTrack = !!state.getNextTrack();
+        if (hasNextTrack) {
+          const trackName = currentTrack.title || 'Unknown track';
+          showError('Skipping track', { description: `${trackName}: failed to load` });
+          playNext();
+        }
       }
     };
 
@@ -597,6 +456,7 @@ export function useAudioEngine() {
   // --------------------------------------------------------------------------
   // Effect: Fetch album gain and apply normalization on track change
   // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isInitialized || !currentTrack) return;
 
@@ -629,202 +489,21 @@ export function useAudioEngine() {
   }, [currentTrack?.id, normalizationMode, isInitialized, shouldUseAlbumGain, applyNormalizationGain]);
 
   // --------------------------------------------------------------------------
-  // Effect: Auto-resume AudioContext when suspended mid-playback (Windows)
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    const ctx = getGlobalAudioContext();
-    if (!isInitialized || !ctx) return;
-    const handler = () => {
-      log.debug('AudioContext statechange', {
-        contextState: ctx.state,
-        isPlaying: usePlayerStore.getState().isPlaying,
-      });
-      if (ctx.state === 'suspended' && usePlayerStore.getState().isPlaying) {
-        ctx.resume().catch(e => log.error('Failed to resume AudioContext', e));
-      }
-    };
-    ctx.addEventListener('statechange', handler);
-    return () => ctx.removeEventListener('statechange', handler);
-  }, [isInitialized]);
-
-  // --------------------------------------------------------------------------
-  // Effect: Resume playback when returning from background tab
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    if (!isInitialized) return;
-    const handler = () => {
-      const state = usePlayerStore.getState();
-      const el = getCurrentElement();
-      const ctx = getGlobalAudioContext();
-      log.debug('visibilitychange', {
-        hidden: document.hidden,
-        isPlaying: state.isPlaying,
-        elPaused: el?.paused,
-        elEnded: el?.ended,
-        audioContextState: ctx?.state,
-        trackId: state.currentTrack?.id,
-      });
-      if (document.hidden) return;
-      if (!state.isPlaying) return;
-      if (ctx?.state === 'suspended') {
-        ctx.resume().catch(e => log.error('Failed to resume AudioContext', e));
-      }
-      if (el?.paused && !el.ended) {
-        el.play().catch(e => {
-          if (e.name !== 'AbortError') {
-            log.warn('Visibility recovery play() failed', { error: e.message, name: e.name, trackId: state.currentTrack?.id });
-            setIsPlaying(false);
-            setIsLoadingAudio(false);
-          }
-        });
-      }
-    };
-    document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
-  }, [isInitialized, setIsPlaying, setIsLoadingAudio]);
-
-  // --------------------------------------------------------------------------
   // Effect: Loading watchdog — clear stuck loading state after 15s
-  // Safety net for isLoadingAudio getting stuck due to edge-case event ordering
-  // (e.g. handlePlaying not firing after handleWaiting). If loading doesn't
-  // resolve within 15s, force-clear it and attempt playback recovery.
   // --------------------------------------------------------------------------
+
   useEffect(() => {
     if (!isLoadingAudio) return;
     const timeout = setTimeout(() => {
       const state = usePlayerStore.getState();
       if (!state.isLoadingAudio) return;
-      const el = getCurrentElement();
       log.warn('Loading timeout - clearing stuck loading state', {
         trackId: state.currentTrack?.id,
         trackTitle: state.currentTrack?.title,
-        elPaused: el?.paused,
-        elReadyState: el?.readyState,
       });
       setIsLoadingAudio(false);
-      if (el?.paused && state.isPlaying) {
-        el.play().catch(e => {
-          log.warn('Loading watchdog play() failed', { error: e.message, name: e.name, trackId: state.currentTrack?.id });
-          setIsPlaying(false);
-        });
-      }
+      // The engine should handle recovery internally
     }, 15000);
     return () => clearTimeout(timeout);
-  }, [isLoadingAudio, setIsLoadingAudio, setIsPlaying]);
-
-  // --------------------------------------------------------------------------
-  // Effect: timeupdate-based crossfade timing (primary mobile fix)
-  // timeupdate fires even when the page is backgrounded (media engine runs
-  // independently from the render loop), unlike rAF which is suspended when
-  // the phone is locked or the browser is in the background.
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    if (!isInitialized || !isPlaying || !currentTrack) return;
-
-    const el = getCurrentElement();
-    if (!el) return;
-
-    const handleTimeUpdate = () => {
-      if (getCrossfadeContext()?.isActive || getQueueTransition()) return;
-      if (!Number.isFinite(el.duration) || el.duration <= 0) return;
-
-      const timeRemaining = el.duration - el.currentTime;
-      const trigger = getCrossfadeTrigger(
-        timeRemaining, crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
-      );
-
-      if (trigger === 'preload') {
-        const nextTrack = usePlayerStore.getState().getNextTrack();
-        if (nextTrack && nextTrack.id !== getPreloadingTrackId()) {
-          preloadNextTrackModule(nextTrack.id);
-        }
-      }
-
-      if (trigger === 'crossfade') {
-        const nextTrack = usePlayerStore.getState().getNextTrack();
-        if (nextTrack) {
-          const nextEl = getNextElement();
-          if (nextEl && nextEl.readyState > 0) {
-            const effectiveDuration = getEffectiveCrossfadeDuration(
-              crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
-            );
-            setQueueTransition(true);
-            executeCrossfade(effectiveDuration, nextTrack);
-            setTimeout(() => { setQueueTransition(false); }, 1000);
-          }
-        }
-      }
-    };
-
-    el.addEventListener('timeupdate', handleTimeUpdate);
-    return () => el.removeEventListener('timeupdate', handleTimeUpdate);
-  }, [isPlaying, isInitialized, currentTrack, executeCrossfade, crossfadeEnabled, crossfadeDuration]);
-
-  // --------------------------------------------------------------------------
-  // Animation/Update Loop
-  // --------------------------------------------------------------------------
-  useEffect(() => {
-    let animationFrameId: number;
-    let lastTimeUpdate = 0;
-
-    const loop = () => {
-      animationFrameId = requestAnimationFrame(loop);
-
-      const now = performance.now();
-      if (now - lastTimeUpdate < 250) return; // ~4Hz — sufficient for seek bar UI
-      lastTimeUpdate = now;
-
-      const el = getCurrentElement();
-      if (el) {
-        if (!el.paused) {
-          setCurrentTime(el.currentTime);
-        }
-
-        if (Number.isFinite(el.duration) && el.duration > 0) {
-          setDuration(el.duration);
-        }
-
-        if (!getCrossfadeContext()?.isActive && !getQueueTransition() && currentTrack) {
-          const timeRemaining = el.duration - el.currentTime;
-          const trigger = getCrossfadeTrigger(
-            timeRemaining, crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
-          );
-
-          if (trigger === 'preload') {
-            const nextTrackForPreload = usePlayerStore.getState().getNextTrack();
-            if (nextTrackForPreload && nextTrackForPreload.id !== getPreloadingTrackId()) {
-              preloadNextTrackModule(nextTrackForPreload.id);
-            }
-          }
-
-          if (trigger === 'crossfade') {
-            const nextTrack = usePlayerStore.getState().getNextTrack();
-            if (nextTrack) {
-              const nextEl = getNextElement();
-              if (nextEl && nextEl.readyState > 0) {
-                const effectiveDuration = getEffectiveCrossfadeDuration(
-                  crossfadeEnabled, crossfadeDuration, useDirectPlayback, MOBILE_TRANSITION_OVERLAP,
-                );
-                // queueTransition suppresses the 'ended' handler during crossfade setup
-                // to prevent double-advance. completeCrossfade also clears it; this 1s
-                // timeout is a safety net in case completeCrossfade doesn't fire.
-                setQueueTransition(true);
-                executeCrossfade(effectiveDuration, nextTrack);
-                setTimeout(() => { setQueueTransition(false); }, 1000);
-              }
-            }
-          }
-        }
-      }
-    };
-
-    if (isPlaying) {
-      loop();
-    }
-
-    return () => {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-    };
-  }, [isPlaying, setCurrentTime, setDuration, executeCrossfade, crossfadeEnabled, crossfadeDuration, currentTrack]);
-
+  }, [isLoadingAudio, setIsLoadingAudio]);
 }

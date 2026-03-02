@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getAudioContext, getGlobalMasterGain } from './audio/audioGraph';
+import { getAudioContext, getGlobalMasterGain } from '../player/audio/engineInstance';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('WebRTC');

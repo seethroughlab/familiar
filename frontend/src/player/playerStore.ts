@@ -7,7 +7,7 @@ import {
   migrateOldPlayerState,
 } from './persistence';
 import { tracksApi } from '../api';
-import { getCurrentElement } from './audio/audioGraph';
+import { getEngine } from './audio/engineInstance';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Player', { forceVerbose: true });
@@ -589,10 +589,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // If we're more than 3 seconds in, restart current track
     if (state.currentTime > 3) {
       log.info('playPrevious — restarting current track', { title: state.currentTrack?.title, currentTime: state.currentTime });
-      const el = getCurrentElement();
-      if (el) {
-        el.currentTime = 0;
-      }
+      getEngine().seek(0);
       set({ currentTime: 0 });
       return;
     }

@@ -14,18 +14,21 @@ vi.mock('../persistence', () => ({
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }))
 
-// Mock audioGraph — provide controllable getCurrentElement and getCrossfadeContext
-const mockGetCurrentElement = vi.fn<() => HTMLAudioElement | null>(() => null)
-const mockGetCrossfadeContext = vi.fn<() => { isActive: boolean; startTime: number; duration: number; timeoutId: ReturnType<typeof setTimeout> | null } | null>(() => null)
-vi.mock('../audio/audioGraph', () => ({
-  getCurrentElement: () => mockGetCurrentElement(),
-  getCrossfadeContext: () => mockGetCrossfadeContext(),
-}))
-
-// Mock crossfade module
+// Mock engineInstance — provide controllable engine for seek/crossfade tests
+const mockSeek = vi.fn()
+const mockGetDuration = vi.fn(() => 180)
+const mockIsCrossfading = vi.fn(() => false)
 const mockCancelCrossfade = vi.fn()
-vi.mock('../audio/crossfade', () => ({
-  cancelCrossfade: () => mockCancelCrossfade(),
+
+vi.mock('../audio/engineInstance', () => ({
+  getEngine: () => ({
+    seek: mockSeek,
+    getDuration: mockGetDuration,
+    isCrossfading: mockIsCrossfading,
+  }),
+  getWebEngine: () => ({
+    cancelCrossfade: mockCancelCrossfade,
+  }),
 }))
 
 // Mock eventHandlers — return a fixed effective crossfade duration
@@ -35,8 +38,6 @@ vi.mock('../audio/eventHandlers', () => ({
 
 // Mock platform
 vi.mock('../audio/platform', () => ({
-  useDirectPlayback: false,
-  MOBILE_TRANSITION_OVERLAP: 0.3,
   log: { error: vi.fn(), info: vi.fn(), debug: vi.fn(), warn: vi.fn() },
 }))
 
@@ -67,37 +68,30 @@ describe('useAudioControls', () => {
   })
 
   describe('seek', () => {
-    it('should set audio element currentTime and store currentTime', () => {
-      const mockEl = { currentTime: 0, duration: 180 } as HTMLAudioElement
-      mockGetCurrentElement.mockReturnValue(mockEl)
-
+    it('should call engine.seek and update store currentTime', () => {
       const { result } = renderHook(() => useAudioControls())
 
       act(() => {
         result.current.seek(30)
       })
 
-      expect(mockEl.currentTime).toBe(30)
+      expect(mockSeek).toHaveBeenCalledWith(30)
       expect(usePlayerStore.getState().currentTime).toBe(30)
     })
 
-    it('should not touch element for non-finite values', () => {
-      const mockEl = { currentTime: 10, duration: 180 } as HTMLAudioElement
-      mockGetCurrentElement.mockReturnValue(mockEl)
-
+    it('should not seek for non-finite values', () => {
       const { result } = renderHook(() => useAudioControls())
 
       act(() => {
         result.current.seek(Infinity)
       })
 
-      expect(mockEl.currentTime).toBe(10) // unchanged
+      expect(mockSeek).not.toHaveBeenCalled()
     })
 
     it('should cancel crossfade when seeking far from end', () => {
-      const mockEl = { currentTime: 0, duration: 180 } as HTMLAudioElement
-      mockGetCurrentElement.mockReturnValue(mockEl)
-      mockGetCrossfadeContext.mockReturnValue({ isActive: true, startTime: 0, duration: 5, timeoutId: null })
+      mockIsCrossfading.mockReturnValue(true)
+      mockGetDuration.mockReturnValue(180)
 
       const { result } = renderHook(() => useAudioControls())
 
@@ -110,9 +104,8 @@ describe('useAudioControls', () => {
     })
 
     it('should NOT cancel crossfade when seeking near end', () => {
-      const mockEl = { currentTime: 0, duration: 180 } as HTMLAudioElement
-      mockGetCurrentElement.mockReturnValue(mockEl)
-      mockGetCrossfadeContext.mockReturnValue({ isActive: true, startTime: 0, duration: 5, timeoutId: null })
+      mockIsCrossfading.mockReturnValue(true)
+      mockGetDuration.mockReturnValue(180)
 
       const { result } = renderHook(() => useAudioControls())
 
@@ -122,19 +115,6 @@ describe('useAudioControls', () => {
       })
 
       expect(mockCancelCrossfade).not.toHaveBeenCalled()
-    })
-
-    it('should do nothing when no audio element', () => {
-      mockGetCurrentElement.mockReturnValue(null)
-
-      const { result } = renderHook(() => useAudioControls())
-
-      act(() => {
-        result.current.seek(30)
-      })
-
-      // Store should not be updated since we returned early
-      expect(usePlayerStore.getState().currentTime).toBe(0)
     })
   })
 

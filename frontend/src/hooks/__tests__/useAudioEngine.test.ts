@@ -241,71 +241,23 @@ describe('Preload logic', () => {
     expect(shouldPreload).toBe(true)
   })
 
-  it('should not preload when crossfade is disabled on desktop', () => {
+  it('should not preload when crossfade is disabled', () => {
     const crossfadeEnabled = false
     const crossfadeDuration = 5
-    const isMobile = false
-    const MOBILE_TRANSITION_OVERLAP = 0.3
     const duration = 180
     const currentTime = 175 // 5 seconds remaining
 
     const timeRemaining = duration - currentTime
-    const effectiveCrossfade = crossfadeEnabled
-      ? (isMobile ? Math.max(crossfadeDuration, MOBILE_TRANSITION_OVERLAP) : crossfadeDuration)
-      : (isMobile ? MOBILE_TRANSITION_OVERLAP : 0)
+    const effectiveCrossfade = crossfadeEnabled ? crossfadeDuration : 0
     const preloadThreshold = effectiveCrossfade + 3
 
-    // Desktop with crossfade disabled: effectiveCrossfade = 0, preloadThreshold = 3
+    // With crossfade disabled: effectiveCrossfade = 0, preloadThreshold = 3
     // timeRemaining (5) > preloadThreshold (3) so should not preload yet
     expect(effectiveCrossfade).toBe(0)
     const shouldPreload =
       timeRemaining <= preloadThreshold && timeRemaining > effectiveCrossfade
 
     expect(shouldPreload).toBe(false)
-  })
-})
-
-describe('Mobile minimum transition overlap', () => {
-  const MOBILE_TRANSITION_OVERLAP = 0.3
-
-  function calcEffectiveCrossfade(
-    crossfadeEnabled: boolean,
-    crossfadeDuration: number,
-    isMobile: boolean,
-  ): number {
-    return crossfadeEnabled
-      ? (isMobile ? Math.max(crossfadeDuration, MOBILE_TRANSITION_OVERLAP) : crossfadeDuration)
-      : (isMobile ? MOBILE_TRANSITION_OVERLAP : 0)
-  }
-
-  it('should use MOBILE_TRANSITION_OVERLAP on mobile when crossfade is disabled', () => {
-    const result = calcEffectiveCrossfade(false, 5, true)
-    expect(result).toBe(MOBILE_TRANSITION_OVERLAP)
-  })
-
-  it('should use 0 on desktop when crossfade is disabled', () => {
-    const result = calcEffectiveCrossfade(false, 5, false)
-    expect(result).toBe(0)
-  })
-
-  it('should enforce minimum overlap on mobile when crossfade duration is 0 (gapless)', () => {
-    const result = calcEffectiveCrossfade(true, 0, true)
-    expect(result).toBe(MOBILE_TRANSITION_OVERLAP)
-  })
-
-  it('should allow 0 duration on desktop for gapless', () => {
-    const result = calcEffectiveCrossfade(true, 0, false)
-    expect(result).toBe(0)
-  })
-
-  it('should use user crossfade duration on mobile when larger than minimum', () => {
-    const result = calcEffectiveCrossfade(true, 5, true)
-    expect(result).toBe(5)
-  })
-
-  it('should not change desktop crossfade behavior', () => {
-    const result = calcEffectiveCrossfade(true, 5, false)
-    expect(result).toBe(5)
   })
 })
 
