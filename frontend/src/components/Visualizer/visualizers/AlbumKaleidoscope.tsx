@@ -13,7 +13,7 @@ import { Canvas, useFrame, useLoader, extend } from '@react-three/fiber';
 import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
-import { isMobile } from '../../../utils/platform';
+import { isMobile, isNativeApp } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 
@@ -498,18 +498,43 @@ function FallbackScene() {
 }
 
 export function AlbumKaleidoscope({ artworkUrl }: VisualizerProps) {
-  const [hasArtwork, setHasArtwork] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (artworkUrl) {
-      // Verify the image loads
-      const img = new Image();
-      img.onload = () => setHasArtwork(true);
-      img.onerror = () => setHasArtwork(false);
-      img.src = artworkUrl;
-    } else {
-      setHasArtwork(false);
+    if (!artworkUrl) {
+      setResolvedUrl(null);
+      return;
     }
+
+    let blobUrl: string | null = null;
+    let cancelled = false;
+
+    if (isNativeApp()) {
+      // On Capacitor native, fetch via CapacitorHttp (bypasses CORS) and convert to blob URL.
+      // Three.js TextureLoader uses <img crossOrigin="anonymous"> internally, which goes through
+      // WKWebView's native networking (not CapacitorHttp), and may fail to load cross-origin images.
+      fetch(artworkUrl)
+        .then((res) => res.blob())
+        .then((blob) => {
+          if (cancelled) return;
+          blobUrl = URL.createObjectURL(blob);
+          setResolvedUrl(blobUrl);
+        })
+        .catch(() => {
+          if (!cancelled) setResolvedUrl(null);
+        });
+    } else {
+      // On web, verify the image loads then pass through the original URL
+      const img = new Image();
+      img.onload = () => { if (!cancelled) setResolvedUrl(artworkUrl); };
+      img.onerror = () => { if (!cancelled) setResolvedUrl(null); };
+      img.src = artworkUrl;
+    }
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [artworkUrl]);
 
   return (
@@ -519,8 +544,8 @@ export function AlbumKaleidoscope({ artworkUrl }: VisualizerProps) {
         gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
         dpr={mobile ? [1, 1] : [1, 2]}
       >
-        {hasArtwork && artworkUrl ? (
-          <KaleidoscopeScene artworkUrl={artworkUrl} />
+        {resolvedUrl ? (
+          <KaleidoscopeScene artworkUrl={resolvedUrl} />
         ) : (
           <FallbackScene />
         )}

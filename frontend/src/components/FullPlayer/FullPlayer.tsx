@@ -32,7 +32,7 @@ import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
 import { isMobile } from '../../utils/platform';
-import { isVisualizerAvailable } from '../../player/audio/audioGraph';
+import { isVisualizerAvailable } from '../../player/audio/engineInstance';
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';

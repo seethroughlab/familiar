@@ -15,6 +15,7 @@ import {
   type TremoloState,
 } from '../../stores/audioEffectsStore';
 import { areAudioEffectsAvailable } from '../../hooks/audio/audioGraph';
+import { useNativeAudioEngine } from '../../hooks/audio/platform';
 
 // Collapsible section component
 function EffectSection({
@@ -126,6 +127,9 @@ const REVERB_PRESETS: { value: ReverbPreset; label: string }[] = [
   { value: 'plate', label: 'Plate' },
   { value: 'cathedral', label: 'Cathedral' },
 ];
+
+// Effects supported on native AVAudioEngine (phase 1): EQ, reverb, delay, saturation
+const isNative = useNativeAudioEngine;
 
 export function AudioEffectsSettings() {
   const [savePresetName, setSavePresetName] = useState('');
@@ -246,10 +250,10 @@ export function AudioEffectsSettings() {
         <div className="mt-4 p-3 bg-zinc-700/50 rounded-lg flex items-start gap-3">
           <Info className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-zinc-300">
-            <p className="font-medium text-white mb-1">Not available on mobile</p>
+            <p className="font-medium text-white mb-1">Coming soon to the app</p>
             <p className="text-zinc-400">
-              Audio effects require Web Audio API routing which prevents background playback on iOS.
-              Effects are available on desktop browsers where background playback isn't needed.
+              Audio effects are not yet available in the native app.
+              Effects work on desktop browsers and will be added to the app in a future update.
             </p>
           </div>
         </div>
@@ -405,7 +409,8 @@ export function AudioEffectsSettings() {
               />
             </EffectSection>
 
-            {/* Compressor */}
+            {/* Compressor — not available on native (no AVAudioUnit equivalent) */}
+            {!isNative && (
             <EffectSection
               title="Compressor"
               enabled={compressor.enabled}
@@ -472,6 +477,7 @@ export function AudioEffectsSettings() {
                 disabled={!compressor.enabled}
               />
             </EffectSection>
+            )}
 
             {/* Reverb */}
             <EffectSection
@@ -573,7 +579,8 @@ export function AudioEffectsSettings() {
               </div>
             </EffectSection>
 
-            {/* Filter */}
+            {/* Filter — not available on native */}
+            {!isNative && (
             <EffectSection
               title="Filters"
               enabled={filter.enabled}
@@ -620,8 +627,10 @@ export function AudioEffectsSettings() {
                 disabled={!filter.enabled}
               />
             </EffectSection>
+            )}
 
-            {/* Stereo Width */}
+            {/* Stereo Width — not available on native */}
+            {!isNative && (
             <EffectSection
               title="Stereo Width"
               enabled={stereoWidth.enabled}
@@ -641,6 +650,7 @@ export function AudioEffectsSettings() {
                 0% = Mono, 100% = Normal, 200% = Extra Wide
               </p>
             </EffectSection>
+            )}
 
             {/* Saturation */}
             <EffectSection
@@ -685,7 +695,8 @@ export function AudioEffectsSettings() {
               />
             </EffectSection>
 
-            {/* Chorus */}
+            {/* Chorus — not available on native */}
+            {!isNative && (
             <EffectSection
               title="Chorus"
               enabled={chorus.enabled}
@@ -732,8 +743,10 @@ export function AudioEffectsSettings() {
                 disabled={!chorus.enabled}
               />
             </EffectSection>
+            )}
 
-            {/* Tremolo */}
+            {/* Tremolo — not available on native */}
+            {!isNative && (
             <EffectSection
               title="Tremolo"
               enabled={tremolo.enabled}
@@ -775,8 +788,10 @@ export function AudioEffectsSettings() {
                 disabled={!tremolo.enabled}
               />
             </EffectSection>
+            )}
 
-            {/* Bitcrusher */}
+            {/* Bitcrusher — not available on native */}
+            {!isNative && (
             <EffectSection
               title="Bitcrusher"
               enabled={bitcrusher.enabled}
@@ -813,6 +828,7 @@ export function AudioEffectsSettings() {
                 disabled={!bitcrusher.enabled}
               />
             </EffectSection>
+            )}
           </div>
         </div>
       )}
