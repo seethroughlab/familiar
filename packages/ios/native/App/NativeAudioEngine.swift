@@ -30,12 +30,6 @@ class NativeAudioEngine {
     private let filterNode: AVAudioUnitEQ          // 2-band: highpass + lowpass
     private let reverbPreDelayNode = AVAudioUnitDelay() // Pure delay before reverb for preDelay
 
-    // Custom audio unit nodes (instantiated async after registration)
-    private var chorusNode: AVAudioUnit?
-    private var stereoWidthNode: AVAudioUnit?
-    private var tremoloNode: AVAudioUnit?
-    private var bitcrusherNode: AVAudioUnit?
-    private var customNodesReady = false
 
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
@@ -103,7 +97,6 @@ class NativeAudioEngine {
         setupCompressorNode()
         setupAudioGraph()
         setupRemoteCommands()
-        instantiateCustomAudioUnits()
     }
 
     private func setupEQBands() {
@@ -161,46 +154,6 @@ class NativeAudioEngine {
         compressorNode?.bypass = true
     }
 
-    private func instantiateCustomAudioUnits() {
-        registerCustomAudioUnits()
-
-        let group = DispatchGroup()
-        let descriptions: [(AudioComponentDescription, WritableKeyPath<NativeAudioEngine, AVAudioUnit?>)] = [
-            (ChorusAudioUnit.componentDescription, \.chorusNode),
-            (StereoWidthAudioUnit.componentDescription, \.stereoWidthNode),
-            (TremoloAudioUnit.componentDescription, \.tremoloNode),
-            (BitcrusherAudioUnit.componentDescription, \.bitcrusherNode),
-        ]
-
-        for (desc, keyPath) in descriptions {
-            group.enter()
-            AVAudioUnit.instantiate(with: desc, options: []) { [weak self] unit, error in
-                if let unit = unit {
-                    self?[keyPath: keyPath] = unit
-                }
-                group.leave()
-            }
-        }
-
-        group.notify(queue: .main) { [weak self] in
-            guard let self = self else { return }
-            self.customNodesReady = true
-            // Attach custom nodes to engine
-            if let node = self.chorusNode { self.engine.attach(node) }
-            if let node = self.stereoWidthNode { self.engine.attach(node) }
-            if let node = self.tremoloNode { self.engine.attach(node) }
-            if let node = self.bitcrusherNode { self.engine.attach(node) }
-            // Bypass custom nodes by default
-            self.chorusNode?.auAudioUnit.shouldBypassEffect = true
-            self.stereoWidthNode?.auAudioUnit.shouldBypassEffect = true
-            self.tremoloNode?.auAudioUnit.shouldBypassEffect = true
-            self.bitcrusherNode?.auAudioUnit.shouldBypassEffect = true
-            // Reconnect if a file is loaded
-            if let file = self.audioFile {
-                self.reconnectChain(format: file.processingFormat)
-            }
-        }
-    }
 
     private func setupAudioGraph() {
         engine.attach(playerNode)
@@ -216,12 +169,13 @@ class NativeAudioEngine {
         reverbNode.wetDryMix = 0
         delayNode.wetDryMix = 0
         distortionNode.wetDryMix = 0
+        reverbPreDelayNode.bypass = true     // start bypassed — its lowPassCutoff filters even at 0ms delay
         reverbPreDelayNode.wetDryMix = 100  // pure pass-through
         reverbPreDelayNode.feedback = 0
         reverbPreDelayNode.delayTime = 0
         reverbPreDelayNode.lowPassCutoff = 20000
 
-        // Connect initial chain (custom nodes added later when ready)
+        // Connect initial chain
         let format = engine.mainMixerNode.outputFormat(forBus: 0)
         connectChain(format: format)
 
@@ -229,20 +183,15 @@ class NativeAudioEngine {
     }
 
     /// Build the ordered effect chain and connect nodes sequentially.
-    /// Chain order: playerNode → EQ → Compressor → Distortion → Filter → Chorus
-    ///   → Delay → preDelay → Reverb → StereoWidth → Tremolo → Bitcrusher → mainMixer
+    /// Chain order: playerNode → EQ → Compressor → Distortion → Filter → Delay → preDelay → Reverb → mainMixer
     private func connectChain(format: AVAudioFormat) {
         var chain: [AVAudioNode] = [playerNode, eqNode]
         if let comp = compressorNode { chain.append(comp) }
         chain.append(distortionNode)
         chain.append(filterNode)
-        if let chorus = chorusNode { chain.append(chorus) }
         chain.append(delayNode)
         chain.append(reverbPreDelayNode)
         chain.append(reverbNode)
-        if let sw = stereoWidthNode { chain.append(sw) }
-        if let trem = tremoloNode { chain.append(trem) }
-        if let bc = bitcrusherNode { chain.append(bc) }
         chain.append(engine.mainMixerNode)
 
         for i in 0..<(chain.count - 1) {
@@ -254,8 +203,7 @@ class NativeAudioEngine {
     private func disconnectAllEffectNodes() {
         let nodes: [AVAudioNode?] = [
             playerNode, eqNode, compressorNode, distortionNode, filterNode,
-            chorusNode, delayNode, reverbPreDelayNode, reverbNode,
-            stereoWidthNode, tremoloNode, bitcrusherNode,
+            delayNode, reverbPreDelayNode, reverbNode,
         ]
         for node in nodes {
             if let node = node {
@@ -329,15 +277,13 @@ class NativeAudioEngine {
             return
         }
 
-        // Download audio to temp file (AVAudioPlayerNode requires local files)
-        let tempDir = NSTemporaryDirectory()
-        let fileExtension = sourceURL.pathExtension.isEmpty ? "mp3" : sourceURL.pathExtension
-        let tempPath = (tempDir as NSString).appendingPathComponent("familiar_audio_\(trackId).\(fileExtension)")
-        let tempURL = URL(fileURLWithPath: tempPath)
-
-        // Clean up previous temp file
+        // Clean up previous temp file before starting a new download
         cleanupTempFile()
-        self.tempFileURL = tempURL
+
+        // Download audio to temp file (AVAudioPlayerNode requires local files).
+        // We defer the file extension decision until we know the MIME type from the HTTP response.
+        let tempDir = NSTemporaryDirectory()
+        let tempBaseName = "familiar_audio_\(trackId)"
 
         let task = URLSession.shared.dataTask(with: sourceURL) { [weak self] data, response, error in
             guard let self = self else { return }
@@ -359,6 +305,13 @@ class NativeAudioEngine {
                 }
                 return
             }
+
+            // Determine file extension from the HTTP response MIME type
+            let mimeType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+            let fileExtension = NativeAudioEngine.extensionForMIME(mimeType)
+            let tempPath = (tempDir as NSString).appendingPathComponent("\(tempBaseName).\(fileExtension)")
+            let tempURL = URL(fileURLWithPath: tempPath)
+            self.tempFileURL = tempURL
 
             do {
                 try data.write(to: tempURL)
@@ -553,14 +506,14 @@ class NativeAudioEngine {
     // MARK: - Effects: Reverb
 
     func setReverb(preset: String, wetDryMix: Float, enabled: Bool, preDelay: Float = 0) {
-        // Pre-delay: set on the dedicated pre-delay node
-        reverbPreDelayNode.delayTime = Double(preDelay) / 1000.0 // ms → seconds
-
         if masterBypassed || !enabled {
             reverbNode.bypass = true
+            reverbPreDelayNode.bypass = true
             return
         }
         reverbNode.bypass = false
+        reverbPreDelayNode.bypass = false
+        reverbPreDelayNode.delayTime = Double(preDelay) / 1000.0 // ms → seconds
 
         let avPreset = reverbPreset(from: preset)
         reverbNode.loadFactoryPreset(avPreset)
@@ -661,73 +614,6 @@ class NativeAudioEngine {
         filterNode.bands[1].bandwidth = lowpassQ
     }
 
-    // MARK: - Effects: Chorus
-
-    func setChorus(rate: Float, depth: Float, voices: Int, mix: Float, enabled: Bool) {
-        guard let node = chorusNode else { return }
-        if masterBypassed || !enabled {
-            node.auAudioUnit.shouldBypassEffect = true
-            return
-        }
-        node.auAudioUnit.shouldBypassEffect = false
-        if let tree = node.auAudioUnit.parameterTree {
-            tree.parameter(withAddress: 0)?.value = rate
-            tree.parameter(withAddress: 1)?.value = depth
-            tree.parameter(withAddress: 2)?.value = mix
-            tree.parameter(withAddress: 3)?.value = Float(voices)
-        }
-    }
-
-    // MARK: - Effects: Stereo Width
-
-    func setStereoWidth(width: Float, enabled: Bool) {
-        guard let node = stereoWidthNode else { return }
-        if masterBypassed || !enabled {
-            node.auAudioUnit.shouldBypassEffect = true
-            return
-        }
-        node.auAudioUnit.shouldBypassEffect = false
-        node.auAudioUnit.parameterTree?.parameter(withAddress: 0)?.value = width
-    }
-
-    // MARK: - Effects: Tremolo
-
-    func setTremolo(rate: Float, depth: Float, shape: String, enabled: Bool) {
-        guard let node = tremoloNode else { return }
-        if masterBypassed || !enabled {
-            node.auAudioUnit.shouldBypassEffect = true
-            return
-        }
-        node.auAudioUnit.shouldBypassEffect = false
-        if let tree = node.auAudioUnit.parameterTree {
-            tree.parameter(withAddress: 0)?.value = rate
-            tree.parameter(withAddress: 1)?.value = depth
-            let shapeValue: Float
-            switch shape {
-            case "triangle": shapeValue = 1
-            case "square": shapeValue = 2
-            default: shapeValue = 0  // sine
-            }
-            tree.parameter(withAddress: 2)?.value = shapeValue
-        }
-    }
-
-    // MARK: - Effects: Bitcrusher
-
-    func setBitcrusher(bits: Float, sampleRateReduction: Float, mix: Float, enabled: Bool) {
-        guard let node = bitcrusherNode else { return }
-        if masterBypassed || !enabled {
-            node.auAudioUnit.shouldBypassEffect = true
-            return
-        }
-        node.auAudioUnit.shouldBypassEffect = false
-        if let tree = node.auAudioUnit.parameterTree {
-            tree.parameter(withAddress: 0)?.value = bits
-            tree.parameter(withAddress: 1)?.value = sampleRateReduction
-            tree.parameter(withAddress: 2)?.value = mix
-        }
-    }
-
     // MARK: - Master Bypass
 
     func setMasterBypass(_ bypassed: Bool) {
@@ -736,13 +622,10 @@ class NativeAudioEngine {
             eqNode.bypass = true
             compressorNode?.bypass = true
             filterNode.bypass = true
-            reverbNode.wetDryMix = 0
-            delayNode.wetDryMix = 0
-            distortionNode.wetDryMix = 0
-            chorusNode?.auAudioUnit.shouldBypassEffect = true
-            stereoWidthNode?.auAudioUnit.shouldBypassEffect = true
-            tremoloNode?.auAudioUnit.shouldBypassEffect = true
-            bitcrusherNode?.auAudioUnit.shouldBypassEffect = true
+            reverbNode.bypass = true
+            reverbPreDelayNode.bypass = true
+            delayNode.bypass = true
+            distortionNode.bypass = true
         }
     }
 
@@ -1064,6 +947,20 @@ class NativeAudioEngine {
         fftFrequencyFloats = nil
         fftFrequencyBytes = nil
         fftTimeDomainBytes = nil
+    }
+
+    // MARK: - MIME → Extension
+
+    private static func extensionForMIME(_ mime: String?) -> String {
+        switch mime?.lowercased() {
+        case "audio/mpeg":  return "mp3"
+        case "audio/flac":  return "flac"
+        case "audio/mp4":   return "m4a"
+        case "audio/aac":   return "m4a"
+        case "audio/wav", "audio/x-wav":  return "wav"
+        case "audio/aiff", "audio/x-aiff": return "aif"
+        default:            return "mp3"
+        }
     }
 
     // MARK: - Cleanup

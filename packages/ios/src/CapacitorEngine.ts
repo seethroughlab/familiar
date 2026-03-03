@@ -72,7 +72,9 @@ export class CapacitorEngine implements AudioEngine {
       } catch { /* ignore — timer-based updates will provide it later */ }
     } catch (e) {
       this.consecutiveLoadFailures++;
-      log.error('Failed to load track (native)', e);
+      const cleanUrl = url.split('?')[0]; // strip query params (auth tokens)
+      const errMsg = e instanceof Error ? e.message : String(e);
+      log.error('Failed to load track (native) trackId=%s url=%s err=%s', trackId, cleanUrl, errMsg);
 
       if (this.consecutiveLoadFailures > 3) {
         log.error('Too many consecutive native load failures (%d)', this.consecutiveLoadFailures);

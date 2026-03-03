@@ -22,10 +22,6 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setDistortion", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setCompressor", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setFilter", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setChorus", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setStereoWidth", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setTremolo", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setBitcrusher", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMasterBypass", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setNowPlayingInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPendingTrackInfo", returnType: CAPPluginReturnPromise),
@@ -167,40 +163,6 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
-    @objc func setChorus(_ call: CAPPluginCall) {
-        let rate = call.getFloat("rate") ?? 1.5
-        let depth = call.getFloat("depth") ?? 3
-        let voices = call.getInt("voices") ?? 2
-        let mix = call.getFloat("mix") ?? 0.5
-        let enabled = call.getBool("enabled") ?? false
-        audioEngine.setChorus(rate: rate, depth: depth, voices: voices, mix: mix, enabled: enabled)
-        call.resolve()
-    }
-
-    @objc func setStereoWidth(_ call: CAPPluginCall) {
-        let width = call.getFloat("width") ?? 1
-        let enabled = call.getBool("enabled") ?? false
-        audioEngine.setStereoWidth(width: width, enabled: enabled)
-        call.resolve()
-    }
-
-    @objc func setTremolo(_ call: CAPPluginCall) {
-        let rate = call.getFloat("rate") ?? 4
-        let depth = call.getFloat("depth") ?? 0.5
-        let shape = call.getString("shape") ?? "sine"
-        let enabled = call.getBool("enabled") ?? false
-        audioEngine.setTremolo(rate: rate, depth: depth, shape: shape, enabled: enabled)
-        call.resolve()
-    }
-
-    @objc func setBitcrusher(_ call: CAPPluginCall) {
-        let bits = call.getFloat("bits") ?? 8
-        let sampleRateReduction = call.getFloat("sampleRateReduction") ?? 4
-        let mix = call.getFloat("mix") ?? 1
-        let enabled = call.getBool("enabled") ?? false
-        audioEngine.setBitcrusher(bits: bits, sampleRateReduction: sampleRateReduction, mix: mix, enabled: enabled)
-        call.resolve()
-    }
 
     @objc func setMasterBypass(_ call: CAPPluginCall) {
         let bypassed = call.getBool("bypassed") ?? false

@@ -59,29 +59,6 @@ export interface FamiliarAudioPlugin {
     lowpassQ: number;
     enabled: boolean;
   }): Promise<void>;
-  setChorus(options: {
-    rate: number;
-    depth: number;
-    voices: number;
-    mix: number;
-    enabled: boolean;
-  }): Promise<void>;
-  setStereoWidth(options: {
-    width: number;
-    enabled: boolean;
-  }): Promise<void>;
-  setTremolo(options: {
-    rate: number;
-    depth: number;
-    shape: string;
-    enabled: boolean;
-  }): Promise<void>;
-  setBitcrusher(options: {
-    bits: number;
-    sampleRateReduction: number;
-    mix: number;
-    enabled: boolean;
-  }): Promise<void>;
   setMasterBypass(options: { bypassed: boolean }): Promise<void>;
 
   // Now Playing

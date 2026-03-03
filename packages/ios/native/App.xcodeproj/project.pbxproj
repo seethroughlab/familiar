@@ -17,7 +17,6 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		FA001A022DB0000100000001 /* NativeAudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001A012DB0000100000001 /* NativeAudioEngine.swift */; };
 		FA001A042DB0000100000002 /* FamiliarAudioPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */; };
-		FA001A062DB0000100000003 /* CustomAudioUnits.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001A052DB0000100000003 /* CustomAudioUnits.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,7 +32,6 @@
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		FA001A012DB0000100000001 /* NativeAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudioEngine.swift; sourceTree = "<group>"; };
 		FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamiliarAudioPlugin.swift; sourceTree = "<group>"; };
-		FA001A052DB0000100000003 /* CustomAudioUnits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomAudioUnits.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,7 +70,6 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				FA001A012DB0000100000001 /* NativeAudioEngine.swift */,
 				FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */,
-				FA001A052DB0000100000003 /* CustomAudioUnits.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -167,7 +164,6 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				FA001A022DB0000100000001 /* NativeAudioEngine.swift in Sources */,
 				FA001A042DB0000100000002 /* FamiliarAudioPlugin.swift in Sources */,
-				FA001A062DB0000100000003 /* CustomAudioUnits.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -309,7 +305,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 30;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -332,7 +328,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 30;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (

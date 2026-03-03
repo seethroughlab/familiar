@@ -36,81 +36,55 @@ registerNativeEffectsSync((state: AudioEffectsState) => {
   const bypassed = !state.masterEnabled;
   FamiliarAudio.setMasterBypass({ bypassed });
 
-  if (!bypassed) {
-    FamiliarAudio.setEQ({
-      lowGain: state.eq.lowGain,
-      midGain: state.eq.midGain,
-      highGain: state.eq.highGain,
-      enabled: state.eq.enabled,
-    });
+  // Always sync all effects — keeps native state consistent even when master is bypassed.
+  // Each native effect method checks masterBypassed internally and bypasses its node.
+  FamiliarAudio.setEQ({
+    lowGain: state.eq.lowGain,
+    midGain: state.eq.midGain,
+    highGain: state.eq.highGain,
+    enabled: state.eq.enabled,
+  });
 
-    FamiliarAudio.setCompressor({
-      threshold: state.compressor.threshold,
-      ratio: state.compressor.ratio,
-      attack: state.compressor.attack,
-      release: state.compressor.release,
-      knee: state.compressor.knee,
-      makeupGain: state.compressor.makeupGain,
-      enabled: state.compressor.enabled,
-    });
+  FamiliarAudio.setCompressor({
+    threshold: state.compressor.threshold,
+    ratio: state.compressor.ratio,
+    attack: state.compressor.attack,
+    release: state.compressor.release,
+    knee: state.compressor.knee,
+    makeupGain: state.compressor.makeupGain,
+    enabled: state.compressor.enabled,
+  });
 
-    FamiliarAudio.setReverb({
-      preset: state.reverb.preset,
-      wetDryMix: state.reverb.mix,
-      enabled: state.reverb.enabled,
-      preDelay: state.reverb.preDelay,
-    });
+  FamiliarAudio.setReverb({
+    preset: state.reverb.preset,
+    wetDryMix: state.reverb.mix,
+    enabled: state.reverb.enabled,
+    preDelay: state.reverb.preDelay,
+  });
 
-    FamiliarAudio.setDelay({
-      time: state.delay.time,
-      feedback: state.delay.feedback,
-      wetDryMix: state.delay.mix,
-      enabled: state.delay.enabled,
-      pingPong: state.delay.pingPong,
-    });
+  FamiliarAudio.setDelay({
+    time: state.delay.time,
+    feedback: state.delay.feedback,
+    wetDryMix: state.delay.mix,
+    enabled: state.delay.enabled,
+    pingPong: state.delay.pingPong,
+  });
 
-    FamiliarAudio.setFilter({
-      highpassFreq: state.filter.highpassFreq,
-      lowpassFreq: state.filter.lowpassFreq,
-      highpassQ: state.filter.highpassQ,
-      lowpassQ: state.filter.lowpassQ,
-      enabled: state.filter.enabled,
-    });
+  FamiliarAudio.setFilter({
+    highpassFreq: state.filter.highpassFreq,
+    lowpassFreq: state.filter.lowpassFreq,
+    highpassQ: state.filter.highpassQ,
+    lowpassQ: state.filter.lowpassQ,
+    enabled: state.filter.enabled,
+  });
 
-    FamiliarAudio.setDistortion({
-      preset: state.saturation.type,
-      wetDryMix: state.saturation.mix,
-      enabled: state.saturation.enabled,
-      drive: state.saturation.drive,
-    });
+  FamiliarAudio.setDistortion({
+    preset: state.saturation.type,
+    wetDryMix: state.saturation.mix,
+    enabled: state.saturation.enabled,
+    drive: state.saturation.drive,
+  });
 
-    FamiliarAudio.setChorus({
-      rate: state.chorus.rate,
-      depth: state.chorus.depth,
-      voices: state.chorus.voices,
-      mix: state.chorus.mix,
-      enabled: state.chorus.enabled,
-    });
-
-    FamiliarAudio.setStereoWidth({
-      width: state.stereoWidth.width,
-      enabled: state.stereoWidth.enabled,
-    });
-
-    FamiliarAudio.setTremolo({
-      rate: state.tremolo.rate,
-      depth: state.tremolo.depth,
-      shape: state.tremolo.shape,
-      enabled: state.tremolo.enabled,
-    });
-
-    FamiliarAudio.setBitcrusher({
-      bits: state.bitcrusher.bits,
-      sampleRateReduction: state.bitcrusher.sampleRateReduction,
-      mix: state.bitcrusher.mix,
-      enabled: state.bitcrusher.enabled,
-    });
-  }
 });
 
 // Global handler for unhandled promise rejections
