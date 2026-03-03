@@ -29,13 +29,13 @@ done
 # Build frontend if needed
 if [ "$DEPLOY_FRONTEND" = true ]; then
     echo "Building frontend..."
-    cd frontend && npm run build && cd ..
+    pnpm --filter @familiar/web run build
 
     echo "Syncing frontend to $NAS_HOST..."
     rsync -avz --delete \
         --exclude 'node_modules' \
         --exclude '.git' \
-        frontend/dist/ root@$NAS_HOST:$REMOTE_PATH/frontend/dist/
+        packages/web/dist/ root@$NAS_HOST:$REMOTE_PATH/frontend/dist/
 
 fi
 

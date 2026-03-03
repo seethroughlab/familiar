@@ -71,19 +71,6 @@ jobs:
             type=sha,prefix=
             type=raw,value=latest,enable=${{ github.ref == format('refs/tags/{0}', github.event.inputs.version) || startsWith(github.ref, 'refs/tags/v') }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build frontend
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-
       - name: Get version from tag
         id: version
         run: |

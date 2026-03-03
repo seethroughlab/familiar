@@ -2,21 +2,26 @@
 # Builds both frontend and backend into a single production image
 
 # =============================================================================
-# Stage 1: Build frontend
+# Stage 1: Build frontend (pnpm workspace)
 # =============================================================================
 FROM node:20-alpine AS frontend-builder
 
-WORKDIR /app/frontend
+RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy package files
-COPY frontend/package*.json ./
+WORKDIR /app
 
-# Install dependencies
-RUN npm ci
+# Copy workspace config and package files for dependency caching
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY packages/frontend/package.json packages/frontend/
+COPY packages/web/package.json packages/web/
+
+# Install dependencies (only what @familiar/web needs)
+RUN pnpm install --frozen-lockfile --filter @familiar/web...
 
 # Copy source and build
-COPY frontend/ ./
-RUN npm run build
+COPY packages/frontend/ packages/frontend/
+COPY packages/web/ packages/web/
+RUN pnpm --filter @familiar/web run build
 
 # =============================================================================
 # Stage 2: Python base with uv
@@ -91,7 +96,7 @@ COPY backend/alembic.ini ./
 COPY backend/migrations ./migrations
 
 # Copy built frontend
-COPY --from=frontend-builder /app/frontend/dist ./static
+COPY --from=frontend-builder /app/packages/web/dist ./static
 
 # Download silero-vad ONNX model (~2MB) for voice activity detection
 RUN mkdir -p /app/data/models \

@@ -1,7 +1,7 @@
 # Familiar - Development Makefile
 # For local development and quick deploys to NAS
 
-.PHONY: help dev dev-remote deploy-dev deploy-frontend deploy-backend release-testflight deploy-device
+.PHONY: help dev dev-remote build deploy-dev deploy-frontend deploy-backend release-testflight deploy-device
 
 help:
 	@echo "Familiar Development Commands"
@@ -25,11 +25,15 @@ dev:
 	@echo "Run these in separate terminals:"
 	@echo "  Terminal 1: docker compose up -d  (database + redis)"
 	@echo "  Terminal 2: cd backend && make run"
-	@echo "  Terminal 3: cd frontend && npm run dev"
+	@echo "  Terminal 3: cd packages/web && pnpm dev"
 
 # Frontend dev server proxying to remote NAS backend
 dev-remote:
-	cd frontend && VITE_API_TARGET=http://openmediavault:4400 npm run dev
+	cd packages/web && VITE_API_TARGET=http://openmediavault:4400 pnpm dev
+
+# Build web frontend
+build:
+	pnpm --filter @familiar/web run build
 
 # Quick deploy to NAS (build + rsync + restart)
 deploy-dev:
@@ -45,8 +49,8 @@ deploy-backend:
 
 # Build and upload iOS app to TestFlight
 release-testflight:
-	./scripts/release-testflight.sh
+	cd packages/ios && ./scripts/release-testflight.sh
 
 # Build and install iOS app directly to connected device
 deploy-device:
-	./scripts/deploy-device.sh
+	cd packages/ios && ./scripts/deploy-device.sh
