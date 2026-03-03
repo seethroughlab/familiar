@@ -3,7 +3,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'com.familiar.player',
   appName: 'Familiar',
-  webDir: '../web/dist',
+  webDir: 'dist',
   ios: {
     path: 'native',
   },

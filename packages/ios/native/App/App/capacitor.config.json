@@ -1,7 +1,7 @@
 {
 	"appId": "com.familiar.player",
 	"appName": "Familiar",
-	"webDir": "../web/dist",
+	"webDir": "dist",
 	"ios": {
 		"path": "native"
 	},
@@ -15,6 +15,7 @@
 		}
 	},
 	"packageClassList": [
-		"PreferencesPlugin"
+		"PreferencesPlugin",
+		"FamiliarAudioPlugin"
 	]
 }

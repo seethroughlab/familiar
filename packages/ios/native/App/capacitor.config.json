@@ -2,6 +2,9 @@
 	"appId": "com.familiar.player",
 	"appName": "Familiar",
 	"webDir": "dist",
+	"ios": {
+		"path": "native"
+	},
 	"server": {
 		"iosScheme": "capacitor",
 		"cleartext": true

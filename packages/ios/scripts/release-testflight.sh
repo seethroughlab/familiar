@@ -77,7 +77,7 @@ green "Build number → $BUILD_NUMBER"
 step "Building frontend"
 
 cd "$PROJECT_ROOT"
-pnpm --filter @familiar/web run build:cap
+pnpm --filter @familiar/ios run build:cap
 green "Frontend build complete"
 
 # ── Step 3: Capacitor sync ────────────────────────────────────────────────────
@@ -90,12 +90,19 @@ npx cap copy ios
 
 # cap copy regenerates capacitor.config.json but doesn't copy packageClassList
 # from the TS config. Re-add local plugins that aren't in npm packages.
-CAP_CONFIG="$IOS_DIR/App/capacitor.config.json"
+CAP_CONFIG="$IOS_DIR/App/App/capacitor.config.json"
 if ! grep -q 'FamiliarAudioPlugin' "$CAP_CONFIG"; then
     sed -i '' 's/"PreferencesPlugin"/"PreferencesPlugin",\
 \t\t"FamiliarAudioPlugin"/' "$CAP_CONFIG"
     green "Re-added FamiliarAudioPlugin to native config"
 fi
+
+# cap copy writes to native/App/App/ (Capacitor's standard double-nesting),
+# but this project's Xcode layout reads from native/App/ (single nesting).
+# Sync the web assets to where Xcode actually bundles them.
+rsync -a --delete "$IOS_DIR/App/App/public/" "$IOS_DIR/App/public/"
+cp "$IOS_DIR/App/App/capacitor.config.json" "$IOS_DIR/App/capacitor.config.json"
+green "Synced web assets to Xcode bundle directory"
 
 green "Capacitor sync complete"
 
