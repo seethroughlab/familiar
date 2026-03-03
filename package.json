@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @familiar/web dev",
+    "dev:remote": "pnpm --filter @familiar/web dev:remote",
+    "build": "pnpm --filter @familiar/web build",
+    "build:cap": "pnpm --filter @familiar/web build:cap",
+    "lint": "pnpm --filter @familiar/frontend lint",
+    "test": "pnpm --filter @familiar/frontend test",
+    "test:watch": "pnpm --filter @familiar/frontend test:watch"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

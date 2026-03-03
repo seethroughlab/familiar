@@ -5,7 +5,7 @@ An LLM-powered local music player that combines library management with AI-power
 ## Architecture
 
 - **Backend**: Python FastAPI + PostgreSQL (pgvector) + Redis
-- **Frontend**: React + TypeScript + Vite + Tailwind + Zustand
+- **Frontend**: React + TypeScript + Vite + Tailwind + Zustand (pnpm workspace monorepo)
 - **Analysis**: Audio embeddings and features extracted via librosa/torch
 - **LLM**: Claude API with tool-use
 - **Offline**: IndexedDB (Dexie) for track caching, download queue, playlist cache
@@ -13,25 +13,38 @@ An LLM-powered local music player that combines library management with AI-power
 ## Key Directories
 
 ```
+packages/
+├── frontend/              # Shared React code (components, hooks, stores, types)
+│   └── src/
+│       ├── components/    # React components
+│       ├── hooks/         # Custom hooks (useFavorites, useAutoDownload, etc.)
+│       ├── stores/        # Zustand state stores (playerStore, downloadStore, audioEffectsStore)
+│       ├── player/        # Audio engine abstraction, playback hooks
+│       ├── services/      # offlineService, playlistCache, syncService, profileService
+│       └── db/            # IndexedDB/Dexie storage
+├── web/                   # Web entry point + Web Audio engine + PWA
+│   ├── src/
+│   │   ├── main.tsx       # Registers WebAudioEngine, sets up SW
+│   │   ├── WebAudioEngine.ts
+│   │   └── audioEffects/  # Web Audio effect processors (10 effects)
+│   ├── e2e/               # Playwright E2E tests
+│   └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
+└── ios/                   # Capacitor + native Swift + iOS deploy
+    ├── src/
+    │   ├── main.tsx       # Registers CapacitorEngine + native effects sync
+    │   ├── CapacitorEngine.ts
+    │   └── plugins/familiarAudio.ts
+    ├── native/            # Xcode project + Swift code
+    ├── capacitor.config.ts
+    └── scripts/           # deploy-device.sh, release-testflight.sh
 backend/
 ├── app/
-│   ├── api/routes/      # FastAPI endpoints (~29 route files)
-│   ├── db/models.py     # SQLAlchemy models
-│   └── services/        # Business logic
-│       └── llm/         # LLM module (service.py, executor.py, tools.py, providers.py)
-├── migrations/versions/ # Alembic database migrations
-└── tests/               # pytest tests
-frontend/
-├── src/
-│   ├── components/      # React components
-│   ├── hooks/           # Custom hooks (useAudioEngine, useFavorites, useAutoDownload, etc.)
-│   ├── stores/          # Zustand state stores (playerStore, downloadStore, audioEffectsStore)
-│   ├── services/        # offlineService, playlistCache, syncService, profileService
-│   └── db/              # IndexedDB/Dexie storage
-├── e2e/                 # Playwright E2E tests
-dev/
-└── scripts/
-    └── deploy-dev.sh    # Fast deploy to NAS (~16-30s)
+│   ├── api/routes/        # FastAPI endpoints (~29 route files)
+│   ├── db/models.py       # SQLAlchemy models
+│   └── services/          # Business logic
+│       └── llm/           # LLM module (service.py, executor.py, tools.py, providers.py)
+├── migrations/versions/   # Alembic database migrations
+└── tests/                 # pytest tests
 ```
 
 ## Key Files
@@ -46,18 +59,32 @@ dev/
 | Library scanning | `backend/app/services/scanner.py` |
 | Smart playlists | `backend/app/services/smart_playlists.py` |
 | Background tasks | `backend/app/services/background.py`, `services/tasks.py` |
-| Audio playback | `frontend/src/hooks/useAudioEngine.ts` |
-| Player state | `frontend/src/stores/playerStore.ts` |
-| Download queue | `frontend/src/stores/downloadStore.ts` |
-| Offline storage | `frontend/src/services/offlineService.ts` |
-| Playlist caching | `frontend/src/services/playlistCache.ts` |
-| Favorites | `frontend/src/hooks/useFavorites.ts` |
-| IndexedDB schema | `frontend/src/db/index.ts` |
-| Visualizers | `frontend/src/components/Visualizer/` |
-| Full player | `frontend/src/components/FullPlayer/` |
-| Discovery | `frontend/src/components/Discovery/` |
-| Smart playlists UI | `frontend/src/components/SmartPlaylists/` |
-| Settings | `frontend/src/components/Settings/` |
+| Audio engine abstraction | `packages/frontend/src/player/audio/types.ts`, `createEngine.ts` |
+| Audio playback | `packages/frontend/src/player/useAudioEngine.ts` |
+| Web Audio engine | `packages/web/src/WebAudioEngine.ts` |
+| iOS Audio engine | `packages/ios/src/CapacitorEngine.ts` |
+| Audio effects (web) | `packages/web/src/audioEffects/` |
+| Player state | `packages/frontend/src/stores/playerStore.ts` |
+| Download queue | `packages/frontend/src/stores/downloadStore.ts` |
+| Offline storage | `packages/frontend/src/services/offlineService.ts` |
+| Playlist caching | `packages/frontend/src/services/playlistCache.ts` |
+| Favorites | `packages/frontend/src/hooks/useFavorites.ts` |
+| IndexedDB schema | `packages/frontend/src/db/index.ts` |
+| Visualizers | `packages/frontend/src/components/Visualizer/` |
+| Full player | `packages/frontend/src/components/FullPlayer/` |
+| Discovery | `packages/frontend/src/components/Discovery/` |
+| Smart playlists UI | `packages/frontend/src/components/SmartPlaylists/` |
+| Settings | `packages/frontend/src/components/Settings/` |
+
+## Frontend Architecture
+
+The frontend uses a **registration pattern** for platform-specific code. The shared `@familiar/frontend` package has zero `@capacitor` dependencies:
+
+- **`createEngine.ts`** — `registerEngineFactory(fn)` sets the audio engine constructor
+- **`audioEffectsStore.ts`** — `registerNativeEffectsSync(cb)` for iOS native effect sync
+- **`api/base.ts`** — `registerPreferencesProvider(p)` for Capacitor Preferences
+
+Each platform entry point (`packages/web/src/main.tsx`, `packages/ios/src/main.tsx`) registers its implementations before calling `renderApp()`.
 
 ## Common Tasks
 
@@ -93,7 +120,7 @@ def _column_exists(table_name: str, column_name: str) -> bool:
 5. `deploy-dev.sh` auto-runs `alembic upgrade head` on deploy
 
 ### Add a new settings section
-1. Add component in `frontend/src/components/Settings/`
+1. Add component in `packages/frontend/src/components/Settings/`
 2. Export from `Settings/index.tsx`
 3. Add to settings tabs in main Settings component
 
@@ -101,10 +128,10 @@ def _column_exists(table_name: str, column_name: str) -> bool:
 Screenshots for the README are auto-generated using Playwright:
 
 1. Ensure backend is running: `cd backend && make run`
-2. Start frontend dev server: `cd frontend && npm run dev`
-3. Run screenshot script: `cd frontend && BASE_URL=http://localhost:3000 npm run screenshots`
+2. Start frontend dev server: `cd packages/web && pnpm dev`
+3. Run screenshot script: `cd packages/web && BASE_URL=http://localhost:3000 npx playwright test --grep="screenshot"`
 
-Screenshots are saved to `screenshots/` directory. The script is in `frontend/e2e/screenshots.spec.ts`.
+Screenshots are saved to `screenshots/` directory. The script is in `packages/web/e2e/screenshots.spec.ts`.
 
 To add new screenshots:
 1. Add a new test case to `screenshots.spec.ts`
@@ -140,8 +167,8 @@ MUSIC_LIBRARY_PATH=/data/music
 # Backend (from backend/)
 DATABASE_URL="..." REDIS_URL="..." uv run uvicorn app.main:app --reload --port 4400
 
-# Frontend (from frontend/)
-npm run dev
+# Frontend (from packages/web/)
+pnpm dev
 ```
 
 ## Development Workflow
@@ -156,7 +183,7 @@ docker compose -f docker/docker-compose.yml up -d
 cd backend && make run
 
 # Terminal 3: Frontend dev server
-cd frontend && npm run dev
+cd packages/web && pnpm dev
 ```
 
 ### Testing Against Remote NAS (openmediavault)
@@ -181,13 +208,20 @@ make deploy-dev  # Build + rsync to NAS + restart (~16-30s)
 make test                    # pytest with coverage
 uv run pytest tests/ -x -q   # quick run, stop on first failure
 
-# Frontend unit tests (from frontend/)
-npm run test                 # vitest run
-npm run test:watch           # vitest watch mode
+# Frontend unit tests (from packages/frontend/)
+pnpm test                   # vitest run
+pnpm test:watch             # vitest watch mode
 
 # Frontend E2E tests (requires backend + frontend running)
-cd frontend && npm run test:e2e      # Playwright headless
-cd frontend && npm run test:e2e:ui   # Playwright UI mode
+cd packages/web && npx playwright test                # Playwright headless
+cd packages/web && npx playwright test --ui           # Playwright UI mode
+```
+
+### iOS Development
+
+```bash
+make deploy-device            # Build + install to connected iPhone (~2 min)
+make release-testflight       # Build + upload to TestFlight
 ```
 
 ## Code Conventions
@@ -200,5 +234,6 @@ cd frontend && npm run test:e2e:ui   # Playwright UI mode
 - SmartPlaylistService uses `**kwargs` with `setattr()` for flexible updates - new model fields work automatically
 - Offline-first: `offlineService.ts` manages IndexedDB track storage, `playlistCache.ts` caches playlists, `downloadStore.ts` manages download queue with persistence and resume
 - iOS Safari flexbox: nested `flex-1` inside `flex-col` needs explicit `min-h-0` for `overflow-y-auto` to work - add at every level of the flex chain
+- Platform-specific code uses registration pattern — never import `@capacitor` packages in `@familiar/frontend`
 
 - When fixing a bug, ask yourself: can we add a test that could have caught this?

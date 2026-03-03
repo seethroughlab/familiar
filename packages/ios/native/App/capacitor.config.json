@@ -1,0 +1,18 @@
+{
+	"appId": "com.familiar.player",
+	"appName": "Familiar",
+	"webDir": "dist",
+	"server": {
+		"iosScheme": "capacitor",
+		"cleartext": true
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		}
+	},
+	"packageClassList": [
+		"PreferencesPlugin",
+		"FamiliarAudioPlugin"
+	]
+}
