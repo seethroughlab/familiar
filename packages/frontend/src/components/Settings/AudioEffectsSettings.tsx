@@ -127,10 +127,10 @@ const REVERB_PRESETS: { value: ReverbPreset; label: string }[] = [
   { value: 'cathedral', label: 'Cathedral' },
 ];
 
-// Effects supported on native AVAudioEngine (phase 1): EQ, reverb, delay, saturation
-const isNative = getCurrentMode() === 'native';
-
 export function AudioEffectsSettings() {
+  // Effects supported on native AVAudioEngine (phase 1): EQ, reverb, delay, saturation
+  // Must be inside component so it evaluates at render time, not module load time
+  const isNative = getCurrentMode() === 'native';
   const [savePresetName, setSavePresetName] = useState('');
   const [showSavePreset, setShowSavePreset] = useState(false);
   const effectsAvailable = areAudioEffectsAvailable();
