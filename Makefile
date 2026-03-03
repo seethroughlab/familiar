@@ -1,7 +1,7 @@
 # Familiar - Development Makefile
 # For local development and quick deploys to NAS
 
-.PHONY: help dev dev-remote deploy-dev deploy-frontend deploy-backend release-testflight
+.PHONY: help dev dev-remote deploy-dev deploy-frontend deploy-backend release-testflight deploy-device
 
 help:
 	@echo "Familiar Development Commands"
@@ -14,6 +14,10 @@ help:
 	@echo "  make deploy-dev      - Build & deploy everything (~30s)"
 	@echo "  make deploy-frontend - Deploy frontend only"
 	@echo "  make deploy-backend  - Deploy backend only"
+	@echo ""
+	@echo "iOS:"
+	@echo "  make deploy-device      - Build & install to connected iPhone (~2 min)"
+	@echo "  make release-testflight - Build & upload to TestFlight"
 
 # Local development - runs frontend and backend locally
 dev:
@@ -42,3 +46,7 @@ deploy-backend:
 # Build and upload iOS app to TestFlight
 release-testflight:
 	./scripts/release-testflight.sh
+
+# Build and install iOS app directly to connected device
+deploy-device:
+	./scripts/deploy-device.sh

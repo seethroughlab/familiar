@@ -174,7 +174,7 @@ class NativeAudioEngine {
 
         for (desc, keyPath) in descriptions {
             group.enter()
-            AVAudioUnit.instantiate(with: desc, options: .loadInProcess) { [weak self] unit, error in
+            AVAudioUnit.instantiate(with: desc, options: []) { [weak self] unit, error in
                 if let unit = unit {
                     self?[keyPath: keyPath] = unit
                 }
