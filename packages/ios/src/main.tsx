@@ -1,3 +1,4 @@
+import '@familiar/frontend/src/index.css';
 import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
 import { registerNativeEffectsSync } from '@familiar/frontend/src/stores/audioEffectsStore';
 import { registerPreferencesProvider } from '@familiar/frontend/src/api/base';

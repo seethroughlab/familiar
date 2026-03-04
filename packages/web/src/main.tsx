@@ -1,3 +1,4 @@
+import '@familiar/frontend/src/index.css';
 import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
 import { createLogger } from '@familiar/frontend/src/utils/logger';
 import { renderApp } from '@familiar/frontend/src/renderApp';
