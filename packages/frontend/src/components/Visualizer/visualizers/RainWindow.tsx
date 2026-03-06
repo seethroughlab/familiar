@@ -16,6 +16,7 @@ import { useArtworkPalette } from '../hooks/useArtworkPalette';
 import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+import { FrameScheduler } from '../effects/FrameScheduler';
 
 const mobile = isMobile();
 
@@ -652,6 +653,8 @@ function RainWindowScene({ palette }: { palette: string[] }) {
           vignetteIntensity={0.4}
         />
       )}
+
+      <FrameScheduler />
     </>
   );
 }
@@ -669,6 +672,7 @@ export function RainWindow({ artworkUrl }: VisualizerProps) {
         camera={{ position: [0, 0, 1], fov: 90 }}
         dpr={mobile ? [1, 1] : [1, 2]}
         gl={{ antialias: false, powerPreference: 'high-performance' }}
+        frameloop={mobile ? 'demand' : 'always'}
       >
         <RainWindowScene palette={palette} />
       </Canvas>

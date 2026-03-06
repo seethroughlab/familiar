@@ -1,5 +1,8 @@
 import { useEffect } from 'react';
 import { getAudioAnalyser, getAudioContext } from '../player/audio/engineInstance';
+import { isMobile } from '../utils/platform';
+
+const mobile = isMobile();
 
 export interface AudioAnalysisData {
   frequencyData: Uint8Array;
@@ -21,6 +24,7 @@ const sharedAudioDataRef: { current: AudioAnalysisData | null } = { current: nul
 let subscriberCount = 0;
 let loopRunning = false;
 let animationFrameId: number | undefined;
+let lastAnalyseTime = 0;
 
 // Persistent output object (mutated in place, buffers reused every frame)
 let sharedData: AudioAnalysisData | null = null;
@@ -78,6 +82,13 @@ function computeBands(freqData: Uint8Array, binCount: number): void {
 function analyseLoop() {
   if (!loopRunning) return;
   animationFrameId = requestAnimationFrame(analyseLoop);
+
+  // Throttle analysis work to ~30fps on mobile (still re-queues rAF above)
+  if (mobile) {
+    const now = performance.now();
+    if (now - lastAnalyseTime < 33) return;
+    lastAnalyseTime = now;
+  }
 
   // --- Native analysis path (iOS Capacitor) ---
   if (nativeFrequencyData && nativeTimeDomainData) {

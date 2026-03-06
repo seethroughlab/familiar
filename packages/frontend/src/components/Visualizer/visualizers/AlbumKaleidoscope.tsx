@@ -16,6 +16,7 @@ import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser'
 import { isMobile, isNativeApp } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+import { FrameScheduler } from '../effects/FrameScheduler';
 
 const mobile = isMobile();
 
@@ -431,6 +432,8 @@ function KaleidoscopeScene({ artworkUrl }: { artworkUrl: string }) {
           vignetteIntensity={0.4}
         />
       )}
+
+      <FrameScheduler />
     </>
   );
 }
@@ -493,6 +496,8 @@ function FallbackScene() {
           vignetteIntensity={0.5}
         />
       )}
+
+      <FrameScheduler />
     </>
   );
 }
@@ -543,6 +548,7 @@ export function AlbumKaleidoscope({ artworkUrl }: VisualizerProps) {
         camera={{ position: [0, 0, 5], fov: 50 }}
         gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
         dpr={mobile ? [1, 1] : [1, 2]}
+        frameloop={mobile ? 'demand' : 'always'}
       >
         {resolvedUrl ? (
           <KaleidoscopeScene artworkUrl={resolvedUrl} />

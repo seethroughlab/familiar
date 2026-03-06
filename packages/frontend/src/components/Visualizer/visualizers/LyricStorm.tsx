@@ -17,6 +17,7 @@ import { usePlayerStore } from '../../../stores/playerStore';
 import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+import { FrameScheduler } from '../effects/FrameScheduler';
 
 const mobile = isMobile();
 
@@ -365,6 +366,8 @@ function LyricStormScene({
           vignetteIntensity={0.4}
         />
       )}
+
+      <FrameScheduler />
     </>
   );
 }
@@ -512,6 +515,7 @@ export function LyricStorm({ lyrics, track }: VisualizerProps) {
         camera={{ position: [0, 0, 15], fov: 50 }}
         gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
         dpr={mobile ? [1, 1] : [1, 2]}
+        frameloop={mobile ? 'demand' : 'always'}
       >
         <LyricStormScene
           allWords={allWords}

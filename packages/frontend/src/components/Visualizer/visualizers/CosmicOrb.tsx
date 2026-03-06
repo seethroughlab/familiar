@@ -19,6 +19,7 @@ import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { GPUParticles } from '../effects/GPUParticles';
+import { FrameScheduler } from '../effects/FrameScheduler';
 
 const mobile = isMobile();
 
@@ -177,8 +178,9 @@ function CircularWaveform({ color }: { color: string }) {
   useAudioAnalyser(true);
   const timeRef = useRef(0);
 
+  const segments = mobile ? 64 : 256;
+
   const geometry = useMemo(() => {
-    const segments = 256;
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(segments * 3);
 
@@ -191,7 +193,7 @@ function CircularWaveform({ color }: { color: string }) {
 
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return geo;
-  }, []);
+  }, [segments]);
 
   const material = useMemo(() => {
     return new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 });
@@ -237,8 +239,9 @@ function SecondaryWaveform({ color }: { color: string }) {
   useAudioAnalyser(true);
   const timeRef = useRef(0);
 
+  const segments = mobile ? 64 : 256;
+
   const geometry = useMemo(() => {
-    const segments = 256;
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(segments * 3);
 
@@ -251,7 +254,7 @@ function SecondaryWaveform({ color }: { color: string }) {
 
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return geo;
-  }, []);
+  }, [segments]);
 
   const material = useMemo(() => {
     return new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.6 });
@@ -332,7 +335,7 @@ function ReactiveOrb({ palette }: { palette: string[] }) {
 
   return (
     <mesh ref={meshRef}>
-      <icosahedronGeometry args={[1.2, 4]} />
+      <icosahedronGeometry args={[1.2, mobile ? 2 : 4]} />
       {/* @ts-expect-error - Custom R3F element registered via extend() */}
       <orbMaterial
         ref={materialRef}
@@ -362,7 +365,7 @@ function GlowingCore({ color }: { color: string }) {
 
   return (
     <mesh ref={meshRef}>
-      <sphereGeometry args={[1, 32, 32]} />
+      <sphereGeometry args={[1, mobile ? 8 : 32, mobile ? 8 : 32]} />
       <meshBasicMaterial
         color={color}
         transparent
@@ -378,7 +381,7 @@ function Starfield() {
   const timeRef = useRef(0);
 
   const { positions, sizes, twinklePhases } = useMemo(() => {
-    const count = 500;
+    const count = mobile ? 150 : 500;
     const positions = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
     const twinklePhases = new Float32Array(count);
@@ -411,12 +414,15 @@ function Starfield() {
     if (!starsRef.current) return;
     timeRef.current += delta;
 
-    const sizeAttr = starsRef.current.geometry.attributes.size;
-    for (let i = 0; i < sizes.length; i++) {
-      const twinkle = Math.sin(timeRef.current * 2 + twinklePhases[i]) * 0.3 + 0.7;
-      sizeAttr.setX(i, sizes[i] * twinkle);
+    // Skip per-star twinkle update on mobile — just rotate
+    if (!mobile) {
+      const sizeAttr = starsRef.current.geometry.attributes.size;
+      for (let i = 0; i < sizes.length; i++) {
+        const twinkle = Math.sin(timeRef.current * 2 + twinklePhases[i]) * 0.3 + 0.7;
+        sizeAttr.setX(i, sizes[i] * twinkle);
+      }
+      sizeAttr.needsUpdate = true;
     }
-    sizeAttr.needsUpdate = true;
 
     starsRef.current.rotation.y += delta * 0.01;
   });
@@ -481,7 +487,8 @@ function CosmicOrbScene({ palette }: { palette: string[] }) {
   return (
     <>
       <color attach="background" args={[bgColor]} />
-      <fog attach="fog" args={[fogColor, 8, 30]} />
+      {/* Fog disabled on mobile — per-pixel depth cost not worth it */}
+      {!mobile && <fog attach="fog" args={[fogColor, 8, 30]} />}
 
       <ambientLight intensity={0.2} />
       <pointLight position={[10, 10, 10]} intensity={1} color={palette[0]} />
@@ -501,7 +508,7 @@ function CosmicOrbScene({ palette }: { palette: string[] }) {
 
       {/* GPU Particles with album colors (reduced count on mobile) */}
       <GPUParticles
-        count={mobile ? 1000 : 3000}
+        count={mobile ? 250 : 3000}
         size={0.025}
         color={palette[0]}
         secondaryColor={palette[1] || palette[0]}
@@ -531,6 +538,8 @@ function CosmicOrbScene({ palette }: { palette: string[] }) {
           vignetteIntensity={0.4}
         />
       )}
+
+      <FrameScheduler />
     </>
   );
 }
@@ -552,6 +561,7 @@ export function CosmicOrb({ artworkUrl }: VisualizerProps) {
         camera={{ position: [0, 1, 7], fov: 60 }}
         gl={{ antialias: !mobile, alpha: true, powerPreference: 'high-performance' }}
         dpr={mobile ? [1, 1] : [1, 2]}
+        frameloop={mobile ? 'demand' : 'always'}
       >
         <CosmicOrbScene palette={palette} />
       </Canvas>

@@ -14,6 +14,7 @@ import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser'
 import { isMobile } from '../../../utils/platform';
 import { registerVisualizer, type VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
+import { FrameScheduler } from '../effects/FrameScheduler';
 
 const mobile = isMobile();
 
@@ -25,6 +26,87 @@ const softLimit = (value: number, threshold: number, max: number): number => {
   return threshold + range * (1 - Math.exp(-excess / range));
 };
 
+
+// Mobile: single instanced draw call, MeshBasicMaterial, no spotlights
+function FrequencyBarsMobileScene() {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const timeRef = useRef(0);
+  const currentScales = useRef(new Float32Array(128).fill(0.1));
+
+  useAudioAnalyser(true);
+
+  const barCount = 128;
+  const barWidth = 0.06;
+  const spacing = 0.015;
+  const totalWidth = barCount * (barWidth + spacing);
+
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const tempColor = useMemo(() => new THREE.Color(), []);
+
+  useFrame((_, delta) => {
+    if (!meshRef.current) return;
+    timeRef.current += delta;
+
+    const audioData = getAudioData();
+    const frequencyData = audioData?.frequencyData;
+    const bass = audioData?.bass ?? 0;
+
+    for (let i = 0; i < barCount; i++) {
+      let value: number;
+      if (frequencyData) {
+        const usableBins = Math.floor(frequencyData.length * 0.75);
+        const dataIndex = Math.floor((i / barCount) * usableBins);
+        value = frequencyData[dataIndex] / 255;
+      } else {
+        value = (Math.sin(timeRef.current * 3 + i * 0.15) + 1) / 2;
+      }
+
+      const targetHeight = 0.1 + value * 4;
+      currentScales.current[i] = THREE.MathUtils.lerp(currentScales.current[i], targetHeight, 0.25);
+      const h = currentScales.current[i];
+
+      const x = i * (barWidth + spacing) - totalWidth / 2;
+      dummy.position.set(x, h / 2 - 1, 0);
+      dummy.scale.set(barWidth, h, barWidth);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
+
+      const t = i / barCount;
+      const hue = 0.5 + t * 0.4;
+      const rawIntensity = 0.3 + value * 0.7 + bass * 0.3;
+      const lightness = Math.min(0.45 + rawIntensity * 0.25, 0.75);
+      tempColor.setHSL(hue, 0.8, lightness);
+      meshRef.current.setColorAt(i, tempColor);
+    }
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
+    if (meshRef.current.instanceColor) {
+      meshRef.current.instanceColor.needsUpdate = true;
+    }
+  });
+
+  return (
+    <>
+      <color attach="background" args={['#050510']} />
+
+      <ambientLight intensity={0.9} />
+      <pointLight position={[8, 4, -3]} intensity={1.2} color="#a855f7" distance={15} />
+      <pointLight position={[-8, 4, -3]} intensity={1.2} color="#06b6d4" distance={15} />
+
+      <instancedMesh ref={meshRef} args={[undefined, undefined, barCount]}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshBasicMaterial toneMapped={false} />
+      </instancedMesh>
+
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
+        <planeGeometry args={[25, 25]} />
+        <meshBasicMaterial color="#030308" />
+      </mesh>
+
+      <FrameScheduler />
+    </>
+  );
+}
 
 function FrequencyBarsScene() {
   const meshesRef = useRef<THREE.Mesh[]>([]);
@@ -214,8 +296,9 @@ export function FrequencyBars(_props: VisualizerProps) {
         camera={{ position: [0, 2, 6], fov: 50 }}
         gl={{ antialias: !mobile, alpha: true }}
         dpr={mobile ? [1, 1] : [1, 2]}
+        frameloop={mobile ? 'demand' : 'always'}
       >
-        <FrequencyBarsScene />
+        {mobile ? <FrequencyBarsMobileScene /> : <FrequencyBarsScene />}
       </Canvas>
     </div>
   );
