@@ -671,6 +671,7 @@ class NativeAudioEngine {
     private func setupRemoteCommands() {
         let commandCenter = MPRemoteCommandCenter.shared()
 
+        commandCenter.playCommand.isEnabled = true
         commandCenter.playCommand.addTarget { [weak self] _ in
             guard let self = self else { return .commandFailed }
             self.play()
@@ -678,6 +679,7 @@ class NativeAudioEngine {
             return .success
         }
 
+        commandCenter.pauseCommand.isEnabled = true
         commandCenter.pauseCommand.addTarget { [weak self] _ in
             guard let self = self else { return .commandFailed }
             self.pause()
@@ -685,6 +687,7 @@ class NativeAudioEngine {
             return .success
         }
 
+        commandCenter.nextTrackCommand.isEnabled = true
         commandCenter.nextTrackCommand.addTarget { [weak self] _ in
             guard let self = self else { return .commandFailed }
 
@@ -716,6 +719,7 @@ class NativeAudioEngine {
             return .success
         }
 
+        commandCenter.previousTrackCommand.isEnabled = true
         commandCenter.previousTrackCommand.addTarget { [weak self] _ in
             guard let self = self else { return .commandFailed }
 
@@ -754,6 +758,7 @@ class NativeAudioEngine {
             return .success
         }
 
+        commandCenter.changePlaybackPositionCommand.isEnabled = true
         commandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let self = self,
                   let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
