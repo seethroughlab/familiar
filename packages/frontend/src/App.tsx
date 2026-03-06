@@ -11,6 +11,8 @@ import { ProfileSelector } from './components/Profiles';
 import { WorkerAlert } from './components/WorkerAlert';
 import { ServerSettings } from './components/Settings/ServerSettings';
 import { isNativePlatform, getApiOrigin } from './api/base';
+import { MobileAppRedirect } from './components/MobileAppRedirect';
+import { isIOS, isNativeApp, isPWA } from './utils/platform';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
 import { pluginLoader } from './services/pluginLoader';
 import { initializeProfile, type Profile } from './services/profileService';
@@ -176,6 +178,12 @@ if (typeof window !== 'undefined') {
 }
 
 function App() {
+  const [showMobileRedirect] = useState(
+    () => isIOS() && !isNativeApp() && !isPWA() &&
+          !sessionStorage.getItem('familiar-continue-in-browser')
+  );
+  const [mobileRedirectDismissed, setMobileRedirectDismissed] = useState(false);
+
   const [serverConfigured, setServerConfigured] = useState(
     () => !isNativePlatform() || !!getApiOrigin()
   );
@@ -225,6 +233,17 @@ function App() {
   }, []);
 
   useUpdateNotification();
+
+  if (showMobileRedirect && !mobileRedirectDismissed) {
+    return (
+      <MobileAppRedirect
+        onContinue={() => {
+          sessionStorage.setItem('familiar-continue-in-browser', '1');
+          setMobileRedirectDismissed(true);
+        }}
+      />
+    );
+  }
 
   if (!serverConfigured) {
     return (
