@@ -108,6 +108,10 @@ body {
   .mt-safe {
     margin-top: env(safe-area-inset-top);
   }
+  /* Combined safe padding for top elements (safe area + breathing room) */
+  .pt-safe-top {
+    padding-top: calc(env(safe-area-inset-top) + 0.5rem);
+  }
   /* Combined safe padding for fixed bottom elements (like PlayerBar) */
   .pb-safe-bottom {
     padding-bottom: max(0.5rem, env(safe-area-inset-bottom));

@@ -306,7 +306,7 @@ export function PlaylistTrackList<T>({
                 onContextMenu={(e) => ctx.track.id && handleContextMenu(ctx.track, e)}
                 className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${currentClass} ${selectedClass} ${extraRowClass}`}
               >
-                <div className="w-8 flex-shrink-0 text-center" onClick={(e) => handlePlayClick(idx, e)}>
+                <div className="w-8 flex-shrink-0 text-center cursor-pointer" onClick={(e) => handlePlayClick(idx, e)}>
                   <PlayIndicator isCurrent={ctx.isCurrentTrack} isPlaying={ctx.isPlaying} index={idx + 1} />
                 </div>
                 <div className="flex-1 min-w-0">

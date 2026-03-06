@@ -48,14 +48,14 @@ export function ContentToolbar() {
   // Non-library views: just show indicators row
   if (!isLibraryView) {
     return (
-      <div className={`pt-safe md:pt-0 px-4 py-2 flex items-center justify-end border-b ${light ? 'border-zinc-200 bg-white/80' : 'border-zinc-800/50 bg-zinc-900/80'} backdrop-blur-sm`}>
+      <div className={`pt-safe-top md:pt-2 px-4 pb-2 flex items-center justify-end border-b ${light ? 'border-zinc-200 bg-white/80' : 'border-zinc-800/50 bg-zinc-900/80'} backdrop-blur-sm`}>
         {indicators}
       </div>
     );
   }
 
   return (
-    <div className={`pt-safe md:pt-0 px-4 py-2 flex items-center gap-2 border-b ${light ? 'border-zinc-200 bg-white/80' : 'border-zinc-800/50 bg-zinc-900/80'} backdrop-blur-sm`}>
+    <div className={`pt-safe-top md:pt-2 px-4 pb-2 flex items-center gap-2 border-b ${light ? 'border-zinc-200 bg-white/80' : 'border-zinc-800/50 bg-zinc-900/80'} backdrop-blur-sm`}>
       {/* Mobile search expanded */}
       {mobileSearchExpanded ? (
         <div className="flex-1 flex items-center gap-2 md:hidden">
