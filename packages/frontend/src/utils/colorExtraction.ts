@@ -15,23 +15,20 @@ const paletteCache = new Map<string, string[]>();
  * Load an image and return it as an HTMLImageElement.
  */
 async function loadImage(url: string): Promise<HTMLImageElement> {
-  return new Promise(async (resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+
+  if (isNativeApp()) {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    img.src = URL.createObjectURL(blob);
+  } else {
+    img.src = url;
+  }
+
+  return new Promise((resolve, reject) => {
     img.onload = () => resolve(img);
     img.onerror = reject;
-
-    if (isNativeApp()) {
-      try {
-        const res = await fetch(url);
-        const blob = await res.blob();
-        img.src = URL.createObjectURL(blob);
-      } catch (e) {
-        reject(e);
-      }
-    } else {
-      img.src = url;
-    }
   });
 }
 
