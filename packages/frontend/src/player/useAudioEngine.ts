@@ -34,8 +34,8 @@ export function useAudioEngine() {
   const [isInitialized, setIsInitialized] = useState(false);
   const engine = getEngine();
 
-  const { currentTrack, isPlaying, volume, isLoadingAudio } = usePlayerStore(
-    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume, isLoadingAudio: s.isLoadingAudio }))
+  const { currentTrack, isPlaying, volume, isLoadingAudio, crossfadeState } = usePlayerStore(
+    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume, isLoadingAudio: s.isLoadingAudio, crossfadeState: s.crossfadeState }))
   );
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
   const setDuration = usePlayerStore((s) => s.setDuration);
@@ -480,9 +480,7 @@ export function useAudioEngine() {
     };
 
     loadTrack();
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrack?.id, isInitialized]);
+  }, [currentTrack?.id, isInitialized, crossfadeState]);
 
   // --------------------------------------------------------------------------
   // Effect: Fetch album gain and apply normalization on track change

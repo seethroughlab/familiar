@@ -406,6 +406,92 @@ describe('playerStore', () => {
       expect(state.currentTrack?.id).toBe('1')
       expect(state.history).toHaveLength(0)
     })
+
+    it('back in shuffle with > 3 seconds restarts current track', () => {
+      const track1 = createMockTrack('1')
+      const track2 = createMockTrack('2')
+      const track3 = createMockTrack('3')
+
+      const { setQueue } = usePlayerStore.getState()
+      setQueue([track1, track2, track3], 0)
+
+      // Manually set shuffle state: order [0, 2, 1], currently at shuffleIndex=1 (track3)
+      usePlayerStore.setState({
+        shuffle: true,
+        shuffleOrder: [0, 2, 1],
+        shuffleIndex: 1,
+        queueIndex: 2,
+        currentTrack: track3,
+        currentTime: 30, // well past 3 seconds — should restart, not navigate
+      })
+
+      usePlayerStore.getState().playPrevious()
+
+      const state = usePlayerStore.getState()
+      // Should restart current track, NOT navigate to previous shuffle position
+      expect(state.currentTrack?.id).toBe('3') // still track3
+      expect(state.shuffleIndex).toBe(1) // unchanged
+      expect(state.currentTime).toBe(0) // restarted
+      expect(mockSeek).toHaveBeenCalledWith(0)
+    })
+
+    it('back in shuffle with <= 3 seconds navigates to previous shuffle order track', () => {
+      const track1 = createMockTrack('1')
+      const track2 = createMockTrack('2')
+      const track3 = createMockTrack('3')
+
+      const { setQueue } = usePlayerStore.getState()
+      setQueue([track1, track2, track3], 0)
+
+      // Manually set shuffle state: order [0, 2, 1], currently at shuffleIndex=1 (track3)
+      usePlayerStore.setState({
+        shuffle: true,
+        shuffleOrder: [0, 2, 1],
+        shuffleIndex: 1,
+        queueIndex: 2,
+        currentTrack: track3,
+        currentTime: 1, // under 3 seconds — should navigate back
+      })
+
+      usePlayerStore.getState().playPrevious()
+
+      const state = usePlayerStore.getState()
+      expect(state.currentTrack?.id).toBe('1') // shuffleOrder[0] = queue[0] = track1
+      expect(state.shuffleIndex).toBe(0)
+      expect(state.queueIndex).toBe(0)
+      expect(state.currentTime).toBe(0)
+      expect(state.isPlaying).toBe(true)
+    })
+
+    it('back then forward in shuffle replays the same next track', () => {
+      const track1 = createMockTrack('1')
+      const track2 = createMockTrack('2')
+      const track3 = createMockTrack('3')
+
+      const { setQueue } = usePlayerStore.getState()
+      setQueue([track1, track2, track3], 0)
+
+      // shuffleOrder [0, 2, 1]: start at index 1 (track3)
+      usePlayerStore.setState({
+        shuffle: true,
+        shuffleOrder: [0, 2, 1],
+        shuffleIndex: 1,
+        queueIndex: 2,
+        currentTrack: track3,
+        currentTime: 0,
+      })
+
+      // Go back: should land on shuffleIndex=0 (track1)
+      usePlayerStore.getState().playPrevious()
+      expect(usePlayerStore.getState().currentTrack?.id).toBe('1')
+      expect(usePlayerStore.getState().shuffleIndex).toBe(0)
+
+      // Go forward: should advance shuffleIndex to 1 → track3 again
+      usePlayerStore.getState().playNext()
+      const state = usePlayerStore.getState()
+      expect(state.currentTrack?.id).toBe('3') // back to shuffleOrder[1] = queue[2] = track3
+      expect(state.shuffleIndex).toBe(1)
+    })
   })
 
   describe('playTrack', () => {

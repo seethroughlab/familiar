@@ -586,15 +586,44 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   playPrevious: () => {
     const state = get();
-    // If we're more than 3 seconds in, restart current track
-    if (state.currentTime > 3) {
-      log.info('playPrevious — restarting current track', { title: state.currentTrack?.title, currentTime: state.currentTime });
+    const { shuffle, shuffleOrder, shuffleIndex, queue, currentTrack, currentTime } = state;
+
+    // Step 1: If more than 3 seconds in, always restart current track (shuffle or not)
+    if (currentTime > 3) {
+      log.info('playPrevious — restarting current track', { title: currentTrack?.title, currentTime });
       getEngine().seek(0);
       set({ currentTime: 0 });
       return;
     }
 
-    // Otherwise go to previous in history
+    // Step 2: Shuffle mode — go to previous track in shuffle order
+    if (shuffle && shuffleOrder.length > 0 && shuffleIndex > 0) {
+      const newShuffleIndex = shuffleIndex - 1;
+      const prevQueueIndex = shuffleOrder[newShuffleIndex];
+      const prevTrack = queue[prevQueueIndex]?.track;
+      if (prevTrack) {
+        log.info('playPrevious — going to previous in shuffle order', {
+          from: currentTrack?.title,
+          to: prevTrack.title,
+          newShuffleIndex,
+        });
+        if (currentTrack) {
+          set((s) => ({ history: [...s.history.slice(-49), s.currentTrack!] }));
+        }
+        set({
+          currentTrack: prevTrack,
+          queueIndex: prevQueueIndex,
+          shuffleIndex: newShuffleIndex,
+          isPlaying: true,
+          currentTime: 0,
+          isLoadingAudio: true,
+        });
+        persistState();
+        return;
+      }
+    }
+
+    // Step 3: Non-shuffle (or shuffle at start) — go to history
     if (state.history.length > 0) {
       const prevTrack = state.history[state.history.length - 1];
       log.info('playPrevious — going to history track', { title: prevTrack.title, id: prevTrack.id });
@@ -612,6 +641,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setQueue: (tracks, startIndex = 0, source?: QueueSource) => {
     log.info('setQueue', { trackCount: tracks.length, startIndex, source: source?.type, sourceId: source?.id, shuffle: get().shuffle });
+    // Cancel any ongoing crossfade — user explicitly chose a new track
+    getEngine().cancelCrossfade?.();
     const { shuffle } = get();
     // Support tracks with _externalInfo metadata from playlist views
     const queueItems = tracks.map((track) => {
