@@ -26,9 +26,10 @@ interface Props {
   playlist: SmartPlaylist;
   position: { x: number; y: number };
   onClose: () => void;
+  onEditRules: () => void;
 }
 
-export function SmartPlaylistContextMenu({ playlist, position, onClose }: Props) {
+export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRules }: Props) {
   const [downloading, setDownloading] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -220,10 +221,7 @@ export function SmartPlaylistContextMenu({ playlist, position, onClose }: Props)
       <MenuItem
         icon={<Settings2 className="w-4 h-4" />}
         label="Edit Rules..."
-        onClick={() => {
-          navigate(`/smart-playlists/${playlist.id}`);
-          onClose();
-        }}
+        onClick={onEditRules}
       />
 
       <MenuDivider />

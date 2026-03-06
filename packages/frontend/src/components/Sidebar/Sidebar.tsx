@@ -29,6 +29,7 @@ import { EphemeralPlaylistContextMenu } from './EphemeralPlaylistContextMenu';
 import { PlaylistEditModal } from './PlaylistEditModal';
 import { CollectionContextMenu } from './CollectionContextMenu';
 import { LibraryItemContextMenu } from './LibraryItemContextMenu';
+import { SmartPlaylistBuilder } from '../SmartPlaylists';
 
 const LIBRARY_ITEMS = [
   { path: '/library/tracks', label: 'Tracks', icon: List },
@@ -69,6 +70,10 @@ export function Sidebar() {
 
   // Playlist edit modal
   const [editModal, setEditModal] = useState<{ id?: string; name: string; description: string } | null>(null);
+
+  // Smart playlist builder
+  const [showSmartPlaylistBuilder, setShowSmartPlaylistBuilder] = useState(false);
+  const [editingSmartPlaylist, setEditingSmartPlaylist] = useState<SmartPlaylist | undefined>();
 
   // Collection counts
   const { total: favoritesCount } = useFavorites();
@@ -341,13 +346,22 @@ export function Sidebar() {
         <div className={`mx-4 my-3 border-t ${dividerClass}`} />
 
         {/* Smart Playlists section */}
-        <button
-          onClick={() => setSmartPlaylistsExpanded(!smartPlaylistsExpanded)}
-          className={`w-full flex items-center justify-between px-4 py-1 text-xs font-semibold uppercase tracking-wider ${sectionClass} ${hoverClass} rounded`}
-        >
-          <span>Smart Playlists</span>
-          {smartPlaylistsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
+        <div className="flex items-center px-4 py-1">
+          <button
+            onClick={() => setSmartPlaylistsExpanded(!smartPlaylistsExpanded)}
+            className={`flex items-center gap-1 flex-1 text-xs font-semibold uppercase tracking-wider ${sectionClass} ${hoverClass} rounded py-0.5`}
+          >
+            <span>Smart Playlists</span>
+            {smartPlaylistsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          <button
+            onClick={() => setShowSmartPlaylistBuilder(true)}
+            className={`p-0.5 rounded ${sectionClass} ${hoverClass}`}
+            title="Create smart playlist"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
         {smartPlaylistsExpanded && (
           <nav className="space-y-0.5 px-2 mt-1">
             {smartPlaylists && smartPlaylists.length > 0 ? (
@@ -410,6 +424,11 @@ export function Sidebar() {
           playlist={smartPlaylistMenu.state.item}
           position={smartPlaylistMenu.state.position}
           onClose={smartPlaylistMenu.close}
+          onEditRules={() => {
+            setEditingSmartPlaylist(smartPlaylistMenu.state.item!);
+            setShowSmartPlaylistBuilder(true);
+            smartPlaylistMenu.close();
+          }}
         />
       )}
       {ephemeralMenu.state.isOpen && ephemeralMenu.state.item && (
@@ -431,6 +450,19 @@ export function Sidebar() {
           path={libraryMenu.state.item}
           position={libraryMenu.state.position}
           onClose={libraryMenu.close}
+        />
+      )}
+
+      {/* Smart playlist builder */}
+      {showSmartPlaylistBuilder && (
+        <SmartPlaylistBuilder
+          playlist={editingSmartPlaylist}
+          onClose={() => { setShowSmartPlaylistBuilder(false); setEditingSmartPlaylist(undefined); }}
+          onSaved={(playlist) => {
+            navigate(`/smart-playlists/${playlist.id}`);
+            setShowSmartPlaylistBuilder(false);
+            setEditingSmartPlaylist(undefined);
+          }}
         />
       )}
 
