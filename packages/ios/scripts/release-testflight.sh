@@ -119,6 +119,7 @@ xcodebuild archive \
     -archivePath "$ARCHIVE_PATH" \
     CODE_SIGN_STYLE=Automatic \
     DEVELOPMENT_TEAM="$TEAM_ID" \
+    -allowProvisioningUpdates \
     -quiet
 
 green "Archive complete → $ARCHIVE_PATH"
@@ -131,6 +132,7 @@ xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_DIR" \
     -exportOptionsPlist "$EXPORT_OPTIONS" \
+    -allowProvisioningUpdates \
     -quiet
 
 green "Export + upload complete!"
