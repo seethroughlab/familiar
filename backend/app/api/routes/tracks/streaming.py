@@ -201,15 +201,18 @@ async def _validate_and_fix_track(track_id: str) -> None:
         )
 
         try:
-            if not await has_decode_errors(file_path):
-                logger.info("No decode errors found in %s, skipping re-encode", file_path.name)
-                return
-
             suffix = file_path.suffix.lower()
             if suffix == ".flac":
+                # For FLAC, check first to decide between remux (PTS) vs re-encode (corruption)
+                if not await has_decode_errors(file_path):
+                    logger.info("No decode errors found in %s, skipping re-encode", file_path.name)
+                    return
                 logger.info("Re-encoding %s to fix decode errors", file_path.name)
                 await reencode_flac_in_place(file_path)
             elif suffix in REMUX_FORMATS:
+                # Remux is fast and lossless — do it unconditionally.
+                # Chromium rejects container issues that ffmpeg decodes fine, so
+                # has_decode_errors() is not a reliable gate for these formats.
                 logger.info("Re-muxing %s to fix container/header issues", file_path.name)
                 await remux_audio_in_place(file_path)
             else:
