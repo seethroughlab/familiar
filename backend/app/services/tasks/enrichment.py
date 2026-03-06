@@ -4,11 +4,11 @@ Contains run_track_enrichment and propose_enrichment_for_track.
 """
 
 import logging
-from datetime import datetime
-from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 from uuid import UUID
+
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

@@ -3,12 +3,13 @@
 import secrets
 from dataclasses import dataclass, field
 from datetime import datetime
-from app.utils.time import utcnow
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import WebSocket
+
+from app.utils.time import utcnow
 
 
 class SessionRole(str, Enum):

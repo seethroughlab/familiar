@@ -4,14 +4,13 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from app.utils.time import utcnow
-
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import ProfilePlayHistory, Track
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +73,6 @@ async def record_play(
     Increments play count and updates last_played_at for the profile.
     Optionally records how long the track was played.
     """
-    from datetime import datetime
 
     # Verify track exists
     track = await db.get(Track, track_id)

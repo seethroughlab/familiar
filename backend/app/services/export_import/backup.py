@@ -9,8 +9,6 @@ import gzip
 import json
 import logging
 from collections.abc import AsyncGenerator
-from datetime import datetime
-from app.utils.time import utcnow
 from typing import Any
 
 from sqlalchemy import func, select
@@ -25,6 +23,7 @@ from app.services.export_import.matching import (
     _backup_import_sessions,
 )
 from app.services.export_import.profile import ExportImportService, ImportService
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

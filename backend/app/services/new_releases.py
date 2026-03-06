@@ -3,7 +3,6 @@
 import logging
 import unicodedata
 from datetime import datetime, timedelta
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ArtistCheckCache, ArtistNewRelease, ProfilePlayHistory, Track
 from app.services.search_links import generate_release_search_urls
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

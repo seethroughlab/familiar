@@ -6,8 +6,6 @@ Used for Spotify imports, LLM recommendations, and wishlist functionality.
 
 import logging
 import re
-from datetime import datetime
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +14,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ExternalTrack, ExternalTrackSource, PlaylistTrack, Track
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

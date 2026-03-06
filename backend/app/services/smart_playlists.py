@@ -1,7 +1,6 @@
 """Smart playlist service for rule-based auto-updating playlists."""
 
 from datetime import datetime, timedelta
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -9,6 +8,7 @@ from sqlalchemy import and_, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ExternalTrack, ProfilePlayHistory, SmartPlaylist, Track, TrackAnalysis
+from app.utils.time import utcnow
 
 # Fields that exist on BOTH Track and ExternalTrack (safe for UNION queries)
 EXTERNAL_COMPATIBLE_FIELDS = {

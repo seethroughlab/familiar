@@ -243,7 +243,6 @@ class SyncMixin(_SyncBase):
         track_ids: list[str],
     ) -> dict[str, Any]:
         """Run bulk audio fingerprint identification."""
-        from datetime import datetime
         from uuid import UUID
 
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -331,7 +330,7 @@ class SyncMixin(_SyncBase):
 
     async def _cleanup_frontend_logs(self) -> None:
         """Delete frontend_logs older than 7 days."""
-        from datetime import datetime, timedelta
+        from datetime import timedelta
 
         from sqlalchemy import delete
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine

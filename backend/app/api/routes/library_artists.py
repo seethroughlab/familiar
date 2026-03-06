@@ -4,8 +4,6 @@ import asyncio
 import logging
 from pathlib import Path
 
-from app.utils.time import utcnow
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
@@ -13,6 +11,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import DbSession
 from app.db.models import Track, TrackAnalysis, TrackStatus
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +214,7 @@ async def get_artist_detail(
         artist_name: The artist name (URL-encoded)
         refresh_lastfm: Force refresh of Last.fm data
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     from urllib.parse import unquote
 
     from sqlalchemy import cast
@@ -719,7 +718,6 @@ async def _cache_artist_images(
     image_urls: dict[str, str],
 ) -> None:
     """Cache artist image URLs in ArtistInfo table."""
-    from datetime import datetime
 
     from app.db.models import ArtistInfo
 

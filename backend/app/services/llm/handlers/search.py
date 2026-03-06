@@ -7,8 +7,6 @@ import random
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from app.utils.time import utcnow
-
 from sqlalchemy import and_, func, or_, select
 
 from app.db.models import (
@@ -17,6 +15,7 @@ from app.db.models import (
     Track,
     TrackAnalysis,
 )
+from app.utils.time import utcnow
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -202,7 +201,7 @@ class SearchHandlersMixin:
         limit: int = 20,
     ) -> dict[str, Any]:
         """Filter tracks by library criteria and/or audio features."""
-        from datetime import datetime, timedelta
+        from datetime import timedelta
 
         # --- Type coercion helpers (LLM may pass strings) ---
         def to_float(v: Any) -> float | None:

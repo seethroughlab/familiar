@@ -1,8 +1,6 @@
 """Dependency injection for API routes."""
 
 from collections.abc import AsyncGenerator
-from datetime import datetime
-from app.utils.time import utcnow
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -10,6 +8,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_maker
+from app.utils.time import utcnow
 
 if TYPE_CHECKING:
     from app.db.models import Profile

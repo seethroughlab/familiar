@@ -6,8 +6,6 @@ Changes can affect database records, ID3 tags, and file organization depending o
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +20,7 @@ from app.db.models import (
     Track,
 )
 from app.services.metadata.writer import WriteResult, write_metadata
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

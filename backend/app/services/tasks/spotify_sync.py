@@ -7,12 +7,11 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
-
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
 from app.services.redis_client import get_redis
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

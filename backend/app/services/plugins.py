@@ -8,8 +8,6 @@ visualizer or browser registry at runtime.
 import hashlib
 import re
 import shutil
-from datetime import datetime
-from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Plugin, PluginType
+from app.utils.time import utcnow
 
 # Current plugin API version supported by this app
 CURRENT_API_VERSION = 1

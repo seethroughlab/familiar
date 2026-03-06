@@ -9,13 +9,13 @@ import logging
 import time
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
-from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, settings
 from app.services.redis_client import get_redis
 from app.services.tasks.common import SYNC_PROGRESS_KEY
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

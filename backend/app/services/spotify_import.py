@@ -9,8 +9,6 @@ import logging
 import tempfile
 import uuid
 import zipfile
-from datetime import datetime
-from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +21,7 @@ from app.db.models import (
     SpotifyFavorite,
     Track,
 )
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

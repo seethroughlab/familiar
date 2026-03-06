@@ -2,8 +2,6 @@
 
 import logging
 
-from app.utils.time import utcnow
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -11,6 +9,7 @@ from sqlalchemy import func, select
 from app.api.deps import DbSession
 from app.api.routes.library_sync import CancelResponse
 from app.db.models import Track, TrackAnalysis
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +94,7 @@ async def get_analysis_status(db: DbSession) -> AnalysisStatus:
     Returns analysis progress and detects if the worker has stalled.
     Also reports embedding coverage to help detect silent failures.
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     from sqlalchemy import or_
 

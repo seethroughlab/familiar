@@ -11,9 +11,6 @@ Phase 3: discovery (genre browse), scrobbling.
 
 import hashlib
 import xml.etree.ElementTree as ET
-from datetime import datetime
-
-from app.utils.time import utcnow
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -38,6 +35,7 @@ from app.db.models import (
     TrackStatus,
 )
 from app.services.artwork import compute_album_hash, get_artwork_path
+from app.utils.time import utcnow
 
 router = APIRouter(tags=["subsonic"])
 

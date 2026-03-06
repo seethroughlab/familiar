@@ -4,8 +4,6 @@ import os
 import platform
 import sys
 from datetime import datetime
-
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -15,6 +13,7 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentProfile, DbSession
 from app.config import FEATURES_VERSION, get_app_version
+from app.utils.time import utcnow
 
 router = APIRouter(tags=["diagnostics"])
 

@@ -7,7 +7,6 @@ backup and migration purposes.
 
 import logging
 from datetime import datetime
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -32,6 +31,7 @@ from app.services.export_import.matching import (
     TrackMatcher,
     _import_sessions,
 )
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

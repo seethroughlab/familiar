@@ -5,8 +5,6 @@ exact match, and fuzzy matching strategies.
 """
 
 import logging
-from datetime import datetime
-from app.utils.time import utcnow
 from typing import Any
 
 from rapidfuzz import fuzz
@@ -15,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track
 from app.services.external_track_matcher import normalize_for_matching
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

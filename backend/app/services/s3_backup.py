@@ -18,14 +18,13 @@ import os
 import subprocess
 import tempfile
 import time
-from datetime import datetime
-from app.utils.time import utcnow
 from pathlib import Path
 from typing import Any
 
 from app.config import settings as app_config
 from app.services.app_settings import get_app_settings_service
 from app.services.redis_client import get_resilient_redis
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

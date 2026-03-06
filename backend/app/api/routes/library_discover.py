@@ -2,14 +2,13 @@
 
 import logging
 
-from app.utils.time import utcnow
-
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
 from app.db.models import Track, TrackStatus
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +85,7 @@ async def get_discover_dashboard(
     - Unmatched Spotify favorites
     - Recently added track count
     """
-    from datetime import datetime, timedelta
+    from datetime import timedelta
 
     from app.db.models import ArtistInfo, ProfilePlayHistory
     from app.services.lastfm import get_lastfm_service

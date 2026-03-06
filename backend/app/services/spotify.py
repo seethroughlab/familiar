@@ -3,7 +3,6 @@
 import logging
 import secrets
 from datetime import datetime, timedelta
-from app.utils.time import utcnow
 from typing import Any
 from uuid import UUID
 
@@ -25,6 +24,7 @@ from app.db.models import (
 )
 from app.services.app_settings import get_app_settings_service
 from app.services.spotify_compat import SpotifyRateLimitError
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 

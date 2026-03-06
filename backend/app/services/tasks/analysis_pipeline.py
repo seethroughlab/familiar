@@ -6,8 +6,7 @@ and all queue_* functions for the background analysis pipeline.
 
 import gc
 import logging
-from datetime import datetime, timedelta
-from app.utils.time import utcnow
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -16,6 +15,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION
 from app.services.tasks.common import _record_task_failure, log_memory
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
