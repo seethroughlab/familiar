@@ -366,8 +366,13 @@ export class WebAudioEngine implements AudioEngine {
   async preloadNext(trackId: string, url: string, opts?: { isOffline?: boolean; isExternal?: boolean }): Promise<boolean> {
     if (this.preloadingTrackId === trackId) return false;
 
-    this.preloadingTrackId = trackId;
+    // Already preloaded and ready — don't reset the element
     const nextEl = this.getNextElement();
+    if (nextEl?.getAttribute('data-track-id') === trackId && nextEl.readyState >= 3) {
+      return true;
+    }
+
+    this.preloadingTrackId = trackId;
     if (!nextEl) return false;
 
     try {
@@ -534,7 +539,7 @@ export class WebAudioEngine implements AudioEngine {
   /** Check if the next element is ready for crossfade */
   isNextReady(): boolean {
     const nextEl = this.getNextElement();
-    return !!nextEl && nextEl.readyState > 0;
+    return !!nextEl && nextEl.readyState >= 3;  // Require HAVE_FUTURE_DATA for reliable playback
   }
 
   /** Resolve a track URL, getting offline track if available */
