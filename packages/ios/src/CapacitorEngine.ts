@@ -11,7 +11,7 @@ type EventHandler = (event: EngineEvent) => void;
 
 export class CapacitorEngine implements AudioEngine {
   readonly capabilities: AudioEngineCapabilities = {
-    crossfade: false,
+    crossfade: true,
     visualizer: true,
     effects: 'native',
   };
@@ -22,6 +22,11 @@ export class CapacitorEngine implements AudioEngine {
   private normalizationGain = 1;
   private consecutiveLoadFailures = 0;
   private lastKnownDuration = 0;
+
+  // Crossfade state (tracked locally to keep sync interface)
+  private nextLoadedTrackId: string | null = null;
+  private localPreloadingTrackId: string | null = null;
+  private localIsCrossfading = false;
 
   // Pre-allocated analysis buffers (reused each bridge event to avoid per-frame allocations)
   private analysisFreqBuffer: Uint8Array | null = null;
@@ -104,6 +109,9 @@ export class CapacitorEngine implements AudioEngine {
   stop(): void {
     FamiliarAudio.stop().catch(e => log.error('Native stop failed', e));
     this.loadedTrackId = null;
+    this.nextLoadedTrackId = null;
+    this.localPreloadingTrackId = null;
+    this.localIsCrossfading = false;
   }
 
   // ========================================================================
@@ -118,6 +126,70 @@ export class CapacitorEngine implements AudioEngine {
   setNormalizationGain(gain: number): void {
     this.normalizationGain = gain;
     FamiliarAudio.setVolume({ volume: Math.min(1, this.masterVolume * this.normalizationGain) });
+  }
+
+  // ========================================================================
+  // Crossfade
+  // ========================================================================
+
+  async preloadNext(trackId: string, url: string): Promise<boolean> {
+    this.localPreloadingTrackId = trackId;
+    try {
+      const { success } = await FamiliarAudio.preloadNext({ url, trackId });
+      if (success) {
+        this.nextLoadedTrackId = trackId;
+        this.localPreloadingTrackId = null;
+      }
+      return success;
+    } catch (e) {
+      this.localPreloadingTrackId = null;
+      log.error('preloadNext failed', e);
+      return false;
+    }
+  }
+
+  isNextReady(): boolean {
+    return this.nextLoadedTrackId !== null;
+  }
+
+  getPreloadingTrackId(): string | null {
+    return this.localPreloadingTrackId;
+  }
+
+  isCrossfading(): boolean {
+    return this.localIsCrossfading;
+  }
+
+  setNextNormalizationGain(gain: number): void {
+    FamiliarAudio.setNextNormalizationVolume({ volume: this.masterVolume * gain }).catch(e =>
+      log.error('setNextNormalizationVolume failed', e)
+    );
+  }
+
+  executeCrossfade(duration: number, onComplete: () => void): void {
+    this.localIsCrossfading = true;
+    FamiliarAudio.executeCrossfade({ duration })
+      .then(() => {
+        // Update loadedTrackId to the track that just faded in
+        if (this.nextLoadedTrackId) {
+          this.loadedTrackId = this.nextLoadedTrackId;
+        }
+        this.nextLoadedTrackId = null;
+        this.localIsCrossfading = false;
+        onComplete();
+      })
+      .catch(e => {
+        this.localIsCrossfading = false;
+        log.error('executeCrossfade failed', e);
+        onComplete();
+      });
+  }
+
+  cancelCrossfade(): void {
+    FamiliarAudio.cancelCrossfade().catch(e => log.error('cancelCrossfade failed', e));
+    this.nextLoadedTrackId = null;
+    this.localPreloadingTrackId = null;
+    this.localIsCrossfading = false;
   }
 
   // ========================================================================

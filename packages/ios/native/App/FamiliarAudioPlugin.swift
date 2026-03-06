@@ -25,6 +25,13 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setMasterBypass", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setNowPlayingInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPendingTrackInfo", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "preloadNext", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "isNextReady", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getPreloadingTrackId", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "isCrossfading", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "executeCrossfade", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "cancelCrossfade", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setNextNormalizationVolume", returnType: CAPPluginReturnPromise),
     ]
 
     private lazy var audioEngine: NativeAudioEngine = {
@@ -207,6 +214,54 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             album: prevAlbum, artworkUrl: prevArtworkUrl
         )
 
+        call.resolve()
+    }
+
+    // MARK: - Crossfade
+
+    @objc func preloadNext(_ call: CAPPluginCall) {
+        guard let url = call.getString("url"),
+              let trackId = call.getString("trackId") else {
+            call.reject("Missing url or trackId")
+            return
+        }
+        audioEngine.preloadNext(url: url, trackId: trackId) { success in
+            call.resolve(["success": success])
+        }
+    }
+
+    @objc func isNextReady(_ call: CAPPluginCall) {
+        call.resolve(["ready": audioEngine.isNextReady()])
+    }
+
+    @objc func getPreloadingTrackId(_ call: CAPPluginCall) {
+        let trackId = audioEngine.getPreloadingTrackId()
+        if let trackId = trackId {
+            call.resolve(["trackId": trackId])
+        } else {
+            call.resolve(["trackId": NSNull()])
+        }
+    }
+
+    @objc func isCrossfading(_ call: CAPPluginCall) {
+        call.resolve(["crossfading": audioEngine.isCrossfading()])
+    }
+
+    @objc func executeCrossfade(_ call: CAPPluginCall) {
+        let duration = call.getDouble("duration") ?? 2.0
+        audioEngine.executeCrossfade(duration: duration) {
+            call.resolve()
+        }
+    }
+
+    @objc func cancelCrossfade(_ call: CAPPluginCall) {
+        audioEngine.cancelCrossfade()
+        call.resolve()
+    }
+
+    @objc func setNextNormalizationVolume(_ call: CAPPluginCall) {
+        let volume = call.getFloat("volume") ?? 1.0
+        audioEngine.setNextNormalizationVolume(volume)
         call.resolve()
     }
 }

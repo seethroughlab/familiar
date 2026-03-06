@@ -19,7 +19,11 @@ class NativeAudioEngine {
     weak var delegate: NativeAudioEngineDelegate?
 
     private let engine = AVAudioEngine()
-    private let playerNode = AVAudioPlayerNode()
+    private var playerNodes: [AVAudioPlayerNode] = [AVAudioPlayerNode(), AVAudioPlayerNode()]
+    private var activePlayerIndex = 0
+    private var playerNode: AVAudioPlayerNode { playerNodes[activePlayerIndex] }
+    private var nextPlayerNode: AVAudioPlayerNode { playerNodes[1 - activePlayerIndex] }
+    private let inputMixer = AVAudioMixerNode()
     private let eqNode: AVAudioUnitEQ
     private let reverbNode = AVAudioUnitReverb()
     private let delayNode = AVAudioUnitDelay()
@@ -44,6 +48,16 @@ class NativeAudioEngine {
 
     private var timeUpdateTimer: Timer?
     private var downloadTask: URLSessionDataTask?
+
+    // Crossfade state
+    private var nextAudioFile: AVAudioFile?
+    private var nextTempFileURL: URL?
+    private var nextTrackId: String?
+    private var preloadingTrackId: String?
+    private var nextDownloadTask: URLSessionDataTask?
+    private var isCrossfadingFlag = false
+    private var crossfadeTimer: Timer?
+    private var nextNormalizationVolume: Float = 1.0
 
     // Now Playing metadata
     private var nowPlayingTitle: String?
@@ -156,7 +170,9 @@ class NativeAudioEngine {
 
 
     private func setupAudioGraph() {
-        engine.attach(playerNode)
+        engine.attach(playerNodes[0])
+        engine.attach(playerNodes[1])
+        engine.attach(inputMixer)
         engine.attach(eqNode)
         if let comp = compressorNode { engine.attach(comp) }
         engine.attach(distortionNode)
@@ -183,9 +199,12 @@ class NativeAudioEngine {
     }
 
     /// Build the ordered effect chain and connect nodes sequentially.
-    /// Chain order: playerNode → EQ → Compressor → Distortion → Filter → Delay → preDelay → Reverb → mainMixer
+    /// Chain order: playerNodes[0,1] → inputMixer → EQ → Compressor → Distortion → Filter → Delay → preDelay → Reverb → mainMixer
     private func connectChain(format: AVAudioFormat) {
-        var chain: [AVAudioNode] = [playerNode, eqNode]
+        engine.connect(playerNodes[0], to: inputMixer, format: format)
+        engine.connect(playerNodes[1], to: inputMixer, format: format)
+
+        var chain: [AVAudioNode] = [inputMixer, eqNode]
         if let comp = compressorNode { chain.append(comp) }
         chain.append(distortionNode)
         chain.append(filterNode)
@@ -202,7 +221,8 @@ class NativeAudioEngine {
     /// Disconnect all effect node outputs before reconnecting.
     private func disconnectAllEffectNodes() {
         let nodes: [AVAudioNode?] = [
-            playerNode, eqNode, compressorNode, distortionNode, filterNode,
+            playerNodes[0], playerNodes[1], inputMixer,
+            eqNode, compressorNode, distortionNode, filterNode,
             delayNode, reverbPreDelayNode, reverbNode,
         ]
         for node in nodes {
@@ -412,6 +432,21 @@ class NativeAudioEngine {
         isPaused = false
         startFramePosition = 0
         pauseFramePosition = 0
+
+        // Cancel any in-progress crossfade and preload
+        crossfadeTimer?.invalidate()
+        crossfadeTimer = nil
+        isCrossfadingFlag = false
+        playerNode.volume = 1.0
+
+        nextDownloadTask?.cancel()
+        nextDownloadTask = nil
+        nextPlayerNode.stop()
+        nextPlayerNode.volume = 1.0
+        cleanupNextTempFile()
+        nextTrackId = nil
+        nextAudioFile = nil
+        preloadingTrackId = nil
     }
 
     func seek(time: Double) {
@@ -627,6 +662,208 @@ class NativeAudioEngine {
             delayNode.bypass = true
             distortionNode.bypass = true
         }
+    }
+
+    // MARK: - Crossfade
+
+    func preloadNext(url: String, trackId: String, completion: @escaping (Bool) -> Void) {
+        // Already preloaded for this track — idempotent
+        if nextTrackId == trackId {
+            completion(true)
+            return
+        }
+        // Already preloading this track — in-flight, report not ready yet
+        if preloadingTrackId == trackId {
+            completion(false)
+            return
+        }
+
+        // Cancel any previous preload for a different track
+        nextDownloadTask?.cancel()
+        nextDownloadTask = nil
+        nextPlayerNode.stop()
+        cleanupNextTempFile()
+        nextTrackId = nil
+        nextAudioFile = nil
+
+        preloadingTrackId = trackId
+
+        guard let sourceURL = URL(string: url) else {
+            preloadingTrackId = nil
+            completion(false)
+            return
+        }
+
+        let tempDir = NSTemporaryDirectory()
+        let tempBaseName = "familiar_next_\(trackId)"
+
+        let task = URLSession.shared.dataTask(with: sourceURL) { [weak self] data, response, error in
+            guard let self = self else { return }
+            guard self.preloadingTrackId == trackId else { return }
+
+            if let error = error {
+                if (error as NSError).code == NSURLErrorCancelled { return }
+                DispatchQueue.main.async {
+                    self.preloadingTrackId = nil
+                    completion(false)
+                }
+                return
+            }
+
+            guard let data = data else {
+                DispatchQueue.main.async {
+                    self.preloadingTrackId = nil
+                    completion(false)
+                }
+                return
+            }
+
+            let mimeType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+            let fileExtension = NativeAudioEngine.extensionForMIME(mimeType)
+            let tempPath = (tempDir as NSString).appendingPathComponent("\(tempBaseName).\(fileExtension)")
+            let tempURL = URL(fileURLWithPath: tempPath)
+
+            do {
+                try data.write(to: tempURL)
+                let file = try AVAudioFile(forReading: tempURL)
+
+                DispatchQueue.main.async {
+                    guard self.preloadingTrackId == trackId else {
+                        try? FileManager.default.removeItem(at: tempURL)
+                        return
+                    }
+                    self.nextTempFileURL = tempURL
+                    self.nextAudioFile = file
+                    self.nextTrackId = trackId
+                    self.preloadingTrackId = nil
+                    completion(true)
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.preloadingTrackId = nil
+                    completion(false)
+                }
+            }
+        }
+        self.nextDownloadTask = task
+        task.resume()
+    }
+
+    func isNextReady() -> Bool {
+        return nextTrackId != nil
+    }
+
+    func getPreloadingTrackId() -> String? {
+        return preloadingTrackId
+    }
+
+    func isCrossfading() -> Bool {
+        return isCrossfadingFlag
+    }
+
+    func setNextNormalizationVolume(_ vol: Float) {
+        nextNormalizationVolume = vol
+    }
+
+    func executeCrossfade(duration: Double, completion: @escaping () -> Void) {
+        guard let nextFile = nextAudioFile, let nextId = nextTrackId else {
+            completion()
+            return
+        }
+
+        let capturedNextTrackId = nextId
+        let capturedNextAudioFile = nextFile
+        let capturedNextTempFileURL = nextTempFileURL
+
+        isCrossfadingFlag = true
+
+        // Stop nextPlayerNode (clears previous schedule), then re-schedule with the end-of-track handler
+        nextPlayerNode.stop()
+        nextPlayerNode.scheduleFile(capturedNextAudioFile, at: nil) { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.async {
+                if self.isPlayerScheduled && !self.isPaused {
+                    self.isPlayerScheduled = false
+                    self.stopTimeUpdates()
+                    self.delegate?.audioEngineDidFinishPlaying()
+                }
+            }
+        }
+
+        nextPlayerNode.volume = 0.0
+
+        if !engine.isRunning {
+            try? engine.start()
+        }
+        nextPlayerNode.play()
+
+        let startTime = Date()
+        crossfadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            let elapsed = Date().timeIntervalSince(startTime)
+            let progress = min(elapsed / duration, 1.0)
+
+            self.playerNode.volume = 1.0 - Float(progress)
+            self.nextPlayerNode.volume = self.nextNormalizationVolume * Float(progress)
+
+            if progress >= 1.0 {
+                self.finishCrossfade(
+                    nextTrackId: capturedNextTrackId,
+                    nextAudioFile: capturedNextAudioFile,
+                    nextTempFileURL: capturedNextTempFileURL,
+                    completion: completion
+                )
+            }
+        }
+    }
+
+    private func finishCrossfade(
+        nextTrackId: String,
+        nextAudioFile: AVAudioFile,
+        nextTempFileURL: URL?,
+        completion: @escaping () -> Void
+    ) {
+        crossfadeTimer?.invalidate()
+        crossfadeTimer = nil
+
+        // Stop and reset the old current player (before index swap)
+        playerNode.stop()
+        playerNode.volume = 1.0
+
+        // Swap — playerNode now points to the formerly-next player
+        activePlayerIndex = 1 - activePlayerIndex
+
+        // Update current track state
+        currentTrackId = nextTrackId
+        audioFile = nextAudioFile
+
+        // Replace current temp file with the next track's file
+        cleanupTempFile()
+        tempFileURL = nextTempFileURL
+        self.nextTempFileURL = nil  // already handed off above; prevent double-cleanup
+
+        // Reset playback state for the new current track
+        isPlayerScheduled = true
+        isPaused = false
+        startFramePosition = 0
+        pauseFramePosition = 0
+
+        // Clear next-track state
+        self.nextTrackId = nil
+        self.nextAudioFile = nil
+        nextNormalizationVolume = 1.0
+        isCrossfadingFlag = false
+
+        completion()
+    }
+
+    func cancelCrossfade() {
+        crossfadeTimer?.invalidate()
+        crossfadeTimer = nil
+        nextPlayerNode.stop()
+        nextPlayerNode.volume = 1.0
+        playerNode.volume = 1.0
+        isCrossfadingFlag = false
     }
 
     // MARK: - Time Update Timer
@@ -974,6 +1211,13 @@ class NativeAudioEngine {
         if let url = tempFileURL {
             try? FileManager.default.removeItem(at: url)
             tempFileURL = nil
+        }
+    }
+
+    private func cleanupNextTempFile() {
+        if let url = nextTempFileURL {
+            try? FileManager.default.removeItem(at: url)
+            nextTempFileURL = nil
         }
     }
 

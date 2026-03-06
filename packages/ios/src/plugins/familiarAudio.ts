@@ -69,6 +69,15 @@ export interface FamiliarAudioPlugin {
     artworkUrl?: string;
   }): Promise<void>;
 
+  // Crossfade
+  preloadNext(options: { url: string; trackId: string }): Promise<{ success: boolean }>;
+  isNextReady(): Promise<{ ready: boolean }>;
+  getPreloadingTrackId(): Promise<{ trackId: string | null }>;
+  isCrossfading(): Promise<{ crossfading: boolean }>;
+  executeCrossfade(options: { duration: number }): Promise<void>;
+  cancelCrossfade(): Promise<void>;
+  setNextNormalizationVolume(options: { volume: number }): Promise<void>;
+
   // Pending track info for lock screen next/previous
   setPendingTrackInfo(options: {
     nextUrl?: string;
