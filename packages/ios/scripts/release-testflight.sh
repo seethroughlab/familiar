@@ -38,6 +38,13 @@ step() {
 
 # ── Preflight checks ──────────────────────────────────────────────────────────
 
+# Ensure login keychain is in the search list — GitHub Actions runners can
+# remove it when setting up their own temporary keychain for CI jobs.
+if ! security list-keychains | grep -q "login.keychain"; then
+    security list-keychains -s ~/Library/Keychains/login.keychain-db /Library/Keychains/System.keychain
+    green "Restored login keychain to search list"
+fi
+
 [[ -f "$PBXPROJ" ]]      || die "Xcode project not found at $PBXPROJ"
 [[ -f "$P8_KEY_PATH" ]]  || die "API key not found at $P8_KEY_PATH"
 [[ -f "$EXPORT_OPTIONS" ]] || die "ExportOptions.plist not found at $EXPORT_OPTIONS"
