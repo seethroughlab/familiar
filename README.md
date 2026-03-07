@@ -19,7 +19,7 @@
 | Audio feature analysis | BPM, key, energy, mood | — | Basic | Basic |
 | Community analysis cache | Yes | — | — | — |
 | Self-hosted / no cloud | Yes | Yes | Yes | Partial |
-| Subsonic API | Yes | Yes | — | — |
+| Subsonic API | — | Yes | — | — |
 | Music video playback | Yes | — | Yes | Yes |
 | Smart playlists | Rules-based | — | — | Yes |
 | Mobile PWA | Yes | Web only | Web + apps | Apps |
@@ -65,14 +65,14 @@
 
 ### Discovery & Search
 - **Semantic audio search** - Describe the sound you want: "upbeat with synths", "acoustic and melancholy"
-- **AI chat assistant** - 33 tools for search, playback, metadata correction, and playlist creation
+- **AI chat assistant** - 27 tools for search, playback, metadata correction, and playlist creation
 - **Find similar tracks** - Click any track to find sonically similar music via CLAP embeddings
 - **Mood Grid** - 2D scatter plot by energy and valence (happy/sad × calm/energetic)
 - **Music Map** - Ego-centric similarity map. Click any artist to center the view
 - **3D Explorer** - Navigate a 3D space of artists with hover-to-preview audio
 
 <details>
-<summary><strong>Available AI Tools (33)</strong></summary>
+<summary><strong>Available AI Tools (27)</strong></summary>
 
 | Tool | Description |
 |------|-------------|
@@ -93,18 +93,11 @@
 | `control_playback` | Play, pause, next, previous, shuffle |
 | `select_diverse_tracks` | Ensure variety across artists/albums |
 | `create_playlist_from_items` | Create playlist from a list of artists/albums/tracks |
-| **Spotify Integration** | |
-| `get_spotify_status` | Check if Spotify is connected |
-| `get_spotify_favorites` | Get Spotify likes matched to local library |
-| `get_unmatched_spotify_favorites` | Spotify likes you don't have locally |
-| `get_spotify_sync_stats` | Match rate and sync statistics |
-| `list_spotify_playlists` | List user's Spotify playlists |
-| `get_spotify_playlist_tracks` | Get tracks from a Spotify playlist with local match status |
-| `import_spotify_playlist` | Import a Spotify playlist to Familiar |
 | **Discovery** | |
 | `search_bandcamp` | Search Bandcamp for albums/tracks to purchase |
-| `recommend_bandcamp_purchases` | Suggest albums based on unmatched Spotify favorites |
-| `get_similar_tracks_external` | Get similar tracks from Last.fm for discovery |
+| `recommend_bandcamp_purchases` | Suggest albums based on your listening history |
+| `get_feature_distribution` | Get statistical distribution of audio features |
+| `get_available_mood_tags` | List all mood/genre/style tags available for filtering |
 | `fetch_webpage` | Extract music references from a URL for playlist creation |
 | **Metadata Correction** | |
 | `lookup_correct_metadata` | Look up correct metadata from MusicBrainz |
@@ -122,7 +115,6 @@
 ### Playback & Experience
 - **Synced lyrics** - Auto-scrolling lyrics display fetched from LRCLIB.net
 - **6 audio visualizers** - Cosmic Orb, Frequency Bars, Album Kaleidoscope, Rain Window, Lyrics, Music Video
-- **Visualizer plugins** - Open API for community visualizers ([create your own](docs/VISUALIZER_API.md))
 - **Music video playback** - Download and match music videos from YouTube
 - **Keyboard shortcuts** - Full keyboard control (press `?` for help)
 - **Multi-profile support** - Each household member gets their own favorites and history
@@ -140,14 +132,11 @@
 - **PWA support** - Install on mobile or desktop, works offline
 - **Download tracks** - Cache music for offline playback
 - **Lock screen controls** - Media notifications and controls
-- **CarPlay / Android Auto** - Stream via [Subsonic-compatible apps](docs/SUBSONIC.md)
 - **Works over Tailscale** - Access your library anywhere with HTTPS
 
 ### Integrations
-- **Spotify sync** - Import your Spotify favorites, see what you're missing locally
 - **Last.fm scrobbling** - Automatic scrobbling, love/unlove tracks
 - **Bandcamp discovery** - Search and get purchase recommendations
-- **Subsonic API** - Connect native music apps for CarPlay/Android Auto ([setup guide](docs/SUBSONIC.md))
 
 ## Quick Start
 
@@ -191,23 +180,24 @@ Press `?` anytime to see all shortcuts.
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Docker, OpenMediaVault, Synology NAS, and development setup
 - **[Configuration](docs/CONFIGURATION.md)** - Environment variables, API keys, Tailscale HTTPS, cloud backup
-- **[Subsonic / CarPlay Setup](docs/SUBSONIC.md)** - Connect native music apps for CarPlay and Android Auto
-- **[Visualizer API](docs/VISUALIZER_API.md)** - Create custom audio visualizers with full metadata access
 - **[Library Browser API](docs/LIBRARY_BROWSERS.md)** - Create custom 2D/3D library visualizations
 - **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation
-
-## Community Plugins
-
-Extend Familiar with community-created visualizers:
-- **[Lyric Pulse](https://github.com/seethroughlab/familiar-plugin-lyric-pulse)** - BPM-synced lyric display with glowing pulse effects
-- **[Timeline](https://github.com/seethroughlab/familiar-plugin-timeline)** - Visual timeline showing track position and upcoming lyrics
 
 ## Coming Soon
 
 Features planned for future releases:
 
-### Listening Sessions (WebRTC)
+### Spotify Integration ([branch](https://github.com/seethroughlab/familiar/tree/feature/spotify-external-tracks))
+Import your Spotify favorites, see what you're missing locally, and sync playlists. Adds 7 AI tools for querying Spotify data and importing playlists into Familiar.
+
+### Subsonic API / CarPlay / Android Auto ([branch](https://github.com/seethroughlab/familiar/tree/feature/subsonic-api))
+Expose a Subsonic-compatible API so native music apps (Symfonium, Ultrasonic, etc.) can connect for CarPlay and Android Auto playback.
+
+### Listening Sessions (WebRTC) ([branch](https://github.com/seethroughlab/familiar/tree/feature/listening-sessions))
 Share what you're listening to with friends in real-time. Host a session, share a link, and guests hear synchronized audio - no account required. Requires public signaling server deployment.
+
+### Community Visualizer Plugins ([branch](https://github.com/seethroughlab/familiar/tree/feature/community-plugins))
+Open API for community-created visualizers. Install plugins like Lyric Pulse (BPM-synced lyrics) and Timeline (visual track position) or create your own.
 
 ### Multi-Room Audio
 Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
