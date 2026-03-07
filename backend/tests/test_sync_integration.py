@@ -293,95 +293,6 @@ class TestProgressPersistence:
                 assert isinstance(data, dict)
 
 
-class TestSpotifySyncProgressReporter:
-    """Tests for SpotifySyncProgressReporter class."""
-
-    @pytest.fixture
-    def mock_redis(self):
-        return MagicMock()
-
-    @pytest.fixture
-    def reporter(self, mock_redis):
-        with patch("app.services.tasks.spotify_sync.get_redis", return_value=mock_redis):
-            from app.services.tasks import SpotifySyncProgressReporter
-            return SpotifySyncProgressReporter(profile_id="test-profile-123")
-
-    def test_init_sets_connecting_phase(self, reporter, mock_redis):
-        """Should set initial connecting phase on init."""
-        mock_redis.set.assert_called()
-        call_args = mock_redis.set.call_args
-        progress_data = json.loads(call_args[0][1])
-
-        assert progress_data["status"] == "running"
-        assert progress_data["phase"] == "connecting"
-        assert progress_data["profile_id"] == "test-profile-123"
-        assert progress_data["tracks_fetched"] == 0
-
-    def test_set_fetching(self, reporter, mock_redis):
-        """Should update to fetching phase."""
-        reporter.set_fetching(fetched=50, message="Fetching...")
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["phase"] == "fetching"
-        assert progress_data["tracks_fetched"] == 50
-        assert progress_data["message"] == "Fetching..."
-
-    def test_set_matching(self, reporter, mock_redis):
-        """Should update matching progress with percentage."""
-        reporter.set_matching(processed=50, total=100, new=10, matched=40, unmatched=10, current="Some Track")
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["phase"] == "matching"
-        assert progress_data["tracks_processed"] == 50
-        assert progress_data["matched"] == 40
-        assert "50%" in progress_data["message"]
-        assert progress_data["current_track"] == "Some Track"
-
-    def test_complete(self, reporter, mock_redis):
-        """Should mark sync as complete."""
-        reporter.complete(fetched=200, new=50, matched=150, unmatched=50)
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["status"] == "completed"
-        assert progress_data["phase"] == "complete"
-        assert progress_data["matched"] == 150
-
-    def test_error(self, reporter, mock_redis):
-        """Should set error status."""
-        # Mock _get_current to return initial state
-        mock_redis.get.return_value = json.dumps({
-            "status": "running",
-            "phase": "fetching",
-            "errors": [],
-        }).encode()
-
-        reporter.error("Connection failed")
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["status"] == "error"
-        assert "Connection failed" in progress_data["errors"]
-
-    def test_error_preserves_existing_data(self, reporter, mock_redis):
-        """Error should preserve existing progress data."""
-        mock_redis.get.return_value = json.dumps({
-            "status": "running",
-            "phase": "matching",
-            "matched": 50,
-            "errors": ["previous error"],
-        }).encode()
-
-        reporter.error("New error")
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["matched"] == 50
-        assert len(progress_data["errors"]) == 2
-
-
 class TestGetSyncProgress:
     """Tests for get_sync_progress function."""
 
@@ -407,22 +318,6 @@ class TestGetSyncProgress:
             result = get_sync_progress()
 
         assert result is None
-
-
-class TestGetSpotifySyncProgress:
-    """Tests for get_spotify_sync_progress function."""
-
-    def test_returns_data(self):
-        """Should return parsed Spotify sync progress."""
-        mock_redis = MagicMock()
-        mock_redis.get.return_value = json.dumps({"status": "running", "matched": 50}).encode()
-
-        with patch("app.services.tasks.spotify_sync.get_redis", return_value=mock_redis):
-            from app.services.tasks import get_spotify_sync_progress
-            result = get_spotify_sync_progress()
-
-        assert result is not None
-        assert result["matched"] == 50
 
 
 class TestGetMemoryMb:

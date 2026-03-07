@@ -11,7 +11,6 @@ from .base import (
     ChangeScope,
     ChangeSource,
     ChangeStatus,
-    ExternalTrackSource,
     TrackStatus,
 )
 from .frontend_log import FrontendLog
@@ -20,13 +19,10 @@ from .playlists import Playlist, PlaylistTrack, SmartPlaylist
 from .profiles import (
     LastfmProfile,
     Profile,
-    ProfileExternalFavorite,
     ProfileFavorite,
     ProfilePlayHistory,
-    SpotifyFavorite,
-    SpotifyProfile,
 )
-from .tracks import ANALYSIS_FEATURE_COLUMNS, ExternalTrack, Track, TrackAnalysis, TrackVideo
+from .tracks import ANALYSIS_FEATURE_COLUMNS, Track, TrackAnalysis, TrackVideo
 
 __all__ = [
     # Base
@@ -36,23 +32,18 @@ __all__ = [
     "ChangeScope",
     "ChangeSource",
     "ChangeStatus",
-    "ExternalTrackSource",
     "TrackStatus",
     # Models
     "ArtistInfo",
     "FrontendLog",
-    "ExternalTrack",
     "LastfmProfile",
     "Playlist",
     "PlaylistTrack",
     "Profile",
-    "ProfileExternalFavorite",
     "ProfileFavorite",
     "ProfilePlayHistory",
     "ProposedChange",
     "SmartPlaylist",
-    "SpotifyFavorite",
-    "SpotifyProfile",
     "Track",
     "TrackAnalysis",
     "TrackVideo",

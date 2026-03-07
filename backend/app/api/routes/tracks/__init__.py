@@ -12,7 +12,7 @@ from uuid import UUID
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
-from app.db.models import ExternalTrack, ProfilePlayHistory, Track
+from app.db.models import ProfilePlayHistory, Track
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +62,6 @@ class TrackResponse(BaseModel):
     # Play history (profile-specific, populated when profile header is present)
     last_played_at: datetime | None = None
     play_count: int | None = None
-
-    # External track fields (present when track_type === 'external')
-    track_type: str = "local"  # 'local' | 'external'
-    preview_url: str | None = None
-    matched_track_id: str | None = None
-    external_data: dict[str, Any] | None = None
-    source: str | None = None
-    spotify_id: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -148,59 +140,6 @@ AUDIO_MIME_TYPES = {
 # ---------------------------------------------------------------------------
 # Shared helper functions
 # ---------------------------------------------------------------------------
-
-def _apply_metadata_filters_to_external(
-    query: Any,
-    search: str | None,
-    artist: str | None,
-    album: str | None,
-    year_from: int | None,
-    year_to: int | None,
-) -> Any:
-    """Apply metadata filters to an ExternalTrack query."""
-    if search:
-        search_filter = f"%{search}%"
-        query = query.where(
-            ExternalTrack.title.ilike(search_filter)
-            | ExternalTrack.artist.ilike(search_filter)
-            | ExternalTrack.album.ilike(search_filter)
-        )
-    if artist:
-        query = query.where(ExternalTrack.artist.ilike(f"%{artist}%"))
-    if album:
-        query = query.where(ExternalTrack.album.ilike(f"%{album}%"))
-    if year_from is not None:
-        query = query.where(ExternalTrack.year >= year_from)
-    if year_to is not None:
-        query = query.where(ExternalTrack.year <= year_to)
-    return query
-
-
-def _external_track_to_response(row: Any) -> TrackResponse:
-    """Convert an ExternalTrack ORM object to a TrackResponse."""
-    ext_data = row.external_data or {}
-    return TrackResponse(
-        id=row.id,
-        file_path="",
-        title=row.title,
-        artist=row.artist,
-        album=row.album,
-        album_artist=None,
-        album_type="album",
-        track_number=row.track_number,
-        disc_number=None,
-        year=row.year,
-        genre=None,
-        duration_seconds=row.duration_seconds,
-        format=None,
-        analysis_version=0,
-        track_type="external",
-        preview_url=ext_data.get("itunes_preview_url"),
-        matched_track_id=str(row.matched_track_id) if row.matched_track_id else None,
-        external_data=ext_data,
-        source=row.source.value if row.source else None,
-        spotify_id=row.spotify_id,
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ from app.services.export_import.matching import (
     LibraryImportPreviewSession,
     _library_import_sessions,
 )
-from app.services.external_track_matcher import normalize_for_matching
+from app.services.normalize import normalize_for_matching
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)

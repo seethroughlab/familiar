@@ -472,18 +472,7 @@ export interface DiscoverRecommendedArtist {
   based_on_artist: string;
 }
 
-export interface DiscoverUnmatchedFavorite {
-  spotify_track_id: string;
-  name: string;
-  artist: string;
-  album: string | null;
-  image_url: string | null;
-  bandcamp_url: string | null;
-}
-
 export interface LibraryDiscoverResponse {
   recommended_artists: DiscoverRecommendedArtist[];
-  unmatched_favorites: DiscoverUnmatchedFavorite[];
-  unmatched_total: number;
   recently_added_count: number;
 }

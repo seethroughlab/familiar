@@ -7,7 +7,6 @@ export interface ExportRequest {
   include_playlists?: boolean;
   include_smart_playlists?: boolean;
   include_proposed_changes?: boolean;
-  include_external_tracks?: boolean;
   chat_history?: Array<Record<string, unknown>>;
 }
 
@@ -18,7 +17,6 @@ export interface ImportPreviewSummary {
   smart_playlists_count: number;
   proposed_changes_count: number;
   user_overrides_count: number;
-  external_tracks_count: number;
   chat_history_count: number;
 }
 
@@ -53,7 +51,6 @@ export interface ImportExecuteRequest {
   import_smart_playlists?: boolean;
   import_proposed_changes?: boolean;
   import_user_overrides?: boolean;
-  import_external_tracks?: boolean;
 }
 
 export interface ImportResultCategory {
@@ -71,7 +68,6 @@ export interface ImportExecuteResponse {
     smart_playlists: ImportResultCategory;
     proposed_changes: ImportResultCategory;
     user_overrides: ImportResultCategory;
-    external_tracks: ImportResultCategory;
     chat_history: Array<Record<string, unknown>>;
   };
 }
@@ -283,7 +279,6 @@ export interface BackupRequest {
   include_playlists?: boolean;
   include_smart_playlists?: boolean;
   include_proposed_changes?: boolean;
-  include_external_tracks?: boolean;
   // Library data options
   include_library_analysis?: boolean;
   include_embeddings?: boolean;
@@ -304,7 +299,6 @@ export interface RestorePreviewSummary {
     smart_playlists_count: number;
     proposed_changes_count: number;
     user_overrides_count: number;
-    external_tracks_count: number;
     chat_history_count: number;
   };
   library?: {
@@ -349,7 +343,6 @@ export interface RestoreExecuteRequest {
   import_smart_playlists?: boolean;
   import_proposed_changes?: boolean;
   import_user_overrides?: boolean;
-  import_external_tracks?: boolean;
   // Library import options
   library_mode?: 'match_only' | 'merge' | 'replace';
   apply_analysis?: boolean;
@@ -364,7 +357,6 @@ export interface RestoreProfileResults {
   smart_playlists: ImportResultCategory;
   proposed_changes: ImportResultCategory;
   user_overrides: ImportResultCategory;
-  external_tracks: ImportResultCategory;
   chat_history: Array<Record<string, unknown>>;
 }
 

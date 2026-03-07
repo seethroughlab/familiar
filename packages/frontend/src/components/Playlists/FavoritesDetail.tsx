@@ -1,25 +1,20 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Heart, Clock, Search, X, Download, Check, Loader2, RotateCw, ExternalLink, Link } from 'lucide-react';
+import { ArrowLeft, Play, Heart, Clock, Search, X, Download, Check, Loader2, RotateCw } from 'lucide-react';
 import { favoritesApi } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
-import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAutoDownload } from '../../hooks/useAutoDownload';
 import * as offlineService from '../../services/offlineService';
 import type { Track } from '../../types';
-import type { FavoriteTrack, ExternalFavoriteTrack } from '../../api';
+import type { FavoriteTrack } from '../../api';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
-import { StoreSearchLinks } from '../shared/StoreSearchLinks';
-import { TrackMatchModal } from './TrackMatchModal';
 import { formatDuration } from '../../utils/format';
 
-type FavoriteItem =
-  | (FavoriteTrack & { _kind: 'local' })
-  | (ExternalFavoriteTrack & { _kind: 'external' });
+type FavoriteItem = FavoriteTrack & { _kind: 'local' };
 
 interface Props {
   onBack?: () => void;
@@ -33,52 +28,28 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
-  const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
-  const { favorites, total, toggle, externalFavorites, toggleExternal } = useFavorites();
+  const { favorites, total, toggle } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const [searchFilter, setSearchFilter] = useState('');
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
-  const [matchingTrack, setMatchingTrack] = useState<ExternalFavoriteTrack | null>(null);
 
   const getTrack = useCallback(
-    (item: FavoriteItem): Track => {
-      if (item._kind === 'external') {
-        const trackId = item.matched_track_id || item.id;
-        return {
-          id: trackId,
-          file_path: '',
-          title: item.title,
-          artist: item.artist,
-          album: item.album,
-          album_artist: null,
-          album_type: 'album',
-          track_number: null,
-          disc_number: null,
-          year: item.year ?? null,
-          genre: null,
-          duration_seconds: item.duration_seconds,
-          format: null,
-          analysis_version: 0,
-        };
-      }
-      return {
-        id: item.id,
-        file_path: item.file_path ?? '',
-        title: item.title,
-        artist: item.artist,
-        album: item.album,
-        album_artist: item.album_artist ?? null,
-        album_type: (item.album_type as Track['album_type']) ?? 'album',
-        track_number: item.track_number ?? null,
-        disc_number: item.disc_number ?? null,
-        year: item.year ?? null,
-        genre: item.genre ?? null,
-        duration_seconds: item.duration_seconds,
-        format: item.format ?? null,
-        analysis_version: item.analysis_version ?? 0,
-      };
-    },
+    (item: FavoriteItem): Track => ({
+      id: item.id,
+      file_path: item.file_path ?? '',
+      title: item.title,
+      artist: item.artist,
+      album: item.album,
+      album_artist: item.album_artist ?? null,
+      album_type: (item.album_type as Track['album_type']) ?? 'album',
+      track_number: item.track_number ?? null,
+      disc_number: item.disc_number ?? null,
+      year: item.year ?? null,
+      genre: item.genre ?? null,
+      duration_seconds: item.duration_seconds,
+      format: item.format ?? null,
+      analysis_version: item.analysis_version ?? 0,
+    }),
     [],
   );
 
@@ -139,64 +110,30 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
     startDownload(jobId, 'playlist', 'Favorites', tracksToDownload.map(f => f.id));
   };
 
-  const searchedFavorites = useMemo(() => {
-    if (!searchFilter) return favorites;
+  const filteredFavorites = useMemo(() => {
+    const items: FavoriteItem[] = favorites.map(f => ({ ...f, _kind: 'local' as const }));
+    if (!searchFilter) return items;
     const q = searchFilter.toLowerCase();
-    return favorites.filter(t =>
+    return items.filter(t =>
       (t.title?.toLowerCase().includes(q)) ||
       (t.artist?.toLowerCase().includes(q)) ||
       (t.album?.toLowerCase().includes(q))
     );
   }, [favorites, searchFilter]);
 
-  const searchedExternalFavorites = useMemo(() => {
-    const extFavs = externalFavorites ?? [];
-    if (!searchFilter) return extFavs;
-    const q = searchFilter.toLowerCase();
-    return extFavs.filter(t =>
-      (t.title?.toLowerCase().includes(q)) ||
-      (t.artist?.toLowerCase().includes(q)) ||
-      (t.album?.toLowerCase().includes(q))
-    );
-  }, [externalFavorites, searchFilter]);
-
-  const mergedFavorites = useMemo(() => {
-    const locals: FavoriteItem[] = searchedFavorites.map(f => ({ ...f, _kind: 'local' as const }));
-    const externals: FavoriteItem[] = searchedExternalFavorites.map(f => ({ ...f, _kind: 'external' as const }));
-    const all = [...locals, ...externals];
-    // Default sort: by favorited_at DESC (interleaved by date)
-    all.sort((a, b) => (b.favorited_at || '').localeCompare(a.favorited_at || ''));
-    return all;
-  }, [searchedFavorites, searchedExternalFavorites]);
-
   const handlePlay = useCallback((startIndex = 0, sortedItems?: FavoriteItem[]) => {
-    const items = sortedItems ?? mergedFavorites;
+    const items = sortedItems ?? filteredFavorites;
     const item = items[startIndex];
     if (!item) return;
 
-    // If clicking on the currently playing track, toggle play/pause
     const trackForItem = getTrack(item);
     if (currentTrack?.id === trackForItem.id) {
       setIsPlaying(!isPlaying);
       return;
     }
 
-    const queueTracks = items.map(t => {
-      const track = getTrack(t);
-      if (t._kind === 'external') {
-        return Object.assign(track, {
-          _externalInfo: {
-            type: 'external' as const,
-            previewUrl: t.preview_url || null,
-            matchedTrackId: t.matched_track_id || null,
-            originalId: t.id,
-          },
-        });
-      }
-      return track;
-    });
-    setQueue(queueTracks, startIndex);
-  }, [mergedFavorites, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+    setQueue(items.map(getTrack), startIndex);
+  }, [filteredFavorites, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
 
   const totalDuration = favorites.reduce(
     (sum, t) => sum + (t.duration_seconds || 0),
@@ -204,130 +141,45 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   );
 
   // Render props for PlaylistTrackList
-  const renderTitleBadge = useCallback((ctx: TrackRowContext<FavoriteItem>) => {
-    if (ctx.item._kind === 'external') {
-      const isMatched = ctx.item.is_matched && ctx.item.matched_track_id;
-      if (!isMatched) {
-        return (
-          <>
-            <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
-              Not in library
-            </span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setMatchingTrack(ctx.item as ExternalFavoriteTrack);
-              }}
-              className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded transition-colors flex items-center gap-0.5"
-              title="Match to library track"
-            >
-              <Link className="w-3 h-3" />
-              Match
-            </button>
-            <StoreSearchLinks
-              artist={ctx.item.artist || 'Unknown Artist'}
-              title={ctx.item.title || 'Unknown Title'}
-              album={ctx.item.album}
-            />
-          </>
-        );
-      }
-    }
-    return null;
-  }, []);
+  const renderTitleBadge = useCallback((_ctx: TrackRowContext<FavoriteItem>) => null, []);
+  const getRowClassName = useCallback((_ctx: TrackRowContext<FavoriteItem>) => '', []);
 
-  const getRowClassName = useCallback((ctx: TrackRowContext<FavoriteItem>) => {
-    if (ctx.item._kind === 'external') {
-      const isMatched = ctx.item.is_matched && ctx.item.matched_track_id;
-      if (!isMatched) return 'opacity-60';
-    }
-    return '';
-  }, []);
+  const renderDesktopTrailing = useCallback((ctx: TrackRowContext<FavoriteItem>) => (
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle(ctx.item.id);
+        }}
+        className="p-1 text-pink-500 hover:text-pink-400 transition-colors"
+        title="Remove from favorites"
+      >
+        <Heart className="w-4 h-4" fill="currentColor" />
+      </button>
+      <div className="text-sm text-zinc-500 text-right">
+        {formatDuration(ctx.track.duration_seconds)}
+      </div>
+    </>
+  ), [toggle]);
 
-  const renderDesktopTrailing = useCallback((ctx: TrackRowContext<FavoriteItem>) => {
-    if (ctx.item._kind === 'external') {
-      return (
-        <>
-          <div className="flex items-center gap-0.5">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleExternal(ctx.item.id);
-              }}
-              className="p-1 text-pink-500 hover:text-pink-400 transition-colors"
-              title="Remove from favorites"
-            >
-              <Heart className="w-4 h-4" fill="currentColor" />
-            </button>
-            {(ctx.item as ExternalFavoriteTrack).external_links && Object.keys((ctx.item as ExternalFavoriteTrack).external_links).length > 0 && (
-              <a
-                href={Object.values((ctx.item as ExternalFavoriteTrack).external_links)[0]}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="p-1 text-zinc-500 hover:text-green-400 transition-colors"
-                title="Open in Spotify"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </a>
-            )}
-          </div>
-          <div className="text-sm text-zinc-500 text-right">
-            {formatDuration(ctx.track.duration_seconds)}
-          </div>
-        </>
-      );
-    }
+  const renderMobileTrailing = useCallback((ctx: TrackRowContext<FavoriteItem>) => (
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          toggle(ctx.item.id);
+        }}
+        className="flex-shrink-0 p-1 text-pink-500 hover:text-pink-400 transition-colors"
+      >
+        <Heart className="w-4 h-4" fill="currentColor" />
+      </button>
+      <div className="flex-shrink-0 text-sm text-zinc-500">
+        {formatDuration(ctx.track.duration_seconds)}
+      </div>
+    </>
+  ), [toggle]);
 
-    // Local favorite
-    return (
-      <>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toggle(ctx.item.id);
-          }}
-          className="p-1 text-pink-500 hover:text-pink-400 transition-colors"
-          title="Remove from favorites"
-        >
-          <Heart className="w-4 h-4" fill="currentColor" />
-        </button>
-        <div className="text-sm text-zinc-500 text-right">
-          {formatDuration(ctx.track.duration_seconds)}
-        </div>
-      </>
-    );
-  }, [toggle, toggleExternal]);
-
-  const renderMobileTrailing = useCallback((ctx: TrackRowContext<FavoriteItem>) => {
-    const isExternal = ctx.item._kind === 'external';
-    return (
-      <>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (isExternal) {
-              toggleExternal(ctx.item.id);
-            } else {
-              toggle(ctx.item.id);
-            }
-          }}
-          className="flex-shrink-0 p-1 text-pink-500 hover:text-pink-400 transition-colors"
-        >
-          <Heart className="w-4 h-4" fill="currentColor" />
-        </button>
-        <div className="flex-shrink-0 text-sm text-zinc-500">
-          {formatDuration(ctx.track.duration_seconds)}
-        </div>
-      </>
-    );
-  }, [toggle, toggleExternal]);
-
-  // Use a stable ID for favorites items since external items have different id namespaces
-  const getItemId = useCallback((item: FavoriteItem) => {
-    if (item._kind === 'external') return `ext-${item.id}`;
-    return item.id;
-  }, []);
+  const getItemId = useCallback((item: FavoriteItem) => item.id, []);
 
   return (
     <div className="space-y-4 p-4">
@@ -359,7 +211,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <button
             onClick={() => handlePlay(0)}
-            disabled={mergedFavorites.length === 0}
+            disabled={filteredFavorites.length === 0}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-pink-600 hover:bg-pink-500 disabled:opacity-50 disabled:hover:bg-pink-600 rounded-full transition-colors"
           >
             <Play className="w-4 h-4" fill="currentColor" />
@@ -412,21 +264,6 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
             <span className="text-sm">Auto</span>
           </button>
 
-          {/* External preview toggle */}
-          {externalFavorites && externalFavorites.length > 0 && (
-            <button
-              onClick={() => setPlayExternalPreviews(!playExternalPreviews)}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
-                playExternalPreviews
-                  ? 'bg-amber-600 hover:bg-amber-500'
-                  : 'bg-zinc-700 hover:bg-zinc-600'
-              }`}
-              title={playExternalPreviews ? 'Disable external track previews' : 'Enable external track previews'}
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span className="text-sm">Previews</span>
-            </button>
-          )}
         </div>
       </div>
 
@@ -452,7 +289,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
 
       {/* Track list */}
       <PlaylistTrackList
-        items={mergedFavorites}
+        items={filteredFavorites}
         getTrack={getTrack}
         getItemId={getItemId}
         onPlay={handlePlay}
@@ -465,15 +302,6 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
         sortPersistKey="favorites"
         defaultSortBy="artist"
       />
-
-      {/* Track match modal */}
-      {matchingTrack && (
-        <TrackMatchModal
-          externalTrack={matchingTrack}
-          unmatchedExternals={searchedExternalFavorites}
-          onClose={() => setMatchingTrack(null)}
-        />
-      )}
     </div>
   );
 }

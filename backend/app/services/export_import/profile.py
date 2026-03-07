@@ -15,8 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_app_version
 from app.db.models import (
-    ExternalTrack,
-    ExternalTrackSource,
     Playlist,
     PlaylistTrack,
     Profile,
@@ -56,23 +54,6 @@ class ExportImportService:
             "duration_seconds": track.duration_seconds,
         }
 
-    def _build_external_track_ref(self, ext: ExternalTrack) -> dict[str, Any]:
-        """Build an external track export dict."""
-        return {
-            "title": ext.title,
-            "artist": ext.artist,
-            "album": ext.album,
-            "duration_seconds": ext.duration_seconds,
-            "track_number": ext.track_number,
-            "year": ext.year,
-            "isrc": ext.isrc,
-            "spotify_id": ext.spotify_id,
-            "musicbrainz_recording_id": ext.musicbrainz_recording_id,
-            "deezer_id": ext.deezer_id,
-            "external_data": ext.external_data,
-            "source": ext.source.value if ext.source else None,
-        }
-
     async def export_profile(
         self,
         profile: Profile,
@@ -81,7 +62,6 @@ class ExportImportService:
         include_playlists: bool = True,
         include_smart_playlists: bool = True,
         include_proposed_changes: bool = True,
-        include_external_tracks: bool = True,
         chat_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Export all data for a profile.
@@ -120,9 +100,6 @@ class ExportImportService:
         if include_proposed_changes:
             export_data["proposed_changes"] = await self._export_proposed_changes()
             export_data["user_overrides"] = await self._export_user_overrides()
-
-        if include_external_tracks:
-            export_data["external_tracks"] = await self._export_external_tracks()
 
         if chat_history:
             export_data["chat_history"] = chat_history
@@ -187,21 +164,11 @@ class ExportImportService:
             tracks_data = []
             for pt in playlist_tracks:
                 if pt.track_id:
-                    # Local track
                     track = await self.db.get(Track, pt.track_id)
                     if track:
                         tracks_data.append({
                             "type": "local",
                             "track_ref": self._build_track_ref(track),
-                            "position": pt.position,
-                        })
-                elif pt.external_track_id:
-                    # External track
-                    ext = await self.db.get(ExternalTrack, pt.external_track_id)
-                    if ext:
-                        tracks_data.append({
-                            "type": "external",
-                            "external_track": self._build_external_track_ref(ext),
                             "position": pt.position,
                         })
 
@@ -290,13 +257,6 @@ class ExportImportService:
                 })
 
         return exported
-
-    async def _export_external_tracks(self) -> list[dict[str, Any]]:
-        """Export external tracks (wishlist items, unmatched tracks)."""
-        result = await self.db.execute(select(ExternalTrack))
-        external_tracks = result.scalars().all()
-
-        return [self._build_external_track_ref(ext) for ext in external_tracks]
 
 
 class ImportService:
@@ -402,7 +362,6 @@ class ImportService:
             "smart_playlists_count": len(import_data.get("smart_playlists", [])),
             "proposed_changes_count": len(proposed_changes),
             "user_overrides_count": len(user_overrides),
-            "external_tracks_count": len(import_data.get("external_tracks", [])),
             "chat_history_count": len(import_data.get("chat_history", [])),
         }
 
@@ -457,7 +416,6 @@ class ImportService:
         import_smart_playlists: bool = True,
         import_proposed_changes: bool = True,
         import_user_overrides: bool = True,
-        import_external_tracks: bool = True,
     ) -> dict[str, Any]:
         """Execute an import from a previewed session.
 
@@ -493,7 +451,6 @@ class ImportService:
             "smart_playlists": {"imported": 0, "skipped": 0, "errors": []},
             "proposed_changes": {"imported": 0, "skipped": 0, "errors": []},
             "user_overrides": {"imported": 0, "skipped": 0, "errors": []},
-            "external_tracks": {"imported": 0, "skipped": 0, "errors": []},
             "chat_history": import_data.get("chat_history", []),
         }
 
@@ -524,11 +481,6 @@ class ImportService:
             if import_user_overrides:
                 results["user_overrides"] = await self._import_user_overrides(
                     import_data.get("user_overrides", []), track_id_lookup,
-                )
-
-            if import_external_tracks:
-                results["external_tracks"] = await self._import_external_tracks(
-                    import_data.get("external_tracks", []),
                 )
 
             await self.db.commit()
@@ -752,18 +704,6 @@ class ImportService:
                             )
                             self.db.add(pt)
 
-                    elif track_entry.get("type") == "external":
-                        ext_data = track_entry.get("external_track", {})
-                        # Create or find external track
-                        ext_track = await self._get_or_create_external_track(ext_data)
-                        if ext_track:
-                            pt = PlaylistTrack(
-                                playlist_id=playlist.id,
-                                external_track_id=ext_track.id,
-                                position=position,
-                            )
-                            self.db.add(pt)
-
                 imported += 1
 
             except Exception as e:
@@ -849,66 +789,3 @@ class ImportService:
                 errors.append(f"Error importing user override: {e}")
 
         return {"imported": imported, "skipped": skipped, "errors": errors}
-
-    async def _import_external_tracks(
-        self,
-        external_tracks: list[dict[str, Any]],
-    ) -> dict[str, Any]:
-        """Import external tracks."""
-        imported = 0
-        skipped = 0
-        errors: list[str] = []
-
-        for ext_data in external_tracks:
-            try:
-                ext_track = await self._get_or_create_external_track(ext_data)
-                if ext_track:
-                    imported += 1
-                else:
-                    skipped += 1
-            except Exception as e:
-                errors.append(f"Error importing external track: {e}")
-
-        return {"imported": imported, "skipped": skipped, "errors": errors}
-
-    async def _get_or_create_external_track(
-        self,
-        ext_data: dict[str, Any],
-    ) -> ExternalTrack | None:
-        """Get or create an external track."""
-        spotify_id = ext_data.get("spotify_id")
-
-        # Check if exists by spotify_id
-        if spotify_id:
-            existing = await self.db.execute(
-                select(ExternalTrack).where(ExternalTrack.spotify_id == spotify_id)
-            )
-            ext = existing.scalar_one_or_none()
-            if ext:
-                return ext
-
-        # Create new
-        source_str = ext_data.get("source", "manual")
-        try:
-            source = ExternalTrackSource(source_str)
-        except (ValueError, KeyError):
-            source = ExternalTrackSource.MANUAL
-
-        ext_track = ExternalTrack(
-            title=ext_data.get("title", "Unknown"),
-            artist=ext_data.get("artist", "Unknown"),
-            album=ext_data.get("album"),
-            duration_seconds=ext_data.get("duration_seconds"),
-            track_number=ext_data.get("track_number"),
-            year=ext_data.get("year"),
-            isrc=ext_data.get("isrc"),
-            spotify_id=spotify_id,
-            musicbrainz_recording_id=ext_data.get("musicbrainz_recording_id"),
-            deezer_id=ext_data.get("deezer_id"),
-            external_data=ext_data.get("external_data", {}),
-            source=source,
-        )
-        self.db.add(ext_track)
-        await self.db.flush()
-
-        return ext_track

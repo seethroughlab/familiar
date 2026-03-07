@@ -130,10 +130,6 @@ describe('syncService', () => {
         expect.objectContaining({ type: 'favorite_toggle' })
       );
 
-      await queueAction('sync_spotify', {});
-      expect(mockAdd).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'sync_spotify' })
-      );
     });
   });
 

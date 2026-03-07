@@ -9,12 +9,10 @@ from uuid import UUID
 from sqlalchemy import func, select
 
 from app.db.models import (
-    ExternalTrackSource,
     Playlist,
     PlaylistTrack,
     Track,
 )
-from app.services.external_track_matcher import ExternalTrackMatcher
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -151,7 +149,7 @@ class PlaylistHandlersMixin:
     ) -> dict[str, Any]:
         """Create a playlist from extracted music items.
 
-        Matches items to local library and creates external tracks for missing items.
+        Matches items to local library. Items not found in the library are reported but not added.
         """
         if not self.profile_id:
             return {"error": "No profile ID - cannot create playlist", "created": False}
@@ -177,7 +175,6 @@ class PlaylistHandlersMixin:
         self.db.add(playlist)
         await self.db.flush()
 
-        matcher = ExternalTrackMatcher(self.db)
         position = 0
         local_tracks_added = 0
         missing_tracks_added = 0
@@ -220,60 +217,17 @@ class PlaylistHandlersMixin:
                     "matched_count": len(matched_tracks),
                 })
             else:
-                # Create external track for missing item
-                display_title = track_name or album or f"Tracks by {artist}"
-
-                external_track = await matcher.create_external_track(
-                    title=display_title,
-                    artist=artist,
-                    album=album,
-                    source=ExternalTrackSource.LLM_RECOMMENDATION,
-                    external_data={
-                        "year": year,
-                        "source_url": description,
-                        "original_item": item,
-                    },
-                    source_playlist_id=playlist.id,
-                    try_match=True,  # Try to match to local library
-                )
-
-                # Check if matcher found a match
-                if external_track.matched_track_id:
-                    # Use the matched local track instead
-                    playlist_track = PlaylistTrack(
-                        playlist_id=playlist.id,
-                        track_id=external_track.matched_track_id,
-                        position=position,
-                    )
-                    local_tracks_added += 1
-                    found_items.append({
-                        "artist": artist,
-                        "album": album,
-                        "track": track_name,
-                        "matched_count": 1,
-                        "matched_via": "fuzzy",
-                    })
-                else:
-                    # Add as external/missing track
-                    playlist_track = PlaylistTrack(
-                        playlist_id=playlist.id,
-                        external_track_id=external_track.id,
-                        position=position,
-                    )
-                    missing_tracks_added += 1
-                    missing_items.append({
-                        "artist": artist,
-                        "album": album,
-                        "track": track_name,
-                        "year": year,
-                    })
-
-                self.db.add(playlist_track)
-                position += 1
+                missing_tracks_added += 1
+                missing_items.append({
+                    "artist": artist,
+                    "album": album,
+                    "track": track_name,
+                    "year": year,
+                })
 
         await self.db.commit()
 
-        total_tracks = local_tracks_added + missing_tracks_added
+        total_tracks = local_tracks_added
 
         return {
             "created": True,
@@ -284,7 +238,7 @@ class PlaylistHandlersMixin:
             "missing_tracks": missing_tracks_added,
             "found_items": found_items,
             "missing_items": missing_items,
-            "message": f"Created playlist '{name}' with {total_tracks} tracks ({local_tracks_added} local, {missing_tracks_added} missing).",
+            "message": f"Created playlist '{name}' with {total_tracks} tracks ({missing_tracks_added} not found in library).",
         }
 
     async def _search_for_item(

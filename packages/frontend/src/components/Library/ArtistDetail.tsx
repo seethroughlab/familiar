@@ -14,7 +14,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { libraryApi, tracksApi, playlistsApi } from '../../api';
+import { libraryApi, tracksApi } from '../../api';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { OfflineButton } from './browsers/trackList/OfflineButton';
@@ -62,27 +62,12 @@ function ArtistDiscoverySection({
     }
   };
 
-  const handleAddToWishlist = async (item: DiscoveryItem) => {
-    if (!item.inLibrary && item.name) {
-      try {
-        // For artists, we add a placeholder track
-        await playlistsApi.addToWishlist({
-          title: `Tracks by ${item.name}`,
-          artist: item.name,
-        });
-      } catch (err) {
-        log.error('Failed to add to wishlist:', err);
-      }
-    }
-  };
-
   return (
     <DiscoveryPanel
       title="Discover More"
       sections={sections}
       collapsible
       onItemClick={handleItemClick}
-      onAddToWishlist={handleAddToWishlist}
     />
   );
 }

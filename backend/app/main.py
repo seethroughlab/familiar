@@ -35,10 +35,8 @@ from app.api.routes import (
     diagnostics,
     download,
     export_import,
-    external_tracks,
     favorites,
     health,
-    itunes,
     lastfm,
     library,
     organizer,
@@ -48,7 +46,6 @@ from app.api.routes import (
     proposed_changes,
     s3_backup,
     smart_playlists,
-    spotify,
     tracks,
     updates,
     videos,
@@ -275,7 +272,6 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(tracks.router, prefix="/api/v1")
 app.include_router(library.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")
-app.include_router(spotify.router, prefix="/api/v1")
 app.include_router(videos.router, prefix="/api/v1")
 app.include_router(lastfm.router, prefix="/api/v1")
 app.include_router(settings_routes.router, prefix="/api/v1")
@@ -290,8 +286,6 @@ app.include_router(outputs.router, prefix="/api/v1")
 app.include_router(artwork.router, prefix="/api/v1")
 app.include_router(background.router, prefix="/api/v1")
 app.include_router(diagnostics.router, prefix="/api/v1")
-app.include_router(external_tracks.router, prefix="/api/v1")
-app.include_router(itunes.router, prefix="/api/v1")
 app.include_router(export_import.router, prefix="/api/v1")
 app.include_router(s3_backup.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")

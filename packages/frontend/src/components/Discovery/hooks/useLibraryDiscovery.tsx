@@ -11,7 +11,6 @@ interface UseLibraryDiscoveryResult {
   sections: DiscoverySection[];
   inLibraryArtistsSection: DiscoverySection | null;
   externalArtistsSection: DiscoverySection | null;
-  unmatchedFavoritesSection: DiscoverySection | null;
   hasDiscovery: boolean;
 }
 
@@ -22,7 +21,6 @@ interface UseLibraryDiscoveryResult {
  * - "New Releases" - new releases from artists in library
  * - "More From Artists You Love" - in-library recommended artists
  * - "Artists to Discover" - external recommended artists
- * - "Get These From Spotify" - unmatched Spotify favorites
  */
 export function useLibraryDiscovery({
   data,
@@ -33,7 +31,6 @@ export function useLibraryDiscovery({
         sections: [],
         inLibraryArtistsSection: null,
         externalArtistsSection: null,
-        unmatchedFavoritesSection: null,
         hasDiscovery: false,
       };
     }
@@ -95,36 +92,10 @@ export function useLibraryDiscovery({
       }
     }
 
-    // Section 4: Unmatched Spotify Favorites
-    let unmatchedFavoritesSection: DiscoverySection | null = null;
-    if (data.unmatched_favorites && data.unmatched_favorites.length > 0) {
-      const unmatchedItems: DiscoveryItem[] = data.unmatched_favorites.map((fav) => ({
-        entityType: 'track' as const,
-        name: fav.name,
-        subtitle: fav.artist,
-        imageUrl: fav.image_url || undefined,
-        inLibrary: false,
-        externalLinks: {
-          bandcamp: fav.bandcamp_url || undefined,
-          spotify: `https://open.spotify.com/track/${fav.spotify_track_id}`,
-        },
-      }));
-
-      unmatchedFavoritesSection = {
-        id: 'unmatched-favorites',
-        title: 'Get These From Spotify',
-        entityType: 'track',
-        items: unmatchedItems,
-        layout: 'list',
-      };
-      sections.push(unmatchedFavoritesSection);
-    }
-
     return {
       sections,
       inLibraryArtistsSection,
       externalArtistsSection,
-      unmatchedFavoritesSection,
       hasDiscovery: sections.some((s) => s.items.length > 0),
     };
   }, [data]);

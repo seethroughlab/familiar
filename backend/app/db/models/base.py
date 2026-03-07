@@ -62,12 +62,3 @@ class ChangeScope(enum.Enum):
     DB_ID3_FILES = "db_id3_files"  # Also rename/move files
 
 
-class ExternalTrackSource(enum.Enum):
-    """Source of an external/missing track."""
-
-    SPOTIFY_PLAYLIST = "spotify_playlist"
-    SPOTIFY_FAVORITE = "spotify_favorite"
-    PLAYLIST_IMPORT = "playlist_import"
-    LLM_RECOMMENDATION = "llm_recommendation"
-    MANUAL = "manual"
-    NEW_RELEASE = "new_release"

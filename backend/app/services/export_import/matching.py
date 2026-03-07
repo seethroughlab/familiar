@@ -11,9 +11,35 @@ from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import re
+
 from app.db.models import Track
-from app.services.external_track_matcher import normalize_for_matching
 from app.utils.time import utcnow
+
+
+def normalize_for_matching(s: str) -> str:
+    """Normalize string for matching comparisons."""
+    s = re.sub(
+        r'\s*[\(\[](feat\.?|ft\.?|featuring)[^\)\]]*[\)\]]',
+        '',
+        s,
+        flags=re.IGNORECASE
+    )
+    s = re.sub(
+        r'\s*[\(\[][^\)\]]*(?:remaster(?:ed)?|remix|version|edit|deluxe|bonus)[^\)\]]*[\)\]]',
+        '',
+        s,
+        flags=re.IGNORECASE
+    )
+    s = re.sub(
+        r'\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|remix|version|edit|deluxe|bonus|radio\s+edit)\b.*$',
+        '',
+        s,
+        flags=re.IGNORECASE
+    )
+    s = s.replace("\u2018", "'").replace("\u2019", "'").replace("`", "'")
+    s = ' '.join(s.split())
+    return s.strip().lower()
 
 logger = logging.getLogger(__name__)
 

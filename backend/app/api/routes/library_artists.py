@@ -537,8 +537,7 @@ async def get_artist_image(
     Fallback order:
     1. Cached Last.fm image from ArtistInfo table
     2. Fetch from Last.fm API and cache
-    3. Fetch from Spotify API (requires profile with Spotify connection)
-    4. Fallback to first album's artwork
+    3. Fallback to first album's artwork
 
     Args:
         artist_name: The artist name (URL-encoded)
@@ -626,40 +625,7 @@ async def get_artist_image(
         except Exception as e:
             logger.debug(f"Last.fm artist image lookup failed for '{artist_name}': {e}")
 
-    # Step 3: Try Spotify (requires profile with Spotify connection)
-    profile_id = request.headers.get("X-Profile-ID")
-    if profile_id:
-        try:
-            from uuid import UUID
-
-            from app.services.spotify import SpotifyArtistService
-
-            spotify_service = SpotifyArtistService(db)
-            spotify_artist = await spotify_service.search_artist(
-                UUID(profile_id),
-                artist_name,
-            )
-
-            if spotify_artist and spotify_artist.get("images"):
-                # Spotify returns images sorted by size (largest first)
-                images = spotify_artist["images"]
-                if images:
-                    image_url = images[0]["url"]  # Largest image
-                    # Cache as extralarge
-                    await _cache_artist_images(
-                        db,
-                        artist_normalized,
-                        artist_name,
-                        {"extralarge": image_url, "large": image_url},
-                    )
-                    return RedirectResponse(
-                        url=image_url,
-                        headers={"Cache-Control": "public, max-age=86400"},
-                    )
-        except Exception as e:
-            logger.debug(f"Spotify artist image lookup failed for '{artist_name}': {e}")
-
-    # Step 4: Fallback to first album's artwork
+    # Step 3: Fallback to first album's artwork
     artist_match = (
         (func.lower(func.trim(Track.artist)) == artist_normalized)
         | (func.lower(func.trim(Track.album_artist)) == artist_normalized)

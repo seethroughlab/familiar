@@ -11,7 +11,6 @@ from uuid import uuid4
 import pytest
 
 from app.db.models import (
-    ExternalTrack,
     Profile,
     ProfilePlayHistory,
     Track,
@@ -215,7 +214,6 @@ class TestExportImportService:
                 include_playlists=False,
                 include_smart_playlists=False,
                 include_proposed_changes=False,
-                include_external_tracks=False,
             )
 
         assert export["version"] == EXPORT_VERSION
@@ -250,7 +248,6 @@ class TestExportImportService:
                 include_playlists=False,
                 include_smart_playlists=False,
                 include_proposed_changes=False,
-                include_external_tracks=False,
                 chat_history=chat_history,
             )
 
@@ -448,69 +445,6 @@ class TestImportMergeMode:
         assert result["imported"] == 1
 
 
-class TestImportExternalTracks:
-    """Tests for external track import."""
-
-    @pytest.fixture
-    def mock_db(self):
-        db = MagicMock()
-        db.execute = AsyncMock()
-        db.commit = AsyncMock()
-        db.flush = AsyncMock()
-        db.scalar = AsyncMock()
-        return db
-
-    @pytest.fixture
-    def service(self, mock_db):
-        return ImportService(mock_db)
-
-    @pytest.mark.asyncio
-    async def test_get_or_create_external_track_creates_new(self, service, mock_db):
-        """Should create new external track if not exists."""
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
-
-        ext_data = {
-            "title": "Test Song",
-            "artist": "Test Artist",
-            "album": "Test Album",
-            "spotify_id": "spotify_123",
-            "source": "spotify_playlist",
-        }
-
-        await service._get_or_create_external_track(ext_data)
-
-        mock_db.add.assert_called_once()
-        added_track = mock_db.add.call_args[0][0]
-        assert added_track.title == "Test Song"
-        assert added_track.artist == "Test Artist"
-        assert added_track.spotify_id == "spotify_123"
-
-    @pytest.mark.asyncio
-    async def test_get_or_create_external_track_returns_existing(self, service, mock_db):
-        """Should return existing external track by spotify_id."""
-        existing_track = MagicMock(spec=ExternalTrack)
-        existing_track.id = uuid4()
-        existing_track.spotify_id = "spotify_123"
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = existing_track
-        mock_db.execute.return_value = mock_result
-
-        ext_data = {
-            "title": "Test Song",
-            "artist": "Test Artist",
-            "spotify_id": "spotify_123",
-            "source": "spotify_playlist",
-        }
-
-        result = await service._get_or_create_external_track(ext_data)
-
-        assert result == existing_track
-        mock_db.add.assert_not_called()
-
-
 class TestRefToKey:
     """Tests for ImportService._ref_to_key."""
 
@@ -538,46 +472,6 @@ class TestRefToKey:
         ref = {"title": "Song"}
         key = service._ref_to_key(ref)
         assert key == ":song:"
-
-
-class TestBuildExternalTrackRef:
-    """Tests for ExportImportService._build_external_track_ref."""
-
-    @pytest.fixture
-    def mock_db(self):
-        db = MagicMock()
-        db.execute = AsyncMock()
-        return db
-
-    @pytest.fixture
-    def service(self, mock_db):
-        return ExportImportService(mock_db)
-
-    def test_maps_all_fields(self, service):
-        """Should map all ExternalTrack fields correctly."""
-        ext = MagicMock(spec=ExternalTrack)
-        ext.title = "External Song"
-        ext.artist = "External Artist"
-        ext.album = "External Album"
-        ext.duration_seconds = 200
-        ext.track_number = 3
-        ext.year = 2023
-        ext.isrc = "ISRC123"
-        ext.spotify_id = "sp_456"
-        ext.musicbrainz_recording_id = "mb_789"
-        ext.deezer_id = "dz_101"
-        ext.preview_url = "https://preview.example.com"
-        ext.preview_source = "spotify"
-        ext.external_data = {"key": "value"}
-        ext.source = MagicMock()
-        ext.source.value = "spotify_playlist"
-
-        ref = service._build_external_track_ref(ext)
-
-        assert ref["title"] == "External Song"
-        assert ref["spotify_id"] == "sp_456"
-        assert ref["source"] == "spotify_playlist"
-        assert ref["external_data"] == {"key": "value"}
 
 
 class TestExportPlayHistory:
@@ -688,7 +582,6 @@ class TestExportPlaylists:
 
         pt = MagicMock()
         pt.track_id = uuid4()
-        pt.external_track_id = None
         pt.position = 0
 
         track = MagicMock(spec=Track)
@@ -713,49 +606,6 @@ class TestExportPlaylists:
         assert len(result[0]["tracks"]) == 1
         assert result[0]["tracks"][0]["type"] == "local"
 
-    @pytest.mark.asyncio
-    async def test_exports_external_tracks(self, service, mock_db):
-        """Should export playlists with external track refs."""
-        playlist = MagicMock()
-        playlist.id = uuid4()
-        playlist.name = "Mixed"
-        playlist.description = None
-        playlist.is_auto_generated = True
-        playlist.is_wishlist = False
-        playlist.generation_prompt = "test"
-        playlist.created_at = None
-
-        pt = MagicMock()
-        pt.track_id = None
-        pt.external_track_id = uuid4()
-        pt.position = 0
-
-        ext_track = MagicMock(spec=ExternalTrack)
-        ext_track.title = "Ext Song"
-        ext_track.artist = "Ext Artist"
-        ext_track.album = None
-        ext_track.duration_seconds = 200
-        ext_track.track_number = None
-        ext_track.year = None
-        ext_track.isrc = None
-        ext_track.spotify_id = "sp_1"
-        ext_track.musicbrainz_recording_id = None
-        ext_track.deezer_id = None
-        ext_track.preview_url = None
-        ext_track.preview_source = None
-        ext_track.external_data = None
-        ext_track.source = MagicMock()
-        ext_track.source.value = "spotify_playlist"
-
-        mock_db.execute.side_effect = [
-            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[playlist])))),
-            MagicMock(scalars=MagicMock(return_value=MagicMock(all=MagicMock(return_value=[pt])))),
-        ]
-        mock_db.get.return_value = ext_track
-
-        result = await service._export_playlists(uuid4())
-
-        assert result[0]["tracks"][0]["type"] == "external"
 
 
 class TestExportSmartPlaylists:

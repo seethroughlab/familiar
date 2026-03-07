@@ -53,7 +53,6 @@ class BackupService:
         include_playlists: bool = True,
         include_smart_playlists: bool = True,
         include_proposed_changes: bool = True,
-        include_external_tracks: bool = True,
         # Library data options
         include_library_analysis: bool = False,
         include_embeddings: bool = True,
@@ -81,7 +80,6 @@ class BackupService:
                     include_playlists,
                     include_smart_playlists,
                     include_proposed_changes,
-                    include_external_tracks,
                 ]),
                 "library_analysis": include_library_analysis,
             },
@@ -97,7 +95,6 @@ class BackupService:
                 include_playlists=include_playlists,
                 include_smart_playlists=include_smart_playlists,
                 include_proposed_changes=include_proposed_changes,
-                include_external_tracks=include_external_tracks,
                 chat_history=chat_history,
             )
 
@@ -114,8 +111,6 @@ class BackupService:
             if include_proposed_changes:
                 export_data["proposed_changes"] = profile_export.get("proposed_changes", [])
                 export_data["user_overrides"] = profile_export.get("user_overrides", [])
-            if include_external_tracks:
-                export_data["external_tracks"] = profile_export.get("external_tracks", [])
             if chat_history:
                 export_data["chat_history"] = chat_history
 
@@ -378,7 +373,6 @@ class RestoreService:
             "smart_playlists_count": len(import_data.get("smart_playlists", [])),
             "proposed_changes_count": len(proposed_changes),
             "user_overrides_count": len(user_overrides),
-            "external_tracks_count": len(import_data.get("external_tracks", [])),
             "chat_history_count": len(import_data.get("chat_history", [])),
         }
 
@@ -499,7 +493,6 @@ class RestoreService:
         import_smart_playlists: bool = True,
         import_proposed_changes: bool = True,
         import_user_overrides: bool = True,
-        import_external_tracks: bool = True,
         # Library import options
         library_mode: str = "match_only",
         apply_analysis: bool = True,
@@ -532,7 +525,6 @@ class RestoreService:
                     import_smart_playlists=import_smart_playlists,
                     import_proposed_changes=import_proposed_changes,
                     import_user_overrides=import_user_overrides,
-                    import_external_tracks=import_external_tracks,
                 )
                 results["profile"] = profile_results
 
@@ -576,7 +568,6 @@ class RestoreService:
         import_smart_playlists: bool,
         import_proposed_changes: bool,
         import_user_overrides: bool,
-        import_external_tracks: bool,
     ) -> dict[str, Any]:
         """Execute the profile data import portion."""
         from uuid import UUID
@@ -596,7 +587,6 @@ class RestoreService:
             "smart_playlists": {"imported": 0, "skipped": 0, "errors": []},
             "proposed_changes": {"imported": 0, "skipped": 0, "errors": []},
             "user_overrides": {"imported": 0, "skipped": 0, "errors": []},
-            "external_tracks": {"imported": 0, "skipped": 0, "errors": []},
             "chat_history": import_data.get("chat_history", []),
         }
 
@@ -626,11 +616,6 @@ class RestoreService:
         if import_user_overrides:
             results["user_overrides"] = await self.profile_import._import_user_overrides(
                 import_data.get("user_overrides", []), track_id_lookup,
-            )
-
-        if import_external_tracks:
-            results["external_tracks"] = await self.profile_import._import_external_tracks(
-                import_data.get("external_tracks", []),
             )
 
         return results

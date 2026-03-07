@@ -159,7 +159,6 @@ export function SystemStatus() {
       lines.push('## Configuration\n');
       lines.push(`- LLM Provider: ${settings.llm_provider || 'not set'}`);
       lines.push(`- Anthropic API Key: ${settings.has_anthropic_key ? 'configured' : 'not configured'}`);
-      lines.push(`- Spotify: ${settings.has_spotify_credentials ? 'configured' : 'not configured'}`);
       lines.push(`- Last.fm: ${settings.has_lastfm_key ? 'configured' : 'not configured'}`);
       lines.push(`- Library paths: ${settings.library_paths_count || 0}\n`);
     }

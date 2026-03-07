@@ -17,16 +17,12 @@ import {
   Trash2,
   X,
   Heart,
-  ShoppingCart,
-  ExternalLink,
   FileText,
   Download,
   Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Track } from '../../types';
-import { isExternalTrack } from '../../types';
-import { generateAllSearchUrls } from '../../utils/storeLinks';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
 
 interface TrackContextMenuProps {
@@ -202,7 +198,7 @@ export function TrackContextMenu({
       )}
 
       {/* Edit Metadata */}
-      {onEditMetadata && !(isExternalTrack(track) && !track.matched_track_id) && (
+      {onEditMetadata && (
         <MenuItem
           icon={<Edit3 className="w-4 h-4" />}
           label="Edit Metadata..."
@@ -252,23 +248,6 @@ export function TrackContextMenu({
         onClick={() => handleAction(onAddToPlaylist)}
       />
 
-      {/* Purchase links for unmatched external tracks */}
-      {isExternalTrack(track) && !track.matched_track_id && (
-        <>
-          <MenuDivider />
-          {generateAllSearchUrls(track.artist || '', track.title || '', track.album || undefined).map(({ key, name, url }, idx) => (
-            <MenuItem
-              key={key}
-              icon={idx === 0 ? <ShoppingCart className="w-4 h-4" /> : <ExternalLink className="w-4 h-4" />}
-              label={`Buy on ${name}`}
-              onClick={() => {
-                window.open(url, '_blank');
-                onClose();
-              }}
-            />
-          ))}
-        </>
-      )}
 
       <MenuDivider />
 

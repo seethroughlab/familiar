@@ -164,23 +164,22 @@ export interface Playlist {
   generation_prompt: string | null;
   track_count: number;
   local_track_count: number;
-  external_track_count: number;
   auto_download: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface PlaylistTrack {
-  id: string; // track_id or external_track_id
+  id: string; // track_id
   playlist_track_id: string; // PlaylistTrack.id for reordering/removal
-  type: 'local' | 'external';
+  type: 'local';
   title: string | null;
   artist: string | null;
   album: string | null;
   duration_seconds: number | null;
   position: number;
 
-  // Full track fields (local tracks only)
+  // Full track fields
   format?: string | null;
   year?: number | null;
   genre?: string | null;
@@ -189,13 +188,6 @@ export interface PlaylistTrack {
   album_artist?: string | null;
   album_type?: string | null;
   analysis_version?: number | null;
-
-  // External track fields (only present when type === 'external')
-  is_matched?: boolean;
-  matched_track_id?: string | null;
-  match_confidence?: number | null;
-  preview_url?: string | null;
-  external_links?: Record<string, string>;
 }
 
 export interface PlaylistDetail {
@@ -309,160 +301,9 @@ export const playlistsApi = {
     return data;
   },
 
-  // Wishlist
   getWishlist: async (): Promise<PlaylistDetail> => {
     const { data } = await api.get('/playlists/wishlist');
     return data;
   },
 
-  addToWishlist: async (request: {
-    title: string;
-    artist: string;
-    album?: string;
-    spotify_id?: string;
-    preview_url?: string;
-    external_data?: Record<string, unknown>;
-  }): Promise<PlaylistDetail> => {
-    const { data } = await api.post('/playlists/wishlist/add', request);
-    return data;
-  },
-
-  addReleaseToWishlist: async (releaseId: string): Promise<{
-    tracks_added: number;
-    tracks_skipped: number;
-    release_name: string;
-    artist_name: string;
-  }> => {
-    const { data } = await api.post('/playlists/wishlist/add-release', { release_id: releaseId });
-    return data;
-  },
-};
-
-// External Tracks API
-export interface ExternalTrack {
-  id: string;
-  title: string;
-  artist: string;
-  album: string | null;
-  duration_seconds: number | null;
-  track_number: number | null;
-  year: number | null;
-  source: string;
-  preview_url: string | null;
-  preview_source: string | null;
-  external_data: Record<string, unknown>;
-  is_matched: boolean;
-  matched_track_id: string | null;
-  matched_at: string | null;
-  match_confidence: number | null;
-  match_method: string | null;
-  spotify_id: string | null;
-  isrc: string | null;
-  created_at: string;
-}
-
-export interface ExternalTrackStats {
-  total: number;
-  matched: number;
-  unmatched: number;
-  match_rate: number;
-  by_source: Record<string, number>;
-}
-
-export interface MatchCandidate {
-  track_id: string;
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  duration_seconds: number | null;
-  format: string | null;
-  year: number | null;
-  match_method: string;
-  confidence: number;
-}
-
-export const externalTracksApi = {
-  list: async (params?: {
-    matched?: boolean;
-    source?: string;
-    limit?: number;
-    offset?: number;
-  }): Promise<ExternalTrack[]> => {
-    const { data } = await api.get('/external-tracks', { params });
-    return data;
-  },
-
-  getStats: async (): Promise<ExternalTrackStats> => {
-    const { data } = await api.get('/external-tracks/stats');
-    return data;
-  },
-
-  get: async (id: string): Promise<ExternalTrack> => {
-    const { data } = await api.get(`/external-tracks/${id}`);
-    return data;
-  },
-
-  create: async (track: {
-    title: string;
-    artist: string;
-    album?: string;
-    isrc?: string;
-    spotify_id?: string;
-    preview_url?: string;
-  }): Promise<ExternalTrack> => {
-    const { data } = await api.post('/external-tracks', track);
-    return data;
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/external-tracks/${id}`);
-  },
-
-  manualMatch: async (externalTrackId: string, trackId: string): Promise<ExternalTrack> => {
-    const { data } = await api.post(`/external-tracks/${externalTrackId}/match`, {
-      track_id: trackId,
-    });
-    return data;
-  },
-
-  removeMatch: async (externalTrackId: string): Promise<ExternalTrack> => {
-    const { data } = await api.delete(`/external-tracks/${externalTrackId}/match`);
-    return data;
-  },
-
-  rematchAll: async (runInBackground = false): Promise<{
-    processed: number;
-    matched: number;
-    task_id?: string;
-  }> => {
-    const { data } = await api.post('/external-tracks/rematch', null, {
-      params: { run_in_background: runInBackground },
-    });
-    return data;
-  },
-
-  resolvePreviewUrl: async (externalTrackId: string): Promise<{ preview_url: string | null; preview_source: string | null }> => {
-    const { data } = await api.get(`/external-tracks/${externalTrackId}/preview-url`);
-    return data;
-  },
-
-  getMatchCandidates: async (externalTrackId: string, limit = 10): Promise<MatchCandidate[]> => {
-    const { data } = await api.get(`/external-tracks/${externalTrackId}/match-candidates`, {
-      params: { limit },
-    });
-    return data.candidates;
-  },
-
-  matchByAlbum: async (
-    sourceAlbum: string,
-    targetAlbum: string,
-    targetArtist?: string,
-  ): Promise<{ matched: number; failed: number; details: Array<{ external_track_id: string; title: string; matched_track_id: string | null; status: string }> }> => {
-    const { data } = await api.post('/external-tracks/match-by-album', {
-      source_album: sourceAlbum,
-      target_album: targetAlbum,
-      target_artist: targetArtist,
-    });
-    return data;
-  },
 };

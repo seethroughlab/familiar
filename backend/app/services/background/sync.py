@@ -177,26 +177,6 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.error(f"Periodic sync failed: {e}")
 
-    async def run_spotify_sync(
-        self,
-        profile_id: str,
-        include_top_tracks: bool = True,
-        favorite_matched: bool = False,
-    ) -> dict[str, Any]:
-        """Start Spotify sync in the background."""
-        from app.services.tasks import run_spotify_sync
-
-        try:
-            result = await run_spotify_sync(
-                profile_id=profile_id,
-                include_top_tracks=include_top_tracks,
-                favorite_matched=favorite_matched,
-            )
-            return result
-        except Exception as e:
-            logger.error(f"Spotify sync failed: {e}", exc_info=True)
-            return {"status": "error", "error": str(e)}
-
     async def run_bulk_identify(
         self,
         task_id: str,

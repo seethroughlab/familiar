@@ -43,7 +43,6 @@ class ExportRequest(BaseModel):
     include_playlists: bool = True
     include_smart_playlists: bool = True
     include_proposed_changes: bool = True
-    include_external_tracks: bool = True
     chat_history: list[dict[str, Any]] | None = Field(
         default=None,
         description="Chat history from frontend IndexedDB (passed through)",
@@ -73,7 +72,6 @@ class ImportExecuteRequest(BaseModel):
     import_smart_playlists: bool = True
     import_proposed_changes: bool = True
     import_user_overrides: bool = True
-    import_external_tracks: bool = True
 
 
 class ImportResultCategory(BaseModel):
@@ -116,7 +114,6 @@ async def export_profile_data(
         include_playlists=request.include_playlists,
         include_smart_playlists=request.include_smart_playlists,
         include_proposed_changes=request.include_proposed_changes,
-        include_external_tracks=request.include_external_tracks,
         chat_history=request.chat_history,
     )
 
@@ -237,7 +234,6 @@ async def execute_import(
             import_smart_playlists=request.import_smart_playlists,
             import_proposed_changes=request.import_proposed_changes,
             import_user_overrides=request.import_user_overrides,
-            import_external_tracks=request.import_external_tracks,
         )
     except ValueError as e:
         raise HTTPException(
@@ -519,7 +515,6 @@ class BackupRequest(BaseModel):
     include_playlists: bool = Field(default=True, description="Include playlists")
     include_smart_playlists: bool = Field(default=True, description="Include smart playlists")
     include_proposed_changes: bool = Field(default=True, description="Include pending changes")
-    include_external_tracks: bool = Field(default=True, description="Include wishlist items")
 
     # Library data options
     include_library_analysis: bool = Field(default=False, description="Include audio analysis")
@@ -561,7 +556,6 @@ class RestoreExecuteRequest(BaseModel):
     import_smart_playlists: bool = True
     import_proposed_changes: bool = True
     import_user_overrides: bool = True
-    import_external_tracks: bool = True
 
     # Library import options
     library_mode: str = Field(
@@ -624,7 +618,6 @@ async def create_backup(
             include_playlists=request.include_playlists,
             include_smart_playlists=request.include_smart_playlists,
             include_proposed_changes=request.include_proposed_changes,
-            include_external_tracks=request.include_external_tracks,
             include_library_analysis=request.include_library_analysis,
             include_embeddings=request.include_embeddings,
             include_acoustid=request.include_acoustid,
@@ -769,7 +762,6 @@ async def execute_restore(
             import_smart_playlists=request.import_smart_playlists,
             import_proposed_changes=request.import_proposed_changes,
             import_user_overrides=request.import_user_overrides,
-            import_external_tracks=request.import_external_tracks,
             library_mode=request.library_mode,
             apply_analysis=request.apply_analysis,
             apply_embeddings=request.apply_embeddings,

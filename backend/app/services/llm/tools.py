@@ -254,50 +254,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "get_spotify_status",
-        "description": "Check if the user has connected their Spotify account and get connection status.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
-        }
-    },
-    {
-        "name": "get_spotify_favorites",
-        "description": "Get user's Spotify favorites that are available in their local library. Use this to find tracks the user has liked on Spotify.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results to return (default 50)",
-                    "default": 50
-                }
-            }
-        }
-    },
-    {
-        "name": "get_unmatched_spotify_favorites",
-        "description": "Get Spotify favorites that couldn't be matched to the local library. Useful for finding music the user likes on Spotify but doesn't own locally.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results to return (default 50)",
-                    "default": 50
-                }
-            }
-        }
-    },
-    {
-        "name": "get_spotify_sync_stats",
-        "description": "Get statistics about the Spotify sync: total favorites, matched count, match rate.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
-        }
-    },
-    {
         "name": "search_bandcamp",
         "description": "Search Bandcamp for albums or tracks the user might want to purchase. Use this when the user wants to find music to buy, especially for artists they like but don't have locally.",
         "input_schema": {
@@ -324,7 +280,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "recommend_bandcamp_purchases",
-        "description": "Suggest Bandcamp albums to purchase based on Spotify favorites that aren't in the local library. Helps users complete their collection.",
+        "description": "Suggest Bandcamp albums to purchase based on artists in the local library. Helps users discover more music to buy.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -537,63 +493,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             "required": ["source_artist", "target_artist", "reason"]
         }
     },
-    # Spotify playlist tools
-    {
-        "name": "list_spotify_playlists",
-        "description": "List the user's Spotify playlists. Returns playlist names, track counts, and IDs. Use this when the user asks about their Spotify playlists or wants to import one.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "limit": {
-                    "type": "integer",
-                    "description": "Max playlists to return (default 20)",
-                    "default": 20
-                }
-            }
-        }
-    },
-    {
-        "name": "get_spotify_playlist_tracks",
-        "description": "Get tracks from a Spotify playlist. Shows which tracks exist locally vs are missing. Use this to understand what's in a Spotify playlist or to recreate it with local tracks.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "playlist_id": {
-                    "type": "string",
-                    "description": "Spotify playlist ID"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max tracks to return (default 50)",
-                    "default": 50
-                }
-            },
-            "required": ["playlist_id"]
-        }
-    },
-    {
-        "name": "import_spotify_playlist",
-        "description": "Import a Spotify playlist to Familiar. Creates a local playlist with matched tracks and missing track placeholders.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "spotify_playlist_id": {
-                    "type": "string",
-                    "description": "Spotify playlist ID"
-                },
-                "name": {
-                    "type": "string",
-                    "description": "Override playlist name (optional, uses Spotify name if not provided)"
-                },
-                "include_missing": {
-                    "type": "boolean",
-                    "description": "Include unmatched tracks as missing track placeholders (default true)",
-                    "default": True
-                }
-            },
-            "required": ["spotify_playlist_id"]
-        }
-    },
     # Track identification tools
     {
         "name": "identify_track",
@@ -611,92 +510,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 }
             },
             "required": ["title", "artist"]
-        }
-    },
-    {
-        "name": "get_similar_tracks_external",
-        "description": "Get similar tracks from Last.fm for a reference track. Returns tracks that may not be in the library. Use when building discovery playlists or when the reference track isn't in library.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "artist": {
-                    "type": "string",
-                    "description": "Artist name"
-                },
-                "track": {
-                    "type": "string",
-                    "description": "Track name"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max similar tracks to return (default 10)",
-                    "default": 10
-                }
-            },
-            "required": ["artist", "track"]
-        }
-    },
-    # External track matching tools
-    {
-        "name": "get_unmatched_external_tracks",
-        "description": "List external tracks (from Spotify, imported playlists, etc.) that haven't been matched to local library tracks. Use when the user asks about missing tracks, unmatched imports, or wants help resolving matching failures.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "artist": {
-                    "type": "string",
-                    "description": "Filter by artist name (case-insensitive partial match)"
-                },
-                "album": {
-                    "type": "string",
-                    "description": "Filter by album name (case-insensitive partial match)"
-                },
-                "source": {
-                    "type": "string",
-                    "description": "Filter by source (e.g., 'spotify', 'playlist_import')"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results to return (default 50, max 200)",
-                    "default": 50
-                }
-            }
-        }
-    },
-    {
-        "name": "get_external_track_match_candidates",
-        "description": "Find potential local library matches for a specific unmatched external track. Returns scored candidates ranked by confidence. Use after get_unmatched_external_tracks to investigate why a track wasn't auto-matched.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "external_track_id": {
-                    "type": "string",
-                    "description": "UUID of the external track to find matches for"
-                }
-            },
-            "required": ["external_track_id"]
-        }
-    },
-    {
-        "name": "match_external_track",
-        "description": "Confirm a match between an external track and a local library track. This directly applies the match (not a proposal) and updates all playlist references. Reversible via unmatch in the UI.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "external_track_id": {
-                    "type": "string",
-                    "description": "UUID of the external track"
-                },
-                "track_id": {
-                    "type": "string",
-                    "description": "UUID of the local library track to match to"
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "Optional explanation of why this match is correct"
-                }
-            },
-            "required": ["external_track_id", "track_id"]
         }
     },
     # Deep analysis tools
@@ -804,7 +617,6 @@ When user says "make a playlist based on [title] by [artist]":
 2. If in library: Use find_similar_tracks(track_id) to find similar local tracks
 3. If NOT in library:
    - Use get_similar_artists_in_library to find related artists the user has
-   - Use get_similar_tracks_external to find what tracks would be similar
    - Build playlist from local similar artists
 4. If discovery_mode is "suggest_missing": ALWAYS include suggested_tracks in queue_tracks
 
@@ -815,9 +627,8 @@ The user's playlist_discovery_mode setting controls behavior:
 - "suggest_missing": ALWAYS include suggested_tracks in every queue_tracks call
 
 **IMPORTANT**: When discovery_mode is "suggest_missing", you MUST include 3-5 suggested_tracks
-in EVERY queue_tracks call. Use get_similar_tracks_external or your music knowledge to suggest
-tracks that fit the request but aren't in the library. These appear as "missing tracks" the user
-can preview or purchase. The current setting is shown at the end of these instructions.
+in EVERY queue_tracks call. Use your music knowledge to suggest tracks that fit the request but
+aren't in the library. The current setting is shown at the end of these instructions.
 
 ## How to Handle Requests
 
@@ -858,7 +669,7 @@ can preview or purchase. The current setting is shown at the end of these instru
 **"Based on [track/album] by [artist]"**:
 1. identify_track to check if it's in library
 2. If in library: find_similar_tracks
-3. If not: get_similar_artists_in_library + get_similar_tracks_external
+3. If not: get_similar_artists_in_library to find related artists the user has
 4. queue_tracks with local tracks
 5. If discovery_mode is "suggest_missing": ALWAYS include suggested_tracks from similar artists/tracks
 
@@ -984,22 +795,5 @@ Example workflow:
 - Analyze content, extract: [{"artist": "...", "album": "...", "year": 2024}, ...]
 - create_playlist_from_items(name="Best Albums 2024", items=[...], description="From: https://...")
 - Response: "Created playlist with X tracks. Y are in your library, Z are marked as missing."
-
-## External Track Matching
-
-You can help resolve unmatched external tracks (from Spotify imports, playlist imports, etc.) that failed automatic matching.
-
-**Workflow:**
-1. Use get_unmatched_external_tracks to list what's unmatched (optionally filter by artist/album)
-2. Use get_external_track_match_candidates on specific tracks to see potential local matches
-3. Use match_external_track to confirm correct matches
-
-**Common reasons auto-matching fails:**
-- Punctuation differences ("Livin'" vs "Living", smart quotes vs straight quotes)
-- Remaster/deluxe annotations ("Track (2021 Remaster)" vs "Track")
-- Featuring artist variations ("feat." vs "ft." vs "featuring", or featuring in title vs artist field)
-- Character encoding issues (accented characters, special symbols)
-
-When reviewing candidates, explain to the user why you believe a match is correct (same artist, similar title, matching duration, etc.).
 
 NEVER make up track names. Only mention tracks returned by tools."""

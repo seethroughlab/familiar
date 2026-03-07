@@ -1,4 +1,4 @@
-import { Cloud, Music2, Radio, Fingerprint, CheckCircle, XCircle, Server } from 'lucide-react';
+import { Cloud, Radio, Fingerprint, CheckCircle, XCircle, Server } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { appSettingsApi } from '../../api';
 
@@ -18,7 +18,6 @@ export function ApiKeyStatus() {
 
   const services = [
     { name: 'Claude API', desc: 'AI assistant', configured: settings?.anthropic_configured, icon: Cloud, color: 'text-purple-400' },
-    { name: 'Spotify', desc: 'Sync favorites', configured: settings?.spotify_configured, icon: Music2, color: 'text-green-400' },
     { name: 'Last.fm', desc: 'Scrobbling', configured: settings?.lastfm_configured, icon: Radio, color: 'text-red-400' },
     { name: 'AcoustID', desc: 'Fingerprinting', configured: settings?.acoustid_configured, icon: Fingerprint, color: 'text-blue-400' },
   ];

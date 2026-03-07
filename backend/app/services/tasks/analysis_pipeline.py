@@ -61,7 +61,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
 
     from sqlalchemy import select
 
-    from app.db.models import ANALYSIS_FEATURE_COLUMNS, SpotifyFavorite, Track, TrackAnalysis
+    from app.db.models import ANALYSIS_FEATURE_COLUMNS, Track, TrackAnalysis
     from app.db.session import sync_session_maker
     from app.services.analysis import (
         AnalysisError,
@@ -73,7 +73,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
     from app.services.app_settings import get_app_settings_service
     from app.services.artwork import extract_and_save_artwork
     from app.services.community_cache import get_community_cache_service
-    from app.services.external_features import get_external_features_service
     from app.services.track_analysis import run_cheap_sections
 
     log_memory("features_start")
@@ -146,44 +145,6 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             features_source = "local"
             app_settings = get_app_settings_service().get()
 
-            if app_settings.external_features_enabled:
-                # Look up Spotify track ID from SpotifyFavorite
-                spotify_fav_result = db.execute(
-                    select(SpotifyFavorite.spotify_track_id)
-                    .where(SpotifyFavorite.matched_track_id == track.id)
-                )
-                spotify_fav = spotify_fav_result.scalar_one_or_none()
-
-                if spotify_fav:
-                    logger.info(f"Looking up external features for Spotify ID: {spotify_fav}")
-                    try:
-                        ext_service = get_external_features_service()
-                        ext_features = asyncio.run(
-                            ext_service.lookup_features(spotify_track_id=spotify_fav)
-                        )
-                        if ext_features:
-                            # Convert ExternalFeatures to our features dict format
-                            features = {
-                                "bpm": ext_features.bpm,
-                                "key": ext_features.key,
-                                "energy": ext_features.energy,
-                                "danceability": ext_features.danceability,
-                                "valence": ext_features.valence,
-                                "acousticness": ext_features.acousticness,
-                                "instrumentalness": ext_features.instrumentalness,
-                                "speechiness": ext_features.speechiness,
-                                "liveness": ext_features.liveness,
-                                "loudness": ext_features.loudness,
-                            }
-                            # Remove None values
-                            features = {k: v for k, v in features.items() if v is not None}
-                            features_source = ext_features.source  # "reccobeats"
-                            logger.info(
-                                f"External features found from {features_source}: "
-                                f"BPM={ext_features.bpm}, Key={ext_features.key}"
-                            )
-                    except Exception as e:
-                        logger.warning(f"External feature lookup failed: {e}")
 
             # Try community cache for features if no external features found
             deep_scalars: dict[str, Any] = {}

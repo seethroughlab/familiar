@@ -44,10 +44,6 @@ class AppSettings(BaseModel):
     # Kept for backwards compatibility with existing settings.json files
     music_library_paths: list[str] = []
 
-    # Spotify
-    spotify_client_id: str | None = None
-    spotify_client_secret: str | None = None
-
     # Last.fm
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None
@@ -160,7 +156,6 @@ class AppSettingsService:
 
         # Keys that contain secrets and should be masked
         secret_keys = {
-            "spotify_client_id", "spotify_client_secret",
             "lastfm_api_key", "lastfm_api_secret",
             "anthropic_api_key", "acoustid_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
@@ -177,12 +172,6 @@ class AppSettingsService:
                     data[key] = "•" * len(val)
 
         return data
-
-    def has_spotify_credentials(self) -> bool:
-        """Check if Spotify credentials are configured (from settings.json or env vars)."""
-        client_id = self.get_effective("spotify_client_id")
-        client_secret = self.get_effective("spotify_client_secret")
-        return bool(client_id and client_secret)
 
     def has_lastfm_credentials(self) -> bool:
         """Check if Last.fm credentials are configured (from settings.json or env vars)."""
@@ -250,8 +239,6 @@ class AppSettingsService:
         # Settings that can come from either source
         dual_source_keys = [
             "anthropic_api_key",
-            "spotify_client_id",
-            "spotify_client_secret",
             "lastfm_api_key",
             "lastfm_api_secret",
             "acoustid_api_key",

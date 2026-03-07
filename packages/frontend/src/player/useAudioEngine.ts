@@ -2,7 +2,7 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from './playerStore';
 import { useAudioSettingsStore } from './audioSettingsStore';
-import { tracksApi, externalTracksApi } from '../api';
+import { tracksApi } from '../api';
 import type { Track } from '../types';
 import { showError } from '../stores/toastStore';
 import { getEngine } from './audio/engineInstance';
@@ -163,7 +163,7 @@ export function useAudioEngine() {
           const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
           log.error('Playback error for "%s": %s', trackName, event.message);
 
-          if (state.currentTrack?.id && state.currentTrack.track_type !== 'external') {
+          if (state.currentTrack?.id) {
             tracksApi.reportPlaybackError(state.currentTrack.id).catch(() => {});
           }
 
@@ -369,41 +369,11 @@ export function useAudioEngine() {
       try {
         setIsLoadingAudio(true);
 
-        // Check external preview settings
-        const state = usePlayerStore.getState();
-        const currentQueueItem = state.queue[state.queueIndex];
-        const externalInfo = currentQueueItem?.externalInfo;
-
-        if (externalInfo && !useAudioSettingsStore.getState().playExternalPreviews) {
-          log.info('External previews disabled, auto-advancing');
-          setIsLoadingAudio(false);
-          playNext();
-          return;
-        }
-
         // Resolve URL
         let url: string;
         let isOffline = false;
-        const isExternal = !!externalInfo;
 
-        if (externalInfo) {
-          let previewUrl = externalInfo.previewUrl;
-          if (!previewUrl && externalInfo.originalId) {
-            try {
-              const result = await externalTracksApi.resolvePreviewUrl(externalInfo.originalId);
-              previewUrl = result.preview_url;
-            } catch (e) {
-              log.warn('Failed to resolve preview URL', e);
-            }
-          }
-          if (!previewUrl) {
-            log.info('No preview URL for external track, auto-advancing');
-            setIsLoadingAudio(false);
-            playNext();
-            return;
-          }
-          url = previewUrl;
-        } else if (engine.resolveTrackUrl) {
+        if (engine.resolveTrackUrl) {
           // Engine supports offline URL resolution (WebAudioEngine)
           const trackUrl = await engine.resolveTrackUrl(currentTrack.id);
           url = trackUrl.url;
@@ -423,11 +393,10 @@ export function useAudioEngine() {
           trackId: currentTrack.id,
           trackTitle: currentTrack.title,
           isOffline,
-          isExternal,
           isPlaying,
         });
 
-        await engine.load(currentTrack.id, url, { isOffline, isExternal });
+        await engine.load(currentTrack.id, url, { isOffline });
 
         // Another race condition guard after load
         if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) {

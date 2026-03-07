@@ -3,8 +3,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { playTrackingApi } from '../api';
 import { createLogger } from '../utils/logger';
-import { isExternalTrack } from '../types';
-
 const log = createLogger('PlayTracking');
 
 /**
@@ -26,7 +24,6 @@ export function usePlayTracking() {
   const lastTimeRef = useRef<number>(0);
   const lastTrackIdRef = useRef<string | null>(null);
   const currentTrackIdRef = useRef<string | null>(null);
-  const lastTrackExternalRef = useRef<boolean>(false);
 
   // Store current track id in ref for cleanup function
   useEffect(() => {
@@ -41,7 +38,6 @@ export function usePlayTracking() {
     if (lastTrackIdRef.current && lastTrackIdRef.current !== trackId) {
       // If we haven't recorded the previous track but have significant time, record it
       if (
-        !lastTrackExternalRef.current &&
         recordedTrackRef.current !== lastTrackIdRef.current &&
         accumulatedTimeRef.current >= 30
       ) {
@@ -59,15 +55,11 @@ export function usePlayTracking() {
     }
 
     lastTrackIdRef.current = trackId;
-    lastTrackExternalRef.current = isExternalTrack(currentTrack);
   }, [currentTrack?.id]);
 
   // Track accumulated play time and record when threshold is met
   useEffect(() => {
     if (!currentTrack || !isPlaying || !duration) return;
-
-    // External tracks use preview URLs and have no entry in the tracks table
-    if (isExternalTrack(currentTrack)) return;
 
     // Already recorded this track
     if (recordedTrackRef.current === currentTrack.id) return;

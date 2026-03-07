@@ -46,8 +46,6 @@ class Settings(BaseSettings):
 
     # API Keys (Phase 3+)
     anthropic_api_key: str | None = None
-    spotify_client_id: str | None = None
-    spotify_client_secret: str | None = None
     frontend_url: str | None = None  # Base URL for OAuth callbacks (e.g., http://myserver:4400)
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None

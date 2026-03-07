@@ -10,8 +10,7 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import sanitize_error_for_client
-from app.api.routes.tracks import TrackResponse, _external_track_to_response
-from app.db.models import ExternalTrack as ExternalTrackModel
+from app.api.routes.tracks import TrackResponse
 from app.db.models import Track
 from app.services.smart_playlists import SmartPlaylistService
 
@@ -228,10 +227,7 @@ async def get_smart_playlist_tracks(
 
     track_responses = []
     for t in tracks:
-        if isinstance(t, ExternalTrackModel):
-            track_responses.append(_external_track_to_response(t))
-        else:
-            track_responses.append(TrackResponse.model_validate(t))
+        track_responses.append(TrackResponse.model_validate(t))
 
     return SmartPlaylistTracksResponse(
         playlist=playlist_to_response(playlist),

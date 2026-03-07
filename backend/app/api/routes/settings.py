@@ -40,8 +40,6 @@ class SettingsResponse(BaseModel):
     library_status: LibraryStatus
 
     # API Credentials
-    spotify_client_id: str | None
-    spotify_client_secret: str | None
     lastfm_api_key: str | None
     lastfm_api_secret: str | None
     anthropic_api_key: str | None
@@ -73,7 +71,6 @@ class SettingsResponse(BaseModel):
     update_channel: str
 
     # Computed status fields
-    spotify_configured: bool
     lastfm_configured: bool
     anthropic_configured: bool
     acoustid_configured: bool
@@ -85,8 +82,6 @@ class SettingsUpdateRequest(BaseModel):
     """Request to update settings."""
 
     # API Credentials
-    spotify_client_id: str | None = None
-    spotify_client_secret: str | None = None
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None
     anthropic_api_key: str | None = None
@@ -176,7 +171,6 @@ async def get_settings() -> SettingsResponse:
         **masked,
         library_status=await asyncio.to_thread(_get_library_status),
         clap_status=ClapStatus(**clap_status_data),
-        spotify_configured=service.has_spotify_credentials(),
         lastfm_configured=service.has_lastfm_credentials(),
         anthropic_configured=service.has_anthropic_key(),
         acoustid_configured=service.has_acoustid_key(),
@@ -229,21 +223,12 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         **masked,
         library_status=await asyncio.to_thread(_get_library_status),
         clap_status=ClapStatus(**clap_status_data),
-        spotify_configured=service.has_spotify_credentials(),
         lastfm_configured=service.has_lastfm_credentials(),
         anthropic_configured=service.has_anthropic_key(),
         acoustid_configured=service.has_acoustid_key(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
     )
-
-
-@router.delete("/spotify")
-async def clear_spotify_settings() -> dict[str, Any]:
-    """Clear Spotify credentials."""
-    service = get_app_settings_service()
-    service.update(spotify_client_id="", spotify_client_secret="")
-    return {"status": "cleared", "message": "Spotify credentials cleared"}
 
 
 @router.delete("/lastfm")

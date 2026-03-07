@@ -356,8 +356,6 @@ class LibraryScanner:
         # Track IDs to queue for analysis after commit
         pending_analysis_ids: list[str] = []
 
-        # Track newly created tracks for external track matching
-        new_tracks: list[Track] = []
 
         # Process found files
         processed = 0
@@ -440,7 +438,6 @@ class LibraryScanner:
                         track = await self._create_track(file_path, file_hash, file_mtime, file_size)
                         track.full_file_hash = full_hash_new
                         pending_analysis_ids.append(str(track.id))
-                        new_tracks.append(track)
                         results["new"] += 1
                         results["queued"] += 1
                     else:
@@ -459,7 +456,6 @@ class LibraryScanner:
                     logger.info(f"NEW: {file_path.name}")
                     track = await self._create_track(file_path, file_hash, file_mtime, file_size)
                     pending_analysis_ids.append(str(track.id))
-                    new_tracks.append(track)
                     results["new"] += 1
                     results["queued"] += 1
                     # Add to hash lookup so subsequent files with same hash are detected
@@ -577,27 +573,6 @@ class LibraryScanner:
             f"{results['marked_missing']} marked missing, {results['still_missing']} still missing, "
             f"{results['unchanged']} unchanged"
         )
-
-        # Match new tracks to external tracks (and replace in playlists)
-        if new_tracks:
-            try:
-                from app.services.external_track_matcher import ExternalTrackMatcher
-
-                matcher = ExternalTrackMatcher(self.db)
-                total_matched = 0
-                for track in new_tracks:
-                    matched_externals = await matcher.match_new_local_track(track, commit=False)
-                    total_matched += len(matched_externals)
-                await self.db.commit()
-
-                if total_matched > 0:
-                    logger.info(
-                        f"Matched {total_matched} external tracks to {len(new_tracks)} new library additions"
-                    )
-                    results["external_matched"] = total_matched
-            except Exception as e:
-                logger.warning(f"External track matching failed (non-fatal): {e}")
-                await self.db.rollback()
 
         return results
 

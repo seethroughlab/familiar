@@ -52,7 +52,7 @@ class ProfileResponse(BaseModel):
     has_lastfm: bool
 
 
-def profile_to_response(profile: Profile, has_spotify: bool, has_lastfm: bool) -> ProfileResponse:
+def profile_to_response(profile: Profile, has_lastfm: bool) -> ProfileResponse:
     """Convert Profile model to response."""
     avatar_url = None
     if profile.avatar_path:
@@ -64,7 +64,7 @@ def profile_to_response(profile: Profile, has_spotify: bool, has_lastfm: bool) -
         color=profile.color,
         avatar_url=avatar_url,
         created_at=profile.created_at.isoformat(),
-        has_spotify=has_spotify,
+        has_spotify=False,
         has_lastfm=has_lastfm,
     )
 
@@ -82,10 +82,9 @@ async def list_profiles(db: DbSession) -> list[ProfileResponse]:
 
     responses = []
     for profile in profiles:
-        await db.refresh(profile, ["spotify_profile", "lastfm_profile"])
-        has_spotify = profile.spotify_profile is not None
+        await db.refresh(profile, ["lastfm_profile"])
         has_lastfm = profile.lastfm_profile is not None
-        responses.append(profile_to_response(profile, has_spotify, has_lastfm))
+        responses.append(profile_to_response(profile, has_lastfm))
 
     return responses
 
@@ -108,7 +107,7 @@ async def create_profile(
     await db.commit()
     await db.refresh(profile)
 
-    return profile_to_response(profile, has_spotify=False, has_lastfm=False)
+    return profile_to_response(profile, has_lastfm=False)
 
 
 @router.get("/me", response_model=ProfileResponse)
@@ -120,11 +119,10 @@ async def get_current_profile_info(
 
     Requires X-Profile-ID header.
     """
-    await db.refresh(profile, ["spotify_profile", "lastfm_profile"])
-    has_spotify = profile.spotify_profile is not None
+    await db.refresh(profile, ["lastfm_profile"])
     has_lastfm = profile.lastfm_profile is not None
 
-    return profile_to_response(profile, has_spotify, has_lastfm)
+    return profile_to_response(profile, has_lastfm)
 
 
 @router.get("/{profile_id}", response_model=ProfileResponse)
@@ -140,11 +138,10 @@ async def get_profile(
             detail="Profile not found",
         )
 
-    await db.refresh(profile, ["spotify_profile", "lastfm_profile"])
-    has_spotify = profile.spotify_profile is not None
+    await db.refresh(profile, ["lastfm_profile"])
     has_lastfm = profile.lastfm_profile is not None
 
-    return profile_to_response(profile, has_spotify, has_lastfm)
+    return profile_to_response(profile, has_lastfm)
 
 
 @router.put("/{profile_id}", response_model=ProfileResponse)
@@ -166,12 +163,11 @@ async def update_profile(
         setattr(profile, key, value)
 
     await db.commit()
-    await db.refresh(profile, ["spotify_profile", "lastfm_profile"])
+    await db.refresh(profile, ["lastfm_profile"])
 
-    has_spotify = profile.spotify_profile is not None
     has_lastfm = profile.lastfm_profile is not None
 
-    return profile_to_response(profile, has_spotify, has_lastfm)
+    return profile_to_response(profile, has_lastfm)
 
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -270,11 +266,10 @@ async def upload_avatar(
             detail="Invalid image file. Please upload a JPEG, PNG, WebP, or GIF.",
         )
 
-    await db.refresh(profile, ["spotify_profile", "lastfm_profile"])
-    has_spotify = profile.spotify_profile is not None
+    await db.refresh(profile, ["lastfm_profile"])
     has_lastfm = profile.lastfm_profile is not None
 
-    return profile_to_response(profile, has_spotify, has_lastfm)
+    return profile_to_response(profile, has_lastfm)
 
 
 @router.get("/{profile_id}/avatar")
@@ -330,8 +325,7 @@ async def delete_avatar(
         profile.avatar_path = None
         await db.commit()
 
-    await db.refresh(profile, ["spotify_profile", "lastfm_profile"])
-    has_spotify = profile.spotify_profile is not None
+    await db.refresh(profile, ["lastfm_profile"])
     has_lastfm = profile.lastfm_profile is not None
 
-    return profile_to_response(profile, has_spotify, has_lastfm)
+    return profile_to_response(profile, has_lastfm)

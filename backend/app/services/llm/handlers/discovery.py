@@ -7,10 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from app.db.models import (
-    SpotifyFavorite,
-    Track,
-)
+from app.db.models import Track
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -60,7 +57,7 @@ class DiscoveryHandlersMixin:
             await bc.close()
 
     async def _recommend_bandcamp_purchases(self: "ToolExecutor", limit: int = 5) -> dict[str, Any]:
-        """Recommend Bandcamp albums based on unmatched Spotify favorites."""
+        """Recommend Bandcamp albums based on top artists in the library."""
         try:
             limit = int(float(limit)) if limit else 5
         except (ValueError, TypeError):
@@ -68,37 +65,27 @@ class DiscoveryHandlersMixin:
 
         from app.services.bandcamp import BandcampService
 
-        if not self.profile_id:
-            return {"recommendations": [], "message": "No profile ID provided"}
-
+        # Get top artists by track count
         result = await self.db.execute(
-            select(SpotifyFavorite)
-            .where(
-                SpotifyFavorite.profile_id == self.profile_id,
-                SpotifyFavorite.matched_track_id.is_(None),
-            )
-            .order_by(SpotifyFavorite.added_at.desc())
+            select(Track.artist, func.count(Track.id).label("count"))
+            .where(Track.artist.isnot(None))
+            .group_by(Track.artist)
+            .order_by(func.count(Track.id).desc())
             .limit(limit * 2)
         )
-        favorites = result.scalars().all()
+        artists = [row[0] for row in result.all() if row[0]]
 
-        if not favorites:
-            return {
-                "recommendations": [],
-                "message": "No unmatched Spotify favorites to base recommendations on",
-            }
+        if not artists:
+            return {"recommendations": [], "message": "No artists in library to base recommendations on"}
 
         bc = BandcampService()
         recommendations = []
         seen_artists = set()
 
         try:
-            for f in favorites:
-                data = f.track_data or {}
-                artist = data.get("artist")
-                if not artist or artist.lower() in seen_artists:
+            for artist in artists:
+                if artist.lower() in seen_artists:
                     continue
-
                 seen_artists.add(artist.lower())
                 results = await bc.search(artist, item_type="a", limit=2)
 
@@ -109,10 +96,6 @@ class DiscoveryHandlersMixin:
                         "artist": r.artist,
                         "url": r.url,
                         "genre": r.genre,
-                        "based_on": {
-                            "spotify_track": data.get("name"),
-                            "spotify_artist": artist,
-                        },
                     })
 
                 if len(recommendations) >= limit:
@@ -123,7 +106,7 @@ class DiscoveryHandlersMixin:
         return {
             "recommendations": recommendations[:limit],
             "count": len(recommendations[:limit]),
-            "note": "Albums recommended based on your Spotify favorites",
+            "note": "Albums recommended based on artists in your library",
         }
 
     async def _get_similar_artists_in_library(
@@ -271,40 +254,11 @@ class DiscoveryHandlersMixin:
                 "note": "Track found in library (fuzzy match). Use find_similar_tracks with this track_id.",
             }
 
-        # Not in library - try to get external info from Spotify if configured
-        external_info: dict[str, Any] = {
-            "title": title,
-            "artist": artist,
-        }
-
-        if self.profile_id:
-            from app.services.spotify import SpotifyService
-
-            spotify_service = SpotifyService()
-            if spotify_service.is_configured():
-                client = await spotify_service.get_client(self.db, self.profile_id)
-                if client:
-                    try:
-                        results = client.search(
-                            q=f"track:{title} artist:{artist}",
-                            type="track",
-                            limit=1,
-                        )
-                        items = results.get("tracks", {}).get("items", [])
-                        if items:
-                            spotify_track = items[0]
-                            external_info.update({
-                                "album": spotify_track.get("album", {}).get("name"),
-                                "spotify_id": spotify_track.get("id"),
-                                "spotify_url": spotify_track.get("external_urls", {}).get("spotify"),
-                            })
-                    except Exception as e:
-                        logger.warning(f"Spotify search failed for identify_track: {e}")
-
         return {
             "in_library": False,
-            "external_info": external_info,
-            "note": "Track not found in library. Use get_similar_artists_in_library and get_similar_tracks_external to build a similar playlist.",
+            "title": title,
+            "artist": artist,
+            "note": "Track not found in library. Use get_similar_artists_in_library to find related artists.",
             "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}+{title.replace(' ', '+')}",
         }
 

@@ -28,26 +28,11 @@ class DiscoverRecommendedArtist(BaseModel):
     based_on_artist: str  # Which library artist triggered this recommendation
 
 
-class DiscoverUnmatchedFavorite(BaseModel):
-    """A Spotify favorite that's not in the local library."""
-
-    spotify_track_id: str
-    name: str
-    artist: str
-    album: str | None
-    image_url: str | None
-    bandcamp_url: str | None
-
-
 class DiscoverResponse(BaseModel):
     """Aggregated discovery data for the dashboard."""
 
     # Recommended artists based on top-played artists
     recommended_artists: list[DiscoverRecommendedArtist]
-
-    # Unmatched Spotify favorites (if Spotify connected)
-    unmatched_favorites: list[DiscoverUnmatchedFavorite]
-    unmatched_total: int
 
     # Recently added to library
     recently_added_count: int
@@ -57,21 +42,19 @@ class DiscoverResponse(BaseModel):
 async def get_discover_dashboard(
     db: DbSession,
     recommendations_limit: int = Query(8, ge=1, le=20),
-    favorites_limit: int = Query(6, ge=1, le=20),
 ) -> DiscoverResponse:
     """Get aggregated discovery data for the dashboard.
 
     Combines:
     - New releases from library artists
     - Recommended artists based on most-played
-    - Unmatched Spotify favorites
     - Recently added track count
     """
     from datetime import timedelta
 
     from app.db.models import ArtistInfo, ProfilePlayHistory
     from app.services.lastfm import get_lastfm_service
-    from app.services.search_links import generate_artist_search_url, generate_release_search_urls
+    from app.services.search_links import generate_artist_search_url
 
     # 1. Get recommended artists based on top-played artists
     recommended_artists: list[DiscoverRecommendedArtist] = []
@@ -176,57 +159,7 @@ async def get_discover_dashboard(
         if len(recommended_artists) >= recommendations_limit:
             break
 
-    # 3. Get unmatched Spotify favorites
-    unmatched_favorites: list[DiscoverUnmatchedFavorite] = []
-    unmatched_total = 0
-
-    try:
-        from app.db.models import SpotifyFavorite, SpotifyProfile
-
-        # Check if any Spotify profile is connected
-        spotify_check = await db.execute(
-            select(SpotifyProfile).where(SpotifyProfile.access_token.isnot(None)).limit(1)
-        )
-        has_spotify = spotify_check.scalar_one_or_none() is not None
-
-        if has_spotify:
-            # Get unmatched favorites
-            unmatched_query = (
-                select(SpotifyFavorite)
-                .where(SpotifyFavorite.matched_track_id.is_(None))
-                .order_by(SpotifyFavorite.added_at.desc())
-                .limit(favorites_limit)
-            )
-            unmatched_result = await db.execute(unmatched_query)
-            favorites = unmatched_result.scalars().all()
-
-            for fav in favorites:
-                artist_name = fav.track_data.get("artist") or ""
-                track_name = fav.track_data.get("name") or ""
-                search_urls = generate_release_search_urls(artist_name, track_name)
-                unmatched_favorites.append(
-                    DiscoverUnmatchedFavorite(
-                        spotify_track_id=fav.spotify_track_id,
-                        name=track_name,
-                        artist=artist_name,
-                        album=fav.track_data.get("album"),
-                        image_url=None,  # album_image_url not stored in track_data
-                        bandcamp_url=search_urls.get("bandcamp", {}).get("url"),
-                    )
-                )
-
-            # Get total count
-            count_query = select(func.count()).select_from(
-                select(SpotifyFavorite)
-                .where(SpotifyFavorite.matched_track_id.is_(None))
-                .subquery()
-            )
-            unmatched_total = await db.scalar(count_query) or 0
-
-    except Exception:
-        pass  # Spotify tables might not exist
-
-    # 4. Get recently added count (last 30 days)
+    # 3. Get recently added count (last 30 days)
     thirty_days_ago = utcnow() - timedelta(days=30)
     recent_query = (
         select(func.count(Track.id))
@@ -239,7 +172,5 @@ async def get_discover_dashboard(
 
     return DiscoverResponse(
         recommended_artists=recommended_artists,
-        unmatched_favorites=unmatched_favorites,
-        unmatched_total=unmatched_total,
         recently_added_count=recently_added_count,
     )

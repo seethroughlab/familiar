@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
-import { smartPlaylistsApi, tracksApi, playlistsApi } from '../../api';
+import { smartPlaylistsApi, tracksApi } from '../../api';
 import type { SmartPlaylist, SmartPlaylistTracksResponse } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore, getSmartPlaylistJobId } from '../../stores/downloadStore';
@@ -13,10 +13,6 @@ import * as playlistCache from '../../services/playlistCache';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
 import { PlaylistTrackList } from '../shared/PlaylistTrackList';
-
-import { createLogger } from '../../utils/logger';
-
-const log = createLogger('SmartPlaylistDetail');
 
 // Discovery section component
 function SmartPlaylistDiscoverySection({
@@ -54,28 +50,6 @@ function SmartPlaylistDiscoverySection({
     }
   };
 
-  const handleAddToWishlist = async (item: DiscoveryItem) => {
-    if (!item.inLibrary && item.name) {
-      try {
-        if (item.entityType === 'artist') {
-          // For artists, add a placeholder track
-          await playlistsApi.addToWishlist({
-            title: `Tracks by ${item.name}`,
-            artist: item.name,
-          });
-        } else {
-          await playlistsApi.addToWishlist({
-            title: item.name,
-            artist: item.subtitle || 'Unknown Artist',
-            album: item.playbackContext?.album,
-          });
-        }
-      } catch (err) {
-        log.error('Failed to add to wishlist:', err);
-      }
-    }
-  };
-
   return (
     <div className="mt-6 border-t border-zinc-800 pt-4">
       <DiscoveryPanel
@@ -85,7 +59,6 @@ function SmartPlaylistDiscoverySection({
         defaultExpanded
         onItemClick={handleItemClick}
         onItemPlay={onPlayTrack}
-        onAddToWishlist={handleAddToWishlist}
       />
     </div>
   );

@@ -20,7 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import AlbumType, Base, ExternalTrackSource, TrackStatus
+from .base import AlbumType, Base, TrackStatus
 
 
 class Track(Base):
@@ -116,70 +116,6 @@ class Track(Base):
             return 0
         return self.analyses[0].features_version if self.analyses else 0
 
-
-class ExternalTrack(Base):
-    """External/missing track that the user wants but doesn't have locally.
-
-    First-class citizens in playlists, appearing alongside local tracks.
-    When a matching local track is added to the library, it auto-links via matched_track_id.
-
-    Sources include Spotify imports, LLM recommendations, and manual additions.
-    """
-
-    __tablename__ = "external_tracks"
-    __table_args__ = (
-        Index("ix_external_tracks_artist", "artist"),
-        Index("ix_external_tracks_isrc", "isrc"),
-        Index("ix_external_tracks_spotify_id", "spotify_id"),
-        Index("ix_external_tracks_matched", "matched_track_id"),
-        Index("ix_external_tracks_source", "source"),
-    )
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-
-    # Core metadata for display and matching
-    title: Mapped[str] = mapped_column(String(500), nullable=False)
-    artist: Mapped[str] = mapped_column(String(500), nullable=False)
-    album: Mapped[str | None] = mapped_column(String(500))
-    duration_seconds: Mapped[float | None] = mapped_column(Float)
-    track_number: Mapped[int | None] = mapped_column(Integer)
-    year: Mapped[int | None] = mapped_column(Integer)
-
-    # External identifiers for matching
-    isrc: Mapped[str | None] = mapped_column(String(12))
-    spotify_id: Mapped[str | None] = mapped_column(String(50), unique=True)
-    musicbrainz_recording_id: Mapped[str | None] = mapped_column(String(36))
-    deezer_id: Mapped[str | None] = mapped_column(String(50))
-
-    # Extended data (album art URLs, external URLs, etc.)
-    external_data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-
-    # Provenance
-    source: Mapped[ExternalTrackSource] = mapped_column(
-        Enum(ExternalTrackSource, values_callable=lambda obj: [e.value for e in obj]),
-        nullable=False,
-    )
-    source_playlist_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("playlists.id", ondelete="SET NULL")
-    )
-    source_spotify_playlist_id: Mapped[str | None] = mapped_column(String(50))
-
-    # Matching status - links to local library track when matched
-    matched_track_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("tracks.id", ondelete="SET NULL")
-    )
-    matched_at: Mapped[datetime | None] = mapped_column(DateTime)
-    match_confidence: Mapped[float | None] = mapped_column(Float)  # 0.0-1.0
-    match_method: Mapped[str | None] = mapped_column(String(20))  # "isrc", "exact", "fuzzy", "manual"
-
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-    # Relationships
-    matched_track: Mapped["Track | None"] = relationship()
-    source_playlist: Mapped["Playlist | None"] = relationship()
-    playlist_entries: Mapped[list["PlaylistTrack"]] = relationship(
-        back_populates="external_track", cascade="all, delete"
-    )
 
 
 # All scalar feature columns on TrackAnalysis

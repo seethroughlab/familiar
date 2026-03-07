@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, ExternalLink, Search, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, Search, RotateCw } from 'lucide-react';
 import { playlistsApi, tracksApi } from '../../api';
 import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import { useDownloadStore, getPlaylistJobId } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
@@ -75,28 +74,6 @@ function PlaylistDiscoverySection({
     }
   };
 
-  const handleAddToWishlist = async (item: DiscoveryItem) => {
-    if (!item.inLibrary && item.name) {
-      try {
-        if (item.entityType === 'artist') {
-          await playlistsApi.addToWishlist({
-            title: `Tracks by ${item.name}`,
-            artist: item.name,
-          });
-        } else {
-          await playlistsApi.addToWishlist({
-            title: item.name,
-            artist: item.subtitle || 'Unknown Artist',
-            album: item.playbackContext?.album,
-          });
-        }
-      } catch (err) {
-        log.error('Failed to add to wishlist:', err);
-        showError('Failed to add to wishlist');
-      }
-    }
-  };
-
   return (
     <div className="mt-6 border-t border-zinc-800 pt-4">
       <DiscoveryPanel
@@ -107,7 +84,6 @@ function PlaylistDiscoverySection({
         defaultExpanded
         onItemClick={handleItemClick}
         onItemPlay={onPlayItem}
-        onAddToWishlist={handleAddToWishlist}
       />
     </div>
   );
@@ -129,9 +105,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const setQueue = usePlayerStore((s) => s.setQueue);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
-  const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
-  const { isFavorite, toggle: toggleFavorite, isExternalFavorite, toggleExternal } = useFavorites();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist } = useAppNavigation();
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
@@ -142,7 +116,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const getTrackFromPlaylistItem = useCallback(
     (t: PlaylistTrackType): Track | null => {
       return {
-        id: t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id,
+        id: t.id,
         file_path: '',
         title: t.title,
         artist: t.artist,
@@ -296,31 +270,22 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       return;
     }
 
-    const queueTracks = items.map(t => {
-      const trackId = t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id;
-      return {
-        id: trackId,
-        file_path: '',
-        title: t.title || 'Unknown',
-        artist: t.artist || 'Unknown',
-        album: t.album || null,
-        album_artist: t.album_artist ?? null,
-        album_type: (t.album_type as Track['album_type']) ?? 'album',
-        track_number: t.track_number ?? null,
-        disc_number: t.disc_number ?? null,
-        year: t.year ?? null,
-        genre: t.genre ?? null,
-        duration_seconds: t.duration_seconds || null,
-        format: t.format ?? null,
-        analysis_version: t.analysis_version ?? 0,
-        _externalInfo: t.type === 'external' ? {
-          type: 'external' as const,
-          previewUrl: t.preview_url || null,
-          matchedTrackId: t.matched_track_id || null,
-          originalId: t.id,
-        } : undefined,
-      };
-    });
+    const queueTracks = items.map(t => ({
+      id: t.id,
+      file_path: '',
+      title: t.title || 'Unknown',
+      artist: t.artist || 'Unknown',
+      album: t.album || null,
+      album_artist: t.album_artist ?? null,
+      album_type: (t.album_type as Track['album_type']) ?? 'album',
+      track_number: t.track_number ?? null,
+      disc_number: t.disc_number ?? null,
+      year: t.year ?? null,
+      genre: t.genre ?? null,
+      duration_seconds: t.duration_seconds || null,
+      format: t.format ?? null,
+      analysis_version: t.analysis_version ?? 0,
+    }));
     setQueue(queueTracks, startIndex, { type: 'playlist', id: playlistId });
   }, [filteredTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue, playlistId]);
 
@@ -449,8 +414,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const handleRemoveFromPlaylist = useCallback(async (track: Track) => {
     if (!playlist) return;
     const playlistTrack = playlist.tracks.find(t => {
-      const trackId = t.type === 'external' && t.matched_track_id ? t.matched_track_id : t.id;
-      return trackId === track.id;
+      return t.id === track.id;
     });
     if (!playlistTrack) return;
 
@@ -506,85 +470,40 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const getItemId = useCallback((t: PlaylistTrackType) => t.playlist_track_id, []);
 
   // Render props
-  const renderTitleBadge = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
-    const isExternal = ctx.item.type === 'external';
-    const isMatched = isExternal && ctx.item.is_matched && ctx.item.matched_track_id;
-    if (isExternal && !isMatched) {
-      return (
-        <span className="flex-shrink-0 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
-          Not in library
-        </span>
-      );
-    }
+  const renderTitleBadge = useCallback((_ctx: TrackRowContext<PlaylistTrackType>) => {
     return null;
   }, []);
 
-  const getRowClassName = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
-    const isExternal = ctx.item.type === 'external';
-    const isMatched = isExternal && ctx.item.is_matched && ctx.item.matched_track_id;
-    if (isExternal && !isMatched) return 'opacity-60';
+  const getRowClassName = useCallback((_ctx: TrackRowContext<PlaylistTrackType>) => {
     return '';
   }, []);
 
   const renderDesktopTrailing = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
     const track = ctx.item;
-    const isExternal = track.type === 'external';
-    const isMatched = isExternal && track.is_matched && track.matched_track_id;
 
     return (
       <>
-        {/* Heart + External link */}
+        {/* Heart */}
         <div className="flex items-center gap-0.5">
-          {isExternal ? (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleExternal(track.id);
-                }}
-                className={`p-1 transition-colors ${
-                  isExternalFavorite(track.id)
-                    ? 'text-pink-500 hover:text-pink-400'
-                    : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-                }`}
-                title={isExternalFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-              >
-                <Heart className="w-4 h-4" fill={isExternalFavorite(track.id) ? 'currentColor' : 'none'} />
-              </button>
-              {!isMatched && track.external_links && Object.keys(track.external_links).length > 0 && (
-                <a
-                  href={Object.values(track.external_links)[0]}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-1 text-zinc-500 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                  title="Open in Spotify"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
-            </>
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleFavorite(track.id);
-              }}
-              className={`p-1 transition-colors ${
-                isFavorite(track.id)
-                  ? 'text-pink-500 hover:text-pink-400'
-                  : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
-              }`}
-              title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
-            </button>
-          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(track.id);
+            }}
+            className={`p-1 transition-colors ${
+              isFavorite(track.id)
+                ? 'text-pink-500 hover:text-pink-400'
+                : 'text-zinc-500 hover:text-pink-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100'
+            }`}
+            title={isFavorite(track.id) ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
+          </button>
         </div>
 
         {/* Offline indicator */}
         <div>
-          {!isExternal && offlineTrackIds.has(track.id) && (
+          {offlineTrackIds.has(track.id) && (
             <span title="Available offline">
               <WifiOff className="w-4 h-4 text-green-500" />
             </span>
@@ -597,33 +516,32 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
         </div>
       </>
     );
-  }, [isFavorite, isExternalFavorite, toggleFavorite, toggleExternal, offlineTrackIds]);
+  }, [isFavorite, toggleFavorite, offlineTrackIds]);
 
   const renderMobileTrailing = useCallback((ctx: TrackRowContext<PlaylistTrackType>) => {
     const track = ctx.item;
-    const isExternal = track.type === 'external';
 
     return (
       <>
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if (isExternal) { toggleExternal(track.id); } else { toggleFavorite(track.id); }
+            toggleFavorite(track.id);
           }}
           className={`flex-shrink-0 p-1 transition-colors ${
-            (isExternal ? isExternalFavorite(track.id) : isFavorite(track.id))
+            isFavorite(track.id)
               ? 'text-pink-500 hover:text-pink-400'
               : 'text-zinc-500 hover:text-pink-400'
           }`}
         >
-          <Heart className="w-4 h-4" fill={(isExternal ? isExternalFavorite(track.id) : isFavorite(track.id)) ? 'currentColor' : 'none'} />
+          <Heart className="w-4 h-4" fill={isFavorite(track.id) ? 'currentColor' : 'none'} />
         </button>
         <div className="flex-shrink-0 text-sm text-zinc-500">
           {formatDuration(track.duration_seconds)}
         </div>
       </>
     );
-  }, [isFavorite, isExternalFavorite, toggleFavorite, toggleExternal]);
+  }, [isFavorite, toggleFavorite]);
 
   const renderDragHandle = useCallback((_ctx: TrackRowContext<PlaylistTrackType>) => {
     if (isOffline || usingCachedData) return null;
@@ -816,21 +734,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
             </button>
           )}
 
-          {/* External preview toggle */}
-          {playlist.tracks.some(t => t.type === 'external') && (
-            <button
-              onClick={() => setPlayExternalPreviews(!playExternalPreviews)}
-              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
-                playExternalPreviews
-                  ? 'bg-amber-600 hover:bg-amber-500'
-                  : 'bg-zinc-700 hover:bg-zinc-600'
-              }`}
-              title={playExternalPreviews ? 'Disable external track previews' : 'Enable external track previews'}
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span className="text-sm">Previews</span>
-            </button>
-          )}
         </div>
       </div>
 

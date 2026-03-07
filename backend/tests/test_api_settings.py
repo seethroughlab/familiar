@@ -41,13 +41,10 @@ def test_get_settings_default(
     data = response.json()
 
     # Secrets should be None initially
-    assert data["spotify_client_id"] is None
-    assert data["spotify_client_secret"] is None
     assert data["lastfm_api_key"] is None
     assert data["anthropic_api_key"] is None
 
     # Status fields
-    assert data["spotify_configured"] is False
     assert data["lastfm_configured"] is False
 
 
@@ -68,29 +65,6 @@ def test_update_settings(
     # Key should be masked in response
     assert data["anthropic_api_key"].startswith("sk-a")
     assert "•" in data["anthropic_api_key"]
-
-
-def test_update_spotify_credentials(
-    client: TestClient,
-    mock_settings_service: AppSettingsService,
-) -> None:
-    """Test updating Spotify credentials."""
-    response = client.put(
-        "/api/v1/settings",
-        json={
-            "spotify_client_id": "test_client_id_12345",
-            "spotify_client_secret": "test_client_secret_67890",
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    # Should now be configured
-    assert data["spotify_configured"] is True
-
-    # Secrets should be masked
-    assert "•" in data["spotify_client_id"]
-    assert "•" in data["spotify_client_secret"]
 
 
 def test_update_lastfm_credentials(
@@ -134,31 +108,6 @@ def test_settings_persist(
     # Should still be there (masked)
     assert data["anthropic_api_key"] is not None
     assert data["anthropic_api_key"].startswith("sk-a")
-
-
-def test_clear_spotify_settings(
-    client: TestClient,
-    mock_settings_service: AppSettingsService,
-) -> None:
-    """Test clearing Spotify credentials."""
-    # First set credentials
-    client.put(
-        "/api/v1/settings",
-        json={
-            "spotify_client_id": "test_id",
-            "spotify_client_secret": "test_secret",
-        },
-    )
-
-    # Clear them
-    response = client.delete("/api/v1/settings/spotify")
-    assert response.status_code == 200
-    assert response.json()["status"] == "cleared"
-
-    # Verify they're gone
-    get_response = client.get("/api/v1/settings")
-    data = get_response.json()
-    assert data["spotify_configured"] is False
 
 
 def test_clear_lastfm_settings(

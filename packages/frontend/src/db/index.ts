@@ -70,7 +70,7 @@ export interface OfflineArtwork {
 export interface PendingAction {
   id?: number; // Auto-increment
   profileId: string; // Profile that queued this action
-  type: 'scrobble' | 'now_playing' | 'sync_spotify' | 'favorite_toggle';
+  type: 'scrobble' | 'now_playing' | 'favorite_toggle';
   payload: unknown;
   createdAt: Date;
   retries: number;

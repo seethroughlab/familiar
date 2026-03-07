@@ -18,17 +18,6 @@ export interface Track {
   last_played_at?: string | null;
   play_count?: number | null;
 
-  // External track fields (present when track_type === 'external')
-  track_type?: 'local' | 'external';
-  preview_url?: string | null;
-  matched_track_id?: string | null;
-  external_data?: Record<string, unknown>;
-  source?: string | null;
-  spotify_id?: string | null;
-}
-
-export function isExternalTrack(track: Track | null | undefined): boolean {
-  return track?.track_type === 'external';
 }
 
 export interface TrackFeatures {
@@ -50,23 +39,15 @@ export interface TrackFeatures {
 }
 
 
-// Playlist track - can be local or external
 export interface PlaylistTrackItem {
-  id: string; // track_id or external_track_id
+  id: string; // track_id
   playlist_track_id: string; // PlaylistTrack.id for reordering/removal
-  type: 'local' | 'external';
+  type: 'local';
   title: string | null;
   artist: string | null;
   album: string | null;
   duration_seconds: number | null;
   position: number;
-
-  // External track fields (only present when type === 'external')
-  is_matched?: boolean;
-  matched_track_id?: string | null;
-  match_confidence?: number | null;
-  preview_url?: string | null;
-  external_links?: Record<string, string>;
 }
 
 export interface TrackListResponse {
@@ -90,13 +71,6 @@ export interface LibraryStats {
 export interface QueueItem {
   track: Track;
   queueId: string;
-  // External track metadata (when track came from an external/suggested source)
-  externalInfo?: {
-    type: 'external';
-    previewUrl: string | null;
-    matchedTrackId: string | null;
-    originalId?: string;
-  };
 }
 
 // Playlist sharing (.familiar file format)

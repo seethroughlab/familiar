@@ -29,7 +29,6 @@ export const tracksApi = {
     fy_min?: number;
     fy_max?: number;
     include_features?: boolean;
-    include_external?: boolean;
     sort_by?: string;
     sort_order?: 'asc' | 'desc';
   }): Promise<TrackListResponse> => {
@@ -61,7 +60,6 @@ export const tracksApi = {
     fy?: string;
     fy_min?: number;
     fy_max?: number;
-    include_external?: boolean;
     sort_by?: string;
     sort_order?: 'asc' | 'desc';
   }): Promise<TrackIdsResponse> => {
@@ -130,7 +128,6 @@ export const tracksApi = {
       fy?: string;
       fy_min?: number;
       fy_max?: number;
-      include_external?: boolean;
       sort_by?: string;
       sort_order?: 'asc' | 'desc';
     }

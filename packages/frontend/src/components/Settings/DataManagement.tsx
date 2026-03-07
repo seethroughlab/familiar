@@ -31,7 +31,6 @@ interface ProfileExportOptions {
   include_playlists: boolean;
   include_smart_playlists: boolean;
   include_proposed_changes: boolean;
-  include_external_tracks: boolean;
 }
 
 interface LibraryExportOptions {
@@ -47,7 +46,6 @@ interface ProfileImportOptions {
   import_smart_playlists: boolean;
   import_proposed_changes: boolean;
   import_user_overrides: boolean;
-  import_external_tracks: boolean;
 }
 
 interface LibraryImportOptions {
@@ -69,7 +67,6 @@ export function DataManagement() {
     include_playlists: true,
     include_smart_playlists: true,
     include_proposed_changes: true,
-    include_external_tracks: true,
   });
 
   const [libraryExportOptions, setLibraryExportOptions] = useState<LibraryExportOptions>({
@@ -96,7 +93,6 @@ export function DataManagement() {
     import_smart_playlists: true,
     import_proposed_changes: true,
     import_user_overrides: true,
-    import_external_tracks: true,
   });
 
   const [libraryImportMode, setLibraryImportMode] = useState<'match_only' | 'merge' | 'replace'>('match_only');
@@ -281,7 +277,6 @@ export function DataManagement() {
                 include_playlists: 'Playlists',
                 include_smart_playlists: 'Smart Playlists',
                 include_proposed_changes: 'Pending Changes',
-                include_external_tracks: 'Wishlist',
               }).map(([key, label]) => (
                 <label
                   key={key}
@@ -550,7 +545,6 @@ export function DataManagement() {
                       import_playlists: 'Playlists',
                       import_smart_playlists: 'Smart Playlists',
                       import_user_overrides: 'User Overrides',
-                      import_external_tracks: 'Wishlist Items',
                     }).map(([key, label]) => (
                       <label
                         key={key}
@@ -737,7 +731,6 @@ export function DataManagement() {
                       playlists: 'Playlists',
                       smart_playlists: 'Smart',
                       user_overrides: 'Overrides',
-                      external_tracks: 'Wishlist',
                     }).map(([key, label]) => {
                       const result = restoreResult.results.profile?.[key as keyof typeof restoreResult.results.profile];
                       if (typeof result === 'object' && result !== null && 'imported' in result) {

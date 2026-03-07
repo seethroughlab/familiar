@@ -2,7 +2,6 @@ export { default as api, getApiUrl, getApiOrigin, encodePathSegment } from './ba
 export * from './tracks';
 export * from './library';
 export * from './playlists';
-export * from './spotify';
 export * from './integrations';
 export * from './settings';
 export * from './profiles';

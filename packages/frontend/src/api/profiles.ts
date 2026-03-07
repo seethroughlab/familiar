@@ -85,38 +85,14 @@ export interface FavoriteTrack {
   favorited_at: string;
 }
 
-export interface ExternalFavoriteTrack {
-  id: string;
-  type: 'external';
-  title: string;
-  artist: string;
-  album: string | null;
-  duration_seconds: number | null;
-  year: number | null;
-  source: string;
-  is_matched: boolean;
-  matched_track_id: string | null;
-  preview_url?: string | null;
-  external_links: Record<string, string>;
-  favorited_at: string;
-}
-
 export interface FavoritesListResponse {
   favorites: FavoriteTrack[];
-  external_favorites: ExternalFavoriteTrack[];
   total: number;
 }
 
 export interface FavoriteStatusResponse {
   track_id: string;
   is_favorite: boolean;
-}
-
-export interface ExternalFavoriteStatusResponse {
-  external_track_id: string;
-  is_favorite: boolean;
-  redirected_to_local: boolean;
-  local_track_id: string | null;
 }
 
 export const favoritesApi = {
@@ -155,15 +131,6 @@ export const favoritesApi = {
     return data;
   },
 
-  toggleExternal: async (externalTrackId: string): Promise<ExternalFavoriteStatusResponse> => {
-    const { data } = await api.post(`/favorites/external/${externalTrackId}/toggle`);
-    return data;
-  },
-
-  checkExternal: async (externalTrackId: string): Promise<ExternalFavoriteStatusResponse> => {
-    const { data } = await api.get(`/favorites/external/${externalTrackId}`);
-    return data;
-  },
 };
 
 // Play Tracking API

@@ -38,18 +38,6 @@ from app.services.tasks.library_sync import (
     run_library_sync,
 )
 
-# spotify_sync.py
-from app.services.tasks.spotify_sync import (
-    SPOTIFY_RATE_LIMIT_KEY,
-    SPOTIFY_SYNC_PROGRESS_KEY,
-    SpotifySyncProgressReporter,
-    clear_spotify_sync_progress,
-    get_spotify_rate_limit,
-    get_spotify_sync_progress,
-    run_spotify_sync,
-    set_spotify_rate_limit,
-)
-
 __all__ = [
     # common
     "get_memory_mb",
@@ -75,13 +63,4 @@ __all__ = [
     "queue_tracks_for_melodic",
     "queue_tracks_for_backfill",
     "queue_unanalyzed_tracks",
-    # spotify_sync
-    "SPOTIFY_SYNC_PROGRESS_KEY",
-    "SPOTIFY_RATE_LIMIT_KEY",
-    "SpotifySyncProgressReporter",
-    "get_spotify_sync_progress",
-    "clear_spotify_sync_progress",
-    "set_spotify_rate_limit",
-    "get_spotify_rate_limit",
-    "run_spotify_sync",
 ]

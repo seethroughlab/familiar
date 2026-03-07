@@ -2,11 +2,10 @@
  * Hook for managing favorites with optimistic updates.
  * Uses React Query as single source of truth for favorites state.
  * Supports offline caching for offline access.
- * Supports both local and external track favorites.
  */
 import { useMemo, useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { favoritesApi, type FavoriteTrack, type ExternalFavoriteTrack, type FavoritesListResponse } from '../api';
+import { favoritesApi, type FavoriteTrack, type FavoritesListResponse } from '../api';
 import { useOfflineStatus } from './useOfflineStatus';
 import * as playlistCache from '../services/playlistCache';
 import * as offlineService from '../services/offlineService';
@@ -22,15 +21,7 @@ export interface UseFavoritesResult {
   toggle: (trackId: string) => void;
   /** List of favorite tracks with metadata */
   favorites: FavoriteTrack[];
-  /** Set of external favorite track IDs for O(1) lookup */
-  externalFavoriteIds: Set<string>;
-  /** Check if an external track is favorited */
-  isExternalFavorite: (externalTrackId: string) => boolean;
-  /** Toggle external favorite status (optimistic update) */
-  toggleExternal: (externalTrackId: string) => void;
-  /** List of external favorite tracks */
-  externalFavorites: ExternalFavoriteTrack[];
-  /** Total count of favorites (local + external) */
+  /** Total count of favorites */
   total: number;
   /** Loading state */
   isLoading: boolean;
@@ -116,17 +107,6 @@ export function useFavorites(): UseFavoritesResult {
   const isFavorite = useCallback(
     (trackId: string) => favoriteIds.has(trackId),
     [favoriteIds]
-  );
-
-  // External favorites
-  const externalFavoriteIds = useMemo(
-    () => new Set(data?.external_favorites?.map((f) => f.id) ?? []),
-    [data]
-  );
-
-  const isExternalFavorite = useCallback(
-    (externalTrackId: string) => externalFavoriteIds.has(externalTrackId),
-    [externalFavoriteIds]
   );
 
   // Toggle mutation with optimistic updates and offline queueing
@@ -228,81 +208,11 @@ export function useFavorites(): UseFavoritesResult {
     },
   });
 
-  // External favorite toggle mutation with optimistic updates
-  const toggleExternalMutation = useMutation({
-    mutationFn: async (externalTrackId: string) => {
-      return favoritesApi.toggleExternal(externalTrackId);
-    },
-    onMutate: async (externalTrackId: string) => {
-      await queryClient.cancelQueries({ queryKey: ['favorites'] });
-      const previous = queryClient.getQueryData<FavoritesListResponse>(['favorites']);
-
-      queryClient.setQueryData<FavoritesListResponse>(['favorites'], (old) => {
-        if (!old) return old;
-
-        const extFavs = old.external_favorites ?? [];
-        const isCurrentlyFavorite = extFavs.some((f) => f.id === externalTrackId);
-
-        if (isCurrentlyFavorite) {
-          return {
-            ...old,
-            external_favorites: extFavs.filter((f) => f.id !== externalTrackId),
-            total: old.total - 1,
-          };
-        } else {
-          // Add placeholder external favorite
-          const newExtFav: ExternalFavoriteTrack = {
-            id: externalTrackId,
-            type: 'external',
-            title: '',
-            artist: '',
-            album: null,
-            duration_seconds: null,
-            year: null,
-            source: '',
-            is_matched: false,
-            matched_track_id: null,
-            external_links: {},
-            favorited_at: new Date().toISOString(),
-          };
-          return {
-            ...old,
-            external_favorites: [newExtFav, ...extFavs],
-            total: old.total + 1,
-          };
-        }
-      });
-
-      return { previous };
-    },
-    onError: (_err, _id, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(['favorites'], context.previous);
-      }
-    },
-    onSettled: (result) => {
-      // If the toggle was redirected to a local favorite, invalidate to refresh
-      queryClient.invalidateQueries({ queryKey: ['favorites'] });
-
-      // If redirected to local, also handle auto-download
-      if (result?.redirected_to_local && result.local_track_id && result.is_favorite) {
-        const autoDownloadData = queryClient.getQueryData<{ enabled: boolean }>(['favorites-auto-download']);
-        if (autoDownloadData?.enabled) {
-          offlineService.downloadTrackForOffline(result.local_track_id).catch(() => {});
-        }
-      }
-    },
-  });
-
   return {
     favoriteIds,
     isFavorite,
     toggle: toggleMutation.mutate,
     favorites: data?.favorites ?? [],
-    externalFavoriteIds,
-    isExternalFavorite,
-    toggleExternal: toggleExternalMutation.mutate,
-    externalFavorites: data?.external_favorites ?? [],
     total: data?.total ?? 0,
     isLoading,
     usingCachedData,

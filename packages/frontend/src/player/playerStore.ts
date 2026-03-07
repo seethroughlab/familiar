@@ -188,13 +188,6 @@ const refillFromReservoir = async () => {
     const newItems: QueueItem[] = tracks.map(track => ({
       track,
       queueId: generateQueueId(),
-      // Attach externalInfo for external tracks so audio engine uses preview URLs
-      externalInfo: track.track_type === 'external' ? {
-        type: 'external' as const,
-        previewUrl: track.preview_url || null,
-        matchedTrackId: track.matched_track_id || null,
-        originalId: track.id,
-      } : undefined,
     }));
 
     // Re-read state after async gap
@@ -292,12 +285,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             const queueItems: QueueItem[] = tracks.map(track => ({
               track,
               queueId: generateQueueId(),
-              externalInfo: track.track_type === 'external' ? {
-                type: 'external' as const,
-                previewUrl: track.preview_url || null,
-                matchedTrackId: track.matched_track_id || null,
-                originalId: track.id,
-              } : undefined,
             }));
 
             // Keep current track at position 0 if present
@@ -644,31 +631,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Cancel any ongoing crossfade — user explicitly chose a new track
     getEngine().cancelCrossfade?.();
     const { shuffle } = get();
-    // Support tracks with _externalInfo metadata from playlist views
-    const queueItems = tracks.map((track) => {
-      // Extract _externalInfo if present (added by playlist handlePlay)
-      const trackWithMeta = track as Track & {
-        _externalInfo?: {
-          type: 'external';
-          previewUrl: string | null;
-          matchedTrackId: string | null;
-          originalId?: string;
-        };
-      };
-      const externalInfo = trackWithMeta._externalInfo;
-
-      return {
-        track,
-        queueId: generateQueueId(),
-        // Preserve external info for the audio engine to handle
-        externalInfo: externalInfo ? {
-          type: externalInfo.type,
-          previewUrl: externalInfo.previewUrl,
-          matchedTrackId: externalInfo.matchedTrackId,
-          originalId: externalInfo.originalId,
-        } : undefined,
-      };
-    });
+    const queueItems = tracks.map((track) => ({
+      track,
+      queueId: generateQueueId(),
+    }));
 
     // Generate shuffle order if shuffle is enabled
     let shuffleOrder: number[] = [];
@@ -802,12 +768,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         const queueItems: QueueItem[] = tracks.map(track => ({
           track,
           queueId: generateQueueId(),
-          externalInfo: track.track_type === 'external' ? {
-            type: 'external' as const,
-            previewUrl: track.preview_url || null,
-            matchedTrackId: track.matched_track_id || null,
-            originalId: track.id,
-          } : undefined,
         }));
 
         // Generate shuffle order if shuffle is enabled

@@ -16,13 +16,11 @@ from app.services.app_settings import get_app_settings_service
 from .handlers import (
     AnalysisHandlersMixin,
     DiscoveryHandlersMixin,
-    ExternalTrackHandlersMixin,
     LibraryInfoHandlersMixin,
     MetadataHandlersMixin,
     PlaybackHandlersMixin,
     PlaylistHandlersMixin,
     SearchHandlersMixin,
-    SpotifyHandlersMixin,
 )
 
 # Timeout for LLM calls (shorter for playlist name generation)
@@ -36,11 +34,9 @@ class ToolExecutor(
     LibraryInfoHandlersMixin,
     PlaybackHandlersMixin,
     AnalysisHandlersMixin,
-    SpotifyHandlersMixin,
     DiscoveryHandlersMixin,
     MetadataHandlersMixin,
     PlaylistHandlersMixin,
-    ExternalTrackHandlersMixin,
 ):
     """Executes tools called by the LLM."""
 
@@ -76,10 +72,6 @@ class ToolExecutor(
             "queue_tracks": self._queue_tracks,
             "control_playback": self._control_playback,
             "get_track_details": self._get_track_details,
-            "get_spotify_status": self._get_spotify_status,
-            "get_spotify_favorites": self._get_spotify_favorites,
-            "get_unmatched_spotify_favorites": self._get_unmatched_spotify_favorites,
-            "get_spotify_sync_stats": self._get_spotify_sync_stats,
             "search_bandcamp": self._search_bandcamp,
             "recommend_bandcamp_purchases": self._recommend_bandcamp_purchases,
             "select_diverse_tracks": self._select_diverse_tracks,
@@ -96,22 +88,13 @@ class ToolExecutor(
             "get_visible_tracks": self._get_visible_tracks,
             # Discovery tools
             "get_similar_artists_in_library": self._get_similar_artists_in_library,
-            # Spotify playlist tools
-            "list_spotify_playlists": self._list_spotify_playlists,
-            "get_spotify_playlist_tracks": self._get_spotify_playlist_tracks,
-            "import_spotify_playlist": self._import_spotify_playlist,
             # Web page reading tools
             "fetch_webpage": self._fetch_webpage,
             "create_playlist_from_items": self._create_playlist_from_items,
             # Track identification tools
             "identify_track": self._identify_track,
-            "get_similar_tracks_external": self._get_similar_tracks_external,
             # Analysis tools
             "get_track_analysis": self._get_track_analysis,
-            # External track matching tools
-            "get_unmatched_external_tracks": self._get_unmatched_external_tracks,
-            "get_external_track_match_candidates": self._get_external_track_match_candidates,
-            "match_external_track": self._match_external_track,
         }
 
         handler = handlers.get(tool_name)
@@ -120,7 +103,7 @@ class ToolExecutor(
 
         try:
             # Handle methods that take no args vs those that do
-            if tool_name in ("get_library_stats", "get_spotify_status", "get_spotify_sync_stats", "get_visible_tracks"):
+            if tool_name in ("get_library_stats", "get_visible_tracks"):
                 return await handler()  # type: ignore[operator]
             return await handler(**tool_input)  # type: ignore[operator]
         except Exception as e:

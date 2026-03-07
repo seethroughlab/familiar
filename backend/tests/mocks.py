@@ -1,65 +1,6 @@
-"""Shared mock objects for external API services.
-
-Usage:
-    from tests.mocks import mock_spotify_client, mock_lastfm_responses
-
-    @patch("app.services.spotify.spotipy.Spotify")
-    def test_something(mock_sp_cls):
-        mock_sp_cls.return_value = mock_spotify_client()
-"""
+"""Shared mock objects for external API services."""
 
 from unittest.mock import AsyncMock, MagicMock
-
-
-def mock_spotify_client(**overrides: object) -> MagicMock:
-    """Create a mock spotipy.Spotify client with common responses."""
-    client = MagicMock()
-
-    client.current_user.return_value = {
-        "id": "testuser123",
-        "display_name": "Test User",
-        "email": "test@example.com",
-    }
-
-    client.current_user_saved_tracks.return_value = {
-        "items": [
-            {
-                "added_at": "2024-01-01T00:00:00Z",
-                "track": {
-                    "id": "spotify_track_1",
-                    "name": "Test Track",
-                    "artists": [{"name": "Test Artist", "id": "artist_1"}],
-                    "album": {
-                        "name": "Test Album",
-                        "id": "album_1",
-                        "images": [{"url": "https://example.com/art.jpg", "width": 300}],
-                    },
-                    "duration_ms": 180000,
-                    "external_ids": {"isrc": "USRC12345678"},
-                    "track_number": 1,
-                },
-            }
-        ],
-        "next": None,
-        "total": 1,
-    }
-
-    client.current_user_playlists.return_value = {
-        "items": [
-            {
-                "id": "playlist_1",
-                "name": "My Playlist",
-                "tracks": {"total": 5},
-                "owner": {"id": "testuser123"},
-            }
-        ],
-        "next": None,
-    }
-
-    for key, val in overrides.items():
-        setattr(client, key, val)
-
-    return client
 
 
 def mock_lastfm_service() -> MagicMock:

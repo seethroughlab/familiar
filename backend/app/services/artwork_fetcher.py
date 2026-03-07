@@ -4,7 +4,6 @@ Fetches album artwork from external sources when not embedded in audio files.
 Sources (in priority order):
 1. Cover Art Archive (via MusicBrainz search)
 2. Last.fm API
-3. Spotify API (if configured)
 """
 
 import asyncio
@@ -269,12 +268,6 @@ class ArtworkFetcher:
             if image_data:
                 logger.debug(f"Found artwork via MusicBrainz/CAA for {request.artist} - {request.album}")
 
-        # Try Spotify if available and others failed
-        if not image_data:
-            image_data = await self._fetch_from_spotify(request.artist, request.album)
-            if image_data:
-                logger.debug(f"Found artwork via Spotify for {request.artist} - {request.album}")
-
         if image_data:
             # Save artwork to disk
             saved = save_artwork(image_data, request.album_hash)
@@ -450,70 +443,6 @@ class ArtworkFetcher:
 
         return None
 
-    async def _fetch_from_spotify(self, artist: str, album: str) -> bytes | None:
-        """Fetch artwork from Spotify API (requires configured credentials)."""
-        from app.services.app_settings import get_app_settings_service
-
-        app_settings = get_app_settings_service().get()
-
-        if not app_settings.spotify_client_id or not app_settings.spotify_client_secret:
-            return None
-
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            try:
-                # Get access token
-                auth_response = await client.post(
-                    "https://accounts.spotify.com/api/token",
-                    data={"grant_type": "client_credentials"},
-                    auth=(app_settings.spotify_client_id, app_settings.spotify_client_secret),
-                )
-
-                if auth_response.status_code != 200:
-                    return None
-
-                token = auth_response.json().get("access_token")
-                if not token:
-                    return None
-
-                # Search for album
-                search_response = await client.get(
-                    "https://api.spotify.com/v1/search",
-                    params={
-                        "q": f"album:{album} artist:{artist}",
-                        "type": "album",
-                        "limit": 1,
-                    },
-                    headers={"Authorization": f"Bearer {token}"},
-                )
-
-                if search_response.status_code != 200:
-                    return None
-
-                data = search_response.json()
-                albums = data.get("albums", {}).get("items", [])
-
-                if not albums:
-                    return None
-
-                # Get largest image
-                images = albums[0].get("images", [])
-                if not images:
-                    return None
-
-                # Images are sorted by size descending
-                image_url = images[0].get("url")
-                if image_url:
-                    img_response = await client.get(image_url, follow_redirects=True)
-                    if img_response.status_code == 200:
-                        content = img_response.content
-                        if is_valid_image_data(content):
-                            return content
-                        logger.debug(f"Spotify returned invalid image data for {artist} - {album}")
-
-            except Exception as e:
-                logger.debug(f"Spotify error: {e}")
-
-        return None
 
 
 # Global singleton

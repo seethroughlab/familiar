@@ -10,7 +10,7 @@ import { showSuccess, showWarning } from '../stores/toastStore';
 
 const log = createLogger('SyncService');
 
-type ActionType = 'scrobble' | 'now_playing' | 'sync_spotify' | 'favorite_toggle';
+type ActionType = 'scrobble' | 'now_playing' | 'favorite_toggle';
 
 /**
  * Queue an action to be performed when online.
@@ -135,9 +135,6 @@ async function executeAction(action: PendingAction): Promise<void> {
     case 'now_playing':
       await executeNowPlaying(action.profileId, action.payload as NowPlayingPayload);
       break;
-    case 'sync_spotify':
-      await executeSyncSpotify(action.profileId);
-      break;
     case 'favorite_toggle':
       await executeFavoriteToggle(action.profileId, action.payload as FavoriteTogglePayload);
       break;
@@ -189,19 +186,6 @@ async function executeNowPlaying(profileId: string, payload: NowPlayingPayload):
 
   if (!response.ok) {
     throw new Error(`Now playing failed: ${response.statusText}`);
-  }
-}
-
-async function executeSyncSpotify(profileId: string): Promise<void> {
-  const response = await fetch(getApiUrl('/spotify/sync'), {
-    method: 'POST',
-    headers: {
-      'X-Profile-ID': profileId,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Spotify sync failed: ${response.statusText}`);
   }
 }
 

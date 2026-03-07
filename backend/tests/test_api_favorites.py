@@ -18,14 +18,6 @@ class TestFavoritesAPI:
         assert data["total"] == 0
         assert data["favorites"] == []
 
-    def test_list_favorites_has_external_favorites_field(self, client: TestClient, test_profile: dict):
-        headers = make_profile_headers(test_profile)
-        response = client.get("/api/v1/favorites", headers=headers)
-        assert response.status_code == 200
-        data = response.json()
-        assert "external_favorites" in data
-        assert data["external_favorites"] == []
-
     def test_add_favorite_nonexistent_track(self, client: TestClient, test_profile: dict):
         headers = make_profile_headers(test_profile)
         fake_id = str(uuid4())

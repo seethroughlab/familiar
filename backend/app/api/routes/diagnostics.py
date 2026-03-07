@@ -152,7 +152,6 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
         app_settings = settings_service.get()
         settings_summary = {
             "has_anthropic_key": bool(app_settings.anthropic_api_key),
-            "has_spotify_credentials": bool(app_settings.spotify_client_id),
             "has_lastfm_key": bool(app_settings.lastfm_api_key),
             "library_paths_count": len(app_settings.music_library_paths),
         }

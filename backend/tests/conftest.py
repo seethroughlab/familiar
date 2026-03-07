@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.db.models import (
-    ExternalTrack,
     Playlist,
     PlaylistTrack,
     ProfilePlayHistory,
@@ -86,7 +85,6 @@ _CLEANUP_TABLES = [
     ProposedChange,
     ProfilePlayHistory,
     TrackAnalysis,
-    ExternalTrack,
     Track,
 ]
 

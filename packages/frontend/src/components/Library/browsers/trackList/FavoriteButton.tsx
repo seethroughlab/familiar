@@ -1,23 +1,15 @@
-/**
- * Favorite toggle button for individual tracks.
- * Supports both local and external tracks via isExternal prop.
- */
 import { Heart } from 'lucide-react';
 import { useFavorites } from '../../../../hooks/useFavorites';
 
-export function FavoriteButton({ trackId, isExternal = false }: { trackId: string; isExternal?: boolean }) {
-  const { isFavorite, toggle, isExternalFavorite, toggleExternal } = useFavorites();
-  const favorited = isExternal ? isExternalFavorite(trackId) : isFavorite(trackId);
+export function FavoriteButton({ trackId }: { trackId: string }) {
+  const { isFavorite, toggle } = useFavorites();
+  const favorited = isFavorite(trackId);
 
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
-        if (isExternal) {
-          toggleExternal(trackId);
-        } else {
-          toggle(trackId);
-        }
+        toggle(trackId);
       }}
       aria-pressed={favorited}
       aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}

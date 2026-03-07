@@ -40,25 +40,6 @@ class TestWishlist:
         resp2 = client.get("/api/v1/playlists/wishlist", headers=headers)
         assert resp1.json()["id"] == resp2.json()["id"]
 
-    @pytest.mark.asyncio
-    async def test_add_to_wishlist(self, async_db, client, profile_with_headers):
-        _, headers = profile_with_headers
-        # Ensure wishlist exists
-        client.get("/api/v1/playlists/wishlist", headers=headers)
-
-        resp = client.post(
-            "/api/v1/playlists/wishlist/add",
-            json={"title": "Wish Song", "artist": "Wish Artist"},
-            headers=headers,
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert len(data["tracks"]) >= 1
-        # The added item should be an external track
-        added = data["tracks"][-1]
-        assert added["type"] == "external"
-
-
 class TestReorderTracks:
     @pytest.mark.asyncio
     async def test_reorder(self, async_db, client, profile_with_headers):

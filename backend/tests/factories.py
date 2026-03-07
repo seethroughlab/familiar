@@ -22,8 +22,6 @@ from app.db.models import (
     ChangeScope,
     ChangeSource,
     ChangeStatus,
-    ExternalTrack,
-    ExternalTrackSource,
     Playlist,
     PlaylistTrack,
     Profile,
@@ -125,33 +123,6 @@ def create_test_smart_playlist(
     return response.json()
 
 
-def create_test_external_track_data(
-    *,
-    title: str = "External Track",
-    artist: str = "External Artist",
-    album: str | None = "External Album",
-    source: str = "manual",
-    spotify_id: str | None = None,
-    isrc: str | None = None,
-    duration_seconds: float | None = 200.0,
-) -> dict:
-    """Return a dict suitable for POST /api/v1/external-tracks."""
-    data: dict = {
-        "title": title,
-        "artist": artist,
-        "source": source,
-    }
-    if album:
-        data["album"] = album
-    if spotify_id:
-        data["spotify_id"] = spotify_id
-    if isrc:
-        data["isrc"] = isrc
-    if duration_seconds is not None:
-        data["duration_seconds"] = duration_seconds
-    return data
-
-
 # ---------------------------------------------------------------------------
 # Async DB-insert factories (for integration tests using async_db fixture)
 # ---------------------------------------------------------------------------
@@ -222,34 +193,6 @@ async def insert_test_analysis(
     db.add(analysis)
     await db.flush()
     return analysis
-
-
-async def insert_test_external_track(
-    db: AsyncSession,
-    *,
-    title: str = "External Track",
-    artist: str = "External Artist",
-    album: str | None = "External Album",
-    source: ExternalTrackSource = ExternalTrackSource.MANUAL,
-    spotify_id: str | None = None,
-    isrc: str | None = None,
-    duration_seconds: float | None = 200.0,
-    matched_track_id: UUID | None = None,
-) -> ExternalTrack:
-    """Insert an ExternalTrack and return it."""
-    ext = ExternalTrack(
-        title=title,
-        artist=artist,
-        album=album,
-        source=source,
-        spotify_id=spotify_id,
-        isrc=isrc,
-        duration_seconds=duration_seconds,
-        matched_track_id=matched_track_id,
-    )
-    db.add(ext)
-    await db.flush()
-    return ext
 
 
 async def insert_test_play_history(
@@ -330,15 +273,13 @@ async def insert_test_playlist_track(
     db: AsyncSession,
     playlist_id: UUID,
     *,
-    track_id: UUID | None = None,
-    external_track_id: UUID | None = None,
+    track_id: UUID,
     position: int = 0,
 ) -> PlaylistTrack:
-    """Insert a PlaylistTrack junction row. Exactly one of track_id/external_track_id required."""
+    """Insert a PlaylistTrack junction row."""
     pt = PlaylistTrack(
         playlist_id=playlist_id,
         track_id=track_id,
-        external_track_id=external_track_id,
         position=position,
     )
     db.add(pt)

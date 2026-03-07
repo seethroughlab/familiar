@@ -10,9 +10,6 @@ interface AudioSettingsState {
   // Whether crossfade is enabled
   crossfadeEnabled: boolean;
 
-  // External track previews
-  playExternalPreviews: boolean;
-
   // Volume normalization
   normalizationEnabled: boolean;
   normalizationMode: NormalizationMode;
@@ -23,7 +20,6 @@ interface AudioSettingsState {
   // Actions
   setCrossfadeDuration: (duration: number) => void;
   setCrossfadeEnabled: (enabled: boolean) => void;
-  setPlayExternalPreviews: (enabled: boolean) => void;
   setNormalizationEnabled: (enabled: boolean) => void;
   setNormalizationMode: (mode: NormalizationMode) => void;
   setNormalizationTargetLufs: (lufs: number) => void;
@@ -37,8 +33,6 @@ export const useAudioSettingsStore = create<AudioSettingsState>()(
       crossfadeDuration: 3,
       crossfadeEnabled: true,
 
-      playExternalPreviews: true,
-
       normalizationEnabled: false,
       normalizationMode: 'track' as NormalizationMode,
       normalizationTargetLufs: -14,
@@ -51,7 +45,6 @@ export const useAudioSettingsStore = create<AudioSettingsState>()(
         }),
 
       setCrossfadeEnabled: (enabled) => set({ crossfadeEnabled: enabled }),
-      setPlayExternalPreviews: (enabled) => set({ playExternalPreviews: enabled }),
 
       setNormalizationEnabled: (enabled) => set({ normalizationEnabled: enabled }),
       setNormalizationMode: (mode) => set({ normalizationMode: mode }),

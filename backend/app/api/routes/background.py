@@ -8,10 +8,7 @@ from pydantic import BaseModel
 
 from app.services.artwork_fetcher import get_artwork_fetch_progress
 from app.services.s3_backup import get_s3_backup_service
-from app.services.tasks import (
-    get_spotify_sync_progress,
-    get_sync_progress,
-)
+from app.services.tasks import get_sync_progress
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +25,7 @@ class JobProgress(BaseModel):
 class BackgroundJob(BaseModel):
     """Status of a background job."""
 
-    type: str  # "library_sync", "spotify_sync", "artwork_fetch", "s3_backup"
+    type: str  # "library_sync", "artwork_fetch", "s3_backup"
     status: str  # "running", "idle", "error", "complete"
     phase: str
     progress: JobProgress | None = None
@@ -86,37 +83,6 @@ def _build_library_sync_job(progress: dict[str, Any]) -> BackgroundJob:
     )
 
 
-def _build_spotify_sync_job(progress: dict[str, Any]) -> BackgroundJob:
-    """Build a BackgroundJob from Spotify sync progress."""
-    phase = progress.get("phase", "idle")
-    status = "running" if phase not in ("idle", "complete", "error") else phase
-
-    job_progress = None
-    if phase in ("fetching", "matching"):
-        job_progress = JobProgress(
-            current=progress.get("tracks_processed", 0),
-            total=progress.get("tracks_total", 0),
-        )
-
-    phase_messages = {
-        "connecting": "Connecting to Spotify...",
-        "fetching": "Fetching saved tracks...",
-        "matching": "Matching to library...",
-        "complete": "Spotify sync complete",
-        "error": "Spotify sync failed",
-    }
-    message = phase_messages.get(phase, "Syncing Spotify...")
-
-    return BackgroundJob(
-        type="spotify_sync",
-        status=status,
-        phase=phase,
-        progress=job_progress,
-        message=message,
-        current_item=progress.get("current_track"),
-        started_at=progress.get("started_at"),
-    )
-
 
 def _build_artwork_fetch_job(progress: dict[str, Any]) -> BackgroundJob:
     """Build a BackgroundJob from artwork fetch progress."""
@@ -163,13 +129,6 @@ async def get_background_jobs() -> BackgroundJobsResponse:
         phase = library_progress.get("phase", "idle")
         if phase not in ("idle", "complete"):
             jobs.append(_build_library_sync_job(library_progress))
-
-    # Check Spotify sync
-    spotify_progress = get_spotify_sync_progress()
-    if spotify_progress:
-        phase = spotify_progress.get("phase", "idle")
-        if phase not in ("idle", "complete"):
-            jobs.append(_build_spotify_sync_job(spotify_progress))
 
     # Check artwork fetch
     artwork_progress = get_artwork_fetch_progress()

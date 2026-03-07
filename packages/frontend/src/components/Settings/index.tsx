@@ -1,4 +1,3 @@
-import { SpotifySettings } from './SpotifySettings';
 import { LastfmSettings } from './LastfmSettings';
 import { OfflineSettings } from './OfflineSettings';
 import { ThemeSettings } from './ThemeSettings';
@@ -102,7 +101,6 @@ export function SettingsPanel() {
             Integrations
           </h3>
           <div className="space-y-4">
-            <SpotifySettings />
             <LastfmSettings />
           </div>
         </section>
@@ -141,7 +139,6 @@ export function SettingsPanel() {
   );
 }
 
-export { SpotifySettings } from './SpotifySettings';
 export { LastfmSettings } from './LastfmSettings';
 export { OfflineSettings } from './OfflineSettings';
 export { DataManagement } from './DataManagement';

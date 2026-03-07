@@ -14,10 +14,9 @@ import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } fr
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { Play, Download, Check, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
+import { Play, Download, Check, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
 import { tracksApi } from '../../../api';
 import { usePlayerStore } from '../../../stores/playerStore';
-import { useAudioSettingsStore } from '../../../stores/audioSettingsStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
 import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
@@ -34,7 +33,6 @@ import { registerBrowser, type BrowserProps } from '../types';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
-import { isExternalTrack } from '../../../types';
 
 import { createLogger } from '../../../utils/logger';
 
@@ -57,26 +55,6 @@ registerBrowser(
   TrackListBrowser
 );
 
-function ExternalLinkButton({ track }: { track: Track }) {
-  const spotifyUrl = track.spotify_id
-    ? `https://open.spotify.com/track/${track.spotify_id}`
-    : null;
-
-  if (!spotifyUrl) return null;
-
-  return (
-    <a
-      href={spotifyUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="p-1 text-zinc-500 hover:text-green-400 transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-      title="Open in Spotify"
-    >
-      <ExternalLink className="w-4 h-4" />
-    </a>
-  );
-}
 
 interface AlbumTrack {
   id: string;
@@ -216,11 +194,6 @@ function MobileTrackCard({
       <div className="flex-1 min-w-0">
         <div className={`truncate font-medium flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : 'text-white'}`}>
           <span className="truncate">{track.title || 'Unknown'}</span>
-          {isExternalTrack(track) && (
-            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-400 flex-shrink-0">
-              External
-            </span>
-          )}
         </div>
         <div className="text-sm text-zinc-400 truncate">
           {track.artist || 'Unknown Artist'}
@@ -235,12 +208,8 @@ function MobileTrackCard({
 
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
-        <FavoriteButton trackId={track.id} isExternal={isExternalTrack(track)} />
-        {isExternalTrack(track) ? (
-          <ExternalLinkButton track={track} />
-        ) : (
-          <OfflineButton trackId={track.id} />
-        )}
+        <FavoriteButton trackId={track.id} />
+        <OfflineButton trackId={track.id} />
       </div>
     </div>
   );
@@ -296,11 +265,6 @@ function TrackRow({
       <div className="min-w-0">
         <div className={`truncate flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : ''}`}>
           {track.title || 'Unknown'}
-          {isExternalTrack(track) && (
-            <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-500/20 text-amber-400 flex-shrink-0">
-              External
-            </span>
-          )}
         </div>
       </div>
 
@@ -331,16 +295,12 @@ function TrackRow({
 
       {/* Favorite button */}
       <div className="flex items-center justify-center">
-        <FavoriteButton trackId={track.id} isExternal={isExternalTrack(track)} />
+        <FavoriteButton trackId={track.id} />
       </div>
 
-      {/* Offline / External link button */}
+      {/* Offline button */}
       <div className="flex items-center justify-center">
-        {isExternalTrack(track) ? (
-          <ExternalLinkButton track={track} />
-        ) : (
-          <OfflineButton trackId={track.id} />
-        )}
+        <OfflineButton trackId={track.id} />
       </div>
     </div>
   );
@@ -371,8 +331,6 @@ export function TrackListBrowser({
   const sortBy = useColumnStore((state) => state.sortBy);
   const sortOrder = useColumnStore((state) => state.sortOrder);
   const toggleSort = useColumnStore((state) => state.toggleSort);
-  const playExternalPreviews = useAudioSettingsStore((s) => s.playExternalPreviews);
-  const setPlayExternalPreviews = useAudioSettingsStore((s) => s.setPlayExternalPreviews);
   // Context menu (via hook — bulk actions and favorites handled automatically)
   const { handleContextMenu, openContextMenu, contextMenuElement } = useTrackContextMenu({
     onPlay: (track) => {
@@ -575,7 +533,6 @@ export function TrackListBrowser({
         fyMin: filters.fyMin,
         fyMax: filters.fyMax,
         include_features: needsFeatures,
-        include_external: true,
         sortBy: sortField,
         sortOrder,
       },
@@ -600,7 +557,6 @@ export function TrackListBrowser({
         page: pageParam,
         page_size: PAGE_SIZE,
         include_features: needsFeatures,
-        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       }),
@@ -647,7 +603,6 @@ export function TrackListBrowser({
         fy_min: filters.fyMin,
         fy_max: filters.fyMax,
         include_features: needsFeatures,
-        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -851,8 +806,7 @@ export function TrackListBrowser({
           fy: filters.fy,
           fy_min: filters.fyMin,
           fy_max: filters.fyMax,
-          include_external: true,
-          sort_by: sortField,
+            sort_by: sortField,
           sort_order: sortOrder,
         });
 
@@ -963,7 +917,6 @@ export function TrackListBrowser({
         fy_min: filters.fyMin,
         fy_max: filters.fyMax,
         include_features: needsFeatures,
-        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -1013,7 +966,6 @@ export function TrackListBrowser({
         fy_min: filters.fyMin,
         fy_max: filters.fyMax,
         include_features: needsFeatures,
-        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -1061,7 +1013,6 @@ export function TrackListBrowser({
         fy_min: filters.fyMin,
         fy_max: filters.fyMax,
         include_features: needsFeatures,
-        include_external: true,
         sort_by: sortField,
         sort_order: sortOrder,
       });
@@ -1200,7 +1151,6 @@ export function TrackListBrowser({
     fy: filters.fy,
     fy_min: filters.fyMin,
     fy_max: filters.fyMax,
-    include_external: true,
     sort_by: sortField,
     sort_order: sortOrder,
   }), [filters, sortField, sortOrder]);
@@ -1219,7 +1169,7 @@ export function TrackListBrowser({
         try {
           const response = await tracksApi.getIds({
             shuffle: shuffle,
-            start_with: isExternalTrack(track) ? `ext:${track.id}` : track.id,  // Clicked track plays first
+            start_with: track.id,
             ...queueFilters,
           });
           if (response.ids.length > 0) {
@@ -1236,19 +1186,8 @@ export function TrackListBrowser({
         return;
       }
 
-      // For smaller result sets, use regular queue (use dense array)
-      // Attach _externalInfo for external tracks so the audio engine uses preview URLs
       if (allTracksUnfiltered.length > 0) {
-        const queueTracks = allTracksUnfiltered.map(t => ({
-          ...t,
-          _externalInfo: isExternalTrack(t) ? {
-            type: 'external' as const,
-            previewUrl: t.preview_url || null,
-            matchedTrackId: t.matched_track_id || null,
-            originalId: t.id,
-          } : undefined,
-        }));
-        setQueue(queueTracks as Track[], index);
+        setQueue(allTracksUnfiltered, index);
       }
     },
     [currentTrack, isPlaying, setIsPlaying, allTracksUnfiltered, setQueue, total, shuffle, queueFilters, setLazyQueue]
@@ -1308,27 +1247,10 @@ export function TrackListBrowser({
       return;
     }
 
-    // For smaller result sets, use regular queue (use dense array)
-    // setQueue() already respects the global shuffle toggle
     if (allTracksUnfiltered.length > 0) {
-      const queueTracks = allTracksUnfiltered.map(t => ({
-        ...t,
-        _externalInfo: isExternalTrack(t) ? {
-          type: 'external' as const,
-          previewUrl: t.preview_url || null,
-          matchedTrackId: t.matched_track_id || null,
-          originalId: t.id,
-        } : undefined,
-      }));
-      setQueue(queueTracks as Track[], 0);
+      setQueue(allTracksUnfiltered, 0);
     }
   }, [total, shuffle, queueFilters, setLazyQueue, allTracksUnfiltered, setQueue]);
-
-  // Check if any external tracks are loaded
-  const hasExternalTracks = useMemo(
-    () => allTracksUnfiltered.some(t => isExternalTrack(t)),
-    [allTracksUnfiltered]
-  );
 
   // Check if currently playing from lazy queue
   const isInLazyQueueMode = lazyQueueIds !== null && lazyQueueIds.length > 0;
@@ -1468,20 +1390,6 @@ export function TrackListBrowser({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {hasExternalTracks && (
-              <button
-                onClick={() => setPlayExternalPreviews(!playExternalPreviews)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full transition-colors ${
-                  playExternalPreviews
-                    ? 'bg-amber-600 hover:bg-amber-500'
-                    : 'bg-zinc-700 hover:bg-zinc-600'
-                }`}
-                title={playExternalPreviews ? 'Disable external track previews' : 'Enable external track previews'}
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Previews</span>
-              </button>
-            )}
             <button
               onClick={handlePlayAll}
               disabled={isLoadingPlayAll}
