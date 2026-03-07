@@ -199,18 +199,22 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    // Reload page to pick up new mock
-    await page.reload();
+    // Reload page to pick up new mock, waiting for the status response to be received
+    await Promise.all([
+      page.waitForResponse('**/api/v1/chat/status'),
+      page.reload(),
+    ]);
     await ensureProfile(page);
     // Re-open chat panel after reload
     await openChatPanel(page);
 
     // The chat input should be disabled or there's a configuration message
     const chatInput = getChatInput(page);
-    const isInputDisabled = await chatInput.isDisabled().catch(() => false);
-
     const configureMessage = page.locator('text=/configure|api key|not configured|unavailable/i').first();
-    const hasConfigMessage = await configureMessage.isVisible({ timeout: 3000 }).catch(() => false);
+
+    // Wait for either condition to be true (up to 5s for UI to reflect status)
+    const isInputDisabled = await chatInput.isDisabled({ timeout: 5000 }).catch(() => false);
+    const hasConfigMessage = await configureMessage.isVisible({ timeout: 5000 }).catch(() => false);
 
     // Either input is disabled OR there's a config message
     expect(isInputDisabled || hasConfigMessage).toBe(true);
