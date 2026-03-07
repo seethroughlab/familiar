@@ -199,14 +199,14 @@ test.describe('AI Chat (Mocked)', () => {
       });
     });
 
-    // Reload page to pick up new mock, waiting for the status response to be received
+    // Reload page to pick up new mock
+    await page.reload();
+    await ensureProfile(page);
+    // Re-open chat panel, waiting for status response (fetched when panel opens)
     await Promise.all([
       page.waitForResponse('**/api/v1/chat/status'),
-      page.reload(),
+      openChatPanel(page),
     ]);
-    await ensureProfile(page);
-    // Re-open chat panel after reload
-    await openChatPanel(page);
 
     // The chat input should be disabled or there's a configuration message
     const chatInput = getChatInput(page);
