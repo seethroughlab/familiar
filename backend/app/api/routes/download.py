@@ -137,9 +137,7 @@ async def download_smart_playlist_zip(
     if not playlist:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Smart playlist not found")
 
-    raw_tracks, _total = await service.get_tracks_unified(playlist, limit=MAX_TRACKS + 1, offset=0)
-    # Filter to local Track objects only
-    tracks = [t for t in raw_tracks if isinstance(t, Track)]
+    tracks = await service.get_tracks(playlist, limit=MAX_TRACKS + 1, offset=0)
 
     if not tracks:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No downloadable tracks in smart playlist")

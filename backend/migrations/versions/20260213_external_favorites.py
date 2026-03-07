@@ -30,6 +30,9 @@ def _table_exists(table_name: str) -> bool:
 
 
 def upgrade() -> None:
+    # external_tracks no longer exists (shelved feature) — skip on fresh DBs
+    if not _table_exists("external_tracks"):
+        return
     if not _table_exists("profile_external_favorites"):
         op.create_table(
             "profile_external_favorites",

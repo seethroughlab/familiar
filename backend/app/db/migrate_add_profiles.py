@@ -12,7 +12,7 @@ from typing import cast
 from sqlalchemy import Table, text
 from sqlalchemy.schema import CreateTable
 
-from app.db.models import LastfmProfile, Profile, SpotifyFavorite, SpotifyProfile
+from app.db.models import LastfmProfile, Profile
 from app.db.session import engine
 
 
@@ -35,8 +35,6 @@ async def migrate() -> None:
         new_tables = [
             (Profile, "profiles"),
             (LastfmProfile, "lastfm_profiles"),
-            (SpotifyProfile, "spotify_profiles"),
-            (SpotifyFavorite, "spotify_favorites"),
         ]
 
         for model, table_name in new_tables:

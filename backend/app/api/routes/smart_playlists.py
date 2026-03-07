@@ -223,7 +223,8 @@ async def get_smart_playlist_tracks(
             detail="Smart playlist not found",
         )
 
-    tracks, total = await service.get_tracks_unified(playlist, limit=limit, offset=offset)
+    tracks = await service.get_tracks(playlist, limit=limit, offset=offset)
+    total = await service.get_track_count(playlist)
 
     track_responses = []
     for t in tracks:
@@ -287,8 +288,7 @@ async def convert_to_static(
         )
 
     # Resolve current tracks
-    raw_tracks, _total = await service.get_tracks_unified(playlist, limit=10000, offset=0)
-    local_tracks = [t for t in raw_tracks if isinstance(t, Track)]
+    local_tracks = await service.get_tracks(playlist, limit=10000, offset=0)
 
     # Create static playlist
     static = Playlist(
