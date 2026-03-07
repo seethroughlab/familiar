@@ -241,7 +241,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           MUSIC_LIBRARY_PATH: ${{ github.workspace }}/backend/tests/fixtures/audio
         run: |
-          uv run uvicorn app.main:app --host 0.0.0.0 --port 4400 &
+          uv run uvicorn app.main:app --host 0.0.0.0 --port 4401 &
           sleep 10
 
       - name: Install Playwright browsers
@@ -251,6 +251,7 @@ jobs:
       - name: Run Playwright tests
         working-directory: packages/web
         env:
+          BASE_URL: http://localhost:4401
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
