@@ -1,4 +1,4 @@
-"""Integration tests for playlists API - wishlist, reorder, item removal.
+"""Integration tests for playlists API - reorder, item removal.
 
 These tests insert real data via async_db, then use the sync TestClient.
 """
@@ -22,23 +22,6 @@ async def profile_with_headers(async_db):
     await async_db.commit()
     return p, {"X-Profile-ID": str(p.id)}
 
-
-class TestWishlist:
-    @pytest.mark.asyncio
-    async def test_wishlist_auto_creates(self, async_db, client, profile_with_headers):
-        _, headers = profile_with_headers
-        resp = client.get("/api/v1/playlists/wishlist", headers=headers)
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["is_wishlist"] is True
-        assert data["name"] == "Wishlist"
-
-    @pytest.mark.asyncio
-    async def test_wishlist_idempotent(self, async_db, client, profile_with_headers):
-        _, headers = profile_with_headers
-        resp1 = client.get("/api/v1/playlists/wishlist", headers=headers)
-        resp2 = client.get("/api/v1/playlists/wishlist", headers=headers)
-        assert resp1.json()["id"] == resp2.json()["id"]
 
 class TestReorderTracks:
     @pytest.mark.asyncio

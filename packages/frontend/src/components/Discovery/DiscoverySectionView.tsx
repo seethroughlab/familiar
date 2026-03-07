@@ -7,7 +7,6 @@ interface DiscoverySectionViewProps {
   section: DiscoverySection;
   onItemClick?: (item: DiscoveryItem) => void;
   onItemPlay?: (item: DiscoveryItem) => void;
-  onAddToWishlist?: (item: DiscoveryItem) => void;
   showHeader?: boolean;
   gridColumns?: 2 | 3 | 4 | 5 | 6;
   className?: string;
@@ -34,7 +33,6 @@ export function DiscoverySectionView({
   section,
   onItemClick,
   onItemPlay,
-  onAddToWishlist,
   showHeader = true,
   gridColumns = 4,
   className = '',
@@ -61,14 +59,12 @@ export function DiscoverySectionView({
           columns={gridColumns}
           onItemClick={onItemClick}
           onItemPlay={onItemPlay}
-          onAddToWishlist={onAddToWishlist}
         />
       ) : (
         <DiscoveryList
           items={section.items}
           onItemClick={onItemClick}
           onItemPlay={onItemPlay}
-          onAddToWishlist={onAddToWishlist}
         />
       )}
     </div>

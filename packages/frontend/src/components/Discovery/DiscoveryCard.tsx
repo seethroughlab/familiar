@@ -1,4 +1,4 @@
-import { Play, Pause, Disc, Disc3, User, Plus } from 'lucide-react';
+import { Play, Pause, Disc, Disc3, User } from 'lucide-react';
 import type { DiscoveryItem, LayoutType } from './types';
 import { MatchScoreBadge } from './MatchScoreBadge';
 import { ExternalLinkPills } from './ExternalLinkPills';
@@ -10,7 +10,6 @@ interface DiscoveryCardProps {
   isPlaying?: boolean;
   onClick?: () => void;
   onPlay?: () => void;
-  onAddToWishlist?: () => void;
 }
 
 /**
@@ -31,7 +30,6 @@ export function DiscoveryCard({
   isPlaying = false,
   onClick,
   onPlay,
-  onAddToWishlist,
 }: DiscoveryCardProps) {
   const isClickable = item.inLibrary && onClick;
   const hasValidImageUrl = item.imageUrl && !isLastFmPlaceholder(item.imageUrl);
@@ -45,11 +43,6 @@ export function DiscoveryCard({
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     onPlay?.();
-  };
-
-  const handleAddToWishlist = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onAddToWishlist?.();
   };
 
   // Render the artwork/icon section
@@ -154,16 +147,6 @@ export function DiscoveryCard({
           </div>
         )}
 
-        {/* Add to Wishlist button for non-library items */}
-        {!item.inLibrary && onAddToWishlist && (
-          <button
-            onClick={handleAddToWishlist}
-            className="absolute top-2 left-2 p-1.5 rounded-full bg-purple-600 hover:bg-purple-500 transition-colors opacity-0 group-hover:opacity-100"
-            title="Add to Wishlist"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        )}
       </div>
     );
   }
@@ -191,7 +174,7 @@ export function DiscoveryCard({
         )}
       </div>
 
-      {/* Right side: match score, badges, links, wishlist button */}
+      {/* Right side: match score, badges, links */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {item.inLibrary ? (
           item.matchScore !== undefined && (
@@ -203,15 +186,6 @@ export function DiscoveryCard({
               <MatchScoreBadge score={item.matchScore} />
             )}
             {item.externalLinks && <ExternalLinkPills links={item.externalLinks} />}
-            {onAddToWishlist && (
-              <button
-                onClick={handleAddToWishlist}
-                className="p-1.5 rounded-full bg-purple-600 hover:bg-purple-500 transition-colors"
-                title="Add to Wishlist"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            )}
           </>
         )}
       </div>

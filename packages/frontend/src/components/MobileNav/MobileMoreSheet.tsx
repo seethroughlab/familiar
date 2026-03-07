@@ -8,7 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Download, Gift, Disc3, MessageSquare, Settings,
+  Download, Disc3, MessageSquare, Settings,
   ListMusic, Clock, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
@@ -34,7 +34,6 @@ const LIBRARY_ITEMS = [
 const COLLECTION_ITEMS = [
   { path: '/new-releases', label: 'New Releases', icon: Disc3 },
   { path: '/downloads', label: 'Downloads', icon: Download },
-  { path: '/wishlist', label: 'Wishlist', icon: Gift },
 ];
 
 export function MobileMoreSheet({ onClose }: Props) {

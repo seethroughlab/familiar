@@ -82,7 +82,6 @@ export interface DiscoveryPanelProps {
   // Callbacks
   onItemClick?: (item: DiscoveryItem) => void;
   onItemPlay?: (item: DiscoveryItem) => void;
-  onAddToWishlist?: (item: DiscoveryItem) => void;
 }
 
 /**
@@ -92,7 +91,6 @@ export interface DiscoverySectionProps {
   section: DiscoverySection;
   onItemClick?: (item: DiscoveryItem) => void;
   onItemPlay?: (item: DiscoveryItem) => void;
-  onAddToWishlist?: (item: DiscoveryItem) => void;
 }
 
 /**
@@ -104,7 +102,6 @@ export interface DiscoveryCardProps {
   isPlaying?: boolean;
   onClick?: () => void;
   onPlay?: () => void;
-  onAddToWishlist?: () => void;
 }
 
 /**

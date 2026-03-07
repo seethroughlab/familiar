@@ -28,7 +28,6 @@ const EphemeralPlaylistDetail = lazy(() => import('./components/Playlists/Epheme
 const FavoritesDetail = lazy(() => import('./components/Playlists/FavoritesDetail').then(m => ({ default: m.FavoritesDetail })));
 const DownloadsDetail = lazy(() => import('./components/Playlists/DownloadsDetail').then(m => ({ default: m.DownloadsDetail })));
 const SmartPlaylistDetail = lazy(() => import('./components/SmartPlaylists/SmartPlaylistDetail').then(m => ({ default: m.SmartPlaylistDetail })));
-const WishlistRoute = lazy(() => import('./components/Playlists/WishlistRoute').then(m => ({ default: m.WishlistRoute })));
 
 function LazyLoadSpinner() {
   return (
@@ -86,7 +85,6 @@ function LegacyRedirect() {
     const view = params.get('view');
     if (view === 'favorites') { navigate('/favorites', { replace: true }); return; }
     if (view === 'downloads') { navigate('/downloads', { replace: true }); return; }
-    if (view === 'wishlist') { navigate('/wishlist', { replace: true }); return; }
 
     const playlistId = params.get('playlist');
     if (playlistId) { navigate(`/playlists/${playlistId}`, { replace: true }); return; }
@@ -317,11 +315,6 @@ function App() {
             <Route path="/downloads" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <DownloadsDetail />
-              </Suspense>
-            } />
-            <Route path="/wishlist" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <WishlistRoute />
               </Suspense>
             } />
 

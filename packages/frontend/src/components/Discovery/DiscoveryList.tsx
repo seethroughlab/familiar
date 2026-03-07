@@ -6,7 +6,6 @@ interface DiscoveryListProps {
   items: DiscoveryItem[];
   onItemClick?: (item: DiscoveryItem) => void;
   onItemPlay?: (item: DiscoveryItem) => void;
-  onAddToWishlist?: (item: DiscoveryItem) => void;
   className?: string;
 }
 
@@ -18,7 +17,6 @@ export function DiscoveryList({
   items,
   onItemClick,
   onItemPlay,
-  onAddToWishlist,
   className = '',
 }: DiscoveryListProps) {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -47,7 +45,6 @@ export function DiscoveryList({
           isPlaying={isItemPlaying(item)}
           onClick={() => onItemClick?.(item)}
           onPlay={() => handlePlay(item)}
-          onAddToWishlist={onAddToWishlist ? () => onAddToWishlist(item) : undefined}
         />
       ))}
     </div>

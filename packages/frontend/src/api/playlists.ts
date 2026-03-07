@@ -160,7 +160,6 @@ export interface Playlist {
   name: string;
   description: string | null;
   is_auto_generated: boolean;
-  is_wishlist: boolean;
   generation_prompt: string | null;
   track_count: number;
   local_track_count: number;
@@ -195,7 +194,6 @@ export interface PlaylistDetail {
   name: string;
   description: string | null;
   is_auto_generated: boolean;
-  is_wishlist: boolean;
   generation_prompt: string | null;
   tracks: PlaylistTrack[];
   auto_download: boolean;
@@ -298,11 +296,6 @@ export const playlistsApi = {
 
   duplicate: async (id: string): Promise<PlaylistDetail> => {
     const { data } = await api.post(`/playlists/${id}/duplicate`);
-    return data;
-  },
-
-  getWishlist: async (): Promise<PlaylistDetail> => {
-    const { data } = await api.get('/playlists/wishlist');
     return data;
   },
 

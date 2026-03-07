@@ -32,7 +32,7 @@ export function PlaylistPickerModal({ trackIds }: Props) {
   }, []);
 
   const filtered = playlists.filter(
-    (p: Playlist) => !p.is_wishlist && p.name.toLowerCase().includes(search.toLowerCase())
+    (p: Playlist) => p.name.toLowerCase().includes(search.toLowerCase())
   );
 
   const handleAdd = async (playlistId: string, playlistName: string) => {

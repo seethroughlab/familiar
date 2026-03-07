@@ -255,14 +255,12 @@ async def insert_test_playlist(
     *,
     name: str = "Test Playlist",
     is_auto_generated: bool = False,
-    is_wishlist: bool = False,
 ) -> Playlist:
     """Insert a Playlist and return it."""
     playlist = Playlist(
         profile_id=profile_id,
         name=name,
         is_auto_generated=is_auto_generated,
-        is_wishlist=is_wishlist,
     )
     db.add(playlist)
     await db.flush()

@@ -106,7 +106,6 @@ describe('playlistCache', () => {
         name: 'My Playlist',
         description: 'A test playlist',
         is_auto_generated: false,
-        is_wishlist: false,
         generation_prompt: null,
         tracks: [
           { id: 'track-1', playlist_track_id: 'pt-1', type: 'local' as const, title: 'Song 1', artist: 'Artist 1', album: null, duration_seconds: 180, position: 0 },
@@ -138,7 +137,7 @@ describe('playlistCache', () => {
       const { cachePlaylist } = await getModule();
       await cachePlaylist({
         id: 'p1', name: 'P', description: null, is_auto_generated: false,
-        is_wishlist: false, generation_prompt: null, tracks: [],
+        generation_prompt: null, tracks: [],
         auto_download: false, created_at: '', updated_at: '',
       });
 

@@ -9,7 +9,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download, Gift,
+  Heart, Download,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
@@ -45,7 +45,6 @@ const LIBRARY_ITEMS = [
 const COLLECTION_ITEMS = [
   { path: '/favorites', label: 'Favorites', icon: Heart, countKey: 'favorites' as const },
   { path: '/downloads', label: 'Downloads', icon: Download, countKey: 'downloads' as const },
-  { path: '/wishlist', label: 'Wishlist', icon: Gift, countKey: 'wishlist' as const },
 ];
 
 export function Sidebar() {
@@ -79,27 +78,15 @@ export function Sidebar() {
   const { total: downloadsCount } = useDownloadedTracks();
   const { isOffline } = useOfflineStatus();
 
-  // Wishlist count
-  const { data: wishlist } = useQuery({
-    queryKey: ['wishlist'],
-    queryFn: () => playlistsApi.getWishlist(),
-    retry: isOffline ? false : 3,
-  });
-  const wishlistCount = wishlist?.tracks?.length ?? 0;
-
   const counts = {
     favorites: favoritesCount,
     downloads: downloadsCount,
-    wishlist: wishlistCount,
   };
 
   // Playlists
   const { data: playlists } = useQuery({
     queryKey: ['playlists'],
-    queryFn: async () => {
-      const data = await playlistsApi.list(true);
-      return data.filter((p: Playlist) => !p.is_wishlist);
-    },
+    queryFn: () => playlistsApi.list(true),
     retry: isOffline ? false : 3,
   });
 

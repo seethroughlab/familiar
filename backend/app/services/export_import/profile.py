@@ -176,7 +176,6 @@ class ExportImportService:
                 "name": playlist.name,
                 "description": playlist.description,
                 "is_auto_generated": playlist.is_auto_generated,
-                "is_wishlist": playlist.is_wishlist,
                 "generation_prompt": playlist.generation_prompt,
                 "tracks": tracks_data,
                 "created_at": playlist.created_at.isoformat() + "Z" if playlist.created_at else None,
@@ -642,49 +641,28 @@ class ImportService:
         for playlist_data in playlists:
             try:
                 name = playlist_data.get("name", "Imported Playlist")
-                is_wishlist = playlist_data.get("is_wishlist", False)
 
-                # For wishlist, find or create
-                if is_wishlist:
-                    existing = await self.db.execute(
-                        select(Playlist).where(
-                            Playlist.profile_id == profile_id,
-                            Playlist.is_wishlist.is_(True),
-                        )
+                # Check for existing playlist by name
+                existing = await self.db.execute(
+                    select(Playlist).where(
+                        Playlist.profile_id == profile_id,
+                        Playlist.name == name,
                     )
-                    playlist = existing.scalar_one_or_none()
-                    if not playlist:
-                        playlist = Playlist(
-                            profile_id=profile_id,
-                            name=name,
-                            description=playlist_data.get("description"),
-                            is_wishlist=True,
-                        )
-                        self.db.add(playlist)
-                        await self.db.flush()
-                else:
-                    # Check for existing playlist by name
-                    existing = await self.db.execute(
-                        select(Playlist).where(
-                            Playlist.profile_id == profile_id,
-                            Playlist.name == name,
-                            Playlist.is_wishlist.is_(False),
-                        )
-                    )
-                    if existing.scalar_one_or_none() and mode == "merge":
-                        skipped += 1
-                        continue
+                )
+                if existing.scalar_one_or_none() and mode == "merge":
+                    skipped += 1
+                    continue
 
-                    # Create new playlist
-                    playlist = Playlist(
-                        profile_id=profile_id,
-                        name=name,
-                        description=playlist_data.get("description"),
-                        is_auto_generated=playlist_data.get("is_auto_generated", False),
-                        generation_prompt=playlist_data.get("generation_prompt"),
-                    )
-                    self.db.add(playlist)
-                    await self.db.flush()
+                # Create new playlist
+                playlist = Playlist(
+                    profile_id=profile_id,
+                    name=name,
+                    description=playlist_data.get("description"),
+                    is_auto_generated=playlist_data.get("is_auto_generated", False),
+                    generation_prompt=playlist_data.get("generation_prompt"),
+                )
+                self.db.add(playlist)
+                await self.db.flush()
 
                 # Add tracks
                 tracks_data = playlist_data.get("tracks", [])

@@ -576,7 +576,6 @@ class TestExportPlaylists:
         playlist.name = "My Playlist"
         playlist.description = "desc"
         playlist.is_auto_generated = False
-        playlist.is_wishlist = False
         playlist.generation_prompt = None
         playlist.created_at = datetime(2024, 1, 1)
 
@@ -734,7 +733,6 @@ class TestImportPlaylists:
         playlists = [{
             "name": "New Playlist",
             "description": "Test",
-            "is_wishlist": False,
             "is_auto_generated": False,
             "tracks": [
                 {
@@ -762,28 +760,12 @@ class TestImportPlaylists:
             scalar_one_or_none=MagicMock(return_value=existing_playlist)
         )
 
-        playlists = [{"name": "Existing Playlist", "is_wishlist": False, "tracks": []}]
+        playlists = [{"name": "Existing Playlist", "tracks": []}]
 
         result = await service._import_playlists(profile_id, playlists, {}, mode="merge")
 
         assert result["skipped"] == 1
         assert result["imported"] == 0
-
-    @pytest.mark.asyncio
-    async def test_wishlist_creates_if_not_exists(self, service, mock_db):
-        """Should create wishlist if one doesn't exist."""
-        profile_id = uuid4()
-
-        mock_db.execute.return_value = MagicMock(
-            scalar_one_or_none=MagicMock(return_value=None)
-        )
-
-        playlists = [{"name": "Wishlist", "is_wishlist": True, "tracks": []}]
-
-        result = await service._import_playlists(profile_id, playlists, {}, mode="merge")
-
-        assert result["imported"] == 1
-
 
 class TestImportSmartPlaylists:
     """Tests for ImportService._import_smart_playlists."""

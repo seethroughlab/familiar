@@ -66,7 +66,6 @@ class PlaylistResponse(BaseModel):
     name: str
     description: str | None
     is_auto_generated: bool
-    is_wishlist: bool = False
     generation_prompt: str | None
     track_count: int
     auto_download: bool = False
@@ -81,7 +80,6 @@ class PlaylistDetailResponse(BaseModel):
     name: str
     description: str | None
     is_auto_generated: bool
-    is_wishlist: bool = False
     generation_prompt: str | None
     tracks: list[TrackInPlaylist]
     auto_download: bool = False
@@ -94,7 +92,6 @@ async def list_playlists(
     db: DbSession,
     profile: RequiredProfile,
     include_auto: bool = Query(True, description="Include auto-generated playlists"),
-    include_wishlist: bool = Query(True, description="Include wishlist playlist"),
 ) -> list[PlaylistResponse]:
     """List all playlists for the current profile."""
     query = select(Playlist).where(Playlist.profile_id == profile.id)
@@ -102,11 +99,7 @@ async def list_playlists(
     if not include_auto:
         query = query.where(Playlist.is_auto_generated.is_(False))
 
-    if not include_wishlist:
-        query = query.where(Playlist.is_wishlist.is_(False))
-
-    # Wishlist first, then by updated_at
-    query = query.order_by(Playlist.is_wishlist.desc(), Playlist.updated_at.desc())
+    query = query.order_by(Playlist.updated_at.desc())
 
     result = await db.execute(query)
     playlists = result.scalars().all()
@@ -136,7 +129,6 @@ async def list_playlists(
             name=playlist.name,
             description=playlist.description,
             is_auto_generated=playlist.is_auto_generated,
-            is_wishlist=playlist.is_wishlist,
             generation_prompt=playlist.generation_prompt,
             track_count=total_count,
             auto_download=playlist.auto_download,
@@ -220,44 +212,6 @@ async def create_playlist(
 
 
 # ============================================================================
-# Wishlist Endpoints (must be defined before /{playlist_id} routes)
-# ============================================================================
-
-
-@router.get("/wishlist", response_model=PlaylistDetailResponse)
-async def get_wishlist(
-    db: DbSession,
-    profile: RequiredProfile,
-) -> PlaylistDetailResponse:
-    """Get the wishlist playlist for the current profile.
-
-    Creates the wishlist if it doesn't exist.
-    """
-    # Find or create wishlist
-    result = await db.execute(
-        select(Playlist).where(
-            Playlist.profile_id == profile.id,
-            Playlist.is_wishlist.is_(True),
-        )
-    )
-    wishlist = result.scalar_one_or_none()
-
-    if not wishlist:
-        # Create wishlist
-        wishlist = Playlist(
-            profile_id=profile.id,
-            name="Wishlist",
-            description="Tracks I want to add to my library",
-            is_wishlist=True,
-        )
-        db.add(wishlist)
-        await db.commit()
-        await db.refresh(wishlist)
-
-    return await get_playlist(wishlist.id, db, profile)
-
-
-# ============================================================================
 # Playlist CRUD by ID
 # ============================================================================
 
@@ -317,7 +271,6 @@ async def get_playlist(
         name=playlist.name,
         description=playlist.description,
         is_auto_generated=playlist.is_auto_generated,
-        is_wishlist=playlist.is_wishlist,
         generation_prompt=playlist.generation_prompt,
         tracks=tracks,
         auto_download=playlist.auto_download,
@@ -363,7 +316,6 @@ async def update_playlist(
         name=playlist.name,
         description=playlist.description,
         is_auto_generated=playlist.is_auto_generated,
-        is_wishlist=playlist.is_wishlist,
         generation_prompt=playlist.generation_prompt,
         track_count=track_count,
         auto_download=playlist.auto_download,
@@ -378,22 +330,13 @@ async def delete_playlist(
     db: DbSession,
     profile: RequiredProfile,
 ) -> None:
-    """Delete a playlist.
-
-    The wishlist playlist cannot be deleted.
-    """
+    """Delete a playlist."""
     playlist = await db.get(Playlist, playlist_id)
 
     if not playlist or playlist.profile_id != profile.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Playlist not found",
-        )
-
-    if playlist.is_wishlist:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete the wishlist playlist",
         )
 
     # Delete playlist tracks first (cascade should handle this, but be explicit)

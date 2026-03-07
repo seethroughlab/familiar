@@ -248,49 +248,5 @@ export function CollectionContextMenu({ collectionPath, position, onClose }: Pro
     );
   }
 
-  // Wishlist
-  if (collectionPath === '/wishlist') {
-    return (
-      <ContextMenuContainer position={position} onClose={onClose}>
-        <MenuHeader title="Wishlist" />
-
-        <MenuItem
-          icon={<Play className="w-4 h-4" />}
-          label="Play All"
-          onClick={() => { onClose(); }}
-          disabled
-        />
-        <MenuItem
-          icon={<Shuffle className="w-4 h-4" />}
-          label="Shuffle"
-          onClick={() => { onClose(); }}
-          disabled
-        />
-
-        <MenuDivider />
-
-        <MenuItem
-          icon={<Trash2 className="w-4 h-4" />}
-          label="Clear Wishlist"
-          onClick={async () => {
-            if (!confirm('Clear all wishlist items?')) return;
-            try {
-              const wl = await playlistsApi.getWishlist();
-              for (const t of wl.tracks) {
-                await playlistsApi.removeItem(wl.id, t.playlist_track_id);
-              }
-              queryClient.invalidateQueries({ queryKey: ['wishlist'] });
-              showSuccess('Wishlist cleared');
-            } catch {
-              showError('Failed to clear wishlist');
-            }
-            onClose();
-          }}
-          iconClassName="text-red-400"
-        />
-      </ContextMenuContainer>
-    );
-  }
-
   return null;
 }

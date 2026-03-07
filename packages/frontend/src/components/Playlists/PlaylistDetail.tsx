@@ -168,7 +168,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
               name: cached.name,
               description: cached.description,
               is_auto_generated: cached.is_auto_generated,
-              is_wishlist: false,
               generation_prompt: cached.generation_prompt,
               tracks: tracks.map((t, idx) => ({
                 id: t.id,
@@ -427,9 +426,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
 
     try {
       await playlistsApi.removeItem(playlistId, playlistTrack.playlist_track_id);
-      if (playlist.is_wishlist) {
-        queryClient.invalidateQueries({ queryKey: ['wishlist'] });
-      }
     } catch (error) {
       log.error('Failed to remove track from playlist:', error);
       showError('Failed to remove track');
@@ -625,9 +621,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
           <div className="flex items-center gap-2">
             {playlist.is_auto_generated && (
               <Sparkles className="w-5 h-5 text-purple-400 flex-shrink-0" />
-            )}
-            {playlist.is_wishlist && (
-              <Heart className="w-5 h-5 text-pink-400 flex-shrink-0" />
             )}
             <h2 className="text-xl font-bold truncate">{playlist.name}</h2>
             {usingCachedData && (

@@ -7,7 +7,6 @@ interface DiscoveryGridProps {
   columns?: 2 | 3 | 4 | 5 | 6;
   onItemClick?: (item: DiscoveryItem) => void;
   onItemPlay?: (item: DiscoveryItem) => void;
-  onAddToWishlist?: (item: DiscoveryItem) => void;
   className?: string;
 }
 
@@ -20,7 +19,6 @@ export function DiscoveryGrid({
   columns = 4,
   onItemClick,
   onItemPlay,
-  onAddToWishlist,
   className = '',
 }: DiscoveryGridProps) {
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -57,7 +55,6 @@ export function DiscoveryGrid({
           isPlaying={isItemPlaying(item)}
           onClick={() => onItemClick?.(item)}
           onPlay={() => handlePlay(item)}
-          onAddToWishlist={onAddToWishlist ? () => onAddToWishlist(item) : undefined}
         />
       ))}
     </div>
