@@ -25,7 +25,6 @@ from .profiles import (
     ProfilePlayHistory,
     SpotifyFavorite,
     SpotifyProfile,
-    SubsonicCredential,
 )
 from .tracks import ANALYSIS_FEATURE_COLUMNS, ExternalTrack, Track, TrackAnalysis, TrackVideo
 
@@ -56,7 +55,6 @@ __all__ = [
     "SmartPlaylist",
     "SpotifyFavorite",
     "SpotifyProfile",
-    "SubsonicCredential",
     "Track",
     "TrackAnalysis",
     "TrackVideo",

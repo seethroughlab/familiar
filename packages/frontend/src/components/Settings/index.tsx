@@ -14,7 +14,6 @@ import { DebugSettings } from './DebugSettings';
 import { RemoteLogsPanel } from './RemoteLogsPanel';
 import { AISettings } from './AISettings';
 import { DataManagement } from './DataManagement';
-import { SubsonicSettings } from './SubsonicSettings';
 import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { S3BackupSettings } from './S3BackupSettings';
@@ -107,7 +106,6 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <SpotifySettings />
             <LastfmSettings />
-            <SubsonicSettings />
           </div>
         </section>
 

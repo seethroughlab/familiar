@@ -90,27 +90,3 @@ export const lastfmApi = {
   },
 };
 
-// Subsonic API credential management
-export interface SubsonicCredentialStatus {
-  configured: boolean;
-  username?: string;
-  password?: string;
-  created_at?: string;
-}
-
-export const subsonicApi = {
-  getStatus: async (): Promise<SubsonicCredentialStatus> => {
-    const { data } = await api.get('/subsonic/credentials');
-    return data;
-  },
-
-  generateCredentials: async (): Promise<SubsonicCredentialStatus> => {
-    const { data } = await api.post('/subsonic/credentials');
-    return data;
-  },
-
-  deleteCredentials: async (): Promise<SubsonicCredentialStatus> => {
-    const { data } = await api.delete('/subsonic/credentials');
-    return data;
-  },
-};
