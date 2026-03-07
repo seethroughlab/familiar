@@ -5,13 +5,12 @@ exact match, and fuzzy matching strategies.
 """
 
 import logging
+import re
 from typing import Any
 
 from rapidfuzz import fuzz
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-import re
 
 from app.db.models import Track
 from app.utils.time import utcnow

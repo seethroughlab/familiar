@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Body, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import selectinload
 
