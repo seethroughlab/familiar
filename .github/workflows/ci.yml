@@ -151,15 +151,8 @@ jobs:
 
       - name: Free up disk space
         run: |
-          # Remove large pre-installed packages
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo rm -rf /usr/share/swift /usr/local/.ghcup
-          sudo rm -rf /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/Python
-          sudo rm -rf /usr/local/share/powershell /usr/share/az_*
-          # Remove Docker images we won't use
           docker system prune -af --volumes || true
-          # Show available space
-          df -h
+          df -h || true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
