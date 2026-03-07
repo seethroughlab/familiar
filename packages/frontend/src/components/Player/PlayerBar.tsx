@@ -19,10 +19,6 @@ interface PlayerBarProps {
   isQueueOpen?: boolean;
   onChatToggle?: () => void;
   isChatOpen?: boolean;
-  // Listening sessions disabled for v0.1.0 - re-enable when signaling server is ready
-  // onSessionClick?: () => void;
-  // isInSession?: boolean;
-  // sessionParticipantCount?: number;
 }
 
 function formatTime(seconds: number): string {
@@ -64,10 +60,6 @@ export function PlayerBar({
   isQueueOpen = false,
   onChatToggle,
   isChatOpen = false,
-  // Listening sessions disabled for v0.1.0
-  // onSessionClick,
-  // isInSession = false,
-  // sessionParticipantCount = 0,
 }: PlayerBarProps) {
   const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume, isPreview } = usePlayerStore(
     useShallow((s) => ({

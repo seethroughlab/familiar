@@ -49,7 +49,6 @@ from app.api.routes import (
     profiles,
     proposed_changes,
     s3_backup,
-    sessions,
     smart_playlists,
     spotify,
     subsonic,
@@ -291,7 +290,6 @@ app.include_router(spotify.router, prefix="/api/v1")
 app.include_router(videos.router, prefix="/api/v1")
 app.include_router(lastfm.router, prefix="/api/v1")
 app.include_router(settings_routes.router, prefix="/api/v1")
-app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(smart_playlists.router, prefix="/api/v1")
 app.include_router(playlists.router, prefix="/api/v1")
 app.include_router(profiles.router, prefix="/api/v1")

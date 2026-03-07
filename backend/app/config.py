@@ -60,11 +60,6 @@ class Settings(BaseSettings):
     s3_backup_region: str = "us-east-1"
     s3_backup_prefix: str = ""
 
-    # WebRTC TURN server (optional, for NAT traversal in corporate networks)
-    turn_server_url: str | None = None  # e.g. "turn:turn.example.com:3478"
-    turn_server_username: str | None = None
-    turn_server_credential: str | None = None
-
     # Development
     debug: bool = False  # Must be explicitly enabled for development
     log_level: str = "INFO"
