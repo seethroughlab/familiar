@@ -34,8 +34,6 @@ const SOURCE_LABELS: Record<string, string> = {
   user_request: 'User Request',
   llm_suggestion: 'AI Suggestion',
   musicbrainz: 'MusicBrainz',
-  spotify: 'Spotify',
-  auto_enrichment: 'Auto Enrichment',
 };
 
 const SCOPE_LABELS: Record<ChangeScope, string> = {

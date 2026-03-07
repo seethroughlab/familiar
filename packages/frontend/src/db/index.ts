@@ -82,7 +82,6 @@ export interface CachedProfile {
   name: string;
   color: string | null;
   avatar_url: string | null;
-  has_spotify: boolean;
   has_lastfm: boolean;
   cachedAt: Date;
 }

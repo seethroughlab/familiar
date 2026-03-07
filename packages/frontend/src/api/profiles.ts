@@ -8,7 +8,6 @@ export interface ProfileResponse {
   color: string | null;
   avatar_url: string | null;
   created_at: string;
-  has_spotify: boolean;
   has_lastfm: boolean;
 }
 

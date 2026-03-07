@@ -19,7 +19,6 @@
 | Audio feature analysis | BPM, key, energy, mood | — | Basic | Basic |
 | Community analysis cache | Yes | — | — | — |
 | Self-hosted / no cloud | Yes | Yes | Yes | Partial |
-| Subsonic API | — | Yes | — | — |
 | Music video playback | Yes | — | Yes | Yes |
 | Smart playlists | Rules-based | — | — | Yes |
 | Mobile PWA | Yes | Web only | Web + apps | Apps |
@@ -186,12 +185,6 @@ Press `?` anytime to see all shortcuts.
 ## Coming Soon
 
 Features planned for future releases:
-
-### Spotify Integration ([branch](https://github.com/seethroughlab/familiar/tree/feature/spotify-external-tracks))
-Import your Spotify favorites, see what you're missing locally, and sync playlists. Adds 7 AI tools for querying Spotify data and importing playlists into Familiar.
-
-### Subsonic API / CarPlay / Android Auto ([branch](https://github.com/seethroughlab/familiar/tree/feature/subsonic-api))
-Expose a Subsonic-compatible API so native music apps (Symfonium, Ultrasonic, etc.) can connect for CarPlay and Android Auto playback.
 
 ### Listening Sessions (WebRTC) ([branch](https://github.com/seethroughlab/familiar/tree/feature/listening-sessions))
 Share what you're listening to with friends in real-time. Host a session, share a link, and guests hear synchronized audio - no account required. Requires public signaling server deployment.

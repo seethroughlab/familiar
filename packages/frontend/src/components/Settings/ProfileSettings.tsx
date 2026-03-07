@@ -214,10 +214,7 @@ export function ProfileSettings() {
             <div>
               <div className="font-medium text-white">{profile?.name || 'Unknown Profile'}</div>
               <div className="text-sm text-zinc-400">
-                {profile?.has_spotify && 'Spotify'}
-                {profile?.has_spotify && profile?.has_lastfm && ' · '}
-                {profile?.has_lastfm && 'Last.fm'}
-                {!profile?.has_spotify && !profile?.has_lastfm && 'No integrations'}
+                {profile?.has_lastfm ? 'Last.fm' : 'No integrations'}
               </div>
             </div>
           </div>

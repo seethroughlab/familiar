@@ -3,7 +3,6 @@ import { ExternalLink } from 'lucide-react';
 interface ExternalLinks {
   bandcamp?: string;
   lastfm?: string;
-  spotify?: string;
 }
 
 interface ExternalLinkPillsProps {
@@ -44,19 +43,8 @@ export function ExternalLinkPills({ links, className = '' }: ExternalLinkPillsPr
           Last.fm
         </a>
       )}
-      {links.spotify && (
-        <a
-          href={links.spotify}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleClick}
-          className="px-2 py-1 text-xs bg-green-600/20 text-green-400 hover:bg-green-600/40 rounded transition-colors"
-        >
-          Spotify
-        </a>
-      )}
       {/* Fallback to generic external link if only one link without service pill */}
-      {!links.bandcamp && !links.spotify && links.lastfm && (
+      {!links.bandcamp && links.lastfm && (
         <a
           href={links.lastfm}
           target="_blank"
@@ -81,7 +69,7 @@ export function ExternalLinkIcon({ links, className = '' }: ExternalLinkPillsPro
   };
 
   // Bandcamp gets a pill, others get an icon
-  const url = links.bandcamp || links.lastfm || links.spotify;
+  const url = links.bandcamp || links.lastfm;
   if (!url) return null;
 
   if (links.bandcamp) {
@@ -105,7 +93,7 @@ export function ExternalLinkIcon({ links, className = '' }: ExternalLinkPillsPro
       rel="noopener noreferrer"
       onClick={handleClick}
       className={`p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 rounded transition-colors ${className}`}
-      title={links.lastfm ? 'View on Last.fm' : 'View on Spotify'}
+      title="View on Last.fm"
     >
       <ExternalLink className="w-3.5 h-3.5" />
     </a>

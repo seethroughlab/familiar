@@ -43,7 +43,6 @@ class TestCreateProfile:
         assert data["name"] == "Test User"
         assert "id" in data
         assert "created_at" in data
-        assert data["has_spotify"] is False
         assert data["has_lastfm"] is False
 
     def test_create_profile_with_color(self, client: TestClient) -> None:
@@ -233,7 +232,6 @@ class TestProfileResponseStructure:
         assert "color" in data
         assert "avatar_url" in data
         assert "created_at" in data
-        assert "has_spotify" in data
         assert "has_lastfm" in data
 
     def test_avatar_url_format(self, client: TestClient, test_profile: dict) -> None:

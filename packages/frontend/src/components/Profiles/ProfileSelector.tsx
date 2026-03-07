@@ -186,7 +186,6 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
               {profile.name}
             </span>
             <div className="flex gap-2 text-xs text-zinc-500">
-              {profile.has_spotify && <span>Spotify</span>}
               {profile.has_lastfm && <span>Last.fm</span>}
             </div>
           </button>

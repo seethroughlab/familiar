@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 async def stream_file(file_path: Path, request: Request, mime_type: str) -> StreamingResponse:
     """Stream a file with HTTP range request support.
 
-    Used by both the main tracks API and the Subsonic API.
+    Used by the main tracks API.
     """
     file_size = file_path.stat().st_size
     range_header = request.headers.get("range")

@@ -16,7 +16,6 @@ export interface Profile {
   color: string | null;
   avatar_url: string | null;
   created_at: string;
-  has_spotify: boolean;
   has_lastfm: boolean;
 }
 
@@ -55,7 +54,6 @@ export async function cacheProfile(profile: Profile): Promise<void> {
       name: profile.name,
       color: profile.color,
       avatar_url: profile.avatar_url,
-      has_spotify: profile.has_spotify,
       has_lastfm: profile.has_lastfm,
       cachedAt: new Date(),
     };
@@ -126,7 +124,6 @@ function cachedToProfile(cached: CachedProfile): Profile {
     name: cached.name,
     color: cached.color,
     avatar_url: cached.avatar_url,
-    has_spotify: cached.has_spotify,
     has_lastfm: cached.has_lastfm,
     created_at: cached.cachedAt.toISOString(),
   };

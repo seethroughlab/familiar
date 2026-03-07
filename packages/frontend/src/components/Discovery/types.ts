@@ -44,7 +44,6 @@ export interface DiscoveryItem {
   externalLinks?: {
     bandcamp?: string;
     lastfm?: string;
-    spotify?: string;
   };
 }
 
@@ -108,7 +107,7 @@ export interface DiscoveryCardProps {
  * External link pill configuration
  */
 export interface ExternalLinkConfig {
-  type: 'bandcamp' | 'lastfm' | 'spotify';
+  type: 'bandcamp' | 'lastfm';
   url: string;
   label?: string;
 }
@@ -214,7 +213,6 @@ export interface LibraryDiscoveryInput {
     based_on_artist: string;
   }>;
   unmatchedFavorites: Array<{
-    spotify_track_id: string;
     name: string;
     artist: string;
     album: string | null;

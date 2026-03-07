@@ -48,7 +48,6 @@ class ProfileResponse(BaseModel):
     color: str | None
     avatar_url: str | None
     created_at: str
-    has_spotify: bool
     has_lastfm: bool
 
 
@@ -64,7 +63,6 @@ def profile_to_response(profile: Profile, has_lastfm: bool) -> ProfileResponse:
         color=profile.color,
         avatar_url=avatar_url,
         created_at=profile.created_at.isoformat(),
-        has_spotify=False,
         has_lastfm=has_lastfm,
     )
 
