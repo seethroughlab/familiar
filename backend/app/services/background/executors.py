@@ -214,6 +214,9 @@ class ExecutorMixin:
             f"track: {self._current_track_id}). Restarting executor."
         )
 
+        if self._current_track_id:
+            self._crashed_track_ids.add(self._current_track_id)
+
         if self._executor is not None:
             try:
                 self._executor.shutdown(wait=False, cancel_futures=True)

@@ -380,13 +380,7 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
             if not track:
                 return {"status": "error", "error": f"Track not found: {track_id}"}
 
-            file_path = Path(track.file_path)
-            if not file_path.exists():
-                return {"status": "error", "error": f"File not found: {file_path}"}
-
-            if track.duration_seconds and track.duration_seconds < MIN_DURATION_SECONDS:
-                return {"status": "skipped", "reason": "Track too short"}
-
+            # Load analysis row early so we can mark skipped tracks as done
             analysis = db.execute(
                 select(TrackAnalysis)
                 .where(TrackAnalysis.track_id == UUID(track_id))
@@ -398,11 +392,27 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
             if analysis.melodic_version >= MELODIC_VERSION:
                 return {"status": "cached", "track_id": track_id}
 
+            file_path = Path(track.file_path)
+            if not file_path.exists():
+                analysis.melodic_version = MELODIC_VERSION
+                analysis.has_melodic = False
+                db.commit()
+                return {"status": "skipped", "reason": "File not found"}
+
+            if track.duration_seconds and track.duration_seconds < MIN_DURATION_SECONDS:
+                analysis.melodic_version = MELODIC_VERSION
+                analysis.has_melodic = False
+                db.commit()
+                return {"status": "skipped", "reason": "Track too short"}
+
             import librosa
             y, sr = librosa.load(str(file_path), sr=22050, mono=True)
 
             rms_all = librosa.feature.rms(y=y)[0]
             if np.mean(rms_all) < 1e-6:
+                analysis.melodic_version = MELODIC_VERSION
+                analysis.has_melodic = False
+                db.commit()
                 return {"status": "skipped", "reason": "Near-silence"}
 
             shared = _precompute_shared(y, sr)

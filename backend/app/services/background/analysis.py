@@ -18,12 +18,41 @@ else:
 logger = logging.getLogger(__name__)
 
 
+async def _mark_melodic_failed(track_id: str) -> None:
+    """Mark a track as permanently failed for melodic analysis (sets melodic_version, has_melodic=False)."""
+    from uuid import UUID
+
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+    from app.config import MELODIC_VERSION, settings as app_settings
+    from app.db.models import TrackAnalysis
+
+    try:
+        engine = create_async_engine(app_settings.database_url)
+        async_session = async_sessionmaker(engine, class_=AsyncSession)
+        async with async_session() as db:
+            analysis = (
+                await db.execute(
+                    select(TrackAnalysis).where(TrackAnalysis.track_id == UUID(track_id))
+                )
+            ).scalar_one_or_none()
+            if analysis:
+                analysis.melodic_version = MELODIC_VERSION
+                analysis.has_melodic = False
+                await db.commit()
+        await engine.dispose()
+    except Exception as e:
+        logger.error(f"Failed to mark track {track_id} as melodic-failed: {e}")
+
+
 class AnalysisMixin(_AnalysisBase):
     """Mixin providing analysis task management for BackgroundManager."""
 
     def _init_analysis_state(self) -> None:
         """Initialize analysis-related state. Call from __init__."""
         self._analysis_tasks: dict[str, asyncio.Task] = {}
+        self._melodic_failures: dict[str, int] = {}
 
     def is_analysis_running(self) -> bool:
         """Check if any analysis tasks are currently running."""
@@ -162,9 +191,18 @@ class AnalysisMixin(_AnalysisBase):
             self._current_track_id = track_id
             self._last_task_started_at = time.monotonic()
             result = await self.run_cpu_bound(run_track_melodic, track_id)
+            self._melodic_failures.pop(track_id, None)
             return result
         except Exception as e:
             logger.error(f"Melodic analysis failed for {track_id}: {e}")
+            self._melodic_failures[track_id] = self._melodic_failures.get(track_id, 0) + 1
+            if self._melodic_failures[track_id] >= 3:
+                logger.warning(
+                    f"Track {track_id} failed melodic {self._melodic_failures[track_id]} times, "
+                    f"marking permanently failed"
+                )
+                await _mark_melodic_failed(track_id)
+                del self._melodic_failures[track_id]
             return {"status": "error", "error": str(e)}
         finally:
             self._current_track_id = None
