@@ -356,11 +356,13 @@ class NativeAudioEngine {
         let processingFormat = file.processingFormat
         reconnectChain(format: processingFormat)
 
+        let scheduledIndex = activePlayerIndex
         playerNode.scheduleFile(file, at: nil) { [weak self] in
             guard let self = self else { return }
             // This fires when the scheduled buffer/file finishes.
             // Check if we actually played to the end (vs being stopped/seeked).
             DispatchQueue.main.async {
+                guard self.activePlayerIndex == scheduledIndex else { return }
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
@@ -779,9 +781,11 @@ class NativeAudioEngine {
 
         // Stop nextPlayerNode (clears previous schedule), then re-schedule with the end-of-track handler
         nextPlayerNode.stop()
+        let nextIndex = 1 - activePlayerIndex
         nextPlayerNode.scheduleFile(capturedNextAudioFile, at: nil) { [weak self] in
             guard let self = self else { return }
             DispatchQueue.main.async {
+                guard self.activePlayerIndex == nextIndex else { return }
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
@@ -854,6 +858,7 @@ class NativeAudioEngine {
         nextNormalizationVolume = 1.0
         isCrossfadingFlag = false
 
+        startTimeUpdates()  // ensure timer is running for the new track
         completion()
     }
 

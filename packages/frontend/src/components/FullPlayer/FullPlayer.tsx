@@ -265,7 +265,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
       {/* Album art thumbnail - z-20 to render above controls gradient */}
       {(isVisualizerAvailable() || isMusicVideo) && !(isFullscreen && !controlsVisible) && (
-        <div className="absolute bottom-64 left-8 z-20">
+        <div className="absolute bottom-80 left-8 z-20">
           {imageError ? (
             <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">
               <Music className="w-12 h-12 text-zinc-600" />
@@ -301,7 +301,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           {currentTrack.artist ? (
             <button
               onClick={() => { onClose(); navigateToArtist(currentTrack.artist!); }}
-              className="text-lg text-zinc-400 hover:text-zinc-200 hover:underline transition-colors"
+              className="block text-lg text-zinc-400 hover:text-zinc-200 hover:underline transition-colors"
             >
               {currentTrack.artist}
             </button>
@@ -311,7 +311,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           {currentTrack.album ? (
             <button
               onClick={() => { onClose(); navigateToAlbum(currentTrack.artist!, currentTrack.album!); }}
-              className="text-sm text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
+              className="block text-sm text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
             >
               {currentTrack.album}
             </button>

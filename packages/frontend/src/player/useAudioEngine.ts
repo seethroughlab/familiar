@@ -211,7 +211,10 @@ export function useAudioEngine() {
           if (trigger === 'preload') {
             const nextTrack = usePlayerStore.getState().getNextTrack();
             if (nextTrack && nextTrack.id !== engine.getPreloadingTrackId?.()) {
-              engine.resolveTrackUrl?.(nextTrack.id).then(({ url, isOffline }) => {
+              const urlPromise = engine.resolveTrackUrl
+                ? engine.resolveTrackUrl(nextTrack.id)
+                : Promise.resolve({ url: tracksApi.getStreamUrl(nextTrack.id), isOffline: false });
+              urlPromise.then(({ url, isOffline }) => {
                 engine.preloadNext?.(nextTrack.id, url, { isOffline });
               }).catch(e => log.error('Failed to preload next track:', e));
             }
@@ -416,7 +419,10 @@ export function useAudioEngine() {
                 if (usePlayerStore.getState().currentTrack?.id !== loadedId) return;
                 const nextTrack = usePlayerStore.getState().getNextTrack();
                 if (nextTrack && nextTrack.id !== engine.getPreloadingTrackId?.()) {
-                  engine.resolveTrackUrl?.(nextTrack.id).then(({ url: nextUrl, isOffline: nextIsOffline }) => {
+                  const urlPromise = engine.resolveTrackUrl
+                    ? engine.resolveTrackUrl(nextTrack.id)
+                    : Promise.resolve({ url: tracksApi.getStreamUrl(nextTrack.id), isOffline: false });
+                  urlPromise.then(({ url: nextUrl, isOffline: nextIsOffline }) => {
                     engine.preloadNext?.(nextTrack.id, nextUrl, { isOffline: nextIsOffline });
                   }).catch(e => log.error('Eager preload failed:', e));
                 }
