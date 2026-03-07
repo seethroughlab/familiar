@@ -318,13 +318,26 @@ test.describe('Screenshot Capture', () => {
   });
 });
 
-// Admin page screenshot
+// Admin/System setup screenshot — shows Settings > System section (API keys + status)
 test.describe('Admin Setup', () => {
   test('13 - Admin Setup Page', async ({ page }) => {
     await page.setViewportSize(VIEWPORT);
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(500);
+    await page.goto('/');
+    await ensureProfile(page);
+
+    // Open Settings
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('navigate-to-settings'));
+    });
+    await page.waitForSelector('h2:has-text("Settings")', { timeout: 10000 });
+    await page.waitForTimeout(1000);
+
+    // Scroll the settings panel to show the System section (API keys)
+    const settingsPanel = page.locator('h3:has-text("System")').first();
+    if (await settingsPanel.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await settingsPanel.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(500);
+    }
 
     await page.screenshot({
       path: path.join(SCREENSHOT_DIR, '13-admin-setup.png'),
