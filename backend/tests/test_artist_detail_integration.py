@@ -6,9 +6,7 @@ Tests the Last.fm similar-artists match-score flow:
 - Cache staleness detection when cached entries lack the 'match' key
 """
 
-from datetime import datetime, timedelta
-
-from app.utils.time import utcnow
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,6 +14,7 @@ from sqlalchemy import delete
 
 from app.api.routes.library_artists import get_artist_detail
 from app.db.models import ArtistInfo
+from app.utils.time import utcnow
 from tests.factories import insert_test_track
 
 

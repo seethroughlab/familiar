@@ -1,7 +1,6 @@
 """Tests for SmartPlaylistService - rule validation, date resolution, and query building."""
 
-from datetime import datetime, timedelta
-from app.utils.time import utcnow
+from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +11,7 @@ from app.services.smart_playlists import (
     resolve_date_value,
     resolve_relative_date,
 )
+from app.utils.time import utcnow
 
 
 class TestResolveRelativeDate:

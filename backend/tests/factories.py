@@ -13,7 +13,6 @@ Usage (DB-level):
 """
 
 from datetime import datetime
-from app.utils.time import utcnow
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -34,6 +33,7 @@ from app.db.models import (
     Track,
     TrackAnalysis,
 )
+from app.utils.time import utcnow
 from tests.conftest import make_profile_headers
 
 # ---------------------------------------------------------------------------

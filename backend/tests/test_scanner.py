@@ -31,12 +31,12 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from app.utils.time import utcnow
 import pytest_asyncio
 from sqlalchemy import delete, select
 
 from app.db.models import Track, TrackStatus
 from app.services.scanner import LibraryScanner, compute_file_hash, compute_full_hash
+from app.utils.time import utcnow
 
 # Path to test audio fixtures
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "audio"
@@ -531,7 +531,6 @@ class TestConcurrentSyncPrevention:
         This is the key test that prevents the duplicate tracks bug.
         """
         import json
-        from datetime import datetime
 
         import redis
 

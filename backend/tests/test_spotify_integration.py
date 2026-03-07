@@ -3,8 +3,7 @@
 Tests cover OAuth flow, token refresh, favorites sync, and track matching.
 """
 
-from datetime import datetime, timedelta
-from app.utils.time import utcnow
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -12,6 +11,7 @@ import pytest
 
 from app.db.models import SpotifyProfile, Track
 from app.services.spotify import SpotifyService, SpotifySyncService
+from app.utils.time import utcnow
 
 
 class TestSpotifyServiceConfig:

@@ -4,12 +4,12 @@ Tests rule-based query building, condition logic, and service methods
 with real data in the database.
 """
 
-from datetime import datetime, timedelta
-from app.utils.time import utcnow
+from datetime import timedelta
 
 import pytest
 
 from app.services.smart_playlists import SmartPlaylistService
+from app.utils.time import utcnow
 from tests.factories import (
     insert_test_analysis,
     insert_test_play_history,
