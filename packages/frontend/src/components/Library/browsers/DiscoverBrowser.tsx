@@ -7,13 +7,11 @@
  * - Unmatched Spotify favorites
  */
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  Disc,
   Music,
   Sparkles,
   Loader2,
-  ChevronRight,
 } from 'lucide-react';
 import { libraryApi, playlistsApi } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
@@ -50,7 +48,6 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
     queryKey: ['library-discover'],
     queryFn: () =>
       libraryApi.getDiscover({
-        releases_limit: 8,
         recommendations_limit: 12,
         favorites_limit: 6,
       }),
@@ -58,7 +55,6 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
   });
 
   const {
-    newReleasesSection,
     inLibraryArtistsSection,
     externalArtistsSection,
     unmatchedFavoritesSection,
@@ -96,7 +92,6 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
   }
 
   const {
-    new_releases_total,
     unmatched_total,
     recently_added_count,
   } = data;
@@ -159,12 +154,6 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
             {recently_added_count} tracks added recently
           </span>
         )}
-        {new_releases_total > 0 && (
-          <span className="flex items-center gap-1">
-            <Disc className="w-4 h-4" />
-            {new_releases_total} new releases
-          </span>
-        )}
         {unmatched_total > 0 && (
           <span className="flex items-center gap-1">
             <Sparkles className="w-4 h-4" />
@@ -172,31 +161,6 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
           </span>
         )}
       </div>
-
-      {/* New Releases */}
-      {newReleasesSection && newReleasesSection.items.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Disc className="w-5 h-5 text-purple-500" />
-              New Releases from Your Artists
-            </h3>
-            {new_releases_total > newReleasesSection.items.length && (
-              <Link to="/new-releases" className="text-sm text-zinc-400 hover:text-white flex items-center gap-1">
-                View all {new_releases_total}
-                <ChevronRight className="w-4 h-4" />
-              </Link>
-            )}
-          </div>
-          <DiscoverySectionView
-            section={newReleasesSection}
-            showHeader={false}
-            gridColumns={4}
-            onItemClick={handleItemClick}
-            onAddToWishlist={handleAddToWishlist}
-          />
-        </section>
-      )}
 
       {/* Recommended Artists in Library */}
       {inLibraryArtistsSection && inLibraryArtistsSection.items.length > 0 && (

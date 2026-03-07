@@ -29,7 +29,6 @@ const FavoritesDetail = lazy(() => import('./components/Playlists/FavoritesDetai
 const DownloadsDetail = lazy(() => import('./components/Playlists/DownloadsDetail').then(m => ({ default: m.DownloadsDetail })));
 const SmartPlaylistDetail = lazy(() => import('./components/SmartPlaylists/SmartPlaylistDetail').then(m => ({ default: m.SmartPlaylistDetail })));
 const WishlistRoute = lazy(() => import('./components/Playlists/WishlistRoute').then(m => ({ default: m.WishlistRoute })));
-const NewReleasesDetail = lazy(() => import('./components/NewReleases').then(m => ({ default: m.NewReleasesDetail })));
 
 function LazyLoadSpinner() {
   return (
@@ -323,11 +322,6 @@ function App() {
             <Route path="/wishlist" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <WishlistRoute />
-              </Suspense>
-            } />
-            <Route path="/new-releases" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <NewReleasesDetail />
               </Suspense>
             } />
 

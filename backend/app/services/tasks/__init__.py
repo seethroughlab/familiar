@@ -44,16 +44,6 @@ from app.services.tasks.library_sync import (
     run_library_sync,
 )
 
-# new_releases.py
-from app.services.tasks.new_releases import (
-    NEW_RELEASES_PROGRESS_KEY,
-    NewReleasesProgressReporter,
-    clear_new_releases_progress,
-    get_new_releases_progress,
-    run_new_releases_check,
-    run_prioritized_new_releases_check,
-)
-
 # spotify_sync.py
 from app.services.tasks.spotify_sync import (
     SPOTIFY_RATE_LIMIT_KEY,
@@ -100,13 +90,6 @@ __all__ = [
     "set_spotify_rate_limit",
     "get_spotify_rate_limit",
     "run_spotify_sync",
-    # new_releases
-    "NEW_RELEASES_PROGRESS_KEY",
-    "NewReleasesProgressReporter",
-    "get_new_releases_progress",
-    "clear_new_releases_progress",
-    "run_new_releases_check",
-    "run_prioritized_new_releases_check",
     # enrichment
     "run_track_enrichment",
     "propose_enrichment_for_track",

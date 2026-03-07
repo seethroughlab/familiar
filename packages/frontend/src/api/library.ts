@@ -452,7 +452,6 @@ export const libraryApi = {
   },
 
   getDiscover: async (params?: {
-    releases_limit?: number;
     recommendations_limit?: number;
     favorites_limit?: number;
   }): Promise<LibraryDiscoverResponse> => {
@@ -462,17 +461,6 @@ export const libraryApi = {
 };
 
 // Library Discover types
-export interface DiscoverNewRelease {
-  id: string;
-  artist: string;
-  album: string;
-  release_date: string | null;
-  source: string;
-  image_url: string | null;
-  bandcamp_url: string | null;
-  owned_locally: boolean;
-}
-
 export interface DiscoverRecommendedArtist {
   name: string;
   match_score: number;
@@ -494,8 +482,6 @@ export interface DiscoverUnmatchedFavorite {
 }
 
 export interface LibraryDiscoverResponse {
-  new_releases: DiscoverNewRelease[];
-  new_releases_total: number;
   recommended_artists: DiscoverRecommendedArtist[];
   unmatched_favorites: DiscoverUnmatchedFavorite[];
   unmatched_total: number;

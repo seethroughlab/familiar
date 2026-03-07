@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from app.services.artwork_fetcher import get_artwork_fetch_progress
 from app.services.s3_backup import get_s3_backup_service
 from app.services.tasks import (
-    get_new_releases_progress,
     get_spotify_sync_progress,
     get_sync_progress,
 )
@@ -29,7 +28,7 @@ class JobProgress(BaseModel):
 class BackgroundJob(BaseModel):
     """Status of a background job."""
 
-    type: str  # "library_sync", "spotify_sync", "new_releases", "artwork_fetch"
+    type: str  # "library_sync", "spotify_sync", "artwork_fetch", "s3_backup"
     status: str  # "running", "idle", "error", "complete"
     phase: str
     progress: JobProgress | None = None
@@ -119,37 +118,6 @@ def _build_spotify_sync_job(progress: dict[str, Any]) -> BackgroundJob:
     )
 
 
-def _build_new_releases_job(progress: dict[str, Any]) -> BackgroundJob:
-    """Build a BackgroundJob from new releases check progress."""
-    phase = progress.get("phase", "idle")
-    status = "running" if phase not in ("idle", "complete", "error") else phase
-
-    job_progress = None
-    if phase == "checking":
-        job_progress = JobProgress(
-            current=progress.get("artists_checked", 0),
-            total=progress.get("artists_total", 0),
-        )
-
-    phase_messages = {
-        "starting": "Starting new releases check...",
-        "checking": "Checking for new releases...",
-        "complete": "New releases check complete",
-        "error": "New releases check failed",
-    }
-    message = phase_messages.get(phase, "Checking new releases...")
-
-    return BackgroundJob(
-        type="new_releases",
-        status=status,
-        phase=phase,
-        progress=job_progress,
-        message=message,
-        current_item=progress.get("current_artist"),
-        started_at=progress.get("started_at"),
-    )
-
-
 def _build_artwork_fetch_job(progress: dict[str, Any]) -> BackgroundJob:
     """Build a BackgroundJob from artwork fetch progress."""
     phase = progress.get("phase", "idle")
@@ -202,13 +170,6 @@ async def get_background_jobs() -> BackgroundJobsResponse:
         phase = spotify_progress.get("phase", "idle")
         if phase not in ("idle", "complete"):
             jobs.append(_build_spotify_sync_job(spotify_progress))
-
-    # Check new releases
-    new_releases_progress = get_new_releases_progress()
-    if new_releases_progress:
-        phase = new_releases_progress.get("phase", "idle")
-        if phase not in ("idle", "complete"):
-            jobs.append(_build_new_releases_job(new_releases_progress))
 
     # Check artwork fetch
     artwork_progress = get_artwork_fetch_progress()

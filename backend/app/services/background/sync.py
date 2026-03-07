@@ -1,4 +1,4 @@
-"""SyncMixin: Redis locks, run_sync, spotify_sync, new_releases, maintenance."""
+"""SyncMixin: Redis locks, run_sync, spotify_sync, maintenance."""
 
 from __future__ import annotations
 
@@ -197,46 +197,6 @@ class SyncMixin(_SyncBase):
             logger.error(f"Spotify sync failed: {e}", exc_info=True)
             return {"status": "error", "error": str(e)}
 
-    async def run_new_releases_check(
-        self,
-        profile_id: str | None = None,
-        days_back: int = 90,
-        force: bool = False,
-    ) -> dict[str, Any]:
-        """Start new releases check in the background."""
-        from app.services.tasks import run_new_releases_check
-
-        try:
-            result = await run_new_releases_check(
-                profile_id=profile_id,
-                days_back=days_back,
-                force=force,
-            )
-            return result
-        except Exception as e:
-            logger.error(f"New releases check failed: {e}", exc_info=True)
-            return {"status": "error", "error": str(e)}
-
-    async def run_prioritized_new_releases_check(
-        self,
-        profile_id: str,
-        batch_size: int = 75,
-        days_back: int = 90,
-    ) -> dict[str, Any]:
-        """Start priority-based new releases check in the background."""
-        from app.services.tasks import run_prioritized_new_releases_check
-
-        try:
-            result = await run_prioritized_new_releases_check(
-                profile_id=profile_id,
-                batch_size=batch_size,
-                days_back=days_back,
-            )
-            return result
-        except Exception as e:
-            logger.error(f"Priority-based new releases check failed: {e}", exc_info=True)
-            return {"status": "error", "error": str(e)}
-
     async def run_bulk_identify(
         self,
         task_id: str,
@@ -354,41 +314,3 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.warning(f"Frontend logs cleanup failed: {e}")
 
-    async def _daily_new_releases_check(self) -> None:
-        """Run daily priority-based new releases check (scheduled at 3 AM)."""
-        logger.info("Starting daily new releases check")
-
-        try:
-            from sqlalchemy import select
-            from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-            from app.config import settings
-            from app.db.models import Profile
-
-            engine = create_async_engine(settings.database_url)
-            async_session = async_sessionmaker(engine, class_=AsyncSession)
-
-            profile_id = None
-            async with async_session() as db:
-                db_result = await db.execute(
-                    select(Profile.id).limit(1)
-                )
-                row = db_result.scalar_one_or_none()
-                if row:
-                    profile_id = str(row)
-
-            await engine.dispose()
-
-            if not profile_id:
-                logger.warning("No profiles found - skipping daily new releases check")
-                return
-
-            check_result = await self.run_prioritized_new_releases_check(
-                profile_id=profile_id,
-                batch_size=75,
-                days_back=90,
-            )
-            logger.info(f"Daily new releases check completed: {check_result}")
-
-        except Exception as e:
-            logger.error(f"Daily new releases check failed: {e}", exc_info=True)

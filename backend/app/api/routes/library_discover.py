@@ -15,19 +15,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["library"])
 
 
-class DiscoverNewRelease(BaseModel):
-    """A new release for discovery."""
-
-    id: str
-    artist: str
-    album: str
-    release_date: str | None
-    source: str
-    image_url: str | None
-    bandcamp_url: str | None
-    owned_locally: bool
-
-
 class DiscoverRecommendedArtist(BaseModel):
     """A recommended artist based on listening patterns."""
 
@@ -55,10 +42,6 @@ class DiscoverUnmatchedFavorite(BaseModel):
 class DiscoverResponse(BaseModel):
     """Aggregated discovery data for the dashboard."""
 
-    # New releases from library artists
-    new_releases: list[DiscoverNewRelease]
-    new_releases_total: int
-
     # Recommended artists based on top-played artists
     recommended_artists: list[DiscoverRecommendedArtist]
 
@@ -73,7 +56,6 @@ class DiscoverResponse(BaseModel):
 @router.get("/discover", response_model=DiscoverResponse)
 async def get_discover_dashboard(
     db: DbSession,
-    releases_limit: int = Query(8, ge=1, le=20),
     recommendations_limit: int = Query(8, ge=1, le=20),
     favorites_limit: int = Query(6, ge=1, le=20),
 ) -> DiscoverResponse:
@@ -89,39 +71,9 @@ async def get_discover_dashboard(
 
     from app.db.models import ArtistInfo, ProfilePlayHistory
     from app.services.lastfm import get_lastfm_service
-    from app.services.new_releases import NewReleasesService
     from app.services.search_links import generate_artist_search_url, generate_release_search_urls
 
-    # 1. Get new releases
-    new_releases_service = NewReleasesService(db)
-    releases_data = await new_releases_service.get_cached_releases(
-        limit=releases_limit,
-        offset=0,
-        include_dismissed=False,
-        include_owned=False,
-    )
-    releases_total = await new_releases_service.get_releases_count(
-        include_dismissed=False,
-        include_owned=False,
-    )
-
-    new_releases = []
-    for r in releases_data:
-        search_urls = generate_release_search_urls(r.get("artist_name", ""), r.get("release_name", ""))
-        new_releases.append(
-            DiscoverNewRelease(
-                id=str(r.get("id", "")),
-                artist=r.get("artist_name", ""),
-                album=r.get("release_name", ""),
-                release_date=r.get("release_date"),
-                source=r.get("source", ""),
-                image_url=r.get("artwork_url"),
-                bandcamp_url=search_urls.get("bandcamp", {}).get("url"),
-                owned_locally=r.get("local_album_match", False),
-            )
-        )
-
-    # 2. Get recommended artists based on top-played artists
+    # 1. Get recommended artists based on top-played artists
     recommended_artists: list[DiscoverRecommendedArtist] = []
 
     # Get top-played artists
@@ -286,8 +238,6 @@ async def get_discover_dashboard(
     recently_added_count = await db.scalar(recent_query) or 0
 
     return DiscoverResponse(
-        new_releases=new_releases,
-        new_releases_total=releases_total,
         recommended_artists=recommended_artists,
         unmatched_favorites=unmatched_favorites,
         unmatched_total=unmatched_total,

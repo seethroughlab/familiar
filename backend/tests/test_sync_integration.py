@@ -382,71 +382,6 @@ class TestSpotifySyncProgressReporter:
         assert len(progress_data["errors"]) == 2
 
 
-class TestNewReleasesProgressReporter:
-    """Tests for NewReleasesProgressReporter class."""
-
-    @pytest.fixture
-    def mock_redis(self):
-        return MagicMock()
-
-    @pytest.fixture
-    def reporter(self, mock_redis):
-        with patch("app.services.tasks.new_releases.get_redis", return_value=mock_redis):
-            from app.services.tasks import NewReleasesProgressReporter
-            return NewReleasesProgressReporter(profile_id="test-profile")
-
-    def test_init_sets_starting_phase(self, reporter, mock_redis):
-        """Should set initial starting phase."""
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["status"] == "running"
-        assert progress_data["phase"] == "starting"
-        assert progress_data["artists_checked"] == 0
-
-    def test_set_checking(self, reporter, mock_redis):
-        """Should update checking progress."""
-        reporter.set_checking(checked=25, total=100, found=5, new=3, current_artist="Radiohead")
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["phase"] == "checking"
-        assert progress_data["artists_checked"] == 25
-        assert progress_data["releases_new"] == 3
-        assert progress_data["current_artist"] == "Radiohead"
-
-    def test_complete(self, reporter, mock_redis):
-        """Should mark complete."""
-        reporter.complete(checked=100, found=10, new=5)
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["status"] == "completed"
-        assert progress_data["releases_new"] == 5
-
-    def test_error(self, reporter, mock_redis):
-        """Should set error status."""
-        mock_redis.get.return_value = json.dumps({
-            "status": "running",
-            "phase": "checking",
-            "errors": [],
-        }).encode()
-
-        reporter.error("API rate limited")
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert progress_data["status"] == "error"
-        assert "API rate limited" in progress_data["errors"]
-
-    def test_percentage_calculation(self, reporter, mock_redis):
-        """Should calculate percentage correctly."""
-        reporter.set_checking(checked=50, total=200, found=0, new=0)
-
-        progress_data = json.loads(mock_redis.set.call_args[0][1])
-
-        assert "25%" in progress_data["message"]
-
-
 class TestGetSyncProgress:
     """Tests for get_sync_progress function."""
 
@@ -488,22 +423,6 @@ class TestGetSpotifySyncProgress:
 
         assert result is not None
         assert result["matched"] == 50
-
-
-class TestGetNewReleasesProgress:
-    """Tests for get_new_releases_progress function."""
-
-    def test_returns_data(self):
-        """Should return parsed new releases progress."""
-        mock_redis = MagicMock()
-        mock_redis.get.return_value = json.dumps({"status": "completed", "releases_new": 3}).encode()
-
-        with patch("app.services.tasks.new_releases.get_redis", return_value=mock_redis):
-            from app.services.tasks import get_new_releases_progress
-            result = get_new_releases_progress()
-
-        assert result is not None
-        assert result["releases_new"] == 3
 
 
 class TestGetMemoryMb:

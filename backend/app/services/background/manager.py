@@ -80,14 +80,6 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
-            # Daily new releases check at 3 AM
-            self._scheduler.add_job(
-                self._daily_new_releases_check,
-                CronTrigger(hour=3, minute=0),
-                id="daily_new_releases",
-                replace_existing=True,
-            )
-
             # Worker health check every 5 minutes
             self._scheduler.add_job(
                 self._check_and_recover_worker,
@@ -116,7 +108,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
             self._register_s3_backup_schedule()
 
             self._scheduler.start()
-            logger.info("APScheduler started with periodic sync (every 2 hours) and daily new releases check (3 AM)")
+            logger.info("APScheduler started with periodic sync (every 2 hours)")
 
             # Schedule startup sync after a short delay
             asyncio.create_task(self._startup_sync())

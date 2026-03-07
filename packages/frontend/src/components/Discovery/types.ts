@@ -206,16 +206,6 @@ export interface PlaylistDiscoveryInput {
 
 // From LibraryDiscoverResponse
 export interface LibraryDiscoveryInput {
-  newReleases: Array<{
-    id: string;
-    artist: string;
-    album: string;
-    release_date: string | null;
-    source: string;
-    image_url: string | null;
-    bandcamp_url: string | null;
-    owned_locally: boolean;
-  }>;
   recommendedArtists: Array<{
     name: string;
     match_score: number;

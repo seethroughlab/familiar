@@ -6,7 +6,6 @@ export * from './spotify';
 export * from './integrations';
 export * from './settings';
 export * from './profiles';
-export * from './discovery';
 export * from './admin';
 export * from './metadata';
 export * from './backup';

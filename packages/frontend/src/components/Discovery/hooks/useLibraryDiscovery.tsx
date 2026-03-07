@@ -9,7 +9,6 @@ interface UseLibraryDiscoveryOptions {
 
 interface UseLibraryDiscoveryResult {
   sections: DiscoverySection[];
-  newReleasesSection: DiscoverySection | null;
   inLibraryArtistsSection: DiscoverySection | null;
   externalArtistsSection: DiscoverySection | null;
   unmatchedFavoritesSection: DiscoverySection | null;
@@ -32,7 +31,6 @@ export function useLibraryDiscovery({
     if (!data) {
       return {
         sections: [],
-        newReleasesSection: null,
         inLibraryArtistsSection: null,
         externalArtistsSection: null,
         unmatchedFavoritesSection: null,
@@ -42,40 +40,7 @@ export function useLibraryDiscovery({
 
     const sections: DiscoverySection[] = [];
 
-    // Section 1: New Releases
-    let newReleasesSection: DiscoverySection | null = null;
-    if (data.new_releases && data.new_releases.length > 0) {
-      const newReleaseItems: DiscoveryItem[] = data.new_releases.map((release) => ({
-        id: release.owned_locally ? release.id : undefined,
-        entityType: 'album' as const,
-        name: release.album,
-        subtitle: release.artist,
-        imageUrl: release.image_url || undefined,
-        inLibrary: release.owned_locally,
-        externalLinks: release.owned_locally
-          ? undefined
-          : {
-              bandcamp: release.bandcamp_url || undefined,
-            },
-        playbackContext: release.owned_locally
-          ? {
-              artist: release.artist,
-              album: release.album,
-            }
-          : undefined,
-      }));
-
-      newReleasesSection = {
-        id: 'new-releases',
-        title: 'New Releases',
-        entityType: 'album',
-        items: newReleaseItems,
-        layout: 'grid',
-      };
-      sections.push(newReleasesSection);
-    }
-
-    // Section 2 & 3: Recommended Artists (split by in-library status)
+    // Section 1 & 2: Recommended Artists (split by in-library status)
     let inLibraryArtistsSection: DiscoverySection | null = null;
     let externalArtistsSection: DiscoverySection | null = null;
 
@@ -157,7 +122,6 @@ export function useLibraryDiscovery({
 
     return {
       sections,
-      newReleasesSection,
       inLibraryArtistsSection,
       externalArtistsSection,
       unmatchedFavoritesSection,
