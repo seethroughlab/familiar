@@ -25,7 +25,8 @@ async def _mark_melodic_failed(track_id: str) -> None:
     from sqlalchemy import select
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-    from app.config import MELODIC_VERSION, settings as app_settings
+    from app.config import MELODIC_VERSION
+    from app.config import settings as app_settings
     from app.db.models import TrackAnalysis
 
     try:
