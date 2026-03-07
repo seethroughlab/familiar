@@ -5,13 +5,11 @@ Revises: 20250509_add_auto_download
 Create Date: 2026-03-07
 
 """
-from typing import Union
-
 import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260307_drop_is_wishlist"
-down_revision: Union[str, None] = "20260306_merge_heads"
+down_revision: str | None = "20260306_merge_heads"
 branch_labels = None
 depends_on = None
 
