@@ -9,7 +9,6 @@ import { SystemStatus } from './SystemStatus';
 import { LibrarySync } from './LibrarySync';
 import { MetadataSettings } from './MetadataSettings';
 import { AnalysisSettings } from './AnalysisSettings';
-import { PluginsSettings } from './PluginsSettings';
 import { InstallStatus } from '../PWA/InstallPrompt';
 import { DebugSettings } from './DebugSettings';
 import { RemoteLogsPanel } from './RemoteLogsPanel';
@@ -79,15 +78,6 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <InstallStatus />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Plugins
-          </h3>
-          <div className="space-y-4">
-            <PluginsSettings />
           </div>
         </section>
 

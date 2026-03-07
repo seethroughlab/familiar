@@ -14,7 +14,6 @@ import { isNativePlatform, getApiOrigin } from './api/base';
 import { MobileAppRedirect } from './components/MobileAppRedirect';
 import { isIOS, isNativeApp, isPWA } from './utils/platform';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
-import { pluginLoader } from './services/pluginLoader';
 import { initializeProfile, type Profile } from './services/profileService';
 
 // Layout
@@ -224,13 +223,6 @@ function App() {
     window.addEventListener('profile-invalidated', handleInvalidated);
     return () => window.removeEventListener('profile-invalidated', handleInvalidated);
   }, [checkProfile, serverConfigured]);
-
-  useEffect(() => {
-    pluginLoader.initializeGlobalAPI();
-    pluginLoader.loadAllPlugins().catch((err) => {
-      log.error('Failed to load plugins:', err);
-    });
-  }, []);
 
   useUpdateNotification();
 

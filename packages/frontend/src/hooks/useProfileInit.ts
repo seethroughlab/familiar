@@ -5,7 +5,6 @@
  * - Initial profile check with IndexedDB timeout (iOS safety)
  * - URL ?reset=true PWA state reset
  * - Profile invalidation listener (from API client)
- * - Plugin system initialization
  *
  * Returns { profile, setProfile, checkingProfile }.
  */
@@ -14,7 +13,6 @@ import { createLogger } from '../utils/logger';
 import { initializeProfile, type Profile } from '../services/profileService';
 
 const log = createLogger('ProfileInit');
-import { pluginLoader } from '../services/pluginLoader';
 
 // PWA Reset utility - clears all persisted state
 function resetPWAState() {
@@ -103,17 +101,6 @@ export function useProfileInit(): ProfileInitResult {
       window.removeEventListener('profile-invalidated', handleInvalidated);
     };
   }, [checkProfile]);
-
-  // Initialize plugin system and load plugins
-  useEffect(() => {
-    // Initialize the global Familiar API for plugins
-    pluginLoader.initializeGlobalAPI();
-
-    // Load all enabled plugins
-    pluginLoader.loadAllPlugins().catch((err) => {
-      log.error('Failed to load plugins:', err);
-    });
-  }, []);
 
   return { profile, setProfile, checkingProfile };
 }

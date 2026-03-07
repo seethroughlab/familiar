@@ -17,7 +17,6 @@ from .base import (
 from .frontend_log import FrontendLog
 from .metadata import ProposedChange
 from .playlists import Playlist, PlaylistTrack, SmartPlaylist
-from .plugins import Plugin, PluginType
 from .profiles import (
     LastfmProfile,
     Profile,
@@ -39,7 +38,6 @@ __all__ = [
     "ChangeSource",
     "ChangeStatus",
     "ExternalTrackSource",
-    "PluginType",
     "TrackStatus",
     # Models
     "ArtistCheckCache",
@@ -50,7 +48,6 @@ __all__ = [
     "LastfmProfile",
     "Playlist",
     "PlaylistTrack",
-    "Plugin",
     "Profile",
     "ProfileExternalFavorite",
     "ProfileFavorite",
