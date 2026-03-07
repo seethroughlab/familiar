@@ -15,7 +15,6 @@ import { useThemeStore } from '../stores/themeStore';
 import { useAudioEngine } from '../hooks/useAudioEngine';
 import { useScrobbling } from '../hooks/useScrobbling';
 import { usePlayTracking } from '../hooks/usePlayTracking';
-import { useMetadataEnrichment } from '../hooks/useMetadataEnrichment';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { initSyncListeners } from '../services/syncService';
 import { initRemoteLogging } from '../services/remoteLogService';
@@ -82,7 +81,6 @@ export function AppShell() {
   useAudioEngine();
   useScrobbling();
   usePlayTracking();
-  useMetadataEnrichment();
 
   // Keyboard shortcuts
   useKeyboardShortcuts({

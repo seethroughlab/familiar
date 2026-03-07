@@ -276,29 +276,6 @@ class TestSimilarity:
 
 
 # ---------------------------------------------------------------------------
-# Enrich
-# ---------------------------------------------------------------------------
-
-
-class TestEnrich:
-    @pytest.mark.asyncio
-    async def test_enrich_not_found(self, async_db, client):
-        resp = client.post(f"/api/v1/tracks/{uuid4()}/enrich")
-        assert resp.status_code == 404
-
-    @pytest.mark.asyncio
-    async def test_enrich_queued_or_skipped(self, async_db, client):
-        t = await insert_test_track(async_db, title="Enrichable", artist="SomeArtist")
-        await async_db.commit()
-
-        resp = client.post(f"/api/v1/tracks/{t.id}/enrich")
-        assert resp.status_code == 200
-        data = resp.json()
-        # Returns "queued", "skipped", or "disabled" depending on settings
-        assert data["status"] in ("queued", "skipped", "disabled")
-
-
-# ---------------------------------------------------------------------------
 # Track list (paginated)
 # ---------------------------------------------------------------------------
 

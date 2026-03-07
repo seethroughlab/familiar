@@ -47,10 +47,6 @@ class SettingsResponse(BaseModel):
     anthropic_api_key: str | None
     acoustid_api_key: str | None
 
-    # Metadata enrichment
-    auto_enrich_metadata: bool
-    enrich_overwrite_existing: bool
-
     # Analysis settings
     clap_embeddings_enabled: bool | None  # None = auto-detect
     clap_status: ClapStatus
@@ -95,10 +91,6 @@ class SettingsUpdateRequest(BaseModel):
     lastfm_api_secret: str | None = None
     anthropic_api_key: str | None = None
     acoustid_api_key: str | None = None
-
-    # Metadata enrichment
-    auto_enrich_metadata: bool | None = None
-    enrich_overwrite_existing: bool | None = None
 
     # Analysis settings
     clap_embeddings_enabled: bool | None = None

@@ -76,13 +76,6 @@ async def stream_track(
         logger.warning("Stream request for unknown track_id=%s", track_id)
         raise HTTPException(status_code=404, detail="Track not found")
 
-    # Trigger auto-enrichment in background if track has incomplete metadata
-    from app.services.metadata.enrichment import needs_enrichment
-    from app.services.tasks import propose_enrichment_for_track
-
-    if needs_enrichment(track, check_artwork=False):
-        background_tasks.add_task(propose_enrichment_for_track, str(track.id))
-
     file_path = Path(track.file_path)
     if not file_path.exists():
         logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)

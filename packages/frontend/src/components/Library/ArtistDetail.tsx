@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PlayIndicator } from '../common/PlayIndicator';
@@ -123,9 +123,6 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
 
-  // Track which artists we've already triggered enrichment for
-  const enrichedArtistsRef = useRef<Set<string>>(new Set());
-
   // Load offline track IDs on mount
   useEffect(() => {
     getOfflineTrackIds().then((ids) => setOfflineTrackIds(new Set(ids)));
@@ -210,19 +207,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
     queryFn: () => libraryApi.getArtist(artistName),
   });
 
-  // Auto-enrich all tracks when artist detail loads (single batch request)
-  useEffect(() => {
-    if (!artist || enrichedArtistsRef.current.has(artistName)) return;
-    enrichedArtistsRef.current.add(artistName);
-
-    const trackIds = artist.tracks.map((t) => t.id);
-    if (trackIds.length > 0) {
-      tracksApi.enrichBatch(trackIds).catch(() => {
-        // Ignore errors - enrichment is best-effort
-      });
-    }
-    // Note: Artwork is now handled reactively by AlbumArtwork components
-  }, [artist, artistName]);
+  // Note: Artwork is handled reactively by AlbumArtwork components
 
   // Prefetch the first few album details so clicking is near-instant
   const queryClient = useQueryClient();

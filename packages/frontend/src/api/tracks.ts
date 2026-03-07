@@ -144,16 +144,6 @@ export const tracksApi = {
     return data;
   },
 
-  enrich: async (id: string): Promise<{ status: string; message: string }> => {
-    const { data } = await api.post(`/tracks/${id}/enrich`);
-    return data;
-  },
-
-  enrichBatch: async (trackIds: string[]): Promise<{ queued: number; skipped: number; total: number }> => {
-    const { data } = await api.post('/tracks/enrich-batch', { track_ids: trackIds });
-    return data;
-  },
-
   // Metadata editing
   getMetadata: async (id: string): Promise<TrackMetadataResponse> => {
     const { data } = await api.get(`/tracks/${id}/metadata`);

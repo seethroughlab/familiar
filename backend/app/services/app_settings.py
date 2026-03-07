@@ -58,10 +58,6 @@ class AppSettings(BaseModel):
     # Audio fingerprinting
     acoustid_api_key: str | None = None  # Get free key at https://acoustid.org/new-application
 
-    # Metadata enrichment
-    auto_enrich_metadata: bool = True  # Auto-fetch missing metadata on playback
-    enrich_overwrite_existing: bool = False  # Overwrite existing tags with MusicBrainz data
-
     # Analysis settings
     clap_embeddings_enabled: bool | None = None  # None = auto-detect based on RAM (6GB+ required)
 

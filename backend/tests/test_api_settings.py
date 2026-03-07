@@ -191,19 +191,19 @@ def test_partial_update(
     mock_settings_service: AppSettingsService,
 ) -> None:
     """Test that partial updates don't overwrite other settings."""
-    # Set multiple settings
+    # Set a setting
     client.put(
         "/api/v1/settings",
         json={
             "anthropic_api_key": "sk-ant-key1",
-            "auto_enrich_metadata": True,
+            "community_cache_enabled": True,
         },
     )
 
     # Update only one setting
     client.put(
         "/api/v1/settings",
-        json={"auto_enrich_metadata": False},
+        json={"community_cache_enabled": False},
     )
 
     # Verify both are preserved
@@ -211,4 +211,4 @@ def test_partial_update(
     data = response.json()
 
     assert data["anthropic_api_key"] is not None  # Still set
-    assert data["auto_enrich_metadata"] is False  # Updated
+    assert data["community_cache_enabled"] is False  # Updated

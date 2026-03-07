@@ -22,9 +22,6 @@ export interface AppSettingsResponse {
   // Community cache
   community_cache_enabled: boolean;
   community_cache_contribute: boolean;
-  // Metadata enrichment
-  auto_enrich_metadata: boolean;
-  enrich_overwrite_existing: boolean;
   // Analysis settings
   clap_embeddings_enabled: boolean | null;
   clap_status: ClapStatus;
@@ -50,9 +47,6 @@ export interface AppSettingsUpdate {
   // Community cache
   community_cache_enabled?: boolean;
   community_cache_contribute?: boolean;
-  // Metadata enrichment
-  auto_enrich_metadata?: boolean;
-  enrich_overwrite_existing?: boolean;
   // Analysis settings
   clap_embeddings_enabled?: boolean | null;
   // Playlist generation

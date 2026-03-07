@@ -113,7 +113,7 @@ export const artworkApi = {
 
 // Proposed Changes API
 export type ChangeStatus = 'pending' | 'rejected' | 'applied';
-export type ChangeSource = 'user_request' | 'llm_suggestion' | 'musicbrainz' | 'spotify' | 'auto_enrichment';
+export type ChangeSource = 'user_request' | 'llm_suggestion' | 'musicbrainz' | 'spotify';
 export type ChangeScope = 'db_only' | 'db_and_id3' | 'db_id3_files';
 
 export interface ProposedChange {

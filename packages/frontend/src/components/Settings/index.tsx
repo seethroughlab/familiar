@@ -7,7 +7,6 @@ import { AudioEffectsSettings } from './AudioEffectsSettings';
 import { ProfileSettings } from './ProfileSettings';
 import { SystemStatus } from './SystemStatus';
 import { LibrarySync } from './LibrarySync';
-import { MetadataSettings } from './MetadataSettings';
 import { AnalysisSettings } from './AnalysisSettings';
 import { InstallStatus } from '../PWA/InstallPrompt';
 import { DebugSettings } from './DebugSettings';
@@ -47,7 +46,6 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <LibrarySync />
-            <MetadataSettings />
             <AnalysisSettings />
             <CommunityCache />
           </div>

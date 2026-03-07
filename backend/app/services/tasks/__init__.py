@@ -30,12 +30,6 @@ from app.services.tasks.common import (
     log_memory,
 )
 
-# enrichment.py
-from app.services.tasks.enrichment import (
-    propose_enrichment_for_track,
-    run_track_enrichment,
-)
-
 # library_sync.py
 from app.services.tasks.library_sync import (
     SyncProgressReporter,
@@ -90,7 +84,4 @@ __all__ = [
     "set_spotify_rate_limit",
     "get_spotify_rate_limit",
     "run_spotify_sync",
-    # enrichment
-    "run_track_enrichment",
-    "propose_enrichment_for_track",
 ]

@@ -1,10 +1,10 @@
-"""Track playback endpoints: record play, play stats, enrichment."""
+"""Track playback endpoints: record play, play stats."""
 
 import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -29,27 +29,6 @@ class PlayRecordResponse(BaseModel):
     track_id: UUID
     play_count: int
     total_play_seconds: float
-
-
-class EnrichResponse(BaseModel):
-    """Response for track enrichment request."""
-
-    status: str
-    message: str
-
-
-class BatchEnrichRequest(BaseModel):
-    """Request body for batch enrichment."""
-
-    track_ids: list[str]
-
-
-class BatchEnrichResponse(BaseModel):
-    """Response for batch enrichment request."""
-
-    queued: int
-    skipped: int
-    total: int
 
 
 class ProfilePlayStatsResponse(BaseModel):
@@ -113,89 +92,6 @@ async def record_play(
         play_count=play_history.play_count,
         total_play_seconds=play_history.total_play_seconds,
     )
-
-
-@router.post("/{track_id}/enrich", response_model=EnrichResponse)
-async def enrich_track_metadata(
-    track_id: UUID,
-    db: DbSession,
-    background_tasks: BackgroundTasks,
-) -> EnrichResponse:
-    """Trigger background metadata enrichment for a track.
-
-    Fire-and-forget endpoint that returns immediately.
-    Enrichment runs in background if track has missing metadata.
-    Fetches data from MusicBrainz/AcoustID, updates ID3 tags, and saves artwork.
-    """
-    from app.services.app_settings import get_app_settings_service
-    from app.services.metadata.enrichment import needs_enrichment
-    from app.services.tasks import run_track_enrichment
-
-    # Check if auto-enrichment is enabled
-    settings_service = get_app_settings_service()
-    app_settings = settings_service.get()
-    if not app_settings.auto_enrich_metadata:
-        return EnrichResponse(status="disabled", message="Auto-enrichment is disabled")
-
-    # Verify track exists
-    track = await db.get(Track, track_id)
-    if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
-
-    # Check if enrichment is needed
-    if not needs_enrichment(track):
-        return EnrichResponse(status="skipped", message="Track metadata is complete")
-
-    # Queue background task (fire-and-forget)
-    background_tasks.add_task(run_track_enrichment, str(track_id))
-
-    return EnrichResponse(status="queued", message="Enrichment started in background")
-
-
-@router.post("/enrich-batch", response_model=BatchEnrichResponse)
-async def enrich_tracks_batch(
-    body: BatchEnrichRequest,
-    db: DbSession,
-    background_tasks: BackgroundTasks,
-) -> BatchEnrichResponse:
-    """Trigger background metadata enrichment for multiple tracks.
-
-    Fire-and-forget endpoint that returns immediately.
-    Checks which tracks need enrichment and queues them in background.
-    """
-    from app.services.app_settings import get_app_settings_service
-    from app.services.metadata.enrichment import needs_enrichment
-    from app.services.tasks import run_track_enrichment
-
-    total = len(body.track_ids)
-
-    # Check if auto-enrichment is enabled
-    settings_service = get_app_settings_service()
-    app_settings = settings_service.get()
-    if not app_settings.auto_enrich_metadata:
-        return BatchEnrichResponse(queued=0, skipped=total, total=total)
-
-    # Fetch all tracks in one query
-    track_uuids = []
-    for tid in body.track_ids:
-        try:
-            track_uuids.append(UUID(tid))
-        except ValueError:
-            continue
-
-    result = await db.execute(
-        select(Track).where(Track.id.in_(track_uuids))
-    )
-    tracks_by_id = {str(t.id): t for t in result.scalars().all()}
-
-    queued = 0
-    for tid in body.track_ids:
-        track = tracks_by_id.get(tid)
-        if track and needs_enrichment(track):
-            background_tasks.add_task(run_track_enrichment, tid)
-            queued += 1
-
-    return BatchEnrichResponse(queued=queued, skipped=total - queued, total=total)
 
 
 @router.get("/stats/plays", response_model=ProfilePlayStatsResponse)
