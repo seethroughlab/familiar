@@ -10,7 +10,7 @@ on:
 jobs:
   backend-lint:
     name: Backend Lint
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     defaults:
       run:
         working-directory: backend
@@ -36,7 +36,7 @@ jobs:
 
   backend-test:
     name: Backend Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     defaults:
       run:
         working-directory: backend
@@ -90,7 +90,7 @@ jobs:
 
   frontend-lint:
     name: Frontend Lint
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +113,7 @@ jobs:
 
   frontend-build:
     name: Frontend Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -143,7 +143,7 @@ jobs:
 
   docker-build:
     name: Docker Build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 30
     needs: [backend-lint, frontend-lint]
     steps:
@@ -175,7 +175,7 @@ jobs:
 
   e2e-test:
     name: E2E Tests (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [docker-build]
     services:
       postgres:
