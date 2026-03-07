@@ -36,7 +36,7 @@ jobs:
 
   backend-test:
     name: Backend Test
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     defaults:
       run:
         working-directory: backend
@@ -175,7 +175,7 @@ jobs:
 
   e2e-test:
     name: E2E Tests (Playwright)
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     needs: [docker-build]
     services:
       postgres:
