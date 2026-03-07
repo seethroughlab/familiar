@@ -22,9 +22,8 @@ test.describe('Settings', () => {
     const apiKeysHeading = page.getByText('API Keys', { exact: true });
     await expect(apiKeysHeading).toBeVisible({ timeout: 5000 });
 
-    // Should show all four services
+    // Should show the active API key services
     await expect(page.getByText('Claude API', { exact: true })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('Spotify', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Last.fm', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
