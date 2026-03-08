@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getSelectedProfileId, clearSelectedProfile } from '../services/profileService';
+import { getSelectedProfileId, clearSelectedProfile } from '../services/profileSelection';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 
