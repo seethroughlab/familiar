@@ -98,6 +98,11 @@ export function useOfflineTrackIds(): {
 
   useEffect(() => {
     refresh();
+    const handle = () => { refresh().catch(() => {}); };
+    window.addEventListener('offline-tracks-updated', handle);
+    return () => {
+      window.removeEventListener('offline-tracks-updated', handle);
+    };
   }, [refresh]);
 
   return { offlineIds, refresh };

@@ -39,6 +39,11 @@ function nativeTrackPath(trackId: string): string {
   return `offline-tracks/${trackId}.bin`;
 }
 
+function notifyOfflineTracksUpdated(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent('offline-tracks-updated'));
+}
+
 /**
  * Fetch and cache track metadata from the API.
  * This ensures downloaded tracks have their metadata available for display.
@@ -282,6 +287,7 @@ export async function downloadTrackForOffline(
         sizeBytes: blob.size,
         cachedAt: new Date(),
       });
+      notifyOfflineTracksUpdated();
     } catch (error) {
       log.error('Failed to store native offline track:', trackId, error);
       throw error;
@@ -299,6 +305,7 @@ export async function downloadTrackForOffline(
 
     try {
       await db.offlineTracks.put(offlineTrack);
+      notifyOfflineTracksUpdated();
     } catch (error) {
     // Handle quota exceeded error
       const isQuotaError =
@@ -394,6 +401,7 @@ export async function removeOfflineTrack(trackId: string): Promise<void> {
     }
   }
   await db.offlineTracks.delete(trackId);
+  notifyOfflineTracksUpdated();
 }
 
 /**
@@ -514,6 +522,7 @@ export async function clearAllOfflineTracks(): Promise<void> {
   }
   await db.offlineTracks.clear();
   await db.offlineArtwork.clear();
+  notifyOfflineTracksUpdated();
 }
 
 /**

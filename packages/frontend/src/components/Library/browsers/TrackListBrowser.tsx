@@ -664,18 +664,21 @@ export function TrackListBrowser({
     return arr;
   }, [data?.pages, sparsePages]);
 
-  // Filter by downloaded tracks if downloadedOnly is enabled
+  const downloadedOnlyActive = filters.downloadedOnly || isOffline;
+
+  // Filter by downloaded tracks if downloadedOnly is enabled or offline mode is active
   // Note: For downloaded-only mode, we use allTracksUnfiltered (dense array)
   // since we can't filter a sparse array by offline status efficiently
   const allTracks = useMemo(() => {
-    if (filters.downloadedOnly && offlineTrackIds && offlineTrackIds.size > 0) {
+    if (downloadedOnlyActive) {
+      if (!offlineTrackIds || offlineTrackIds.size === 0) return [];
       return allTracksUnfiltered.filter(track => offlineTrackIds.has(track.id));
     }
     // Use sparse array for normal mode to support alphabet bar jumping
     return allTracksSparse;
-  }, [allTracksUnfiltered, allTracksSparse, filters.downloadedOnly, offlineTrackIds]) as (Track | undefined)[];
+  }, [allTracksUnfiltered, allTracksSparse, downloadedOnlyActive, offlineTrackIds]) as (Track | undefined)[];
 
-  const total = filters.downloadedOnly && offlineTrackIds
+  const total = downloadedOnlyActive && offlineTrackIds
     ? allTracks.length
     : data?.pages[0]?.total ?? 0;
 

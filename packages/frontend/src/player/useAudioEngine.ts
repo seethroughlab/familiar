@@ -8,6 +8,7 @@ import { showError } from '../stores/toastStore';
 import { getEngine } from './audio/engineInstance';
 import type { EngineEvent } from './audio/types';
 import { log } from './audio/platform';
+import { useConnectivityStore } from '../stores/connectivityStore';
 import {
   getCrossfadeTrigger,
   getEffectiveCrossfadeDuration,
@@ -18,6 +19,45 @@ const albumGainCache = new Map<string, { avgLufs: number; albumPeak: number | nu
 
 // Queue transition flag — suppresses ended events during crossfade setup
 let queueTransition = false;
+const MAX_AUTO_ADVANCES_PER_WINDOW = 8;
+const AUTO_ADVANCE_WINDOW_MS = 15000;
+const failureAdvanceTimestamps: number[] = [];
+
+type PlaybackErrorCategory = 'offline-unavailable' | 'network-unreachable' | 'media-decode' | 'other';
+
+function classifyPlaybackError(error: unknown): PlaybackErrorCategory {
+  const code = (error as { code?: string })?.code;
+  const message = String((error as { message?: string })?.message ?? error ?? '').toLowerCase();
+
+  if (code === 'offline-unavailable' || message.includes('unavailable while offline')) {
+    return 'offline-unavailable';
+  }
+
+  if (
+    message.includes('network request failed') ||
+    message.includes('failed to fetch') ||
+    message.includes('network connection was lost') ||
+    message.includes('not connected to internet') ||
+    message.includes('internet connection appears to be offline')
+  ) {
+    return 'network-unreachable';
+  }
+
+  if (message.includes('decode') || message.includes('media')) {
+    return 'media-decode';
+  }
+
+  return 'other';
+}
+
+function registerFailureAdvanceAndCheckCircuitBreaker(): boolean {
+  const now = Date.now();
+  failureAdvanceTimestamps.push(now);
+  while (failureAdvanceTimestamps.length > 0 && now - failureAdvanceTimestamps[0] > AUTO_ADVANCE_WINDOW_MS) {
+    failureAdvanceTimestamps.shift();
+  }
+  return failureAdvanceTimestamps.length <= MAX_AUTO_ADVANCES_PER_WINDOW;
+}
 
 function getAlbumKey(track: Track): string | null {
   if (!track.album) return null;
@@ -54,8 +94,15 @@ export function useAudioEngine() {
   const setNextTrackPreloaded = usePlayerStore((s) => s.setNextTrackPreloaded);
   const advanceToNextTrack = usePlayerStore((s) => s.advanceToNextTrack);
   const setIsLoadingAudio = usePlayerStore((s) => s.setIsLoadingAudio);
+  const jumpToQueueIndex = usePlayerStore((s) => s.jumpToQueueIndex);
 
   const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationMode, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
+  const offlineModeActive = useConnectivityStore((s) => s.offlineModeActive);
+  const offlineTrackIds = useConnectivityStore((s) => s.offlineTrackIds);
+  const noteStreamLoadFailure = useConnectivityStore((s) => s.noteStreamLoadFailure);
+  const noteStreamLoadSuccess = useConnectivityStore((s) => s.noteStreamLoadSuccess);
+  const incrementConnectivityCounter = useConnectivityStore((s) => s.incrementCounter);
+  const refreshOfflineTrackIds = useConnectivityStore((s) => s.refreshOfflineTrackIds);
 
   // Refs for stable access in event handler (avoids re-subscribing on every change)
   const crossfadeEnabledRef = useRef(crossfadeEnabled);
@@ -118,6 +165,48 @@ export function useAudioEngine() {
 
   const executeCrossfadeRef = useRef<(duration: number, nextTrack: Track) => void>(() => {});
 
+  const stopForCircuitBreaker = useCallback(() => {
+    incrementConnectivityCounter('skip_storm_circuit_breaker_triggered');
+    setIsPlaying(false);
+    setIsLoadingAudio(false);
+    showError('Playback paused', {
+      description: 'Network instability triggered skip protection. Playback stopped cleanly.',
+    });
+  }, [incrementConnectivityCounter, setIsLoadingAudio, setIsPlaying]);
+
+  const advanceToNextDownloadedTrack = useCallback(async (reason: PlaybackErrorCategory): Promise<boolean> => {
+    await refreshOfflineTrackIds().catch(() => {});
+    const connectivity = useConnectivityStore.getState();
+    const state = usePlayerStore.getState();
+    const queue = state.queue;
+    if (queue.length === 0) return false;
+
+    const startIdx = state.queueIndex >= 0 ? state.queueIndex : 0;
+    const maxScan = queue.length;
+    for (let step = 1; step <= maxScan; step++) {
+      const idx = (startIdx + step) % queue.length;
+      if (state.repeat !== 'all' && idx <= startIdx) break;
+      const candidate = queue[idx];
+      if (candidate && connectivity.offlineTrackIds.has(candidate.track.id)) {
+        if (!registerFailureAdvanceAndCheckCircuitBreaker()) {
+          stopForCircuitBreaker();
+          return true;
+        }
+        jumpToQueueIndex(idx);
+        return true;
+      }
+    }
+
+    setIsPlaying(false);
+    setIsLoadingAudio(false);
+    showError('No downloaded tracks available', {
+      description: reason === 'offline-unavailable'
+        ? 'This track is not downloaded for offline playback.'
+        : 'No downloaded tracks are available to continue playback.',
+    });
+    return false;
+  }, [jumpToQueueIndex, refreshOfflineTrackIds, setIsLoadingAudio, setIsPlaying, stopForCircuitBreaker]);
+
   const executeCrossfade = useCallback((duration: number, nextTrack: Track) => {
     if (!engine.executeCrossfade) return;
 
@@ -176,13 +265,29 @@ export function useAudioEngine() {
           const state = usePlayerStore.getState();
           const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
           log.error('Playback error for "%s": %s', trackName, event.message);
+          const category = classifyPlaybackError(event);
 
           if (state.currentTrack?.id) {
             tracksApi.reportPlaybackError(state.currentTrack.id).catch(() => {});
           }
 
+          if (category === 'network-unreachable' || category === 'offline-unavailable') {
+            noteStreamLoadFailure(category);
+            setIsLoadingAudio(false);
+            advanceToNextDownloadedTrack(category).catch(() => {
+              setIsPlaying(false);
+              setIsLoadingAudio(false);
+            });
+            break;
+          }
+
+          noteStreamLoadFailure('other');
           const hasNextTrack = !!state.getNextTrack();
           if (hasNextTrack) {
+            if (!registerFailureAdvanceAndCheckCircuitBreaker()) {
+              stopForCircuitBreaker();
+              break;
+            }
             showError('Skipping track', { description: `${trackName}: ${event.message}` });
             setIsLoadingAudio(false);
             playNext();
@@ -275,7 +380,46 @@ export function useAudioEngine() {
           break;
       }
     });
-  }, [isInitialized, engine, playNext, setIsPlaying, setIsLoadingAudio, setCurrentTime, setDuration]);
+  }, [
+    isInitialized,
+    engine,
+    playNext,
+    setIsPlaying,
+    setIsLoadingAudio,
+    setCurrentTime,
+    setDuration,
+    noteStreamLoadFailure,
+    advanceToNextDownloadedTrack,
+    stopForCircuitBreaker,
+  ]);
+
+  useEffect(() => {
+    if (!offlineModeActive) return;
+    const state = usePlayerStore.getState();
+    if (state.queue.length === 0) return;
+
+    const filteredTracks = state.queue
+      .map((item) => item.track)
+      .filter((track) => offlineTrackIds.has(track.id));
+    if (filteredTracks.length === state.queue.length) return;
+
+    incrementConnectivityCounter('offline_queue_rebuild_count');
+    const currentId = state.currentTrack?.id;
+    const newIndex = currentId
+      ? filteredTracks.findIndex((track) => track.id === currentId)
+      : -1;
+
+    if (newIndex >= 0) {
+      state.setQueue(filteredTracks, newIndex, state.queueSource ?? undefined);
+      return;
+    }
+
+    state.setQueue(filteredTracks, 0, state.queueSource ?? undefined);
+    if (filteredTracks.length === 0) {
+      setIsPlaying(false);
+      setIsLoadingAudio(false);
+    }
+  }, [offlineModeActive, offlineTrackIds, incrementConnectivityCounter, setIsLoadingAudio, setIsPlaying]);
 
   // --------------------------------------------------------------------------
   // Effect: Update Media Session when track changes
@@ -414,6 +558,7 @@ export function useAudioEngine() {
         });
 
         await engine.load(currentTrack.id, url, { isOffline });
+        noteStreamLoadSuccess();
 
         // Another race condition guard after load
         if (usePlayerStore.getState().currentTrack?.id !== currentTrack.id) {
@@ -424,6 +569,7 @@ export function useAudioEngine() {
         if (isPlaying) {
           try {
             await engine.play();
+            noteStreamLoadSuccess();
             setIsLoadingAudio(false);
 
             // Eager preload: after a short delay, preload the next track
@@ -456,11 +602,23 @@ export function useAudioEngine() {
       } catch (e) {
         log.error('Failed to load track', e);
         setIsLoadingAudio(false);
+        const category = classifyPlaybackError(e);
+
+        if (category === 'network-unreachable' || category === 'offline-unavailable') {
+          noteStreamLoadFailure(category);
+          await advanceToNextDownloadedTrack(category);
+          return;
+        }
 
         // Auto-advance on error
+        noteStreamLoadFailure('other');
         const state = usePlayerStore.getState();
         const hasNextTrack = !!state.getNextTrack();
         if (hasNextTrack) {
+          if (!registerFailureAdvanceAndCheckCircuitBreaker()) {
+            stopForCircuitBreaker();
+            return;
+          }
           const trackName = currentTrack.title || 'Unknown track';
           showError('Skipping track', { description: `${trackName}: failed to load` });
           playNext();

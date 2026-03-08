@@ -6,6 +6,7 @@ import { usePlayerStore } from '../../player/playerStore';
 
 type EngineEvent =
   | { type: 'ended' }
+  | { type: 'error'; message: string; code?: string }
   | { type: 'remotePrevious'; nativeAction?: 'restart' }
   | { type: 'timeUpdate'; currentTime: number; duration: number };
 
@@ -87,8 +88,46 @@ const mockEngine = vi.hoisted(() => {
   };
 });
 
+const mockConnectivityStore = vi.hoisted(() => {
+  let state = {
+    offlineModeActive: false,
+    offlineTrackIds: new Set<string>(),
+    noteStreamLoadFailure: vi.fn(),
+    noteStreamLoadSuccess: vi.fn(),
+    incrementCounter: vi.fn(),
+    refreshOfflineTrackIds: vi.fn(async () => {}),
+  };
+
+  const store = ((selector?: (s: typeof state) => unknown) => selector ? selector(state) : state) as
+    ((selector?: (s: typeof state) => unknown) => unknown) & {
+      getState: () => typeof state;
+      setState: (next: Partial<typeof state>) => void;
+      __reset: () => void;
+    };
+
+  store.getState = () => state;
+  store.setState = (next) => {
+    state = { ...state, ...next };
+  };
+  store.__reset = () => {
+    state = {
+      offlineModeActive: false,
+      offlineTrackIds: new Set<string>(),
+      noteStreamLoadFailure: vi.fn(),
+      noteStreamLoadSuccess: vi.fn(),
+      incrementCounter: vi.fn(),
+      refreshOfflineTrackIds: vi.fn(async () => {}),
+    };
+  };
+  return store;
+});
+
 vi.mock('../../player/audio/engineInstance', () => ({
   getEngine: () => mockEngine,
+}));
+
+vi.mock('../../stores/connectivityStore', () => ({
+  useConnectivityStore: mockConnectivityStore,
 }));
 
 vi.mock('../../api', () => ({
@@ -121,6 +160,7 @@ vi.mock('../../player/persistence', () => ({
 
 describe('useAudioEngine + playerStore integration parity', () => {
   beforeEach(() => {
+    mockConnectivityStore.__reset();
     mockEngine.__reset();
     usePlayerStore.setState({
       currentTrack: null,
@@ -155,6 +195,7 @@ describe('useAudioEngine + playerStore integration parity', () => {
 
     renderHook(() => useAudioEngine());
 
+    usePlayerStore.setState({ isLoadingAudio: false });
     await act(async () => {
       mockEngine.__emit({ type: 'ended' });
     });
@@ -280,5 +321,73 @@ describe('useAudioEngine + playerStore integration parity', () => {
       next: null,
       previous: null,
     });
+  });
+
+  it('falls back to next downloaded track on network-unreachable load error', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    const t3 = makeTrack('3');
+    mockConnectivityStore.setState({
+      offlineTrackIds: new Set(['3']),
+      refreshOfflineTrackIds: vi.fn(async () => {}),
+    });
+    mockEngine.resolveTrackUrl.mockImplementation(async (trackId: string) => {
+      if (trackId === '1' || trackId === '2') throw new Error('Failed to fetch');
+      return { url: `/api/v1/tracks/${trackId}/stream`, isOffline: false };
+    });
+
+    usePlayerStore.getState().setQueue([t1, t2, t3], 0);
+    renderHook(() => useAudioEngine());
+
+    await act(async () => {});
+
+    const state = usePlayerStore.getState();
+    expect(state.currentTrack?.id).toBe('3');
+    expect(state.queueIndex).toBe(2);
+    expect(mockConnectivityStore.getState().noteStreamLoadFailure).toHaveBeenCalled();
+  });
+
+  it('preload timeout fallback still advances on ended when next is not ready', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    usePlayerStore.getState().setQueue([t1, t2], 0);
+    mockEngine.isNextReady.mockReturnValue(false);
+    mockEngine.preloadNext.mockResolvedValue(false);
+
+    renderHook(() => useAudioEngine());
+
+    await act(async () => {
+      mockEngine.__emit({ type: 'timeUpdate', currentTime: 96, duration: 100 });
+      usePlayerStore.setState({ isLoadingAudio: false });
+      mockEngine.__emit({ type: 'ended' });
+    });
+
+    expect(usePlayerStore.getState().currentTrack?.id).toBe('2');
+  });
+
+  it('does not attempt stream fallback for unavailable-offline track', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    mockConnectivityStore.setState({
+      offlineModeActive: true,
+      offlineTrackIds: new Set(['2']),
+    });
+    mockEngine.resolveTrackUrl.mockImplementation(async (trackId: string) => {
+      if (trackId === '1') {
+        const err = new Error('Track unavailable while offline') as Error & { code?: string };
+        err.code = 'offline-unavailable';
+        throw err;
+      }
+      return { url: `/local/${trackId}.mp3`, isOffline: true };
+    });
+
+    usePlayerStore.getState().setQueue([t1, t2], 0);
+    renderHook(() => useAudioEngine());
+
+    await act(async () => {});
+
+    const state = usePlayerStore.getState();
+    expect(state.currentTrack?.id).toBe('2');
+    expect(mockEngine.resolveTrackUrl).toHaveBeenCalledWith('2');
   });
 });

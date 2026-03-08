@@ -9,6 +9,7 @@ import {
 import { tracksApi } from '../api';
 import { getEngine } from './audio/engineInstance';
 import { createLogger } from '../utils/logger';
+import { useConnectivityStore } from '../stores/connectivityStore';
 
 const log = createLogger('Player', { forceVerbose: true });
 
@@ -120,6 +121,12 @@ interface PlayerState {
 
 let queueIdCounter = 0;
 const generateQueueId = () => `queue-${++queueIdCounter}`;
+
+function enforceOfflineQueueInvariant(tracks: Track[]): Track[] {
+  const connectivity = useConnectivityStore.getState();
+  if (!connectivity.offlineModeActive) return tracks;
+  return tracks.filter((track) => connectivity.offlineTrackIds.has(track.id));
+}
 
 // Generate a shuffled order of queue indices, with current track first
 function generateShuffleOrder(queueLength: number, currentIndex: number): number[] {
@@ -628,19 +635,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0, source?: QueueSource) => {
-    const safeStartIndex = tracks.length === 0
+    const requestedTrackId = tracks[startIndex]?.id;
+    const queueTracks = enforceOfflineQueueInvariant(tracks);
+
+    const safeStartIndex = queueTracks.length === 0
       ? -1
-      : Math.max(0, Math.min(startIndex, tracks.length - 1));
+      : Math.max(0, Math.min(startIndex, queueTracks.length - 1));
     if (safeStartIndex !== startIndex) {
       log.warn('setQueue adjusted invalid startIndex', {
-        trackCount: tracks.length,
+        trackCount: queueTracks.length,
         requested: startIndex,
         resolved: safeStartIndex,
       });
     }
+    const resolvedStartIndex = requestedTrackId
+      ? queueTracks.findIndex((track) => track.id === requestedTrackId)
+      : safeStartIndex;
+    const finalStartIndex = resolvedStartIndex >= 0 ? resolvedStartIndex : safeStartIndex;
+
     log.info('setQueue', {
-      trackCount: tracks.length,
-      startIndex: safeStartIndex,
+      trackCount: queueTracks.length,
+      startIndex: finalStartIndex,
       source: source?.type,
       sourceId: source?.id,
       shuffle: get().shuffle,
@@ -648,7 +663,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Cancel any ongoing crossfade — user explicitly chose a new track
     getEngine().cancelCrossfade?.();
     const { shuffle } = get();
-    const queueItems = tracks.map((track) => ({
+    const queueItems = queueTracks.map((track) => ({
       track,
       queueId: generateQueueId(),
     }));
@@ -656,18 +671,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Generate shuffle order if shuffle is enabled
     let shuffleOrder: number[] = [];
     let shuffleIndex = -1;
-    if (shuffle && tracks.length > 1) {
-      shuffleOrder = generateShuffleOrder(tracks.length, safeStartIndex);
+    if (shuffle && queueTracks.length > 1) {
+      shuffleOrder = generateShuffleOrder(queueTracks.length, finalStartIndex);
       shuffleIndex = 0;
     }
 
     set({
       queue: queueItems,
-      queueIndex: safeStartIndex,
-      currentTrack: safeStartIndex >= 0 ? tracks[safeStartIndex] : null,
-      isPlaying: safeStartIndex >= 0,
+      queueIndex: finalStartIndex,
+      currentTrack: finalStartIndex >= 0 ? queueTracks[finalStartIndex] : null,
+      isPlaying: finalStartIndex >= 0,
       currentTime: 0,
-      isLoadingAudio: safeStartIndex >= 0,
+      isLoadingAudio: finalStartIndex >= 0,
       shuffleOrder,
       shuffleIndex,
       // Exit lazy mode when setting a regular queue
@@ -679,17 +694,32 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueueByTrackId: (tracks, trackId, source?: QueueSource) => {
-    const resolvedIndex = tracks.findIndex((track) => track.id === trackId);
-    if (resolvedIndex < 0) {
+    const offlineModeActive = useConnectivityStore.getState().offlineModeActive;
+    const queueTracks = enforceOfflineQueueInvariant(tracks);
+    const resolvedIndex = queueTracks.findIndex((track) => track.id === trackId);
+    if (resolvedIndex < 0 && queueTracks.length === 0) {
       log.warn('setQueueByTrackId ignored missing track id', {
         trackId,
-        trackCount: tracks.length,
+        trackCount: queueTracks.length,
         source: source?.type,
         sourceId: source?.id,
       });
       return;
     }
-    get().setQueue(tracks, resolvedIndex, source);
+    if (resolvedIndex < 0) {
+      if (!offlineModeActive) {
+        log.warn('setQueueByTrackId ignored missing track id', {
+          trackId,
+          trackCount: queueTracks.length,
+          source: source?.type,
+          sourceId: source?.id,
+        });
+        return;
+      }
+      get().setQueue(queueTracks, 0, source);
+      return;
+    }
+    get().setQueue(queueTracks, resolvedIndex, source);
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -776,10 +806,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   // Lazy queue actions (for shuffle-all with large libraries)
   setLazyQueue: async (ids: string[], source?: QueueSource) => {
-    if (ids.length === 0) return;
+    let resolvedIds = ids;
+    const connectivity = useConnectivityStore.getState();
+    if (connectivity.offlineModeActive) {
+      resolvedIds = ids.filter((id) => connectivity.offlineTrackIds.has(id));
+    }
+
+    if (resolvedIds.length === 0) {
+      set({
+        queue: [],
+        queueIndex: -1,
+        currentTrack: null,
+        isPlaying: false,
+        isLoadingAudio: false,
+        lazyQueueIds: null,
+        lazyQueueIndex: -1,
+      });
+      persistState();
+      return;
+    }
 
     const { shuffle } = get();
-    const windowIds = ids.slice(0, WINDOW_SIZE);
+    const windowIds = resolvedIds.slice(0, WINDOW_SIZE);
 
     // Set up lazy state immediately (loading state)
     set({
@@ -787,7 +835,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueIndex: -1,
       shuffleOrder: [],
       shuffleIndex: -1,
-      lazyQueueIds: ids,
+      lazyQueueIds: resolvedIds,
       lazyQueueIndex: windowIds.length,
       queueSource: source || null,
     });

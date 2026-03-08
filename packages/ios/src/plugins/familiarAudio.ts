@@ -107,7 +107,7 @@ export interface FamiliarAudioPlugin {
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'error',
-    handler: (data: { message: string }) => void,
+    handler: (data: { message: string; category?: 'network' | 'decode' | 'state' | 'resource' }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'remotePlay',

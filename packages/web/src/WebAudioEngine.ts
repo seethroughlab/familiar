@@ -5,6 +5,7 @@ import {
   createOfflineTrackUrl,
   revokeOfflineTrackUrl,
 } from '@familiar/frontend/src/services/offlineService';
+import { useConnectivityStore } from '@familiar/frontend/src/stores/connectivityStore';
 import { EffectsChain, initEffectsChain } from './audioEffects';
 import { showError } from '@familiar/frontend/src/stores/toastStore';
 import { isCapacitorNative, log } from '@familiar/frontend/src/player/audio/platform';
@@ -547,6 +548,11 @@ export class WebAudioEngine implements AudioEngine {
     const offlineBlob = await getOfflineTrack(trackId);
     if (offlineBlob) {
       return { url: createOfflineTrackUrl(offlineBlob), isOffline: true };
+    }
+    if (useConnectivityStore.getState().offlineModeActive) {
+      const err = new Error('Track unavailable while offline');
+      (err as Error & { code?: string }).code = 'offline-unavailable';
+      throw err;
     }
     return { url: tracksApi.getStreamUrl(trackId), isOffline: false };
   }

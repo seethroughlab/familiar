@@ -35,6 +35,12 @@ vi.mock('../../../hooks/useTrackContextMenu', () => ({
     contextMenuElement: null,
   }),
 }));
+vi.mock('../../../hooks/useOfflineStatus', () => ({
+  useOfflineStatus: () => ({ isOnline: true, isOffline: false, offlineModeActive: false, reachabilityState: 'reachable', lastRecoveryAt: null }),
+}));
+vi.mock('../../../hooks/useOfflineTrack', () => ({
+  useOfflineTrackIds: () => ({ offlineIds: new Set<string>(), refresh: vi.fn() }),
+}));
 
 vi.mock('../../Library/columnDefinitions', () => ({
   getColumnDef: vi.fn(() => null),

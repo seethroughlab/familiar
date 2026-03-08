@@ -18,6 +18,8 @@ import { useClientAlphabetBar } from './useClientAlphabetBar';
 import { AlphabetBar } from '../Library/AlphabetBar';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
 import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
+import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { formatDuration } from '../../utils/format';
 import { FavoriteButton } from '../Library/browsers/trackList/FavoriteButton';
 import type { Track } from '../../types';
@@ -115,6 +117,17 @@ export function PlaylistTrackList<T>({
   sortPersistKey,
   defaultSortBy,
 }: PlaylistTrackListProps<T>) {
+  const { isOffline } = useOfflineStatus();
+  const { offlineIds } = useOfflineTrackIds();
+
+  const visibleItems = useMemo(() => {
+    if (!isOffline) return items;
+    return items.filter((item) => {
+      const track = getTrack(item);
+      return !!track && offlineIds.has(track.id);
+    });
+  }, [isOffline, items, getTrack, offlineIds]);
+
   // Player state
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -137,7 +150,7 @@ export function PlaylistTrackList<T>({
   );
 
   // Sort items
-  const sortedItems = useSortedTracks(items, sortBy, sortOrder, getTrack);
+  const sortedItems = useSortedTracks(visibleItems, sortBy, sortOrder, getTrack);
 
   // Alphabet bar (client-side, no backend call needed)
   const { letterIndex, activeLetter, isVisible: alphabetBarVisible, jumpToLetter } =

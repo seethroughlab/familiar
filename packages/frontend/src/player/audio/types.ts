@@ -8,7 +8,7 @@
  */
 export type EngineEvent =
   | { type: 'ended' }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; code?: 'offline-unavailable' | 'network-unreachable' | 'media-decode' | 'state' | 'resource' | 'unknown' }
   | { type: 'playing'; trackId: string }
   | { type: 'waiting' }
   | { type: 'timeUpdate'; currentTime: number; duration: number }

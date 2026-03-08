@@ -19,6 +19,23 @@ vi.mock('../audio/engineInstance', () => ({
   getEngine: () => ({ seek: mockSeek }),
 }))
 
+const mockConnectivityState = {
+  offlineModeActive: false,
+  offlineTrackIds: new Set<string>(),
+}
+
+vi.mock('../../stores/connectivityStore', () => ({
+  useConnectivityStore: Object.assign(
+    (selector: (state: {
+      offlineModeActive: boolean;
+      offlineTrackIds: Set<string>;
+    }) => unknown) => selector(mockConnectivityState),
+    {
+      getState: () => mockConnectivityState,
+    }
+  ),
+}))
+
 // Helper to create mock tracks
 const createMockTrack = (id: string, title = 'Test Track'): Track => ({
   id,
@@ -39,6 +56,8 @@ const createMockTrack = (id: string, title = 'Test Track'): Track => ({
 
 describe('playerStore', () => {
   beforeEach(() => {
+    mockConnectivityState.offlineModeActive = false
+    mockConnectivityState.offlineTrackIds = new Set<string>()
     // Reset store to initial state before each test
     usePlayerStore.setState({
       currentTrack: null,
@@ -249,6 +268,34 @@ describe('playerStore', () => {
       expect(state.queueIndex).toBe(-1)
       expect(state.currentTrack).toBeNull()
       expect(state.queue).toHaveLength(0)
+    })
+
+    it('enforces downloaded-only queue when offline mode is active', () => {
+      const track1 = createMockTrack('1', 'First')
+      const track2 = createMockTrack('2', 'Second')
+      const track3 = createMockTrack('3', 'Third')
+      mockConnectivityState.offlineModeActive = true
+      mockConnectivityState.offlineTrackIds = new Set(['1', '3'])
+
+      usePlayerStore.getState().setQueue([track1, track2, track3], 1)
+
+      const state = usePlayerStore.getState()
+      expect(state.queue.map((q) => q.track.id)).toEqual(['1', '3'])
+      expect(state.currentTrack?.id).toBe('3')
+    })
+
+    it('setQueueByTrackId falls back to downloaded track in offline mode', () => {
+      const track1 = createMockTrack('1', 'First')
+      const track2 = createMockTrack('2', 'Second')
+      const track3 = createMockTrack('3', 'Third')
+      mockConnectivityState.offlineModeActive = true
+      mockConnectivityState.offlineTrackIds = new Set(['1', '3'])
+
+      usePlayerStore.getState().setQueueByTrackId([track1, track2, track3], '2')
+
+      const state = usePlayerStore.getState()
+      expect(state.queue.map((q) => q.track.id)).toEqual(['1', '3'])
+      expect(state.currentTrack?.id).toBe('1')
     })
   })
 

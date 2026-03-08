@@ -4,6 +4,7 @@ import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/
 import { log } from '@familiar/frontend/src/player/audio/platform';
 import { tracksApi } from '@familiar/frontend/src/api';
 import { getOfflineTrackNativeUri } from '@familiar/frontend/src/services/offlineService';
+import { useConnectivityStore } from '@familiar/frontend/src/stores/connectivityStore';
 
 // ============================================================================
 // CapacitorEngine — Native iOS/Android via FamiliarAudio Capacitor plugin
@@ -252,6 +253,11 @@ export class CapacitorEngine implements AudioEngine {
     if (nativeUri) {
       return { url: nativeUri, isOffline: true };
     }
+    if (useConnectivityStore.getState().offlineModeActive) {
+      const err = new Error('Track unavailable while offline');
+      (err as Error & { code?: string }).code = 'offline-unavailable';
+      throw err;
+    }
     return { url: tracksApi.getStreamUrl(trackId), isOffline: false };
   }
 
@@ -347,7 +353,16 @@ export class CapacitorEngine implements AudioEngine {
 
     // error
     FamiliarAudio.addListener('error', (data) => {
-      this.emit({ type: 'error', message: data.message });
+      const code = data.category === 'network'
+        ? 'network-unreachable'
+        : data.category === 'decode'
+          ? 'media-decode'
+          : data.category === 'state'
+            ? 'state'
+            : data.category === 'resource'
+              ? 'resource'
+              : undefined;
+      this.emit({ type: 'error', message: data.message, code });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
     // Remote commands (lock screen / Control Center)

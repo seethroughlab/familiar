@@ -1,36 +1,29 @@
-/**
- * Hook for tracking online/offline status.
- */
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useConnectivityStore } from '../stores/connectivityStore';
 
 export interface OfflineStatus {
   isOnline: boolean;
   isOffline: boolean;
+  offlineModeActive: boolean;
+  reachabilityState: 'unknown' | 'checking' | 'reachable' | 'unreachable';
+  lastRecoveryAt: number | null;
 }
 
-/**
- * Hook to track online/offline status.
- */
 export function useOfflineStatus(): OfflineStatus {
-  const [isOnline, setIsOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true
-  );
+  const offlineModeActive = useConnectivityStore((s) => s.offlineModeActive);
+  const reachabilityState = useConnectivityStore((s) => s.reachabilityState);
+  const lastRecoveryAt = useConnectivityStore((s) => s.lastRecoveryAt);
+  const startMonitoring = useConnectivityStore((s) => s.startMonitoring);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+    startMonitoring();
+  }, [startMonitoring]);
 
   return {
-    isOnline,
-    isOffline: !isOnline,
+    isOnline: !offlineModeActive,
+    isOffline: offlineModeActive,
+    offlineModeActive,
+    reachabilityState,
+    lastRecoveryAt,
   };
 }
