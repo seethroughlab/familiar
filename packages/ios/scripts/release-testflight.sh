@@ -23,6 +23,8 @@ BUILD_DIR="$PROJECT_ROOT/build"
 ARCHIVE_PATH="$BUILD_DIR/Familiar.xcarchive"
 EXPORT_DIR="$BUILD_DIR/export"
 PBXPROJ="$XCODEPROJ/project.pbxproj"
+IOS_DEBUG_XCCONFIG="$IOS_PKG_DIR/debug.xcconfig"
+NATIVE_DEBUG_XCCONFIG="$IOS_DIR/debug.xcconfig"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -36,19 +38,45 @@ step() {
     bold "── $1 ──"
 }
 
+ensure_debug_xcconfig_shim() {
+    local include_line='#include "native/debug.xcconfig"'
+
+    [[ -f "$NATIVE_DEBUG_XCCONFIG" ]] || die "Native debug.xcconfig not found at $NATIVE_DEBUG_XCCONFIG"
+
+    if [[ ! -f "$IOS_DEBUG_XCCONFIG" ]]; then
+        cat > "$IOS_DEBUG_XCCONFIG" <<'EOF'
+// Compatibility shim: App.xcodeproj references ../debug.xcconfig from packages/ios/native
+#include "native/debug.xcconfig"
+EOF
+        green "Created xcconfig shim at $IOS_DEBUG_XCCONFIG"
+        return
+    fi
+
+    if ! grep -qF "$include_line" "$IOS_DEBUG_XCCONFIG"; then
+        cat > "$IOS_DEBUG_XCCONFIG" <<'EOF'
+// Compatibility shim: App.xcodeproj references ../debug.xcconfig from packages/ios/native
+#include "native/debug.xcconfig"
+EOF
+        green "Repaired xcconfig shim at $IOS_DEBUG_XCCONFIG"
+    fi
+}
+
 # ── Preflight checks ──────────────────────────────────────────────────────────
 
-# Ensure login keychain is in the search list — GitHub Actions runners can
-# remove it when setting up their own temporary keychain for CI jobs.
-if ! security list-keychains | grep -q "login.keychain"; then
-    security list-keychains -s ~/Library/Keychains/login.keychain-db /Library/Keychains/System.keychain
-    green "Restored login keychain to search list"
+# Ensure login keychain is in the user search list — CI runners can remove it.
+if ! security list-keychains -d user 2>/dev/null | grep -q "login.keychain-db"; then
+    if security list-keychains -d user -s ~/Library/Keychains/login.keychain-db /Library/Keychains/System.keychain >/dev/null 2>&1; then
+        green "Restored login keychain to user search list"
+    else
+        red "WARN: Could not reset keychain search list; continuing with existing keychain config"
+    fi
 fi
 
 [[ -f "$PBXPROJ" ]]      || die "Xcode project not found at $PBXPROJ"
 [[ -f "$P8_KEY_PATH" ]]  || die "API key not found at $P8_KEY_PATH"
 [[ -f "$EXPORT_OPTIONS" ]] || die "ExportOptions.plist not found at $EXPORT_OPTIONS"
 command -v xcodebuild >/dev/null || die "xcodebuild not found — install Xcode"
+ensure_debug_xcconfig_shim
 
 # ── Parse arguments ────────────────────────────────────────────────────────────
 
