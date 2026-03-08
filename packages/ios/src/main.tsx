@@ -14,6 +14,13 @@ const log = createLogger('App');
 declare const __BUILD_TIME__: string;
 console.log(`[App] Build: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev'}`);
 
+// Feature flag rollout gate for native engine hardening.
+// localStorage.native_audio_v2 = "0" disables v2 behavior.
+const nativeAudioV2Enabled = localStorage.getItem('native_audio_v2') !== '0';
+if (!nativeAudioV2Enabled) {
+  log.warn('native_audio_v2 disabled; running compatibility mode');
+}
+
 // Register Capacitor audio engine
 registerEngineFactory(() => new CapacitorEngine());
 

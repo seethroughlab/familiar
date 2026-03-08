@@ -4,6 +4,7 @@ import type { PluginListenerHandle } from '@capacitor/core';
 export interface FamiliarAudioPlugin {
   // Playback
   load(options: { url: string; trackId: string }): Promise<void>;
+  loadLocal(options: { path: string; trackId: string }): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   resume(): Promise<void>;
@@ -70,11 +71,12 @@ export interface FamiliarAudioPlugin {
   }): Promise<void>;
 
   // Crossfade
-  preloadNext(options: { url: string; trackId: string }): Promise<{ success: boolean }>;
+  preloadNext(options: { url: string; trackId: string }): Promise<{ success: boolean; state?: 'idle' | 'preloading' | 'ready' | 'failed'; reason?: string }>;
+  preloadNextLocal(options: { path: string; trackId: string }): Promise<{ success: boolean; state?: 'idle' | 'preloading' | 'ready' | 'failed'; reason?: string }>;
   isNextReady(): Promise<{ ready: boolean }>;
   getPreloadingTrackId(): Promise<{ trackId: string | null }>;
   isCrossfading(): Promise<{ crossfading: boolean }>;
-  executeCrossfade(options: { duration: number }): Promise<void>;
+  executeCrossfade(options: { duration: number }): Promise<{ success: boolean; reason?: string }>;
   cancelCrossfade(): Promise<void>;
   setNextNormalizationVolume(options: { volume: number }): Promise<void>;
 

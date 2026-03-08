@@ -16,7 +16,15 @@ protocol NativeAudioEngineDelegate: AnyObject {
 }
 
 class NativeAudioEngine {
+    enum PreloadState: Equatable {
+        case idle
+        case preloading(trackId: String)
+        case ready(trackId: String)
+        case failed(trackId: String)
+    }
+
     weak var delegate: NativeAudioEngineDelegate?
+    private let stateQueue = DispatchQueue(label: "com.familiar.audio-engine.state")
 
     private let engine = AVAudioEngine()
     private var playerNodes: [AVAudioPlayerNode] = [AVAudioPlayerNode(), AVAudioPlayerNode()]
@@ -37,6 +45,7 @@ class NativeAudioEngine {
 
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
+    private var tempFileOwnedByEngine = false
     private var currentTrackId: String?
     private var isPlayerScheduled = false
     private var startFramePosition: AVAudioFramePosition = 0
@@ -47,17 +56,26 @@ class NativeAudioEngine {
     private var masterBypassed = false
 
     private var timeUpdateTimer: Timer?
-    private var downloadTask: URLSessionDataTask?
+    private var downloadTask: URLSessionDownloadTask?
 
     // Crossfade state
     private var nextAudioFile: AVAudioFile?
     private var nextTempFileURL: URL?
+    private var nextTempFileOwnedByEngine = false
     private var nextTrackId: String?
     private var preloadingTrackId: String?
-    private var nextDownloadTask: URLSessionDataTask?
+    private var nextDownloadTask: URLSessionDownloadTask?
+    private var preloadTimeoutWorkItem: DispatchWorkItem?
     private var isCrossfadingFlag = false
     private var crossfadeTimer: Timer?
     private var nextNormalizationVolume: Float = 1.0
+    private var preloadState: PreloadState = .idle
+
+    // Operation tokens to ignore stale async callbacks.
+    private var loadOperationToken: UInt64 = 0
+    private var preloadOperationToken: UInt64 = 0
+    private var seekOperationToken: UInt64 = 0
+    private var crossfadeOperationToken: UInt64 = 0
 
     // Now Playing metadata
     private var nowPlayingTitle: String?
@@ -111,6 +129,34 @@ class NativeAudioEngine {
         setupCompressorNode()
         setupAudioGraph()
         setupRemoteCommands()
+    }
+
+    private func nextLoadToken() -> UInt64 {
+        stateQueue.sync {
+            loadOperationToken &+= 1
+            return loadOperationToken
+        }
+    }
+
+    private func nextPreloadToken() -> UInt64 {
+        stateQueue.sync {
+            preloadOperationToken &+= 1
+            return preloadOperationToken
+        }
+    }
+
+    private func nextSeekToken() -> UInt64 {
+        stateQueue.sync {
+            seekOperationToken &+= 1
+            return seekOperationToken
+        }
+    }
+
+    private func nextCrossfadeToken() -> UInt64 {
+        stateQueue.sync {
+            crossfadeOperationToken &+= 1
+            return crossfadeOperationToken
+        }
     }
 
     private func setupEQBands() {
@@ -283,72 +329,86 @@ class NativeAudioEngine {
     // MARK: - Playback
 
     func load(url: String, trackId: String, completion: @escaping (Error?) -> Void) {
-        // Cancel any in-progress download
+        let token = nextLoadToken()
+
         downloadTask?.cancel()
         downloadTask = nil
-
-        // Stop current playback
-        stopInternal()
-
+        stopInternal(invalidateLoadToken: false)
         currentTrackId = trackId
+        cleanupTempFile()
 
         guard let sourceURL = URL(string: url) else {
             completion(NSError(domain: "NativeAudioEngine", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid URL"]))
             return
         }
 
-        // Clean up previous temp file before starting a new download
-        cleanupTempFile()
-
-        // Download audio to temp file (AVAudioPlayerNode requires local files).
-        // We defer the file extension decision until we know the MIME type from the HTTP response.
         let tempDir = NSTemporaryDirectory()
         let tempBaseName = "familiar_audio_\(trackId)"
-
-        let task = URLSession.shared.dataTask(with: sourceURL) { [weak self] data, response, error in
+        let task = URLSession.shared.downloadTask(with: sourceURL) { [weak self] localURL, response, error in
             guard let self = self else { return }
-
-            // Check if this load was cancelled (new track started)
+            guard self.stateQueue.sync(execute: { token == self.loadOperationToken }) else { return }
             guard self.currentTrackId == trackId else { return }
 
             if let error = error {
                 if (error as NSError).code == NSURLErrorCancelled { return }
-                DispatchQueue.main.async {
-                    completion(error)
-                }
+                DispatchQueue.main.async { completion(error) }
                 return
             }
 
-            guard let data = data else {
+            guard let localURL = localURL else {
                 DispatchQueue.main.async {
                     completion(NSError(domain: "NativeAudioEngine", code: -2, userInfo: [NSLocalizedDescriptionKey: "No data received"]))
                 }
                 return
             }
 
-            // Determine file extension from the HTTP response MIME type
             let mimeType = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
             let fileExtension = NativeAudioEngine.extensionForMIME(mimeType)
             let tempPath = (tempDir as NSString).appendingPathComponent("\(tempBaseName).\(fileExtension)")
             let tempURL = URL(fileURLWithPath: tempPath)
-            self.tempFileURL = tempURL
 
             do {
-                try data.write(to: tempURL)
+                try? FileManager.default.removeItem(at: tempURL)
+                try FileManager.default.moveItem(at: localURL, to: tempURL)
                 let file = try AVAudioFile(forReading: tempURL)
-                self.audioFile = file
 
                 DispatchQueue.main.async {
+                    guard self.stateQueue.sync(execute: { token == self.loadOperationToken }) else { return }
+                    self.tempFileURL = tempURL
+                    self.tempFileOwnedByEngine = true
+                    self.audioFile = file
                     self.scheduleFile(file, completion: completion)
                 }
             } catch {
-                DispatchQueue.main.async {
-                    completion(error)
-                }
+                DispatchQueue.main.async { completion(error) }
             }
         }
         self.downloadTask = task
         task.resume()
+    }
+
+    func loadLocal(path: String, trackId: String, completion: @escaping (Error?) -> Void) {
+        let token = nextLoadToken()
+        downloadTask?.cancel()
+        downloadTask = nil
+        stopInternal(invalidateLoadToken: false)
+        currentTrackId = trackId
+        cleanupTempFile()
+
+        let normalizedPath = path.replacingOccurrences(of: "file://", with: "")
+        let fileURL = URL(fileURLWithPath: normalizedPath)
+        do {
+            let file = try AVAudioFile(forReading: fileURL)
+            DispatchQueue.main.async {
+                guard self.stateQueue.sync(execute: { token == self.loadOperationToken }) else { return }
+                self.audioFile = file
+                self.tempFileURL = fileURL
+                self.tempFileOwnedByEngine = false
+                self.scheduleFile(file, completion: completion)
+            }
+        } catch {
+            completion(error)
+        }
     }
 
     private func scheduleFile(_ file: AVAudioFile, completion: @escaping (Error?) -> Void) {
@@ -426,7 +486,14 @@ class NativeAudioEngine {
         stopInternal()
     }
 
-    private func stopInternal() {
+    private func stopInternal(invalidateLoadToken: Bool = true) {
+        if invalidateLoadToken {
+            _ = nextLoadToken()
+        }
+        _ = nextPreloadToken()
+        _ = nextSeekToken()
+        _ = nextCrossfadeToken()
+
         stopTimeUpdates()
         disableAnalysis()
         playerNode.stop()
@@ -443,15 +510,20 @@ class NativeAudioEngine {
 
         nextDownloadTask?.cancel()
         nextDownloadTask = nil
+        preloadTimeoutWorkItem?.cancel()
+        preloadTimeoutWorkItem = nil
         nextPlayerNode.stop()
         nextPlayerNode.volume = 1.0
         cleanupNextTempFile()
         nextTrackId = nil
         nextAudioFile = nil
         preloadingTrackId = nil
+        preloadState = .idle
+        currentTrackId = nil
     }
 
     func seek(time: Double) {
+        let token = nextSeekToken()
         guard let file = audioFile, isPlayerScheduled else { return }
 
         let sampleRate = file.processingFormat.sampleRate
@@ -467,6 +539,7 @@ class NativeAudioEngine {
         playerNode.scheduleSegment(file, startingFrame: targetFrame, frameCount: remainingFrames, at: nil) { [weak self] in
             guard let self = self else { return }
             DispatchQueue.main.async {
+                guard self.stateQueue.sync(execute: { token == self.seekOperationToken }) else { return }
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
@@ -668,54 +741,76 @@ class NativeAudioEngine {
 
     // MARK: - Crossfade
 
-    func preloadNext(url: String, trackId: String, completion: @escaping (Bool) -> Void) {
-        // Already preloaded for this track — idempotent
-        if nextTrackId == trackId {
-            completion(true)
+    func preloadNext(url: String, trackId: String, completion: @escaping (Bool, PreloadState, String?) -> Void) {
+        let token = nextPreloadToken()
+        if case .ready(let readyTrackId) = preloadState, readyTrackId == trackId {
+            completion(true, preloadState, nil)
             return
         }
-        // Already preloading this track — in-flight, report not ready yet
-        if preloadingTrackId == trackId {
-            completion(false)
+        if case .preloading(let preloadingId) = preloadState, preloadingId == trackId {
+            completion(false, preloadState, "already-preloading")
             return
         }
 
-        // Cancel any previous preload for a different track
         nextDownloadTask?.cancel()
         nextDownloadTask = nil
+        preloadTimeoutWorkItem?.cancel()
+        preloadTimeoutWorkItem = nil
         nextPlayerNode.stop()
         cleanupNextTempFile()
         nextTrackId = nil
         nextAudioFile = nil
-
         preloadingTrackId = trackId
+        preloadState = .preloading(trackId: trackId)
+        preloadTimeoutWorkItem?.cancel()
+        let timeoutItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            guard self.stateQueue.sync(execute: { token == self.preloadOperationToken }) else { return }
+            guard self.preloadingTrackId == trackId else { return }
+            self.nextDownloadTask?.cancel()
+            self.nextDownloadTask = nil
+            self.preloadingTrackId = nil
+            self.preloadState = .failed(trackId: trackId)
+            completion(false, self.preloadState, "preload-timeout")
+        }
+        preloadTimeoutWorkItem = timeoutItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeoutItem)
 
         guard let sourceURL = URL(string: url) else {
             preloadingTrackId = nil
-            completion(false)
+            preloadTimeoutWorkItem?.cancel()
+            preloadTimeoutWorkItem = nil
+            preloadState = .failed(trackId: trackId)
+            completion(false, preloadState, "invalid-url")
             return
         }
 
         let tempDir = NSTemporaryDirectory()
         let tempBaseName = "familiar_next_\(trackId)"
-
-        let task = URLSession.shared.dataTask(with: sourceURL) { [weak self] data, response, error in
+        let task = URLSession.shared.downloadTask(with: sourceURL) { [weak self] localURL, response, error in
             guard let self = self else { return }
+            guard self.stateQueue.sync(execute: { token == self.preloadOperationToken }) else { return }
             guard self.preloadingTrackId == trackId else { return }
 
             if let error = error {
                 if (error as NSError).code == NSURLErrorCancelled { return }
                 DispatchQueue.main.async {
                     self.preloadingTrackId = nil
-                    completion(false)
+                    self.preloadTimeoutWorkItem?.cancel()
+                    self.preloadTimeoutWorkItem = nil
+                    self.preloadState = .failed(trackId: trackId)
+                    completion(false, self.preloadState, "download-failed")
                 }
                 return
             }
 
-            guard let data = data else {
+            guard let localURL = localURL else {
                 DispatchQueue.main.async {
                     self.preloadingTrackId = nil
-                    completion(false)
+                    self.preloadTimeoutWorkItem?.cancel()
+                    self.preloadTimeoutWorkItem = nil
+                    self.preloadState = .failed(trackId: trackId)
+                    completion(false, self.preloadState, "empty-download")
                 }
                 return
             }
@@ -726,24 +821,33 @@ class NativeAudioEngine {
             let tempURL = URL(fileURLWithPath: tempPath)
 
             do {
-                try data.write(to: tempURL)
+                try? FileManager.default.removeItem(at: tempURL)
+                try FileManager.default.moveItem(at: localURL, to: tempURL)
                 let file = try AVAudioFile(forReading: tempURL)
 
                 DispatchQueue.main.async {
+                    guard self.stateQueue.sync(execute: { token == self.preloadOperationToken }) else { return }
                     guard self.preloadingTrackId == trackId else {
                         try? FileManager.default.removeItem(at: tempURL)
                         return
                     }
+                    self.preloadTimeoutWorkItem?.cancel()
+                    self.preloadTimeoutWorkItem = nil
                     self.nextTempFileURL = tempURL
+                    self.nextTempFileOwnedByEngine = true
                     self.nextAudioFile = file
                     self.nextTrackId = trackId
                     self.preloadingTrackId = nil
-                    completion(true)
+                    self.preloadState = .ready(trackId: trackId)
+                    completion(true, self.preloadState, nil)
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.preloadingTrackId = nil
-                    completion(false)
+                    self.preloadTimeoutWorkItem?.cancel()
+                    self.preloadTimeoutWorkItem = nil
+                    self.preloadState = .failed(trackId: trackId)
+                    completion(false, self.preloadState, "decode-failed")
                 }
             }
         }
@@ -751,12 +855,55 @@ class NativeAudioEngine {
         task.resume()
     }
 
+    func preloadNextLocal(path: String, trackId: String, completion: @escaping (Bool, PreloadState, String?) -> Void) {
+        let token = nextPreloadToken()
+        if case .ready(let readyTrackId) = preloadState, readyTrackId == trackId {
+            completion(true, preloadState, nil)
+            return
+        }
+
+        nextDownloadTask?.cancel()
+        nextDownloadTask = nil
+        preloadTimeoutWorkItem?.cancel()
+        preloadTimeoutWorkItem = nil
+        nextPlayerNode.stop()
+        cleanupNextTempFile()
+        nextTrackId = nil
+        nextAudioFile = nil
+        preloadingTrackId = trackId
+        preloadState = .preloading(trackId: trackId)
+
+        let normalizedPath = path.replacingOccurrences(of: "file://", with: "")
+        let fileURL = URL(fileURLWithPath: normalizedPath)
+        do {
+            let file = try AVAudioFile(forReading: fileURL)
+            guard stateQueue.sync(execute: { token == preloadOperationToken }) else { return }
+            nextTempFileURL = fileURL
+            nextTempFileOwnedByEngine = false
+            nextAudioFile = file
+            nextTrackId = trackId
+            preloadingTrackId = nil
+            preloadState = .ready(trackId: trackId)
+            completion(true, preloadState, nil)
+        } catch {
+            preloadingTrackId = nil
+            preloadState = .failed(trackId: trackId)
+            completion(false, preloadState, "decode-failed")
+        }
+    }
+
     func isNextReady() -> Bool {
-        return nextTrackId != nil
+        if case .ready = preloadState {
+            return nextTrackId != nil
+        }
+        return false
     }
 
     func getPreloadingTrackId() -> String? {
-        return preloadingTrackId
+        if case .preloading(let trackId) = preloadState {
+            return trackId
+        }
+        return nil
     }
 
     func isCrossfading() -> Bool {
@@ -767,9 +914,17 @@ class NativeAudioEngine {
         nextNormalizationVolume = vol
     }
 
-    func executeCrossfade(duration: Double, completion: @escaping () -> Void) {
+    func executeCrossfade(duration: Double, completion: @escaping (Bool, String?) -> Void) {
+        let crossfadeToken = nextCrossfadeToken()
+        let clampedDuration = max(0.001, duration)
+
+        guard case .ready = preloadState else {
+            completion(false, "preload-not-ready")
+            return
+        }
+
         guard let nextFile = nextAudioFile, let nextId = nextTrackId else {
-            completion()
+            completion(false, "next-not-ready")
             return
         }
 
@@ -804,8 +959,12 @@ class NativeAudioEngine {
         let startTime = Date()
         crossfadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
+            guard self.stateQueue.sync(execute: { crossfadeToken == self.crossfadeOperationToken }) else {
+                timer.invalidate()
+                return
+            }
             let elapsed = Date().timeIntervalSince(startTime)
-            let progress = min(elapsed / duration, 1.0)
+            let progress = min(elapsed / clampedDuration, 1.0)
 
             self.playerNode.volume = 1.0 - Float(progress)
             self.nextPlayerNode.volume = self.nextNormalizationVolume * Float(progress)
@@ -815,7 +974,7 @@ class NativeAudioEngine {
                     nextTrackId: capturedNextTrackId,
                     nextAudioFile: capturedNextAudioFile,
                     nextTempFileURL: capturedNextTempFileURL,
-                    completion: completion
+                    completion: { completion(true, nil) }
                 )
             }
         }
@@ -844,7 +1003,9 @@ class NativeAudioEngine {
         // Replace current temp file with the next track's file
         cleanupTempFile()
         tempFileURL = nextTempFileURL
-        self.nextTempFileURL = nil  // already handed off above; prevent double-cleanup
+        self.nextTempFileURL = nil
+        self.tempFileOwnedByEngine = self.nextTempFileOwnedByEngine
+        self.nextTempFileOwnedByEngine = false
 
         // Reset playback state for the new current track
         isPlayerScheduled = true
@@ -855,6 +1016,7 @@ class NativeAudioEngine {
         // Clear next-track state
         self.nextTrackId = nil
         self.nextAudioFile = nil
+        self.preloadState = .idle
         nextNormalizationVolume = 1.0
         isCrossfadingFlag = false
 
@@ -869,23 +1031,30 @@ class NativeAudioEngine {
         nextPlayerNode.volume = 1.0
         playerNode.volume = 1.0
         isCrossfadingFlag = false
+        nextCrossfadeToken()
     }
 
     // MARK: - Time Update Timer
 
     private func startTimeUpdates() {
-        stopTimeUpdates()
-        timeUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            let current = self.getCurrentTime()
-            let duration = self.getDuration()
-            self.delegate?.audioEngineDidUpdateTime(currentTime: current, duration: duration)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.timeUpdateTimer?.invalidate()
+            let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+                guard let self = self else { return }
+                self.updateRemoteCommandAvailability()
+                self.delegate?.audioEngineDidUpdateTime(currentTime: self.getCurrentTime(), duration: self.getDuration())
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self.timeUpdateTimer = timer
         }
     }
 
     private func stopTimeUpdates() {
-        timeUpdateTimer?.invalidate()
-        timeUpdateTimer = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.timeUpdateTimer?.invalidate()
+            self?.timeUpdateTimer = nil
+        }
     }
 
     // MARK: - Pending Track Info (for lock screen next/previous)
@@ -897,6 +1066,8 @@ class NativeAudioEngine {
         pendingNextArtist = artist
         pendingNextAlbum = album
         pendingNextArtworkUrl = artworkUrl
+        updateRemoteCommandAvailability()
+        syncNowPlaying()
     }
 
     func setPendingPrevious(url: String?, trackId: String?, title: String?, artist: String?, album: String?, artworkUrl: String?) {
@@ -906,9 +1077,19 @@ class NativeAudioEngine {
         pendingPreviousArtist = artist
         pendingPreviousAlbum = album
         pendingPreviousArtworkUrl = artworkUrl
+        updateRemoteCommandAvailability()
+        syncNowPlaying()
     }
 
     // MARK: - Now Playing
+
+    private func updateRemoteCommandAvailability() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+        let hasNext = pendingNextTrackId != nil
+        let canGoPrevious = getCurrentTime() > 3 || pendingPreviousTrackId != nil
+        commandCenter.nextTrackCommand.isEnabled = hasNext
+        commandCenter.previousTrackCommand.isEnabled = canGoPrevious
+    }
 
     private func setupRemoteCommands() {
         let commandCenter = MPRemoteCommandCenter.shared()
@@ -1010,6 +1191,8 @@ class NativeAudioEngine {
             self.delegate?.audioEngineRemoteSeek(time: positionEvent.positionTime)
             return .success
         }
+
+        updateRemoteCommandAvailability()
     }
 
     func updateNowPlayingInfo(title: String?, artist: String?, album: String?) {
@@ -1044,8 +1227,15 @@ class NativeAudioEngine {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = getCurrentTime()
         info[MPMediaItemPropertyPlaybackDuration] = getDuration()
         info[MPNowPlayingInfoPropertyPlaybackRate] = playerNode.isPlaying ? 1.0 : 0.0
+        let hasPrevious = pendingPreviousTrackId != nil
+        let hasNext = pendingNextTrackId != nil
+        let queueCount = 1 + (hasPrevious ? 1 : 0) + (hasNext ? 1 : 0)
+        let queueIndex = hasPrevious ? 1 : 0
+        info[MPNowPlayingInfoPropertyPlaybackQueueCount] = queueCount
+        info[MPNowPlayingInfoPropertyPlaybackQueueIndex] = queueIndex
         if let artwork = nowPlayingArtwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        updateRemoteCommandAvailability()
     }
 
     // MARK: - FFT Analysis
@@ -1214,15 +1404,21 @@ class NativeAudioEngine {
 
     private func cleanupTempFile() {
         if let url = tempFileURL {
-            try? FileManager.default.removeItem(at: url)
+            if tempFileOwnedByEngine {
+                try? FileManager.default.removeItem(at: url)
+            }
             tempFileURL = nil
+            tempFileOwnedByEngine = false
         }
     }
 
     private func cleanupNextTempFile() {
         if let url = nextTempFileURL {
-            try? FileManager.default.removeItem(at: url)
+            if nextTempFileOwnedByEngine {
+                try? FileManager.default.removeItem(at: url)
+            }
             nextTempFileURL = nil
+            nextTempFileOwnedByEngine = false
         }
     }
 

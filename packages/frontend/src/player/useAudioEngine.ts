@@ -34,8 +34,17 @@ export function useAudioEngine() {
   const [isInitialized, setIsInitialized] = useState(false);
   const engine = getEngine();
 
-  const { currentTrack, isPlaying, volume, isLoadingAudio, crossfadeState } = usePlayerStore(
-    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying, volume: s.volume, isLoadingAudio: s.isLoadingAudio, crossfadeState: s.crossfadeState }))
+  const { currentTrack, isPlaying, volume, isLoadingAudio, crossfadeState, queueIndex, queueLength, historyLength } = usePlayerStore(
+    useShallow((s) => ({
+      currentTrack: s.currentTrack,
+      isPlaying: s.isPlaying,
+      volume: s.volume,
+      isLoadingAudio: s.isLoadingAudio,
+      crossfadeState: s.crossfadeState,
+      queueIndex: s.queueIndex,
+      queueLength: s.queue.length,
+      historyLength: s.history.length,
+    }))
   );
   const setCurrentTime = usePlayerStore((s) => s.setCurrentTime);
   const setDuration = usePlayerStore((s) => s.setDuration);
@@ -307,7 +316,7 @@ export function useAudioEngine() {
         artworkUrl: prevTrack.id ? tracksApi.getArtworkUrl(prevTrack.id) : undefined,
       } : null,
     });
-  }, [currentTrack?.id, engine, isInitialized]);
+  }, [currentTrack?.id, queueIndex, queueLength, historyLength, engine, isInitialized]);
 
   // --------------------------------------------------------------------------
   // Effect: Handle Play/Pause State

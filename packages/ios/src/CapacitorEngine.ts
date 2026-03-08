@@ -2,12 +2,15 @@ import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familia
 import { FamiliarAudio } from './plugins/familiarAudio';
 import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/frontend/src/hooks/useAudioAnalyser';
 import { log } from '@familiar/frontend/src/player/audio/platform';
+import { tracksApi } from '@familiar/frontend/src/api';
+import { getOfflineTrackNativeUri } from '@familiar/frontend/src/services/offlineService';
 
 // ============================================================================
 // CapacitorEngine — Native iOS/Android via FamiliarAudio Capacitor plugin
 // ============================================================================
 
 type EventHandler = (event: EngineEvent) => void;
+type EngineDiagnostic = { ts: number; event: string; details?: Record<string, unknown> };
 
 export class CapacitorEngine implements AudioEngine {
   readonly capabilities: AudioEngineCapabilities = {
@@ -37,6 +40,7 @@ export class CapacitorEngine implements AudioEngine {
 
   // Plugin listener cleanup functions
   private listenerCleanups: (() => void)[] = [];
+  private diagnostics: EngineDiagnostic[] = [];
 
   // ========================================================================
   // Lifecycle
@@ -44,6 +48,7 @@ export class CapacitorEngine implements AudioEngine {
 
   initialize(): boolean {
     this.setupPluginListeners();
+    this.recordDiagnostic('initialize');
     log.info('CapacitorEngine initialized (AVAudioEngine plugin)');
     return true;
   }
@@ -55,15 +60,25 @@ export class CapacitorEngine implements AudioEngine {
     this.listenerCleanups.forEach(cleanup => cleanup());
     this.listenerCleanups = [];
     this.handlers.clear();
+    this.recordDiagnostic('dispose');
   }
 
   // ========================================================================
   // Playback
   // ========================================================================
 
+  private isNativeFileUrl(url: string): boolean {
+    return url.startsWith('file://') || url.startsWith('capacitor://') || url.startsWith('content://');
+  }
+
   async load(trackId: string, url: string): Promise<void> {
     try {
-      await FamiliarAudio.load({ url, trackId });
+      if (this.isNativeFileUrl(url)) {
+        await FamiliarAudio.loadLocal({ path: url, trackId });
+      } else {
+        await FamiliarAudio.load({ url, trackId });
+      }
+      this.recordDiagnostic('load', { trackId, source: url.startsWith('file://') ? 'local' : 'remote' });
       this.loadedTrackId = trackId;
       this.consecutiveLoadFailures = 0;
 
@@ -77,6 +92,7 @@ export class CapacitorEngine implements AudioEngine {
       } catch { /* ignore — timer-based updates will provide it later */ }
     } catch (e) {
       this.consecutiveLoadFailures++;
+      this.recordDiagnostic('load-error', { trackId });
       const cleanUrl = url.split('?')[0]; // strip query params (auth tokens)
       const errMsg = e instanceof Error ? e.message : String(e);
       log.error('Failed to load track (native) trackId=%s url=%s err=%s', trackId, cleanUrl, errMsg);
@@ -135,11 +151,18 @@ export class CapacitorEngine implements AudioEngine {
   async preloadNext(trackId: string, url: string): Promise<boolean> {
     this.localPreloadingTrackId = trackId;
     try {
-      const { success } = await FamiliarAudio.preloadNext({ url, trackId });
+      const result = this.isNativeFileUrl(url)
+        ? await FamiliarAudio.preloadNextLocal({ path: url, trackId })
+        : await FamiliarAudio.preloadNext({ url, trackId });
+      const { success } = result;
+      if (!success && result.reason) {
+        log.warn('preloadNext rejected by native engine', { trackId, reason: result.reason, state: result.state });
+      }
       if (success) {
         this.nextLoadedTrackId = trackId;
-        this.localPreloadingTrackId = null;
       }
+      this.recordDiagnostic('preload-next', { trackId, success });
+      this.localPreloadingTrackId = null;
       return success;
     } catch (e) {
       this.localPreloadingTrackId = null;
@@ -168,18 +191,28 @@ export class CapacitorEngine implements AudioEngine {
 
   executeCrossfade(duration: number, onComplete: () => void): void {
     this.localIsCrossfading = true;
+    this.recordDiagnostic('crossfade-start', { duration });
     FamiliarAudio.executeCrossfade({ duration })
-      .then(() => {
+      .then((result) => {
+        if (result.success === false) {
+          this.localIsCrossfading = false;
+          this.recordDiagnostic('crossfade-rejected', { reason: result.reason });
+          log.warn('executeCrossfade rejected by native engine', { reason: result.reason });
+          onComplete();
+          return;
+        }
         // Update loadedTrackId to the track that just faded in
         if (this.nextLoadedTrackId) {
           this.loadedTrackId = this.nextLoadedTrackId;
         }
         this.nextLoadedTrackId = null;
         this.localIsCrossfading = false;
+        this.recordDiagnostic('crossfade-complete');
         onComplete();
       })
       .catch(e => {
         this.localIsCrossfading = false;
+        this.recordDiagnostic('crossfade-error');
         log.error('executeCrossfade failed', e);
         onComplete();
       });
@@ -190,6 +223,7 @@ export class CapacitorEngine implements AudioEngine {
     this.nextLoadedTrackId = null;
     this.localPreloadingTrackId = null;
     this.localIsCrossfading = false;
+    this.recordDiagnostic('crossfade-cancel');
   }
 
   // ========================================================================
@@ -213,6 +247,14 @@ export class CapacitorEngine implements AudioEngine {
     return this.consecutiveLoadFailures > 3;
   }
 
+  async resolveTrackUrl(trackId: string): Promise<{ url: string; isOffline: boolean }> {
+    const nativeUri = await getOfflineTrackNativeUri(trackId);
+    if (nativeUri) {
+      return { url: nativeUri, isOffline: true };
+    }
+    return { url: tracksApi.getStreamUrl(trackId), isOffline: false };
+  }
+
   // ========================================================================
   // Events
   // ========================================================================
@@ -223,7 +265,16 @@ export class CapacitorEngine implements AudioEngine {
   }
 
   private emit(event: EngineEvent): void {
+    this.recordDiagnostic(`event:${event.type}`);
     this.handlers.forEach(h => h(event));
+  }
+
+  private recordDiagnostic(event: string, details?: Record<string, unknown>): void {
+    this.diagnostics.push({ ts: Date.now(), event, details });
+    if (this.diagnostics.length > 200) {
+      this.diagnostics.splice(0, this.diagnostics.length - 200);
+    }
+    (window as unknown as { __familiarNativeAudioDiagnostics?: EngineDiagnostic[] }).__familiarNativeAudioDiagnostics = [...this.diagnostics];
   }
 
   // ========================================================================

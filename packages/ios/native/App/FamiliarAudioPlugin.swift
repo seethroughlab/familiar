@@ -7,6 +7,7 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "FamiliarAudio"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "load", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "loadLocal", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "play", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "pause", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "resume", returnType: CAPPluginReturnPromise),
@@ -26,6 +27,7 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setNowPlayingInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPendingTrackInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "preloadNext", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "preloadNextLocal", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isNextReady", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPreloadingTrackId", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isCrossfading", returnType: CAPPluginReturnPromise),
@@ -52,6 +54,22 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         audioEngine.load(url: url, trackId: trackId) { error in
             if let error = error {
                 call.reject("Failed to load: \(error.localizedDescription)")
+            } else {
+                call.resolve()
+            }
+        }
+    }
+
+    @objc func loadLocal(_ call: CAPPluginCall) {
+        guard let path = call.getString("path"),
+              let trackId = call.getString("trackId") else {
+            call.reject("Missing path or trackId")
+            return
+        }
+
+        audioEngine.loadLocal(path: path, trackId: trackId) { error in
+            if let error = error {
+                call.reject("Failed to load local file: \(error.localizedDescription)")
             } else {
                 call.resolve()
             }
@@ -225,8 +243,27 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
             call.reject("Missing url or trackId")
             return
         }
-        audioEngine.preloadNext(url: url, trackId: trackId) { success in
-            call.resolve(["success": success])
+        audioEngine.preloadNext(url: url, trackId: trackId) { success, state, reason in
+            call.resolve([
+                "success": success,
+                "state": preloadStateName(state),
+                "reason": reason as Any,
+            ])
+        }
+    }
+
+    @objc func preloadNextLocal(_ call: CAPPluginCall) {
+        guard let path = call.getString("path"),
+              let trackId = call.getString("trackId") else {
+            call.reject("Missing path or trackId")
+            return
+        }
+        audioEngine.preloadNextLocal(path: path, trackId: trackId) { success, state, reason in
+            call.resolve([
+                "success": success,
+                "state": preloadStateName(state),
+                "reason": reason as Any,
+            ])
         }
     }
 
@@ -249,8 +286,11 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func executeCrossfade(_ call: CAPPluginCall) {
         let duration = call.getDouble("duration") ?? 2.0
-        audioEngine.executeCrossfade(duration: duration) {
-            call.resolve()
+        audioEngine.executeCrossfade(duration: duration) { success, reason in
+            call.resolve([
+                "success": success,
+                "reason": reason as Any,
+            ])
         }
     }
 
@@ -314,5 +354,18 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
             "frequencyData": frequencyData,
             "timeDomainData": timeDomainData,
         ])
+    }
+}
+
+private func preloadStateName(_ state: NativeAudioEngine.PreloadState) -> String {
+    switch state {
+    case .idle:
+        return "idle"
+    case .preloading:
+        return "preloading"
+    case .ready:
+        return "ready"
+    case .failed:
+        return "failed"
     }
 }
