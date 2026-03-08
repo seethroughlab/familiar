@@ -42,6 +42,9 @@ export function ArtistList({
   onGoToArtist,
 }: BrowserProps) {
   const { isOffline } = useOfflineStatus();
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => typeof window !== 'undefined' ? !window.matchMedia('(min-width: 768px)').matches : false
+  );
   const [sortBy, setSortBy] = useState<'name' | 'track_count' | 'album_count'>(() => {
     try {
       const stored = localStorage.getItem('familiar-sort-artist-list');
@@ -60,6 +63,14 @@ export function ArtistList({
     } catch { /* ignore */ }
   }, []);
   const cols = useGridColumns();
+
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsMobileViewport(!mql.matches);
+    update();
+    mql.addEventListener('change', update);
+    return () => mql.removeEventListener('change', update);
+  }, []);
 
   const fetchArtistsPage = useCallback(
     async (pageNumber: number) => {
@@ -234,7 +245,7 @@ export function ArtistList({
     fetchNextPage,
     hasNextPage: hasNextPage ?? false,
     loadedItemCount: total, // Sparse array covers full total
-    scrollToIndex,
+    scrollToIndex: isMobileViewport ? undefined : scrollToIndex,
   });
 
   // --- Mobile infinite scroll ---

@@ -54,6 +54,9 @@ export function AlbumGrid({
   onGoToYear,
 }: BrowserProps) {
   const { isOffline } = useOfflineStatus();
+  const [isMobileViewport, setIsMobileViewport] = useState(
+    () => typeof window !== 'undefined' ? !window.matchMedia('(min-width: 768px)').matches : false
+  );
   const [sortBy, setSortBy] = useState<'name' | 'year' | 'artist' | 'track_count'>('name');
   const [albumContextMenu, setAlbumContextMenu] = useState<AlbumContextMenuState>(initialAlbumContextMenuState);
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
@@ -62,6 +65,14 @@ export function AlbumGrid({
   const { startDownload } = useDownloadStore();
   const queryClient = useQueryClient();
   const cols = useGridColumns();
+
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 768px)');
+    const update = () => setIsMobileViewport(!mql.matches);
+    update();
+    mql.addEventListener('change', update);
+    return () => mql.removeEventListener('change', update);
+  }, []);
 
   const fetchAlbumsPage = useCallback(
     async (pageNumber: number) => {
@@ -265,7 +276,7 @@ export function AlbumGrid({
     fetchNextPage,
     hasNextPage: hasNextPage ?? false,
     loadedItemCount: total, // Sparse array covers full total
-    scrollToIndex,
+    scrollToIndex: isMobileViewport ? undefined : scrollToIndex,
   });
 
   // --- Mobile infinite scroll ---
