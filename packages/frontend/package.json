@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "lint": "eslint .",
+    "check:audio-guardrails": "node ./scripts/check-audio-guardrails.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

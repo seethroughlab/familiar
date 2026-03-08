@@ -1,27 +1,20 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff, X } from 'lucide-react';
-import { getApiUrl } from '../../api/base';
+import { chatApi, parseChatStreamEvent, type ChatStreamEvent } from '../../api';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ChatPanel');
 import { useQueryClient } from '@tanstack/react-query';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useVisibleTracksStore } from '../../stores/visibleTracksStore';
-import { useEphemeralPlaylistStore, type EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
+import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { getOrCreateDeviceProfile } from '../../services/profileService';
 import * as chatService from '../../services/chatService';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { notifyError } from '../../utils/errorNotifications';
 import type { ChatSession, ChatToolCall } from '../../db';
-
-interface Track {
-  id: string;
-  title: string;
-  artist: string;
-  album: string;
-}
 
 interface ChatPanelProps {
   /** Pre-filled message to auto-submit (from context menu actions) */
@@ -76,11 +69,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
   // Track network vs config errors separately
   const [llmError, setLlmError] = useState<'network' | null>(null);
   useEffect(() => {
-    fetch(getApiUrl('/chat/status'))
-      .then((r) => {
-        if (!r.ok) throw new Error('Failed to check LLM status');
-        return r.json();
-      })
+    chatApi.getStatus()
       .then((status) => {
         setLlmStatus(status);
         setLlmError(null);
@@ -206,25 +195,11 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       const visibleTracksState = useVisibleTracksStore.getState();
       const visibleTrackIds = visibleTracksState.trackIds.slice(0, 100); // Limit to 100
 
-      const response = await fetch(getApiUrl('/chat/stream'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(profileId && { 'X-Profile-ID': profileId }),
-        },
-        body: JSON.stringify({
-          message: userMessageContent,
-          history,
-          visible_track_ids: visibleTrackIds,
-        }),
-      });
-
-      if (!response.ok) {
-        // Try to get error detail from response
-        const errorData = await response.json().catch(() => null);
-        const errorMessage = errorData?.detail || 'Chat request failed';
-        throw new Error(errorMessage);
-      }
+      const response = await chatApi.stream({
+        message: userMessageContent,
+        history,
+        visible_track_ids: visibleTrackIds,
+      }, profileId);
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No response body');
@@ -246,8 +221,10 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
             if (data === '[DONE]') continue;
 
             try {
-              const event = JSON.parse(data);
-              await handleStreamEvent(event, session!.id);
+              const parsed = parseChatStreamEvent(JSON.parse(data));
+              if (parsed) {
+                await handleStreamEvent(parsed, session!.id);
+              }
             } catch {
               // Ignore parse errors
             }
@@ -283,12 +260,12 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
   };
 
   const handleStreamEvent = async (
-    event: Record<string, unknown>,
+    event: ChatStreamEvent,
     sessionId: string
   ) => {
     switch (event.type) {
       case 'text':
-        await chatService.appendToLastMessage(sessionId, event.content as string);
+        await chatService.appendToLastMessage(sessionId, event.content);
         // Update local state for immediate feedback
         setCurrentSession((prev) => {
           if (!prev) return null;
@@ -296,7 +273,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
           const lastIdx = messages.length - 1;
           messages[lastIdx] = {
             ...messages[lastIdx],
-            content: messages[lastIdx].content + (event.content as string),
+            content: messages[lastIdx].content + event.content,
           };
           return { ...prev, messages };
         });
@@ -304,8 +281,8 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
 
       case 'tool_call': {
         const toolCall: ChatToolCall = {
-          name: event.name as string,
-          input: event.input as Record<string, unknown>,
+          name: event.name,
+          input: event.input,
           status: 'running',
         };
         await chatService.addToolCallToLastMessage(sessionId, toolCall);
@@ -323,8 +300,8 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       }
 
       case 'tool_result': {
-        const result = event.result as Record<string, unknown>;
-        await chatService.updateToolCallInLastMessage(sessionId, event.name as string, {
+        const result = event.result;
+        await chatService.updateToolCallInLastMessage(sessionId, event.name, {
           result,
           status: 'complete',
         });
@@ -346,7 +323,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       }
 
       case 'queue': {
-        const tracks = (event.tracks as Track[]).map((t) => ({
+        const tracks = event.tracks.map((t) => ({
           id: t.id,
           title: t.title,
           artist: t.artist,
@@ -369,7 +346,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       }
 
       case 'playback': {
-        const action = event.action as string;
+        const action = event.action;
         const store = usePlayerStore.getState();
         if (action === 'play') store.setIsPlaying(true);
         else if (action === 'pause') store.setIsPlaying(false);
@@ -379,7 +356,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       }
 
       case 'error': {
-        const errorContent = event.content as string || event.message as string || 'An error occurred';
+        const errorContent = event.content || event.message || 'An error occurred';
         log.error('LLM error:', errorContent);
         await chatService.updateLastMessage(sessionId, {
           content: `**Error:** ${errorContent}`,
@@ -399,10 +376,10 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
 
       case 'ephemeral_playlist_created': {
         // Add to ephemeral store instead of saving to database
-        const tracks = (event.tracks as EphemeralTrack[]) || [];
-        const trackIds = (event.track_ids as string[]) || [];
-        const name = (event.name as string) || 'AI Playlist';
-        const generationPrompt = (event.generation_prompt as string) || '';
+        const tracks = event.tracks || [];
+        const trackIds = event.track_ids || [];
+        const name = event.name || 'AI Playlist';
+        const generationPrompt = event.generation_prompt || '';
 
         const ephemeralId = useEphemeralPlaylistStore.getState().addPlaylist({
           name,
@@ -421,7 +398,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
       }
 
       case 'navigate': {
-        const view = event.view as string;
+        const view = event.view;
         if (view === 'proposed-changes') {
           // Navigate to Proposed Changes browser view
           chatNavigate('/library/proposed-changes');

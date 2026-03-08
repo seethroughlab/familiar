@@ -16,122 +16,20 @@ import {
   Minus,
   RefreshCw,
 } from 'lucide-react';
-import { getApiUrl } from '../../api/base';
-
-// Quality info from backend
-interface QualityInfo {
-  format_tier: number;
-  format_tier_name: string;
-  bitrate: number | null;
-  sample_rate: number | null;
-  bit_depth: number | null;
-  is_lossless: boolean;
-  bitrate_mode: string | null;
-}
-
-// Types matching backend
-interface TrackPreview {
-  filename: string;
-  relative_path: string;
-  detected_artist: string | null;
-  detected_album: string | null;
-  detected_title: string | null;
-  detected_track_num: number | null;
-  detected_year: number | null;
-  format: string;
-  duration_seconds: number | null;
-  file_size_bytes: number;
-  sample_rate: number | null;
-  bit_depth: number | null;
-  bitrate: number | null;
-  bitrate_mode: string | null;
-  // Duplicate detection
-  duplicate_of: string | null;
-  duplicate_info: string | null;
-  duplicate_match_type: 'exact' | 'normalized' | 'artist_title' | null;
-  // Quality comparison (for duplicates)
-  trump_status: 'trumps' | 'trumped_by' | 'equal' | null;
-  trump_reason: string | null;
-  incoming_quality: QualityInfo | null;
-  existing_quality: QualityInfo | null;
-}
-
-interface PreviewResponse {
-  session_id: string;
-  tracks: TrackPreview[];
-  total_size_bytes: number;
-  estimated_sizes: {
-    original: number;
-    flac: number;
-    mp3_320: number;
-  };
-  has_convertible_formats: boolean;
-}
-
-interface EditableTrack extends TrackPreview {
-  artist: string;
-  album: string;
-  title: string;
-  track_num: number | null;
-  year: number | null;
-  // Duplicate detection (inherited but making explicit)
-  duplicate_of: string | null;
-  duplicate_info: string | null;
-  // Track which fields have been manually edited
-  editedFields: Set<'artist' | 'album' | 'title' | 'track_num' | 'year'>;
-  // Quality-based replacement action
-  action: 'import' | 'replace' | 'skip';
-}
-
-interface ImportModalProps {
-  files: File[];
-  onClose: () => void;
-  onImportComplete?: () => void;
-}
-
-type UploadState = 'uploading' | 'preview' | 'importing' | 'complete' | 'error';
-type FormatOption = 'original' | 'flac' | 'mp3';
-type OrganizationOption = 'organized' | 'imports';
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds) return '--:--';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function formatQuality(quality: QualityInfo | null): string {
-  if (!quality) return 'Unknown';
-
-  if (quality.is_lossless) {
-    const parts: string[] = ['FLAC'];
-    if (quality.bit_depth) {
-      parts.push(`${quality.bit_depth}-bit`);
-    }
-    if (quality.sample_rate) {
-      const srKhz = quality.sample_rate / 1000;
-      parts.push(`${srKhz === Math.floor(srKhz) ? srKhz : srKhz.toFixed(1)}kHz`);
-    }
-    return parts.join(' ');
-  } else {
-    const parts: string[] = [];
-    if (quality.bitrate) {
-      parts.push(`${quality.bitrate}kbps`);
-    }
-    if (quality.bitrate_mode) {
-      parts.push(quality.bitrate_mode);
-    }
-    return parts.length > 0 ? parts.join(' ') : 'Lossy';
-  }
-}
+import { importSessionApi } from '../../api';
+import type {
+  EditableTrack,
+  ImportModalProps,
+  PreviewResponse,
+  UploadState,
+  FormatOption,
+  OrganizationOption,
+} from './types';
+import {
+  formatBytes,
+  formatDuration,
+  formatQuality,
+} from './types';
 
 export function ImportModal({ files, onClose, onImportComplete }: ImportModalProps) {
   const queryClient = useQueryClient();
@@ -168,45 +66,7 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
     try {
       // Use first file (could be zip or single audio)
       const file = files[0];
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Upload with progress
-      const xhr = new XMLHttpRequest();
-
-      const uploadPromise = new Promise<PreviewResponse>((resolve, reject) => {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response);
-            } catch {
-              reject(new Error('Invalid response'));
-            }
-          } else {
-            try {
-              const errorData = JSON.parse(xhr.responseText);
-              reject(new Error(errorData.detail || 'Upload failed'));
-            } catch {
-              reject(new Error(`Upload failed: ${xhr.status}`));
-            }
-          }
-        });
-
-        xhr.addEventListener('error', () => reject(new Error('Network error')));
-        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-      });
-
-      xhr.open('POST', getApiUrl('/library/import/preview'));
-      xhr.send(formData);
-
-      const response = await uploadPromise;
+      const response = await importSessionApi.preview(file, setUploadProgress);
 
       // Convert to editable tracks with default actions based on quality
       const editableTracks: EditableTrack[] = response.tracks.map(t => {
@@ -371,43 +231,31 @@ export function ImportModal({ files, onClose, onImportComplete }: ImportModalPro
     setImportErrors([]);
 
     try {
-      const response = await fetch(getApiUrl('/library/import/execute'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          tracks: tracksToImport.map(t => ({
-            filename: t.filename,
-            relative_path: t.relative_path,
-            artist: t.artist || t.detected_artist,
-            album: t.album || t.detected_album,
-            title: t.title || t.detected_title,
-            track_num: t.track_num ?? t.detected_track_num,
-            year: t.year ?? t.detected_year,
-            detected_artist: t.detected_artist,
-            detected_album: t.detected_album,
-            detected_title: t.detected_title,
-            detected_track_num: t.detected_track_num,
-            detected_year: t.detected_year,
-            // Quality-based replacement
-            action: t.action,
-            replace_track_id: t.action === 'replace' ? t.duplicate_of : null,
-          })),
-          options: {
-            format,
-            mp3_quality: mp3Quality,
-            organization,
-            queue_analysis: queueAnalysis,
-          },
-        }),
+      const result = await importSessionApi.execute({
+        session_id: sessionId,
+        tracks: tracksToImport.map((t) => ({
+          filename: t.filename,
+          relative_path: t.relative_path,
+          artist: t.artist || t.detected_artist,
+          album: t.album || t.detected_album,
+          title: t.title || t.detected_title,
+          track_num: t.track_num ?? t.detected_track_num,
+          year: t.year ?? t.detected_year,
+          detected_artist: t.detected_artist,
+          detected_album: t.detected_album,
+          detected_title: t.detected_title,
+          detected_track_num: t.detected_track_num,
+          detected_year: t.detected_year,
+          action: t.action,
+          replace_track_id: t.action === 'replace' ? t.duplicate_of : null,
+        })),
+        options: {
+          format,
+          mp3_quality: mp3Quality,
+          organization,
+          queue_analysis: queueAnalysis,
+        },
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Import failed');
-      }
-
-      const result = await response.json();
 
       setImportedCount(result.imported_count);
       setReplacedCount(result.replaced_count || 0);

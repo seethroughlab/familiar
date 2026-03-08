@@ -9,8 +9,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { RotateCcw, Info, Volume2, VolumeX, Music } from 'lucide-react';
 import * as THREE from 'three';
-import { getApiUrl } from '../../../../api/base';
-import { tracksApi } from '../../../../api';
+import { tracksApi, mapStreamApi, parseMapErrorMessage, parseMapProgressEvent } from '../../../../api';
 import type { MapNode3D, MusicMap3DResponse } from '../../../../api';
 import { registerBrowser } from '../../types';
 import type { BrowserProps } from '../../types';
@@ -255,12 +254,12 @@ function use3DMapStream(enabled: boolean) {
     }
 
     // Start SSE connection
-    const eventSource = new EventSource(getApiUrl('/library/map/3d/stream?entity_type=artists'));
+    const eventSource = mapStreamApi.open3DStream('artists');
 
     eventSource.addEventListener('progress', (event) => {
       try {
-        const progressData = JSON.parse(event.data);
-        setProgress(progressData);
+        const progressData = parseMapProgressEvent(JSON.parse(event.data));
+        if (progressData) setProgress(progressData);
       } catch (e) {
         log.error('Failed to parse progress:', e);
       }
@@ -288,8 +287,8 @@ function use3DMapStream(enabled: boolean) {
       if (event instanceof MessageEvent && event.data) {
         // Server sent an error event with data
         try {
-          const errorData = JSON.parse(event.data);
-          setError(errorData.error || 'Failed to load 3D map');
+          const errorMessage = parseMapErrorMessage(JSON.parse(event.data));
+          setError(errorMessage || 'Failed to load 3D map');
         } catch {
           setError('Failed to load 3D map');
         }

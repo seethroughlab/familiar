@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { getApiUrl } from '../../api/base';
+import { importSessionApi } from '../../api';
 import type {
   EditableTrack,
   EditableField,
@@ -56,45 +56,7 @@ export function useImportSession({ files, onImportComplete }: UseImportSessionOp
     try {
       // Use first file (could be zip or single audio)
       const file = files[0];
-      const formData = new FormData();
-      formData.append('file', file);
-
-      // Upload with progress
-      const xhr = new XMLHttpRequest();
-
-      const uploadPromise = new Promise<PreviewResponse>((resolve, reject) => {
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            setUploadProgress(Math.round((e.loaded / e.total) * 100));
-          }
-        });
-
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            try {
-              const response = JSON.parse(xhr.responseText);
-              resolve(response);
-            } catch {
-              reject(new Error('Invalid response'));
-            }
-          } else {
-            try {
-              const errorData = JSON.parse(xhr.responseText);
-              reject(new Error(errorData.detail || 'Upload failed'));
-            } catch {
-              reject(new Error(`Upload failed: ${xhr.status}`));
-            }
-          }
-        });
-
-        xhr.addEventListener('error', () => reject(new Error('Network error')));
-        xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-      });
-
-      xhr.open('POST', getApiUrl('/library/import/preview'));
-      xhr.send(formData);
-
-      const response = await uploadPromise;
+      const response = await importSessionApi.preview(file, setUploadProgress);
 
       // Convert to editable tracks with default actions based on quality
       const editableTracks: EditableTrack[] = response.tracks.map(t => {
@@ -266,43 +228,31 @@ export function useImportSession({ files, onImportComplete }: UseImportSessionOp
     setImportErrors([]);
 
     try {
-      const response = await fetch(getApiUrl('/library/import/execute'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          tracks: tracksToImport.map(t => ({
-            filename: t.filename,
-            relative_path: t.relative_path,
-            artist: t.artist || t.detected_artist,
-            album: t.album || t.detected_album,
-            title: t.title || t.detected_title,
-            track_num: t.track_num ?? t.detected_track_num,
-            year: t.year ?? t.detected_year,
-            detected_artist: t.detected_artist,
-            detected_album: t.detected_album,
-            detected_title: t.detected_title,
-            detected_track_num: t.detected_track_num,
-            detected_year: t.detected_year,
-            // Quality-based replacement
-            action: t.action,
-            replace_track_id: t.action === 'replace' ? t.duplicate_of : null,
-          })),
-          options: {
-            format,
-            mp3_quality: mp3Quality,
-            organization,
-            queue_analysis: queueAnalysis,
-          },
-        }),
+      const result = await importSessionApi.execute({
+        session_id: sessionId,
+        tracks: tracksToImport.map((t) => ({
+          filename: t.filename,
+          relative_path: t.relative_path,
+          artist: t.artist || t.detected_artist,
+          album: t.album || t.detected_album,
+          title: t.title || t.detected_title,
+          track_num: t.track_num ?? t.detected_track_num,
+          year: t.year ?? t.detected_year,
+          detected_artist: t.detected_artist,
+          detected_album: t.detected_album,
+          detected_title: t.detected_title,
+          detected_track_num: t.detected_track_num,
+          detected_year: t.detected_year,
+          action: t.action,
+          replace_track_id: t.action === 'replace' ? t.duplicate_of : null,
+        })),
+        options: {
+          format,
+          mp3_quality: mp3Quality,
+          organization,
+          queue_analysis: queueAnalysis,
+        },
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Import failed');
-      }
-
-      const result = await response.json();
 
       setImportedCount(result.imported_count);
       setReplacedCount(result.replaced_count || 0);

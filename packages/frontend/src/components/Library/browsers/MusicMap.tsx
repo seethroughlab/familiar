@@ -10,7 +10,14 @@
  */
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Users, Disc, Music } from 'lucide-react';
-import { tracksApi, getApiUrl, type MapNode, type MusicMapResponse } from '../../../api';
+import {
+  tracksApi,
+  mapStreamApi,
+  parseMapErrorMessage,
+  parseMapProgressEvent,
+  type MapNode,
+  type MusicMapResponse,
+} from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 
@@ -116,14 +123,11 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
 
     const fetchWithSSE = async () => {
       try {
-        const response = await fetch(
-          getApiUrl(`/library/map/stream?entity_type=${entityType}&limit=200`),
-          { signal: abortController.signal }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error: ${response.status}`);
-        }
+        const response = await mapStreamApi.fetch2DStream({
+          entityType,
+          limit: 200,
+          signal: abortController.signal,
+        });
 
         const reader = response.body?.getReader();
         if (!reader) {
@@ -153,7 +157,8 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
                 const eventData = JSON.parse(dataStr);
 
                 if (eventType === 'progress') {
-                  setProgress(eventData as MapProgress);
+                  const parsedProgress = parseMapProgressEvent(eventData);
+                  if (parsedProgress) setProgress(parsedProgress);
                 } else if (eventType === 'complete') {
                   const mapData = eventData as MusicMapResponse;
                   cacheRef.current.set(entityType, mapData);
@@ -161,7 +166,7 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
                   setIsLoading(false);
                   setProgress(null);
                 } else if (eventType === 'error') {
-                  throw new Error(eventData.error || 'Unknown error');
+                  throw new Error(parseMapErrorMessage(eventData) || 'Unknown error');
                 }
               } catch {
                 // Ignore JSON parse errors for incomplete data

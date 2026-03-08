@@ -10,27 +10,20 @@ import {
   XCircle,
   Clock,
 } from 'lucide-react';
-import { getApiUrl } from '../../api/base';
+import {
+  missingTracksApi,
+  type MissingTrack,
+  type MissingTracksResponse,
+} from '../../api';
 
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('MissingTracksPanel');
 
-interface MissingTrack {
-  id: string;
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  file_path: string;
-  status: 'missing' | 'pending_deletion';
-  missing_since: string | null;
-  days_missing: number;
-}
-
-interface MissingTracksResponse {
-  tracks: MissingTrack[];
-  total_missing: number;
-  total_pending_deletion: number;
+function getErrorMessage(error: unknown, fallback: string): string {
+  const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.length > 0) return detail;
+  return error instanceof Error ? error.message : fallback;
 }
 
 export function MissingTracksPanel() {
@@ -49,13 +42,10 @@ export function MissingTracksPanel() {
 
   const fetchMissingTracks = async () => {
     try {
-      const response = await fetch(getApiUrl('/library/missing'));
-      if (response.ok) {
-        const data: MissingTracksResponse = await response.json();
-        setTracks(data.tracks);
-        setTotalMissing(data.total_missing);
-        setTotalPending(data.total_pending_deletion);
-      }
+      const data: MissingTracksResponse = await missingTracksApi.list();
+      setTracks(data.tracks);
+      setTotalMissing(data.total_missing);
+      setTotalPending(data.total_pending_deletion);
     } catch (error) {
       log.error('Failed to fetch missing tracks:', error);
     } finally {
@@ -74,27 +64,16 @@ export function MissingTracksPanel() {
     setStatus(null);
 
     try {
-      const response = await fetch(getApiUrl('/library/missing/relocate'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ search_path: searchPath.trim() }),
+      const result = await missingTracksApi.relocateBatch(searchPath.trim());
+      setStatus({
+        type: result.found > 0 ? 'success' : 'info',
+        message: `Found ${result.found} of ${result.found + result.not_found} missing tracks`,
       });
-
-      if (response.ok) {
-        const result = await response.json();
-        setStatus({
-          type: result.found > 0 ? 'success' : 'info',
-          message: `Found ${result.found} of ${result.found + result.not_found} missing tracks`,
-        });
-        await fetchMissingTracks();
-        setShowSearchInput(false);
-        setSearchPath('');
-      } else {
-        const error = await response.json();
-        setStatus({ type: 'error', message: error.detail || 'Failed to search' });
-      }
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to search folder' });
+      await fetchMissingTracks();
+      setShowSearchInput(false);
+      setSearchPath('');
+    } catch (error) {
+      setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to search folder') });
     } finally {
       setRelocating(false);
       setTimeout(() => setStatus(null), 5000);
@@ -105,23 +84,13 @@ export function MissingTracksPanel() {
     if (!newPath.trim()) return;
 
     try {
-      const response = await fetch(getApiUrl(`/library/missing/${trackId}/locate`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_path: newPath.trim() }),
-      });
-
-      if (response.ok) {
-        setStatus({ type: 'success', message: 'Track relocated successfully' });
-        await fetchMissingTracks();
-        setLocatingTrackId(null);
-        setNewPath('');
-      } else {
-        const error = await response.json();
-        setStatus({ type: 'error', message: error.detail || 'Failed to locate' });
-      }
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to locate track' });
+      await missingTracksApi.locateTrack(trackId, newPath.trim());
+      setStatus({ type: 'success', message: 'Track relocated successfully' });
+      await fetchMissingTracks();
+      setLocatingTrackId(null);
+      setNewPath('');
+    } catch (error) {
+      setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to locate track') });
     } finally {
       setTimeout(() => setStatus(null), 5000);
     }
@@ -131,22 +100,16 @@ export function MissingTracksPanel() {
     setDeletingIds((prev) => new Set(prev).add(trackId));
 
     try {
-      const response = await fetch(getApiUrl(`/library/missing/${trackId}`), {
-        method: 'DELETE',
+      await missingTracksApi.deleteTrack(trackId);
+      await fetchMissingTracks();
+      setSelectedTracks((prev) => {
+        const next = new Set(prev);
+        next.delete(trackId);
+        return next;
       });
-
-      if (response.ok) {
-        await fetchMissingTracks();
-        setSelectedTracks((prev) => {
-          const next = new Set(prev);
-          next.delete(trackId);
-          return next;
-        });
-      } else {
-        const error = await response.json();
-        setStatus({ type: 'error', message: error.detail || 'Failed to delete' });
-        setTimeout(() => setStatus(null), 5000);
-      }
+    } catch (error) {
+      setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to delete') });
+      setTimeout(() => setStatus(null), 5000);
     } finally {
       setDeletingIds((prev) => {
         const next = new Set(prev);
@@ -165,25 +128,15 @@ export function MissingTracksPanel() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(getApiUrl('/library/missing/batch'), {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ track_ids: Array.from(selectedTracks) }),
+      const result = await missingTracksApi.deleteBatch(Array.from(selectedTracks));
+      setStatus({
+        type: result.deleted > 0 ? 'success' : 'info',
+        message: `Deleted ${result.deleted} track(s)`,
       });
-
-      if (response.ok) {
-        const result = await response.json();
-        setStatus({
-          type: result.deleted > 0 ? 'success' : 'info',
-          message: `Deleted ${result.deleted} track(s)`,
-        });
-        await fetchMissingTracks();
-        setSelectedTracks(new Set());
-      } else {
-        setStatus({ type: 'error', message: 'Failed to delete tracks' });
-      }
-    } catch {
-      setStatus({ type: 'error', message: 'Failed to delete tracks' });
+      await fetchMissingTracks();
+      setSelectedTracks(new Set());
+    } catch (error) {
+      setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to delete tracks') });
     } finally {
       setTimeout(() => setStatus(null), 5000);
     }

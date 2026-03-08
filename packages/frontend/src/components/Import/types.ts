@@ -1,52 +1,8 @@
-// Quality info from backend
-export interface QualityInfo {
-  format_tier: number;
-  format_tier_name: string;
-  bitrate: number | null;
-  sample_rate: number | null;
-  bit_depth: number | null;
-  is_lossless: boolean;
-  bitrate_mode: string | null;
-}
-
-// Types matching backend
-export interface TrackPreview {
-  filename: string;
-  relative_path: string;
-  detected_artist: string | null;
-  detected_album: string | null;
-  detected_title: string | null;
-  detected_track_num: number | null;
-  detected_year: number | null;
-  format: string;
-  duration_seconds: number | null;
-  file_size_bytes: number;
-  sample_rate: number | null;
-  bit_depth: number | null;
-  bitrate: number | null;
-  bitrate_mode: string | null;
-  // Duplicate detection
-  duplicate_of: string | null;
-  duplicate_info: string | null;
-  duplicate_match_type: 'exact' | 'normalized' | 'artist_title' | null;
-  // Quality comparison (for duplicates)
-  trump_status: 'trumps' | 'trumped_by' | 'equal' | null;
-  trump_reason: string | null;
-  incoming_quality: QualityInfo | null;
-  existing_quality: QualityInfo | null;
-}
-
-export interface PreviewResponse {
-  session_id: string;
-  tracks: TrackPreview[];
-  total_size_bytes: number;
-  estimated_sizes: {
-    original: number;
-    flac: number;
-    mp3_320: number;
-  };
-  has_convertible_formats: boolean;
-}
+export type {
+  QualityInfo,
+  TrackPreview,
+  PreviewResponse,
+} from '../../api/importSession';
 
 export interface EditableTrack extends TrackPreview {
   artist: string;

@@ -10,5 +10,10 @@ export * from './metadata';
 export * from './backup';
 export * from './download';
 export * from './analysis';
+export * from './chat';
+export * from './missingTracks';
+export * from './importSession';
+export * from './diagnosticsLogs';
+export * from './mapStream';
 // Default export: shared axios instance (for MusicBrainzLookup)
 export { default } from './base';

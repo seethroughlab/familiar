@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Radio, RefreshCw, Trash2, Send, ToggleLeft, ToggleRight } from 'lucide-react';
-import { getApiUrl } from '../../api/base';
+import { frontendLogsApi, type FrontendLogEntry } from '../../api';
 import { flushNow, getPendingCount, clearLocalLogs } from '../../services/remoteLogService';
-
-interface LogEntry {
-  id: string;
-  level: string;
-  namespace: string;
-  message: string;
-  client_ts: string | null;
-  server_ts: string | null;
-  context: Record<string, unknown> | null;
-}
 
 export function RemoteLogsPanel() {
   const [expanded, setExpanded] = useState(false);
@@ -20,7 +10,7 @@ export function RemoteLogsPanel() {
     catch { return true; }
   });
   const [pendingCount, setPendingCount] = useState(0);
-  const [entries, setEntries] = useState<LogEntry[]>([]);
+  const [entries, setEntries] = useState<FrontendLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [flushing, setFlushing] = useState(false);
@@ -39,16 +29,13 @@ export function RemoteLogsPanel() {
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (levelFilter) params.set('level', levelFilter);
-      if (namespaceFilter) params.set('namespace', namespaceFilter);
-      params.set('limit', '100');
-      const res = await fetch(getApiUrl(`/diagnostics/frontend-logs?${params}`));
-      if (res.ok) {
-        const data = await res.json();
-        setEntries(data.entries);
-        setTotal(data.total);
-      }
+      const data = await frontendLogsApi.list({
+        level: levelFilter || undefined,
+        namespace: namespaceFilter || undefined,
+        limit: 100,
+      });
+      setEntries(data.entries);
+      setTotal(data.total);
     } catch { /* silent */ }
     setLoading(false);
   }, [levelFilter, namespaceFilter]);
@@ -67,7 +54,7 @@ export function RemoteLogsPanel() {
 
   const handleClear = async () => {
     try {
-      await fetch(getApiUrl('/diagnostics/frontend-logs'), { method: 'DELETE' });
+      await frontendLogsApi.clear();
       await clearLocalLogs();
       setEntries([]);
       setTotal(0);

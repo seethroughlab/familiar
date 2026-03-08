@@ -10,7 +10,7 @@
  * - Best-effort: all failures are silently swallowed
  */
 import { db, isIndexedDBAvailable, type RemoteLogEntry } from '../db';
-import { getApiUrl } from '../api/base';
+import { frontendLogsApi } from '../api';
 import { getSelectedProfileId } from './profileService';
 import { setLogSink } from '../utils/logger';
 
@@ -133,16 +133,9 @@ async function submitToBackend(): Promise<void> {
       context: e.context,
     }));
 
-    const res = await fetch(getApiUrl('/diagnostics/frontend-logs'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entries: payload }),
-    });
-
-    if (res.ok) {
-      const ids = entries.map((e) => e.id!).filter(Boolean);
-      await db.remoteLogs.bulkDelete(ids);
-    }
+    await frontendLogsApi.ingest(payload);
+    const ids = entries.map((e) => e.id!).filter(Boolean);
+    await db.remoteLogs.bulkDelete(ids);
   } catch {
     // Silent on failure -- best-effort
   }
