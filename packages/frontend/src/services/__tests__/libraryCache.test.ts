@@ -20,10 +20,14 @@ const { mockCachedTracks } = vi.hoisted(() => ({
 vi.mock('../../db', () => ({
   db: {
     cachedTracks: mockCachedTracks,
+    offlineTracks: {
+      toArray: vi.fn(() => Promise.resolve([])),
+    },
     transaction: vi.fn(
       (_mode: string, _table: unknown, fn: () => Promise<void>) => fn()
     ),
   },
+  isIndexedDBAvailable: vi.fn(() => Promise.resolve(true)),
 }));
 
 vi.mock('../../utils/logger', () => ({

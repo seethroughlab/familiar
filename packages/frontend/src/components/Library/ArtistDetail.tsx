@@ -27,8 +27,10 @@ import type { AlbumContextMenuState } from './types';
 import { initialAlbumContextMenuState } from './types';
 import { useDownloadStore, getAlbumJobId } from '../../stores/downloadStore';
 import { getOfflineTrackIds, removeOfflineTrack } from '../../services/offlineService';
+import { getDownloadedArtistDetail } from '../../services/libraryCache';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useArtistDiscovery, type DiscoveryItem } from '../Discovery';
+import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 
 import { createLogger } from '../../utils/logger';
 
@@ -101,6 +103,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const setLazyQueue = usePlayerStore((s) => s.setLazyQueue);
   const { startDownload } = useDownloadStore();
   const { navigateToArtist, navigateToAlbumDetail } = useAppNavigation();
+  const { isOffline } = useOfflineStatus();
   const [showFullBio, setShowFullBio] = useState(false);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [albumContextMenu, setAlbumContextMenu] = useState<AlbumContextMenuState>(initialAlbumContextMenuState);
@@ -189,7 +192,17 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
     isRefetching,
   } = useQuery({
     queryKey: ['artist', artistName],
-    queryFn: () => libraryApi.getArtist(artistName),
+    queryFn: async () => {
+      try {
+        return await libraryApi.getArtist(artistName);
+      } catch (error) {
+        if (isOffline) {
+          const offlineArtist = await getDownloadedArtistDetail(artistName);
+          if (offlineArtist) return offlineArtist;
+        }
+        throw error;
+      }
+    },
   });
 
   // Note: Artwork is handled reactively by AlbumArtwork components

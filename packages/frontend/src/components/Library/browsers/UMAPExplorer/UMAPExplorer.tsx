@@ -16,6 +16,7 @@ import { registerBrowser } from '../../types';
 import type { BrowserProps } from '../../types';
 import { ArtistPoints, POSITION_SCALE } from './ArtistPoints';
 import { usePreviewAudio } from '../../../../hooks/usePreviewAudio';
+import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
 
 import { createLogger } from '../../../../utils/logger';
 
@@ -225,14 +226,22 @@ function CameraController({ targetArtist, controlsRef }: CameraControllerProps) 
 }
 
 // Custom hook for SSE-based 3D map loading
-function use3DMapStream() {
+function use3DMapStream(enabled: boolean) {
   const [data, setData] = useState<MusicMap3DResponse | null>(null);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(enabled);
   const receivedDataRef = useRef(false);
 
   useEffect(() => {
+    if (!enabled) {
+      setData(null);
+      setProgress(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     // Check if we already have cached data in sessionStorage
     const cached = sessionStorage.getItem('music-map-3d');
     if (cached) {
@@ -310,13 +319,14 @@ function use3DMapStream() {
     return () => {
       eventSource.close();
     };
-  }, []);
+  }, [enabled]);
 
   return { data, progress, error, isLoading };
 }
 
 // Main component
 function UMAPExplorerInner({ onGoToArtist }: BrowserProps) {
+  const { isOffline } = useOfflineStatus();
   const [selectedArtist, setSelectedArtist] = useState<MapNode3D | null>(null);
   const [hoveredArtist, setHoveredArtist] = useState<MapNode3D | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -325,7 +335,7 @@ function UMAPExplorerInner({ onGoToArtist }: BrowserProps) {
   const lastClickTimeRef = useRef(0);
 
   // Fetch 3D map data via SSE
-  const { data, progress, error, isLoading } = use3DMapStream();
+  const { data, progress, error, isLoading } = use3DMapStream(!isOffline);
 
   // Audio preview on hover
   const { startPreview, stopPreview } = usePreviewAudio();
@@ -372,6 +382,17 @@ function UMAPExplorerInner({ onGoToArtist }: BrowserProps) {
       controlsRef.current.reset();
     }
   }, []);
+
+  if (isOffline) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-zinc-500 px-6">
+        <div className="text-center">
+          <p className="mb-2 text-zinc-300">Music Map is not available offline.</p>
+          <p className="text-sm text-zinc-600">Reconnect to load the 3D similarity view.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (

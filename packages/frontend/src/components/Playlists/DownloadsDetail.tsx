@@ -23,7 +23,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   const onBack = onBackProp || (() => routeNavigate(-1));
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { tracks, total, totalSizeFormatted, refresh } = useDownloadedTracks();
 
@@ -89,8 +89,8 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
       format: null,
       analysis_version: 0,
     }));
-    setQueue(queueTracks, startIndex);
-  }, [searchedTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+    setQueueByTrackId(queueTracks, clickedTrack.id);
+  }, [searchedTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId]);
 
   const handleRemoveFromDownloads = async (trackId: string, e: React.MouseEvent) => {
     e.stopPropagation();

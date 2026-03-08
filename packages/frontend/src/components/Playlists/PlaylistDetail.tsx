@@ -103,6 +103,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
+  const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
@@ -285,8 +286,8 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       format: t.format ?? null,
       analysis_version: t.analysis_version ?? 0,
     }));
-    setQueue(queueTracks, startIndex, { type: 'playlist', id: playlistId });
-  }, [filteredTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueue, playlistId]);
+    setQueueByTrackId(queueTracks, clickedTrack.id, { type: 'playlist', id: playlistId });
+  }, [filteredTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId, playlistId]);
 
   // Handle playing a discovery item
   const handlePlayDiscoveryItem = useCallback(async (item: DiscoveryItem) => {

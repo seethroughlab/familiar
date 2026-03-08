@@ -13,11 +13,13 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Users, Loader2 } from 'lucide-react';
 import { libraryApi, type ArtistSummary } from '../../../api';
+import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import { useGridColumns } from '../../../hooks/useGridColumns';
+import { getDownloadedArtistsPage } from '../../../services/libraryCache';
 
 const PAGE_SIZE = 50;
 
@@ -39,6 +41,7 @@ export function ArtistList({
   filters,
   onGoToArtist,
 }: BrowserProps) {
+  const { isOffline } = useOfflineStatus();
   const [sortBy, setSortBy] = useState<'name' | 'track_count' | 'album_count'>(() => {
     try {
       const stored = localStorage.getItem('familiar-sort-artist-list');
@@ -58,6 +61,30 @@ export function ArtistList({
   }, []);
   const cols = useGridColumns();
 
+  const fetchArtistsPage = useCallback(
+    async (pageNumber: number) => {
+      try {
+        return await libraryApi.listArtists({
+          search: filters.search,
+          sort_by: sortBy,
+          page: pageNumber,
+          page_size: PAGE_SIZE,
+        });
+      } catch (error) {
+        if (isOffline) {
+          return await getDownloadedArtistsPage({
+            search: filters.search,
+            sort_by: sortBy,
+            page: pageNumber,
+            page_size: PAGE_SIZE,
+          });
+        }
+        throw error;
+      }
+    },
+    [filters.search, sortBy, isOffline]
+  );
+
   // --- Infinite query (shared by mobile & desktop) ---
   const {
     data,
@@ -67,14 +94,8 @@ export function ArtistList({
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['library-artists', { search: filters.search, sortBy }],
-    queryFn: ({ pageParam = 1 }) =>
-      libraryApi.listArtists({
-        search: filters.search,
-        sort_by: sortBy,
-        page: pageParam,
-        page_size: PAGE_SIZE,
-      }),
+    queryKey: ['library-artists', { search: filters.search, sortBy, offline: isOffline }],
+    queryFn: ({ pageParam = 1 }) => fetchArtistsPage(pageParam),
     getNextPageParam: (lastPage) => {
       const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
       return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
@@ -93,17 +114,12 @@ export function ArtistList({
     loadedPagesRef.current.add(pageNumber);
 
     try {
-      const result = await libraryApi.listArtists({
-        search: filters.search,
-        sort_by: sortBy,
-        page: pageNumber,
-        page_size: PAGE_SIZE,
-      });
+      const result = await fetchArtistsPage(pageNumber);
       setSparsePages(prev => new Map(prev).set(pageNumber, result.items));
     } catch {
       loadedPagesRef.current.delete(pageNumber);
     }
-  }, [filters.search, sortBy]);
+  }, [fetchArtistsPage]);
 
   // Reset sparse state on filter/sort changes
   useEffect(() => {

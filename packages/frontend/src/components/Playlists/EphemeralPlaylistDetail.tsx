@@ -65,7 +65,7 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
 
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -92,8 +92,8 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
     }
 
     const queueTracks = items.map(toFullTrack);
-    setQueue(queueTracks, startIndex, { type: 'ephemeral', id: playlist.id });
-  }, [searchedTracks, playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+    setQueueByTrackId(queueTracks, clickedTrack.id, { type: 'ephemeral', id: playlist.id });
+  }, [searchedTracks, playlist, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId]);
 
   if (!playlist) {
     return (

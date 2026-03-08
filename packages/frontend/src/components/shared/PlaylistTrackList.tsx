@@ -21,6 +21,7 @@ import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
 import { formatDuration } from '../../utils/format';
 import { FavoriteButton } from '../Library/browsers/trackList/FavoriteButton';
 import type { Track } from '../../types';
+import { resolveTrackRowIntent } from './trackRowInteraction';
 
 /** Context passed to render props for each track row. */
 export interface TrackRowContext<T> {
@@ -163,11 +164,13 @@ export function PlaylistTrackList<T>({
   // Context menu
   const { handleContextMenu, contextMenuElement } = useTrackContextMenu({
     onPlay: (track) => {
-      const idx = sortedItems.findIndex(item => {
+      const idx = sortedItems.findIndex((item) => {
         const id = getItemId ? getItemId(item) : getTrack(item)?.id;
         return id === track.id;
       });
-      if (idx !== -1) onPlay(idx, sortedItems);
+      if (idx !== -1) {
+        onPlay(idx, sortedItems);
+      }
     },
     selectedTrackIds: selectedIds,
     onToggleSelect: (track) => toggleItem(track.id),
@@ -183,29 +186,52 @@ export function PlaylistTrackList<T>({
       .filter((t): t is Track => t !== null),
   });
 
+  const playItem = useCallback((item: T) => {
+    const clickedId = getItemId ? getItemId(item) : getTrack(item)?.id ?? '';
+    if (!clickedId) return;
+
+    const resolvedIndex = sortedItems.findIndex((candidate) => {
+      const candidateId = getItemId ? getItemId(candidate) : getTrack(candidate)?.id ?? '';
+      return candidateId === clickedId;
+    });
+
+    if (resolvedIndex === -1) return;
+
+    clearSelection();
+    onPlay(resolvedIndex, sortedItems);
+  }, [clearSelection, getItemId, getTrack, onPlay, sortedItems]);
+
   // Row click handler: single click = select, double click = play
   const handleRowClick = useCallback((item: T, index: number, e: React.MouseEvent) => {
     const id = getItemId ? getItemId(item) : getTrack(item)?.id ?? '';
-    if (e.shiftKey || e.metaKey || e.ctrlKey) {
-      // Modifier click: always select
-      handleMultiSelectClick(id, index, e, orderedIds);
-    } else {
-      // Plain click: select (single)
-      handleMultiSelectClick(id, index, e, orderedIds);
-    }
-  }, [getItemId, getTrack, handleMultiSelectClick, orderedIds]);
+    const intent = resolveTrackRowIntent({
+      isMobile: false,
+      shiftKey: e.shiftKey,
+      metaKey: e.metaKey,
+      ctrlKey: e.ctrlKey,
+    });
 
-  const handleRowDoubleClick = useCallback((_item: T, index: number) => {
-    clearSelection();
-    onPlay(index, sortedItems);
-  }, [onPlay, clearSelection, sortedItems]);
+    if (intent === 'play') {
+      playItem(item);
+      return;
+    }
+
+    handleMultiSelectClick(id, index, e, orderedIds);
+  }, [getItemId, getTrack, handleMultiSelectClick, orderedIds, playItem]);
+
+  const handleMobileRowClick = useCallback((item: T) => {
+    playItem(item);
+  }, [playItem]);
+
+  const handleRowDoubleClick = useCallback((item: T) => {
+    playItem(item);
+  }, [playItem]);
 
   // Play indicator click handler (always plays)
-  const handlePlayClick = useCallback((index: number, e: React.MouseEvent) => {
+  const handlePlayClick = useCallback((item: T, e: React.MouseEvent) => {
     e.stopPropagation();
-    clearSelection();
-    onPlay(index, sortedItems);
-  }, [onPlay, clearSelection, sortedItems]);
+    playItem(item);
+  }, [playItem]);
 
   // Build row context
   const buildCtx = useCallback((item: T, index: number): TrackRowContext<T> => {
@@ -301,12 +327,13 @@ export function PlaylistTrackList<T>({
             <div key={id} data-list-index={idx} ref={ctx.isCurrentTrack ? currentTrackRef : undefined}>
               {/* Mobile layout */}
               <div
-                onClick={(e) => handleRowClick(item, idx, e)}
-                onDoubleClick={() => handleRowDoubleClick(item, idx)}
+                data-testid="playlist-track-row-mobile"
+                onClick={() => handleMobileRowClick(item)}
+                onDoubleClick={() => handleRowDoubleClick(item)}
                 onContextMenu={(e) => ctx.track.id && handleContextMenu(ctx.track, e)}
                 className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${currentClass} ${selectedClass} ${extraRowClass}`}
               >
-                <div className="w-8 flex-shrink-0 text-center cursor-pointer" onClick={(e) => handlePlayClick(idx, e)}>
+                <div className="w-8 flex-shrink-0 text-center cursor-pointer" onClick={(e) => handlePlayClick(item, e)}>
                   <PlayIndicator isCurrent={ctx.isCurrentTrack} isPlaying={ctx.isPlaying} index={idx + 1} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -326,6 +353,7 @@ export function PlaylistTrackList<T>({
 
               {/* Desktop layout */}
               <div
+                data-testid="playlist-track-row-desktop"
                 draggable={dragReorder ? !dragReorder.disabled : true}
                 onDragStart={(e) => {
                   if (dragReorder && !dragReorder.disabled) {
@@ -340,7 +368,7 @@ export function PlaylistTrackList<T>({
                 onDrop={dragReorder && !dragReorder.disabled ? () => dragReorder.onDrop(item) : undefined}
                 onDragEnd={dragReorder ? dragReorder.onDragEnd : undefined}
                 onClick={(e) => handleRowClick(item, idx, e)}
-                onDoubleClick={() => handleRowDoubleClick(item, idx)}
+                onDoubleClick={() => handleRowDoubleClick(item)}
                 onContextMenu={(e) => ctx.track.id && handleContextMenu(ctx.track, e)}
                 className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${currentClass} ${selectedClass} ${dragClass} ${extraRowClass}`}
                 style={{ gridTemplateColumns: gridColumns }}
@@ -348,7 +376,7 @@ export function PlaylistTrackList<T>({
                 {/* Index cell */}
                 <div className="flex items-center">
                   {renderDragHandle?.(ctx)}
-                  <div className="flex-1 text-center cursor-pointer" onClick={(e) => handlePlayClick(idx, e)}>
+                  <div className="flex-1 text-center cursor-pointer" onClick={(e) => handlePlayClick(item, e)}>
                     <PlayIndicator isCurrent={ctx.isCurrentTrack} isPlaying={ctx.isPlaying} index={idx + 1} />
                   </div>
                 </div>

@@ -223,6 +223,32 @@ describe('playerStore', () => {
       expect(state.shuffleOrder).toHaveLength(3)
       expect(state.shuffleIndex).toBe(0)
     })
+
+    it('should resolve queue start by track id', () => {
+      const track1 = createMockTrack('1', 'First')
+      const track2 = createMockTrack('2', 'Second')
+      const track3 = createMockTrack('3', 'Third')
+      const tracks = [track1, track2, track3]
+
+      usePlayerStore.getState().setQueueByTrackId(tracks, track2.id)
+
+      const state = usePlayerStore.getState()
+      expect(state.queueIndex).toBe(1)
+      expect(state.currentTrack?.id).toBe(track2.id)
+      expect(state.isPlaying).toBe(true)
+    })
+
+    it('should fall back safely when queue track id is missing', () => {
+      const track1 = createMockTrack('1', 'First')
+      const track2 = createMockTrack('2', 'Second')
+      const tracks = [track1, track2]
+
+      usePlayerStore.getState().setQueueByTrackId(tracks, 'missing-track-id')
+
+      const state = usePlayerStore.getState()
+      expect(state.queueIndex).toBe(0)
+      expect(state.currentTrack?.id).toBe(track1.id)
+    })
   })
 
   describe('addToQueue', () => {

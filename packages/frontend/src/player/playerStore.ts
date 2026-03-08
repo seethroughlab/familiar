@@ -95,6 +95,7 @@ interface PlayerState {
   playNext: () => void;
   playPrevious: () => void;
   setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource) => void;
+  setQueueByTrackId: (tracks: Track[], trackId: string, source?: QueueSource) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   reorderShuffleOrder: (fromIndex: number, toIndex: number) => void;
   jumpToQueueIndex: (index: number) => void;
@@ -627,7 +628,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0, source?: QueueSource) => {
-    log.info('setQueue', { trackCount: tracks.length, startIndex, source: source?.type, sourceId: source?.id, shuffle: get().shuffle });
+    const safeStartIndex = tracks.length === 0
+      ? -1
+      : Math.max(0, Math.min(startIndex, tracks.length - 1));
+    if (safeStartIndex !== startIndex) {
+      log.warn('setQueue adjusted invalid startIndex', {
+        trackCount: tracks.length,
+        requested: startIndex,
+        resolved: safeStartIndex,
+      });
+    }
+    log.info('setQueue', {
+      trackCount: tracks.length,
+      startIndex: safeStartIndex,
+      source: source?.type,
+      sourceId: source?.id,
+      shuffle: get().shuffle,
+    });
     // Cancel any ongoing crossfade — user explicitly chose a new track
     getEngine().cancelCrossfade?.();
     const { shuffle } = get();
@@ -640,17 +657,17 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     let shuffleOrder: number[] = [];
     let shuffleIndex = -1;
     if (shuffle && tracks.length > 1) {
-      shuffleOrder = generateShuffleOrder(tracks.length, startIndex);
+      shuffleOrder = generateShuffleOrder(tracks.length, safeStartIndex);
       shuffleIndex = 0;
     }
 
     set({
       queue: queueItems,
-      queueIndex: startIndex,
-      currentTrack: tracks[startIndex] || null,
-      isPlaying: tracks.length > 0,
+      queueIndex: safeStartIndex,
+      currentTrack: safeStartIndex >= 0 ? tracks[safeStartIndex] : null,
+      isPlaying: safeStartIndex >= 0,
       currentTime: 0,
-      isLoadingAudio: tracks.length > 0,
+      isLoadingAudio: safeStartIndex >= 0,
       shuffleOrder,
       shuffleIndex,
       // Exit lazy mode when setting a regular queue
@@ -659,6 +676,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       queueSource: source || null,
     });
     persistState();
+  },
+
+  setQueueByTrackId: (tracks, trackId, source?: QueueSource) => {
+    const resolvedIndex = tracks.findIndex((track) => track.id === trackId);
+    get().setQueue(tracks, resolvedIndex >= 0 ? resolvedIndex : 0, source);
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {

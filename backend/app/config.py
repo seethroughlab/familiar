@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     # Development
     debug: bool = False  # Must be explicitly enabled for development
     log_level: str = "INFO"
+    migration_preflight_enabled: bool = True
+    migration_preflight_strict: bool = True
 
     @property
     def sync_database_url(self) -> str:

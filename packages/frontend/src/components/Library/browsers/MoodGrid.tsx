@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Sparkles, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { libraryApi, type MoodCell } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
+import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 
 // Register this browser
 registerBrowser(
@@ -55,6 +56,7 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const { isOffline } = useOfflineStatus();
 
   // Configurable axes
   const [xAxis, setXAxis] = useState('valence');
@@ -90,6 +92,7 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['library-mood-distribution', xAxis, yAxis],
     queryFn: () => libraryApi.getMoodDistribution(10, xAxis, yAxis),
+    enabled: !isOffline,
   });
 
   // Calculate max count for color scaling
@@ -176,6 +179,15 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
     setIsPanning(false);
     setHoveredCell(null);
   }, []);
+
+  if (isOffline) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-2 px-6 text-center">
+        <p className="text-zinc-300">Similarity views are not available offline.</p>
+        <p className="text-sm">Reconnect to load feature-based map data.</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

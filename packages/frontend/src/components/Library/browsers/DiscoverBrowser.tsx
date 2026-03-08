@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { libraryApi } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
+import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
@@ -37,6 +38,7 @@ registerBrowser(
 
 export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
   const discoverNavigate = useNavigate();
+  const { isOffline } = useOfflineStatus();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['library-discover'],
@@ -45,6 +47,7 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
         recommendations_limit: 12,
         favorites_limit: 6,
       }),
+    enabled: !isOffline,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
@@ -53,6 +56,15 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
     externalArtistsSection,
     hasDiscovery,
   } = useLibraryDiscovery({ data });
+
+  if (isOffline) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 p-6 text-center">
+        <p className="text-zinc-300">Discovery is not available offline.</p>
+        <p className="text-sm">Reconnect to load recommendations and new releases.</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

@@ -21,6 +21,8 @@ import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useAlbumDiscovery, type DiscoveryItem } from '../Discovery';
 import { createLogger } from '../../utils/logger';
+import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { getDownloadedAlbumDetail } from '../../services/libraryCache';
 
 const log = createLogger('AlbumDetail');
 
@@ -176,6 +178,7 @@ export function AlbumDetail({
 
   const { currentTrack, isPlaying, setQueue, setIsPlaying } =
     usePlayerStore();
+  const { isOffline } = useOfflineStatus();
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
 
@@ -222,7 +225,17 @@ export function AlbumDetail({
 
   const { data: album, isLoading } = useQuery({
     queryKey: ['album', artistName, albumName],
-    queryFn: () => libraryApi.getAlbum(artistName, albumName, 8, source),
+    queryFn: async () => {
+      try {
+        return await libraryApi.getAlbum(artistName, albumName, 8, source);
+      } catch (error) {
+        if (isOffline) {
+          const offlineAlbum = await getDownloadedAlbumDetail(artistName, albumName);
+          if (offlineAlbum) return offlineAlbum;
+        }
+        throw error;
+      }
+    },
   });
 
 

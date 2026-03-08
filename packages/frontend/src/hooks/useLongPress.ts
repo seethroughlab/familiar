@@ -19,6 +19,7 @@ interface LongPressHandlers {
   onTouchStart: (e: React.TouchEvent) => void;
   onTouchEnd: (e: React.TouchEvent) => void;
   onTouchMove: (e: React.TouchEvent) => void;
+  onClickCapture: (e: React.MouseEvent) => void;
 }
 
 export function useLongPress(
@@ -30,6 +31,7 @@ export function useLongPress(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startPositionRef = useRef<{ x: number; y: number } | null>(null);
   const triggeredRef = useRef(false);
+  const suppressClickRef = useRef(false);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -43,6 +45,7 @@ export function useLongPress(
       const touch = e.touches[0];
       startPositionRef.current = { x: touch.clientX, y: touch.clientY };
       triggeredRef.current = false;
+      suppressClickRef.current = false;
 
       timerRef.current = setTimeout(() => {
         if (startPositionRef.current) {
@@ -52,6 +55,7 @@ export function useLongPress(
           }
 
           triggeredRef.current = true;
+          suppressClickRef.current = true;
           onLongPress(startPositionRef.current);
         }
       }, delay);
@@ -90,9 +94,21 @@ export function useLongPress(
     [threshold, clearTimer]
   );
 
+  const onClickCapture = useCallback((e: React.MouseEvent) => {
+    if (!suppressClickRef.current) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    suppressClickRef.current = false;
+    triggeredRef.current = false;
+  }, []);
+
   return {
     onTouchStart,
     onTouchEnd,
     onTouchMove,
+    onClickCapture,
   };
 }

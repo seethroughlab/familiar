@@ -49,6 +49,7 @@ export function useFavorites(): UseFavoritesResult {
         // Cache favorites for offline use
         const profileId = await getSelectedProfileId();
         if (profileId) {
+          await playlistCache.cacheTrackMetadata(result.favorites);
           await playlistCache.cacheFavorites(
             profileId,
             result.favorites.map((f) => f.id)
@@ -64,26 +65,30 @@ export function useFavorites(): UseFavoritesResult {
             const cached = await playlistCache.getCachedFavorites(profileId);
             if (cached) {
               setUsingCachedData(true);
-              // Return a minimal response with just the track IDs
-              // Full track metadata would be resolved separately from cachedTracks
+              const cachedTracks = await playlistCache.resolveTrackIds(cached.trackIds);
+              const cachedTrackMap = new Map(cachedTracks.map((track) => [track.id, track]));
+
               return {
-                favorites: cached.trackIds.map((id): FavoriteTrack => ({
-                  id,
-                  file_path: '',
-                  title: null,
-                  artist: null,
-                  album: null,
-                  album_artist: null,
-                  album_type: 'album',
-                  track_number: null,
-                  disc_number: null,
-                  year: null,
-                  genre: null,
-                  duration_seconds: null,
-                  format: null,
-                  analysis_version: 0,
-                  favorited_at: '',
-                })),
+                favorites: cached.trackIds.map((id): FavoriteTrack => {
+                  const cachedTrack = cachedTrackMap.get(id);
+                  return {
+                    id,
+                    file_path: '',
+                    title: cachedTrack?.title || null,
+                    artist: cachedTrack?.artist || null,
+                    album: cachedTrack?.album || null,
+                    album_artist: cachedTrack?.albumArtist || null,
+                    album_type: 'album',
+                    track_number: cachedTrack?.trackNumber ?? null,
+                    disc_number: cachedTrack?.discNumber ?? null,
+                    year: cachedTrack?.year ?? null,
+                    genre: cachedTrack?.genre ?? null,
+                    duration_seconds: cachedTrack?.durationSeconds ?? null,
+                    format: null,
+                    analysis_version: 0,
+                    favorited_at: '',
+                  };
+                }),
                 external_favorites: [],
                 total: cached.trackIds.length,
               } as FavoritesListResponse;

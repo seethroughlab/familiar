@@ -16,6 +16,7 @@ import { libraryApi, tracksApi, type EgoMapArtist } from '../../../../api';
 import { registerBrowser, type BrowserProps } from '../../types';
 import { ArtistPicker } from './ArtistPicker';
 import { useUIStore } from '../../../../stores/uiStore';
+import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
 
 // Register this browser
 registerBrowser(
@@ -46,6 +47,7 @@ interface AnimationState {
 }
 
 export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
+  const { isOffline } = useOfflineStatus();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Read initial center from URL params
@@ -97,7 +99,7 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['ego-map', centerArtist],
     queryFn: () => libraryApi.getEgoMap({ center: centerArtist!, limit: 200 }),
-    enabled: !!centerArtist,
+    enabled: !isOffline && !!centerArtist,
     staleTime: 30000,
   });
 
@@ -626,6 +628,15 @@ export function EgoMusicMap({ onGoToArtist }: BrowserProps) {
     // Clear selection after creating
     setSelectedArtists(new Set());
   }, [selectedArtists]);
+
+  if (isOffline) {
+    return (
+      <div ref={containerRef} className="flex flex-col items-center justify-center h-full text-zinc-500 gap-2 px-6 text-center">
+        <p className="text-zinc-300">Music Map is not available offline.</p>
+        <p className="text-sm">Reconnect to explore artist similarity.</p>
+      </div>
+    );
+  }
 
   // Show picker if no center selected
   if (showPicker) {

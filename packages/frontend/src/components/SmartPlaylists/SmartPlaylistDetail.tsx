@@ -87,6 +87,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueue = usePlayerStore((s) => s.setQueue);
+  const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist } = useAppNavigation();
@@ -141,6 +142,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
             result.tracks.map((t) => t.id)
           );
         }
+        await playlistCache.cacheTrackMetadata(result.tracks);
 
         return result;
       } catch (error) {
@@ -296,7 +298,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
     }
 
     const queueTracks = items.map(t => getTrackFromItem(t));
-    setQueue(queueTracks, startIndex);
+    setQueueByTrackId(queueTracks, clickedTrack.id);
   };
 
   // Format rule for display

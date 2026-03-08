@@ -28,6 +28,7 @@ const mockFavoritesCount = vi.fn();
 const mockFavoritesOrderBy = vi.fn();
 
 const mockCachedTracksWhere = vi.fn();
+const mockCachedTracksBulkPut = vi.fn();
 
 vi.mock('../../db', () => ({
   db: {
@@ -59,6 +60,7 @@ vi.mock('../../db', () => ({
     },
     cachedTracks: {
       where: (...args: unknown[]) => mockCachedTracksWhere(...args),
+      bulkPut: (...args: unknown[]) => mockCachedTracksBulkPut(...args),
     },
   },
   isIndexedDBAvailable: vi.fn(() => Promise.resolve(true)),
@@ -96,6 +98,7 @@ describe('playlistCache', () => {
     mockFavoritesDelete.mockResolvedValue(undefined);
     mockFavoritesClear.mockResolvedValue(undefined);
     mockFavoritesCount.mockResolvedValue(0);
+    mockCachedTracksBulkPut.mockResolvedValue(undefined);
   });
 
   // ========== Regular Playlists ==========
@@ -274,6 +277,74 @@ describe('playlistCache', () => {
   });
 
   // ========== Track Resolution ==========
+  describe('cacheTrackMetadata', () => {
+    it('caches normalized track metadata from snake_case fields', async () => {
+      const { cacheTrackMetadata } = await getModule();
+      await cacheTrackMetadata([
+        {
+          id: 'track-1',
+          title: 'Song 1',
+          artist: 'Artist 1',
+          album: 'Album 1',
+          album_artist: 'Album Artist 1',
+          genre: 'Rock',
+          year: 2024,
+          duration_seconds: 201,
+          track_number: 3,
+          disc_number: 1,
+        },
+      ]);
+
+      expect(mockCachedTracksBulkPut).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'track-1',
+            title: 'Song 1',
+            artist: 'Artist 1',
+            album: 'Album 1',
+            albumArtist: 'Album Artist 1',
+            genre: 'Rock',
+            year: 2024,
+            durationSeconds: 201,
+            trackNumber: 3,
+            discNumber: 1,
+            cachedAt: expect.any(Date),
+          }),
+        ])
+      );
+    });
+
+    it('caches normalized track metadata from camelCase fields', async () => {
+      const { cacheTrackMetadata } = await getModule();
+      await cacheTrackMetadata([
+        {
+          id: 'track-2',
+          title: 'Song 2',
+          artist: 'Artist 2',
+          album: 'Album 2',
+          albumArtist: 'Album Artist 2',
+          genre: 'Pop',
+          year: 2023,
+          durationSeconds: 180,
+          trackNumber: 1,
+          discNumber: 2,
+        },
+      ]);
+
+      expect(mockCachedTracksBulkPut).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'track-2',
+            albumArtist: 'Album Artist 2',
+            durationSeconds: 180,
+            trackNumber: 1,
+            discNumber: 2,
+          }),
+        ])
+      );
+    });
+  });
+
   describe('resolveTrackIds', () => {
     it('should resolve track IDs to cached track metadata in order', async () => {
       const tracks = [

@@ -26,7 +26,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const queryClient = useQueryClient();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { favorites, total, toggle } = useFavorites();
   const { isOffline } = useOfflineStatus();
@@ -132,8 +132,8 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       return;
     }
 
-    setQueue(items.map(getTrack), startIndex);
-  }, [filteredFavorites, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueue]);
+    setQueueByTrackId(items.map(getTrack), trackForItem.id);
+  }, [filteredFavorites, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId]);
 
   const totalDuration = favorites.reduce(
     (sum, t) => sum + (t.duration_seconds || 0),

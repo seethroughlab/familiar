@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Play, Download, Check, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
 import { tracksApi } from '../../../api';
+import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
 import { useSelectionStore } from '../../../stores/selectionStore';
@@ -33,8 +34,10 @@ import { registerBrowser, type BrowserProps } from '../types';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
+import { resolveTrackRowIntent } from '../../shared/trackRowInteraction';
 
 import { createLogger } from '../../../utils/logger';
+import { getDownloadedTracksPage } from '../../../services/libraryCache';
 
 const log = createLogger('TrackListBrowser');
 
@@ -126,6 +129,7 @@ interface TrackRowProps {
   isSelected: boolean;
   onPlay: () => void;
   onClick: (e: React.MouseEvent) => void;
+  onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   visibleColumnIds: string[];
   gridColumns: string;
@@ -223,6 +227,7 @@ function TrackRow({
   isSelected,
   onPlay,
   onClick,
+  onDoubleClick,
   onContextMenu,
   visibleColumnIds,
   gridColumns,
@@ -237,6 +242,7 @@ function TrackRow({
         e.dataTransfer.effectAllowed = 'copy';
       }}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       onMouseDown={(e) => {
         // Prevent text selection when using modifier keys for multi-select
@@ -317,6 +323,7 @@ export function TrackListBrowser({
   onEditTrack,
   offlineTrackIds,
 }: BrowserProps) {
+  const { isOffline } = useOfflineStatus();
   const trackListNavigate = useNavigate();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
@@ -506,6 +513,46 @@ export function TrackListBrowser({
     return colDef?.sortField;
   }, [sortBy]);
 
+  const fetchTracksPage = useCallback(
+    async (pageNumber: number) => {
+      const params = {
+        search: filters.search,
+        artist: filters.artist,
+        album: filters.album,
+        year_from: filters.yearFrom,
+        year_to: filters.yearTo,
+        energy_min: filters.energyMin,
+        energy_max: filters.energyMax,
+        valence_min: filters.valenceMin,
+        valence_max: filters.valenceMax,
+        fx: filters.fx,
+        fx_min: filters.fxMin,
+        fx_max: filters.fxMax,
+        fy: filters.fy,
+        fy_min: filters.fyMin,
+        fy_max: filters.fyMax,
+        page: pageNumber,
+        page_size: PAGE_SIZE,
+        include_features: needsFeatures,
+        sort_by: sortField,
+        sort_order: sortOrder,
+      } as const;
+
+      try {
+        return await tracksApi.list(params);
+      } catch (error) {
+        if (isOffline) {
+          return await getDownloadedTracksPage(params);
+        }
+        throw error;
+      }
+    },
+    [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
+      needsFeatures, sortField, sortOrder, isOffline]
+  );
+
   const {
     data,
     isLoading,
@@ -535,31 +582,10 @@ export function TrackListBrowser({
         include_features: needsFeatures,
         sortBy: sortField,
         sortOrder,
+        offline: isOffline,
       },
     ],
-    queryFn: ({ pageParam = 1 }) =>
-      tracksApi.list({
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        year_from: filters.yearFrom,
-        year_to: filters.yearTo,
-        energy_min: filters.energyMin,
-        energy_max: filters.energyMax,
-        valence_min: filters.valenceMin,
-        valence_max: filters.valenceMax,
-        fx: filters.fx,
-        fx_min: filters.fxMin,
-        fx_max: filters.fxMax,
-        fy: filters.fy,
-        fy_min: filters.fyMin,
-        fy_max: filters.fyMax,
-        page: pageParam,
-        page_size: PAGE_SIZE,
-        include_features: needsFeatures,
-        sort_by: sortField,
-        sort_order: sortOrder,
-      }),
+    queryFn: ({ pageParam = 1 }) => fetchTracksPage(pageParam),
     getNextPageParam: (lastPage) => {
       const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
       return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
@@ -584,28 +610,7 @@ export function TrackListBrowser({
     loadedPagesRef.current.add(pageNumber); // Mark as loading to prevent duplicates
 
     try {
-      const result = await tracksApi.list({
-        page: pageNumber,
-        page_size: PAGE_SIZE,
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        year_from: filters.yearFrom,
-        year_to: filters.yearTo,
-        energy_min: filters.energyMin,
-        energy_max: filters.energyMax,
-        valence_min: filters.valenceMin,
-        valence_max: filters.valenceMax,
-        fx: filters.fx,
-        fx_min: filters.fxMin,
-        fx_max: filters.fxMax,
-        fy: filters.fy,
-        fy_min: filters.fyMin,
-        fy_max: filters.fyMax,
-        include_features: needsFeatures,
-        sort_by: sortField,
-        sort_order: sortOrder,
-      });
+      const result = await fetchTracksPage(pageNumber);
 
       setSparsePages(prev => new Map(prev).set(pageNumber, result.items));
     } catch (error) {
@@ -613,10 +618,7 @@ export function TrackListBrowser({
       loadedPagesRef.current.delete(pageNumber);
       log.error(`Failed to fetch page ${pageNumber}:`, error);
     }
-  }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
-      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
-      needsFeatures, sortField, sortOrder]);
+  }, [fetchTracksPage]);
 
   // Reset sparse pages and loaded tracking when filters or sort changes
   useEffect(() => {
@@ -898,28 +900,7 @@ export function TrackListBrowser({
     }));
 
     try {
-      const result = await tracksApi.list({
-        page: targetPage,
-        page_size: PAGE_SIZE,
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        year_from: filters.yearFrom,
-        year_to: filters.yearTo,
-        energy_min: filters.energyMin,
-        energy_max: filters.energyMax,
-        valence_min: filters.valenceMin,
-        valence_max: filters.valenceMax,
-        fx: filters.fx,
-        fx_min: filters.fxMin,
-        fx_max: filters.fxMax,
-        fy: filters.fy,
-        fy_min: filters.fyMin,
-        fy_max: filters.fyMax,
-        include_features: needsFeatures,
-        sort_by: sortField,
-        sort_order: sortOrder,
-      });
+      const result = await fetchTracksPage(targetPage);
 
       const totalPages = Math.ceil(result.total / PAGE_SIZE);
       setMobileJump({
@@ -947,28 +928,7 @@ export function TrackListBrowser({
     setMobileJump(prev => prev ? { ...prev, isLoading: true } : null);
 
     try {
-      const result = await tracksApi.list({
-        page: mobileJump.nextPage,
-        page_size: PAGE_SIZE,
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        year_from: filters.yearFrom,
-        year_to: filters.yearTo,
-        energy_min: filters.energyMin,
-        energy_max: filters.energyMax,
-        valence_min: filters.valenceMin,
-        valence_max: filters.valenceMax,
-        fx: filters.fx,
-        fx_min: filters.fxMin,
-        fx_max: filters.fxMax,
-        fy: filters.fy,
-        fy_min: filters.fyMin,
-        fy_max: filters.fyMax,
-        include_features: needsFeatures,
-        sort_by: sortField,
-        sort_order: sortOrder,
-      });
+      const result = await fetchTracksPage(mobileJump.nextPage);
 
       const totalPages = Math.ceil(result.total / PAGE_SIZE);
       setMobileJump(prev => prev ? {
@@ -994,28 +954,7 @@ export function TrackListBrowser({
     prevLoadScrollRef.current = document.documentElement.scrollHeight;
 
     try {
-      const result = await tracksApi.list({
-        page: mobileJump.prevPage,
-        page_size: PAGE_SIZE,
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        year_from: filters.yearFrom,
-        year_to: filters.yearTo,
-        energy_min: filters.energyMin,
-        energy_max: filters.energyMax,
-        valence_min: filters.valenceMin,
-        valence_max: filters.valenceMax,
-        fx: filters.fx,
-        fx_min: filters.fxMin,
-        fx_max: filters.fxMax,
-        fy: filters.fy,
-        fy_min: filters.fyMin,
-        fy_max: filters.fyMax,
-        include_features: needsFeatures,
-        sort_by: sortField,
-        sort_order: sortOrder,
-      });
+      const result = await fetchTracksPage(mobileJump.prevPage);
 
       setMobileJump(prev => prev ? {
         ...prev,
@@ -1187,7 +1126,10 @@ export function TrackListBrowser({
       }
 
       if (allTracksUnfiltered.length > 0) {
-        setQueue(allTracksUnfiltered, index);
+        // Resolve from the authoritative queue array by ID so mobile sparse/jump lists
+        // always start the tapped track, even when their visible index differs.
+        const resolvedIndex = allTracksUnfiltered.findIndex((t) => t.id === track.id);
+        setQueue(allTracksUnfiltered, resolvedIndex >= 0 ? resolvedIndex : index);
       }
     },
     [currentTrack, isPlaying, setIsPlaying, allTracksUnfiltered, setQueue, total, shuffle, queueFilters, setLazyQueue]
@@ -1195,18 +1137,20 @@ export function TrackListBrowser({
 
   const handleRowClick = useCallback(
     (track: Track, e: React.MouseEvent) => {
-      if (e.shiftKey) {
-        // Shift+click: select range from last clicked to this track
-        // Use dense array for shift-select to work correctly
+      const intent = resolveTrackRowIntent({
+        isMobile: false,
+        shiftKey: e.shiftKey,
+        metaKey: e.metaKey,
+        ctrlKey: e.ctrlKey,
+      });
+
+      if (intent === 'select-range') {
         const allIds = allTracksUnfiltered.map((t) => t.id);
         selectRange(track.id, allIds);
-      } else if (e.metaKey || e.ctrlKey) {
-        // Cmd/Ctrl+click: toggle individual track selection
-        onSelectTrack(track.id, true);
-      } else {
-        // Plain click: select only this track
-        onSelectTrack(track.id, false);
+        return;
       }
+
+      onSelectTrack(track.id, intent === 'select-toggle');
     },
     [onSelectTrack, selectRange, allTracksUnfiltered]
   );
@@ -1425,14 +1369,11 @@ export function TrackListBrowser({
             index={index}
             isCurrentTrack={currentTrack?.id === track.id}
             isPlaying={currentTrack?.id === track.id && isPlaying}
-            isSelected={selectedTrackIds.has(track.id)}
+            isSelected={false}
             onPlay={() => handlePlayTrack(track, index)}
-            onClick={(e) => {
-              if (e.detail === 2) {
-                handleRowDoubleClick(track, index);
-              } else {
-                handleRowClick(track, e);
-              }
+            onClick={() => {
+              onClearSelection();
+              handlePlayTrack(track, index);
             }}
             onContextMenu={(e) => handleContextMenu(track, e)}
             onLongPress={(position) => openContextMenu(track, position)}
@@ -1579,13 +1520,8 @@ export function TrackListBrowser({
                       isPlaying={currentTrack?.id === track.id && isPlaying}
                       isSelected={selectedTrackIds.has(track.id)}
                       onPlay={() => handlePlayTrack(track, index)}
-                      onClick={(e) => {
-                        if (e.detail === 2) {
-                          handleRowDoubleClick(track, index);
-                        } else {
-                          handleRowClick(track, e);
-                        }
-                      }}
+                      onClick={(e) => handleRowClick(track, e)}
+                      onDoubleClick={() => handleRowDoubleClick(track, index)}
                       onContextMenu={(e) => handleContextMenu(track, e)}
                       visibleColumnIds={visibleColumnIds}
                       gridColumns={gridColumns}

@@ -132,6 +132,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     import asyncio
     await asyncio.to_thread(validate_library_path)
 
+    # Validate DB migration state before serving requests.
+    if app_config.migration_preflight_enabled:
+        from app.db.migration_preflight import check_database_at_head
+
+        ok, current, heads, reason = await asyncio.to_thread(check_database_at_head)
+        if ok:
+            logger.info("Migration preflight passed (revision=%s)", ",".join(current))
+        else:
+            message = (
+                "Migration preflight failed. "
+                f"reason={reason}; current={current}; heads={heads}. "
+                "Run 'alembic upgrade head' before startup."
+            )
+            if app_config.migration_preflight_strict:
+                raise RuntimeError(message)
+            logger.warning(message)
+
     # Check analysis capabilities (warns if embeddings disabled)
     from app.services.analysis import check_analysis_capabilities
     check_analysis_capabilities()

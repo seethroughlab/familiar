@@ -77,10 +77,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
-      - name: Initialize database
+      - name: Apply migrations
         env:
           DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
-        run: uv run python -m app.db.init_db
+        run: uv run python -m alembic upgrade head
+
+      - name: Migration preflight
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+        run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
 
       - name: Run tests
         env:
@@ -208,11 +213,17 @@ jobs:
         working-directory: backend
         run: uv sync --extra dev
 
-      - name: Initialize database
+      - name: Apply migrations
         working-directory: backend
         env:
           DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
-        run: uv run python -m app.db.init_db
+        run: uv run python -m alembic upgrade head
+
+      - name: Migration preflight
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+        run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4

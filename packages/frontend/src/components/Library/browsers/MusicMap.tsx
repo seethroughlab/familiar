@@ -12,6 +12,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Map as MapIcon, Loader2, ZoomIn, ZoomOut, Maximize2, Users, Disc, Music } from 'lucide-react';
 import { tracksApi, getApiUrl, type MapNode, type MusicMapResponse } from '../../../api';
 import { registerBrowser, type BrowserProps } from '../types';
+import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 
 import { createLogger } from '../../../utils/logger';
 
@@ -46,6 +47,7 @@ interface HoveredNode {
 type EntityType = 'artists' | 'albums';
 
 export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
+  const { isOffline } = useOfflineStatus();
   const [hoveredNode, setHoveredNode] = useState<HoveredNode | null>(null);
   const [hoveredImageError, setHoveredImageError] = useState(false);
   const [entityType, setEntityType] = useState<EntityType>('artists');
@@ -90,6 +92,13 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
 
   // Fetch map data via SSE with progress updates
   useEffect(() => {
+    if (isOffline) {
+      setIsLoading(false);
+      setError(null);
+      setProgress(null);
+      return;
+    }
+
     // Check cache first
     const cached = cacheRef.current.get(entityType);
     if (cached) {
@@ -175,7 +184,7 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
     fetchWithSSE();
 
     return () => abortController.abort();
-  }, [entityType]);
+  }, [entityType, isOffline]);
 
   // Zoom via native wheel event - zooms toward cursor position
   // Re-run when loading completes so we attach to the newly rendered SVG
@@ -337,6 +346,15 @@ export function MusicMap({ onGoToArtist, onGoToAlbum }: BrowserProps) {
   useEffect(() => {
     setHasAutoZoomed(false);
   }, [entityType]);
+
+  if (isOffline) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-zinc-500 gap-2 px-6 text-center">
+        <p className="text-zinc-300">Music Map is not available offline.</p>
+        <p className="text-sm">Reconnect to load similarity embeddings.</p>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

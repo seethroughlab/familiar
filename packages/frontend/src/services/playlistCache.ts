@@ -16,6 +16,23 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlaylistCache');
 
+type TrackMetadataInput = {
+  id: string;
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+  album_artist?: string | null;
+  albumArtist?: string | null;
+  genre?: string | null;
+  year?: number | null;
+  duration_seconds?: number | null;
+  durationSeconds?: number | null;
+  track_number?: number | null;
+  trackNumber?: number | null;
+  disc_number?: number | null;
+  discNumber?: number | null;
+};
+
 // =====================
 // Regular Playlists
 // =====================
@@ -28,6 +45,8 @@ export async function cachePlaylist(playlist: PlaylistDetail): Promise<void> {
   if (!idbAvailable) return;
 
   try {
+    await cacheTrackMetadata(playlist.tracks);
+
     const cached: CachedPlaylist = {
       id: playlist.id,
       name: playlist.name,
@@ -409,6 +428,41 @@ export async function getAvailableTrackIds(
   } catch (error) {
     log.warn('Failed to get available track IDs:', error);
     return new Set();
+  }
+}
+
+/**
+ * Upsert track metadata into cachedTracks.
+ * Accepts multiple track shapes (snake_case and camelCase fields).
+ */
+export async function cacheTrackMetadata(
+  tracks: TrackMetadataInput[]
+): Promise<void> {
+  const idbAvailable = await isIndexedDBAvailable();
+  if (!idbAvailable || tracks.length === 0) return;
+
+  try {
+    const now = new Date();
+    const normalized: CachedTrack[] = tracks
+      .filter((track): track is TrackMetadataInput => Boolean(track?.id))
+      .map((track) => ({
+        id: track.id,
+        title: track.title ?? '',
+        artist: track.artist ?? '',
+        album: track.album ?? '',
+        albumArtist: track.albumArtist ?? track.album_artist ?? null,
+        genre: track.genre ?? null,
+        year: track.year ?? null,
+        durationSeconds: track.durationSeconds ?? track.duration_seconds ?? null,
+        trackNumber: track.trackNumber ?? track.track_number ?? null,
+        discNumber: track.discNumber ?? track.disc_number ?? null,
+        cachedAt: now,
+      }));
+
+    if (normalized.length === 0) return;
+    await db.cachedTracks.bulkPut(normalized);
+  } catch (error) {
+    log.warn('Failed to cache track metadata:', error);
   }
 }
 

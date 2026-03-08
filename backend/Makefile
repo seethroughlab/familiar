@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db test lint format
+.PHONY: install dev run reset-db migrate test test-contract lint format
 
 # Install dependencies
 install:
@@ -16,9 +16,18 @@ run:
 reset-db:
 	uv run python -m app.db.init_db
 
+# Apply migrations to latest revision
+migrate:
+	uv run python -m alembic upgrade head
+
 # Run tests
 test:
 	uv run pytest -v
+
+# Run backend API contract tests with required migration preflight
+test-contract:
+	uv run python -m alembic upgrade head
+	uv run pytest tests/test_api_contract_error_shapes.py -v --tb=short --no-cov
 
 # Lint code
 lint:

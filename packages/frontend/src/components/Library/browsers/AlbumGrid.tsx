@@ -13,6 +13,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Grid3X3, Loader2 } from 'lucide-react';
 import { libraryApi, type AlbumSummary } from '../../../api';
+import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import {
   registerBrowser,
   type BrowserProps,
@@ -28,6 +29,7 @@ import { usePlayerStore } from '../../../stores/playerStore';
 import { useDownloadStore, getAlbumJobId } from '../../../stores/downloadStore';
 import { getOfflineTrackIds, removeOfflineTrack } from '../../../services/offlineService';
 import { useGridColumns } from '../../../hooks/useGridColumns';
+import { getDownloadedAlbumsPage } from '../../../services/libraryCache';
 
 const PAGE_SIZE = 50;
 
@@ -51,6 +53,7 @@ export function AlbumGrid({
   onGoToArtist,
   onGoToYear,
 }: BrowserProps) {
+  const { isOffline } = useOfflineStatus();
   const [sortBy, setSortBy] = useState<'name' | 'year' | 'artist' | 'track_count'>('name');
   const [albumContextMenu, setAlbumContextMenu] = useState<AlbumContextMenuState>(initialAlbumContextMenuState);
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
@@ -59,6 +62,32 @@ export function AlbumGrid({
   const { startDownload } = useDownloadStore();
   const queryClient = useQueryClient();
   const cols = useGridColumns();
+
+  const fetchAlbumsPage = useCallback(
+    async (pageNumber: number) => {
+      try {
+        return await libraryApi.listAlbums({
+          search: filters.search,
+          artist: filters.artist,
+          sort_by: sortBy,
+          page: pageNumber,
+          page_size: PAGE_SIZE,
+        });
+      } catch (error) {
+        if (isOffline) {
+          return await getDownloadedAlbumsPage({
+            search: filters.search,
+            artist: filters.artist,
+            sort_by: sortBy,
+            page: pageNumber,
+            page_size: PAGE_SIZE,
+          });
+        }
+        throw error;
+      }
+    },
+    [filters.search, filters.artist, sortBy, isOffline]
+  );
 
   // Load offline track IDs on mount
   useEffect(() => {
@@ -94,15 +123,8 @@ export function AlbumGrid({
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['library-albums', { search: filters.search, artist: filters.artist, sortBy }],
-    queryFn: ({ pageParam = 1 }) =>
-      libraryApi.listAlbums({
-        search: filters.search,
-        artist: filters.artist,
-        sort_by: sortBy,
-        page: pageParam,
-        page_size: PAGE_SIZE,
-      }),
+    queryKey: ['library-albums', { search: filters.search, artist: filters.artist, sortBy, offline: isOffline }],
+    queryFn: ({ pageParam = 1 }) => fetchAlbumsPage(pageParam),
     getNextPageParam: (lastPage) => {
       const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
       return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
@@ -121,18 +143,12 @@ export function AlbumGrid({
     loadedPagesRef.current.add(pageNumber);
 
     try {
-      const result = await libraryApi.listAlbums({
-        search: filters.search,
-        artist: filters.artist,
-        sort_by: sortBy,
-        page: pageNumber,
-        page_size: PAGE_SIZE,
-      });
+      const result = await fetchAlbumsPage(pageNumber);
       setSparsePages(prev => new Map(prev).set(pageNumber, result.items));
     } catch {
       loadedPagesRef.current.delete(pageNumber);
     }
-  }, [filters.search, filters.artist, sortBy]);
+  }, [fetchAlbumsPage]);
 
   // Reset sparse state on filter/sort changes
   useEffect(() => {
