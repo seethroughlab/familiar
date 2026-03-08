@@ -13,6 +13,9 @@ interface ConnectivityCounters {
   offline_queue_rebuild_count: number;
   skip_storm_circuit_breaker_triggered: number;
   recovery_to_online_success: number;
+  remote_command_enablement_mismatch: number;
+  pending_sync_local_url_local: number;
+  pending_sync_local_url_total: number;
 }
 
 interface ConnectivityState {
@@ -32,6 +35,7 @@ interface ConnectivityState {
   noteStreamLoadFailure: (category: 'network-unreachable' | 'offline-unavailable' | 'other') => void;
   noteStreamLoadSuccess: () => void;
   incrementCounter: (name: keyof ConnectivityCounters) => void;
+  incrementCounterBy: (name: keyof ConnectivityCounters, amount: number) => void;
 }
 
 const PROBE_TIMEOUT_MS = 3500;
@@ -178,6 +182,9 @@ const defaultCounters = (): ConnectivityCounters => ({
   offline_queue_rebuild_count: 0,
   skip_storm_circuit_breaker_triggered: 0,
   recovery_to_online_success: 0,
+  remote_command_enablement_mismatch: 0,
+  pending_sync_local_url_local: 0,
+  pending_sync_local_url_total: 0,
 });
 
 export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
@@ -283,6 +290,17 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
       counters: {
         ...state.counters,
         [name]: state.counters[name] + 1,
+      },
+    });
+  },
+
+  incrementCounterBy: (name, amount) => {
+    if (!Number.isFinite(amount) || amount === 0) return;
+    const state = get();
+    set({
+      counters: {
+        ...state.counters,
+        [name]: state.counters[name] + amount,
       },
     });
   },

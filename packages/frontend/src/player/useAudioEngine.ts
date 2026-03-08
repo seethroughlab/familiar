@@ -102,6 +102,7 @@ export function useAudioEngine() {
   const noteStreamLoadFailure = useConnectivityStore((s) => s.noteStreamLoadFailure);
   const noteStreamLoadSuccess = useConnectivityStore((s) => s.noteStreamLoadSuccess);
   const incrementConnectivityCounter = useConnectivityStore((s) => s.incrementCounter);
+  const incrementConnectivityCounterBy = useConnectivityStore((s) => s.incrementCounterBy);
   const refreshOfflineTrackIds = useConnectivityStore((s) => s.refreshOfflineTrackIds);
 
   // Refs for stable access in event handler (avoids re-subscribing on every change)
@@ -446,26 +447,67 @@ export function useAudioEngine() {
     const state = usePlayerStore.getState();
     const nextTrack = state.getNextTrack();
     const prevTrack = state.history[state.history.length - 1] ?? null;
+    let cancelled = false;
 
-    engine.syncPendingTracks({
-      next: nextTrack ? {
-        url: tracksApi.getStreamUrl(nextTrack.id),
-        trackId: nextTrack.id,
-        title: nextTrack.title || 'Unknown',
-        artist: nextTrack.artist || 'Unknown',
-        album: nextTrack.album || 'Unknown',
-        artworkUrl: nextTrack.id ? tracksApi.getArtworkUrl(nextTrack.id) : undefined,
-      } : null,
-      previous: prevTrack ? {
-        url: tracksApi.getStreamUrl(prevTrack.id),
-        trackId: prevTrack.id,
-        title: prevTrack.title || 'Unknown',
-        artist: prevTrack.artist || 'Unknown',
-        album: prevTrack.album || 'Unknown',
-        artworkUrl: prevTrack.id ? tracksApi.getArtworkUrl(prevTrack.id) : undefined,
-      } : null,
-    });
-  }, [currentTrack?.id, queueIndex, queueLength, historyLength, engine, isInitialized]);
+    const toPendingTrack = async (track: Track | null) => {
+      if (!track || !engine.resolveTrackUrl) return null;
+      try {
+        const resolved = await engine.resolveTrackUrl(track.id);
+        return {
+          url: resolved.url,
+          trackId: track.id,
+          title: track.title || 'Unknown',
+          artist: track.artist || 'Unknown',
+          album: track.album || 'Unknown',
+          artworkUrl: track.id ? tracksApi.getArtworkUrl(track.id) : undefined,
+        };
+      } catch (error) {
+        log.warn('pending track resolution failed', { trackId: track.id, error });
+        return null;
+      }
+    };
+
+    const isLikelyLocalUrl = (url: string): boolean => (
+      url.startsWith('file://') ||
+      url.startsWith('capacitor://') ||
+      url.startsWith('content://') ||
+      url.startsWith('/local/')
+    );
+
+    Promise.all([toPendingTrack(nextTrack), toPendingTrack(prevTrack)])
+      .then(([next, previous]) => {
+        if (cancelled) return;
+        if ((!!nextTrack && !next) || (!!prevTrack && !previous)) {
+          incrementConnectivityCounter('remote_command_enablement_mismatch');
+        }
+        if (offlineModeActive) {
+          const candidates = [next, previous].filter((item): item is NonNullable<typeof item> => !!item);
+          if (candidates.length > 0) {
+            const localCount = candidates.filter((item) => isLikelyLocalUrl(item.url)).length;
+            incrementConnectivityCounterBy('pending_sync_local_url_local', localCount);
+            incrementConnectivityCounterBy('pending_sync_local_url_total', candidates.length);
+          }
+        }
+        engine.syncPendingTracks?.({ next, previous });
+      })
+      .catch((error) => {
+        log.warn('syncPendingTracks preparation failed', { error });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentTrack?.id,
+    queueIndex,
+    queueLength,
+    historyLength,
+    offlineModeActive,
+    engine,
+    isInitialized,
+    incrementConnectivityCounter,
+    incrementConnectivityCounterBy,
+  ]);
 
   // --------------------------------------------------------------------------
   // Effect: Handle Play/Pause State

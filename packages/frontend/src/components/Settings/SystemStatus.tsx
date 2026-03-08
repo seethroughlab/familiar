@@ -29,6 +29,7 @@ import {
   type DiagnosticsExport,
   type UpdateStatus,
 } from '../../api';
+import { useConnectivityStore } from '../../stores/connectivityStore';
 
 import { createLogger } from '../../utils/logger';
 
@@ -47,6 +48,7 @@ export function SystemStatus() {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [updateChannel, setUpdateChannel] = useState<string>('disabled');
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const connectivityCounters = useConnectivityStore((s) => s.counters);
 
   // Load update channel from settings
   useEffect(() => {
@@ -162,6 +164,21 @@ export function SystemStatus() {
       lines.push(`- Last.fm: ${settings.has_lastfm_key ? 'configured' : 'not configured'}`);
       lines.push(`- Library paths: ${settings.library_paths_count || 0}\n`);
     }
+
+    const pendingLocalTotal = connectivityCounters.pending_sync_local_url_total;
+    const pendingLocalRatio = pendingLocalTotal > 0
+      ? connectivityCounters.pending_sync_local_url_local / pendingLocalTotal
+      : null;
+    lines.push('## Playback Canary (Client)\n');
+    lines.push(`- remote_command_enablement_mismatch: ${connectivityCounters.remote_command_enablement_mismatch}`);
+    lines.push(
+      `- pending_sync_local_url_ratio: ${
+        pendingLocalRatio === null
+          ? 'n/a (no offline pending sync attempts yet)'
+          : `${(pendingLocalRatio * 100).toFixed(1)}% (${connectivityCounters.pending_sync_local_url_local}/${pendingLocalTotal})`
+      }`
+    );
+    lines.push('');
 
     // Recent Failures
     if (diag.recent_failures && diag.recent_failures.length > 0) {
@@ -365,6 +382,10 @@ export function SystemStatus() {
   if (!health) return null;
 
   const hasWarnings = Array.isArray(health.warnings) && health.warnings.length > 0;
+  const pendingLocalTotal = connectivityCounters.pending_sync_local_url_total;
+  const pendingLocalRatio = pendingLocalTotal > 0
+    ? connectivityCounters.pending_sync_local_url_local / pendingLocalTotal
+    : null;
 
   return (
     <div className={`rounded-lg p-4 border ${getStatusBgColor(health.status)}`}>
@@ -588,6 +609,29 @@ export function SystemStatus() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Playback Canary */}
+          <div className="space-y-2">
+            <h5 className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
+              Playback Canary
+            </h5>
+            <div className="p-3 bg-zinc-800/50 rounded-lg space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-zinc-400">remote_command_enablement_mismatch</span>
+                <span className={`font-mono ${connectivityCounters.remote_command_enablement_mismatch === 0 ? 'text-green-400' : 'text-yellow-300'}`}>
+                  {connectivityCounters.remote_command_enablement_mismatch}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-zinc-400">pending_sync_local_url_ratio</span>
+                <span className="font-mono text-zinc-200">
+                  {pendingLocalRatio === null
+                    ? 'n/a'
+                    : `${(pendingLocalRatio * 100).toFixed(1)}% (${connectivityCounters.pending_sync_local_url_local}/${pendingLocalTotal})`}
+                </span>
+              </div>
             </div>
           </div>
         </div>

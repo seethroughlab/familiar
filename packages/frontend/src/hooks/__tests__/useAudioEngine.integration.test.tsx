@@ -95,6 +95,7 @@ const mockConnectivityStore = vi.hoisted(() => {
     noteStreamLoadFailure: vi.fn(),
     noteStreamLoadSuccess: vi.fn(),
     incrementCounter: vi.fn(),
+    incrementCounterBy: vi.fn(),
     refreshOfflineTrackIds: vi.fn(async () => {}),
   };
 
@@ -116,11 +117,19 @@ const mockConnectivityStore = vi.hoisted(() => {
       noteStreamLoadFailure: vi.fn(),
       noteStreamLoadSuccess: vi.fn(),
       incrementCounter: vi.fn(),
+      incrementCounterBy: vi.fn(),
       refreshOfflineTrackIds: vi.fn(async () => {}),
     };
   };
   return store;
 });
+
+const mockTracksApi = vi.hoisted(() => ({
+  getStreamUrl: vi.fn((id: string) => `/api/v1/tracks/${id}/stream`),
+  getArtworkUrl: vi.fn((id: string) => `/api/v1/tracks/${id}/artwork`),
+  getAlbumGain: vi.fn(async () => ({ album_gain_db: null, album_peak: null, track_count: 1 })),
+  reportPlaybackError: vi.fn(async () => {}),
+}));
 
 vi.mock('../../player/audio/engineInstance', () => ({
   getEngine: () => mockEngine,
@@ -131,12 +140,7 @@ vi.mock('../../stores/connectivityStore', () => ({
 }));
 
 vi.mock('../../api', () => ({
-  tracksApi: {
-    getStreamUrl: (id: string) => `/api/v1/tracks/${id}/stream`,
-    getArtworkUrl: (id: string) => `/api/v1/tracks/${id}/artwork`,
-    getAlbumGain: vi.fn(async () => ({ album_gain_db: null, album_peak: null, track_count: 1 })),
-    reportPlaybackError: vi.fn(async () => {}),
-  },
+  tracksApi: mockTracksApi,
 }));
 
 vi.mock('../../player/audioSettingsStore', () => ({
@@ -162,6 +166,11 @@ describe('useAudioEngine + playerStore integration parity', () => {
   beforeEach(() => {
     mockConnectivityStore.__reset();
     mockEngine.__reset();
+    mockTracksApi.getStreamUrl.mockClear();
+    mockTracksApi.getArtworkUrl.mockClear();
+    mockTracksApi.getAlbumGain.mockClear();
+    mockTracksApi.reportPlaybackError.mockClear();
+    mockEngine.resolveTrackUrl.mockImplementation(async (trackId: string) => ({ url: `/api/v1/tracks/${trackId}/stream`, isOffline: false }));
     usePlayerStore.setState({
       currentTrack: null,
       isPlaying: false,
@@ -266,6 +275,51 @@ describe('useAudioEngine + playerStore integration parity', () => {
     });
   });
 
+  it('syncs pending tracks using resolver-backed local URLs while offline', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    const t3 = makeTrack('3');
+    mockConnectivityStore.setState({
+      offlineModeActive: true,
+      offlineTrackIds: new Set(['1', '2', '3']),
+    });
+    mockEngine.resolveTrackUrl.mockImplementation(async (trackId: string) => ({
+      url: `/local/${trackId}.m4a`,
+      isOffline: true,
+    }));
+    usePlayerStore.getState().setQueue([t1, t2], 0);
+    usePlayerStore.setState({ history: [t3] });
+
+    renderHook(() => useAudioEngine());
+
+    await act(async () => {});
+
+    expect(mockEngine.syncPendingTracks).toHaveBeenCalled();
+    expect(mockEngine.syncPendingTracks).toHaveBeenLastCalledWith({
+      next: expect.objectContaining({ trackId: '2', url: '/local/2.m4a' }),
+      previous: expect.objectContaining({ trackId: '3', url: '/local/3.m4a' }),
+    });
+    expect(mockTracksApi.getStreamUrl).not.toHaveBeenCalledWith('2');
+    expect(mockTracksApi.getStreamUrl).not.toHaveBeenCalledWith('3');
+    expect(mockConnectivityStore.getState().incrementCounterBy).toHaveBeenCalledWith('pending_sync_local_url_local', 2);
+    expect(mockConnectivityStore.getState().incrementCounterBy).toHaveBeenCalledWith('pending_sync_local_url_total', 2);
+  });
+
+  it('increments remote command mismatch counter when pending resolution fails', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    usePlayerStore.getState().setQueue([t1, t2], 0);
+    mockEngine.resolveTrackUrl.mockImplementation(async (trackId: string) => {
+      if (trackId === '2') throw new Error('Failed to fetch');
+      return { url: `/api/v1/tracks/${trackId}/stream`, isOffline: false };
+    });
+
+    renderHook(() => useAudioEngine());
+    await act(async () => {});
+
+    expect(mockConnectivityStore.getState().incrementCounter).toHaveBeenCalledWith('remote_command_enablement_mismatch');
+  });
+
   it('re-syncs pending previous when history changes without currentTrack id change', async () => {
     const t1 = makeTrack('1');
     const t2 = makeTrack('2');
@@ -273,6 +327,7 @@ describe('useAudioEngine + playerStore integration parity', () => {
     usePlayerStore.getState().setQueue([t1, t2, t3], 1);
 
     renderHook(() => useAudioEngine());
+    await act(async () => {});
 
     const initialCalls = mockEngine.syncPendingTracks.mock.calls.length;
     expect(initialCalls).toBeGreaterThan(0);
@@ -295,6 +350,7 @@ describe('useAudioEngine + playerStore integration parity', () => {
     usePlayerStore.getState().setQueue([t1, t2], 0);
 
     renderHook(() => useAudioEngine());
+    await act(async () => {});
 
     const initialCalls = mockEngine.syncPendingTracks.mock.calls.length;
     expect(initialCalls).toBeGreaterThan(0);
@@ -315,6 +371,7 @@ describe('useAudioEngine + playerStore integration parity', () => {
     usePlayerStore.getState().setQueue([t1], 0);
 
     renderHook(() => useAudioEngine());
+    await act(async () => {});
 
     expect(mockEngine.syncPendingTracks).toHaveBeenCalled();
     expect(mockEngine.syncPendingTracks).toHaveBeenLastCalledWith({
