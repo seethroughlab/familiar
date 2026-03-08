@@ -57,7 +57,9 @@ export interface CachedTrack {
 
 export interface OfflineTrack {
   id: string; // Track UUID
-  audio: Blob;
+  audio?: Blob; // Web/PWA path
+  nativePath?: string; // Capacitor native file path
+  sizeBytes?: number; // Native file size when blob is not stored
   cachedAt: Date;
 }
 

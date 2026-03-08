@@ -11,8 +11,33 @@ import {
 import { getApiUrl } from '../api/base';
 import { computeAlbumHash } from '../utils/albumHash';
 import { createLogger } from '../utils/logger';
+import { isNativeApp } from '../utils/platform';
 
 const log = createLogger('Offline');
+
+type CapacitorFilesystemPlugin = {
+  writeFile(options: { path: string; data: string; directory?: string; recursive?: boolean }): Promise<void>;
+  deleteFile(options: { path: string; directory?: string }): Promise<void>;
+  getUri(options: { path: string; directory?: string }): Promise<{ uri: string }>;
+};
+
+async function getCapacitorFilesystem(): Promise<CapacitorFilesystemPlugin | null> {
+  if (!isNativeApp()) return null;
+  const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor;
+  const fs = cap?.Plugins?.Filesystem as CapacitorFilesystemPlugin | undefined;
+  return fs ?? null;
+}
+
+function toBase64(data: ArrayBuffer): string {
+  const bytes = new Uint8Array(data);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function nativeTrackPath(trackId: string): string {
+  return `offline-tracks/${trackId}.bin`;
+}
 
 /**
  * Fetch and cache track metadata from the API.
@@ -239,43 +264,68 @@ export async function downloadTrackForOffline(
     }
   }
 
-  // Store in IndexedDB
-  const offlineTrack: OfflineTrack = {
-    id: trackId,
-    audio: blob,
-    cachedAt: new Date(),
-  };
-
-  log.info('Storing track in IndexedDB:', trackId, 'size:', blob.size);
-
-  try {
-    await db.offlineTracks.put(offlineTrack);
-  } catch (error) {
-    // Handle quota exceeded error
-    const isQuotaError =
-      error instanceof DOMException &&
-      (error.name === 'QuotaExceededError' ||
-        error.code === 22 ||
-        // Firefox
-        error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
-
-    if (isQuotaError) {
-      log.error('Storage quota exceeded:', trackId);
-      // Dispatch event for UI to show "Storage full" message
-      window.dispatchEvent(
-        new CustomEvent('offline-storage-full', {
-          detail: {
-            trackId,
-            blobSize: blob.size,
-            message: 'Storage is full. Free up space by removing downloaded tracks.',
-          },
-        })
-      );
-      // Also clear partial download since we can't store the full track
-      await clearPartialDownload(trackId);
-      throw new Error('Storage quota exceeded. Free up space by removing downloaded tracks.');
+  const fs = await getCapacitorFilesystem();
+  if (fs) {
+    const path = nativeTrackPath(trackId);
+    log.info('Storing track in Capacitor filesystem:', trackId, path);
+    try {
+      const data = await blob.arrayBuffer();
+      await fs.writeFile({
+        path,
+        data: toBase64(data),
+        directory: 'DATA',
+        recursive: true,
+      });
+      await db.offlineTracks.put({
+        id: trackId,
+        nativePath: path,
+        sizeBytes: blob.size,
+        cachedAt: new Date(),
+      });
+    } catch (error) {
+      log.error('Failed to store native offline track:', trackId, error);
+      throw error;
     }
-    throw error;
+  } else {
+    // Store in IndexedDB
+    const offlineTrack: OfflineTrack = {
+      id: trackId,
+      audio: blob,
+      sizeBytes: blob.size,
+      cachedAt: new Date(),
+    };
+
+    log.info('Storing track in IndexedDB:', trackId, 'size:', blob.size);
+
+    try {
+      await db.offlineTracks.put(offlineTrack);
+    } catch (error) {
+    // Handle quota exceeded error
+      const isQuotaError =
+        error instanceof DOMException &&
+        (error.name === 'QuotaExceededError' ||
+          error.code === 22 ||
+          // Firefox
+          error.name === 'NS_ERROR_DOM_QUOTA_REACHED');
+
+      if (isQuotaError) {
+        log.error('Storage quota exceeded:', trackId);
+        // Dispatch event for UI to show "Storage full" message
+        window.dispatchEvent(
+          new CustomEvent('offline-storage-full', {
+            detail: {
+              trackId,
+              blobSize: blob.size,
+              message: 'Storage is full. Free up space by removing downloaded tracks.',
+            },
+          })
+        );
+        // Also clear partial download since we can't store the full track
+        await clearPartialDownload(trackId);
+        throw new Error('Storage quota exceeded. Free up space by removing downloaded tracks.');
+      }
+      throw error;
+    }
   }
 
   // Clear partial download record on success
@@ -305,6 +355,22 @@ export async function getOfflineTrack(trackId: string): Promise<Blob | null> {
 }
 
 /**
+ * Get a Capacitor-native file URI for an offline track if available.
+ */
+export async function getOfflineTrackNativeUri(trackId: string): Promise<string | null> {
+  const track = await db.offlineTracks.get(trackId);
+  if (!track?.nativePath) return null;
+  const fs = await getCapacitorFilesystem();
+  if (!fs) return null;
+  try {
+    const { uri } = await fs.getUri({ path: track.nativePath, directory: 'DATA' });
+    return uri;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if a track is available offline.
  */
 export async function isTrackOffline(trackId: string): Promise<boolean> {
@@ -316,6 +382,17 @@ export async function isTrackOffline(trackId: string): Promise<boolean> {
  * Remove a track from offline storage.
  */
 export async function removeOfflineTrack(trackId: string): Promise<void> {
+  const track = await db.offlineTracks.get(trackId);
+  if (track?.nativePath) {
+    const fs = await getCapacitorFilesystem();
+    if (fs) {
+      try {
+        await fs.deleteFile({ path: track.nativePath, directory: 'DATA' });
+      } catch {
+        // best-effort
+      }
+    }
+  }
   await db.offlineTracks.delete(trackId);
 }
 
@@ -410,7 +487,7 @@ export async function getOfflineStorageUsage(): Promise<{
   const tracks = await db.offlineTracks.toArray();
   const artwork = await db.offlineArtwork.toArray();
 
-  const trackSizeBytes = tracks.reduce((total, track) => total + track.audio.size, 0);
+  const trackSizeBytes = tracks.reduce((total, track) => total + (track.audio?.size ?? track.sizeBytes ?? 0), 0);
   const artworkSizeBytes = artwork.reduce((total, art) => total + art.artwork.size, 0);
 
   return {
@@ -426,6 +503,15 @@ export async function getOfflineStorageUsage(): Promise<{
  * Clear all offline tracks and artwork.
  */
 export async function clearAllOfflineTracks(): Promise<void> {
+  const fs = await getCapacitorFilesystem();
+  if (fs) {
+    const tracks = await db.offlineTracks.toArray();
+    await Promise.allSettled(
+      tracks
+        .filter((t) => !!t.nativePath)
+        .map((t) => fs.deleteFile({ path: t.nativePath!, directory: 'DATA' }))
+    );
+  }
   await db.offlineTracks.clear();
   await db.offlineArtwork.clear();
 }
@@ -529,13 +615,14 @@ export async function getOfflineTracksWithInfo(): Promise<OfflineTrackInfo[]> {
 
   return offlineTracks.map((track) => {
     const info = trackInfoMap.get(track.id);
+    const sizeBytes = track.audio?.size ?? track.sizeBytes ?? 0;
     return {
       id: track.id,
       title: info?.title || 'Unknown Title',
       artist: info?.artist || 'Unknown Artist',
       album: info?.album || 'Unknown Album',
-      sizeBytes: track.audio.size,
-      sizeFormatted: formatBytes(track.audio.size),
+      sizeBytes,
+      sizeFormatted: formatBytes(sizeBytes),
       cachedAt: track.cachedAt,
     };
   });
