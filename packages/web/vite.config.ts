@@ -11,6 +11,7 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   build: {
+    manifest: true,
     rollupOptions: {
       output: {
         manualChunks: {

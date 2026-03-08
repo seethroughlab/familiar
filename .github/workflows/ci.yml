@@ -116,6 +116,9 @@ jobs:
       - name: Lint
         run: pnpm --filter @familiar/frontend run lint
 
+      - name: Audio Guardrail Checks
+        run: pnpm --filter @familiar/frontend run check:audio-guardrails
+
   frontend-build:
     name: Frontend Build
     runs-on: self-hosted
@@ -139,11 +142,25 @@ jobs:
       - name: Build
         run: pnpm --filter @familiar/web run build
 
+      - name: Bundle Budget Checks
+        env:
+          # Temporary bootstrap hard ceiling while Phase 6 split work reduces entry size.
+          # Targets are still enforced as warnings by the checker.
+          BUNDLE_ENTRY_GZIP_HARD_KB: '460'
+        run: pnpm --filter @familiar/web run check:bundle-budgets
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
           path: packages/web/dist
+          retention-days: 7
+
+      - name: Upload performance artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-perf-metrics
+          path: artifacts/perf
           retention-days: 7
 
   docker-build:
