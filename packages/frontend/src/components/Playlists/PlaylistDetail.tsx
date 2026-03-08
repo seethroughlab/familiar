@@ -265,7 +265,8 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     if (items.length === 0) return;
 
     const clickedTrack = items[startIndex];
-    if (clickedTrack && currentTrack?.id === clickedTrack.id) {
+    if (!clickedTrack) return;
+    if (currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }

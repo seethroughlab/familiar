@@ -68,6 +68,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
 
     // If clicking on the currently playing track, toggle play/pause
     const clickedTrack = items[startIndex];
+    if (!clickedTrack) return;
     if (clickedTrack && currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;

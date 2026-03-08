@@ -1129,7 +1129,15 @@ export function TrackListBrowser({
         // Resolve from the authoritative queue array by ID so mobile sparse/jump lists
         // always start the tapped track, even when their visible index differs.
         const resolvedIndex = allTracksUnfiltered.findIndex((t) => t.id === track.id);
-        setQueue(allTracksUnfiltered, resolvedIndex >= 0 ? resolvedIndex : index);
+        if (resolvedIndex < 0) {
+          log.warn('handlePlayTrack skipped unresolved track', {
+            trackId: track.id,
+            visibleIndex: index,
+            queueLength: allTracksUnfiltered.length,
+          });
+          return;
+        }
+        setQueue(allTracksUnfiltered, resolvedIndex);
       }
     },
     [currentTrack, isPlaying, setIsPlaying, allTracksUnfiltered, setQueue, total, shuffle, queueFilters, setLazyQueue]

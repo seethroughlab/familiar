@@ -86,7 +86,8 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
 
     // If clicking on the currently playing track, toggle play/pause
     const clickedTrack = items[startIndex];
-    if (clickedTrack && currentTrack?.id === clickedTrack.id) {
+    if (!clickedTrack) return;
+    if (currentTrack?.id === clickedTrack.id) {
       setIsPlaying(!isPlaying);
       return;
     }

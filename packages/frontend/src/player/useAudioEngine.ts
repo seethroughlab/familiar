@@ -162,6 +162,11 @@ export function useAudioEngine() {
         case 'ended': {
           if (queueTransition) return;
           const state = usePlayerStore.getState();
+          // Ignore stale/stray ended events while a newly selected track is still loading.
+          if (state.isLoadingAudio) {
+            log.debug('ended ignored while loading', { trackId: state.currentTrack?.id });
+            return;
+          }
           log.debug('ended event', { trackId: state.currentTrack?.id });
           playNext();
           break;

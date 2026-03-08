@@ -680,7 +680,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   setQueueByTrackId: (tracks, trackId, source?: QueueSource) => {
     const resolvedIndex = tracks.findIndex((track) => track.id === trackId);
-    get().setQueue(tracks, resolvedIndex >= 0 ? resolvedIndex : 0, source);
+    if (resolvedIndex < 0) {
+      log.warn('setQueueByTrackId ignored missing track id', {
+        trackId,
+        trackCount: tracks.length,
+        source: source?.type,
+        sourceId: source?.id,
+      });
+      return;
+    }
+    get().setQueue(tracks, resolvedIndex, source);
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {

@@ -238,7 +238,7 @@ describe('playerStore', () => {
       expect(state.isPlaying).toBe(true)
     })
 
-    it('should fall back safely when queue track id is missing', () => {
+    it('should ignore queue updates when track id is missing', () => {
       const track1 = createMockTrack('1', 'First')
       const track2 = createMockTrack('2', 'Second')
       const tracks = [track1, track2]
@@ -246,8 +246,9 @@ describe('playerStore', () => {
       usePlayerStore.getState().setQueueByTrackId(tracks, 'missing-track-id')
 
       const state = usePlayerStore.getState()
-      expect(state.queueIndex).toBe(0)
-      expect(state.currentTrack?.id).toBe(track1.id)
+      expect(state.queueIndex).toBe(-1)
+      expect(state.currentTrack).toBeNull()
+      expect(state.queue).toHaveLength(0)
     })
   })
 
