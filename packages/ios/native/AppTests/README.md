@@ -1,6 +1,6 @@
-# AppTests Scaffold
+# AppTests
 
-This folder scaffolds native lock-screen regression tests for `NativeAudioEngine`.
+This folder contains native lock-screen regression tests for `NativeAudioEngine`.
 
 ## Wire Target In Xcode
 
@@ -10,7 +10,7 @@ This folder scaffolds native lock-screen regression tests for `NativeAudioEngine
 4. Add `NativeAudioEngineRemoteCommandAvailabilityTests.swift` to the new target.
 5. Enable `@testable import App` by making sure target/module name is `App`.
 
-## Initial Test Focus
+## Current Test Focus
 
 - Previous command enablement when `currentTime > 3`.
 - Previous command enablement when pending previous exists.

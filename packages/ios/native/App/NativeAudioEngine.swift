@@ -7,7 +7,7 @@ protocol NativeAudioEngineDelegate: AnyObject {
     func audioEngineDidFinishPlaying()
     func audioEngineDidUpdateTime(currentTime: Double, duration: Double)
     func audioEngineDidUpdateAnalysis(frequencyData: [UInt8], timeDomainData: [UInt8])
-    func audioEngineDidEncounterError(message: String)
+    func audioEngineDidEncounterError(message: String, category: NativeAudioEngine.NativeAudioErrorCategory)
     func audioEngineRemotePlay()
     func audioEngineRemotePause()
     func audioEngineRemoteNext(loadedTrackId: String?)
@@ -16,6 +16,12 @@ protocol NativeAudioEngineDelegate: AnyObject {
 }
 
 class NativeAudioEngine {
+    enum NativeAudioErrorCategory: String {
+        case network
+        case decode
+        case state
+        case resource
+    }
     enum PreloadState: Equatable {
         case idle
         case preloading(trackId: String)
@@ -299,7 +305,10 @@ class NativeAudioEngine {
                         // Don't auto-resume — let JS side decide
                     }
                 } catch {
-                    delegate?.audioEngineDidEncounterError(message: "Failed to restart after interruption: \(error.localizedDescription)")
+                    delegate?.audioEngineDidEncounterError(
+                        message: "Failed to restart after interruption: \(error.localizedDescription)",
+                        category: .state
+                    )
                 }
             }
         @unknown default:
@@ -437,7 +446,10 @@ class NativeAudioEngine {
             enableAnalysis()
             syncNowPlaying()
         } catch {
-            delegate?.audioEngineDidEncounterError(message: "Failed to start engine: \(error.localizedDescription)")
+            delegate?.audioEngineDidEncounterError(
+                message: "Failed to start engine: \(error.localizedDescription)",
+                category: .state
+            )
         }
     }
 
@@ -1062,10 +1074,17 @@ class NativeAudioEngine {
 
     private func updateRemoteCommandAvailability() {
         let commandCenter = MPRemoteCommandCenter.shared()
-        let hasNext = pendingNextTrackId != nil
-        let canGoPrevious = getCurrentTime() > 3 || pendingPreviousTrackId != nil
-        commandCenter.nextTrackCommand.isEnabled = hasNext
-        commandCenter.previousTrackCommand.isEnabled = canGoPrevious
+        commandCenter.nextTrackCommand.isEnabled = canGoNextForRemoteCommand()
+        commandCenter.previousTrackCommand.isEnabled = canGoPreviousForRemoteCommand()
+    }
+
+    func canGoNextForRemoteCommand() -> Bool {
+        return pendingNextTrackId != nil
+    }
+
+    func canGoPreviousForRemoteCommand(at currentTime: Double? = nil) -> Bool {
+        let effectiveCurrentTime = currentTime ?? getCurrentTime()
+        return effectiveCurrentTime > 3 || pendingPreviousTrackId != nil
     }
 
     private func setupRemoteCommands() {
@@ -1124,7 +1143,7 @@ class NativeAudioEngine {
             guard let self = self else { return .commandFailed }
 
             // If more than 3 seconds in, restart the current track
-            if self.getCurrentTime() > 3 {
+            if self.canGoPreviousForRemoteCommand() && self.getCurrentTime() > 3 {
                 self.seek(time: 0)
                 self.syncNowPlaying()
                 self.delegate?.audioEngineRemotePrevious(nativeAction: "restart", loadedTrackId: nil)

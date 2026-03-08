@@ -320,8 +320,11 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
         ])
     }
 
-    func audioEngineDidEncounterError(message: String) {
-        notifyListeners("error", data: ["message": message])
+    func audioEngineDidEncounterError(message: String, category: NativeAudioEngine.NativeAudioErrorCategory) {
+        notifyListeners("error", data: [
+            "message": message,
+            "category": category.rawValue,
+        ])
     }
 
     func audioEngineRemotePlay() {

@@ -334,6 +334,36 @@ describe('playerStore', () => {
       expect(shuffleOrder).toHaveLength(3)
       expect(shuffleOrder).toContain(2) // New track index should be in order
     })
+
+    it('blocks non-downloaded tracks when offline mode is active', () => {
+      const track1 = createMockTrack('1')
+      const track2 = createMockTrack('2')
+      mockConnectivityState.offlineModeActive = true
+      mockConnectivityState.offlineTrackIds = new Set(['1'])
+
+      const { setQueue, addToQueue } = usePlayerStore.getState()
+      setQueue([track1], 0)
+      addToQueue(track2)
+
+      const state = usePlayerStore.getState()
+      expect(state.queue).toHaveLength(1)
+      expect(state.queue[0].track.id).toBe('1')
+    })
+
+    it('allows downloaded tracks to be added while offline mode is active', () => {
+      const track1 = createMockTrack('1')
+      const track2 = createMockTrack('2')
+      mockConnectivityState.offlineModeActive = true
+      mockConnectivityState.offlineTrackIds = new Set(['1', '2'])
+
+      const { setQueue, addToQueue } = usePlayerStore.getState()
+      setQueue([track1], 0)
+      addToQueue(track2)
+
+      const state = usePlayerStore.getState()
+      expect(state.queue).toHaveLength(2)
+      expect(state.queue[1].track.id).toBe('2')
+    })
   })
 
   describe('clearQueue', () => {

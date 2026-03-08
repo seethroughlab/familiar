@@ -212,4 +212,34 @@ describe('Capacitor Engine Parity Behaviors', () => {
     });
     expect(engine.getLoadedTrackId()).toBe('prev-1');
   });
+
+  it('maps native error categories to EngineEvent codes', () => {
+    const engine = new CapacitorEngine();
+    const handler = vi.fn();
+    engine.initialize();
+    engine.on(handler);
+
+    familiarAudioMock.__emit('error', { message: 'Network down', category: 'network' });
+    familiarAudioMock.__emit('error', { message: 'Decode failed', category: 'decode' });
+    familiarAudioMock.__emit('error', { message: 'State failed', category: 'state' });
+    familiarAudioMock.__emit('error', { message: 'Resource missing', category: 'resource' });
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'network-unreachable' }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'media-decode' }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'state' }));
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'resource' }));
+  });
+
+  it('emits remote command fallback events when native load is not completed', () => {
+    const engine = new CapacitorEngine();
+    const handler = vi.fn();
+    engine.initialize();
+    engine.on(handler);
+
+    familiarAudioMock.__emit('remoteNext', {});
+    familiarAudioMock.__emit('remotePrevious', {});
+
+    expect(handler).toHaveBeenCalledWith({ type: 'remoteNext' });
+    expect(handler).toHaveBeenCalledWith({ type: 'remotePrevious', nativeAction: undefined });
+  });
 });

@@ -359,6 +359,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   // Queue actions
   addToQueue: (track, insertIndex, shuffleInsertPosition) => {
+    const connectivity = useConnectivityStore.getState();
+    if (connectivity.offlineModeActive && !connectivity.offlineTrackIds.has(track.id)) {
+      log.warn('addToQueue blocked by offline invariant', { trackId: track.id });
+      return;
+    }
+
     const { queue, queueIndex, shuffle, shuffleOrder } = get();
 
     const insertAt = insertIndex ?? queue.length;
