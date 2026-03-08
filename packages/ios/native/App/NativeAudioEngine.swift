@@ -238,17 +238,18 @@ class NativeAudioEngine {
         reverbPreDelayNode.lowPassCutoff = 20000
 
         // Connect initial chain
-        let format = engine.mainMixerNode.outputFormat(forBus: 0)
-        connectChain(format: format)
+        connectChain()
 
         setupInterruptionHandling()
     }
 
     /// Build the ordered effect chain and connect nodes sequentially.
     /// Chain order: playerNodes[0,1] → inputMixer → EQ → Compressor → Distortion → Filter → Delay → preDelay → Reverb → mainMixer
-    private func connectChain(format: AVAudioFormat) {
-        engine.connect(playerNodes[0], to: inputMixer, format: format)
-        engine.connect(playerNodes[1], to: inputMixer, format: format)
+    private func connectChain() {
+        // Let AVAudioEngine negotiate formats across the graph. Forcing per-track
+        // processing formats during load can trigger graph reconfiguration crashes.
+        engine.connect(playerNodes[0], to: inputMixer, format: nil)
+        engine.connect(playerNodes[1], to: inputMixer, format: nil)
 
         var chain: [AVAudioNode] = [inputMixer, eqNode]
         if let comp = compressorNode { chain.append(comp) }
@@ -260,28 +261,8 @@ class NativeAudioEngine {
         chain.append(engine.mainMixerNode)
 
         for i in 0..<(chain.count - 1) {
-            engine.connect(chain[i], to: chain[i + 1], format: format)
+            engine.connect(chain[i], to: chain[i + 1], format: nil)
         }
-    }
-
-    /// Disconnect all effect node outputs before reconnecting.
-    private func disconnectAllEffectNodes() {
-        let nodes: [AVAudioNode?] = [
-            playerNodes[0], playerNodes[1], inputMixer,
-            eqNode, compressorNode, distortionNode, filterNode,
-            delayNode, reverbPreDelayNode, reverbNode,
-        ]
-        for node in nodes {
-            if let node = node {
-                engine.disconnectNodeOutput(node)
-            }
-        }
-    }
-
-    /// Rebuild the signal chain with a given format (called on track load and custom node readiness).
-    private func reconnectChain(format: AVAudioFormat) {
-        disconnectAllEffectNodes()
-        connectChain(format: format)
     }
 
     // MARK: - Audio Session Interruption Handling
@@ -412,10 +393,6 @@ class NativeAudioEngine {
     }
 
     private func scheduleFile(_ file: AVAudioFile, completion: @escaping (Error?) -> Void) {
-        // Reconnect with the file's processing format for correct sample rate / channel count
-        let processingFormat = file.processingFormat
-        reconnectChain(format: processingFormat)
-
         let scheduledIndex = activePlayerIndex
         playerNode.scheduleFile(file, at: nil) { [weak self] in
             guard let self = self else { return }
@@ -1312,20 +1289,27 @@ class NativeAudioEngine {
             // --- FFT: apply window, compute magnitudes, convert to dB, scale to bytes ---
             vDSP_vmul(samples, 1, window, 1, &windowedSamples, 1, vDSP_Length(fftSize))
 
-            // Pack into split complex format for FFT
-            windowedSamples.withUnsafeBufferPointer { ptr in
-                ptr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfSize) { complexPtr in
-                    var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
-                    vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfSize))
+            // Pack into split complex format for FFT and process within a single pointer scope.
+            realPart.withUnsafeMutableBufferPointer { realPtr in
+                imagPart.withUnsafeMutableBufferPointer { imagPtr in
+                    guard let realBase = realPtr.baseAddress,
+                          let imagBase = imagPtr.baseAddress else { return }
+
+                    var splitComplex = DSPSplitComplex(realp: realBase, imagp: imagBase)
+                    windowedSamples.withUnsafeBufferPointer { windowedPtr in
+                        guard let windowedBase = windowedPtr.baseAddress else { return }
+                        windowedBase.withMemoryRebound(to: DSPComplex.self, capacity: halfSize) { complexPtr in
+                            vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfSize))
+                        }
+                    }
+
+                    // Forward FFT
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, NativeAudioEngine.analysisLog2n, FFTDirection(FFT_FORWARD))
+
+                    // Compute magnitudes
+                    vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfSize))
                 }
             }
-
-            // Forward FFT
-            var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
-            vDSP_fft_zrip(fftSetup, &splitComplex, 1, NativeAudioEngine.analysisLog2n, FFTDirection(FFT_FORWARD))
-
-            // Compute magnitudes
-            vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfSize))
 
             // Square root to get actual magnitudes
             var count = Int32(halfSize)
