@@ -27,7 +27,7 @@ function SmartPlaylistDiscoverySection({
     title: string;
     entityType: 'track' | 'album' | 'artist';
     items: DiscoveryItem[];
-    layout?: 'list' | 'grid';
+    layout?: 'list' | 'grid' | 'tracklist';
   }>;
   hasDiscovery: boolean;
   loading: boolean;

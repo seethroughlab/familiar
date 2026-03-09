@@ -11,7 +11,7 @@
 
 export type EntityType = 'track' | 'album' | 'artist';
 
-export type LayoutType = 'list' | 'grid';
+export type LayoutType = 'list' | 'grid' | 'tracklist';
 
 /**
  * Unified discovery item - represents any discoverable entity
@@ -58,6 +58,7 @@ export interface DiscoverySection {
   items: DiscoveryItem[];
   layout?: LayoutType;            // Default: 'list'
   icon?: React.ReactNode;
+  rawTracks?: import('../../api').DiscoverTrack[];
 }
 
 /**

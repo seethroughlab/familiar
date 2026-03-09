@@ -6,7 +6,7 @@
  * - Deep cuts (least-played tracks by favorites)
  * - External artists to explore
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Music,
@@ -19,6 +19,7 @@ import {
   useLibraryDiscovery,
   DiscoverySectionView,
   DiscoveryEmpty,
+  CuratedPrompts,
   type DiscoveryItem,
 } from '../../Discovery';
 
@@ -39,6 +40,7 @@ registerBrowser(
 
 export function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
   const discoverNavigate = useNavigate();
+  const queryClient = useQueryClient();
   const { isOffline } = useOfflineStatus();
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -49,6 +51,13 @@ export function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
       }),
     enabled: !isOffline,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  const promptsQuery = useQuery({
+    queryKey: ['curated-prompts'],
+    queryFn: () => libraryApi.getCuratedPrompts(),
+    enabled: !isOffline,
+    staleTime: 30 * 60 * 1000, // 30 min client-side; server caches 4h
   });
 
   const { sections, hasDiscovery } = useLibraryDiscovery({ data });
@@ -127,6 +136,19 @@ export function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-8">
+      {/* AI-generated listening suggestions */}
+      <CuratedPrompts
+        prompts={promptsQuery.data?.prompts ?? []}
+        loading={promptsQuery.isLoading || promptsQuery.isFetching}
+        onRefresh={() => {
+          queryClient.fetchQuery({
+            queryKey: ['curated-prompts'],
+            queryFn: () => libraryApi.getCuratedPrompts({ refresh: true }),
+            staleTime: 0,
+          });
+        }}
+      />
+
       {/* Stats banner */}
       {recently_added_count > 0 && (
         <div className="flex gap-4 text-sm text-zinc-400">

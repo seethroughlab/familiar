@@ -50,7 +50,8 @@ export function useLibraryDiscovery({
         description: "Tracks by artists you love that you haven't played yet",
         entityType: 'track',
         items,
-        layout: 'list',
+        layout: 'tracklist',
+        rawTracks: data.unheard_tracks,
       });
     }
 
@@ -75,7 +76,8 @@ export function useLibraryDiscovery({
         description: 'Least-played tracks by your most-played artists',
         entityType: 'track',
         items,
-        layout: 'list',
+        layout: 'tracklist',
+        rawTracks: data.deep_cuts,
       });
     }
 

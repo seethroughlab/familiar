@@ -2,6 +2,7 @@ import { Disc, Disc3, User } from 'lucide-react';
 import type { DiscoverySection, DiscoveryItem } from './types';
 import { DiscoveryList } from './DiscoveryList';
 import { DiscoveryGrid } from './DiscoveryGrid';
+import { DiscoverTrackList } from './DiscoverTrackList';
 
 interface DiscoverySectionViewProps {
   section: DiscoverySection;
@@ -58,7 +59,12 @@ export function DiscoverySectionView({
         </div>
       )}
 
-      {layout === 'grid' ? (
+      {layout === 'tracklist' && section.rawTracks ? (
+        <DiscoverTrackList
+          items={section.rawTracks}
+          sortPersistKey={`discover-${section.id}`}
+        />
+      ) : layout === 'grid' ? (
         <DiscoveryGrid
           items={section.items}
           columns={gridColumns}
