@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { spotifyApi } from '../../../api/spotify';
 import type { SpotifyImportData } from '../../../api/spotify';
+import type { MatchingProgress } from '../../../api/spotify';
 import { registerBrowser, type BrowserProps } from '../types';
 import {
   useSpotifyDiscovery,
@@ -56,6 +57,7 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
   });
 
   const isPending = data?.summary?.matching_status === 'pending';
+  const [matchProgress, setMatchProgress] = useState<MatchingProgress | null>(null);
 
   // Auto-refresh every 5s while matching is pending
   useEffect(() => {
@@ -65,6 +67,21 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
     }, 5000);
     return () => clearInterval(interval);
   }, [isPending, queryClient]);
+
+  // Poll Redis progress every 2s while pending
+  useEffect(() => {
+    if (!isPending) {
+      setMatchProgress(null);
+      return;
+    }
+    const poll = async () => {
+      const p = await spotifyApi.getProgress();
+      setMatchProgress(p);
+    };
+    poll();
+    const id = setInterval(poll, 2000);
+    return () => clearInterval(id);
+  }, [isPending]);
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => spotifyApi.upload(file),
@@ -141,7 +158,9 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
         {isPending && (
           <div className="flex items-center gap-2 text-xs text-zinc-400 bg-zinc-800/50 rounded-lg px-3 py-2">
             <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-            Matching tracks against your library...
+            {matchProgress && matchProgress.total > 0
+              ? `Matching tracks... ${matchProgress.matched.toLocaleString()}/${matchProgress.total.toLocaleString()}`
+              : 'Matching tracks against your library...'}
           </div>
         )}
         <div className="flex items-center justify-between">

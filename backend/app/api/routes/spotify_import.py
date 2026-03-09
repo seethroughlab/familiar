@@ -71,6 +71,17 @@ async def upload_spotify_export(
     return {**_serialize_import(import_), "matching_task_id": task_id}
 
 
+@router.get("/import/progress")
+async def get_spotify_matching_progress() -> dict | None:
+    """Get live matching progress from Redis (null if not running)."""
+    try:
+        from app.services.background import get_background_manager
+        data: bytes | None = get_background_manager().redis.get("familiar:spotify_match:progress")  # type: ignore[assignment]
+        return json.loads(data) if data else None
+    except Exception:
+        return None
+
+
 @router.get("/import/status/{task_id}")
 async def get_spotify_import_status(task_id: str):
     """Poll the status of a background Spotify matching task."""

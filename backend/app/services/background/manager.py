@@ -183,12 +183,12 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
         key = f"familiar:spotify_import:{task_id}"
         well_known_key = "familiar:spotify_match:progress"
 
-        def _update(message: str) -> None:
-            payload = json.dumps({"status": "processing", "message": message})
+        def _update(message: str, matched: int = 0, total: int = 0) -> None:
+            payload = json.dumps({"status": "processing", "message": message, "matched": matched, "total": total})
             self.redis.set(key, payload, ex=3600)
             self.redis.set(well_known_key, payload, ex=3600)
 
-        initial = json.dumps({"status": "processing", "message": "Matching tracks..."})
+        initial = json.dumps({"status": "processing", "message": "Matching tracks...", "matched": 0, "total": 0})
         self.redis.set(key, initial, ex=3600)
         self.redis.set(well_known_key, initial, ex=3600)
 

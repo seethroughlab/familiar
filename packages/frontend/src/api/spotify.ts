@@ -76,6 +76,13 @@ export interface UploadOptions {
   streaming: boolean;
 }
 
+export interface MatchingProgress {
+  status: 'processing';
+  message: string;
+  matched: number;
+  total: number;
+}
+
 // ---- API functions ----
 
 export const spotifyApi = {
@@ -108,5 +115,10 @@ export const spotifyApi = {
   async rematch(): Promise<ImportTaskResponse> {
     const { data } = await api.post<ImportTaskResponse>('/spotify/rematch');
     return data;
+  },
+
+  async getProgress(): Promise<MatchingProgress | null> {
+    const { data } = await api.get<MatchingProgress | null>('/spotify/import/progress');
+    return data ?? null;
   },
 };

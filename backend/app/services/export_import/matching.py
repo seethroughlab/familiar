@@ -6,7 +6,7 @@ exact match, and fuzzy matching strategies.
 
 import logging
 import re
-from typing import Any
+from typing import Any, Callable
 
 from rapidfuzz import fuzz
 from sqlalchemy import select
@@ -185,17 +185,24 @@ class TrackMatcher:
     async def match_batch(
         self,
         track_refs: list[dict[str, Any]],
+        on_progress: Callable[[int, int], None] | None = None,
     ) -> list[tuple[dict[str, Any], Track | None, str | None, float | None]]:
         """Match a batch of track references.
 
         Returns list of (track_ref, matched_track, method, confidence) tuples.
+        Calls on_progress(processed, total) every 25 tracks if provided.
         """
         await self._build_track_cache()
 
         results = []
-        for ref in track_refs:
+        total = len(track_refs)
+        for i, ref in enumerate(track_refs):
             track, method, confidence = await self.match_track_ref(ref)
             results.append((ref, track, method, confidence))
+            if on_progress and (i + 1) % 25 == 0:
+                on_progress(i + 1, total)
+        if on_progress and total > 0:
+            on_progress(total, total)
 
         return results
 

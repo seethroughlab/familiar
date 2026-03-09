@@ -87,7 +87,7 @@ class SpotifyImportService:
     async def update_matches(
         self,
         profile_id: UUID,
-        progress_cb: Callable[[str], None] | None = None,
+        progress_cb: Callable[[str, int, int], None] | None = None,
     ) -> SpotifyImport | None:
         """Run matching against current library and update the stored import."""
         result = await self.db.execute(
@@ -98,14 +98,14 @@ class SpotifyImportService:
             return None
 
         if progress_cb:
-            progress_cb("Matching tracks...")
+            progress_cb("Matching tracks...", 0, 0)
 
         match_results = await self._match_all(
-            import_.favorites, import_.playlists, import_.streaming_stats
+            import_.favorites, import_.playlists, import_.streaming_stats, progress_cb=progress_cb
         )
 
         if progress_cb:
-            progress_cb("Saving results...")
+            progress_cb("Saving results...", 0, 0)
 
         summary = self._compute_summary(
             import_.favorites, import_.playlists, import_.streaming_stats, match_results
@@ -121,7 +121,7 @@ class SpotifyImportService:
     async def rematch(
         self,
         profile_id: UUID,
-        progress_cb: Callable[[str], None] | None = None,
+        progress_cb: Callable[[str, int, int], None] | None = None,
     ) -> SpotifyImport | None:
         """Re-run matching against current library without re-uploading."""
         return await self.update_matches(profile_id, progress_cb=progress_cb)
@@ -227,8 +227,13 @@ class SpotifyImportService:
             if not data:
                 continue
 
-            # Handle both single playlist and array of playlists
-            playlist_list = data if isinstance(data, list) else [data]
+            # Handle: array of playlists, {"playlists": [...]}, or single playlist object
+            if isinstance(data, list):
+                playlist_list = data
+            elif isinstance(data, dict) and "playlists" in data:
+                playlist_list = data["playlists"]
+            else:
+                playlist_list = [data]
             for pl in playlist_list:
                 if not isinstance(pl, dict):
                     continue
@@ -323,6 +328,7 @@ class SpotifyImportService:
         favorites: list[dict[str, Any]],
         playlists: list[dict[str, Any]],
         streaming_stats: dict[str, Any],
+        progress_cb: Callable[[str, int, int], None] | None = None,
     ) -> dict[str, Any]:
         """Deduplicate all tracks and run TrackMatcher once."""
         # Collect unique (artist, track) pairs
@@ -347,8 +353,15 @@ class SpotifyImportService:
 
         logger.info(f"Matching {len(track_refs)} unique Spotify tracks against library")
 
+        def _on_progress(processed: int, total: int) -> None:
+            if progress_cb:
+                progress_cb("Matching tracks...", processed, total)
+
         matcher = TrackMatcher(self.db)
-        results = await matcher.match_batch(track_refs)
+        results = await matcher.match_batch(
+            track_refs,
+            on_progress=_on_progress if progress_cb else None,
+        )
 
         match_dict: dict[str, Any] = {}
         for ref, track, method, confidence in results:
