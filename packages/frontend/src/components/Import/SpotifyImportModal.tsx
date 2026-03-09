@@ -1,11 +1,11 @@
 /**
  * SpotifyImportModal - Shown when a Spotify data export ZIP is dropped.
  *
- * Flow: uploading -> done (summary + navigate to Spotify Library)
+ * Flow: uploading -> polling -> done (summary + navigate to Spotify Library)
  */
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Disc3, Loader2, X, CheckCircle, AlertTriangle } from 'lucide-react';
 import { spotifyApi } from '../../api/spotify';
 import type { SpotifyImportData } from '../../api/spotify';
@@ -15,24 +15,102 @@ interface SpotifyImportModalProps {
   onClose: () => void;
 }
 
+type ImportState =
+  | { phase: 'uploading' }
+  | { phase: 'polling'; taskId: string; message: string }
+  | { phase: 'done'; data: SpotifyImportData }
+  | { phase: 'error'; error: string };
+
 export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [state, setState] = useState<ImportState>({ phase: 'uploading' });
+  const pollInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const uploadMutation = useMutation({
-    mutationFn: (f: File) => spotifyApi.upload(f),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['spotify-import'] });
-    },
-  });
+  const stopPolling = () => {
+    if (pollInterval.current) {
+      clearInterval(pollInterval.current);
+      pollInterval.current = null;
+    }
+  };
+
+  const startPolling = (taskId: string) => {
+    const poll = async () => {
+      try {
+        const status = await spotifyApi.pollStatus(taskId);
+        if (status.status === 'completed') {
+          stopPolling();
+          queryClient.invalidateQueries({ queryKey: ['spotify-import'] });
+          const importData = await spotifyApi.get();
+          if (importData) {
+            setState({ phase: 'done', data: importData });
+          } else {
+            setState({ phase: 'error', error: 'Import completed but data not found' });
+          }
+        } else if (status.status === 'error') {
+          stopPolling();
+          setState({ phase: 'error', error: status.error || 'Import failed' });
+        } else {
+          setState({ phase: 'polling', taskId, message: status.message || 'Processing...' });
+        }
+      } catch (err: unknown) {
+        stopPolling();
+        const message = err instanceof Error ? err.message : 'Polling failed';
+        setState({ phase: 'error', error: message });
+      }
+    };
+
+    poll();
+    pollInterval.current = setInterval(poll, 2000);
+  };
 
   // Auto-upload on mount
   useEffect(() => {
-    uploadMutation.mutate(file);
+    let cancelled = false;
+
+    const doUpload = async () => {
+      try {
+        const { task_id } = await spotifyApi.upload(file);
+        if (!cancelled) {
+          setState({ phase: 'polling', taskId: task_id, message: 'Parsing export...' });
+          startPolling(task_id);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Upload failed';
+          setState({ phase: 'error', error: message });
+        }
+      }
+    };
+
+    doUpload();
+
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const data = uploadMutation.data as SpotifyImportData | undefined;
+  const retry = () => {
+    setState({ phase: 'uploading' });
+    stopPolling();
+
+    const doUpload = async () => {
+      try {
+        const { task_id } = await spotifyApi.upload(file);
+        setState({ phase: 'polling', taskId: task_id, message: 'Parsing export...' });
+        startPolling(task_id);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        setState({ phase: 'error', error: message });
+      }
+    };
+
+    doUpload();
+  };
+
+  const isLoading = state.phase === 'uploading' || state.phase === 'polling';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -55,30 +133,28 @@ export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
 
         {/* Body */}
         <div className="p-6">
-          {uploadMutation.isPending && (
+          {isLoading && (
             <div className="flex flex-col items-center gap-4 py-4">
               <Loader2 className="w-10 h-10 animate-spin text-green-400" />
               <div className="text-center">
                 <p className="text-zinc-200">Processing Spotify export...</p>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Parsing tracks and matching against your library
+                  {state.phase === 'polling' ? state.message : 'Uploading...'}
                 </p>
               </div>
             </div>
           )}
 
-          {uploadMutation.isError && (
+          {state.phase === 'error' && (
             <div className="flex flex-col items-center gap-4 py-4">
               <AlertTriangle className="w-10 h-10 text-red-400" />
               <div className="text-center">
                 <p className="text-zinc-200">Import failed</p>
-                <p className="text-sm text-red-400 mt-1">
-                  {uploadMutation.error?.message || 'Unknown error'}
-                </p>
+                <p className="text-sm text-red-400 mt-1">{state.error}</p>
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => uploadMutation.mutate(file)}
+                  onClick={retry}
                   className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm transition-colors"
                 >
                   Retry
@@ -93,7 +169,7 @@ export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
             </div>
           )}
 
-          {uploadMutation.isSuccess && data && (
+          {state.phase === 'done' && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-green-400">
                 <CheckCircle className="w-5 h-5" />
@@ -104,22 +180,22 @@ export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
               <div className="grid grid-cols-2 gap-3">
                 <StatCard
                   label="Favorites"
-                  value={data.summary.total_favorites}
-                  matched={data.summary.matched_favorites}
+                  value={state.data.summary.total_favorites}
+                  matched={state.data.summary.matched_favorites}
                 />
                 <StatCard
                   label="Playlists"
-                  value={data.summary.total_playlists}
+                  value={state.data.summary.total_playlists}
                 />
-                {data.streaming_stats.total_ms > 0 && (
+                {state.data.streaming_stats.total_ms > 0 && (
                   <StatCard
                     label="Hours streamed"
-                    value={Math.round(data.streaming_stats.total_ms / 3600000)}
+                    value={Math.round(state.data.streaming_stats.total_ms / 3600000)}
                   />
                 )}
                 <StatCard
                   label="Total matched"
-                  value={data.summary.total_matched}
+                  value={state.data.summary.total_matched}
                 />
               </div>
 

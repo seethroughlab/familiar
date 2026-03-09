@@ -53,16 +53,32 @@ export interface SpotifyImportData {
   summary: SpotifyImportSummary;
 }
 
+export interface ImportTaskResponse {
+  task_id: string;
+  status: 'processing';
+}
+
+export interface ImportStatusResponse {
+  status: 'processing' | 'completed' | 'error';
+  message?: string;
+  result?: SpotifyImportSummary;
+  error?: string;
+}
+
 // ---- API functions ----
 
 export const spotifyApi = {
-  async upload(file: File): Promise<SpotifyImportData> {
+  async upload(file: File): Promise<ImportTaskResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    const { data } = await api.post<SpotifyImportData>('/spotify/import', formData, {
+    const { data } = await api.post<ImportTaskResponse>('/spotify/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120_000, // 2 min for large ZIPs
     });
+    return data;
+  },
+
+  async pollStatus(taskId: string): Promise<ImportStatusResponse> {
+    const { data } = await api.get<ImportStatusResponse>(`/spotify/import/status/${taskId}`);
     return data;
   },
 
@@ -75,8 +91,8 @@ export const spotifyApi = {
     await api.delete('/spotify/import');
   },
 
-  async rematch(): Promise<SpotifyImportData> {
-    const { data } = await api.post<SpotifyImportData>('/spotify/rematch');
+  async rematch(): Promise<ImportTaskResponse> {
+    const { data } = await api.post<ImportTaskResponse>('/spotify/rematch');
     return data;
   },
 };

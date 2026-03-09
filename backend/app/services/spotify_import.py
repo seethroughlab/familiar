@@ -10,7 +10,7 @@ import json
 import logging
 import zipfile
 from collections import Counter
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
 
 from sqlalchemy import delete, select
@@ -38,9 +38,15 @@ class SpotifyImportService:
         self.db = db
 
     async def process_zip(
-        self, profile_id: UUID, zip_bytes: bytes
+        self,
+        profile_id: UUID,
+        zip_bytes: bytes,
+        progress_cb: Callable[[str], None] | None = None,
     ) -> SpotifyImport:
         """Parse a Spotify data export ZIP, match tracks, and store results."""
+        if progress_cb:
+            progress_cb("Parsing export...")
+
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             prefix = self._detect_prefix(zf)
             favorites = self._parse_favorites(zf, prefix)
@@ -48,8 +54,14 @@ class SpotifyImportService:
             streaming_stats = self._aggregate_streaming_history(zf, prefix)
             username = self._extract_username(zf, prefix)
 
+        if progress_cb:
+            progress_cb("Matching tracks...")
+
         # Deduplicate all tracks and match
         match_results = await self._match_all(favorites, playlists, streaming_stats)
+
+        if progress_cb:
+            progress_cb("Saving results...")
 
         # Compute summary
         summary = self._compute_summary(favorites, playlists, streaming_stats, match_results)
@@ -74,7 +86,11 @@ class SpotifyImportService:
         await self.db.refresh(import_)
         return import_
 
-    async def rematch(self, profile_id: UUID) -> SpotifyImport | None:
+    async def rematch(
+        self,
+        profile_id: UUID,
+        progress_cb: Callable[[str], None] | None = None,
+    ) -> SpotifyImport | None:
         """Re-run matching against current library without re-uploading."""
         result = await self.db.execute(
             select(SpotifyImport).where(SpotifyImport.profile_id == profile_id)
@@ -83,9 +99,15 @@ class SpotifyImportService:
         if not import_:
             return None
 
+        if progress_cb:
+            progress_cb("Matching tracks...")
+
         match_results = await self._match_all(
             import_.favorites, import_.playlists, import_.streaming_stats
         )
+
+        if progress_cb:
+            progress_cb("Saving results...")
         summary = self._compute_summary(
             import_.favorites, import_.playlists, import_.streaming_stats, match_results
         )
