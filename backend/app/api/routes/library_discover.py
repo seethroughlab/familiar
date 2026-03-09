@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from app.api.deps import CurrentProfile, DbSession
+from app.api.deps import DbSession, RequiredProfile
 from app.db.models import Track, TrackStatus
 from app.utils.time import utcnow
 
@@ -56,7 +56,7 @@ class DiscoverResponse(BaseModel):
 @router.get("/discover", response_model=DiscoverResponse)
 async def get_discover_dashboard(
     db: DbSession,
-    profile: CurrentProfile,
+    profile: RequiredProfile,
     recommendations_limit: int = Query(8, ge=1, le=20),
 ) -> DiscoverResponse:
     """Get aggregated discovery data for the dashboard.
