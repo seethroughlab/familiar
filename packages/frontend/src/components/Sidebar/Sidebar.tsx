@@ -9,7 +9,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download,
+  Heart, Download, Disc3,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
@@ -21,6 +21,7 @@ import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { spotifyApi } from '../../api/spotify';
 import type { Playlist, SmartPlaylist } from '../../api';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
 import { PlaylistContextMenu } from './PlaylistContextMenu';
@@ -83,6 +84,14 @@ export function Sidebar() {
     downloads: downloadsCount,
   };
 
+  // Spotify import existence check (shares cache with SpotifyBrowser)
+  const { data: spotifyImport } = useQuery({
+    queryKey: ['spotify-import'],
+    queryFn: () => spotifyApi.get(),
+    staleTime: 60_000,
+    retry: isOffline ? false : 1,
+  });
+
   // Playlists
   const { data: playlists } = useQuery({
     queryKey: ['playlists'],
@@ -141,6 +150,17 @@ export function Sidebar() {
               </Link>
             </div>
           ))}
+          {spotifyImport && (
+            <Link
+              to="/library/spotify"
+              className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
+                isActive('/library/spotify') ? activeClass : `${textClass} ${hoverClass}`
+              }`}
+              title="Spotify Library"
+            >
+              <Disc3 className="w-5 h-5" />
+            </Link>
+          )}
           <div className={`mx-3 my-2 border-t ${dividerClass}`} />
           {COLLECTION_ITEMS.map((item) => (
             <div key={item.path} onContextMenu={(e) => collectionMenu.open(item.path, e)}>
@@ -214,6 +234,17 @@ export function Sidebar() {
               </Link>
             </div>
           ))}
+          {spotifyImport && (
+            <Link
+              to="/library/spotify"
+              className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+                isActive('/library/spotify') ? activeClass : `${textClass} ${hoverClass}`
+              }`}
+            >
+              <Disc3 className="w-4 h-4 flex-shrink-0 text-green-400" />
+              <span className="truncate">Spotify Library</span>
+            </Link>
+          )}
         </nav>
 
         <div className={`mx-4 my-3 border-t ${dividerClass}`} />

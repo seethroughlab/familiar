@@ -145,6 +145,7 @@ const BROWSER_ROUTES = [
   { path: 'explorer', browserId: 'umap-explorer' },
   { path: 'discover', browserId: 'discover' },
   { path: 'proposed-changes', browserId: 'proposed-changes' },
+  { path: 'spotify', browserId: 'spotify' },
 ];
 
 // PWA Reset utility

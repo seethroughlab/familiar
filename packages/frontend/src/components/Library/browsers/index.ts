@@ -14,6 +14,7 @@ import './EgoMusicMap';
 import './UMAPExplorer';
 import './ProposedChangesBrowser';
 import './DiscoverBrowser';
+import './SpotifyBrowser';
 
 // Phase 6 browsers:
 // import './TempoSpectrum';

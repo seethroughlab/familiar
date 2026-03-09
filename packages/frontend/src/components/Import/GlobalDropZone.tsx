@@ -238,7 +238,7 @@ export function GlobalDropZone({ children, onFilesDropped, disabled }: GlobalDro
               <p className="text-zinc-400">
                 {isPackaging
                   ? 'Collecting audio files and creating archive'
-                  : 'Audio files, ZIP archives, or folders'}
+                  : 'Music files, folders, or Spotify data exports'}
               </p>
             </div>
           </div>

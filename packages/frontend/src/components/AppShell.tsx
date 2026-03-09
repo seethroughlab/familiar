@@ -22,7 +22,7 @@ import { PlayerBar } from './Player/PlayerBar';
 import { Sidebar } from './Sidebar/Sidebar';
 import { ContentToolbar } from './ContentToolbar';
 import { ErrorBoundary } from './ErrorBoundary';
-import { GlobalDropZone, ImportModal } from './Import';
+import { GlobalDropZone, ImportModal, SpotifyImportModal, detectZipType } from './Import';
 import { InstallPrompt } from './PWA/InstallPrompt';
 import { OfflineIndicator } from './PWA/OfflineIndicator';
 import { ShortcutsHelp } from './KeyboardShortcuts';
@@ -52,6 +52,7 @@ export function AppShell() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [importFiles, setImportFiles] = useState<File[] | null>(null);
+  const [spotifyImportFile, setSpotifyImportFile] = useState<File | null>(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
 
@@ -178,7 +179,18 @@ export function AppShell() {
   }, [setShowFullPlayer, closeRightPanel, setShowSettings]);
 
   return (
-    <GlobalDropZone onFilesDropped={setImportFiles}>
+    <GlobalDropZone onFilesDropped={async (files) => {
+      // Check if any file is a ZIP that looks like a Spotify export
+      const zips = files.filter(f => f.name.toLowerCase().endsWith('.zip'));
+      if (zips.length === 1) {
+        const type = await detectZipType(zips[0]);
+        if (type === 'spotify') {
+          setSpotifyImportFile(zips[0]);
+          return;
+        }
+      }
+      setImportFiles(files);
+    }}>
       <div className={`h-dynamic-screen flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
         {/* Main content area */}
         <div className="flex-1 flex overflow-hidden min-h-0">
@@ -333,6 +345,14 @@ export function AppShell() {
               setImportFiles(null);
               queryClient.refetchQueries({ queryKey: ['tracks'] });
             }}
+          />
+        )}
+
+        {/* Spotify import modal */}
+        {spotifyImportFile && (
+          <SpotifyImportModal
+            file={spotifyImportFile}
+            onClose={() => setSpotifyImportFile(null)}
           />
         )}
       </div>

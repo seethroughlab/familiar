@@ -15,5 +15,6 @@ export * from './missingTracks';
 export * from './importSession';
 export * from './diagnosticsLogs';
 export * from './mapStream';
+export * from './spotify';
 // Default export: shared axios instance (for MusicBrainzLookup)
 export { default } from './base';
