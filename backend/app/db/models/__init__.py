@@ -22,6 +22,7 @@ from .profiles import (
     ProfileFavorite,
     ProfilePlayHistory,
 )
+from .spotify import SpotifyImport
 from .tracks import ANALYSIS_FEATURE_COLUMNS, Track, TrackAnalysis, TrackVideo
 
 __all__ = [
@@ -44,6 +45,7 @@ __all__ = [
     "ProfilePlayHistory",
     "ProposedChange",
     "SmartPlaylist",
+    "SpotifyImport",
     "Track",
     "TrackAnalysis",
     "TrackVideo",

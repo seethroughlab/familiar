@@ -48,6 +48,7 @@ from app.api.routes import (
     smart_playlists,
     tracks,
     updates,
+    spotify_import,
     videos,
 )
 from app.api.routes import settings as settings_routes
@@ -308,6 +309,7 @@ app.include_router(s3_backup.router, prefix="/api/v1")
 app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(download.router, prefix="/api/v1")
 app.include_router(updates.router, prefix="/api/v1")
+app.include_router(spotify_import.router, prefix="/api/v1")
 
 
 # Serve frontend static files in production
