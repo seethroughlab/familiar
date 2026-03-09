@@ -313,6 +313,10 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
         notifyListeners("ended", data: [:])
     }
 
+    func audioEngineDidAutoAdvance(loadedTrackId: String) {
+        notifyListeners("nativeAutoAdvanced", data: ["loadedTrackId": loadedTrackId])
+    }
+
     func audioEngineDidUpdateTime(currentTime: Double, duration: Double) {
         notifyListeners("timeUpdate", data: [
             "currentTime": currentTime,

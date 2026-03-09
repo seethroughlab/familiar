@@ -16,7 +16,8 @@ export type EngineEvent =
   | { type: 'remotePause' }
   | { type: 'remoteNext' }
   | { type: 'remotePrevious'; nativeAction?: 'restart' }
-  | { type: 'remoteSeek'; time: number };
+  | { type: 'remoteSeek'; time: number }
+  | { type: 'nativeAutoAdvanced' };
 
 /**
  * What each engine supports. The hook checks these before calling optional methods.

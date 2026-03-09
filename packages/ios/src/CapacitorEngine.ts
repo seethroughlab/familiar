@@ -395,6 +395,13 @@ export class CapacitorEngine implements AudioEngine {
       });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
+    FamiliarAudio.addListener('nativeAutoAdvanced', (data) => {
+      if (data?.loadedTrackId) {
+        this.loadedTrackId = data.loadedTrackId;
+      }
+      this.emit({ type: 'nativeAutoAdvanced' });
+    }).then(h => this.listenerCleanups.push(() => h.remove()));
+
     FamiliarAudio.addListener('remoteSeek', (data) => {
       this.emit({ type: 'remoteSeek', time: data.time });
     }).then(h => this.listenerCleanups.push(() => h.remove()));

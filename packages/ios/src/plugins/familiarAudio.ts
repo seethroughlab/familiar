@@ -133,6 +133,10 @@ export interface FamiliarAudioPlugin {
     event: 'audioAnalysis',
     handler: (data: { frequencyData: number[]; timeDomainData: number[] }) => void,
   ): Promise<PluginListenerHandle>;
+  addListener(
+    event: 'nativeAutoAdvanced',
+    handler: (data: { loadedTrackId?: string }) => void,
+  ): Promise<PluginListenerHandle>;
 }
 
 export const FamiliarAudio = registerPlugin<FamiliarAudioPlugin>('FamiliarAudio');

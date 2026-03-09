@@ -375,6 +375,10 @@ export function useAudioEngine() {
           playNext();
           break;
 
+        case 'nativeAutoAdvanced':
+          playNext();
+          break;
+
         case 'remotePrevious':
           if (event.nativeAction === 'restart') {
             // Native already seeked to 0 — just sync store state
