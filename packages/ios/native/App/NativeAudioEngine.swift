@@ -89,6 +89,9 @@ class NativeAudioEngine {
     private var nowPlayingArtist: String?
     private var nowPlayingAlbum: String?
     private var nowPlayingArtwork: MPMediaItemArtwork?
+    private var artworkDataTask: URLSessionDataTask?
+    private var artworkFetchGeneration: UInt64 = 0
+    private var lastArtworkUrl: String?
 
     // Pending next/previous track info (pre-synced from JS for lock screen control)
     private var pendingNextUrl: String?
@@ -1261,19 +1264,36 @@ class NativeAudioEngine {
 
     func updateNowPlayingArtwork(url: String?) {
         guard let urlString = url, let imageURL = URL(string: urlString) else {
+            artworkDataTask?.cancel()
+            artworkDataTask = nil
+            lastArtworkUrl = nil
             nowPlayingArtwork = nil
             syncNowPlaying()
             return
         }
 
-        URLSession.shared.dataTask(with: imageURL) { [weak self] data, _, _ in
+        // Dedup: skip if we're already showing or fetching this URL
+        if urlString == lastArtworkUrl { return }
+        lastArtworkUrl = urlString
+
+        // Cancel any in-flight fetch
+        artworkDataTask?.cancel()
+
+        // Generation counter to discard stale completions
+        artworkFetchGeneration += 1
+        let expectedGeneration = artworkFetchGeneration
+
+        let task = URLSession.shared.dataTask(with: imageURL) { [weak self] data, _, _ in
             guard let self = self, let data = data, let image = UIImage(data: data) else { return }
             let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
             DispatchQueue.main.async {
+                guard self.artworkFetchGeneration == expectedGeneration else { return }
                 self.nowPlayingArtwork = artwork
                 self.syncNowPlaying()
             }
-        }.resume()
+        }
+        artworkDataTask = task
+        task.resume()
     }
 
     private func syncNowPlaying() {
