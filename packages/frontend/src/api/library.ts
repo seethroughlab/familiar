@@ -453,7 +453,6 @@ export const libraryApi = {
 
   getDiscover: async (params?: {
     recommendations_limit?: number;
-    favorites_limit?: number;
   }): Promise<LibraryDiscoverResponse> => {
     const { data } = await api.get('/library/discover', { params });
     return data;
@@ -461,6 +460,15 @@ export const libraryApi = {
 };
 
 // Library Discover types
+export interface DiscoverTrack {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  duration_seconds: number | null;
+  play_count: number;
+}
+
 export interface DiscoverRecommendedArtist {
   name: string;
   match_score: number;
@@ -473,6 +481,8 @@ export interface DiscoverRecommendedArtist {
 }
 
 export interface LibraryDiscoverResponse {
+  unheard_tracks: DiscoverTrack[];
+  deep_cuts: DiscoverTrack[];
   recommended_artists: DiscoverRecommendedArtist[];
   recently_added_count: number;
 }

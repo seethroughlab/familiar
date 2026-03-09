@@ -53,6 +53,7 @@ export interface DiscoveryItem {
 export interface DiscoverySection {
   id: string;
   title: string;
+  description?: string;
   entityType: EntityType;
   items: DiscoveryItem[];
   layout?: LayoutType;            // Default: 'list'
@@ -202,6 +203,22 @@ export interface PlaylistDiscoveryInput {
 
 // From LibraryDiscoverResponse
 export interface LibraryDiscoveryInput {
+  unheardTracks: Array<{
+    id: string;
+    title: string | null;
+    artist: string | null;
+    album: string | null;
+    duration_seconds: number | null;
+    play_count: number;
+  }>;
+  deepCuts: Array<{
+    id: string;
+    title: string | null;
+    artist: string | null;
+    album: string | null;
+    duration_seconds: number | null;
+    play_count: number;
+  }>;
   recommendedArtists: Array<{
     name: string;
     match_score: number;
@@ -212,12 +229,4 @@ export interface LibraryDiscoveryInput {
     bandcamp_url: string | null;
     based_on_artist: string;
   }>;
-  unmatchedFavorites: Array<{
-    name: string;
-    artist: string;
-    album: string | null;
-    image_url: string | null;
-    bandcamp_url: string | null;
-  }>;
-  getArtistImageUrl: (name: string, size: string) => string;
 }

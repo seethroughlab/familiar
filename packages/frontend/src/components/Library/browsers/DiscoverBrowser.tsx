@@ -1,9 +1,10 @@
 /**
  * DiscoverBrowser - Music discovery dashboard.
  *
- * Aggregates discovery features using unified Discovery components:
- * - New releases from library artists
- * - Recommended artists based on listening patterns
+ * Shows three sections:
+ * - Unheard tracks by your top artists
+ * - Deep cuts (least-played tracks by favorites)
+ * - External artists to explore
  */
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -36,7 +37,7 @@ registerBrowser(
   DiscoverBrowser
 );
 
-export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
+export function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
   const discoverNavigate = useNavigate();
   const { isOffline } = useOfflineStatus();
 
@@ -45,17 +46,12 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
     queryFn: () =>
       libraryApi.getDiscover({
         recommendations_limit: 12,
-        favorites_limit: 6,
       }),
     enabled: !isOffline,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
-  const {
-    inLibraryArtistsSection,
-    externalArtistsSection,
-    hasDiscovery,
-  } = useLibraryDiscovery({ data });
+  const { sections, hasDiscovery } = useLibraryDiscovery({ data });
 
   if (isOffline) {
     return (
@@ -112,6 +108,12 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
     }
   };
 
+  const handleItemPlay = (item: DiscoveryItem) => {
+    if (item.playbackContext?.trackId) {
+      onPlayTrack(item.playbackContext.trackId);
+    }
+  };
+
   // Empty state
   if (!hasDiscovery) {
     return (
@@ -135,29 +137,18 @@ export function DiscoverBrowser({ onGoToArtist }: BrowserProps) {
         </div>
       )}
 
-      {/* Recommended Artists in Library */}
-      {inLibraryArtistsSection && inLibraryArtistsSection.items.length > 0 && (
-        <section>
+      {/* Discovery sections */}
+      {sections.map((section) => (
+        <section key={section.id}>
           <DiscoverySectionView
-            section={inLibraryArtistsSection}
+            section={section}
             showHeader={true}
             gridColumns={6}
             onItemClick={handleItemClick}
+            onItemPlay={handleItemPlay}
           />
         </section>
-      )}
-
-      {/* Artists to Discover */}
-      {externalArtistsSection && externalArtistsSection.items.length > 0 && (
-        <section>
-          <DiscoverySectionView
-            section={externalArtistsSection}
-            showHeader={true}
-            gridColumns={6}
-          />
-        </section>
-      )}
-
+      ))}
     </div>
   );
 }

@@ -6,13 +6,24 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from app.api.deps import DbSession
+from app.api.deps import CurrentProfile, DbSession
 from app.db.models import Track, TrackStatus
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["library"])
+
+
+class DiscoverTrack(BaseModel):
+    """A track for discovery sections."""
+
+    id: str
+    title: str | None
+    artist: str | None
+    album: str | None
+    duration_seconds: float | None
+    play_count: int
 
 
 class DiscoverRecommendedArtist(BaseModel):
@@ -31,7 +42,11 @@ class DiscoverRecommendedArtist(BaseModel):
 class DiscoverResponse(BaseModel):
     """Aggregated discovery data for the dashboard."""
 
-    # Recommended artists based on top-played artists
+    # Track-based discovery
+    unheard_tracks: list[DiscoverTrack]
+    deep_cuts: list[DiscoverTrack]
+
+    # Recommended artists based on top-played artists (external only)
     recommended_artists: list[DiscoverRecommendedArtist]
 
     # Recently added to library
@@ -41,6 +56,7 @@ class DiscoverResponse(BaseModel):
 @router.get("/discover", response_model=DiscoverResponse)
 async def get_discover_dashboard(
     db: DbSession,
+    profile: CurrentProfile,
     recommendations_limit: int = Query(8, ge=1, le=20),
 ) -> DiscoverResponse:
     """Get aggregated discovery data for the dashboard.
@@ -59,7 +75,7 @@ async def get_discover_dashboard(
     # 1. Get recommended artists based on top-played artists
     recommended_artists: list[DiscoverRecommendedArtist] = []
 
-    # Get top-played artists
+    # Get top-played artists (filtered by profile)
     play_history_query = (
         select(
             func.lower(func.trim(Track.artist)).label("artist_normalized"),
@@ -67,7 +83,10 @@ async def get_discover_dashboard(
             func.sum(ProfilePlayHistory.play_count).label("total_plays"),
         )
         .join(Track, ProfilePlayHistory.track_id == Track.id)
-        .where(Track.artist.isnot(None))
+        .where(
+            Track.artist.isnot(None),
+            ProfilePlayHistory.profile_id == profile.id,
+        )
         .group_by(func.lower(func.trim(Track.artist)), Track.artist)
         .order_by(func.sum(ProfilePlayHistory.play_count).desc())
         .limit(5)  # Top 5 artists
@@ -159,6 +178,94 @@ async def get_discover_dashboard(
         if len(recommended_artists) >= recommendations_limit:
             break
 
+    # Filter to external artists only
+    recommended_artists = [a for a in recommended_artists if not a.in_library]
+
+    # 2. Track-based discovery using top artist names
+    unheard_tracks: list[DiscoverTrack] = []
+    deep_cuts: list[DiscoverTrack] = []
+
+    top_artist_names = [row.artist_normalized for row in top_artists if row.artist_normalized]
+
+    if top_artist_names:
+        # Subquery: track IDs this profile has played
+        played_track_ids = (
+            select(ProfilePlayHistory.track_id)
+            .where(ProfilePlayHistory.profile_id == profile.id)
+        )
+
+        # Unheard tracks: by top artists, never played by this profile
+        unheard_query = (
+            select(
+                Track.id,
+                Track.title,
+                Track.artist,
+                Track.album,
+                Track.duration_seconds,
+            )
+            .where(
+                func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                Track.status == TrackStatus.ACTIVE,
+                Track.id.notin_(played_track_ids),
+            )
+            .order_by(func.random())
+            .limit(15)
+        )
+        unheard_result = await db.execute(unheard_query)
+        unheard_rows = unheard_result.fetchall()
+        unheard_track_ids = set()
+
+        for row in unheard_rows:
+            unheard_track_ids.add(row.id)
+            unheard_tracks.append(
+                DiscoverTrack(
+                    id=row.id,
+                    title=row.title,
+                    artist=row.artist,
+                    album=row.album,
+                    duration_seconds=row.duration_seconds,
+                    play_count=0,
+                )
+            )
+
+        # Deep cuts: by top artists, played but low play count
+        deep_cuts_query = (
+            select(
+                Track.id,
+                Track.title,
+                Track.artist,
+                Track.album,
+                Track.duration_seconds,
+                ProfilePlayHistory.play_count,
+            )
+            .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
+            .where(
+                func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                Track.status == TrackStatus.ACTIVE,
+                ProfilePlayHistory.profile_id == profile.id,
+                ProfilePlayHistory.play_count > 0,
+            )
+            .order_by(ProfilePlayHistory.play_count.asc())
+            .limit(20)  # Fetch extra to filter out unheard overlap
+        )
+        deep_cuts_result = await db.execute(deep_cuts_query)
+
+        for row in deep_cuts_result.fetchall():
+            if row.id in unheard_track_ids:
+                continue
+            deep_cuts.append(
+                DiscoverTrack(
+                    id=row.id,
+                    title=row.title,
+                    artist=row.artist,
+                    album=row.album,
+                    duration_seconds=row.duration_seconds,
+                    play_count=row.play_count,
+                )
+            )
+            if len(deep_cuts) >= 15:
+                break
+
     # 3. Get recently added count (last 30 days)
     thirty_days_ago = utcnow() - timedelta(days=30)
     recent_query = (
@@ -171,6 +278,8 @@ async def get_discover_dashboard(
     recently_added_count = await db.scalar(recent_query) or 0
 
     return DiscoverResponse(
+        unheard_tracks=unheard_tracks,
+        deep_cuts=deep_cuts,
         recommended_artists=recommended_artists,
         recently_added_count=recently_added_count,
     )

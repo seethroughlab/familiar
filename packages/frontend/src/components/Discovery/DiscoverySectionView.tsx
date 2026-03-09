@@ -46,10 +46,15 @@ export function DiscoverySectionView({
   return (
     <div className={className}>
       {showHeader && (
-        <div className="flex items-center gap-2 mb-3">
-          {section.icon || getTypeIcon(section.entityType)}
-          <h3 className="font-medium text-sm">{section.title}</h3>
-          <span className="text-xs text-zinc-500">({section.items.length})</span>
+        <div className="mb-3">
+          <div className="flex items-center gap-2">
+            {section.icon || getTypeIcon(section.entityType)}
+            <h3 className="font-medium text-sm">{section.title}</h3>
+            <span className="text-xs text-zinc-500">({section.items.length})</span>
+          </div>
+          {section.description && (
+            <p className="text-xs text-zinc-500 mt-1 ml-6">{section.description}</p>
+          )}
         </div>
       )}
 
