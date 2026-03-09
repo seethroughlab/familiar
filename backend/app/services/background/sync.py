@@ -7,6 +7,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
+from app.services.background.events import record_background_event
 from app.utils.time import utcnow
 
 if TYPE_CHECKING:
@@ -17,6 +18,8 @@ else:
     _SyncBase = object
 
 logger = logging.getLogger(__name__)
+
+SYNC_HEARTBEAT_STALE_SECONDS = 300
 
 
 class SyncMixin(_SyncBase):
@@ -49,7 +52,7 @@ class SyncMixin(_SyncBase):
                         try:
                             hb_time = datetime.fromisoformat(heartbeat)
                             age = utcnow() - hb_time
-                            if age < timedelta(seconds=60):
+                            if age < timedelta(seconds=SYNC_HEARTBEAT_STALE_SECONDS):
                                 return True
                             elif has_lock:
                                 logger.info(
@@ -88,7 +91,7 @@ class SyncMixin(_SyncBase):
                     if heartbeat:
                         hb_time = datetime.fromisoformat(heartbeat)
                         age = utcnow() - hb_time
-                        if age > timedelta(seconds=60):
+                        if age > timedelta(seconds=SYNC_HEARTBEAT_STALE_SECONDS):
                             logger.info(
                                 f"Clearing stale sync lock before acquire "
                                 f"(heartbeat was {age.total_seconds():.0f}s ago)"
@@ -110,9 +113,28 @@ class SyncMixin(_SyncBase):
 
     def _cancel_sync(self) -> None:
         """Cancel the current sync task."""
+        self.cancel_sync()
+
+    def cancel_sync(self) -> dict[str, Any]:
+        """Cancel sync orchestration and release lock.
+
+        Returns structured cancellation semantics for API responses.
+        """
+        cancelled = 0
         if self._current_sync_task and not self._current_sync_task.done():
             self._current_sync_task.cancel()
+            cancelled = 1
         self._release_sync_lock()
+        record_background_event(
+            "cancel_requested",
+            {"scope": "sync", "in_process_tasks_cancelled": cancelled},
+        )
+        return {
+            "requested": True,
+            "in_process_tasks_cancelled": cancelled,
+            # The scan/analyzer subprocess may continue even after task cancellation.
+            "subprocess_may_continue": cancelled > 0,
+        }
 
     async def run_sync(
         self,
@@ -129,6 +151,10 @@ class SyncMixin(_SyncBase):
             self._current_sync_task = asyncio.create_task(
                 self._do_sync(reread_unchanged)
             )
+            record_background_event(
+                "sync_start",
+                {"reread_unchanged": reread_unchanged},
+            )
 
         return {"status": "started"}
 
@@ -142,9 +168,21 @@ class SyncMixin(_SyncBase):
         try:
             result = await run_library_sync(reread_unchanged=reread_unchanged)
             await self._post_sync_backup()
+            record_background_event(
+                "sync_complete",
+                {
+                    "status": result.get("status", "unknown"),
+                    "analyzed": result.get("analyzed"),
+                    "phase_forced_exit_reasons": result.get("phase_forced_exit_reasons", {}),
+                },
+            )
             return result
         except Exception as e:
             logger.error(f"Sync failed: {e}", exc_info=True)
+            record_background_event(
+                "sync_error",
+                {"error": str(e)[:300]},
+            )
             try:
                 progress = {"status": "error", "phase_message": str(e)}
                 self.redis.set("familiar:sync:progress", json.dumps(progress), ex=3600)
@@ -293,4 +331,3 @@ class SyncMixin(_SyncBase):
             await engine.dispose()
         except Exception as e:
             logger.warning(f"Frontend logs cleanup failed: {e}")
-

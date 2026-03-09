@@ -14,6 +14,7 @@ import pytest
 
 from app.services.background import (
     EXECUTOR_MAX_CONSECUTIVE_FAILURES,
+    SYNC_HEARTBEAT_STALE_SECONDS,
     BackgroundManager,
     get_background_manager,
 )
@@ -162,6 +163,21 @@ class TestSyncLocking:
         manager_with_redis._redis.get.return_value = None
 
         assert manager_with_redis.is_sync_running() is False
+
+    def test_is_sync_running_uses_shared_staleness_threshold(self, manager_with_redis):
+        """Heartbeat younger than threshold should be considered running."""
+        from datetime import timedelta
+
+        from app.utils.time import utcnow
+
+        manager_with_redis._current_sync_task = None
+        recent_heartbeat = (utcnow() - timedelta(seconds=SYNC_HEARTBEAT_STALE_SECONDS - 1)).isoformat()
+        manager_with_redis._redis.get.side_effect = [
+            b"1",
+            json.dumps({"status": "running", "last_heartbeat": recent_heartbeat}).encode(),
+        ]
+
+        assert manager_with_redis.is_sync_running() is True
 
 
 class TestAnalysisTaskManagement:
@@ -325,6 +341,39 @@ class TestRunCpuBound:
 
                 assert result == 42
                 assert call_count == 2
+
+
+class TestExecutorAutoRecovery:
+    """Tests for optional disabled-executor auto recovery."""
+
+    @pytest.fixture
+    def manager(self):
+        manager = BackgroundManager()
+        manager._executor = MagicMock()
+        return manager
+
+    @pytest.mark.asyncio
+    async def test_auto_recovery_disabled_by_default(self, manager):
+        manager._executor_disabled = True
+        manager._executor_disabled_at = time.monotonic() - 9999
+
+        with patch("app.services.background.executors.app_settings.executor_auto_recovery_enabled", False):
+            recovered = await manager._maybe_auto_recover_disabled_executor(trigger="test")
+            assert recovered is False
+
+    @pytest.mark.asyncio
+    async def test_auto_recovery_resets_after_backoff(self, manager):
+        manager._executor_disabled = True
+        manager._executor_disabled_at = time.monotonic() - 9999
+        manager._consecutive_executor_failures = 5
+
+        with patch("app.services.background.executors.app_settings.executor_auto_recovery_enabled", True), \
+             patch("app.services.background.executors.app_settings.executor_auto_recovery_backoff_seconds", 1), \
+             patch("app.services.background.executors.app_settings.executor_auto_recovery_max_attempts", 3), \
+             patch.object(manager, "reset_executor_circuit_breaker") as reset_mock:
+            recovered = await manager._maybe_auto_recover_disabled_executor(trigger="test")
+            assert recovered is True
+            reset_mock.assert_called_once()
 
 
 class TestRunSync:
@@ -527,7 +576,7 @@ class TestCancelSync:
     """Tests for sync cancellation."""
 
     def test_cancel_sync_cancels_task(self):
-        """Cancel should cancel running task."""
+        """Public cancel should cancel running task and return semantics."""
         manager = BackgroundManager()
         manager._redis = MagicMock()
 
@@ -535,17 +584,55 @@ class TestCancelSync:
         mock_task.done.return_value = False
         manager._current_sync_task = mock_task
 
-        manager._cancel_sync()
+        result = manager.cancel_sync()
 
         mock_task.cancel.assert_called_once()
         manager._redis.delete.assert_called_with("familiar:sync:lock")
+        assert result["requested"] is True
+        assert result["in_process_tasks_cancelled"] == 1
+        assert result["subprocess_may_continue"] is True
 
     def test_cancel_sync_no_task(self):
-        """Cancel should handle no running task."""
+        """Public cancel should handle no running task."""
         manager = BackgroundManager()
         manager._redis = MagicMock()
         manager._current_sync_task = None
 
         # Should not raise
-        manager._cancel_sync()
+        result = manager.cancel_sync()
         manager._redis.delete.assert_called()
+        assert result["requested"] is True
+        assert result["in_process_tasks_cancelled"] == 0
+        assert result["subprocess_may_continue"] is False
+
+    def test_cancel_sync_legacy_private_method_delegates(self):
+        """Private alias should delegate to public method for compatibility."""
+        manager = BackgroundManager()
+        manager._redis = MagicMock()
+        with patch.object(manager, "cancel_sync", return_value={"requested": True}):
+            manager._cancel_sync()
+            manager.cancel_sync.assert_called_once()
+
+
+class TestCancelAnalysis:
+    """Tests for analysis cancellation semantics."""
+
+    def test_cancel_analysis_returns_structured_result(self):
+        """Cancel analysis should return explicit semantics and clear task map."""
+        manager = BackgroundManager()
+        running_task = MagicMock()
+        running_task.done.return_value = False
+        done_task = MagicMock()
+        done_task.done.return_value = True
+        manager._analysis_tasks = {
+            "track1:features": running_task,
+            "track2:embedding": done_task,
+        }
+
+        result = manager.cancel_analysis()
+
+        running_task.cancel.assert_called_once()
+        assert result["requested"] is True
+        assert result["in_process_tasks_cancelled"] == 1
+        assert result["subprocess_may_continue"] is True
+        assert manager._analysis_tasks == {}

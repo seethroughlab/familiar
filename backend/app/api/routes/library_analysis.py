@@ -73,17 +73,14 @@ async def cancel_analysis() -> CancelResponse:
 
     bg = get_background_manager()
 
-    # Cancel all running analysis tasks
-    cancelled = 0
-    for task_id, task in list(bg._analysis_tasks.items()):
-        if not task.done():
-            task.cancel()
-            cancelled += 1
-        bg._analysis_tasks.pop(task_id, None)
+    cancel_result = bg.cancel_analysis()
 
     return CancelResponse(
         status="cancelled",
-        message=f"Cancelled {cancelled} analysis tasks",
+        message=f"Cancelled {cancel_result['in_process_tasks_cancelled']} analysis tasks",
+        requested=cancel_result["requested"],
+        in_process_tasks_cancelled=cancel_result["in_process_tasks_cancelled"],
+        subprocess_may_continue=cancel_result["subprocess_may_continue"],
     )
 
 

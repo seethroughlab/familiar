@@ -7,17 +7,37 @@ import asyncio
 import json
 import logging
 import time
+from collections import deque
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from app.config import EMBEDDING_VERSION, FEATURES_VERSION, MELODIC_VERSION, settings
+from app.services.background.events import record_background_event
 from app.services.redis_client import get_redis
 from app.services.tasks.common import SYNC_PROGRESS_KEY
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+SYNC_GUARDRAIL_PHASES = ("features", "embeddings", "backfill", "melodic")
+SYNC_QUEUE_CHURN_WINDOW_SECONDS = 300.0
+SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW = 60
+
+
+def _register_phase_requeue_attempt(
+    attempts: deque[float],
+    now: float,
+    window_seconds: float = SYNC_QUEUE_CHURN_WINDOW_SECONDS,
+    max_attempts: int = SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW,
+) -> bool:
+    """Track per-phase requeue attempts and return True when churn limit is exceeded."""
+    while attempts and (now - attempts[0]) > window_seconds:
+        attempts.popleft()
+    attempts.append(now)
+    return len(attempts) > max_attempts
 
 
 class SyncProgressReporter:
@@ -33,6 +53,12 @@ class SyncProgressReporter:
         self.redis = get_redis()
         self.started_at = datetime.now().isoformat()
         self.errors: list[str] = []
+        self.phase_requeue_attempts: dict[str, int] = {phase: 0 for phase in SYNC_GUARDRAIL_PHASES}
+        self.phase_stall_recoveries: dict[str, int] = {phase: 0 for phase in SYNC_GUARDRAIL_PHASES}
+        self.phase_forced_exit_reasons: dict[str, str | None] = {
+            phase: None for phase in SYNC_GUARDRAIL_PHASES
+        }
+        self._last_phase_emitted: str | None = None
         self._update({
             "status": "running",
             "phase": "starting",
@@ -58,9 +84,25 @@ class SyncProgressReporter:
 
     def _update(self, data: dict[str, Any]) -> None:
         """Update progress in Redis with heartbeat."""
+        phase = data.get("phase")
+        if phase and phase != self._last_phase_emitted:
+            record_background_event("phase_transition", {"phase": phase})
+            self._last_phase_emitted = phase
         data["last_heartbeat"] = datetime.now().isoformat()
         data["errors"] = self.errors
+        data["phase_requeue_attempts"] = self.phase_requeue_attempts
+        data["phase_stall_recoveries"] = self.phase_stall_recoveries
+        data["phase_forced_exit_reasons"] = self.phase_forced_exit_reasons
         self.redis.set(SYNC_PROGRESS_KEY, json.dumps(data), ex=3600)
+
+    def record_requeue_attempt(self, phase: str) -> None:
+        self.phase_requeue_attempts[phase] = self.phase_requeue_attempts.get(phase, 0) + 1
+
+    def record_stall_recovery(self, phase: str) -> None:
+        self.phase_stall_recoveries[phase] = self.phase_stall_recoveries.get(phase, 0) + 1
+
+    def set_forced_exit_reason(self, phase: str, reason: str) -> None:
+        self.phase_forced_exit_reasons[phase] = reason
 
     def set_discovering(self, dirs_scanned: int, files_found: int) -> None:
         """Phase 1: File discovery."""
@@ -456,6 +498,35 @@ async def run_library_sync(
     )
 
     progress = SyncProgressReporter()
+    phase_requeue_windows: dict[str, deque[float]] = {
+        phase: deque() for phase in SYNC_GUARDRAIL_PHASES
+    }
+
+    async def _guarded_queue(
+        phase: str,
+        queue_fn: Callable[..., Awaitable[int]],
+        *,
+        limit: int,
+        stall_recovery: bool = False,
+    ) -> tuple[int, bool]:
+        """Queue tracks while enforcing per-phase churn guardrails."""
+        now = time.monotonic()
+        attempts = phase_requeue_windows.setdefault(phase, deque())
+        if _register_phase_requeue_attempt(attempts, now):
+            reason = (
+                f"queue_churn_limit_exceeded:{len(attempts)}/"
+                f"{SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW}:{int(SYNC_QUEUE_CHURN_WINDOW_SECONDS)}s"
+            )
+            progress.set_forced_exit_reason(phase, reason)
+            logger.warning("Sync %s phase forced exit: %s", phase, reason)
+            return 0, True
+
+        progress.record_requeue_attempt(phase)
+        if stall_recovery:
+            progress.record_stall_recovery(phase)
+
+        queued = await queue_fn(limit=limit)
+        return queued, False
 
     try:
         # Phase 1 & 2: Run the scan in a separate process so it doesn't
@@ -538,6 +609,7 @@ async def run_library_sync(
                         f"Features phase timed out after {features_elapsed/3600:.1f}h "
                         f"({features_done} done, {pending_features} still pending)"
                     )
+                    progress.set_forced_exit_reason("features", "timeout")
                     break
 
                 # Check for stall (no progress in stall_threshold seconds)
@@ -549,8 +621,20 @@ async def run_library_sync(
                         f"Features progress stalled for {features_stall_threshold}s "
                         f"({pending_features} still pending)"
                     )
-                    queued = await queue_tracks_for_features(limit=200)
+                    record_background_event(
+                        "queue_stall",
+                        {"phase": "features", "pending": pending_features},
+                    )
+                    queued, forced_exit = await _guarded_queue(
+                        "features",
+                        queue_tracks_for_features,
+                        limit=200,
+                        stall_recovery=True,
+                    )
+                    if forced_exit:
+                        break
                     if queued == 0 and pending_features > 0:
+                        progress.set_forced_exit_reason("features", "stalled_no_queueable_tracks")
                         logger.warning(
                             f"Cannot queue more features but {pending_features} "
                             f"still pending - exiting to avoid infinite loop"
@@ -561,7 +645,13 @@ async def run_library_sync(
                 # Queue more tracks for feature extraction when queue might be low
                 # (the queue_tracks_for_features function handles deduplication)
                 if pending_features > 0:
-                    await queue_tracks_for_features(limit=100)
+                    _, forced_exit = await _guarded_queue(
+                        "features",
+                        queue_tracks_for_features,
+                        limit=100,
+                    )
+                    if forced_exit:
+                        break
 
                 progress.set_features(
                     analyzed=features_done,
@@ -639,6 +729,7 @@ async def run_library_sync(
                             f"({embeddings_success} success, {embeddings_failed} failed, "
                             f"{pending_embeddings} still pending)"
                         )
+                        progress.set_forced_exit_reason("embeddings", "timeout")
                         analyzed_count = embeddings_success
                         break
 
@@ -652,9 +743,22 @@ async def run_library_sync(
                             f"Embedding progress stalled for {stall_threshold}s "
                             f"({pending_embeddings} still pending)"
                         )
+                        record_background_event(
+                            "queue_stall",
+                            {"phase": "embeddings", "pending": pending_embeddings},
+                        )
                         # If still no queueable tracks, exit gracefully
-                        queued = await queue_tracks_for_embeddings(limit=200)
+                        queued, forced_exit = await _guarded_queue(
+                            "embeddings",
+                            queue_tracks_for_embeddings,
+                            limit=200,
+                            stall_recovery=True,
+                        )
+                        if forced_exit:
+                            analyzed_count = embeddings_success
+                            break
                         if queued == 0 and pending_embeddings > 0:
+                            progress.set_forced_exit_reason("embeddings", "stalled_no_queueable_tracks")
                             logger.warning(
                                 f"Cannot queue more embeddings but {pending_embeddings} "
                                 f"still pending - exiting to avoid infinite loop"
@@ -669,7 +773,14 @@ async def run_library_sync(
 
                     # Queue more tracks for embedding generation when queue might be low
                     if pending_embeddings > 0:
-                        await queue_tracks_for_embeddings(limit=100)
+                        _, forced_exit = await _guarded_queue(
+                            "embeddings",
+                            queue_tracks_for_embeddings,
+                            limit=100,
+                        )
+                        if forced_exit:
+                            analyzed_count = embeddings_success
+                            break
 
                     progress.set_embeddings(
                         analyzed=embeddings_success,
@@ -726,14 +837,27 @@ async def run_library_sync(
                         f"Deep backfill timed out after {elapsed/3600:.1f}h "
                         f"({backfill_done} done, {pending_backfill} pending)"
                     )
+                    progress.set_forced_exit_reason("backfill", "timeout")
                     break
 
                 if backfill_done > last_backfill_done:
                     last_backfill_progress_time = time.time()
                     last_backfill_done = backfill_done
                 elif time.time() - last_backfill_progress_time > backfill_stall_threshold:
-                    queued = await queue_tracks_for_backfill(limit=200)
+                    record_background_event(
+                        "queue_stall",
+                        {"phase": "backfill", "pending": pending_backfill},
+                    )
+                    queued, forced_exit = await _guarded_queue(
+                        "backfill",
+                        queue_tracks_for_backfill,
+                        limit=200,
+                        stall_recovery=True,
+                    )
+                    if forced_exit:
+                        break
                     if queued == 0 and pending_backfill > 0:
+                        progress.set_forced_exit_reason("backfill", "stalled_no_queueable_tracks")
                         logger.warning(
                             f"Backfill stalled with {pending_backfill} pending"
                         )
@@ -741,7 +865,13 @@ async def run_library_sync(
                     last_backfill_progress_time = time.time()
 
                 if pending_backfill > 0:
-                    await queue_tracks_for_backfill(limit=100)
+                    _, forced_exit = await _guarded_queue(
+                        "backfill",
+                        queue_tracks_for_backfill,
+                        limit=100,
+                    )
+                    if forced_exit:
+                        break
 
                 # Report as features phase since it's populating analysis data
                 progress.set_features(
@@ -803,6 +933,7 @@ async def run_library_sync(
                             f"Melodic phase timed out after {elapsed/3600:.1f}h "
                             f"({melodic_done} done, {pending_melodic} pending)"
                         )
+                        progress.set_forced_exit_reason("melodic", "timeout")
                         break
 
                     # Stall detection
@@ -810,8 +941,20 @@ async def run_library_sync(
                         last_melodic_progress_time = time.time()
                         last_melodic_done = melodic_done
                     elif time.time() - last_melodic_progress_time > melodic_stall_threshold:
-                        queued = await queue_tracks_for_melodic(limit=200)
+                        record_background_event(
+                            "queue_stall",
+                            {"phase": "melodic", "pending": pending_melodic},
+                        )
+                        queued, forced_exit = await _guarded_queue(
+                            "melodic",
+                            queue_tracks_for_melodic,
+                            limit=200,
+                            stall_recovery=True,
+                        )
+                        if forced_exit:
+                            break
                         if queued == 0 and pending_melodic > 0:
+                            progress.set_forced_exit_reason("melodic", "stalled_no_queueable_tracks")
                             logger.warning(
                                 f"Melodic phase stalled with {pending_melodic} pending"
                             )
@@ -822,7 +965,13 @@ async def run_library_sync(
                         break
 
                     if pending_melodic > 0:
-                        await queue_tracks_for_melodic(limit=100)
+                        _, forced_exit = await _guarded_queue(
+                            "melodic",
+                            queue_tracks_for_melodic,
+                            limit=100,
+                        )
+                        if forced_exit:
+                            break
 
                     progress.set_melodic(
                         analyzed=melodic_done,
@@ -863,7 +1012,14 @@ async def run_library_sync(
         )
 
         logger.info(f"Library sync complete: {scan_result}, analyzed={analyzed_count}")
-        return {"status": "success", **scan_result, "analyzed": analyzed_count}
+        return {
+            "status": "success",
+            **scan_result,
+            "analyzed": analyzed_count,
+            "phase_requeue_attempts": progress.phase_requeue_attempts,
+            "phase_stall_recoveries": progress.phase_stall_recoveries,
+            "phase_forced_exit_reasons": progress.phase_forced_exit_reasons,
+        }
 
     except Exception as e:
         logger.error(f"Library sync failed: {e}", exc_info=True)

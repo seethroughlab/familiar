@@ -10,6 +10,7 @@ from app.services.background.executors import (
     EXECUTOR_RESET_COOLDOWN,
 )
 from app.services.background.manager import BackgroundManager, get_background_manager
+from app.services.background.sync import SYNC_HEARTBEAT_STALE_SECONDS
 
 __all__ = [
     "BackgroundManager",
@@ -17,4 +18,5 @@ __all__ = [
     "EXECUTOR_RESET_COOLDOWN",
     "EXECUTOR_MAX_CONSECUTIVE_FAILURES",
     "EXECUTOR_AUTO_RECOVERY_DELAY",
+    "SYNC_HEARTBEAT_STALE_SECONDS",
 ]

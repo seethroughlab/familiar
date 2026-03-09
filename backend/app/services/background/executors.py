@@ -11,6 +11,9 @@ from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 
+from app.config import settings as app_settings
+from app.services.background.events import record_background_event
+
 logger = logging.getLogger(__name__)
 
 # Rate limiting for executor recreation to prevent runaway process spawning
@@ -48,6 +51,7 @@ class ExecutorMixin:
         self._consecutive_executor_failures: int = 0
         self._executor_disabled: bool = False
         self._executor_disabled_at: float = 0.0
+        self._executor_auto_recovery_attempts: int = 0
         # Track current work for crash diagnostics
         self._current_track_id: str | None = None
         self._crashed_track_ids: set[str] = set()
@@ -112,6 +116,13 @@ class ExecutorMixin:
         if self._consecutive_executor_failures >= EXECUTOR_MAX_CONSECUTIVE_FAILURES:
             self._executor_disabled = True
             self._executor_disabled_at = time.monotonic()
+            record_background_event(
+                "breaker_disabled",
+                {
+                    "reason": "max_consecutive_failures",
+                    "consecutive_failures": self._consecutive_executor_failures,
+                },
+            )
             logger.error(
                 f"Executor disabled after {self._consecutive_executor_failures} consecutive "
                 f"failures. Manual reset required (POST /api/v1/analysis/reset-executor)."
@@ -127,6 +138,7 @@ class ExecutorMixin:
 
         self._create_executor()
         self._last_executor_reset = now
+        self._executor_auto_recovery_attempts = 0
         if self._current_track_id:
             self._crashed_track_ids.add(self._current_track_id)
             logger.warning(
@@ -139,6 +151,14 @@ class ExecutorMixin:
                 f"ProcessPoolExecutor was reset after crash "
                 f"(failure {self._consecutive_executor_failures}/{EXECUTOR_MAX_CONSECUTIVE_FAILURES})"
             )
+        record_background_event(
+            "executor_reset",
+            {
+                "reason": "broken_process_pool",
+                "consecutive_failures": self._consecutive_executor_failures,
+                "current_track_id": self._current_track_id,
+            },
+        )
         return True
 
     def reset_executor_circuit_breaker(self) -> dict[str, Any]:
@@ -150,6 +170,7 @@ class ExecutorMixin:
         self._executor_disabled = False
         self._consecutive_executor_failures = 0
         self._last_executor_reset = 0.0
+        self._executor_auto_recovery_attempts = 0
         self._crashed_track_ids.clear()
 
         if self._executor is not None:
@@ -164,6 +185,15 @@ class ExecutorMixin:
         logger.info(
             f"Executor circuit breaker manually reset. Was disabled: {was_disabled}, "
             f"failures: {old_failure_count}, crashed tracks: {len(crashed_tracks)}"
+        )
+        record_background_event(
+            "executor_reset",
+            {
+                "reason": "manual_reset",
+                "was_disabled": was_disabled,
+                "previous_failure_count": old_failure_count,
+                "crashed_track_count": len(crashed_tracks),
+            },
         )
 
         return {
@@ -205,6 +235,10 @@ class ExecutorMixin:
 
     async def _check_and_recover_worker(self) -> None:
         """Periodic health check: if a task is stuck, restart the executor."""
+        if self._executor_disabled:
+            await self._maybe_auto_recover_disabled_executor(trigger="health_check")
+            return
+
         if self._check_worker_health():
             return
 
@@ -226,6 +260,41 @@ class ExecutorMixin:
 
         self._last_task_started_at = None
         self._create_executor()
+        record_background_event(
+            "executor_reset",
+            {
+                "reason": "worker_stuck_restart",
+                "current_track_id": self._current_track_id,
+                "duration_seconds": round(duration, 1),
+            },
+        )
+
+    async def _maybe_auto_recover_disabled_executor(self, trigger: str) -> bool:
+        """Optionally auto-recover a disabled executor with bounded backoff."""
+        if not self._executor_disabled:
+            return False
+
+        if not app_settings.executor_auto_recovery_enabled:
+            return False
+
+        if self._executor_auto_recovery_attempts >= app_settings.executor_auto_recovery_max_attempts:
+            return False
+
+        disabled_for = time.monotonic() - self._executor_disabled_at
+        if disabled_for < app_settings.executor_auto_recovery_backoff_seconds:
+            return False
+
+        self._executor_auto_recovery_attempts += 1
+        record_background_event(
+            "executor_auto_recovery_attempt",
+            {
+                "trigger": trigger,
+                "attempt": self._executor_auto_recovery_attempts,
+                "disabled_for_seconds": round(disabled_for, 1),
+            },
+        )
+        self.reset_executor_circuit_breaker()
+        return True
 
     async def run_cpu_bound(self, func: Callable, *args: Any, max_retries: int = 1) -> Any:
         """Run CPU-bound function in process pool (spawned, not forked).
@@ -233,6 +302,17 @@ class ExecutorMixin:
         If the process pool crashes (BrokenProcessPool), it will be automatically
         recreated and the operation retried once.
         """
+        if self._executor_disabled:
+            recovered = await self._maybe_auto_recover_disabled_executor(trigger="run_cpu_bound")
+            if recovered:
+                logger.info("Executor auto-recovery succeeded; continuing analysis task")
+            else:
+                raise RuntimeError(
+                    "Process pool executor is disabled due to repeated OOM failures. "
+                    "Reset manually via POST /api/v1/analysis/reset-executor "
+                    "or restart the container with more memory."
+                )
+
         if self._executor_disabled:
             raise RuntimeError(
                 "Process pool executor is disabled due to repeated OOM failures. "
@@ -282,6 +362,13 @@ class ExecutorMixin:
                     if self._consecutive_executor_failures >= EXECUTOR_MAX_CONSECUTIVE_FAILURES:
                         self._executor_disabled = True
                         self._executor_disabled_at = time.monotonic()
+                        record_background_event(
+                            "breaker_disabled",
+                            {
+                                "reason": "retry_exhausted",
+                                "consecutive_failures": self._consecutive_executor_failures,
+                            },
+                        )
                         logger.error(
                             f"Executor disabled after {self._consecutive_executor_failures} "
                             f"consecutive failures. Manual reset required "

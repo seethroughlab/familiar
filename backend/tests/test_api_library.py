@@ -327,6 +327,9 @@ class TestCancelOperations:
         data = response.json()
         assert "status" in data
         assert data["status"] == "cancelled"
+        assert "requested" in data
+        assert "in_process_tasks_cancelled" in data
+        assert "subprocess_may_continue" in data
 
     def test_cancel_sync(self, client: TestClient) -> None:
         """Test cancelling sync operation."""
@@ -336,6 +339,9 @@ class TestCancelOperations:
         data = response.json()
         assert "status" in data
         assert data["status"] == "cancelled"
+        assert "requested" in data
+        assert "in_process_tasks_cancelled" in data
+        assert "subprocess_may_continue" in data
 
 
 class TestArtistDetail:

@@ -300,6 +300,14 @@ class TaskFailure(BaseModel):
     timestamp: str
 
 
+class BackgroundEvent(BaseModel):
+    """Recent background lifecycle/resilience event."""
+
+    event: str
+    timestamp: str
+    details: dict[str, Any] = {}
+
+
 class WorkerStatus(BaseModel):
     """Detailed worker and queue status."""
 
@@ -307,6 +315,7 @@ class WorkerStatus(BaseModel):
     queues: list[QueueStats]
     analysis_progress: dict[str, Any]
     recent_failures: list[TaskFailure] = []
+    background_events: list[BackgroundEvent] = []
 
 
 @router.get("/health/workers", response_model=WorkerStatus)
@@ -316,11 +325,13 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
 
     from app.config import FEATURES_VERSION
     from app.services.background import get_background_manager
+    from app.services.background.events import get_recent_background_events
     from app.services.tasks import get_recent_failures
 
     workers: list[WorkerInfo] = []
     queues: list[QueueStats] = []
     recent_failures: list[TaskFailure] = []
+    background_events: list[BackgroundEvent] = []
 
     # Get recent failures
     try:
@@ -328,6 +339,13 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
         recent_failures = [TaskFailure(**f) for f in failures]
     except Exception as e:
         logger.warning(f"Could not get recent failures: {e}")
+
+    # Background lifecycle timeline
+    try:
+        events = get_recent_background_events(limit=20)
+        background_events = [BackgroundEvent(**evt) for evt in events]
+    except Exception as e:
+        logger.warning(f"Could not get background events: {e}")
 
     # Get worker info from BackgroundManager
     try:
@@ -388,4 +406,5 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
         queues=queues,
         analysis_progress=analysis_progress,
         recent_failures=recent_failures,
+        background_events=background_events,
     )

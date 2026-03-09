@@ -56,6 +56,9 @@ class CancelResponse(BaseModel):
 
     status: str
     message: str
+    requested: bool = True
+    in_process_tasks_cancelled: int = 0
+    subprocess_may_continue: bool = False
 
 
 @router.post("/sync", response_model=SyncStatus)
@@ -119,6 +122,7 @@ async def get_sync_status_endpoint() -> SyncStatus:
     """
     from datetime import datetime, timedelta
 
+    from app.services.background import SYNC_HEARTBEAT_STALE_SECONDS
     from app.services.tasks import clear_sync_progress
 
     progress = get_sync_progress()
@@ -137,7 +141,7 @@ async def get_sync_status_endpoint() -> SyncStatus:
         if last_heartbeat:
             try:
                 heartbeat_time = datetime.fromisoformat(last_heartbeat)
-                if datetime.now() - heartbeat_time > timedelta(minutes=5):
+                if datetime.now() - heartbeat_time > timedelta(seconds=SYNC_HEARTBEAT_STALE_SECONDS):
                     clear_sync_progress()
                     return SyncStatus(
                         status="error",
@@ -188,11 +192,13 @@ async def cancel_sync() -> CancelResponse:
 
     bg = get_background_manager()
 
-    # Cancel the sync task and release lock
-    bg._cancel_sync()
+    cancel_result = bg.cancel_sync()
     clear_sync_progress()
 
     return CancelResponse(
         status="cancelled",
         message="Sync cancelled and state cleared",
+        requested=cancel_result["requested"],
+        in_process_tasks_cancelled=cancel_result["in_process_tasks_cancelled"],
+        subprocess_may_continue=cancel_result["subprocess_may_continue"],
     )

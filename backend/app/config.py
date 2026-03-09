@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     migration_preflight_enabled: bool = True
     migration_preflight_strict: bool = True
+    executor_auto_recovery_enabled: bool = False
+    executor_auto_recovery_backoff_seconds: int = 900
+    executor_auto_recovery_max_attempts: int = 3
 
     @property
     def sync_database_url(self) -> str:

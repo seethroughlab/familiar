@@ -8,6 +8,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from app.services.background.events import record_background_event
+
 if TYPE_CHECKING:
     from app.services.background._typing import _BackgroundManagerProtocol
 
@@ -68,6 +70,28 @@ class AnalysisMixin(_AnalysisBase):
         for tid in completed:
             self._analysis_tasks.pop(tid, None)
         return len(self._analysis_tasks)
+
+    def cancel_analysis(self) -> dict[str, Any]:
+        """Cancel queued/running analysis orchestration tasks.
+
+        Returns structured cancellation semantics for API responses.
+        """
+        cancelled = 0
+        for task_id, task in list(self._analysis_tasks.items()):
+            if not task.done():
+                task.cancel()
+                cancelled += 1
+            self._analysis_tasks.pop(task_id, None)
+        record_background_event(
+            "cancel_requested",
+            {"scope": "analysis", "in_process_tasks_cancelled": cancelled},
+        )
+        return {
+            "requested": True,
+            "in_process_tasks_cancelled": cancelled,
+            # CPU-bound worker subprocess work may continue after coroutine cancellation.
+            "subprocess_may_continue": cancelled > 0,
+        }
 
     async def run_analysis(
         self,

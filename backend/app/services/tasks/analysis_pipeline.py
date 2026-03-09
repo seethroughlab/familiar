@@ -19,6 +19,16 @@ from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
+ANALYSIS_RETRY_WINDOW_HOURS = 24
+# Retry ownership policy:
+# - Track-level failure cooldown: Track.analysis_failed_at
+# - Embedding-level failure cooldown: TrackAnalysis.embedding_failed_at
+
+
+def _analysis_failure_cutoff():
+    """Shared retry cutoff for analysis queueing policies."""
+    return utcnow() - timedelta(hours=ANALYSIS_RETRY_WINDOW_HOURS)
+
 
 def _ensure_track_analysis_row(db: Any, track_id: "UUID", version: int) -> None:
     """Create or update TrackAnalysis to record attempt version.
@@ -649,7 +659,7 @@ async def queue_tracks_for_features(limit: int = 500) -> int:
 
     queued = 0
     async with async_session_maker() as db:
-        failure_cutoff = utcnow() - timedelta(hours=24)
+        failure_cutoff = _analysis_failure_cutoff()
 
         # Find tracks that need analysis:
         # 1. No TrackAnalysis row (never attempted)
@@ -701,7 +711,7 @@ async def queue_tracks_for_embeddings(limit: int = 500) -> int:
 
     queued = 0
     async with async_session_maker() as db:
-        failure_cutoff = utcnow() - timedelta(hours=24)
+        failure_cutoff = _analysis_failure_cutoff()
 
         # Find tracks with analysis record but outdated/missing embedding
         # Exclude tracks that recently failed embedding (within 24h) to avoid infinite retry
@@ -826,7 +836,7 @@ async def queue_unanalyzed_tracks(limit: int = 500) -> int:
 
     queued = 0
     async with async_session_maker() as db:
-        failure_cutoff = utcnow() - timedelta(hours=24)
+        failure_cutoff = _analysis_failure_cutoff()
 
         result = await db.execute(
             select(Track.id)
