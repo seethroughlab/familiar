@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Loader2, X, Music, Image, CloudUpload } from 'lucide-react';
+import { Loader2, X, Music, Image, CloudUpload, ListMusic } from 'lucide-react';
 import { useBackgroundJobsStore } from '../stores/backgroundJobsStore';
 import type { BackgroundJob } from '../api';
 
@@ -9,6 +9,7 @@ const jobIcons: Record<BackgroundJob['type'], typeof Music> = {
   library_sync: Music,
   artwork_fetch: Image,
   s3_backup: CloudUpload,
+  spotify_matching: ListMusic,
 };
 
 // Friendly names for job types
@@ -16,6 +17,7 @@ const jobNames: Record<BackgroundJob['type'], string> = {
   library_sync: 'Library Sync',
   artwork_fetch: 'Artwork',
   s3_backup: 'S3 Backup',
+  spotify_matching: 'Spotify Matching',
 };
 
 const phaseLabels: Record<string, string> = {

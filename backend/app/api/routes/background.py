@@ -137,6 +137,25 @@ async def get_background_jobs() -> BackgroundJobsResponse:
         if status == "running":
             jobs.append(_build_artwork_fetch_job(artwork_progress))
 
+    # Check Spotify matching
+    try:
+        from app.services.background import get_background_manager
+        import json as _json
+        spotify_data = get_background_manager().redis.get("familiar:spotify_match:progress")
+        spotify_progress = _json.loads(spotify_data) if spotify_data else None
+    except Exception:
+        spotify_progress = None
+    if spotify_progress and spotify_progress.get("status") == "processing":
+        jobs.append(BackgroundJob(
+            type="spotify_matching",
+            status="running",
+            phase="matching",
+            progress=None,
+            message=spotify_progress.get("message", "Matching Spotify tracks..."),
+            current_item=None,
+            started_at=None,
+        ))
+
     # Check S3 backup
     s3_progress = get_s3_backup_service().get_backup_progress()
     if s3_progress and s3_progress.get("status") == "running":

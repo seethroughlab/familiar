@@ -181,11 +181,16 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
         key = f"familiar:spotify_import:{task_id}"
+        well_known_key = "familiar:spotify_match:progress"
 
         def _update(message: str) -> None:
-            self.redis.set(key, json.dumps({"status": "processing", "message": message}), ex=3600)
+            payload = json.dumps({"status": "processing", "message": message})
+            self.redis.set(key, payload, ex=3600)
+            self.redis.set(well_known_key, payload, ex=3600)
 
-        self.redis.set(key, json.dumps({"status": "processing", "message": "Matching tracks..."}), ex=3600)
+        initial = json.dumps({"status": "processing", "message": "Matching tracks..."})
+        self.redis.set(key, initial, ex=3600)
+        self.redis.set(well_known_key, initial, ex=3600)
 
         engine = create_async_engine(app_settings.database_url)
         async_session_factory = async_sessionmaker(engine, class_=AsyncSession)
@@ -201,6 +206,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
             logger.error(f"Spotify matching task {task_id} failed: {e}", exc_info=True)
             self.redis.set(key, json.dumps({"status": "error", "error": str(e)}), ex=3600)
         finally:
+            self.redis.delete(well_known_key)
             await engine.dispose()
 
     async def run_spotify_rematch(self, task_id: str, profile_id: UUID) -> None:
