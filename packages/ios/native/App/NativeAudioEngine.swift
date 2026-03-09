@@ -5,6 +5,7 @@ import MediaPlayer
 
 protocol NativeAudioEngineDelegate: AnyObject {
     func audioEngineDidFinishPlaying()
+    func audioEngineDidAutoAdvance(loadedTrackId: String)
     func audioEngineDidUpdateTime(currentTime: Double, duration: Double)
     func audioEngineDidUpdateAnalysis(frequencyData: [UInt8], timeDomainData: [UInt8])
     func audioEngineDidEncounterError(message: String, category: NativeAudioEngine.NativeAudioErrorCategory)
@@ -415,7 +416,7 @@ class NativeAudioEngine {
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
-                    self.delegate?.audioEngineDidFinishPlaying()
+                    self.handleTrackEnd()
                 }
             }
         }
@@ -535,7 +536,7 @@ class NativeAudioEngine {
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
-                    self.delegate?.audioEngineDidFinishPlaying()
+                    self.handleTrackEnd()
                 }
             }
         }
@@ -936,7 +937,7 @@ class NativeAudioEngine {
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
-                    self.delegate?.audioEngineDidFinishPlaying()
+                    self.handleTrackEnd()
                 }
             }
         }
@@ -1073,6 +1074,64 @@ class NativeAudioEngine {
         syncNowPlaying()
     }
 
+    // MARK: - Auto-advance & Pending Track Helpers
+
+    /// Load and play the pending next track natively, routing file:// URLs to loadLocal().
+    /// Calls `onSuccess(trackId)` on success or `onFailure()` on error.
+    private func loadAndPlayPendingTrack(
+        url: String, trackId: String,
+        title: String?, artist: String?, album: String?, artworkUrl: String?,
+        onSuccess: @escaping (String) -> Void,
+        onFailure: @escaping () -> Void
+    ) {
+        let isLocalUrl = url.hasPrefix("file://") || url.hasPrefix("capacitor://") || url.hasPrefix("content://")
+
+        let loadCompletion: (Error?) -> Void = { [weak self] error in
+            guard let self = self, error == nil else {
+                onFailure()
+                return
+            }
+            self.play()
+            self.updateNowPlayingInfo(title: title, artist: artist, album: album)
+            self.updateNowPlayingArtwork(url: artworkUrl)
+            onSuccess(trackId)
+        }
+
+        if isLocalUrl {
+            loadLocal(path: url, trackId: trackId, completion: loadCompletion)
+        } else {
+            load(url: url, trackId: trackId, completion: loadCompletion)
+        }
+    }
+
+    /// Called when a track finishes playing. If pending next track info is available,
+    /// auto-advances natively (works even when JS is suspended). Otherwise falls back
+    /// to the delegate's `audioEngineDidFinishPlaying()` for JS-side handling.
+    private func handleTrackEnd() {
+        if let url = pendingNextUrl, let trackId = pendingNextTrackId {
+            let title = pendingNextTitle
+            let artist = pendingNextArtist
+            let album = pendingNextAlbum
+            let artworkUrl = pendingNextArtworkUrl
+
+            // Clear pending info before async load
+            setPendingNext(url: nil, trackId: nil, title: nil, artist: nil, album: nil, artworkUrl: nil)
+
+            loadAndPlayPendingTrack(
+                url: url, trackId: trackId,
+                title: title, artist: artist, album: album, artworkUrl: artworkUrl,
+                onSuccess: { [weak self] loadedTrackId in
+                    self?.delegate?.audioEngineDidAutoAdvance(loadedTrackId: loadedTrackId)
+                },
+                onFailure: { [weak self] in
+                    self?.delegate?.audioEngineDidFinishPlaying()
+                }
+            )
+        } else {
+            delegate?.audioEngineDidFinishPlaying()
+        }
+    }
+
     // MARK: - Now Playing
 
     private func updateRemoteCommandAvailability() {
@@ -1123,17 +1182,16 @@ class NativeAudioEngine {
                 // Clear pending info before async load
                 self.setPendingNext(url: nil, trackId: nil, title: nil, artist: nil, album: nil, artworkUrl: nil)
 
-                self.load(url: url, trackId: trackId) { [weak self] error in
-                    guard let self = self, error == nil else {
-                        // Load failed — fall through to JS
+                self.loadAndPlayPendingTrack(
+                    url: url, trackId: trackId,
+                    title: title, artist: artist, album: album, artworkUrl: artworkUrl,
+                    onSuccess: { [weak self] loadedTrackId in
+                        self?.delegate?.audioEngineRemoteNext(loadedTrackId: loadedTrackId)
+                    },
+                    onFailure: { [weak self] in
                         self?.delegate?.audioEngineRemoteNext(loadedTrackId: nil)
-                        return
                     }
-                    self.play()
-                    self.updateNowPlayingInfo(title: title, artist: artist, album: album)
-                    self.updateNowPlayingArtwork(url: artworkUrl)
-                    self.delegate?.audioEngineRemoteNext(loadedTrackId: trackId)
-                }
+                )
             } else {
                 self.delegate?.audioEngineRemoteNext(loadedTrackId: nil)
             }
@@ -1163,16 +1221,16 @@ class NativeAudioEngine {
                 // Clear pending info before async load
                 self.setPendingPrevious(url: nil, trackId: nil, title: nil, artist: nil, album: nil, artworkUrl: nil)
 
-                self.load(url: url, trackId: trackId) { [weak self] error in
-                    guard let self = self, error == nil else {
+                self.loadAndPlayPendingTrack(
+                    url: url, trackId: trackId,
+                    title: title, artist: artist, album: album, artworkUrl: artworkUrl,
+                    onSuccess: { [weak self] loadedTrackId in
+                        self?.delegate?.audioEngineRemotePrevious(nativeAction: nil, loadedTrackId: loadedTrackId)
+                    },
+                    onFailure: { [weak self] in
                         self?.delegate?.audioEngineRemotePrevious(nativeAction: nil, loadedTrackId: nil)
-                        return
                     }
-                    self.play()
-                    self.updateNowPlayingInfo(title: title, artist: artist, album: album)
-                    self.updateNowPlayingArtwork(url: artworkUrl)
-                    self.delegate?.audioEngineRemotePrevious(nativeAction: nil, loadedTrackId: trackId)
-                }
+                )
             } else {
                 self.delegate?.audioEngineRemotePrevious(nativeAction: nil, loadedTrackId: nil)
             }
