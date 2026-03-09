@@ -9,6 +9,7 @@ import { getEngine } from './audio/engineInstance';
 import type { EngineEvent } from './audio/types';
 import { log } from './audio/platform';
 import { useConnectivityStore } from '../stores/connectivityStore';
+import { prefetchService } from '../services/prefetchService';
 import {
   getCrossfadeTrigger,
   getEffectiveCrossfadeDuration,
@@ -239,6 +240,13 @@ export function useAudioEngine() {
       if (ok) setIsInitialized(true);
     }
   }, [isInitialized, engine]);
+
+  // Start/stop prefetch service with engine lifecycle
+  useEffect(() => {
+    if (!isInitialized) return;
+    prefetchService.start();
+    return () => prefetchService.stop();
+  }, [isInitialized]);
 
   // --------------------------------------------------------------------------
   // Engine Event Subscription

@@ -4,6 +4,7 @@ import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/
 import { log } from '@familiar/frontend/src/player/audio/platform';
 import { tracksApi } from '@familiar/frontend/src/api';
 import { getOfflineTrackNativeUri } from '@familiar/frontend/src/services/offlineService';
+import { prefetchService } from '@familiar/frontend/src/services/prefetchService';
 import { useConnectivityStore } from '@familiar/frontend/src/stores/connectivityStore';
 
 // ============================================================================
@@ -253,6 +254,9 @@ export class CapacitorEngine implements AudioEngine {
     if (nativeUri) {
       return { url: nativeUri, isOffline: true };
     }
+    // Check prefetch cache
+    const prefetched = prefetchService.getUrl(trackId);
+    if (prefetched) return prefetched;
     if (useConnectivityStore.getState().offlineModeActive) {
       const err = new Error('Track unavailable while offline');
       (err as Error & { code?: string }).code = 'offline-unavailable';

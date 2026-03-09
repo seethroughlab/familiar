@@ -109,6 +109,7 @@ interface PlayerState {
   setCrossfadeState: (state: CrossfadeState) => void;
   setNextTrackPreloaded: (preloaded: boolean) => void;
   getNextTrack: () => Track | null;
+  getUpcomingTrackIds: (count: number) => string[];
   advanceToNextTrack: (track: Track) => void;
 
   // Audio loading actions
@@ -925,6 +926,46 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     return queue[nextQueueIndex]?.track || null;
+  },
+
+  getUpcomingTrackIds: (count: number): string[] => {
+    const { queue, queueIndex, shuffle, shuffleOrder, shuffleIndex, repeat } = get();
+    if (queue.length === 0 || count <= 0) return [];
+    if (repeat === 'one') return [];
+
+    const result: string[] = [];
+
+    for (let step = 1; step <= count; step++) {
+      let idx: number;
+
+      if (shuffle && shuffleOrder.length > 0) {
+        const si = shuffleIndex + step;
+        if (si >= shuffleOrder.length) {
+          if (repeat === 'all') {
+            // Can't predict reshuffle order, stop here
+            break;
+          }
+          break;
+        }
+        idx = shuffleOrder[si];
+      } else {
+        idx = queueIndex + step;
+        if (idx >= queue.length) {
+          if (repeat === 'all') {
+            idx = idx % queue.length;
+          } else {
+            break;
+          }
+        }
+      }
+
+      const trackId = queue[idx]?.track?.id;
+      if (trackId && !result.includes(trackId)) {
+        result.push(trackId);
+      }
+    }
+
+    return result;
   },
 
   advanceToNextTrack: (track) => {
