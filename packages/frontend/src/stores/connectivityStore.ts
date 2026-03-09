@@ -26,6 +26,7 @@ interface ConnectivityState {
   lastRecoveryAt: number | null;
   lastReachableAt: number | null;
   consecutiveNetworkFailures: number;
+  consecutiveProbeFailures: number;
   offlineTrackIds: Set<string>;
   counters: ConnectivityCounters;
 
@@ -102,6 +103,7 @@ async function runProbe(): Promise<void> {
       reachabilityState: 'reachable',
       lastReachableAt: now,
       consecutiveNetworkFailures: 0,
+      consecutiveProbeFailures: 0,
       ...(current.forcedOffline
         ? {
             ...setOfflineDerivedState(current.browserOnline, false),
@@ -114,9 +116,11 @@ async function runProbe(): Promise<void> {
         : {}),
     });
   } else {
-    const shouldForce = current.browserOnline;
+    const nextProbeFailures = current.consecutiveProbeFailures + 1;
+    const shouldForce = current.browserOnline && nextProbeFailures >= 2;
     useConnectivityStore.setState({
       reachabilityState: 'unreachable',
+      consecutiveProbeFailures: nextProbeFailures,
       ...(shouldForce
         ? {
             ...setOfflineDerivedState(current.browserOnline, true),
@@ -130,7 +134,7 @@ async function runProbe(): Promise<void> {
   }
 
   const next = useConnectivityStore.getState();
-  scheduleProbe(next.offlineModeActive ? PROBE_OFFLINE_INTERVAL_MS : PROBE_ONLINE_INTERVAL_MS);
+  scheduleProbe(next.reachabilityState === 'unreachable' ? PROBE_OFFLINE_INTERVAL_MS : PROBE_ONLINE_INTERVAL_MS);
 }
 
 async function setupNativeNetworkListener(): Promise<void> {
@@ -195,6 +199,7 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
   lastRecoveryAt: null,
   lastReachableAt: null,
   consecutiveNetworkFailures: 0,
+  consecutiveProbeFailures: 0,
   offlineTrackIds: new Set<string>(),
   counters: defaultCounters(),
 
@@ -204,7 +209,7 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
 
     browserOnlineListener = () => {
       const state = get();
-      set({ ...setOfflineDerivedState(true, state.forcedOffline) });
+      set({ ...setOfflineDerivedState(true, state.forcedOffline), consecutiveProbeFailures: 0 });
       scheduleProbe(300);
     };
     browserOfflineListener = () => {
@@ -254,16 +259,23 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
     const nextFailures = state.consecutiveNetworkFailures + 1;
 
     if (category === 'network-unreachable') {
-      const shouldForce = !state.offlineModeActive;
+      const shouldForce = !state.offlineModeActive && nextFailures >= 2;
       set({
         consecutiveNetworkFailures: nextFailures,
         reachabilityState: 'unreachable',
-        ...setOfflineDerivedState(state.browserOnline, true),
-        counters: {
-          ...state.counters,
-          network_unreachable_load_failures: state.counters.network_unreachable_load_failures + 1,
-          offline_mode_forced: state.counters.offline_mode_forced + (shouldForce ? 1 : 0),
-        },
+        ...(shouldForce ? {
+          ...setOfflineDerivedState(state.browserOnline, true),
+          counters: {
+            ...state.counters,
+            network_unreachable_load_failures: state.counters.network_unreachable_load_failures + 1,
+            offline_mode_forced: state.counters.offline_mode_forced + 1,
+          },
+        } : {
+          counters: {
+            ...state.counters,
+            network_unreachable_load_failures: state.counters.network_unreachable_load_failures + 1,
+          },
+        }),
       });
       scheduleProbe(PROBE_OFFLINE_INTERVAL_MS);
       return;

@@ -39,6 +39,7 @@ describe('connectivityStore', () => {
       lastRecoveryAt: null,
       lastReachableAt: null,
       consecutiveNetworkFailures: 0,
+      consecutiveProbeFailures: 0,
       offlineTrackIds: new Set<string>(),
       counters: defaultCounters(),
     });
@@ -50,14 +51,53 @@ describe('connectivityStore', () => {
     vi.useRealTimers();
   });
 
-  it('forces offline mode on network-unreachable load failures', () => {
+  it('does not force offline on first network-unreachable load failure', () => {
+    useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
+
+    const state = useConnectivityStore.getState();
+    expect(state.forcedOffline).toBe(false);
+    expect(state.offlineModeActive).toBe(false);
+    expect(state.reachabilityState).toBe('unreachable');
+    expect(state.counters.network_unreachable_load_failures).toBe(1);
+    expect(state.counters.offline_mode_forced).toBe(0);
+  });
+
+  it('forces offline mode after 2 consecutive network-unreachable load failures', () => {
+    useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
     useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
 
     const state = useConnectivityStore.getState();
     expect(state.forcedOffline).toBe(true);
     expect(state.offlineModeActive).toBe(true);
     expect(state.reachabilityState).toBe('unreachable');
-    expect(state.counters.network_unreachable_load_failures).toBe(1);
+    expect(state.counters.network_unreachable_load_failures).toBe(2);
+    expect(state.counters.offline_mode_forced).toBe(1);
+  });
+
+  it('does not force offline after a single failed probe', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const state = useConnectivityStore.getState();
+    expect(state.reachabilityState).toBe('unreachable');
+    expect(state.forcedOffline).toBe(false);
+    expect(state.offlineModeActive).toBe(false);
+    expect(state.consecutiveProbeFailures).toBe(1);
+  });
+
+  it('forces offline after 2 consecutive failed probes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10);  // first probe fails
+    await vi.advanceTimersByTimeAsync(8000 + 10);  // second probe fails (PROBE_OFFLINE_INTERVAL_MS)
+
+    const state = useConnectivityStore.getState();
+    expect(state.forcedOffline).toBe(true);
+    expect(state.offlineModeActive).toBe(true);
+    expect(state.consecutiveProbeFailures).toBe(2);
     expect(state.counters.offline_mode_forced).toBe(1);
   });
 
