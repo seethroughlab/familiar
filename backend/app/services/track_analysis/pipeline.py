@@ -324,7 +324,8 @@ def run_backfill(track_id: str) -> dict[str, Any]:
                 return {"status": "cached", "track_id": track_id}
 
             import librosa
-            y, sr = librosa.load(str(file_path), sr=22050, mono=True)
+            # Cap at 8 min to prevent OOM on long tracks (~200MB vs ~6GB uncapped)
+            y, sr = librosa.load(str(file_path), sr=22050, mono=True, duration=480)
 
             rms_all = librosa.feature.rms(y=y)[0]
             if np.mean(rms_all) < 1e-6:
@@ -406,7 +407,9 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
                 return {"status": "skipped", "reason": "Track too short"}
 
             import librosa
-            y, sr = librosa.load(str(file_path), sr=22050, mono=True)
+            # Cap at 6 min to prevent OOM (basic-pitch + librosa ~ 2.5GB)
+            MELODIC_DURATION_CAP = 360
+            y, sr = librosa.load(str(file_path), sr=22050, mono=True, duration=MELODIC_DURATION_CAP)
 
             rms_all = librosa.feature.rms(y=y)[0]
             if np.mean(rms_all) < 1e-6:
@@ -417,8 +420,17 @@ def run_track_melodic(track_id: str) -> dict[str, Any]:
 
             shared = _precompute_shared(y, sr)
 
+            # If track exceeds duration cap, basic-pitch needs a truncated file
+            # since predict() reads from disk independently
+            needs_truncated_file = (
+                track.duration_seconds and track.duration_seconds > MELODIC_DURATION_CAP
+            )
+
             try:
-                melodic_result = _analyze_melodic(y, sr, shared, str(file_path), track_id)
+                melodic_result = _analyze_melodic(
+                    y, sr, shared, str(file_path), track_id,
+                    truncate_duration=MELODIC_DURATION_CAP if needs_truncated_file else None,
+                )
                 melodic_result = _sanitize_for_json(melodic_result)
             except Exception as e:
                 logger.error(f"Melodic analysis failed for {track_id}: {e}")

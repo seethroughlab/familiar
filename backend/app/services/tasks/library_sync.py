@@ -27,6 +27,81 @@ SYNC_QUEUE_CHURN_WINDOW_SECONDS = 300.0
 SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW = 60
 
 
+async def _mark_crashed_tracks_as_skipped(phase: str) -> int:
+    """Mark OOM-crashed tracks as skipped so they don't re-queue forever.
+
+    When stall recovery fires, the pending tracks are ones whose worker
+    subprocess was killed (OOM). Mark them as done with a skip marker so
+    the queue filter excludes them on the next pass.
+
+    Returns the number of tracks marked.
+    """
+    from sqlalchemy import and_, select, update
+
+    from app.db.models import Track, TrackAnalysis
+    from app.db.session import async_session_maker
+
+    marked = 0
+    async with async_session_maker() as db:
+        if phase == "backfill":
+            # Find tracks stuck without analysis_detail — mark with skip sentinel
+            result = await db.execute(
+                select(TrackAnalysis.track_id)
+                .join(Track, Track.id == TrackAnalysis.track_id)
+                .where(
+                    and_(
+                        TrackAnalysis.features_version >= FEATURES_VERSION,
+                        TrackAnalysis.analysis_detail.is_(None),
+                    )
+                )
+                # Target the longest tracks first (most likely OOM culprits)
+                .order_by(Track.duration_seconds.desc().nullslast())
+                .limit(20)
+            )
+            stuck_ids = [row[0] for row in result.fetchall()]
+            if stuck_ids:
+                await db.execute(
+                    update(TrackAnalysis)
+                    .where(TrackAnalysis.track_id.in_(stuck_ids))
+                    .values(analysis_detail={"_skipped": True, "reason": "oom_crash"})
+                )
+                await db.commit()
+                marked = len(stuck_ids)
+                logger.warning(
+                    f"Marked {marked} likely OOM-crashed tracks as skipped (backfill)"
+                )
+
+        elif phase == "melodic":
+            # Find tracks stuck without melodic_version — mark as done (no melodic)
+            result = await db.execute(
+                select(TrackAnalysis.track_id)
+                .join(Track, Track.id == TrackAnalysis.track_id)
+                .where(
+                    and_(
+                        TrackAnalysis.features_version >= FEATURES_VERSION,
+                        TrackAnalysis.analysis_detail.is_not(None),
+                        TrackAnalysis.melodic_version < MELODIC_VERSION,
+                    )
+                )
+                .order_by(Track.duration_seconds.desc().nullslast())
+                .limit(20)
+            )
+            stuck_ids = [row[0] for row in result.fetchall()]
+            if stuck_ids:
+                await db.execute(
+                    update(TrackAnalysis)
+                    .where(TrackAnalysis.track_id.in_(stuck_ids))
+                    .values(melodic_version=MELODIC_VERSION, has_melodic=False)
+                )
+                await db.commit()
+                marked = len(stuck_ids)
+                logger.warning(
+                    f"Marked {marked} likely OOM-crashed tracks as skipped (melodic)"
+                )
+
+    return marked
+
+
 def _register_phase_requeue_attempt(
     attempts: deque[float],
     now: float,
@@ -872,6 +947,8 @@ async def run_library_sync(
                         "queue_stall",
                         {"phase": "backfill", "pending": pending_backfill},
                     )
+                    # Mark longest stuck tracks as skipped (likely OOM victims)
+                    skipped = await _mark_crashed_tracks_as_skipped("backfill")
                     queued, forced_exit = await _guarded_queue(
                         "backfill",
                         queue_tracks_for_backfill,
@@ -880,7 +957,7 @@ async def run_library_sync(
                     )
                     if forced_exit:
                         break
-                    if queued == 0 and pending_backfill > 0:
+                    if queued == 0 and skipped == 0 and pending_backfill > 0:
                         progress.set_forced_exit_reason("backfill", "stalled_no_queueable_tracks")
                         logger.warning(
                             f"Backfill stalled with {pending_backfill} pending"
@@ -969,6 +1046,8 @@ async def run_library_sync(
                             "queue_stall",
                             {"phase": "melodic", "pending": pending_melodic},
                         )
+                        # Mark longest stuck tracks as skipped (likely OOM victims)
+                        skipped = await _mark_crashed_tracks_as_skipped("melodic")
                         queued, forced_exit = await _guarded_queue(
                             "melodic",
                             queue_tracks_for_melodic,
@@ -977,7 +1056,7 @@ async def run_library_sync(
                         )
                         if forced_exit:
                             break
-                        if queued == 0 and pending_melodic > 0:
+                        if queued == 0 and skipped == 0 and pending_melodic > 0:
                             progress.set_forced_exit_reason("melodic", "stalled_no_queueable_tracks")
                             logger.warning(
                                 f"Melodic phase stalled with {pending_melodic} pending"

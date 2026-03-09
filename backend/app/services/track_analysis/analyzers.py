@@ -507,9 +507,19 @@ def _compute_interval_histogram(
 
 
 def _analyze_melodic(
-    y: np.ndarray, sr: int, shared: dict, file_path: str, track_id: str
+    y: np.ndarray, sr: int, shared: dict, file_path: str, track_id: str,
+    truncate_duration: float | None = None,
 ) -> dict[str, Any]:
-    """Melodic analysis using basic-pitch for MIDI transcription."""
+    """Melodic analysis using basic-pitch for MIDI transcription.
+
+    Args:
+        truncate_duration: If set, write a temporary truncated WAV for basic-pitch
+            (which re-reads from disk). Prevents OOM on long tracks.
+    """
+    import tempfile
+
+    import soundfile as sf
+
     try:
         from basic_pitch.inference import predict
     except ImportError:
@@ -518,8 +528,31 @@ def _analyze_melodic(
             "error": "basic-pitch not installed. Install with: pip install 'basic-pitch[onnx]'",
         }
 
-    # Run basic-pitch prediction
-    _model_output, midi_data, note_events = predict(file_path)
+    # For long tracks, write truncated audio to a temp WAV so basic-pitch
+    # doesn't load the full file into memory
+    predict_path = file_path
+    tmp_file = None
+    if truncate_duration is not None:
+        try:
+            tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            sf.write(tmp_file.name, y, sr)
+            predict_path = tmp_file.name
+        except Exception as e:
+            logger.warning(f"Failed to write truncated WAV, using original: {e}")
+            predict_path = file_path
+            tmp_file = None
+
+    try:
+        # Run basic-pitch prediction
+        _model_output, midi_data, note_events = predict(predict_path)
+    finally:
+        # Clean up temp file
+        if tmp_file is not None:
+            import os
+            try:
+                os.unlink(tmp_file.name)
+            except OSError:
+                pass
 
     if not note_events or len(note_events) == 0:
         return {"degraded": True, "error": "No notes detected by basic-pitch"}

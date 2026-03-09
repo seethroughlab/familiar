@@ -750,7 +750,7 @@ async def queue_tracks_for_melodic(limit: int = 500) -> int:
     """
     from sqlalchemy import and_, select
 
-    from app.db.models import TrackAnalysis
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.background import get_background_manager
 
@@ -758,6 +758,7 @@ async def queue_tracks_for_melodic(limit: int = 500) -> int:
     async with async_session_maker() as db:
         result = await db.execute(
             select(TrackAnalysis.track_id)
+            .join(Track, Track.id == TrackAnalysis.track_id)
             .where(
                 and_(
                     TrackAnalysis.features_version >= FEATURES_VERSION,
@@ -765,6 +766,7 @@ async def queue_tracks_for_melodic(limit: int = 500) -> int:
                     TrackAnalysis.melodic_version < MELODIC_VERSION,
                 )
             )
+            .order_by(Track.duration_seconds.asc().nullsfirst())
             .limit(limit)
         )
         track_ids = [str(row[0]) for row in result.fetchall()]
@@ -789,7 +791,7 @@ async def queue_tracks_for_backfill(limit: int = 500) -> int:
     """
     from sqlalchemy import and_, select
 
-    from app.db.models import TrackAnalysis
+    from app.db.models import Track, TrackAnalysis
     from app.db.session import async_session_maker
     from app.services.background import get_background_manager
 
@@ -797,12 +799,14 @@ async def queue_tracks_for_backfill(limit: int = 500) -> int:
     async with async_session_maker() as db:
         result = await db.execute(
             select(TrackAnalysis.track_id)
+            .join(Track, Track.id == TrackAnalysis.track_id)
             .where(
                 and_(
                     TrackAnalysis.features_version >= FEATURES_VERSION,
                     TrackAnalysis.analysis_detail.is_(None),
                 )
             )
+            .order_by(Track.duration_seconds.asc().nullsfirst())
             .limit(limit)
         )
         track_ids = [str(row[0]) for row in result.fetchall()]
