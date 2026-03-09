@@ -35,14 +35,17 @@ class LibraryStats(BaseModel):
     soundtracks: int
     analyzed_tracks: int
     pending_analysis: int
+    pending_backfill: int = 0
+    pending_melodic: int = 0
+    pending_mood_tags: int = 0
 
 
 @router.get("/stats", response_model=LibraryStats)
 async def get_library_stats(db: DbSession) -> LibraryStats:
     """Get library statistics in a single query using conditional aggregation."""
-    from sqlalchemy import case
+    from sqlalchemy import and_, case
 
-    from app.config import FEATURES_VERSION
+    from app.config import FEATURES_VERSION, MELODIC_VERSION, MOOD_TAGS_VERSION
 
     result = await db.execute(
         select(
@@ -63,6 +66,35 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
         )
     ) or 0
 
+    # Per-phase pending counts
+    pending_backfill = await db.scalar(
+        select(func.count(TrackAnalysis.id)).where(
+            and_(
+                TrackAnalysis.features_version >= FEATURES_VERSION,
+                TrackAnalysis.analysis_detail.is_(None),
+            )
+        )
+    ) or 0
+
+    pending_melodic = await db.scalar(
+        select(func.count(TrackAnalysis.id)).where(
+            and_(
+                TrackAnalysis.features_version >= FEATURES_VERSION,
+                TrackAnalysis.analysis_detail.is_not(None),
+                TrackAnalysis.melodic_version < MELODIC_VERSION,
+            )
+        )
+    ) or 0
+
+    pending_mood_tags = await db.scalar(
+        select(func.count(TrackAnalysis.id)).where(
+            and_(
+                TrackAnalysis.embedding.isnot(None),
+                TrackAnalysis.mood_tags_version < MOOD_TAGS_VERSION,
+            )
+        )
+    ) or 0
+
     return LibraryStats(
         total_tracks=total_tracks,
         total_albums=row.total_albums or 0,
@@ -72,6 +104,9 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
         soundtracks=row.soundtracks or 0,
         analyzed_tracks=analyzed_tracks,
         pending_analysis=total_tracks - analyzed_tracks,
+        pending_backfill=pending_backfill,
+        pending_melodic=pending_melodic,
+        pending_mood_tags=pending_mood_tags,
     )
 
 
