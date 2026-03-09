@@ -9,7 +9,7 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, UploadFile
 
 from app.api.deps import DbSession, RequiredProfile
 from app.services.spotify_import import SpotifyImportService
@@ -38,10 +38,14 @@ def _serialize_import(import_) -> dict:
 
 @router.post("/import")
 async def upload_spotify_export(
-    file: UploadFile,
+    db: DbSession,
     profile: RequiredProfile,
+    file: UploadFile,
+    include_favorites: bool = Form(True),
+    include_playlists: bool = Form(True),
+    include_streaming: bool = Form(True),
 ):
-    """Upload and process a Spotify data export ZIP (runs in background)."""
+    """Upload a Spotify data export ZIP. Parses immediately, matches in background."""
     if not file.filename or not file.filename.lower().endswith(".zip"):
         raise HTTPException(400, "File must be a ZIP archive")
 
@@ -49,18 +53,27 @@ async def upload_spotify_export(
     if len(zip_bytes) > MAX_ZIP_SIZE:
         raise HTTPException(400, f"File too large (max {MAX_ZIP_SIZE // 1024 // 1024} MB)")
 
+    service = SpotifyImportService(db)
+    import_ = await service.parse_and_save(
+        profile.id,
+        zip_bytes,
+        include_favorites=include_favorites,
+        include_playlists=include_playlists,
+        include_streaming=include_streaming,
+    )
+
     from app.services.background import get_background_manager
     bg = get_background_manager()
 
     task_id = str(uuid4())
-    asyncio.create_task(bg.run_spotify_import(task_id, profile.id, zip_bytes))
+    asyncio.create_task(bg.run_spotify_matching(task_id, profile.id))
 
-    return {"task_id": task_id, "status": "processing"}
+    return {**_serialize_import(import_), "matching_task_id": task_id}
 
 
 @router.get("/import/status/{task_id}")
 async def get_spotify_import_status(task_id: str):
-    """Poll the status of a background Spotify import task."""
+    """Poll the status of a background Spotify matching task."""
     from app.services.background import get_background_manager
     bg = get_background_manager()
 

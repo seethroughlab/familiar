@@ -37,36 +37,34 @@ class SpotifyImportService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
 
-    async def process_zip(
+    async def parse_and_save(
         self,
         profile_id: UUID,
         zip_bytes: bytes,
-        progress_cb: Callable[[str], None] | None = None,
+        include_favorites: bool = True,
+        include_playlists: bool = True,
+        include_streaming: bool = True,
     ) -> SpotifyImport:
-        """Parse a Spotify data export ZIP, match tracks, and store results."""
-        if progress_cb:
-            progress_cb("Parsing export...")
+        """Parse a Spotify data export ZIP and store results immediately.
 
+        Matching is deferred — the returned import has match_results={}
+        and summary.matching_status='pending'.
+        """
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             prefix = self._detect_prefix(zf)
-            favorites = self._parse_favorites(zf, prefix)
-            playlists = self._parse_playlists(zf, prefix)
-            streaming_stats = self._aggregate_streaming_history(zf, prefix)
+            favorites = self._parse_favorites(zf, prefix) if include_favorites else []
+            playlists = self._parse_playlists(zf, prefix) if include_playlists else []
+            streaming_stats = (
+                self._aggregate_streaming_history(zf, prefix)
+                if include_streaming
+                else {"top_artists": [], "top_tracks": [], "total_ms": 0, "date_range": None}
+            )
             username = self._extract_username(zf, prefix)
 
-        if progress_cb:
-            progress_cb("Matching tracks...")
+        summary = self._compute_summary(
+            favorites, playlists, streaming_stats, {}, matching_status="pending"
+        )
 
-        # Deduplicate all tracks and match
-        match_results = await self._match_all(favorites, playlists, streaming_stats)
-
-        if progress_cb:
-            progress_cb("Saving results...")
-
-        # Compute summary
-        summary = self._compute_summary(favorites, playlists, streaming_stats, match_results)
-
-        # Upsert (delete old, insert new)
         await self.db.execute(
             delete(SpotifyImport).where(SpotifyImport.profile_id == profile_id)
         )
@@ -78,7 +76,7 @@ class SpotifyImportService:
             favorites=favorites,
             playlists=playlists,
             streaming_stats=streaming_stats,
-            match_results=match_results,
+            match_results={},
             summary=summary,
         )
         self.db.add(import_)
@@ -86,12 +84,12 @@ class SpotifyImportService:
         await self.db.refresh(import_)
         return import_
 
-    async def rematch(
+    async def update_matches(
         self,
         profile_id: UUID,
         progress_cb: Callable[[str], None] | None = None,
     ) -> SpotifyImport | None:
-        """Re-run matching against current library without re-uploading."""
+        """Run matching against current library and update the stored import."""
         result = await self.db.execute(
             select(SpotifyImport).where(SpotifyImport.profile_id == profile_id)
         )
@@ -108,6 +106,7 @@ class SpotifyImportService:
 
         if progress_cb:
             progress_cb("Saving results...")
+
         summary = self._compute_summary(
             import_.favorites, import_.playlists, import_.streaming_stats, match_results
         )
@@ -118,6 +117,14 @@ class SpotifyImportService:
         await self.db.commit()
         await self.db.refresh(import_)
         return import_
+
+    async def rematch(
+        self,
+        profile_id: UUID,
+        progress_cb: Callable[[str], None] | None = None,
+    ) -> SpotifyImport | None:
+        """Re-run matching against current library without re-uploading."""
+        return await self.update_matches(profile_id, progress_cb=progress_cb)
 
     async def get_import(self, profile_id: UUID) -> SpotifyImport | None:
         """Get the current Spotify import for a profile."""
@@ -362,6 +369,7 @@ class SpotifyImportService:
         playlists: list[dict[str, Any]],
         streaming_stats: dict[str, Any],
         match_results: dict[str, Any],
+        matching_status: str = "complete",
     ) -> dict[str, Any]:
         """Compute summary statistics."""
 
@@ -397,4 +405,5 @@ class SpotifyImportService:
             "matched_top_tracks": matched_top_tracks,
             "total_top_artists": len(streaming_stats.get("top_artists", [])),
             "total_matched": len(match_results),
+            "matching_status": matching_status,
         }

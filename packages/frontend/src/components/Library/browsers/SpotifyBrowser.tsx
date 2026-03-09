@@ -4,7 +4,7 @@
  * Upload a ZIP from Spotify's "Download your data" page to see
  * your favorites, playlists, and listening stats with match indicators.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Disc3,
@@ -54,6 +54,17 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
     queryFn: () => spotifyApi.get(),
     staleTime: 60_000,
   });
+
+  const isPending = data?.summary?.matching_status === 'pending';
+
+  // Auto-refresh every 5s while matching is pending
+  useEffect(() => {
+    if (!isPending) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['spotify-import'] });
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [isPending, queryClient]);
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => spotifyApi.upload(file),
@@ -127,6 +138,12 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
       {/* Header */}
       <div className="flex-shrink-0 px-4 pt-3 pb-2 space-y-2">
         <SummaryBanner data={data} />
+        {isPending && (
+          <div className="flex items-center gap-2 text-xs text-zinc-400 bg-zinc-800/50 rounded-lg px-3 py-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+            Matching tracks against your library...
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <TabBar tab={tab} onTabChange={setTab} />
           <div className="flex items-center gap-2">

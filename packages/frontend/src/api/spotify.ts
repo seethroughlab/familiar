@@ -39,6 +39,7 @@ export interface SpotifyImportSummary {
   matched_top_tracks: number;
   total_top_artists: number;
   total_matched: number;
+  matching_status?: 'pending' | 'complete';
 }
 
 export interface SpotifyImportData {
@@ -53,6 +54,10 @@ export interface SpotifyImportData {
   summary: SpotifyImportSummary;
 }
 
+export interface UploadResponse extends SpotifyImportData {
+  matching_task_id: string;
+}
+
 export interface ImportTaskResponse {
   task_id: string;
   status: 'processing';
@@ -65,13 +70,22 @@ export interface ImportStatusResponse {
   error?: string;
 }
 
+export interface UploadOptions {
+  favorites: boolean;
+  playlists: boolean;
+  streaming: boolean;
+}
+
 // ---- API functions ----
 
 export const spotifyApi = {
-  async upload(file: File): Promise<ImportTaskResponse> {
+  async upload(file: File, options: UploadOptions = { favorites: true, playlists: true, streaming: true }): Promise<UploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    const { data } = await api.post<ImportTaskResponse>('/spotify/import', formData, {
+    formData.append('include_favorites', String(options.favorites));
+    formData.append('include_playlists', String(options.playlists));
+    formData.append('include_streaming', String(options.streaming));
+    const { data } = await api.post<UploadResponse>('/spotify/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return data;

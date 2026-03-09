@@ -174,36 +174,8 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
         )
         return await fetcher.queue(request)
 
-    async def run_spotify_import(
-        self, task_id: str, profile_id: UUID, zip_bytes: bytes
-    ) -> None:
-        """Run Spotify import in the background with Redis progress tracking."""
-        from app.config import settings as app_settings
-        from app.services.spotify_import import SpotifyImportService
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-        key = f"familiar:spotify_import:{task_id}"
-
-        def _update(message: str) -> None:
-            self.redis.set(key, json.dumps({"status": "processing", "message": message}), ex=3600)
-
-        self.redis.set(key, json.dumps({"status": "processing", "message": "Parsing export..."}), ex=3600)
-
-        engine = create_async_engine(app_settings.database_url)
-        async_session_factory = async_sessionmaker(engine, class_=AsyncSession)
-        try:
-            async with async_session_factory() as db:
-                service = SpotifyImportService(db)
-                import_ = await service.process_zip(profile_id, zip_bytes, progress_cb=_update)
-            self.redis.set(key, json.dumps({"status": "completed", "result": import_.summary}), ex=3600)
-        except Exception as e:
-            logger.error(f"Spotify import task {task_id} failed: {e}", exc_info=True)
-            self.redis.set(key, json.dumps({"status": "error", "error": str(e)}), ex=3600)
-        finally:
-            await engine.dispose()
-
-    async def run_spotify_rematch(self, task_id: str, profile_id: UUID) -> None:
-        """Run Spotify rematch in the background with Redis progress tracking."""
+    async def run_spotify_matching(self, task_id: str, profile_id: UUID) -> None:
+        """Run Spotify track matching in the background with Redis progress tracking."""
         from app.config import settings as app_settings
         from app.services.spotify_import import SpotifyImportService
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -220,16 +192,20 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
         try:
             async with async_session_factory() as db:
                 service = SpotifyImportService(db)
-                import_ = await service.rematch(profile_id, progress_cb=_update)
+                import_ = await service.update_matches(profile_id, progress_cb=_update)
             if import_ is None:
                 self.redis.set(key, json.dumps({"status": "error", "error": "No Spotify import found"}), ex=3600)
             else:
                 self.redis.set(key, json.dumps({"status": "completed", "result": import_.summary}), ex=3600)
         except Exception as e:
-            logger.error(f"Spotify rematch task {task_id} failed: {e}", exc_info=True)
+            logger.error(f"Spotify matching task {task_id} failed: {e}", exc_info=True)
             self.redis.set(key, json.dumps({"status": "error", "error": str(e)}), ex=3600)
         finally:
             await engine.dispose()
+
+    async def run_spotify_rematch(self, task_id: str, profile_id: UUID) -> None:
+        """Run Spotify rematch in the background with Redis progress tracking."""
+        await self.run_spotify_matching(task_id, profile_id)
 
     async def _startup_update_check(self) -> None:
         """Check for updates on startup after a short delay."""
