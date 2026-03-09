@@ -105,6 +105,29 @@ async def stream_track(
                 exc_info=True,
             )
 
+    # Fix non-FLAC files missing PTS timestamps
+    elif file_path.suffix.lower() in (".mp3", ".ogg", ".m4a", ".aac", ".wav"):
+        from app.services.flac_remux import needs_remux, remux_audio_in_place
+
+        try:
+            if await needs_remux(file_path):
+                logger.info("Re-muxing %s for PTS fix: %s", file_path.suffix, file_path.name)
+                await remux_audio_in_place(file_path)
+                from app.services.scanner import compute_file_hash
+
+                track.file_hash = compute_file_hash(file_path)
+                track.file_size = file_path.stat().st_size
+                track.file_modified_at = datetime.fromtimestamp(
+                    file_path.stat().st_mtime
+                )
+                await db.commit()
+        except Exception:
+            logger.warning(
+                "PTS check/re-mux failed for %s, serving as-is",
+                track_id,
+                exc_info=True,
+            )
+
     # Transcode formats that browsers can't natively decode
     if file_path.suffix.lower() in TRANSCODE_EXTENSIONS:
         logger.debug("Transcoding track_id=%s path=%s to FLAC", track_id, file_path)
