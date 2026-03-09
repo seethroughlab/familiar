@@ -85,14 +85,38 @@ class SyncProgressReporter:
     def _update(self, data: dict[str, Any]) -> None:
         """Update progress in Redis with heartbeat."""
         phase = data.get("phase")
-        if phase and phase != self._last_phase_emitted:
+        # Defensive fallback for partially initialized reporter instances.
+        last_phase = getattr(self, "_last_phase_emitted", None)
+        if phase and phase != last_phase:
             record_background_event("phase_transition", {"phase": phase})
             self._last_phase_emitted = phase
+        errors = getattr(self, "errors", [])
+        phase_requeue_attempts = getattr(
+            self,
+            "phase_requeue_attempts",
+            {phase_name: 0 for phase_name in SYNC_GUARDRAIL_PHASES},
+        )
+        phase_stall_recoveries = getattr(
+            self,
+            "phase_stall_recoveries",
+            {phase_name: 0 for phase_name in SYNC_GUARDRAIL_PHASES},
+        )
+        phase_forced_exit_reasons = getattr(
+            self,
+            "phase_forced_exit_reasons",
+            {phase_name: None for phase_name in SYNC_GUARDRAIL_PHASES},
+        )
+
+        # Backfill any missing instance fields to keep later updates consistent.
+        self.errors = errors
+        self.phase_requeue_attempts = phase_requeue_attempts
+        self.phase_stall_recoveries = phase_stall_recoveries
+        self.phase_forced_exit_reasons = phase_forced_exit_reasons
         data["last_heartbeat"] = datetime.now().isoformat()
-        data["errors"] = self.errors
-        data["phase_requeue_attempts"] = self.phase_requeue_attempts
-        data["phase_stall_recoveries"] = self.phase_stall_recoveries
-        data["phase_forced_exit_reasons"] = self.phase_forced_exit_reasons
+        data["errors"] = errors
+        data["phase_requeue_attempts"] = phase_requeue_attempts
+        data["phase_stall_recoveries"] = phase_stall_recoveries
+        data["phase_forced_exit_reasons"] = phase_forced_exit_reasons
         self.redis.set(SYNC_PROGRESS_KEY, json.dumps(data), ex=3600)
 
     def record_requeue_attempt(self, phase: str) -> None:
