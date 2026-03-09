@@ -403,12 +403,15 @@ class NativeAudioEngine {
 
     private func scheduleFile(_ file: AVAudioFile, completion: @escaping (Error?) -> Void) {
         let scheduledIndex = activePlayerIndex
-        playerNode.scheduleFile(file, at: nil) { [weak self] in
+        let scheduleSeekToken = stateQueue.sync { seekOperationToken }
+        playerNode.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
             // This fires when the scheduled buffer/file finishes.
-            // Check if we actually played to the end (vs being stopped/seeked).
+            // Guard activePlayerIndex (crossfade) and seekOperationToken (seek):
+            // playerNode.stop() inside seek() can spuriously trigger this callback.
             DispatchQueue.main.async {
                 guard self.activePlayerIndex == scheduledIndex else { return }
+                guard self.stateQueue.sync(execute: { self.seekOperationToken == scheduleSeekToken }) else { return }
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
@@ -525,7 +528,7 @@ class NativeAudioEngine {
         playerNode.stop()
 
         let remainingFrames = AVAudioFrameCount(totalFrames - targetFrame)
-        playerNode.scheduleSegment(file, startingFrame: targetFrame, frameCount: remainingFrames, at: nil) { [weak self] in
+        playerNode.scheduleSegment(file, startingFrame: targetFrame, frameCount: remainingFrames, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 guard self.stateQueue.sync(execute: { token == self.seekOperationToken }) else { return }
@@ -926,7 +929,7 @@ class NativeAudioEngine {
         // Stop nextPlayerNode (clears previous schedule), then re-schedule with the end-of-track handler
         nextPlayerNode.stop()
         let nextIndex = 1 - activePlayerIndex
-        nextPlayerNode.scheduleFile(capturedNextAudioFile, at: nil) { [weak self] in
+        nextPlayerNode.scheduleFile(capturedNextAudioFile, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 guard self.activePlayerIndex == nextIndex else { return }
@@ -1223,12 +1226,10 @@ class NativeAudioEngine {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = getCurrentTime()
         info[MPMediaItemPropertyPlaybackDuration] = getDuration()
         info[MPNowPlayingInfoPropertyPlaybackRate] = playerNode.isPlaying ? 1.0 : 0.0
-        let hasPrevious = pendingPreviousTrackId != nil
-        let hasNext = pendingNextTrackId != nil
-        let queueCount = 1 + (hasPrevious ? 1 : 0) + (hasNext ? 1 : 0)
-        let queueIndex = hasPrevious ? 1 : 0
-        info[MPNowPlayingInfoPropertyPlaybackQueueCount] = queueCount
-        info[MPNowPlayingInfoPropertyPlaybackQueueIndex] = queueIndex
+        // Queue count/index intentionally omitted: setting queueCount > 1 enables iOS's
+        // swipe-to-change-track gesture on the lock screen album art, which conflicts
+        // with progress bar scrubbing. Skip buttons still work via commandCenter
+        // nextTrackCommand/previousTrackCommand isEnabled flags.
         if let artwork = nowPlayingArtwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
         updateRemoteCommandAvailability()
