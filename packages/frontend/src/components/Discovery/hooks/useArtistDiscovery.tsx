@@ -61,6 +61,8 @@ export function useArtistDiscovery({
           : {
               bandcamp: similar.bandcamp_url || undefined,
               lastfm: similar.lastfm_url || undefined,
+              amazon: `https://www.amazon.com/s?k=${encodeURIComponent(similar.name)}&i=digital-music`,
+              apple: `https://music.apple.com/us/search?term=${encodeURIComponent(similar.name)}`,
             },
         playbackContext: similar.in_library
           ? { artist: similar.name }

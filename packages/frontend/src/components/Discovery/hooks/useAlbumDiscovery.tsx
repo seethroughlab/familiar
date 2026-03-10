@@ -121,6 +121,8 @@ export function useAlbumDiscovery({ album }: UseAlbumDiscoveryOptions): UseAlbum
           externalLinks: {
             bandcamp: discover.bandcamp_url || undefined,
             lastfm: discover.lastfm_url || undefined,
+            amazon: `https://www.amazon.com/s?k=${encodeURIComponent(`${discover.artist} ${discover.name}`)}&i=digital-music`,
+            apple: `https://music.apple.com/us/search?term=${encodeURIComponent(`${discover.artist} ${discover.name}`)}`,
           },
         });
       });

@@ -48,11 +48,10 @@ function spotifyTrackToDiscoveryItem(
       ? { artist: t.artist, album: t.album || undefined, trackId: match.track_id }
       : undefined,
     externalLinks: match ? undefined : {
-      spotify: t.uri
-        ? `https://open.spotify.com/track/${t.uri.replace('spotify:track:', '')}`
-        : undefined,
       bandcamp: `https://bandcamp.com/search?q=${encodeURIComponent(`${t.artist} ${t.track}`)}`,
       lastfm: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.track)}`,
+      amazon: `https://www.amazon.com/s?k=${encodeURIComponent(`${t.artist} ${t.track}`)}&i=digital-music`,
+      apple: `https://music.apple.com/us/search?term=${encodeURIComponent(`${t.artist} ${t.track}`)}`,
     },
   };
 }
@@ -131,6 +130,8 @@ export function useSpotifyDiscovery({
             externalLinks: match ? undefined : {
               bandcamp: `https://bandcamp.com/search?q=${encodeURIComponent(`${t.artist} ${t.track}`)}`,
               lastfm: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.track)}`,
+              amazon: `https://www.amazon.com/s?k=${encodeURIComponent(`${t.artist} ${t.track}`)}&i=digital-music`,
+              apple: `https://music.apple.com/us/search?term=${encodeURIComponent(`${t.artist} ${t.track}`)}`,
             },
           };
         }),

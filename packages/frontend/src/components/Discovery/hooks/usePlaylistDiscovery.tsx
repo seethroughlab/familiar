@@ -50,6 +50,8 @@ export function usePlaylistDiscovery({
             ? undefined
             : {
                 lastfm: artist.external_url || undefined,
+                amazon: `https://www.amazon.com/s?k=${encodeURIComponent(artist.name)}&i=digital-music`,
+                apple: `https://music.apple.com/us/search?term=${encodeURIComponent(artist.name)}`,
               },
         playbackContext:
           artist.local_track_count > 0
@@ -79,6 +81,8 @@ export function usePlaylistDiscovery({
           ? undefined
           : {
               lastfm: track.external_url || undefined,
+              amazon: `https://www.amazon.com/s?k=${encodeURIComponent(`${track.artist} ${track.title}`)}&i=digital-music`,
+              apple: `https://music.apple.com/us/search?term=${encodeURIComponent(`${track.artist} ${track.title}`)}`,
             },
         playbackContext: track.local_track_id
           ? {

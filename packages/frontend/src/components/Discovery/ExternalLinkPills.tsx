@@ -3,7 +3,8 @@ import { ExternalLink } from 'lucide-react';
 interface ExternalLinks {
   bandcamp?: string;
   lastfm?: string;
-  spotify?: string;
+  amazon?: string;
+  apple?: string;
 }
 
 interface ExternalLinkPillsProps {
@@ -13,7 +14,7 @@ interface ExternalLinkPillsProps {
 
 /**
  * External link pills for discovery items not in the library
- * Priority: Bandcamp (teal) > Last.fm (red) > Spotify (green)
+ * Priority: Bandcamp (teal) > Last.fm (red) > Amazon MP3 (orange) > Apple Music (pink)
  */
 export function ExternalLinkPills({ links, className = '' }: ExternalLinkPillsProps) {
   const handleClick = (e: React.MouseEvent) => {
@@ -44,15 +45,26 @@ export function ExternalLinkPills({ links, className = '' }: ExternalLinkPillsPr
           Last.fm
         </a>
       )}
-      {links.spotify && (
+      {links.amazon && (
         <a
-          href={links.spotify}
+          href={links.amazon}
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleClick}
-          className="px-2 py-1 text-xs bg-green-600/20 text-green-400 hover:bg-green-600/40 rounded transition-colors"
+          className="px-2 py-1 text-xs bg-orange-600/20 text-orange-400 hover:bg-orange-600/40 rounded transition-colors"
         >
-          Spotify
+          Amazon MP3
+        </a>
+      )}
+      {links.apple && (
+        <a
+          href={links.apple}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleClick}
+          className="px-2 py-1 text-xs bg-pink-600/20 text-pink-400 hover:bg-pink-600/40 rounded transition-colors"
+        >
+          Apple Music
         </a>
       )}
       {/* Fallback to generic external link if only one link without service pill */}

@@ -91,6 +91,8 @@ export function useTrackDiscovery({ data }: UseTrackDiscoveryOptions): UseTrackD
           : {
               bandcamp: artist.bandcamp_url || undefined,
               lastfm: artist.lastfm_url || undefined,
+              amazon: `https://www.amazon.com/s?k=${encodeURIComponent(artist.name)}&i=digital-music`,
+              apple: `https://music.apple.com/us/search?term=${encodeURIComponent(artist.name)}`,
             },
         playbackContext: artist.in_library
           ? { artist: artist.name }
