@@ -47,6 +47,13 @@ function spotifyTrackToDiscoveryItem(
     playbackContext: match
       ? { artist: t.artist, album: t.album || undefined, trackId: match.track_id }
       : undefined,
+    externalLinks: match ? undefined : {
+      spotify: t.uri
+        ? `https://open.spotify.com/track/${t.uri.replace('spotify:track:', '')}`
+        : undefined,
+      bandcamp: `https://bandcamp.com/search?q=${encodeURIComponent(`${t.artist} ${t.track}`)}`,
+      lastfm: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.track)}`,
+    },
   };
 }
 
@@ -121,6 +128,10 @@ export function useSpotifyDiscovery({
             playbackContext: match
               ? { artist: t.artist, trackId: match.track_id }
               : undefined,
+            externalLinks: match ? undefined : {
+              bandcamp: `https://bandcamp.com/search?q=${encodeURIComponent(`${t.artist} ${t.track}`)}`,
+              lastfm: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.track)}`,
+            },
           };
         }),
         matchFilter,

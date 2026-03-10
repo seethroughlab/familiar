@@ -3,6 +3,7 @@ import { ExternalLink } from 'lucide-react';
 interface ExternalLinks {
   bandcamp?: string;
   lastfm?: string;
+  spotify?: string;
 }
 
 interface ExternalLinkPillsProps {
@@ -41,6 +42,17 @@ export function ExternalLinkPills({ links, className = '' }: ExternalLinkPillsPr
           className="px-2 py-1 text-xs bg-red-600/20 text-red-400 hover:bg-red-600/40 rounded transition-colors flex items-center gap-1"
         >
           Last.fm
+        </a>
+      )}
+      {links.spotify && (
+        <a
+          href={links.spotify}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleClick}
+          className="px-2 py-1 text-xs bg-green-600/20 text-green-400 hover:bg-green-600/40 rounded transition-colors"
+        >
+          Spotify
         </a>
       )}
       {/* Fallback to generic external link if only one link without service pill */}

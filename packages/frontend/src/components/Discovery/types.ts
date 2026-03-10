@@ -44,6 +44,7 @@ export interface DiscoveryItem {
   externalLinks?: {
     bandcamp?: string;
     lastfm?: string;
+    spotify?: string;
   };
 }
 
@@ -109,7 +110,7 @@ export interface DiscoveryCardProps {
  * External link pill configuration
  */
 export interface ExternalLinkConfig {
-  type: 'bandcamp' | 'lastfm';
+  type: 'bandcamp' | 'lastfm' | 'spotify';
   url: string;
   label?: string;
 }
