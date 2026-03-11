@@ -366,13 +366,20 @@ export async function getOfflineTrack(trackId: string): Promise<Blob | null> {
  */
 export async function getOfflineTrackNativeUri(trackId: string): Promise<string | null> {
   const track = await db.offlineTracks.get(trackId);
-  if (!track?.nativePath) return null;
+  if (!track?.nativePath) {
+    log.debug('getOfflineTrackNativeUri: no nativePath for %s (hasAudio=%s)', trackId, !!track?.audio);
+    return null;
+  }
   const fs = await getCapacitorFilesystem();
-  if (!fs) return null;
+  if (!fs) {
+    log.warn('getOfflineTrackNativeUri: no filesystem plugin for %s', trackId);
+    return null;
+  }
   try {
     const { uri } = await fs.getUri({ path: track.nativePath, directory: 'DATA' });
     return uri;
-  } catch {
+  } catch (e) {
+    log.warn('getOfflineTrackNativeUri: getUri failed for %s path=%s', trackId, track.nativePath, e);
     return null;
   }
 }

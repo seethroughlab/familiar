@@ -1088,12 +1088,17 @@ class NativeAudioEngine {
         onFailure: @escaping () -> Void
     ) {
         let isLocalUrl = url.hasPrefix("file://") || url.hasPrefix("capacitor://") || url.hasPrefix("content://")
+        let loadStart = CFAbsoluteTimeGetCurrent()
+        print("[FamiliarAudio] loadAndPlayPendingTrack: trackId=\(trackId) isLocal=\(isLocalUrl)")
 
         let loadCompletion: (Error?) -> Void = { [weak self] error in
+            let elapsed = Int((CFAbsoluteTimeGetCurrent() - loadStart) * 1000)
             guard let self = self, error == nil else {
+                print("[FamiliarAudio] loadAndPlayPendingTrack: FAILED trackId=\(trackId) elapsed=\(elapsed)ms error=\(error?.localizedDescription ?? "unknown")")
                 onFailure()
                 return
             }
+            print("[FamiliarAudio] loadAndPlayPendingTrack: SUCCESS trackId=\(trackId) elapsed=\(elapsed)ms")
             self.play()
             self.updateNowPlayingInfo(title: title, artist: artist, album: album)
             self.updateNowPlayingArtwork(url: artworkUrl)
@@ -1112,6 +1117,9 @@ class NativeAudioEngine {
     /// to the delegate's `audioEngineDidFinishPlaying()` for JS-side handling.
     private func handleTrackEnd() {
         if let url = pendingNextUrl, let trackId = pendingNextTrackId {
+            let isLocal = url.hasPrefix("file://") || url.hasPrefix("capacitor://")
+            print("[FamiliarAudio] handleTrackEnd: auto-advance to \(trackId) isLocal=\(isLocal)")
+
             let title = pendingNextTitle
             let artist = pendingNextArtist
             let album = pendingNextAlbum
@@ -1124,13 +1132,16 @@ class NativeAudioEngine {
                 url: url, trackId: trackId,
                 title: title, artist: artist, album: album, artworkUrl: artworkUrl,
                 onSuccess: { [weak self] loadedTrackId in
+                    print("[FamiliarAudio] handleTrackEnd: auto-advance SUCCESS trackId=\(loadedTrackId)")
                     self?.delegate?.audioEngineDidAutoAdvance(loadedTrackId: loadedTrackId)
                 },
                 onFailure: { [weak self] in
+                    print("[FamiliarAudio] handleTrackEnd: auto-advance FAILED, falling back to JS")
                     self?.delegate?.audioEngineDidFinishPlaying()
                 }
             )
         } else {
+            print("[FamiliarAudio] handleTrackEnd: no pending URL, falling back to JS")
             delegate?.audioEngineDidFinishPlaying()
         }
     }

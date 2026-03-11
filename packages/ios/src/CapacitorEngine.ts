@@ -250,18 +250,24 @@ export class CapacitorEngine implements AudioEngine {
   }
 
   async resolveTrackUrl(trackId: string): Promise<{ url: string; isOffline: boolean }> {
+    const start = performance.now();
     const nativeUri = await getOfflineTrackNativeUri(trackId);
     if (nativeUri) {
+      log.info('resolveTrackUrl: OFFLINE trackId=%s elapsed=%dms', trackId, Math.round(performance.now() - start));
       return { url: nativeUri, isOffline: true };
     }
     // Check prefetch cache
     const prefetched = prefetchService.getUrl(trackId);
-    if (prefetched) return prefetched;
+    if (prefetched) {
+      log.info('resolveTrackUrl: PREFETCH trackId=%s elapsed=%dms', trackId, Math.round(performance.now() - start));
+      return prefetched;
+    }
     if (useConnectivityStore.getState().offlineModeActive) {
       const err = new Error('Track unavailable while offline');
       (err as Error & { code?: string }).code = 'offline-unavailable';
       throw err;
     }
+    log.warn('resolveTrackUrl: SERVER trackId=%s elapsed=%dms', trackId, Math.round(performance.now() - start));
     return { url: tracksApi.getStreamUrl(trackId), isOffline: false };
   }
 

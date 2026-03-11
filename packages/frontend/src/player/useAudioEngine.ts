@@ -500,6 +500,12 @@ export function useAudioEngine() {
             incrementConnectivityCounterBy('pending_sync_local_url_total', candidates.length);
           }
         }
+        log.info('syncPendingTracks: next=%s(%s) prev=%s(%s)',
+          next?.trackId ?? 'none',
+          next ? (isLikelyLocalUrl(next.url) ? 'local' : 'remote') : '-',
+          previous?.trackId ?? 'none',
+          previous ? (isLikelyLocalUrl(previous.url) ? 'local' : 'remote') : '-',
+        );
         engine.syncPendingTracks?.({ next, previous });
       })
       .catch((error) => {
