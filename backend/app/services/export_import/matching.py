@@ -6,7 +6,8 @@ exact match, and fuzzy matching strategies.
 
 import logging
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from rapidfuzz import fuzz
 from sqlalchemy import select

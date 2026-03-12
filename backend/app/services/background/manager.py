@@ -176,9 +176,10 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
 
     async def run_spotify_matching(self, task_id: str, profile_id: UUID) -> None:
         """Run Spotify track matching in the background with Redis progress tracking."""
+        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
         from app.config import settings as app_settings
         from app.services.spotify_import import SpotifyImportService
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
         key = f"familiar:spotify_import:{task_id}"
         well_known_key = "familiar:spotify_match:progress"

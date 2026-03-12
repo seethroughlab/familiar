@@ -139,8 +139,9 @@ async def get_background_jobs() -> BackgroundJobsResponse:
 
     # Check Spotify matching
     try:
-        from app.services.background import get_background_manager
         import json as _json
+
+        from app.services.background import get_background_manager
         spotify_data = get_background_manager().redis.get("familiar:spotify_match:progress")
         spotify_progress = _json.loads(spotify_data) if spotify_data else None
     except Exception:

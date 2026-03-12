@@ -10,7 +10,8 @@ import json
 import logging
 import zipfile
 from collections import Counter
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import delete, select

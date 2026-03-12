@@ -46,9 +46,9 @@ from app.api.routes import (
     proposed_changes,
     s3_backup,
     smart_playlists,
+    spotify_import,
     tracks,
     updates,
-    spotify_import,
     videos,
 )
 from app.api.routes import settings as settings_routes
