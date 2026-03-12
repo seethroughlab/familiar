@@ -140,7 +140,7 @@ class SpotifyImportService:
             delete(SpotifyImport).where(SpotifyImport.profile_id == profile_id)
         )
         await self.db.commit()
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[attr-defined]
 
     # ---- ZIP parsing ----
 
