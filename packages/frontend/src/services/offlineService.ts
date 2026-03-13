@@ -293,7 +293,13 @@ export async function downloadTrackForOffline(
       throw error;
     }
   } else {
-    // Store in IndexedDB
+    // On native iOS, Filesystem plugin should always be available — warn loudly
+    if (isNativeApp()) {
+      log.error('downloadTrack: Filesystem plugin unavailable on native app, aborting download for %s', trackId);
+      throw new Error('Native filesystem unavailable — cannot download track');
+    }
+
+    // Web/PWA path: store blob in IndexedDB
     const offlineTrack: OfflineTrack = {
       id: trackId,
       audio: blob,
@@ -361,13 +367,10 @@ export async function getOfflineTrack(trackId: string): Promise<Blob | null> {
   return track?.audio || null;
 }
 
-/**
- * Get a Capacitor-native file URI for an offline track if available.
- */
 export async function getOfflineTrackNativeUri(trackId: string): Promise<string | null> {
   const track = await db.offlineTracks.get(trackId);
   if (!track?.nativePath) {
-    log.debug('getOfflineTrackNativeUri: no nativePath for %s (hasAudio=%s)', trackId, !!track?.audio);
+    log.debug('getOfflineTrackNativeUri: no nativePath for %s', trackId);
     return null;
   }
   const fs = await getCapacitorFilesystem();
