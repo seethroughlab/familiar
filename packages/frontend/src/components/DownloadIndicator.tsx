@@ -3,7 +3,8 @@
  * Shows in the app header when downloads are in progress.
  * Includes iOS-specific warning about keeping the app open.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, X, Check, AlertCircle, Loader2, ChevronDown, ChevronUp, Smartphone } from 'lucide-react';
 import { useDownloadStore, type DownloadJob, restoreDownloadQueue } from '../stores/downloadStore';
 import { isIOS } from '../utils/platform';
@@ -79,6 +80,9 @@ export function DownloadIndicator() {
   const { jobs, getActiveJob } = useDownloadStore();
   const [expanded, setExpanded] = useState(false);
   const [showIOSWarning, setShowIOSWarning] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
 
   // Restore download queue from IndexedDB on mount
   useEffect(() => {
@@ -91,6 +95,35 @@ export function DownloadIndicator() {
   useEffect(() => {
     setShowIOSWarning(isIOS());
   }, []);
+
+  // Compute portal position from button rect
+  useEffect(() => {
+    if (!expanded || !buttonRef.current) {
+      setMenuPosition(null);
+      return;
+    }
+    const rect = buttonRef.current.getBoundingClientRect();
+    setMenuPosition({
+      top: rect.bottom + 8,
+      right: window.innerWidth - rect.right,
+    });
+  }, [expanded]);
+
+  // Close on click outside
+  useEffect(() => {
+    if (!expanded) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        buttonRef.current?.contains(e.target as Node) ||
+        menuRef.current?.contains(e.target as Node)
+      ) {
+        return;
+      }
+      setExpanded(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [expanded]);
 
   // Get all active/queued/recent jobs
   const allJobs = Array.from(jobs.values());
@@ -107,68 +140,69 @@ export function DownloadIndicator() {
   );
   const isDownloading = downloadingJobs.length > 0;
 
-  return (
-    <div className="relative">
-      {/* Indicator button */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
-          isDownloading
-            ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
-            : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-        }`}
-        title={isDownloading ? 'Downloads in progress' : 'Downloads complete'}
-      >
-        {isDownloading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
-        ) : (
-          <Check className="w-4 h-4" />
-        )}
-        <span className="text-xs font-medium hidden sm:inline">
-          {isDownloading
-            ? activeJob
-              ? `${activeJob.completedIds.length}/${activeJob.trackIds.length}`
-              : 'Downloading...'
-            : 'Complete'}
-        </span>
-        {expanded ? (
-          <ChevronUp className="w-3 h-3" />
-        ) : (
-          <ChevronDown className="w-3 h-3" />
-        )}
-      </button>
-
-      {/* Expanded dropdown */}
-      {expanded && (
-        <>
-          {/* Backdrop to close on click outside */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setExpanded(false)}
-          />
-          <div className="absolute right-0 top-full mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-50 p-2 space-y-2">
-            <div className="text-xs font-medium text-zinc-400 px-2 py-1">
-              Downloads
-            </div>
-            {/* iOS warning banner */}
-            {showIOSWarning && isDownloading && (
-              <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <Smartphone className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-200">
-                  <span className="font-medium">Keep Familiar open</span>
-                  <br />
-                  <span className="text-amber-300/80">
-                    iOS pauses downloads when you switch apps. Downloads will resume if interrupted.
-                  </span>
-                </div>
-              </div>
-            )}
-            {allJobs.map((job) => (
-              <JobProgress key={job.id} job={job} />
-            ))}
+  const dropdown = expanded && menuPosition && createPortal(
+    <div
+      ref={menuRef}
+      style={{ top: menuPosition.top, right: menuPosition.right }}
+      className="fixed w-72 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-[60] p-2 space-y-2"
+    >
+      <div className="text-xs font-medium text-zinc-400 px-2 py-1">
+        Downloads
+      </div>
+      {/* iOS warning banner */}
+      {showIOSWarning && isDownloading && (
+        <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+          <Smartphone className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-200">
+            <span className="font-medium">Keep Familiar open</span>
+            <br />
+            <span className="text-amber-300/80">
+              iOS pauses downloads when you switch apps. Downloads will resume if interrupted.
+            </span>
           </div>
-        </>
+        </div>
       )}
-    </div>
+      {allJobs.map((job) => (
+        <JobProgress key={job.id} job={job} />
+      ))}
+    </div>,
+    document.body
+  );
+
+  return (
+    <>
+      <div className="relative">
+        {/* Indicator button */}
+        <button
+          ref={buttonRef}
+          onClick={() => setExpanded(!expanded)}
+          className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+            isDownloading
+              ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+              : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+          }`}
+          title={isDownloading ? 'Downloads in progress' : 'Downloads complete'}
+        >
+          {isDownloading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Check className="w-4 h-4" />
+          )}
+          <span className="text-xs font-medium hidden sm:inline">
+            {isDownloading
+              ? activeJob
+                ? `${activeJob.completedIds.length}/${activeJob.trackIds.length}`
+                : 'Downloading...'
+              : 'Complete'}
+          </span>
+          {expanded ? (
+            <ChevronUp className="w-3 h-3" />
+          ) : (
+            <ChevronDown className="w-3 h-3" />
+          )}
+        </button>
+      </div>
+      {dropdown}
+    </>
   );
 }
