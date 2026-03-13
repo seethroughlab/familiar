@@ -15,6 +15,7 @@
 		}
 	},
 	"packageClassList": [
+		"FilesystemPlugin",
 		"PreferencesPlugin",
 		"FamiliarAudioPlugin"
 	]

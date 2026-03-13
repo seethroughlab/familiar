@@ -15,24 +15,32 @@ import { isNativeApp } from '../utils/platform';
 
 const log = createLogger('Offline');
 
-type CapacitorFilesystemPlugin = {
+export type FilesystemProvider = {
   writeFile(options: { path: string; data: string; directory?: string; recursive?: boolean }): Promise<void>;
   deleteFile(options: { path: string; directory?: string }): Promise<void>;
   getUri(options: { path: string; directory?: string }): Promise<{ uri: string }>;
 };
 
-async function getCapacitorFilesystem(): Promise<CapacitorFilesystemPlugin | null> {
-  if (!isNativeApp()) return null;
-  const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor;
-  const fs = cap?.Plugins?.Filesystem as CapacitorFilesystemPlugin | undefined;
-  return fs ?? null;
+let _filesystemProvider: FilesystemProvider | null = null;
+
+export function registerFilesystemProvider(provider: FilesystemProvider): void {
+  _filesystemProvider = provider;
 }
 
-function toBase64(data: ArrayBuffer): string {
-  const bytes = new Uint8Array(data);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
+async function getCapacitorFilesystem(): Promise<FilesystemProvider | null> {
+  return _filesystemProvider;
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      resolve(dataUrl.split(',')[1]); // strip "data:...;base64," prefix
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function nativeTrackPath(trackId: string): string {
@@ -131,24 +139,17 @@ async function clearPartialDownload(trackId: string): Promise<void> {
 }
 
 /**
- * Download a track for offline playback with optional progress tracking.
- * Supports resuming interrupted downloads using HTTP Range requests.
- * Also downloads album artwork if track metadata is available.
+ * Fetch, stream, and store a track's audio data.
+ * Extracted into its own function so `blob` goes out of scope (and becomes
+ * GC-eligible) before metadata/artwork work begins, preventing two-track
+ * peak-memory overlap on iOS.
  */
-export async function downloadTrackForOffline(
+async function downloadAndStoreAudio(
   trackId: string,
-  onProgress?: DownloadProgressCallback
+  partial: PartialDownload | undefined,
+  onProgress: DownloadProgressCallback | undefined,
+  fs: FilesystemProvider | null,
 ): Promise<void> {
-  // Check if already downloaded
-  const existing = await db.offlineTracks.get(trackId);
-  if (existing) {
-    log.info('Track already exists in IndexedDB:', trackId);
-    onProgress?.({ loaded: 1, total: 1, percentage: 100 });
-    return;
-  }
-
-  // Check for partial download to resume
-  const partial = await getPartialDownload(trackId);
   const resumeFrom = partial?.bytesDownloaded || 0;
   const existingChunks: Blob[] = partial?.chunks || [];
 
@@ -159,9 +160,19 @@ export async function downloadTrackForOffline(
     log.info('Resuming download from byte:', resumeFrom);
   }
 
-  // Set up abort controller with timeout for iOS PWA resilience
+  // Rolling inactivity timer: aborts if no data arrives for 30s.
+  // Covers both the initial connection and the streaming phase (unlike a
+  // one-shot timeout that fires after headers are received).
+  const INACTIVITY_TIMEOUT = 30_000;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+  let activityTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function resetActivityTimer() {
+    if (activityTimer) clearTimeout(activityTimer);
+    activityTimer = setTimeout(() => controller.abort(), INACTIVITY_TIMEOUT);
+  }
+
+  resetActivityTimer(); // covers the initial connection
 
   // Fetch the audio file with progress tracking
   log.info('Fetching track:', trackId, resumeFrom > 0 ? '(resuming)' : '');
@@ -171,12 +182,12 @@ export async function downloadTrackForOffline(
       headers,
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
+    // Do NOT clear the timer here — it continues covering the streaming phase
   } catch (error) {
-    clearTimeout(timeoutId);
+    if (activityTimer) clearTimeout(activityTimer);
     if (error instanceof Error && error.name === 'AbortError') {
-      const message = 'Download timed out - please try again';
-      log.error('Download timeout:', trackId);
+      const message = 'Download timed out - no data received';
+      log.error('Download inactivity timeout:', trackId);
       window.dispatchEvent(
         new CustomEvent('offline-download-error', {
           detail: { trackId, error: message },
@@ -195,6 +206,7 @@ export async function downloadTrackForOffline(
 
   // Check for successful response (200 OK or 206 Partial Content)
   if (!response.ok && response.status !== 206) {
+    if (activityTimer) clearTimeout(activityTimer);
     log.error('Fetch failed:', response.status, response.statusText);
     throw new Error(`Failed to download track: ${response.statusText}`);
   }
@@ -219,7 +231,7 @@ export async function downloadTrackForOffline(
     log.info('Full response, content-length:', total);
   }
 
-  let blob: Blob;
+  let blob: Blob; // scoped here — freed when this function returns
   const contentType = response.headers.get('content-type') || 'audio/mpeg';
 
   // Use streaming if available
@@ -235,6 +247,7 @@ export async function downloadTrackForOffline(
         const { done, value } = await reader.read();
         if (done) break;
 
+        resetActivityTimer(); // keep the timer alive as long as data flows
         chunks.push(new Blob([value]));
         loaded += value.length;
         chunksSinceLastSave++;
@@ -252,8 +265,11 @@ export async function downloadTrackForOffline(
         }
       }
 
+      if (activityTimer) clearTimeout(activityTimer);
       blob = new Blob(chunks, { type: contentType });
+      chunks.length = 0; // free constituent chunk Blobs before base64 encoding
     } catch (error) {
+      if (activityTimer) clearTimeout(activityTimer);
       // Save progress before throwing so we can resume later
       if (chunks.length > existingChunks.length && total > 0) {
         log.info('Saving partial progress before error:', loaded, 'bytes');
@@ -262,6 +278,7 @@ export async function downloadTrackForOffline(
       throw error;
     }
   } else {
+    if (activityTimer) clearTimeout(activityTimer);
     blob = await response.blob();
     if (existingChunks.length > 0) {
       // Combine existing chunks with new data
@@ -269,15 +286,13 @@ export async function downloadTrackForOffline(
     }
   }
 
-  const fs = await getCapacitorFilesystem();
   if (fs) {
     const path = nativeTrackPath(trackId);
     log.info('Storing track in Capacitor filesystem:', trackId, path);
     try {
-      const data = await blob.arrayBuffer();
       await fs.writeFile({
         path,
-        data: toBase64(data),
+        data: await blobToBase64(blob),
         directory: 'DATA',
         recursive: true,
       });
@@ -293,12 +308,6 @@ export async function downloadTrackForOffline(
       throw error;
     }
   } else {
-    // On native iOS, Filesystem plugin should always be available — warn loudly
-    if (isNativeApp()) {
-      log.error('downloadTrack: Filesystem plugin unavailable on native app, aborting download for %s', trackId);
-      throw new Error('Native filesystem unavailable — cannot download track');
-    }
-
     // Web/PWA path: store blob in IndexedDB
     const offlineTrack: OfflineTrack = {
       id: trackId,
@@ -313,7 +322,7 @@ export async function downloadTrackForOffline(
       await db.offlineTracks.put(offlineTrack);
       notifyOfflineTracksUpdated();
     } catch (error) {
-    // Handle quota exceeded error
+      // Handle quota exceeded error
       const isQuotaError =
         error instanceof DOMException &&
         (error.name === 'QuotaExceededError' ||
@@ -340,8 +349,38 @@ export async function downloadTrackForOffline(
       throw error;
     }
   }
+  // blob goes out of scope here — GC-eligible before metadata/artwork work begins
+}
 
-  // Clear partial download record on success
+/**
+ * Download a track for offline playback with optional progress tracking.
+ * Supports resuming interrupted downloads using HTTP Range requests.
+ * Also downloads album artwork if track metadata is available.
+ */
+export async function downloadTrackForOffline(
+  trackId: string,
+  onProgress?: DownloadProgressCallback
+): Promise<void> {
+  // Check if already downloaded
+  const existing = await db.offlineTracks.get(trackId);
+  if (existing) {
+    log.info('Track already exists in IndexedDB:', trackId);
+    onProgress?.({ loaded: 1, total: 1, percentage: 100 });
+    return;
+  }
+
+  const partial = await getPartialDownload(trackId);
+  const fs = await getCapacitorFilesystem();
+
+  // On native iOS, Filesystem plugin should always be available — fail fast
+  if (!fs && isNativeApp()) {
+    log.error('downloadTrack: Filesystem plugin unavailable on native app, aborting download for %s', trackId);
+    throw new Error('Native filesystem unavailable — cannot download track');
+  }
+
+  await downloadAndStoreAudio(trackId, partial, onProgress, fs);
+  // blob is now out of scope — GC-eligible before the steps below
+
   await clearPartialDownload(trackId);
   log.info('Track stored successfully:', trackId);
 

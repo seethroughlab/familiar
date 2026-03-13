@@ -24,6 +24,18 @@ if (!nativeAudioV2Enabled) {
 // Register Capacitor audio engine
 registerEngineFactory(() => new CapacitorEngine());
 
+// Register Capacitor Filesystem provider for native track storage
+import { registerFilesystemProvider } from '@familiar/frontend/src/services/offlineService';
+import('@capacitor/filesystem').then(({ Filesystem }) => {
+  registerFilesystemProvider({
+    writeFile: (options) => Filesystem.writeFile(options as Parameters<typeof Filesystem.writeFile>[0]).then(() => {}),
+    deleteFile: (options) => Filesystem.deleteFile(options as Parameters<typeof Filesystem.deleteFile>[0]),
+    getUri: (options) => Filesystem.getUri(options as Parameters<typeof Filesystem.getUri>[0]),
+  });
+}).catch(() => {
+  log.warn('Capacitor Filesystem not available');
+});
+
 // Register Capacitor Preferences provider for API origin persistence
 import('@capacitor/preferences').then(({ Preferences }) => {
   registerPreferencesProvider({
