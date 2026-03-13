@@ -19,6 +19,7 @@
 		FA3000012DC0000100000001 /* NativeAudioEngineSchedulingAPITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA3000022DC0000100000002 /* NativeAudioEngineSchedulingAPITests.swift */; };
 		FA001A022DB0000100000001 /* NativeAudioEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001A012DB0000100000001 /* NativeAudioEngine.swift */; };
 		FA001A042DB0000100000002 /* FamiliarAudioPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */; };
+		FA001B022DB0000100000001 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001B012DB0000100000001 /* ViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -47,6 +48,7 @@
 		FA2000032DB1000100000003 /* AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		FA001A012DB0000100000001 /* NativeAudioEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudioEngine.swift; sourceTree = "<group>"; };
 		FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamiliarAudioPlugin.swift; sourceTree = "<group>"; };
+		FA001B012DB0000100000001 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +96,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				FA001A012DB0000100000001 /* NativeAudioEngine.swift */,
 				FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */,
+				FA001B012DB0000100000001 /* ViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -227,6 +230,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				FA001A022DB0000100000001 /* NativeAudioEngine.swift in Sources */,
 				FA001A042DB0000100000002 /* FamiliarAudioPlugin.swift in Sources */,
+				FA001B022DB0000100000001 /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -385,7 +389,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
-				CURRENT_PROJECT_VERSION = 63;
+				CURRENT_PROJECT_VERSION = 69;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -408,7 +412,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
-				CURRENT_PROJECT_VERSION = 63;
+				CURRENT_PROJECT_VERSION = 69;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -429,7 +433,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 63;
+				CURRENT_PROJECT_VERSION = 69;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = AppTests;
@@ -454,7 +458,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 63;
+				CURRENT_PROJECT_VERSION = 69;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = AppTests;
