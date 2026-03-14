@@ -1,6 +1,7 @@
 """Metadata extraction service using mutagen."""
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,26 @@ from mutagen.mp4 import MP4
 from mutagen.oggvorbis import OggVorbis
 
 logger = logging.getLogger(__name__)
+
+# String metadata keys that should be normalized
+_TEXT_FIELDS = {
+    "title", "artist", "album", "album_artist", "genre",
+    "composer", "conductor", "lyricist", "grouping", "comment",
+    "sort_artist", "sort_album", "sort_title",
+}
+
+
+def _normalize_text(s: str | None) -> str | None:
+    """Normalize Unicode whitespace and mojibake in metadata strings."""
+    if not s:
+        return s
+    # Fix common UTF-8 mojibake: Â followed by NBSP (double-encoded UTF-8)
+    s = s.replace('\u00c2\u00a0', ' ')
+    # Replace non-breaking spaces and other Unicode whitespace with regular spaces
+    s = re.sub(r'[\u00A0\u2007\u202F\u2060]', ' ', s)
+    # Collapse multiple spaces
+    s = ' '.join(s.split())
+    return s.strip()
 
 
 def extract_metadata(file_path: Path) -> dict[str, Any]:
@@ -90,6 +111,11 @@ def extract_metadata(file_path: Path) -> dict[str, Any]:
     except Exception as e:
         # Log error but return partial metadata
         logger.warning(f"Error extracting metadata from {file_path}: {e}")
+
+    # Normalize Unicode whitespace in all text fields
+    for key in _TEXT_FIELDS:
+        if key in metadata:
+            metadata[key] = _normalize_text(metadata[key])
 
     return metadata
 

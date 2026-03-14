@@ -38,6 +38,8 @@ def normalize_for_matching(s: str) -> str:
         flags=re.IGNORECASE
     )
     s = s.replace("\u2018", "'").replace("\u2019", "'").replace("`", "'")
+    # Normalize Unicode whitespace (NBSP, figure space, narrow NBSP, word joiner)
+    s = re.sub(r'[\u00A0\u2007\u202F\u2060]', ' ', s)
     s = ' '.join(s.split())
     return s.strip().lower()
 
@@ -85,9 +87,9 @@ class TrackMatcher:
             if track.musicbrainz_track_id:
                 self._track_cache[f"mbid:{track.musicbrainz_track_id}"] = track
 
-            # Index by exact title+artist (lowercase)
+            # Index by normalized title+artist for exact matching
             if track.title and track.artist:
-                key = f"exact:{track.title.lower().strip()}:{track.artist.lower().strip()}"
+                key = f"exact:{normalize_for_matching(track.title)}:{normalize_for_matching(track.artist)}"
                 self._track_cache[key] = track
 
     async def match_track_ref(
@@ -124,9 +126,9 @@ class TrackMatcher:
             if track:
                 return track, "musicbrainz", 1.0
 
-        # 3. Try exact title + artist match
+        # 3. Try exact title + artist match (with normalization)
         if title and artist:
-            key = f"exact:{title.lower().strip()}:{artist.lower().strip()}"
+            key = f"exact:{normalize_for_matching(title)}:{normalize_for_matching(artist)}"
             track = self._track_cache.get(key)
             if track:
                 return track, "exact", 1.0
