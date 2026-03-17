@@ -16,7 +16,7 @@ import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { S3BackupSettings } from './S3BackupSettings';
 import { ServerSettings } from './ServerSettings';
-import { isNativePlatform } from '../../api/base';
+import { isNativeApp } from '../../utils/platform';
 
 export function SettingsPanel() {
   return (
@@ -35,7 +35,7 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <SystemStatus />
             <ApiKeyStatus />
-            {isNativePlatform() && <ServerSettings />}
+            {isNativeApp() && <ServerSettings />}
           </div>
         </section>
 

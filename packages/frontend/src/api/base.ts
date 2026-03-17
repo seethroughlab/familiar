@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { getSelectedProfileId, clearSelectedProfile } from '../services/profileSelection';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
+import { isNativeApp } from '../utils/platform';
 
 const log = createLogger('ApiBase');
 
@@ -13,14 +13,6 @@ const BACKEND_URL_KEY = 'familiar_backend_url';
 
 /** Cached origin string — empty for same-origin (web), full URL for Capacitor. */
 let _apiOrigin = '';
-
-/** True when running inside a Capacitor native shell. */
-function isNativePlatform(): boolean {
-  // Capacitor injects this on the window object
-  return !!(window as unknown as Record<string, unknown>).Capacitor &&
-    (window as unknown as { Capacitor: { isNativePlatform?: () => boolean } })
-      .Capacitor.isNativePlatform?.() === true;
-}
 
 // ============================================================================
 // Preferences Provider — Registration Pattern
@@ -35,6 +27,23 @@ type PreferencesProvider = {
 
 let _preferencesProvider: PreferencesProvider | null = null;
 
+// ============================================================================
+// Profile Provider — Registration Pattern
+// Breaks circular dependency: api/base should not import from services/.
+// The shared bootstrap (renderApp.tsx) registers the provider at boot.
+// ============================================================================
+
+type ProfileProvider = {
+  getSelectedProfileId(): Promise<string | null>;
+  clearSelectedProfile(): Promise<void>;
+};
+
+let _profileProvider: ProfileProvider | null = null;
+
+export function registerProfileProvider(p: ProfileProvider): void {
+  _profileProvider = p;
+}
+
 export function registerPreferencesProvider(p: PreferencesProvider): void {
   _preferencesProvider = p;
 }
@@ -45,7 +54,7 @@ export function registerPreferencesProvider(p: PreferencesProvider): void {
  * and caches it in localStorage for synchronous access.
  */
 export async function initApiOrigin(): Promise<void> {
-  if (!isNativePlatform()) {
+  if (!isNativeApp()) {
     _apiOrigin = '';
     return;
   }
@@ -81,7 +90,7 @@ export async function setApiOrigin(url: string): Promise<void> {
   _apiOrigin = url.replace(/\/+$/, '');
   localStorage.setItem(BACKEND_URL_KEY, _apiOrigin);
 
-  if (isNativePlatform() && _preferencesProvider) {
+  if (isNativeApp() && _preferencesProvider) {
     try {
       await _preferencesProvider.set(BACKEND_URL_KEY, _apiOrigin);
     } catch {
@@ -94,9 +103,6 @@ export async function setApiOrigin(url: string): Promise<void> {
 export function getApiOrigin(): string {
   return _apiOrigin;
 }
-
-/** True when running inside a Capacitor native shell (re-exported for guards). */
-export { isNativePlatform };
 
 /** Build a full API URL path, e.g. getApiUrl('/tracks/123/stream') → '/api/v1/tracks/123/stream' */
 export function getApiUrl(path: string): string {
@@ -127,7 +133,7 @@ export function encodePathSegment(value: string): string {
 // Add X-Profile-ID header to all requests (if a profile is selected)
 api.interceptors.request.use(async (config) => {
   try {
-    const profileId = await getSelectedProfileId();
+    const profileId = await _profileProvider?.getSelectedProfileId();
     if (profileId) {
       config.headers['X-Profile-ID'] = profileId;
     }
@@ -153,7 +159,7 @@ api.interceptors.response.use(
        error.response?.data?.detail?.includes('Invalid profile'))
     ) {
       // Clear the invalid profile selection
-      await clearSelectedProfile();
+      await _profileProvider?.clearSelectedProfile();
       // The app should redirect to profile selector
       // Dispatch a custom event that App.tsx can listen for
       window.dispatchEvent(new CustomEvent('profile-invalidated'));

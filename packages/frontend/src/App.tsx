@@ -10,7 +10,7 @@ const log = createLogger('App');
 import { ProfileSelector } from './components/Profiles';
 import { WorkerAlert } from './components/WorkerAlert';
 import { ServerSettings } from './components/Settings/ServerSettings';
-import { isNativePlatform, getApiOrigin } from './api/base';
+import { getApiOrigin } from './api/base';
 import { MobileAppRedirect } from './components/MobileAppRedirect';
 import { isIOS, isNativeApp, isPWA } from './utils/platform';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
@@ -182,7 +182,7 @@ function App() {
   const [mobileRedirectDismissed, setMobileRedirectDismissed] = useState(false);
 
   const [serverConfigured, setServerConfigured] = useState(
-    () => !isNativePlatform() || !!getApiOrigin()
+    () => !isNativeApp() || !!getApiOrigin()
   );
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [checkingProfile, setCheckingProfile] = useState(true);

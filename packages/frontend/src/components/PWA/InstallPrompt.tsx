@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Download, X, Share, CheckCircle, Monitor, Smartphone } from 'lucide-react';
 
 import { createLogger } from '../../utils/logger';
-import { isNativePlatform } from '../../api/base';
+import { isNativeApp } from '../../utils/platform';
 
 const log = createLogger('InstallPrompt');
 
@@ -23,7 +23,7 @@ type InstallState =
 
 function detectInstallState(hasPromptEvent: boolean): InstallState {
   // Native Capacitor app is always "installed"
-  if (isNativePlatform()) {
+  if (isNativeApp()) {
     return 'installed';
   }
 

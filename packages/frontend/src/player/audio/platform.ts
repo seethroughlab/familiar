@@ -1,4 +1,5 @@
 import { createLogger } from '../../utils/logger';
+import { isNativeApp, isMobile } from '../../utils/platform';
 
 // ============================================================================
 // Platform Detection
@@ -6,12 +7,10 @@ import { createLogger } from '../../utils/logger';
 
 export const log = createLogger('AudioEngine', { forceVerbose: true });
 
-export const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
+export const isMobilePlatform = isMobile();
 
 // Capacitor native app detection
-export const isCapacitorNative = !!(window as unknown as Record<string, unknown>).Capacitor &&
-  (window as unknown as { Capacitor: { isNativePlatform?: () => boolean } })
-    .Capacitor.isNativePlatform?.() === true;
+export const isCapacitorNative = isNativeApp();
 
 // On Capacitor native, bypass Web Audio entirely — iOS suspends AudioContext in background.
 // Use plain HTMLAudioElement.volume for playback (direct mode). Desktop uses Web Audio (effects + visualizer).

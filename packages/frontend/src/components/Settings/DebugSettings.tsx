@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bug, RefreshCw, Trash2, Download, AlertCircle } from 'lucide-react';
 import { getApiUrl } from '../../api/base';
+import { isMobile, isIOS } from '../../utils/platform';
 import {
   getAudioContext,
   getAudioAnalyser,
@@ -108,9 +109,9 @@ export function DebugSettings() {
   const currentMode = getCurrentMode();
 
   // Platform detection
-  const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent);
-  const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent);
-  const useHybridMode = isIOS;
+  const isMobilePlatform = isMobile();
+  const isIOSDevice = isIOS();
+  const useHybridMode = isIOSDevice;
 
   const clearLogs = () => {
     logBuffer.length = 0;
@@ -167,8 +168,8 @@ export function DebugSettings() {
               </div>
 
               <div className="text-zinc-400">isIOS:</div>
-              <div className={isIOS ? 'text-green-400' : 'text-red-400'}>
-                {String(isIOS)}
+              <div className={isIOSDevice ? 'text-green-400' : 'text-red-400'}>
+                {String(isIOSDevice)}
               </div>
 
               <div className="text-zinc-400">useHybridMode:</div>
