@@ -138,8 +138,13 @@ npx cap copy ios
 CAP_CONFIG="$IOS_DIR/App/App/capacitor.config.json"
 if ! grep -q 'FamiliarAudioPlugin' "$CAP_CONFIG"; then
     sed -i '' 's/"PreferencesPlugin"/"PreferencesPlugin",\
-\t\t"FamiliarAudioPlugin"/' "$CAP_CONFIG"
-    green "Re-added FamiliarAudioPlugin to native config"
+\t\t"FamiliarAudioPlugin",\
+\t\t"FamiliarAmbientSynthPlugin"/' "$CAP_CONFIG"
+    green "Re-added FamiliarAudioPlugin + FamiliarAmbientSynthPlugin to native config"
+elif ! grep -q 'FamiliarAmbientSynthPlugin' "$CAP_CONFIG"; then
+    sed -i '' 's/"FamiliarAudioPlugin"/"FamiliarAudioPlugin",\
+\t\t"FamiliarAmbientSynthPlugin"/' "$CAP_CONFIG"
+    green "Re-added FamiliarAmbientSynthPlugin to native config"
 fi
 
 # cap copy writes to native/App/App/ (Capacitor's standard double-nesting),

@@ -7,6 +7,7 @@ import type { Track } from '../types';
 import { showError } from '../stores/toastStore';
 import { getEngine } from './audio/engineInstance';
 import type { EngineEvent } from './audio/types';
+import { useActiveSessionStore } from '../stores/activeSessionStore';
 import { log } from './audio/platform';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { prefetchService } from '../services/prefetchService';
@@ -256,6 +257,9 @@ export function useAudioEngine() {
     if (!isInitialized) return;
 
     return engine.on((event: EngineEvent) => {
+      // When ambient mode owns the engine, let the ambient coordinator handle events
+      if (useActiveSessionStore.getState().activeSession === 'ambient') return;
+
       switch (event.type) {
         case 'ended': {
           if (queueTransition) return;

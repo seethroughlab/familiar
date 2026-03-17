@@ -14,6 +14,8 @@ interface UIState {
   pendingChatMessage: string | null;
   /** Track IDs to show in playlist picker modal */
   playlistPickerTrackIds: string[] | null;
+  /** Whether the ambient screen overlay is showing */
+  showAmbientScreen: boolean;
 
   // Actions
   toggleRightPanel: (panel: 'queue' | 'chat') => void;
@@ -29,6 +31,7 @@ interface UIState {
   openPlaylistPicker: (trackIds: string[]) => void;
   /** Close the playlist picker */
   closePlaylistPicker: () => void;
+  setShowAmbientScreen: (show: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -40,6 +43,7 @@ export const useUIStore = create<UIState>()(
       showFullPlayer: false,
       pendingChatMessage: null,
       playlistPickerTrackIds: null,
+      showAmbientScreen: false,
 
       toggleRightPanel: (panel) => {
         const current = get().rightPanel;
@@ -57,6 +61,7 @@ export const useUIStore = create<UIState>()(
       },
       openPlaylistPicker: (trackIds) => set({ playlistPickerTrackIds: trackIds }),
       closePlaylistPicker: () => set({ playlistPickerTrackIds: null }),
+      setShowAmbientScreen: (show) => set({ showAmbientScreen: show }),
     }),
     {
       name: 'familiar-ui',

@@ -1,0 +1,99 @@
+{
+  "generatedAt": "2026-03-13T12:41:50.262Z",
+  "budgets": {
+    "entryGzipTargetKb": 300,
+    "entryGzipHardKb": 460,
+    "lazyGzipTargetKb": 120,
+    "lazyGzipHardKb": 180,
+    "mainCssGzipTargetKb": 18,
+    "mainCssGzipHardKb": 25
+  },
+  "entry": {
+    "file": "assets/index-Dvy_qw_U.js",
+    "rawBytes": 1694224,
+    "gzipBytes": 465790,
+    "gzipKb": 454.87
+  },
+  "largestLazy": {
+    "file": "assets/index-B_PCgeGB.js",
+    "gzipBytes": 73036,
+    "gzipKb": 71.32
+  },
+  "mainCss": {
+    "file": "assets/index-9hqiJINH.css",
+    "gzipBytes": 13961,
+    "gzipKb": 13.63
+  },
+  "topJsAssets": [
+    {
+      "file": "assets/index-Dvy_qw_U.js",
+      "rawBytes": 1694224,
+      "rawKb": 1654.52,
+      "gzipBytes": 465790,
+      "gzipKb": 454.87
+    },
+    {
+      "file": "assets/index-B_PCgeGB.js",
+      "rawBytes": 223056,
+      "rawKb": 217.83,
+      "gzipBytes": 73036,
+      "gzipKb": 71.32
+    },
+    {
+      "file": "assets/vendor-audio-CXPx7eTM.js",
+      "rawBytes": 94964,
+      "rawKb": 92.74,
+      "gzipBytes": 31919,
+      "gzipKb": 31.17
+    },
+    {
+      "file": "assets/index-gmKv4Kgd.js",
+      "rawBytes": 140179,
+      "rawKb": 136.89,
+      "gzipBytes": 28659,
+      "gzipKb": 27.99
+    },
+    {
+      "file": "assets/vendor-react-Bq1UMS2s.js",
+      "rawBytes": 40855,
+      "rawKb": 39.9,
+      "gzipBytes": 14555,
+      "gzipKb": 14.21
+    },
+    {
+      "file": "assets/vendor-query-CcIar6DF.js",
+      "rawBytes": 44822,
+      "rawKb": 43.77,
+      "gzipBytes": 13690,
+      "gzipKb": 13.37
+    },
+    {
+      "file": "assets/vendor-icons-DeeEANVr.js",
+      "rawBytes": 30241,
+      "rawKb": 29.53,
+      "gzipBytes": 9781,
+      "gzipKb": 9.55
+    },
+    {
+      "file": "assets/index-Bm4932vQ.js",
+      "rawBytes": 22072,
+      "rawKb": 21.55,
+      "gzipBytes": 7330,
+      "gzipKb": 7.16
+    },
+    {
+      "file": "assets/PlaylistDetail-Demhifen.js",
+      "rawBytes": 15402,
+      "rawKb": 15.04,
+      "gzipBytes": 4994,
+      "gzipKb": 4.88
+    },
+    {
+      "file": "assets/ArtistDetail-DXgxmG5Y.js",
+      "rawBytes": 15090,
+      "rawKb": 14.74,
+      "gzipBytes": 4648,
+      "gzipKb": 4.54
+    }
+  ]
+}

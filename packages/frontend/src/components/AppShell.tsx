@@ -38,6 +38,7 @@ const FullPlayer = lazy(() => import('./FullPlayer').then(m => ({ default: m.Ful
 const SettingsPanel = lazy(() => import('./Settings').then(m => ({ default: m.SettingsPanel })));
 const QueueView = lazy(() => import('./Queue').then(m => ({ default: m.QueueView })));
 const ChatPanel = lazy(() => import('./Chat').then(m => ({ default: m.ChatPanel })));
+const AmbientScreen = lazy(() => import('./Ambient').then(m => ({ default: m.AmbientScreen })));
 
 function LazyLoadSpinner() {
   return (
@@ -64,6 +65,8 @@ export function AppShell() {
   const closeRightPanel = useUIStore((s) => s.closeRightPanel);
   const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowFullPlayer = useUIStore((s) => s.setShowFullPlayer);
+  const showAmbientScreen = useUIStore((s) => s.showAmbientScreen);
+  const setShowAmbientScreen = useUIStore((s) => s.setShowAmbientScreen);
 
   // Theme
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -258,6 +261,19 @@ export function AppShell() {
               </div>
             }>
               <FullPlayer isOpen={showFullPlayer} onClose={() => setShowFullPlayer(false)} />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+
+        {/* Ambient screen overlay */}
+        {showAmbientScreen && (
+          <ErrorBoundary name="Ambient Screen" fullscreen>
+            <Suspense fallback={
+              <div role="status" aria-label="Loading" className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+              </div>
+            }>
+              <AmbientScreen onClose={() => setShowAmbientScreen(false)} />
             </Suspense>
           </ErrorBoundary>
         )}

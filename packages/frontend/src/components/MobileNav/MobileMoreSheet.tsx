@@ -8,10 +8,11 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Download, MessageSquare, Settings,
+  Download, MessageSquare, Settings, Waves,
   ListMusic, Clock, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
+import { getAmbientSynthBridge } from '../../player/ambient/ambientSynthBridge';
 import { useThemeStore } from '../../stores/themeStore';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
@@ -41,6 +42,8 @@ export function MobileMoreSheet({ onClose }: Props) {
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const setShowSettings = useUIStore((s) => s.setShowSettings);
+  const setShowAmbientScreen = useUIStore((s) => s.setShowAmbientScreen);
+  const hasAmbientSynth = getAmbientSynthBridge() !== null;
   const { isOffline } = useOfflineStatus();
 
   const { data: playlists } = useQuery({
@@ -186,6 +189,20 @@ export function MobileMoreSheet({ onClose }: Props) {
                   <span className="flex-1 truncate">{pl.name}</span>
                 </button>
               ))}
+            </>
+          )}
+
+          {/* Ambient mode (mobile only, requires native synth) */}
+          {hasAmbientSynth && (
+            <>
+              <div className={`my-2 mx-4 border-t ${light ? 'border-zinc-200' : 'border-zinc-800'}`} />
+              <button
+                onClick={() => { setShowAmbientScreen(true); onClose(); }}
+                className={`flex items-center gap-3 px-4 py-3 w-full ${light ? 'text-purple-600 active:bg-purple-50' : 'text-purple-400 active:bg-zinc-800'}`}
+              >
+                <Waves className="w-5 h-5 flex-shrink-0" />
+                <span>Ambient</span>
+              </button>
             </>
           )}
 

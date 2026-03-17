@@ -27,6 +27,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.exceptions import FamiliarError
 from app.api.ratelimit import limiter
 from app.api.routes import (
+    ambient,
     analysis,
     artwork,
     background,
@@ -310,6 +311,7 @@ app.include_router(analysis.router, prefix="/api/v1")
 app.include_router(download.router, prefix="/api/v1")
 app.include_router(updates.router, prefix="/api/v1")
 app.include_router(spotify_import.router, prefix="/api/v1")
+app.include_router(ambient.router, prefix="/api/v1")
 
 
 # Serve frontend static files in production

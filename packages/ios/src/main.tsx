@@ -24,6 +24,14 @@ if (!nativeAudioV2Enabled) {
 // Register Capacitor audio engine
 registerEngineFactory(() => new CapacitorEngine());
 
+// Register ambient synth bridge (deferred — must not block boot)
+import { registerAmbientSynthBridge } from '@familiar/frontend/src/player/ambient/ambientSynthBridge';
+import('./CapacitorAmbientSynthAdapter').then(({ CapacitorAmbientSynthAdapter }) => {
+  registerAmbientSynthBridge(new CapacitorAmbientSynthAdapter());
+}).catch(() => {
+  log.warn('Ambient synth bridge not available');
+});
+
 // Register Capacitor Filesystem provider for native track storage
 import { registerFilesystemProvider } from '@familiar/frontend/src/services/offlineService';
 import('@capacitor/filesystem').then(({ Filesystem }) => {

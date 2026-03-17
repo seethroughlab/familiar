@@ -17,6 +17,7 @@
 	"packageClassList": [
 		"FilesystemPlugin",
 		"PreferencesPlugin",
-		"FamiliarAudioPlugin"
+		"FamiliarAudioPlugin",
+		"FamiliarAmbientSynthPlugin"
 	]
 }
