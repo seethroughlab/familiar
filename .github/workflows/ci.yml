@@ -421,7 +421,7 @@ jobs:
 
   docker-build:
     name: Docker Build
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     timeout-minutes: 30
     needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-integration, frontend-lint, frontend-test]
     steps:
