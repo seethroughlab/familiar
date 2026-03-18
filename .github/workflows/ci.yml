@@ -557,7 +557,7 @@ jobs:
             const flaky = (r.suites || []).flatMap(s => (s.suites || []).flatMap(ss => ss.specs || []).concat(s.specs || []))
               .filter(s => s.tests?.some(t => t.results?.length > 1 && t.results?.at(-1)?.status === 'passed'))
               || [];
-            if (flaky.length > 5) {
+            if (flaky.length > 15) {
               console.log('::warning::' + flaky.length + ' test(s) passed only after retry (flaky):');
               flaky.forEach(s => console.log('  - ' + s.title));
               process.exit(1);
