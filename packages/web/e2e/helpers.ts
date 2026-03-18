@@ -7,35 +7,19 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
   // Wait for page to settle (use domcontentloaded instead of networkidle to avoid timeout)
   await page.waitForLoadState('domcontentloaded');
 
-  // Check if we're on profile selector (shows "Who's listening?")
-  const profileSelector = page.getByRole('heading', { name: "Who's listening?" });
-  if (await profileSelector.isVisible({ timeout: 3000 }).catch(() => false)) {
-    // Find profile buttons - they have name pattern "T Test User" (letter + name)
-    const profileButtons = page.getByRole('button', { name: /^[A-Z] .+/ });
-    const buttonCount = await profileButtons.count();
+  // Wait for the app to reach a meaningful state: either the profile selector appears
+  // (meaning we need to pick/create a profile) or the nav links are already visible
+  // (meaning a profile is already selected). In CI, React hydration + API calls can
+  // take 10-15s, so we use a generous timeout here instead of a short isVisible check.
+  const navOrProfile = await page.waitForFunction(() => {
+    // Check for profile selector heading
+    const headings = document.querySelectorAll('h1, h2, h3');
+    const hasProfileSelector = Array.from(headings).some(
+      el => el.textContent?.includes("Who's listening?") && el.offsetParent !== null
+    );
+    if (hasProfileSelector) return 'profile-selector';
 
-    if (buttonCount > 0) {
-      // Click the first profile button
-      await profileButtons.first().click();
-    } else {
-      // No profiles exist - create one
-      await page.getByRole('button', { name: /Add Profile/ }).click();
-
-      // Fill in profile name in the modal dialog
-      const nameInput = page.getByPlaceholder('Enter name');
-      await nameInput.waitFor({ timeout: 3000 });
-      await nameInput.fill(profileName);
-
-      // Click Create button
-      await page.getByRole('button', { name: 'Create' }).click();
-    }
-
-  }
-
-  // Wait for main app to load - sidebar links (desktop) or bottom nav buttons (mobile)
-  // Use waitForFunction because waitForSelector picks the first DOM match which may be
-  // a hidden sidebar link on mobile viewports
-  await page.waitForFunction(() => {
+    // Check for visible nav links (app already loaded with profile)
     const links = document.querySelectorAll('a');
     const buttons = document.querySelectorAll('nav button');
     const hasVisibleLink = Array.from(links).some(
@@ -45,8 +29,44 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
     const hasVisibleButton = Array.from(buttons).some(
       el => el.textContent?.includes('Tracks') && el.offsetParent !== null
     );
-    return hasVisibleLink || hasVisibleButton;
+    if (hasVisibleLink || hasVisibleButton) return 'nav-ready';
+
+    return null;
   }, undefined, { timeout: 30000 });
+
+  const state = await navOrProfile.jsonValue();
+
+  if (state === 'profile-selector') {
+    // Find profile buttons - they have name pattern "T Test User" (letter + name)
+    const profileButtons = page.getByRole('button', { name: /^[A-Z] .+/ });
+    const buttonCount = await profileButtons.count();
+
+    if (buttonCount > 0) {
+      await profileButtons.first().click();
+    } else {
+      // No profiles exist - create one
+      await page.getByRole('button', { name: /Add Profile/ }).click();
+      const nameInput = page.getByPlaceholder('Enter name');
+      await nameInput.waitFor({ timeout: 5000 });
+      await nameInput.fill(profileName);
+      await page.getByRole('button', { name: 'Create' }).click();
+    }
+
+    // Now wait for nav links after profile selection
+    await page.waitForFunction(() => {
+      const links = document.querySelectorAll('a');
+      const buttons = document.querySelectorAll('nav button');
+      const hasVisibleLink = Array.from(links).some(
+        el => (el.textContent?.includes('Tracks') || el.textContent?.includes('Artists'))
+          && el.offsetParent !== null
+      );
+      const hasVisibleButton = Array.from(buttons).some(
+        el => el.textContent?.includes('Tracks') && el.offsetParent !== null
+      );
+      return hasVisibleLink || hasVisibleButton;
+    }, undefined, { timeout: 15000 });
+  }
+  // If state === 'nav-ready', we're already good
 }
 
 /**
