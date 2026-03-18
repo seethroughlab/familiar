@@ -129,6 +129,11 @@ async def stream_track(
                 exc_info=True,
             )
 
+    # Transcode tracks with browser-unsupported codecs
+    if track.needs_transcode:
+        logger.info("Transcoding (unsupported codec=%s) track_id=%s", track.codec, track_id)
+        return await _stream_transcoded(file_path)
+
     # Transcode formats that browsers can't natively decode
     if file_path.suffix.lower() in TRANSCODE_EXTENSIONS:
         logger.debug("Transcoding track_id=%s path=%s to FLAC", track_id, file_path)
@@ -213,6 +218,7 @@ async def _validate_and_fix_track(track_id: str) -> None:
         from app.services.flac_remux import (
             REMUX_FORMATS,
             has_decode_errors,
+            needs_transcode_check,
             reencode_flac_in_place,
             remux_audio_in_place,
         )
@@ -220,18 +226,28 @@ async def _validate_and_fix_track(track_id: str) -> None:
         try:
             suffix = file_path.suffix.lower()
             if suffix == ".flac":
-                # For FLAC, check first to decide between remux (PTS) vs re-encode (corruption)
-                if not await has_decode_errors(file_path):
+                if await needs_transcode_check(file_path):
+                    # Unsupported codec params (e.g. 32-bit FLAC) — re-encode with bit depth reduction
+                    logger.info("Re-encoding %s (unsupported codec params)", file_path.name)
+                    await reencode_flac_in_place(file_path, reduce_bit_depth=True)
+                    track.needs_transcode = False
+                    track.codec = "flac"
+                elif await has_decode_errors(file_path):
+                    logger.info("Re-encoding %s to fix decode errors", file_path.name)
+                    await reencode_flac_in_place(file_path)
+                else:
                     logger.info("No decode errors found in %s, skipping re-encode", file_path.name)
                     return
-                logger.info("Re-encoding %s to fix decode errors", file_path.name)
-                await reencode_flac_in_place(file_path)
             elif suffix in REMUX_FORMATS:
                 # Remux is fast and lossless — do it unconditionally.
                 # Chromium rejects container issues that ffmpeg decodes fine, so
                 # has_decode_errors() is not a reliable gate for these formats.
                 logger.info("Re-muxing %s to fix container/header issues", file_path.name)
                 await remux_audio_in_place(file_path)
+                # Check if the codec itself is the problem (remux preserves codec)
+                if await needs_transcode_check(file_path):
+                    logger.info("Codec still unsupported after remux, flagging for transcode: %s", file_path.name)
+                    track.needs_transcode = True
             else:
                 logger.warning("Unsupported format for repair: %s", file_path.name)
                 return
@@ -243,7 +259,7 @@ async def _validate_and_fix_track(track_id: str) -> None:
             track.file_size = file_path.stat().st_size
             track.file_modified_at = datetime.fromtimestamp(file_path.stat().st_mtime)
             await db.commit()
-            logger.info("Successfully re-encoded %s", file_path.name)
+            logger.info("Successfully repaired %s", file_path.name)
         except Exception:
             logger.exception("Failed to validate/re-encode %s", file_path.name)
 

@@ -19,6 +19,59 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+BROWSER_SUPPORTED_CODECS = {
+    "mp3", "aac", "vorbis", "opus", "flac",
+    "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_u8",
+}
+
+
+async def detect_codec(file_path: Path) -> tuple[str | None, int]:
+    """Return (codec_name, bits_per_raw_sample) via ffprobe."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffprobe", "-v", "quiet",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=codec_name,bits_per_raw_sample",
+        "-of", "csv=p=0",
+        str(file_path),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return None, 0
+
+    line = stdout.decode().strip()
+    if not line:
+        return None, 0
+
+    parts = line.split(",")
+    codec = parts[0] if parts[0] and parts[0] != "N/A" else None
+    bits = 0
+    if len(parts) > 1 and parts[1] and parts[1] != "N/A":
+        try:
+            bits = int(parts[1])
+        except ValueError:
+            pass
+    return codec, bits
+
+
+async def needs_transcode_check(file_path: Path) -> bool:
+    """Check if file's codec is unsupported by browsers."""
+    codec, bits = await detect_codec(file_path)
+    if not codec:
+        return False
+    if codec not in BROWSER_SUPPORTED_CODECS:
+        return True
+    if codec == "flac" and bits > 24:
+        return True
+    if codec.startswith("pcm_") and bits > 24:
+        return True
+    return False
+
+
 async def needs_remux(file_path: Path) -> bool:
     """Check if a FLAC file is missing PTS timestamps.
 
@@ -195,19 +248,29 @@ async def remux_audio_in_place(file_path: Path) -> None:
         raise
 
 
-async def reencode_flac_in_place(file_path: Path) -> None:
-    """Re-encode FLAC through ffmpeg to fix corrupted frames. Lossless. Atomic."""
+async def reencode_flac_in_place(file_path: Path, reduce_bit_depth: bool = False) -> None:
+    """Re-encode FLAC through ffmpeg to fix corrupted frames. Lossless. Atomic.
+
+    Args:
+        reduce_bit_depth: When True, add `-sample_fmt s32` to force FLAC encoder
+            to cap output at 24-bit (handles 32-bit FLAC files).
+    """
     fd, tmp_path = tempfile.mkstemp(suffix=".flac", dir=file_path.parent)
     os.close(fd)
     tmp = Path(tmp_path)
 
     try:
-        proc = await asyncio.create_subprocess_exec(
+        cmd = [
             "ffmpeg", "-y",
             "-i", str(file_path),
             "-c:a", "flac",
-            "-f", "flac",
-            str(tmp),
+        ]
+        if reduce_bit_depth:
+            cmd += ["-sample_fmt", "s32"]
+        cmd += ["-f", "flac", str(tmp)]
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )

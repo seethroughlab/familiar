@@ -651,6 +651,8 @@ class LibraryScanner:
             "bitrate": metadata.get("bitrate"),
             "bitrate_mode": metadata.get("bitrate_mode"),
             "format": metadata.get("format"),
+            "codec": metadata.get("codec"),
+            "needs_transcode": metadata.get("needs_transcode", False),
             "lyrics_language": metadata.get("lyrics_language"),
         }
 
@@ -676,6 +678,8 @@ class LibraryScanner:
                 "bitrate": insert_stmt.excluded.bitrate,
                 "bitrate_mode": insert_stmt.excluded.bitrate_mode,
                 "format": insert_stmt.excluded.format,
+                "codec": insert_stmt.excluded.codec,
+                "needs_transcode": insert_stmt.excluded.needs_transcode,
                 "lyrics_language": insert_stmt.excluded.lyrics_language,
             },
         ).returning(Track)
@@ -796,6 +800,8 @@ class LibraryScanner:
         track.bitrate = metadata.get("bitrate")
         track.bitrate_mode = metadata.get("bitrate_mode")
         track.format = metadata.get("format")
+        track.codec = metadata.get("codec")
+        track.needs_transcode = metadata.get("needs_transcode", False)
         track.lyrics_language = metadata.get("lyrics_language")
 
         # Only reset analysis status if requested (when file content changed)

@@ -2,6 +2,7 @@
 
 import logging
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -14,12 +15,52 @@ from mutagen.oggvorbis import OggVorbis
 
 logger = logging.getLogger(__name__)
 
+# Codecs that browsers (Chrome/Safari/Firefox) can natively decode
+BROWSER_SUPPORTED_CODECS = {
+    "mp3",          # MP3
+    "aac",          # AAC in .m4a
+    "vorbis",       # OGG Vorbis
+    "opus",         # OGG/WebM Opus
+    "flac",         # FLAC (≤24-bit only)
+    "pcm_s16le",    # WAV 16-bit
+    "pcm_s24le",    # WAV 24-bit
+    "pcm_s16be",    # WAV 16-bit big-endian
+    "pcm_s24be",    # WAV 24-bit big-endian
+    "pcm_u8",       # WAV 8-bit unsigned
+}
+
 # String metadata keys that should be normalized
 _TEXT_FIELDS = {
     "title", "artist", "album", "album_artist", "genre",
     "composer", "conductor", "lyricist", "grouping", "comment",
     "sort_artist", "sort_album", "sort_title",
 }
+
+
+def _detect_codec(file_path: Path) -> str | None:
+    """Detect the audio codec of a file using ffprobe.
+
+    Returns codec name (e.g. "aac", "alac", "flac", "mp3", "pcm_s16le") or None.
+    Called synchronously — runs inside the scanner's thread pool executor.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-select_streams", "a:0",
+                "-show_entries", "stream=codec_name",
+                "-of", "csv=p=0",
+                str(file_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        codec = result.stdout.strip()
+        return codec if codec else None
+    except Exception:
+        logger.debug("ffprobe codec detection failed for %s", file_path.name)
+        return None
 
 
 def detect_lyrics_language(lyrics: str | None) -> str | None:
@@ -133,6 +174,20 @@ def extract_metadata(file_path: Path) -> dict[str, Any]:
 
     # Detect lyrics language
     metadata["lyrics_language"] = detect_lyrics_language(metadata.get("lyrics"))
+
+    # Detect codec via ffprobe and determine if transcoding is needed
+    codec = _detect_codec(file_path)
+    metadata["codec"] = codec
+
+    needs_transcode = False
+    if codec and codec not in BROWSER_SUPPORTED_CODECS:
+        needs_transcode = True
+    # Even whitelisted codecs may need transcode for edge-case params
+    if codec == "flac" and metadata.get("bit_depth") and metadata["bit_depth"] > 24:
+        needs_transcode = True
+    if codec and codec.startswith("pcm_") and metadata.get("bit_depth") and metadata["bit_depth"] > 24:
+        needs_transcode = True
+    metadata["needs_transcode"] = needs_transcode
 
     return metadata
 

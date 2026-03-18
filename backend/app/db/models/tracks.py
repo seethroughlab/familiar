@@ -53,6 +53,8 @@ class Track(Base):
     bitrate: Mapped[int | None] = mapped_column(Integer)
     bitrate_mode: Mapped[str | None] = mapped_column(String(10))  # "CBR", "VBR", or None
     format: Mapped[str | None] = mapped_column(String(10))
+    codec: Mapped[str | None] = mapped_column(String(50))  # e.g. "aac", "alac", "flac", "mp3"
+    needs_transcode: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     # External IDs (from MusicBrainz, etc.)
     musicbrainz_track_id: Mapped[str | None] = mapped_column(String(36))
