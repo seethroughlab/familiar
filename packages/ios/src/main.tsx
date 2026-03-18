@@ -121,22 +121,5 @@ window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault();
 });
 
-// DEBUG: visible indicator to diagnose black screen
-const dbg = document.createElement('div');
-dbg.id = 'boot-debug';
-dbg.style.cssText = 'position:fixed;top:50px;left:0;right:0;z-index:99999;color:lime;background:black;padding:16px;font:14px monospace;white-space:pre-wrap;';
-dbg.textContent = '[1] main.tsx: about to call renderApp()';
-document.body.appendChild(dbg);
-const dbgLog = (msg: string) => { dbg.textContent += '\n' + msg; console.log('[boot-debug]', msg); };
-
-try {
-  dbgLog('[2] calling renderApp()...');
-  renderApp();
-  dbgLog('[3] renderApp() returned (sync portion done)');
-} catch (e: unknown) {
-  dbgLog('[ERROR] renderApp threw: ' + (e instanceof Error ? e.message + '\n' + e.stack : String(e)));
-}
-
-// Also catch async errors
-window.addEventListener('error', (ev) => dbgLog('[GLOBAL ERROR] ' + ev.message));
-window.addEventListener('unhandledrejection', (ev) => dbgLog('[UNHANDLED] ' + String(ev.reason)));
+// Render the app
+renderApp();
