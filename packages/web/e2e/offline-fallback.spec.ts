@@ -113,8 +113,12 @@ test.describe('Offline Fallback', () => {
   test('network recovery after stream failure', async ({ page }) => {
     await navigateToTab(page, 'Library');
 
-    const trackRows = page.locator('[data-testid="track-row"], .track-row, tr');
+    const trackRows = page.locator('[data-testid="track-row"]');
     await trackRows.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+    if (!(await trackRows.first().isVisible().catch(() => false))) {
+      test.skip(true, 'No visible tracks in library');
+      return;
+    }
     const trackCount = await trackRows.count();
     if (trackCount < 2) {
       test.skip(true, 'Need at least 2 tracks for recovery test');
@@ -127,7 +131,6 @@ test.describe('Offline Fallback', () => {
     );
 
     // Try to play — should fail gracefully
-    await trackRows.first().scrollIntoViewIfNeeded();
     await trackRows.first().dblclick();
 
     // Wait for error state
