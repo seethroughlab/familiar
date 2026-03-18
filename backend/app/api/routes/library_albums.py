@@ -4,11 +4,12 @@ import asyncio
 import logging
 from collections.abc import Sequence
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
+from app.api.exceptions import NotFoundError
 from app.db.models import Track, TrackStatus
 
 logger = logging.getLogger(__name__)
@@ -254,7 +255,7 @@ async def get_album_detail(
         tracks_list = result.scalars().all()
 
     if not tracks_list:
-        raise HTTPException(status_code=404, detail="Album not found in library")
+        raise NotFoundError("Album not found in library")
 
     # Extract album info from first track
     first_track = tracks_list[0]

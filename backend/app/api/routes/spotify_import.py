@@ -9,9 +9,11 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Form, UploadFile
+from pydantic import BaseModel
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import NotFoundError, ValidationError
 from app.services.spotify_import import SpotifyImportService
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/spotify", tags=["spotify"])
 
 MAX_ZIP_SIZE = 500 * 1024 * 1024  # 500 MB
+
+
+# ── Response Models ───────────────────────────────────────────────
+
+
+class SpotifyImportResponse(BaseModel):
+    id: str
+    profile_id: str
+    imported_at: str
+    spotify_username: str | None = None
+    favorites: dict | None = None
+    playlists: dict | None = None
+    streaming_stats: dict | None = None
+    match_results: dict | None = None
+    summary: dict | None = None
+    matching_task_id: str | None = None
+
+
+class SpotifyMatchProgressResponse(BaseModel):
+    phase: str | None = None
+    progress: float | None = None
+    matched: int | None = None
+    total: int | None = None
+    message: str | None = None
+
+
+class SpotifyTaskStatusResponse(BaseModel):
+    status: str
+    error: str | None = None
+    matched: int | None = None
+    total: int | None = None
+
+
+class SpotifyDeleteResponse(BaseModel):
+    ok: bool
+
+
+class SpotifyRematchResponse(BaseModel):
+    task_id: str
+    status: str
 
 
 def _serialize_import(import_) -> dict:
@@ -36,7 +78,7 @@ def _serialize_import(import_) -> dict:
     }
 
 
-@router.post("/import")
+@router.post("/import", response_model=SpotifyImportResponse)
 async def upload_spotify_export(
     db: DbSession,
     profile: RequiredProfile,
@@ -44,14 +86,14 @@ async def upload_spotify_export(
     include_favorites: bool = Form(True),
     include_playlists: bool = Form(True),
     include_streaming: bool = Form(True),
-):
+) -> SpotifyImportResponse:
     """Upload a Spotify data export ZIP. Parses immediately, matches in background."""
     if not file.filename or not file.filename.lower().endswith(".zip"):
-        raise HTTPException(400, "File must be a ZIP archive")
+        raise ValidationError("File must be a ZIP archive")
 
     zip_bytes = await file.read()
     if len(zip_bytes) > MAX_ZIP_SIZE:
-        raise HTTPException(400, f"File too large (max {MAX_ZIP_SIZE // 1024 // 1024} MB)")
+        raise ValidationError("File too large", detail=f"Max size: {MAX_ZIP_SIZE // 1024 // 1024} MB")
 
     service = SpotifyImportService(db)
     import_ = await service.parse_and_save(
@@ -68,22 +110,22 @@ async def upload_spotify_export(
     task_id = str(uuid4())
     asyncio.create_task(bg.run_spotify_matching(task_id, profile.id))
 
-    return {**_serialize_import(import_), "matching_task_id": task_id}
+    return SpotifyImportResponse(**_serialize_import(import_), matching_task_id=task_id)
 
 
-@router.get("/import/progress")
-async def get_spotify_matching_progress() -> dict | None:
+@router.get("/import/progress", response_model=SpotifyMatchProgressResponse | None)
+async def get_spotify_matching_progress() -> SpotifyMatchProgressResponse | None:
     """Get live matching progress from Redis (null if not running)."""
     try:
         from app.services.background import get_background_manager
         data: bytes | None = get_background_manager().redis.get("familiar:spotify_match:progress")  # type: ignore[assignment]
-        return json.loads(data) if data else None
+        return SpotifyMatchProgressResponse(**json.loads(data)) if data else None
     except Exception:
         return None
 
 
-@router.get("/import/status/{task_id}")
-async def get_spotify_import_status(task_id: str):
+@router.get("/import/status/{task_id}", response_model=SpotifyTaskStatusResponse)
+async def get_spotify_import_status(task_id: str) -> SpotifyTaskStatusResponse:
     """Poll the status of a background Spotify matching task."""
     from app.services.background import get_background_manager
     bg = get_background_manager()
@@ -91,41 +133,41 @@ async def get_spotify_import_status(task_id: str):
     key = f"familiar:spotify_import:{task_id}"
     data: bytes | None = bg.redis.get(key)  # type: ignore[assignment]
     if not data:
-        raise HTTPException(404, "Task not found")
+        raise NotFoundError("Task not found")
 
-    return json.loads(data)
+    return SpotifyTaskStatusResponse(**json.loads(data))
 
 
-@router.get("/import")
+@router.get("/import", response_model=SpotifyImportResponse | None)
 async def get_spotify_import(
     db: DbSession,
     profile: RequiredProfile,
-):
+) -> SpotifyImportResponse | None:
     """Get the current Spotify import for the profile."""
     service = SpotifyImportService(db)
     import_ = await service.get_import(profile.id)
     if not import_:
         return None
-    return _serialize_import(import_)
+    return SpotifyImportResponse(**_serialize_import(import_))
 
 
-@router.delete("/import")
+@router.delete("/import", response_model=SpotifyDeleteResponse)
 async def delete_spotify_import(
     db: DbSession,
     profile: RequiredProfile,
-):
+) -> SpotifyDeleteResponse:
     """Remove the Spotify import for the profile."""
     service = SpotifyImportService(db)
     deleted = await service.delete_import(profile.id)
     if not deleted:
-        raise HTTPException(404, "No Spotify import found")
-    return {"ok": True}
+        raise NotFoundError("No Spotify import found")
+    return SpotifyDeleteResponse(ok=True)
 
 
-@router.post("/rematch")
+@router.post("/rematch", response_model=SpotifyRematchResponse)
 async def rematch_spotify_import(
     profile: RequiredProfile,
-):
+) -> SpotifyRematchResponse:
     """Re-run matching against current library without re-uploading (runs in background)."""
     from app.services.background import get_background_manager
     bg = get_background_manager()
@@ -133,4 +175,4 @@ async def rematch_spotify_import(
     task_id = str(uuid4())
     asyncio.create_task(bg.run_spotify_rematch(task_id, profile.id))
 
-    return {"task_id": task_id, "status": "processing"}
+    return SpotifyRematchResponse(task_id=task_id, status="processing")

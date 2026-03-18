@@ -105,6 +105,14 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
+            # Periodic metrics summary every 5 minutes
+            self._scheduler.add_job(
+                self._log_metrics_summary,
+                IntervalTrigger(minutes=5),
+                id="metrics_summary",
+                replace_existing=True,
+            )
+
             # Register S3 backup schedule if enabled
             self._register_s3_backup_schedule()
 
@@ -121,6 +129,36 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
             logger.warning("APScheduler not installed - periodic tasks disabled")
         except Exception as e:
             logger.error(f"Failed to start scheduler: {e}")
+
+    async def _log_metrics_summary(self) -> None:
+        """Log a one-line metrics summary for operational visibility."""
+        try:
+            from app.services.metrics import (
+                check_pressure_alarms,
+                get_metrics_collector,
+                update_background_gauges,
+            )
+            collector = get_metrics_collector()
+            update_background_gauges(collector)
+            snapshot = collector.get_snapshot(window_seconds=300)
+            req = snapshot["request_metrics"]
+            bg = snapshot["background_gauges"]
+            logger.info(
+                "metrics_summary",
+                extra={
+                    "requests_5m": req["total_requests"],
+                    "error_rate": req["error_rate"],
+                    "p50_ms": req["duration_p50_ms"],
+                    "p95_ms": req["duration_p95_ms"],
+                    "analysis_queue": bg.get("analysis_queue_depth", 0),
+                    "sync_running": bg.get("sync_running", False),
+                    "current_phase": bg.get("current_phase"),
+                    "phase_pending": bg.get("phase_pending", 0),
+                },
+            )
+            check_pressure_alarms(snapshot, logger)
+        except Exception as e:
+            logger.warning(f"Failed to log metrics summary: {e}")
 
     async def shutdown(self) -> None:
         """Cleanup on app shutdown."""

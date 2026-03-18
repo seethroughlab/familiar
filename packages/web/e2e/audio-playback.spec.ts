@@ -49,13 +49,11 @@ test.describe('Audio Playback', () => {
 
     // Click to pause
     await playPauseBtn.click();
-    await page.waitForTimeout(300);
-    expect(await isAudioPlaying(page)).toBe(false);
+    await expect.poll(() => isAudioPlaying(page), { timeout: 3000 }).toBe(false);
 
     // Click to play again
     await playPauseBtn.click();
-    await page.waitForTimeout(300);
-    expect(await isAudioPlaying(page)).toBe(true);
+    await expect.poll(() => isAudioPlaying(page), { timeout: 3000 }).toBe(true);
   });
 
   test('progress bar shows current position', async ({ page }) => {
@@ -69,11 +67,7 @@ test.describe('Audio Playback', () => {
     await waitForAudioReady(page);
 
     // Wait for playback to progress
-    await page.waitForTimeout(2000);
-
-    // Check current time has advanced
-    const currentTime = await getAudioCurrentTime(page);
-    expect(currentTime).toBeGreaterThan(0);
+    await expect.poll(() => getAudioCurrentTime(page), { timeout: 5000 }).toBeGreaterThan(0);
 
     // Check progress bar element exists and has some width/value
     const progressBar = page.locator('[data-testid="progress-bar"], .progress-bar, input[type="range"]').first();
@@ -100,11 +94,9 @@ test.describe('Audio Playback', () => {
     const box = await progressBar.boundingBox();
     if (box) {
       await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
-      await page.waitForTimeout(500);
 
       // Time should have changed
-      const newTime = await getAudioCurrentTime(page);
-      expect(Math.abs(newTime - initialTime)).toBeGreaterThan(1);
+      await expect.poll(() => getAudioCurrentTime(page), { timeout: 3000 }).not.toBeCloseTo(initialTime, 0);
     }
   });
 
@@ -125,7 +117,6 @@ test.describe('Audio Playback', () => {
       const volumeBtn = page.locator('[data-testid="volume-button"], button[aria-label*="volume" i]').first();
       if (await volumeBtn.isVisible()) {
         await volumeBtn.click();
-        await page.waitForTimeout(300);
       }
     }
 
@@ -136,7 +127,6 @@ test.describe('Audio Playback', () => {
     const slider = page.locator('input[type="range"]').filter({ hasText: '' }).first();
     if (await slider.isVisible()) {
       await slider.fill('0.3');
-      await page.waitForTimeout(300);
 
       const newVolume = await getAudioVolume(page);
       // Volume should have changed (or be clamped)
@@ -169,7 +159,6 @@ test.describe('Audio Playback', () => {
     const nextBtn = page.locator('[data-testid="next-track"], button[aria-label*="next" i]').first();
     if (await nextBtn.isVisible()) {
       await nextBtn.click();
-      await page.waitForTimeout(1000);
       await waitForAudioReady(page);
 
       const secondTrack = await getCurrentTrack();
@@ -179,7 +168,6 @@ test.describe('Audio Playback', () => {
       const prevBtn = page.locator('[data-testid="prev-track"], button[aria-label*="previous" i]').first();
       if (await prevBtn.isVisible()) {
         await prevBtn.click();
-        await page.waitForTimeout(1000);
         await waitForAudioReady(page);
 
         const backToFirst = await getCurrentTrack();
@@ -209,7 +197,6 @@ test.describe('Audio Playback', () => {
     }
 
     await shuffleBtn.click();
-    await page.waitForTimeout(300);
 
     // Verify shuffle is active (button state changed)
     const _isActive = await shuffleBtn.evaluate(el =>
@@ -241,17 +228,14 @@ test.describe('Audio Playback', () => {
 
     // Click to cycle through repeat modes (off -> all -> one -> off)
     await repeatBtn.click();
-    await page.waitForTimeout(200);
 
     // Should be in some repeat state now
     expect(repeatBtn).toBeVisible();
 
     // Click again
     await repeatBtn.click();
-    await page.waitForTimeout(200);
 
     // Click once more to cycle back
     await repeatBtn.click();
-    await page.waitForTimeout(200);
   });
 });

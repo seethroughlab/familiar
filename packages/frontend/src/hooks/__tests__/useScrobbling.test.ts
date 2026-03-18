@@ -13,6 +13,15 @@ import { act } from 'react';
 import { useScrobbling } from '../useScrobbling';
 import { usePlayerStore } from '../../stores/playerStore';
 
+// Track renderHook results for cleanup (prevents hook leaks between tests —
+// unmounted hooks still react to zustand store changes, causing extra API calls).
+let _unmount: (() => void) | undefined;
+function renderScrobbling() {
+  const result = renderHook(() => useScrobbling());
+  _unmount = result.unmount;
+  return result;
+}
+
 // Mock the API client
 vi.mock('../../api', () => ({
   lastfmApi: {
@@ -79,6 +88,8 @@ describe('useScrobbling', () => {
   });
 
   afterEach(() => {
+    _unmount?.();
+    _unmount = undefined;
     vi.clearAllMocks();
   });
 
@@ -86,7 +97,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-1');
 
-    renderHook(() => useScrobbling());
+    renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -106,7 +117,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-1');
 
-    renderHook(() => useScrobbling());
+    renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -126,7 +137,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-1');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -155,7 +166,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-2');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     // Start playing a 120-second track
     act(() => {
@@ -186,7 +197,7 @@ describe('useScrobbling', () => {
     // 10-minute track: 50% = 300s, 4min = 240s, so scrobble at 240s
     const track = createMockTrack('track-long');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -215,7 +226,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-3');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -256,7 +267,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-4');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -290,7 +301,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-5');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -312,7 +323,7 @@ describe('useScrobbling', () => {
     const { lastfmApi } = await import('../../api');
     const track = createMockTrack('track-6');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({
@@ -349,7 +360,7 @@ describe('useScrobbling', () => {
 
     const track = createMockTrack('track-7');
 
-    const { rerender } = renderHook(() => useScrobbling());
+    const { rerender } = renderScrobbling();
 
     act(() => {
       usePlayerStore.setState({

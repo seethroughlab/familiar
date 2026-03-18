@@ -24,7 +24,6 @@ test.describe('Profiles', () => {
 
     // Click Add Profile
     await page.getByRole('button', { name: /Add Profile/ }).click();
-    await page.waitForTimeout(300);
 
     // Fill in profile name
     const uniqueName = `Profile ${Date.now()}`;
@@ -33,7 +32,6 @@ test.describe('Profiles', () => {
 
     // Click Create
     await page.getByRole('button', { name: 'Create' }).click();
-    await page.waitForTimeout(500);
 
     // Should transition to main app
     await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 5000 });

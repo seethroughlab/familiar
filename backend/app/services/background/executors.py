@@ -68,13 +68,14 @@ class ExecutorMixin:
 
     def _create_executor(self) -> None:
         """Create a new ProcessPoolExecutor with spawn context."""
+        workers = app_settings.max_analysis_workers
         self._executor = ProcessPoolExecutor(
-            max_workers=1,
+            max_workers=workers,
             mp_context=mp_context,
             initializer=_analysis_worker_init,
             max_tasks_per_child=1,  # Fresh process per task to prevent memory accumulation
         )
-        logger.info("ProcessPoolExecutor initialized with spawn context (1 worker, nice=10, max_tasks_per_child=1)")
+        logger.info(f"ProcessPoolExecutor initialized with spawn context ({workers} worker(s), nice=10, max_tasks_per_child=1)")
 
         if not self._atexit_registered:
             atexit.register(self._atexit_cleanup)

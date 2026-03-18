@@ -5,19 +5,16 @@
  * PlayerBar (full width, bottom)
  */
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
+import { ScrollContainerContext } from '../hooks/useScrollContainer';
 import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../api/queryKeys';
 import { Loader2 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
-import { usePlayerStore } from '../stores/playerStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useThemeStore } from '../stores/themeStore';
-import { useAudioEngine } from '../hooks/useAudioEngine';
-import { useScrobbling } from '../hooks/useScrobbling';
-import { usePlayTracking } from '../hooks/usePlayTracking';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { initSyncListeners } from '../services/syncService';
-import { initRemoteLogging } from '../services/remoteLogService';
+import { useAppBootstrap } from '../hooks/useAppBootstrap';
 import { PlayerBar } from './Player/PlayerBar';
 import { Sidebar } from './Sidebar/Sidebar';
 import { ContentToolbar } from './ContentToolbar';
@@ -29,9 +26,6 @@ import { ShortcutsHelp } from './KeyboardShortcuts';
 import { TrackEditModal } from './TrackEdit';
 import { MobileBottomNav } from './MobileNav';
 import { PlaylistPickerModal } from './Playlists/PlaylistPickerModal';
-import { createLogger } from '../utils/logger';
-
-const log = createLogger('AppShell');
 
 // Lazy-loaded components
 const FullPlayer = lazy(() => import('./FullPlayer').then(m => ({ default: m.FullPlayer })));
@@ -50,8 +44,8 @@ function LazyLoadSpinner() {
 
 export function AppShell() {
   const navigate = useNavigate();
-  const location = useLocation();
   const queryClient = useQueryClient();
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [importFiles, setImportFiles] = useState<File[] | null>(null);
   const [spotifyImportFile, setSpotifyImportFile] = useState<File | null>(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -81,10 +75,8 @@ export function AppShell() {
     }
   }, [showFullPlayer, fullPlayerMounted]);
 
-  // Initialize Audio Engine
-  useAudioEngine();
-  useScrobbling();
-  usePlayTracking();
+  // One-time initialization (audio engine, sync, logging, hydration, events, triple-tap)
+  useAppBootstrap({ navigate, setShowSettings, setShowFullPlayer, closeRightPanel });
 
   // Keyboard shortcuts
   useKeyboardShortcuts({
@@ -103,83 +95,8 @@ export function AppShell() {
     },
   });
 
-  // Initialize offline sync listeners
-  useEffect(() => {
-    return initSyncListeners();
-  }, []);
-
-  // Initialize remote logging (captures frontend logs to backend)
-  useEffect(() => {
-    return initRemoteLogging();
-  }, []);
-
-  // Listen for navigate-to-settings event
-  useEffect(() => {
-    const handler = () => setShowSettings(true);
-    window.addEventListener('navigate-to-settings', handler);
-    return () => window.removeEventListener('navigate-to-settings', handler);
-  }, [setShowSettings]);
-
-  // Listen for show-playlist event from ChatPanel
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.playlistId) {
-        navigate(`/playlists/${detail.playlistId}`);
-      }
-    };
-    window.addEventListener('show-playlist', handler);
-    return () => window.removeEventListener('show-playlist', handler);
-  }, [navigate]);
-
-  // Listen for show-ephemeral-playlist event
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.ephemeralId) {
-        navigate(`/ephemeral/${detail.ephemeralId}`);
-      }
-    };
-    window.addEventListener('show-ephemeral-playlist', handler);
-    return () => window.removeEventListener('show-ephemeral-playlist', handler);
-  }, [navigate]);
-
   const pendingChatMessage = useUIStore((s) => s.pendingChatMessage);
   const playlistPickerTrackIds = useUIStore((s) => s.playlistPickerTrackIds);
-
-  // Hydrate player state from IndexedDB
-  const hydrate = usePlayerStore((state) => state.hydrate);
-  useEffect(() => {
-    hydrate();
-  }, [hydrate]);
-
-  // Triple-tap recovery for mobile
-  const tapCountRef = useRef(0);
-  const lastTapTimeRef = useRef(0);
-  useEffect(() => {
-    const handleTripleTap = () => {
-      const now = Date.now();
-      if (now - lastTapTimeRef.current < 500) {
-        tapCountRef.current++;
-        if (tapCountRef.current >= 3) {
-          log.info('[AppShell] Triple-tap recovery triggered');
-          setShowFullPlayer(false);
-          closeRightPanel();
-          setShowSettings(false);
-          setShowShortcutsHelp(false);
-          tapCountRef.current = 0;
-        }
-      } else {
-        tapCountRef.current = 1;
-      }
-      lastTapTimeRef.current = now;
-    };
-
-    if ('ontouchstart' in window) {
-      document.addEventListener('touchstart', handleTripleTap);
-      return () => document.removeEventListener('touchstart', handleTripleTap);
-    }
-  }, [setShowFullPlayer, closeRightPanel, setShowSettings]);
 
   return (
     <GlobalDropZone onFilesDropped={async (files) => {
@@ -205,9 +122,11 @@ export function AppShell() {
           {/* Content area with Outlet */}
           <main className={`flex-1 flex flex-col overflow-hidden min-h-0 ${resolvedTheme === 'light' ? 'bg-gradient-to-b from-zinc-50 to-white' : 'bg-gradient-to-b from-zinc-900 to-black'}`}>
             <ContentToolbar />
-            <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-              <Outlet key={location.pathname} />
-            </div>
+            <ScrollContainerContext.Provider value={scrollContainerRef}>
+              <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+                <Outlet />
+              </div>
+            </ScrollContainerContext.Provider>
           </main>
 
           {/* Right panel - Queue or Chat (desktop only) */}
@@ -359,7 +278,7 @@ export function AppShell() {
             files={importFiles}
             onClose={() => {
               setImportFiles(null);
-              queryClient.refetchQueries({ queryKey: ['tracks'] });
+              queryClient.refetchQueries({ queryKey: queryKeys.tracks.all });
             }}
           />
         )}

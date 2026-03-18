@@ -29,4 +29,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # One-way: data backfill
     pass

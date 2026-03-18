@@ -651,6 +651,7 @@ class LibraryScanner:
             "bitrate": metadata.get("bitrate"),
             "bitrate_mode": metadata.get("bitrate_mode"),
             "format": metadata.get("format"),
+            "lyrics_language": metadata.get("lyrics_language"),
         }
 
         # Use upsert to handle race conditions (another process may have inserted this track)
@@ -675,6 +676,7 @@ class LibraryScanner:
                 "bitrate": insert_stmt.excluded.bitrate,
                 "bitrate_mode": insert_stmt.excluded.bitrate_mode,
                 "format": insert_stmt.excluded.format,
+                "lyrics_language": insert_stmt.excluded.lyrics_language,
             },
         ).returning(Track)
 
@@ -794,6 +796,7 @@ class LibraryScanner:
         track.bitrate = metadata.get("bitrate")
         track.bitrate_mode = metadata.get("bitrate_mode")
         track.format = metadata.get("format")
+        track.lyrics_language = metadata.get("lyrics_language")
 
         # Only reset analysis status if requested (when file content changed)
         if reset_analysis:

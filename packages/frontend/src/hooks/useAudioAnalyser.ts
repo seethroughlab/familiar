@@ -32,20 +32,16 @@ let lastBinCount = 0;
 
 // ---------------------------------------------------------------------------
 // Native analysis data (set from CapacitorEngine via bridge events)
+// Re-exported from the shared module for backwards compatibility.
 // ---------------------------------------------------------------------------
 
-let nativeFrequencyData: Uint8Array | null = null;
-let nativeTimeDomainData: Uint8Array | null = null;
+import {
+  setNativeAnalysisBuffers,
+  clearNativeAnalysisBuffers,
+  getNativeAnalysisBuffers,
+} from '../player/audio/nativeAnalysisBuffers';
 
-export function setNativeAnalysisBuffers(freq: Uint8Array, time: Uint8Array): void {
-  nativeFrequencyData = freq;
-  nativeTimeDomainData = time;
-}
-
-export function clearNativeAnalysisBuffers(): void {
-  nativeFrequencyData = null;
-  nativeTimeDomainData = null;
-}
+export { setNativeAnalysisBuffers, clearNativeAnalysisBuffers };
 
 // ---------------------------------------------------------------------------
 
@@ -91,8 +87,9 @@ function analyseLoop() {
   }
 
   // --- Native analysis path (iOS Capacitor) ---
-  if (nativeFrequencyData && nativeTimeDomainData) {
-    const binCount = nativeFrequencyData.length;
+  const nativeBuffers = getNativeAnalysisBuffers();
+  if (nativeBuffers.frequency && nativeBuffers.timeDomain) {
+    const binCount = nativeBuffers.frequency.length;
     if (!sharedData || lastBinCount !== binCount) {
       lastBinCount = binCount;
       sharedData = {
@@ -105,8 +102,8 @@ function analyseLoop() {
       };
     }
 
-    sharedData.frequencyData.set(nativeFrequencyData);
-    sharedData.timeDomainData.set(nativeTimeDomainData);
+    sharedData.frequencyData.set(nativeBuffers.frequency);
+    sharedData.timeDomainData.set(nativeBuffers.timeDomain);
     computeBands(sharedData.frequencyData, binCount);
     sharedAudioDataRef.current = sharedData;
     return;

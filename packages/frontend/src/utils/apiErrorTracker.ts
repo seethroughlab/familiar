@@ -149,51 +149,77 @@ class ApiErrorTracker {
   }
 
   private categorizeError(statusCode: number | null, message: string): ErrorCategory {
-    if (statusCode === null) {
-      // Network-level error (no response)
-      if (message.toLowerCase().includes('network') || message.toLowerCase().includes('timeout')) {
-        return 'network';
-      }
-      return 'unknown';
-    }
-
-    if (statusCode === 401 || statusCode === 403) {
-      return 'auth';
-    }
-
-    if (statusCode === 400 || statusCode === 422) {
-      return 'validation';
-    }
-
-    if (statusCode === 503) {
-      return 'external';
-    }
-
-    if (statusCode >= 500) {
-      return 'server';
-    }
-
-    return 'unknown';
+    return categorizeError(statusCode, message);
   }
 
   private determineSeverity(category: ErrorCategory): ErrorSeverity {
-    switch (category) {
-      case 'auth':
-      case 'server':
-        return 'error';
-      case 'network':
-      case 'external':
-        return 'warning';
-      case 'validation':
-      case 'unknown':
-      default:
-        return 'info';
+    return determineSeverity(category);
+  }
+}
+
+/** Categorize an error by status code and message. */
+export function categorizeError(statusCode: number | null, message: string): ErrorCategory {
+  if (statusCode === null) {
+    // Network-level error (no response)
+    if (message.toLowerCase().includes('network') || message.toLowerCase().includes('timeout')) {
+      return 'network';
     }
+    return 'unknown';
+  }
+
+  if (statusCode === 401 || statusCode === 403) {
+    return 'auth';
+  }
+
+  if (statusCode === 400 || statusCode === 422) {
+    return 'validation';
+  }
+
+  if (statusCode === 503) {
+    return 'external';
+  }
+
+  if (statusCode >= 500) {
+    return 'server';
+  }
+
+  return 'unknown';
+}
+
+/** Determine severity from error category. */
+export function determineSeverity(category: ErrorCategory): ErrorSeverity {
+  switch (category) {
+    case 'auth':
+    case 'server':
+      return 'error';
+    case 'network':
+    case 'external':
+      return 'warning';
+    case 'validation':
+    case 'unknown':
+    default:
+      return 'info';
   }
 }
 
 // Global singleton instance
 export const apiErrorTracker = new ApiErrorTracker();
+
+/** Track a fetch() error. Call when response.ok is false or in catch blocks. */
+export function trackFetchError(
+  url: string,
+  method: string,
+  status: number | null,
+  context?: string
+): void {
+  apiErrorTracker.track({
+    message: status ? `HTTP ${status}` : 'Network error',
+    endpoint: url,
+    method: method.toUpperCase(),
+    statusCode: status,
+    context,
+  });
+}
 
 /**
  * Helper to extract error info from Axios errors.

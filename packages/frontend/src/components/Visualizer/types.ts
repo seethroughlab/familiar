@@ -131,7 +131,5 @@ export function getVisualizer(id: string): RegisteredVisualizer | undefined {
   return visualizerRegistry.get(id);
 }
 
-/**
- * Default visualizer ID.
- */
-export const DEFAULT_VISUALIZER_ID = 'cosmic-orb';
+// Re-export constants for backward compatibility
+export { DEFAULT_VISUALIZER_ID } from './constants';

@@ -14,12 +14,14 @@ export default defineConfig({
     manifest: true,
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks(id) {
           // Vendor chunks - split large dependencies
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-query': ['@tanstack/react-query'],
-          'vendor-audio': ['dexie'],  // IndexedDB for offline audio
-          'vendor-icons': ['lucide-react'],
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom)\//.test(id)) return 'vendor-react';
+          if (id.includes('node_modules/@tanstack/react-query')) return 'vendor-query';
+          if (id.includes('node_modules/dexie')) return 'vendor-audio';
+          if (id.includes('node_modules/lucide-react')) return 'vendor-icons';
+          // Isolate three.js ecosystem into its own cacheable chunk (loaded lazily via UMAPExplorer)
+          if (/node_modules\/(three|@react-three)\//.test(id)) return 'vendor-three';
         },
       },
     },

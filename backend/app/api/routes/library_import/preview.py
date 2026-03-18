@@ -1,4 +1,4 @@
-"""Music import endpoints."""
+"""Enhanced import with preview and execution endpoints."""
 
 import logging
 from pathlib import Path
@@ -7,212 +7,27 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 
 from app.api.deps import DbSession
-from app.api.exceptions import sanitize_error_for_client
+from app.api.exceptions import (
+    FileOperationError,
+    LibraryImportError,
+    ValidationError,
+    sanitize_error_for_client,
+)
 from app.config import settings
 from app.db.models import Track, TrackAnalysis
-from app.services.import_service import ImportService, MusicImportError, save_upload_to_temp
-from app.services.scanner import LibraryScanner
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["library"])
-
-
-class ImportResult(BaseModel):
-    """Import operation result."""
-    status: str
-    message: str
-    import_path: str | None = None
-    files_found: int = 0
-    files: list[str] = []
-
-
-class RecentImport(BaseModel):
-    """Recent import directory info."""
-    name: str
-    path: str
-    file_count: int
-    created_at: str | None
-
-
-@router.post("/import", response_model=ImportResult)
-async def import_music(
-    db: DbSession,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-) -> ImportResult:
-    """Import music from a zip file or audio file.
-
-    Accepts:
-    - Zip files containing audio (extracts and imports)
-    - Individual audio files (mp3, flac, m4a, etc.)
-
-    Files are saved to {MUSIC_LIBRARY_PATH}/_imports/{timestamp}/
-    and automatically scanned for metadata.
-    """
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
-
-    # Read uploaded file
-    content = await file.read()
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="Empty file")
-
-    # Save to temp file
-    try:
-        temp_path = save_upload_to_temp(content, file.filename)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
-
-    # Process the import
-    try:
-        import_service = ImportService()
-        result = import_service.process_upload(temp_path, file.filename)
-
-        # Schedule scan of the import directory
-        import_dir = Path(result["import_path"])
-
-        async def scan_import():
-            # Create new db session for background task (request session is closed)
-            from app.db.session import async_session_maker
-            async with async_session_maker() as bg_db:
-                try:
-                    scanner = LibraryScanner(bg_db)
-                    await scanner.scan(import_dir, full_scan=True)
-                    await bg_db.commit()
-                except Exception as e:
-                    await bg_db.rollback()
-                    import logging
-                    logging.getLogger(__name__).error(f"Background scan failed: {e}")
-
-        background_tasks.add_task(scan_import)
-
-        return ImportResult(
-            status="processing",
-            message=f"Imported {result['files_found']} files, scanning for metadata...",
-            import_path=result["import_path"],
-            files_found=result["files_found"],
-            files=result.get("files", []),
-        )
-
-    except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Import failed"))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Import failed")
-    finally:
-        # Clean up temp file
-        temp_path.unlink(missing_ok=True)
-
-
-class ScanPathEntry(BaseModel):
-    """A directory entry from scan-path."""
-    name: str
-    file_count: int
-    total_size_bytes: int
-
-
-class ImportFromPathRequest(BaseModel):
-    """Request body for importing from a local path."""
-    source_path: str
-
-
-@router.get("/import/scan-path", response_model=list[ScanPathEntry])
-async def scan_path(path: str) -> list[ScanPathEntry]:
-    """List subdirectories at a local path with audio file counts.
-
-    Useful for discovering what's available for import at a given path
-    (e.g. a mounted volume of downloaded music).
-
-    Args:
-        path: Absolute path inside the container to scan.
-    """
-    from app.config import AUDIO_EXTENSIONS
-
-    scan_dir = Path(path)
-    if not scan_dir.exists():
-        raise HTTPException(status_code=404, detail=f"Path does not exist: {path}")
-    if not scan_dir.is_dir():
-        raise HTTPException(status_code=400, detail=f"Path is not a directory: {path}")
-
-    entries = []
-    for child in sorted(scan_dir.iterdir()):
-        if not child.is_dir():
-            continue
-        audio_files = [
-            f for f in child.rglob("*")
-            if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
-        ]
-        if audio_files:
-            entries.append(ScanPathEntry(
-                name=child.name,
-                file_count=len(audio_files),
-                total_size_bytes=sum(f.stat().st_size for f in audio_files),
-            ))
-
-    return entries
-
-
-@router.post("/import/from-path", response_model=ImportResult)
-async def import_from_path(
-    request: ImportFromPathRequest,
-    background_tasks: BackgroundTasks,
-) -> ImportResult:
-    """Import audio files from a local filesystem path.
-
-    Copies audio files from the given directory into the library's _imports/
-    folder and triggers a background metadata scan.
-    """
-    source = Path(request.source_path)
-
-    try:
-        import_service = ImportService()
-        result = import_service.process_local_directory(source)
-
-        # Schedule scan of the import directory (same pattern as POST /import)
-        import_dir = Path(result["import_path"])
-
-        async def scan_import():
-            from app.db.session import async_session_maker
-            async with async_session_maker() as bg_db:
-                try:
-                    scanner = LibraryScanner(bg_db)
-                    await scanner.scan(import_dir, full_scan=True)
-                    await bg_db.commit()
-                except Exception as e:
-                    await bg_db.rollback()
-                    logger.error(f"Background scan failed: {e}")
-
-        background_tasks.add_task(scan_import)
-
-        return ImportResult(
-            status="processing",
-            message=f"Imported {result['files_found']} files from {source.name}, scanning for metadata...",
-            import_path=result["import_path"],
-            files_found=result["files_found"],
-            files=result.get("files", []),
-        )
-
-    except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Import failed"))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Import failed")
-
-
-@router.get("/imports/recent", response_model=list[RecentImport])
-async def get_recent_imports(limit: int = 10) -> list[RecentImport]:
-    """Get list of recent import directories."""
-    import_service = ImportService()
-    imports = import_service.get_recent_imports(limit)
-    return [RecentImport(**i) for i in imports]
+router = APIRouter()
 
 
 # ============================================================================
-# Enhanced Import with Preview
+# Request/Response Models
 # ============================================================================
 
 
@@ -297,6 +112,16 @@ class ImportExecuteResponse(BaseModel):
     errors: list[str]
     base_path: str
     queue_analysis: bool
+
+
+class ImportFromPathRequest(BaseModel):
+    """Request body for importing from a local path."""
+    source_path: str
+
+
+# ============================================================================
+# Duplicate detection helpers
+# ============================================================================
 
 
 async def _find_import_duplicate(
@@ -429,6 +254,11 @@ async def _enrich_tracks_with_duplicates(
         track["existing_quality"] = existing_score.to_dict()
 
 
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+
 @router.post("/import/preview", response_model=ImportPreviewResponse)
 async def import_preview(
     db: DbSession,
@@ -448,18 +278,18 @@ async def import_preview(
     )
 
     if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
+        raise ValidationError("No filename provided")
 
     # Read uploaded file
     content = await file.read()
     if len(content) == 0:
-        raise HTTPException(status_code=400, detail="Empty file")
+        raise ValidationError("Empty file")
 
     # Save to temp file
     try:
         temp_path = save_upload_to_temp(content, file.filename)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
+        raise FileOperationError("Failed to save upload", detail=str(e))
 
     try:
         preview_service = ImportPreviewService()
@@ -477,9 +307,9 @@ async def import_preview(
         )
 
     except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Preview failed"))
+        raise ValidationError(sanitize_error_for_client(e, "Preview failed"))
     except Exception:
-        raise HTTPException(status_code=500, detail="Preview failed")
+        raise LibraryImportError("Preview failed")
     finally:
         # Clean up temp file (session has its own copy)
         temp_path.unlink(missing_ok=True)
@@ -514,9 +344,9 @@ async def import_preview_from_path(
         )
 
     except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Preview failed"))
+        raise ValidationError(sanitize_error_for_client(e, "Preview failed"))
     except Exception:
-        raise HTTPException(status_code=500, detail="Preview failed")
+        raise LibraryImportError("Preview failed")
 
 
 @router.post("/import/execute", response_model=ImportExecuteResponse)
@@ -627,6 +457,6 @@ async def import_execute(
         return ImportExecuteResponse(**result)
 
     except MusicImportError as e:
-        raise HTTPException(status_code=400, detail=sanitize_error_for_client(e, "Import failed"))
+        raise ValidationError(sanitize_error_for_client(e, "Import failed"))
     except Exception:
-        raise HTTPException(status_code=500, detail="Import failed")
+        raise LibraryImportError()

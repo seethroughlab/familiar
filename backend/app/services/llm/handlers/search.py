@@ -198,6 +198,8 @@ class SearchHandlersMixin:
         pitch_range_min: int | None = None,
         pitch_range_max: int | None = None,
         mood_tag: str | None = None,
+        tempo_cv_max: float | None = None,
+        lyrics_language: str | None = None,
         limit: int = 20,
     ) -> dict[str, Any]:
         """Filter tracks by library criteria and/or audio features."""
@@ -263,7 +265,7 @@ class SearchHandlersMixin:
             harmonic_complexity_min, harmonic_complexity_max,
             speechiness_min, speechiness_max,
             tempo_character, pitch_range_min, pitch_range_max,
-            mood_tag,
+            mood_tag, tempo_cv_max,
         ])
         needs_play_history = any(v is not None for v in [
             min_play_count, max_play_count, played_in_last_days, not_played_in_days,
@@ -469,6 +471,13 @@ class SearchHandlersMixin:
                     json.dumps([{"tag": mood_tag.lower().strip()}])
                 )
             )
+
+        tempo_cv_max = to_float(tempo_cv_max)
+        if tempo_cv_max is not None:
+            conditions.append(TrackAnalysis.tempo_cv <= tempo_cv_max)
+
+        if lyrics_language is not None:
+            conditions.append(Track.lyrics_language == lyrics_language.strip().lower())
 
         for condition in conditions:
             stmt = stmt.where(condition)

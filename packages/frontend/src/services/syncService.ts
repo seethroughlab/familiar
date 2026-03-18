@@ -3,11 +3,11 @@
  * All IndexedDB operations silently fail if IndexedDB isn't available (iOS private browsing).
  */
 import { db, isIndexedDBAvailable, type PendingAction } from '../db';
-import { getApiUrl } from '../api/base';
+import { lastfmApi } from '../api/integrations';
+import { favoritesApi } from '../api/profiles';
+import { useConnectivityStore } from '../stores/connectivityStore';
 import { getSelectedProfileId } from './profileService';
 import { createLogger } from '../utils/logger';
-import { showSuccess, showWarning } from '../stores/toastStore';
-
 const log = createLogger('SyncService');
 
 type ActionType = 'scrobble' | 'now_playing' | 'favorite_toggle';
@@ -156,50 +156,16 @@ interface FavoriteTogglePayload {
   trackId: string;
 }
 
-async function executeScrobble(profileId: string, payload: ScrobblePayload): Promise<void> {
-  const response = await fetch(getApiUrl('/lastfm/scrobble'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Profile-ID': profileId,
-    },
-    body: JSON.stringify({
-      track_id: payload.trackId,
-      timestamp: payload.timestamp,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Scrobble failed: ${response.statusText}`);
-  }
+async function executeScrobble(_profileId: string, payload: ScrobblePayload): Promise<void> {
+  await lastfmApi.scrobble(payload.trackId, parseInt(payload.timestamp));
 }
 
-async function executeNowPlaying(profileId: string, payload: NowPlayingPayload): Promise<void> {
-  const response = await fetch(getApiUrl('/lastfm/now-playing'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Profile-ID': profileId,
-    },
-    body: JSON.stringify({ track_id: payload.trackId }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Now playing failed: ${response.statusText}`);
-  }
+async function executeNowPlaying(_profileId: string, payload: NowPlayingPayload): Promise<void> {
+  await lastfmApi.updateNowPlaying(payload.trackId);
 }
 
-async function executeFavoriteToggle(profileId: string, payload: FavoriteTogglePayload): Promise<void> {
-  const response = await fetch(getApiUrl(`/favorites/${payload.trackId}/toggle`), {
-    method: 'POST',
-    headers: {
-      'X-Profile-ID': profileId,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Favorite toggle failed: ${response.statusText}`);
-  }
+async function executeFavoriteToggle(_profileId: string, payload: FavoriteTogglePayload): Promise<void> {
+  await favoritesApi.toggle(payload.trackId);
 }
 
 /**
@@ -220,7 +186,12 @@ export async function clearPendingActions(): Promise<void> {
  * Initialize online/offline listeners.
  * Call this once when the app starts.
  */
-export function initSyncListeners(): () => void {
+export interface SyncNotifications {
+  onSuccess: (msg: string) => void;
+  onWarning: (msg: string) => void;
+}
+
+export function initSyncListeners(notify?: SyncNotifications): () => void {
   const handleOnline = async () => {
     log.info('Back online, processing pending actions...');
     const result = await processPendingActions();
@@ -229,9 +200,9 @@ export function initSyncListeners(): () => void {
     // Show toast for sync results if there were pending actions
     if (result.processed > 0 || result.failed > 0) {
       if (result.failed > 0) {
-        showWarning(`Synced ${result.processed} actions, ${result.failed} failed`);
+        notify?.onWarning(`Synced ${result.processed} actions, ${result.failed} failed`);
       } else {
-        showSuccess(`Synced ${result.processed} pending actions`);
+        notify?.onSuccess(`Synced ${result.processed} pending actions`);
       }
     }
   };
@@ -239,7 +210,7 @@ export function initSyncListeners(): () => void {
   window.addEventListener('online', handleOnline);
 
   // Process any pending actions on startup if online
-  if (navigator.onLine) {
+  if (useConnectivityStore.getState().browserOnline) {
     processPendingActions().catch(log.error);
   }
 

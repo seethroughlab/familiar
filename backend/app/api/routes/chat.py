@@ -6,13 +6,13 @@ from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import CurrentProfile, DbSession
-from app.api.exceptions import sanitize_error_for_client
+from app.api.exceptions import LLMNotConfiguredError, sanitize_error_for_client
 from app.api.ratelimit import CHAT_RATE_LIMIT, limiter
 from app.services.app_settings import get_app_settings_service
 from app.services.llm import LLMService
@@ -22,8 +22,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-@router.get("/status")
-async def get_chat_status() -> dict[str, Any]:
+class ChatStatusResponse(BaseModel):
+    configured: bool
+    provider: str | None = None
+
+
+class ChatResponse(BaseModel):
+    response: str
+    tool_calls: list[dict[str, Any]]
+    queued_tracks: list[dict[str, Any]]
+    playback_action: dict[str, Any] | None = None
+
+
+@router.get("/status", response_model=ChatStatusResponse)
+async def get_chat_status() -> ChatStatusResponse:
     """Check if LLM is configured and available.
 
     Returns configuration status so the frontend can show
@@ -32,10 +44,10 @@ async def get_chat_status() -> dict[str, Any]:
     settings_service = get_app_settings_service()
     configured = bool(settings_service.get_effective("anthropic_api_key"))
 
-    return {
-        "configured": configured,
-        "provider": "claude",
-    }
+    return ChatStatusResponse(
+        configured=configured,
+        provider="claude",
+    )
 
 
 class ChatMessage(BaseModel):
@@ -120,10 +132,7 @@ async def chat_stream(
     has_api_key = bool(settings_service.get_effective("anthropic_api_key"))
 
     if not has_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Anthropic API key not configured. Add it in the Admin panel."
-        )
+        raise LLMNotConfiguredError()
 
     # Convert history to format expected by LLM service
     history = [{"role": msg.role, "content": msg.content} for msg in chat_request.history]
@@ -146,14 +155,14 @@ async def chat_stream(
     )
 
 
-@router.post("")
+@router.post("", response_model=ChatResponse)
 @limiter.limit(CHAT_RATE_LIMIT)
 async def chat(
     request: Request,
     chat_request: ChatRequest,
     db: DbSession,
     profile: CurrentProfile,
-) -> dict[str, Any]:
+) -> ChatResponse:
     """
     Non-streaming chat endpoint.
 
@@ -165,10 +174,7 @@ async def chat(
     has_api_key = bool(settings_service.get_effective("anthropic_api_key"))
 
     if not has_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Anthropic API key not configured. Add it in the Admin panel."
-        )
+        raise LLMNotConfiguredError()
 
     llm_service = LLMService()  # type: ignore[no-untyped-call]
     history = [{"role": msg.role, "content": msg.content} for msg in chat_request.history]
@@ -193,9 +199,9 @@ async def chat(
         elif event["type"] == "playback":
             playback_action = event["action"]
 
-    return {
-        "response": response_text,
-        "tool_calls": tool_calls,
-        "queued_tracks": queued_tracks,
-        "playback_action": playback_action,
-    }
+    return ChatResponse(
+        response=response_text,
+        tool_calls=tool_calls,
+        queued_tracks=queued_tracks,
+        playback_action=playback_action,
+    )

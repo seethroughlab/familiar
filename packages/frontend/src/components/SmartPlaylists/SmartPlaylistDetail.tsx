@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, Search, X, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, RotateCw } from 'lucide-react';
+import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { smartPlaylistsApi, tracksApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
 import type { SmartPlaylist, SmartPlaylistTracksResponse } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore, getSmartPlaylistJobId } from '../../stores/downloadStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAutoDownload } from '../../hooks/useAutoDownload';
-import * as offlineService from '../../services/offlineService';
+import { useOfflineTrackState } from '../../hooks/useOfflineTrackState';
+import { useTrackSearch } from '../../hooks/useTrackSearch';
 import * as playlistCache from '../../services/playlistCache';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
@@ -77,7 +81,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
 
   // Fetch playlist from route param if not provided as prop
   const { data: fetchedPlaylist } = useQuery({
-    queryKey: ['smart-playlist', routeParams.id],
+    queryKey: queryKeys.smartPlaylist.detail(routeParams.id!),
     queryFn: () => smartPlaylistsApi.get(routeParams.id!),
     enabled: !playlistProp && !!routeParams.id,
   });
@@ -91,10 +95,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist } = useAppNavigation();
-  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
   const [usingCachedData, setUsingCachedData] = useState(false);
-  const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
-  const [searchFilter, setSearchFilter] = useState('');
 
   const getTrackFromItem = useCallback(
     (t: SmartPlaylistTracksResponse['tracks'][0]): Track => ({
@@ -129,7 +130,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
 
   // Fetch tracks for this smart playlist with offline fallback
   const { data: tracksResponse, isLoading: tracksLoading, refetch } = useQuery({
-    queryKey: ['smart-playlist-tracks', playlistId],
+    queryKey: queryKeys.smartPlaylistTracks.detail(playlistId),
     queryFn: async () => {
       try {
         const result = await smartPlaylistsApi.getTracks(playlistId, 500);
@@ -182,34 +183,23 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
       }
     },
     enabled: !!playlist,
-    retry: isOffline ? false : 3,
+    retry: offlineAwareRetry(isOffline),
   });
 
   const allTracks = tracksResponse?.tracks || [];
 
+  // Offline track state
+  const { offlineTrackIds } = useOfflineTrackState({ downloadJobStatus: downloadJob?.status });
+
   // Filter by downloaded tracks and search query
-  const filteredTracks = useMemo(() => {
-    let result = allTracks;
-    if (showDownloadedOnly) {
-      result = result.filter(t => offlineTrackIds.has(t.id));
-    }
-    if (searchFilter) {
-      const q = searchFilter.toLowerCase();
-      result = result.filter(t =>
-        (t.title?.toLowerCase().includes(q)) ||
-        (t.artist?.toLowerCase().includes(q)) ||
-        (t.album?.toLowerCase().includes(q))
-      );
-    }
-    return result;
-  }, [allTracks, showDownloadedOnly, offlineTrackIds, searchFilter]);
+  const { searchFilter, setSearchFilter, showDownloadedOnly, setShowDownloadedOnly, filteredTracks } = useTrackSearch(allTracks, offlineTrackIds);
 
   // Fetch discovery data based on the first track in the playlist (not available offline)
   const firstTrackId = filteredTracks[0]?.id;
   const { data: discoverData, isLoading: discoverLoading } = useQuery({
-    queryKey: ['track-discover', firstTrackId],
+    queryKey: queryKeys.trackDiscover.detail(firstTrackId!),
     queryFn: () => tracksApi.getDiscover(firstTrackId!, 6, 8),
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.LONG,
     enabled: !!firstTrackId && !isOffline && !usingCachedData,
   });
 
@@ -220,25 +210,6 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
       similar_artists: discoverData.similar_artists,
     } : undefined,
   });
-
-  // Check which tracks are already offline
-  useEffect(() => {
-    const checkOfflineStatus = async () => {
-      const ids = await offlineService.getOfflineTrackIds();
-      setOfflineTrackIds(new Set(ids));
-    };
-    checkOfflineStatus();
-  }, []);
-
-  // Update offline track IDs when download job completes
-  useEffect(() => {
-    if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
-      // Refresh offline IDs after download completes
-      offlineService.getOfflineTrackIds().then((ids) => {
-        setOfflineTrackIds(new Set(ids));
-      });
-    }
-  }, [downloadJob?.status]);
 
   const allTrackIds = useMemo(() => allTracks.map(t => t.id), [allTracks]);
 
@@ -351,7 +322,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="flex flex-col gap-4 p-4 min-h-full">
       {/* Header */}
       <div className="space-y-4">
         {/* Back button row */}
@@ -459,7 +430,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
             onClick={async () => {
               const newValue = !playlist.auto_download;
               await smartPlaylistsApi.update(playlist.id, { auto_download: newValue });
-              queryClient.setQueryData<SmartPlaylist[]>(['smart-playlists'], (old) =>
+              queryClient.setQueryData<SmartPlaylist[]>(queryKeys.smartPlaylists.all, (old) =>
                 old?.map((p) => (p.id === playlist.id ? { ...p, auto_download: newValue } : p))
               );
             }}
@@ -495,24 +466,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input
-          type="text"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          placeholder="Search tracks..."
-          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-        />
-        {searchFilter && (
-          <button
-            onClick={() => setSearchFilter('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

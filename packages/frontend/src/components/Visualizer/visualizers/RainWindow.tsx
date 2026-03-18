@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { useArtworkPalette } from '../hooks/useArtworkPalette';
 import { isMobile } from '../../../utils/platform';
-import { registerVisualizer, type VisualizerProps } from '../types';
+import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { FrameScheduler } from '../effects/FrameScheduler';
 
@@ -680,13 +680,4 @@ export function RainWindow({ artworkUrl }: VisualizerProps) {
   );
 }
 
-// Register the visualizer
-registerVisualizer(
-  {
-    id: 'rain-window',
-    name: 'Rain Window',
-    description: 'Peaceful rain on glass with soft bokeh lights',
-    usesMetadata: true,
-  },
-  RainWindow
-);
+export default RainWindow;

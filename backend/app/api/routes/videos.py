@@ -2,15 +2,15 @@
 
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
+from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
 from app.db.models import Track
 from app.services.video import get_video_service
 
@@ -65,13 +65,10 @@ async def search_videos(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if not track.title:
-        raise HTTPException(
-            status_code=400,
-            detail="Track must have a title to search for videos"
-        )
+        raise ValidationError("Track must have a title to search for videos")
 
     # Build search query
     search_query = f"{track.artist or ''} {track.title} official music video"
@@ -108,7 +105,7 @@ async def get_video_status(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     video_service = get_video_service()
     track_id_str = str(track_id)
@@ -144,7 +141,7 @@ async def download_video(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     video_service = get_video_service()
     track_id_str = str(track_id)
@@ -197,13 +194,13 @@ async def stream_video(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     video_service = get_video_service()
     video_path = video_service.get_video_path(str(track_id))
 
     if not video_path:
-        raise HTTPException(status_code=404, detail="No video available")
+        raise NotFoundError("No video available")
 
     file_size = video_path.stat().st_size
 
@@ -223,11 +220,17 @@ async def stream_video(
     )
 
 
-@router.delete("/{track_id}")
+class VideoDeleteResponse(BaseModel):
+    """Response from video deletion."""
+    status: str
+    message: str
+
+
+@router.delete("/{track_id}", response_model=VideoDeleteResponse)
 async def delete_video(
     db: DbSession,
     track_id: UUID,
-) -> dict[str, Any]:
+) -> VideoDeleteResponse:
     """Delete a downloaded video for a track."""
     # Verify track exists
     query = select(Track).where(Track.id == track_id)
@@ -235,12 +238,12 @@ async def delete_video(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     video_service = get_video_service()
     deleted = await video_service.delete_video(str(track_id))
 
     if deleted:
-        return {"status": "deleted", "message": "Video deleted successfully"}
+        return VideoDeleteResponse(status="deleted", message="Video deleted successfully")
     else:
-        raise HTTPException(status_code=404, detail="No video to delete")
+        raise NotFoundError("No video to delete")

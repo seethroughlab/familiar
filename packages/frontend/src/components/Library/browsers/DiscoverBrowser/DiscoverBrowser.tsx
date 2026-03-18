@@ -12,52 +12,40 @@ import {
   Music,
   Loader2,
 } from 'lucide-react';
-import { libraryApi } from '../../../api';
-import { registerBrowser, type BrowserProps } from '../types';
-import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
+import { libraryApi } from '../../../../api';
+import { queryKeys } from '../../../../api/queryKeys';
+import { STALE_TIME } from '../../../../api/queryDefaults';
+import type { BrowserProps } from '../../types';
+import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
   DiscoveryEmpty,
   CuratedPrompts,
   type DiscoveryItem,
-} from '../../Discovery';
+} from '../../../Discovery';
 
 
-// Register this browser
-registerBrowser(
-  {
-    id: 'discover',
-    name: 'Discover',
-    description: 'New releases, recommendations, and music to explore',
-    icon: 'Sparkles',
-    category: 'discovery',
-    requiresFeatures: false,
-    requiresEmbeddings: false,
-  },
-  DiscoverBrowser
-);
-
-export function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
+export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
   const discoverNavigate = useNavigate();
   const queryClient = useQueryClient();
   const { isOffline } = useOfflineStatus();
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['library-discover'],
+    queryKey: queryKeys.libraryDiscover.all,
     queryFn: () =>
       libraryApi.getDiscover({
         recommendations_limit: 12,
       }),
     enabled: !isOffline,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: STALE_TIME.LONG,
   });
 
   const promptsQuery = useQuery({
-    queryKey: ['curated-prompts'],
+    queryKey: queryKeys.curatedPrompts.all,
     queryFn: () => libraryApi.getCuratedPrompts(),
     enabled: !isOffline,
-    staleTime: 30 * 60 * 1000, // 30 min client-side; server caches 4h
+    staleTime: STALE_TIME.STATIC, // 30 min client-side; server caches 4h
   });
 
   const { sections, hasDiscovery } = useLibraryDiscovery({ data });
@@ -142,7 +130,7 @@ export function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
         loading={promptsQuery.isLoading || promptsQuery.isFetching}
         onRefresh={() => {
           queryClient.fetchQuery({
-            queryKey: ['curated-prompts'],
+            queryKey: queryKeys.curatedPrompts.all,
             queryFn: () => libraryApi.getCuratedPrompts({ refresh: true }),
             staleTime: 0,
           });

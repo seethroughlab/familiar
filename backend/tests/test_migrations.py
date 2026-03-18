@@ -2,14 +2,17 @@
 Tests for Alembic migrations and deployment readiness.
 
 Verifies that migrations are properly configured and applied,
-and that Docker health checks will work correctly.
+that Docker health checks will work correctly, and that migrations
+survive downgrade/upgrade round-trip cycles.
 """
 
+import ast
 import re
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -175,3 +178,120 @@ def test_uvicorn_has_workers() -> None:
         "uvicorn should be configured with --workers to prevent health check "
         "timeouts under load. Add '--workers', '4' to the CMD in Dockerfile."
     )
+
+
+# ---------------------------------------------------------------------------
+# Migration round-trip (downgrade → upgrade) tests
+# ---------------------------------------------------------------------------
+
+def _alembic_run(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run an alembic command and return the result."""
+    backend_dir = Path(__file__).parent.parent
+    return subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
+        cwd=backend_dir,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_migration_downgrade_upgrade_cycle(client: TestClient) -> None:
+    """Verify the latest migration survives a downgrade → upgrade round-trip.
+
+    This ensures:
+    - The latest migration's downgrade() runs without error (even if it's just pass)
+    - The upgrade() is idempotent thanks to guard helpers
+    - The schema is consistent after the round-trip
+    """
+    # Ensure we're at head first
+    result = _alembic_run("upgrade", "head")
+    assert result.returncode == 0, f"upgrade head failed: {result.stderr}"
+
+    # Downgrade one step
+    result = _alembic_run("downgrade", "-1")
+    assert result.returncode == 0, f"downgrade -1 failed: {result.stderr}"
+
+    # Upgrade back to head
+    result = _alembic_run("upgrade", "head")
+    assert result.returncode == 0, f"upgrade head after downgrade failed: {result.stderr}"
+
+    # Verify we're at head
+    result = _alembic_run("current")
+    assert result.returncode == 0, f"alembic current failed: {result.stderr}"
+    assert "(head)" in result.stdout, f"Not at head after round-trip: {result.stdout}"
+
+
+def _get_reversible_migrations() -> list[str]:
+    """Find all migration revisions whose downgrade() has real logic (not just pass)."""
+    versions_dir = Path(__file__).parent.parent / "migrations" / "versions"
+    reversible = []
+
+    for filepath in sorted(versions_dir.glob("*.py")):
+        source = filepath.read_text()
+        tree = ast.parse(source, filename=str(filepath))
+
+        revision = None
+        downgrade_is_real = False
+
+        for node in ast.iter_child_nodes(tree):
+            # Handle both plain assignment and annotated assignment
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "revision":
+                        if isinstance(node.value, ast.Constant):
+                            revision = node.value.value
+            elif isinstance(node, ast.AnnAssign):
+                if isinstance(node.target, ast.Name) and node.target.id == "revision":
+                    if node.value and isinstance(node.value, ast.Constant):
+                        revision = node.value.value
+
+            if isinstance(node, ast.FunctionDef) and node.name == "downgrade":
+                body = node.body
+                # pass-only or docstring-only → not real
+                is_trivial = (
+                    len(body) == 1
+                    and (
+                        isinstance(body[0], ast.Pass)
+                        or (
+                            isinstance(body[0], ast.Expr)
+                            and isinstance(body[0].value, ast.Constant)
+                        )
+                    )
+                )
+                downgrade_is_real = not is_trivial
+
+        if revision and downgrade_is_real:
+            reversible.append(revision)
+
+    return reversible
+
+
+REVERSIBLE_MIGRATIONS = _get_reversible_migrations()
+
+
+@pytest.mark.parametrize("revision", REVERSIBLE_MIGRATIONS)
+def test_reversible_migration_round_trip(client: TestClient, revision: str) -> None:
+    """Each reversible migration survives a downgrade → upgrade cycle."""
+    # Ensure at head
+    result = _alembic_run("upgrade", "head")
+    assert result.returncode == 0, f"upgrade head failed: {result.stderr}"
+
+    # Upgrade to this specific revision (in case we're testing older ones)
+    result = _alembic_run("upgrade", revision)
+    assert result.returncode == 0, f"upgrade to {revision} failed: {result.stderr}"
+
+    # Downgrade one step from this revision
+    result = _alembic_run("downgrade", f"{revision}-1")
+    assert result.returncode == 0, (
+        f"downgrade from {revision} failed: {result.stderr}"
+    )
+
+    # Upgrade back
+    result = _alembic_run("upgrade", revision)
+    assert result.returncode == 0, (
+        f"upgrade back to {revision} failed: {result.stderr}"
+    )
+
+    # Restore to head for the next test
+    result = _alembic_run("upgrade", "head")
+    assert result.returncode == 0, f"restore to head failed: {result.stderr}"

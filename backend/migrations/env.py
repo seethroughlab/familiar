@@ -30,6 +30,9 @@ _MANUAL_INDEXES = {
     "ix_tracks_artist_lower",
     "ix_tracks_album_lower",
     "ix_tracks_album_artist_lower",
+    "ix_tracks_title_trgm",
+    "ix_tracks_artist_trgm",
+    "ix_tracks_album_trgm",
 }
 
 

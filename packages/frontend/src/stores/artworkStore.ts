@@ -6,25 +6,11 @@
  */
 import { create } from 'zustand';
 import { getApiUrl } from '../api/base';
+import { artworkApi } from '../api/metadata';
 import { computeAlbumHash } from '../utils/albumHash';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Artwork');
-
-// API types
-interface QueueBatchResponse {
-  status: string;
-  queued_count: number;
-  existing_count: number;
-  queued_hashes: string[];
-  existing_hashes: string[];
-  pending_hashes: string[];  // Already in queue/progress from previous request
-}
-
-interface StatusBatchResponse {
-  status: Record<string, boolean>;
-  failed: string[];  // Hashes that failed to fetch (stop polling)
-}
 
 // Artwork status for each album
 type ArtworkStatus = 'unknown' | 'checking' | 'pending' | 'ready' | 'missing';
@@ -114,23 +100,13 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
       set({ hashes: newHashes });
 
       // Queue artwork downloads
-      const response = await fetch(getApiUrl('/artwork/queue/batch'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: newAlbums.map((a) => ({
-            artist: a.artist,
-            album: a.album,
-            track_id: a.trackId,
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to queue artwork: ${response.status}`);
-      }
-
-      const data: QueueBatchResponse = await response.json();
+      const data = await artworkApi.queueBatch(
+        newAlbums.map((a) => ({
+          artist: a.artist,
+          album: a.album,
+          track_id: a.trackId,
+        })),
+      );
 
       // Update status based on response
       const newStatus = new Map(get().status);
@@ -204,17 +180,7 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
       }
 
       try {
-        const response = await fetch(getApiUrl('/artwork/status/batch'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            hashes: Array.from(pendingHashes),
-          }),
-        });
-
-        if (!response.ok) return;
-
-        const data: StatusBatchResponse = await response.json();
+        const data = await artworkApi.statusBatch(Array.from(pendingHashes));
 
         // Update status for each hash
         const newStatus = new Map(status);

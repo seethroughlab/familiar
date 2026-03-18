@@ -103,6 +103,8 @@ def extract_feature_scalars(results: dict[str, Any]) -> dict[str, Any]:
     if syncopation is not None:
         scalars["syncopation"] = syncopation
     scalars["tempo_character"] = rhythmic.get("tempo_stability")
+    if rhythmic.get("tempo_cv") is not None:
+        scalars["tempo_cv"] = rhythmic["tempo_cv"]
 
     # Spectral section
     spectral = results.get("spectral", {})

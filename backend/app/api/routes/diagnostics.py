@@ -62,6 +62,7 @@ class DiagnosticsExport(BaseModel):
     recent_logs: list[dict[str, Any]]
     frontend_logs: list[dict[str, Any]]
     settings_summary: dict[str, Any]
+    metrics_snapshot: dict[str, Any] | None = None
 
 
 # ── Frontend Log Schemas ────────────────────────────────────────────
@@ -180,6 +181,16 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
     except Exception as e:
         frontend_logs_list = [{"error": str(e)}]
 
+    # Get metrics snapshot
+    metrics_snapshot = None
+    try:
+        from app.services.metrics import get_metrics_collector, update_background_gauges
+        collector = get_metrics_collector()
+        update_background_gauges(collector)
+        metrics_snapshot = collector.get_snapshot(window_seconds=300)
+    except Exception as e:
+        metrics_snapshot = {"error": str(e)}
+
     return DiagnosticsExport(
         exported_at=utcnow().isoformat(),
         version=get_app_version(),
@@ -191,7 +202,26 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
         recent_logs=recent_logs,
         frontend_logs=frontend_logs_list,
         settings_summary=settings_summary,
+        metrics_snapshot=metrics_snapshot,
     )
+
+
+class MetricsSnapshotResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    requests: dict[str, Any] | None = None
+    background: dict[str, Any] | None = None
+    window_seconds: int | None = None
+
+
+@router.get("/diagnostics/metrics", response_model=MetricsSnapshotResponse)
+async def get_metrics() -> MetricsSnapshotResponse:
+    """Get application metrics snapshot (request timing + background gauges)."""
+    from app.services.metrics import get_metrics_collector, update_background_gauges
+
+    collector = get_metrics_collector()
+    update_background_gauges(collector)
+    return MetricsSnapshotResponse(**collector.get_snapshot(window_seconds=300))
 
 
 # ── Frontend Log Endpoints ──────────────────────────────────────────
@@ -312,12 +342,16 @@ async def query_frontend_logs(
     return FrontendLogQueryResponse(entries=entries, total=total)
 
 
-@router.delete("/diagnostics/frontend-logs")
-async def clear_frontend_logs(db: DbSession) -> dict[str, str]:
+class ClearLogsResponse(BaseModel):
+    status: str
+
+
+@router.delete("/diagnostics/frontend-logs", response_model=ClearLogsResponse)
+async def clear_frontend_logs(db: DbSession) -> ClearLogsResponse:
     """Delete all frontend log entries."""
     from sqlalchemy import delete
 
     from app.db.models import FrontendLog
 
     await db.execute(delete(FrontendLog))
-    return {"status": "cleared"}
+    return ClearLogsResponse(status="cleared")

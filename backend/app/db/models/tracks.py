@@ -74,6 +74,7 @@ class Track(Base):
 
     # Embedded lyrics
     lyrics: Mapped[str | None] = mapped_column(Text)
+    lyrics_language: Mapped[str | None] = mapped_column(String(10))  # ISO 639-1
 
     # User overrides for auto-detected analysis values
     # Example: {"bpm": 124.0, "key": "Am"} - overrides analysis.features values
@@ -126,7 +127,7 @@ ANALYSIS_FEATURE_COLUMNS = [
     "replaygain_track_gain",
     # From analysis algorithms (Phase 1)
     "harmonic_complexity", "key_stability", "modal_character", "modal_confidence",
-    "swing_ratio", "syncopation", "tempo_character", "brightness",
+    "swing_ratio", "syncopation", "tempo_character", "tempo_cv", "brightness",
     "dynamic_range_db", "energy_shape", "section_count", "form_string",
     "avg_section_length",
     # Melodic (Phase 3)
@@ -151,7 +152,7 @@ class TrackAnalysis(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     track_id: Mapped[UUID] = mapped_column(ForeignKey("tracks.id", ondelete="CASCADE"), index=True)
-    features_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    features_version: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     embedding_version: Mapped[int] = mapped_column(Integer, default=0)
 
     # ── Typed feature columns (promoted from JSONB) ──────────────────────
@@ -176,6 +177,7 @@ class TrackAnalysis(Base):
     swing_ratio: Mapped[float | None] = mapped_column(Float)
     syncopation: Mapped[float | None] = mapped_column(Float)
     tempo_character: Mapped[str | None] = mapped_column(String(20))
+    tempo_cv: Mapped[float | None] = mapped_column(Float)
     brightness: Mapped[float | None] = mapped_column(Float)
     dynamic_range_db: Mapped[float | None] = mapped_column(Float)
     energy_shape: Mapped[str | None] = mapped_column(String(20))

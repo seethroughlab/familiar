@@ -8,8 +8,8 @@ import { renderHook, waitFor } from '@testing-library/react';
 const mockGetOfflineTrackIds = vi.fn();
 const mockRemoveOfflineTrack = vi.fn();
 vi.mock('../../services/offlineService', () => ({
-  getOfflineTrackIds: (...args: unknown[]) => mockGetOfflineTrackIds(...args),
-  removeOfflineTrack: (...args: unknown[]) => mockRemoveOfflineTrack(...args),
+  getOfflineTrackIds: (...args: unknown[]) => mockGetOfflineTrackIds(...args) ?? Promise.resolve([]),
+  removeOfflineTrack: (...args: unknown[]) => mockRemoveOfflineTrack(...args) ?? Promise.resolve(),
 }));
 
 // Mock download store

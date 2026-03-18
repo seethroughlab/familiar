@@ -9,26 +9,16 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from migrations.helpers import table_exists
+
 revision = "20260219_frontend_logs"
 down_revision = "20260219_deep_analysis"
 branch_labels = None
 depends_on = None
 
 
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name = :table"
-        ),
-        {"table": table_name},
-    )
-    return result.fetchone() is not None
-
-
 def upgrade() -> None:
-    if _table_exists("frontend_logs"):
+    if table_exists("frontend_logs"):
         return
 
     op.create_table(

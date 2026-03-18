@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { lastfmApi } from '../api';
+import { queryKeys } from '../api/queryKeys';
+import { STALE_TIME } from '../api/queryDefaults';
 
 /**
  * Hook for automatic Last.fm scrobbling.
@@ -23,9 +25,9 @@ export function useScrobbling() {
 
   // Get Last.fm connection status
   const { data: status } = useQuery({
-    queryKey: ['lastfm-status'],
+    queryKey: queryKeys.lastfmStatus.all,
     queryFn: lastfmApi.getStatus,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: STALE_TIME.LONG,
   });
 
   const isConnected = status?.connected ?? false;

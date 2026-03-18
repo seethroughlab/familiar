@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { isMobile } from '../../../utils/platform';
-import { registerVisualizer, type VisualizerProps } from '../types';
+import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { FrameScheduler } from '../effects/FrameScheduler';
 
@@ -528,13 +528,4 @@ export function LyricStorm({ lyrics, track }: VisualizerProps) {
   );
 }
 
-// Register the visualizer
-registerVisualizer(
-  {
-    id: 'lyrics',
-    name: 'Lyrics',
-    description: 'Karaoke-style lyrics with next-line preview',
-    usesMetadata: true,
-  },
-  LyricStorm
-);
+export default LyricStorm;

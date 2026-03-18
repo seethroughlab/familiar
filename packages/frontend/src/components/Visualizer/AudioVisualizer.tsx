@@ -8,7 +8,8 @@ import { Suspense } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
-import { getVisualizer, DEFAULT_VISUALIZER_ID } from './types';
+import { getVisualizer } from './types';
+import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { ErrorBoundary } from '../ErrorBoundary';
 

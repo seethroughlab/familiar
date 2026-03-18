@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Search, Plus, Loader2, ListMusic } from 'lucide-react';
 import { playlistsApi, type Playlist } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { useUIStore } from '../../stores/uiStore';
 import { showSuccess, showError } from '../../stores/toastStore';
 
@@ -23,7 +24,7 @@ export function PlaylistPickerModal({ trackIds }: Props) {
   const closePlaylistPicker = useUIStore((s) => s.closePlaylistPicker);
 
   const { data: playlists = [], isLoading } = useQuery({
-    queryKey: ['playlists'],
+    queryKey: queryKeys.playlists.all,
     queryFn: () => playlistsApi.list(false),
   });
 
@@ -39,8 +40,8 @@ export function PlaylistPickerModal({ trackIds }: Props) {
     setAdding(playlistId);
     try {
       await playlistsApi.addTracks(playlistId, trackIds);
-      queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlist.detail(playlistId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
       const count = trackIds.length;
       showSuccess(`Added ${count} ${count === 1 ? 'track' : 'tracks'} to "${playlistName}"`);
       closePlaylistPicker();
@@ -56,7 +57,7 @@ export function PlaylistPickerModal({ trackIds }: Props) {
     setCreating(true);
     try {
       const created = await playlistsApi.create({ name: newName.trim(), track_ids: trackIds });
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
       const count = trackIds.length;
       showSuccess(`Created "${created.name}" with ${count} ${count === 1 ? 'track' : 'tracks'}`);
       closePlaylistPicker();

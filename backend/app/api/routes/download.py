@@ -9,13 +9,20 @@ import zipfile
 from io import BytesIO
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PayloadTooLargeError,
+    PlaylistNotFoundError,
+    ValidationError,
+)
 from app.db.models import Playlist, PlaylistTrack, Track, TrackAnalysis
 from app.services.smart_playlists import SmartPlaylistService
 
@@ -64,7 +71,7 @@ async def _get_playlist_tracks(db: DbSession, playlist_id: UUID, profile_id: UUI
     """Get tracks and name for a playlist."""
     playlist = await db.get(Playlist, playlist_id)
     if not playlist or playlist.profile_id != profile_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Playlist not found")
+        raise PlaylistNotFoundError()
 
     result = await db.execute(
         select(PlaylistTrack)
@@ -80,18 +87,12 @@ async def _get_playlist_tracks(db: DbSession, playlist_id: UUID, profile_id: UUI
 def _check_limits(tracks: list[Track]) -> None:
     """Raise 413 if track list exceeds limits."""
     if len(tracks) > MAX_TRACKS:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Too many tracks ({len(tracks)}). Maximum is {MAX_TRACKS}.",
-        )
+        raise PayloadTooLargeError(f"Too many tracks ({len(tracks)}). Maximum is {MAX_TRACKS}.")
 
     estimated_size = sum(t.file_size or 0 for t in tracks)
     if estimated_size > MAX_SIZE_BYTES:
         size_gb = estimated_size / (1024 * 1024 * 1024)
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Estimated size ({size_gb:.1f} GB) exceeds 2 GB limit.",
-        )
+        raise PayloadTooLargeError(f"Estimated size ({size_gb:.1f} GB) exceeds 2 GB limit.")
 
 
 @router.get("/playlist/{playlist_id}")
@@ -104,7 +105,7 @@ async def download_playlist_zip(
     tracks, name = await _get_playlist_tracks(db, playlist_id, profile.id)
 
     if not tracks:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No downloadable tracks in playlist")
+        raise NotFoundError("No downloadable tracks in playlist")
 
     _check_limits(tracks)
 
@@ -135,12 +136,12 @@ async def download_smart_playlist_zip(
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Smart playlist not found")
+        raise PlaylistNotFoundError("Smart playlist not found")
 
     tracks = await service.get_tracks(playlist, limit=MAX_TRACKS + 1, offset=0)
 
     if not tracks:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No downloadable tracks in smart playlist")
+        raise NotFoundError("No downloadable tracks in smart playlist")
 
     _check_limits(tracks)
 
@@ -182,7 +183,7 @@ async def download_tracks_zip(
             continue
 
     if not track_uuids:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No valid track IDs provided")
+        raise ValidationError("No valid track IDs provided")
 
     result = await db.execute(
         select(Track).where(Track.id.in_(track_uuids))
@@ -190,7 +191,7 @@ async def download_tracks_zip(
     tracks = list(result.scalars().all())
 
     if not tracks:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No tracks found")
+        raise NotFoundError("No tracks found")
 
     _check_limits(tracks)
 
@@ -273,19 +274,16 @@ async def download_analyses_zip(
             continue
 
     if not track_uuids:
-        raise HTTPException(status_code=400, detail="No valid track IDs provided")
+        raise ValidationError("No valid track IDs provided")
 
     if len(track_uuids) > MAX_TRACKS:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"Too many tracks ({len(track_uuids)}). Maximum is {MAX_TRACKS}.",
-        )
+        raise PayloadTooLargeError(f"Too many tracks ({len(track_uuids)}). Maximum is {MAX_TRACKS}.")
 
     # Fetch tracks
     result = await db.execute(select(Track).where(Track.id.in_(track_uuids)))
     tracks = list(result.scalars().all())
     if not tracks:
-        raise HTTPException(status_code=404, detail="No tracks found")
+        raise NotFoundError("No tracks found")
 
     # Fetch existing analyses
     analysis_result = await db.execute(
@@ -357,7 +355,7 @@ async def get_analysis_download_status(task_id: str) -> dict:
     bg = get_background_manager()
     data = bg.redis.get(f"familiar:download_analysis:{task_id}")
     if not data:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")
     return json.loads(data)
 
 
@@ -373,14 +371,11 @@ async def download_analysis_zip_result(
     bg = get_background_manager()
     data = bg.redis.get(f"familiar:download_analysis:{task_id}")
     if not data:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")
 
     progress = json.loads(data)
     if progress["status"] != "ready":
-        raise HTTPException(
-            status_code=409,
-            detail=f"Task not ready (status: {progress['status']})",
-        )
+        raise ConflictError(f"Task not ready (status: {progress['status']})")
 
     # Get full track ID list and name stored at initiation
     track_ids_data = bg.redis.get(f"familiar:download_analysis:{task_id}:track_ids")
@@ -388,7 +383,7 @@ async def download_analysis_zip_result(
     folder_name = name.decode() if isinstance(name, bytes) else (name or "Track Analyses")
 
     if not track_ids_data:
-        raise HTTPException(status_code=404, detail="Task track data expired")
+        raise NotFoundError("Task track data expired")
 
     raw = track_ids_data.decode() if isinstance(track_ids_data, bytes) else track_ids_data
     all_track_ids = json.loads(raw)

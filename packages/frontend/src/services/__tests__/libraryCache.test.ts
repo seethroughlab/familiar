@@ -30,6 +30,13 @@ vi.mock('../../db', () => ({
   isIndexedDBAvailable: vi.fn(() => Promise.resolve(true)),
 }));
 
+const mockApiGet = vi.fn();
+vi.mock('../../api/base', () => ({
+  default: {
+    get: (...args: unknown[]) => mockApiGet(...args),
+  },
+}));
+
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -100,7 +107,6 @@ const sampleTracks = [
 describe('libraryCache', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn();
   });
 
   describe('cacheLibrary', () => {
@@ -120,10 +126,7 @@ describe('libraryCache', () => {
         },
       ];
 
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ items: apiTracks }),
-      });
+      mockApiGet.mockResolvedValueOnce({ data: { items: apiTracks } });
 
       const result = await cacheLibrary();
 
@@ -141,20 +144,14 @@ describe('libraryCache', () => {
       );
     });
 
-    it('should throw when API response is not ok', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Internal Server Error',
-      });
+    it('should throw when API request fails', async () => {
+      mockApiGet.mockRejectedValueOnce(new Error('Request failed with status code 500'));
 
-      await expect(cacheLibrary()).rejects.toThrow('Failed to fetch library');
+      await expect(cacheLibrary()).rejects.toThrow();
     });
 
     it('should throw when response format is invalid', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ something: 'else' }),
-      });
+      mockApiGet.mockResolvedValueOnce({ data: { something: 'else' } });
 
       await expect(cacheLibrary()).rejects.toThrow('Invalid response format');
     });

@@ -7,10 +7,12 @@ import { useMemo, useCallback, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { favoritesApi, type FavoriteTrack, type FavoritesListResponse } from '../api';
 import { useOfflineStatus } from './useOfflineStatus';
+import { STALE_TIME, offlineAwareRetry } from '../api/queryDefaults';
 import * as playlistCache from '../services/playlistCache';
 import * as offlineService from '../services/offlineService';
 import * as syncService from '../services/syncService';
 import { getSelectedProfileId } from '../services/profileService';
+import { queryKeys } from '../api/queryKeys';
 
 export interface UseFavoritesResult {
   /** Set of favorite track IDs for O(1) lookup */
@@ -40,7 +42,7 @@ export function useFavorites(): UseFavoritesResult {
 
   // Fetch all favorites (source of truth) with offline fallback
   const { data, isLoading } = useQuery({
-    queryKey: ['favorites'],
+    queryKey: queryKeys.favorites.all,
     queryFn: async () => {
       try {
         const result = await favoritesApi.list(10000, 0); // Get all favorites
@@ -98,8 +100,8 @@ export function useFavorites(): UseFavoritesResult {
         throw error;
       }
     },
-    staleTime: 30000, // Consider fresh for 30s
-    retry: isOffline ? false : 3,
+    staleTime: STALE_TIME.SHORT,
+    retry: offlineAwareRetry(isOffline),
   });
 
   // Derive a Set for O(1) lookups
@@ -127,13 +129,13 @@ export function useFavorites(): UseFavoritesResult {
     },
     onMutate: async (trackId: string) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['favorites'] });
+      await queryClient.cancelQueries({ queryKey: queryKeys.favorites.all });
 
       // Snapshot previous value
-      const previous = queryClient.getQueryData<FavoritesListResponse>(['favorites']);
+      const previous = queryClient.getQueryData<FavoritesListResponse>(queryKeys.favorites.all);
 
       // Optimistically update
-      queryClient.setQueryData<FavoritesListResponse>(['favorites'], (old) => {
+      queryClient.setQueryData<FavoritesListResponse>(queryKeys.favorites.all, (old) => {
         if (!old) return old;
 
         const isCurrentlyFavorite = old.favorites.some((f) => f.id === trackId);
@@ -188,13 +190,13 @@ export function useFavorites(): UseFavoritesResult {
     onError: (_err, _trackId, context) => {
       // Rollback on error (only if online - offline changes are queued)
       if (context?.previous && !isOffline) {
-        queryClient.setQueryData(['favorites'], context.previous);
+        queryClient.setQueryData(queryKeys.favorites.all, context.previous);
       }
     },
     onSettled: (_data, _error, trackId) => {
       // Refetch to ensure consistency (only when online)
       if (!isOffline) {
-        queryClient.invalidateQueries({ queryKey: ['favorites'] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.favorites.all });
       }
 
       // Auto-download the newly favorited track if auto-download is enabled
@@ -202,7 +204,7 @@ export function useFavorites(): UseFavoritesResult {
         const wasAdded = !favoriteIds.has(trackId);
         if (wasAdded) {
           // Check if auto-download is enabled (best-effort, non-blocking)
-          const autoDownloadData = queryClient.getQueryData<{ enabled: boolean }>(['favorites-auto-download']);
+          const autoDownloadData = queryClient.getQueryData<{ enabled: boolean }>(queryKeys.favorites.autoDownload);
           if (autoDownloadData?.enabled) {
             offlineService.downloadTrackForOffline(trackId).catch(() => {
               // Best-effort: silently ignore download errors

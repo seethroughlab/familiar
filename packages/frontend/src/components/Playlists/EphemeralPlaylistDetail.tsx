@@ -1,10 +1,12 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Clock, Save, Trash2, Loader2, Search, X } from 'lucide-react';
+import { ArrowLeft, Play, Clock, Save, Trash2, Loader2 } from 'lucide-react';
+import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
 import type { Track } from '../../types';
+import { useTrackSearch } from '../../hooks/useTrackSearch';
 import { PlaylistTrackList } from '../shared/PlaylistTrackList';
 
 interface Props {
@@ -67,18 +69,9 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
-  const [searchFilter, setSearchFilter] = useState('');
 
   const playlistTracks = playlist?.tracks ?? [];
-  const searchedTracks = useMemo(() => {
-    if (!searchFilter) return playlistTracks;
-    const q = searchFilter.toLowerCase();
-    return playlistTracks.filter(t =>
-      (t.title?.toLowerCase().includes(q)) ||
-      (t.artist?.toLowerCase().includes(q)) ||
-      (t.album?.toLowerCase().includes(q))
-    );
-  }, [playlistTracks, searchFilter]);
+  const { searchFilter, setSearchFilter, filteredTracks: searchedTracks } = useTrackSearch(playlistTracks);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: EphemeralTrack[]) => {
     const items = sortedItems ?? searchedTracks;
@@ -110,7 +103,7 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
   );
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="flex flex-col gap-4 p-4 min-h-full">
       {/* Header */}
       <div className="space-y-4">
         {/* Back button row */}
@@ -180,24 +173,7 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input
-          type="text"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          placeholder="Search tracks..."
-          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-        />
-        {searchFilter && (
-          <button
-            onClick={() => setSearchFilter('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

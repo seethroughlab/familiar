@@ -4,8 +4,10 @@ Owns background job orchestration: library sync, analysis pipeline.
 
 ## Public API (re-exported from `__init__.py`)
 
-- **library_sync**: `run_library_sync`, `SyncProgressReporter`, `get_sync_progress`, `clear_sync_progress`
-- **analysis_pipeline**: `run_track_features`, `run_track_embedding`, `run_track_analysis`, `queue_tracks_for_*`, `queue_unanalyzed_tracks`
+- **library_sync**: `run_library_sync`
+- **library_sync_progress**: `SyncProgressReporter`, `get_sync_progress`, `clear_sync_progress`
+- **analysis_pipeline**: `run_track_features`, `run_track_embedding`, `run_track_analysis`
+- **analysis_queue**: `queue_tracks_for_*`, `queue_unanalyzed_tracks`
 - **common**: `get_redis`, failure tracking, memory logging
 
 ## Does NOT handle

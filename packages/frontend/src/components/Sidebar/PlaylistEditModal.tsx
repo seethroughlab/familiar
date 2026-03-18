@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { playlistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { showSuccess, showError } from '../../stores/toastStore';
 
 interface Props {
@@ -41,13 +42,13 @@ export function PlaylistEditModal({ playlistId, initialName = '', initialDescrip
     try {
       if (isCreateMode) {
         const created = await playlistsApi.create({ name: name.trim(), description: description.trim() || undefined, track_ids: [] });
-        queryClient.invalidateQueries({ queryKey: ['playlists'] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
         showSuccess('Playlist created');
         onCreated?.(created.id);
       } else {
         await playlistsApi.update(playlistId, { name: name.trim(), description: description.trim() || undefined });
-        queryClient.invalidateQueries({ queryKey: ['playlists'] });
-        queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.playlist.detail(playlistId) });
         showSuccess('Playlist updated');
       }
       onClose();

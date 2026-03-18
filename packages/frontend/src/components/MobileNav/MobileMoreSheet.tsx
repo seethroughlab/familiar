@@ -17,6 +17,8 @@ import { useThemeStore } from '../../stores/themeStore';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { offlineAwareRetry } from '../../api/queryDefaults';
 import type { Playlist } from '../../api';
 
 interface Props {
@@ -47,18 +49,18 @@ export function MobileMoreSheet({ onClose }: Props) {
   const { isOffline } = useOfflineStatus();
 
   const { data: playlists } = useQuery({
-    queryKey: ['playlists', 'ai'],
+    queryKey: queryKeys.playlists.ai,
     queryFn: async () => {
       const data = await playlistsApi.list(true);
       return data.filter((p: Playlist) => p.is_auto_generated);
     },
-    retry: isOffline ? false : 3,
+    retry: offlineAwareRetry(isOffline),
   });
 
   const { data: smartPlaylists } = useQuery({
-    queryKey: ['smart-playlists'],
+    queryKey: queryKeys.smartPlaylists.all,
     queryFn: () => smartPlaylistsApi.list(),
-    retry: isOffline ? false : 3,
+    retry: offlineAwareRetry(isOffline),
   });
 
   const ephemeralPlaylists = useEphemeralPlaylistStore((s) => s.playlists);

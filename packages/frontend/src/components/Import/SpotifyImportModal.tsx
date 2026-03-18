@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Disc3, Loader2, X, CheckCircle, AlertTriangle } from 'lucide-react';
+import { queryKeys } from '../../api/queryKeys';
 import { spotifyApi } from '../../api/spotify';
 import type { SpotifyImportData, UploadOptions } from '../../api/spotify';
 
@@ -52,7 +53,7 @@ export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
         const status = await spotifyApi.pollStatus(taskId);
         if (status.status === 'completed') {
           stopPolling();
-          queryClient.invalidateQueries({ queryKey: ['spotify-import'] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.spotifyImport.all });
           const updated = await spotifyApi.get();
           setState((prev) => {
             if (prev.phase !== 'ready') return prev;
@@ -86,7 +87,7 @@ export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
     setState({ phase: 'uploading' });
     try {
       const result = await spotifyApi.upload(file, options);
-      queryClient.invalidateQueries({ queryKey: ['spotify-import'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.spotifyImport.all });
       setState({
         phase: 'ready',
         ready: {

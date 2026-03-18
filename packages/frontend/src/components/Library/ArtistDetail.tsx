@@ -15,6 +15,8 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { libraryApi, tracksApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME } from '../../api/queryDefaults';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
 import { OfflineButton } from './browsers/trackList/OfflineButton';
@@ -26,8 +28,9 @@ import { useUIStore } from '../../stores/uiStore';
 import type { AlbumContextMenuState } from './types';
 import { initialAlbumContextMenuState } from './types';
 import { useDownloadStore, getAlbumJobId } from '../../stores/downloadStore';
-import { getOfflineTrackIds, removeOfflineTrack } from '../../services/offlineService';
+import { removeOfflineTrack } from '../../services/offlineService';
 import { getDownloadedArtistDetail } from '../../services/libraryCache';
+import { useOfflineTrackState } from '../../hooks/useOfflineTrackState';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useArtistDiscovery, type DiscoveryItem } from '../Discovery';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
@@ -107,14 +110,9 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const [showFullBio, setShowFullBio] = useState(false);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const [albumContextMenu, setAlbumContextMenu] = useState<AlbumContextMenuState>(initialAlbumContextMenuState);
-  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+  const { offlineTrackIds } = useOfflineTrackState();
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
-
-  // Load offline track IDs on mount
-  useEffect(() => {
-    getOfflineTrackIds().then((ids) => setOfflineTrackIds(new Set(ids)));
-  }, []);
 
   // Context menu (via hook — bulk actions, favorites, add-to-playlist handled automatically)
   const { handleContextMenu, contextMenuElement } = useTrackContextMenu({
@@ -191,7 +189,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
     refetch,
     isRefetching,
   } = useQuery({
-    queryKey: ['artist', artistName],
+    queryKey: queryKeys.artist.detail(artistName),
     queryFn: async () => {
       try {
         return await libraryApi.getArtist(artistName);
@@ -213,9 +211,9 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
     if (!artist?.albums?.length) return;
     for (const album of artist.albums.slice(0, 5)) {
       queryClient.prefetchQuery({
-        queryKey: ['album', artist.name, album.name],
+        queryKey: queryKeys.album.detail(artist.name, album.name),
         queryFn: () => libraryApi.getAlbum(artist.name, album.name, 8, 'artist'),
-        staleTime: 60_000,
+        staleTime: STALE_TIME.MEDIUM,
       });
     }
   }, [artist, queryClient]);
@@ -830,9 +828,6 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
                   await removeOfflineTrack(t.id);
                 }
               }
-              // Refresh offline IDs
-              const ids = await getOfflineTrackIds();
-              setOfflineTrackIds(new Set(ids));
             }
           }}
           hasDownloadedTracks={(() => {

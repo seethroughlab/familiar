@@ -21,7 +21,9 @@ import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { spotifyApi } from '../../api/spotify';
+import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
 import type { Playlist, SmartPlaylist } from '../../api';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
 import { PlaylistContextMenu } from './PlaylistContextMenu';
@@ -86,24 +88,24 @@ export function Sidebar() {
 
   // Spotify import existence check (shares cache with SpotifyBrowser)
   const { data: spotifyImport } = useQuery({
-    queryKey: ['spotify-import'],
+    queryKey: queryKeys.spotifyImport.all,
     queryFn: () => spotifyApi.get(),
-    staleTime: 60_000,
-    retry: isOffline ? false : 1,
+    staleTime: STALE_TIME.MEDIUM,
+    retry: offlineAwareRetry(isOffline, 1),
   });
 
   // Playlists
   const { data: playlists } = useQuery({
-    queryKey: ['playlists'],
+    queryKey: queryKeys.playlists.all,
     queryFn: () => playlistsApi.list(true),
-    retry: isOffline ? false : 3,
+    retry: offlineAwareRetry(isOffline),
   });
 
   // Smart playlists
   const { data: smartPlaylists } = useQuery({
-    queryKey: ['smart-playlists'],
+    queryKey: queryKeys.smartPlaylists.all,
     queryFn: () => smartPlaylistsApi.list(),
-    retry: isOffline ? false : 3,
+    retry: offlineAwareRetry(isOffline),
   });
 
   // Ephemeral playlists

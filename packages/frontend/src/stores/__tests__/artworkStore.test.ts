@@ -18,6 +18,22 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
+const { mockArtworkApi } = vi.hoisted(() => ({
+  mockArtworkApi: {
+    queueBatch: vi.fn(),
+    statusBatch: vi.fn(),
+  },
+}));
+
+vi.mock('../../api/metadata', () => ({
+  artworkApi: mockArtworkApi,
+}));
+
+// artworkStore still uses getApiUrl for getArtworkUrl
+vi.mock('../../api/base', () => ({
+  getApiUrl: (path: string) => `/api/v1${path}`,
+}));
+
 import { useArtworkStore } from '../artworkStore';
 
 describe('artworkStore', () => {
@@ -33,9 +49,6 @@ describe('artworkStore', () => {
       isPolling: false,
       pollIntervalId: null,
     });
-
-    // Default fetch mock
-    global.fetch = vi.fn();
   });
 
   afterEach(() => {
@@ -89,7 +102,7 @@ describe('artworkStore', () => {
     it('should do nothing for empty array', async () => {
       const { requestArtwork } = useArtworkStore.getState();
       await requestArtwork([]);
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(mockArtworkApi.queueBatch).not.toHaveBeenCalled();
     });
 
     it('should skip already-seen albums', async () => {
@@ -100,20 +113,17 @@ describe('artworkStore', () => {
 
       const { requestArtwork } = useArtworkStore.getState();
       await requestArtwork([{ artist: 'Artist', album: 'Album' }]);
-      expect(global.fetch).not.toHaveBeenCalled();
+      expect(mockArtworkApi.queueBatch).not.toHaveBeenCalled();
     });
 
     it('should mark albums as ready when they already exist', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'ok',
-          queued_count: 0,
-          existing_count: 1,
-          queued_hashes: [],
-          existing_hashes: ['hash_artist_album'],
-          pending_hashes: [],
-        }),
+      mockArtworkApi.queueBatch.mockResolvedValueOnce({
+        status: 'ok',
+        queued_count: 0,
+        existing_count: 1,
+        queued_hashes: [],
+        existing_hashes: ['hash_artist_album'],
+        pending_hashes: [],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -124,16 +134,13 @@ describe('artworkStore', () => {
     });
 
     it('should mark albums as pending when queued', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'ok',
-          queued_count: 1,
-          existing_count: 0,
-          queued_hashes: ['hash_artist_album'],
-          existing_hashes: [],
-          pending_hashes: [],
-        }),
+      mockArtworkApi.queueBatch.mockResolvedValueOnce({
+        status: 'ok',
+        queued_count: 1,
+        existing_count: 0,
+        queued_hashes: ['hash_artist_album'],
+        existing_hashes: [],
+        pending_hashes: [],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -145,16 +152,13 @@ describe('artworkStore', () => {
     });
 
     it('should mark albums as missing when not queued and not existing', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'ok',
-          queued_count: 0,
-          existing_count: 0,
-          queued_hashes: [],
-          existing_hashes: [],
-          pending_hashes: [],
-        }),
+      mockArtworkApi.queueBatch.mockResolvedValueOnce({
+        status: 'ok',
+        queued_count: 0,
+        existing_count: 0,
+        queued_hashes: [],
+        existing_hashes: [],
+        pending_hashes: [],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -164,21 +168,8 @@ describe('artworkStore', () => {
       expect(getStatus('Artist', 'Album')).toBe('missing');
     });
 
-    it('should mark all as missing on fetch error', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Network error'));
-
-      const { requestArtwork } = useArtworkStore.getState();
-      await requestArtwork([{ artist: 'Artist', album: 'Album' }]);
-
-      const { getStatus } = useArtworkStore.getState();
-      expect(getStatus('Artist', 'Album')).toBe('missing');
-    });
-
-    it('should mark all as missing on non-ok response', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      });
+    it('should mark all as missing on API error', async () => {
+      mockArtworkApi.queueBatch.mockRejectedValueOnce(new Error('Network error'));
 
       const { requestArtwork } = useArtworkStore.getState();
       await requestArtwork([{ artist: 'Artist', album: 'Album' }]);
@@ -190,16 +181,13 @@ describe('artworkStore', () => {
 
   describe('polling', () => {
     it('should start polling when there are pending hashes', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'ok',
-          queued_count: 1,
-          existing_count: 0,
-          queued_hashes: ['hash_artist_album'],
-          existing_hashes: [],
-          pending_hashes: [],
-        }),
+      mockArtworkApi.queueBatch.mockResolvedValueOnce({
+        status: 'ok',
+        queued_count: 1,
+        existing_count: 0,
+        queued_hashes: ['hash_artist_album'],
+        existing_hashes: [],
+        pending_hashes: [],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -209,16 +197,13 @@ describe('artworkStore', () => {
     });
 
     it('should not start polling when no pending hashes', async () => {
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'ok',
-          queued_count: 0,
-          existing_count: 1,
-          queued_hashes: [],
-          existing_hashes: ['hash_artist_album'],
-          pending_hashes: [],
-        }),
+      mockArtworkApi.queueBatch.mockResolvedValueOnce({
+        status: 'ok',
+        queued_count: 0,
+        existing_count: 1,
+        queued_hashes: [],
+        existing_hashes: ['hash_artist_album'],
+        pending_hashes: [],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -236,12 +221,9 @@ describe('artworkStore', () => {
       });
 
       // Mock the poll response saying artwork is ready
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          status: { hash123: true },
-          failed: [],
-        }),
+      mockArtworkApi.statusBatch.mockResolvedValue({
+        status: { hash123: true },
+        failed: [],
       });
 
       // Start polling
@@ -262,12 +244,9 @@ describe('artworkStore', () => {
         pendingHashes: new Set(['hash123']),
       });
 
-      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          status: { hash123: false },
-          failed: ['hash123'],
-        }),
+      mockArtworkApi.statusBatch.mockResolvedValue({
+        status: { hash123: false },
+        failed: ['hash123'],
       });
 
       useArtworkStore.getState().startPolling();

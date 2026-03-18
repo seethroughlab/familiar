@@ -13,6 +13,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { Grid3X3, Loader2 } from 'lucide-react';
 import { libraryApi, type AlbumSummary } from '../../../api';
+import { queryKeys } from '../../../api/queryKeys';
 import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import {
   registerBrowser,
@@ -29,6 +30,7 @@ import { usePlayerStore } from '../../../stores/playerStore';
 import { useDownloadStore, getAlbumJobId } from '../../../stores/downloadStore';
 import { getOfflineTrackIds, removeOfflineTrack } from '../../../services/offlineService';
 import { useGridColumns } from '../../../hooks/useGridColumns';
+import { useScrollContainer } from '../../../hooks/useScrollContainer';
 import { getDownloadedAlbumsPage } from '../../../services/libraryCache';
 
 const PAGE_SIZE = 50;
@@ -134,7 +136,7 @@ export function AlbumGrid({
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['library-albums', { search: filters.search, artist: filters.artist, sortBy, offline: isOffline }],
+    queryKey: queryKeys.albums.list({ search: filters.search, artist: filters.artist, sortBy, offline: isOffline }),
     queryFn: ({ pageParam = 1 }) => fetchAlbumsPage(pageParam),
     getNextPageParam: (lastPage) => {
       const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
@@ -222,6 +224,18 @@ export function AlbumGrid({
   useEffect(() => {
     virtualizer.measure();
   }, [cols, virtualizer]);
+
+  // --- Mobile virtualizer (row-based, shared scroll container) ---
+  const MOBILE_COLS = 2;
+  const scrollContainerRef = useScrollContainer();
+  const mobileRowCount = Math.ceil(allAlbumsDense.length / MOBILE_COLS);
+  const mobileVirtualizer = useVirtualizer({
+    count: mobileRowCount,
+    getScrollElement: () => scrollContainerRef?.current ?? null,
+    estimateSize: () => 220,
+    overscan: 3,
+    enabled: !!scrollContainerRef,
+  });
 
   // Fetch pages for visible rows
   useEffect(() => {
@@ -351,21 +365,61 @@ export function AlbumGrid({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Mobile view — intersection-observer infinite scroll */}
+      {/* Mobile view — virtualized grid (shared scroll container from AppShell) */}
       <div className="md:hidden p-4" data-alphabet-scroll-container>
         {sortControls}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
-          {allAlbumsDense.map((album, index) => (
-            <AlbumCard
-              key={`${album.artist}-${album.name}`}
-              album={album}
-              index={index}
-              onClick={() => onGoToAlbum(album.artist, album.name)}
-              onGoToYear={onGoToYear}
-              onContextMenu={(e) => handleAlbumContextMenu(album, e)}
-            />
-          ))}
-        </div>
+        {scrollContainerRef ? (
+          <div style={{ height: mobileVirtualizer.getTotalSize(), position: 'relative' }}>
+            {mobileVirtualizer.getVirtualItems().map((virtualRow) => {
+              const rowStartIdx = virtualRow.index * MOBILE_COLS;
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={mobileVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
+                    {Array.from({ length: MOBILE_COLS }, (_, colIdx) => {
+                      const itemIdx = rowStartIdx + colIdx;
+                      if (itemIdx >= allAlbumsDense.length) return null;
+                      const album = allAlbumsDense[itemIdx];
+                      return (
+                        <AlbumCard
+                          key={`${album.artist}-${album.name}`}
+                          album={album}
+                          index={itemIdx}
+                          onClick={() => onGoToAlbum(album.artist, album.name)}
+                          onGoToYear={onGoToYear}
+                          onContextMenu={(e) => handleAlbumContextMenu(album, e)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
+            {allAlbumsDense.map((album, index) => (
+              <AlbumCard
+                key={`${album.artist}-${album.name}`}
+                album={album}
+                index={index}
+                onClick={() => onGoToAlbum(album.artist, album.name)}
+                onGoToYear={onGoToYear}
+                onContextMenu={(e) => handleAlbumContextMenu(album, e)}
+              />
+            ))}
+          </div>
+        )}
         {isFetchingNextPage && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
@@ -443,7 +497,7 @@ export function AlbumGrid({
           onPlay={async () => {
             const album = albumContextMenu.album!;
             const albumData = await queryClient.fetchQuery({
-              queryKey: ['album', album.artist, album.name],
+              queryKey: queryKeys.album.detail(album.artist, album.name),
               queryFn: () => libraryApi.getAlbum(album.artist, album.name),
             });
             const tracks = albumData.tracks.map((t) => ({
@@ -467,7 +521,7 @@ export function AlbumGrid({
           onShuffle={async () => {
             const album = albumContextMenu.album!;
             const albumData = await queryClient.fetchQuery({
-              queryKey: ['album', album.artist, album.name],
+              queryKey: queryKeys.album.detail(album.artist, album.name),
               queryFn: () => libraryApi.getAlbum(album.artist, album.name),
             });
             const tracks = albumData.tracks.map((t) => ({
@@ -492,7 +546,7 @@ export function AlbumGrid({
           onQueue={async () => {
             const album = albumContextMenu.album!;
             const albumData = await queryClient.fetchQuery({
-              queryKey: ['album', album.artist, album.name],
+              queryKey: queryKeys.album.detail(album.artist, album.name),
               queryFn: () => libraryApi.getAlbum(album.artist, album.name),
             });
             for (const t of albumData.tracks) {
@@ -527,7 +581,7 @@ export function AlbumGrid({
           onDownload={async () => {
             const album = albumContextMenu.album!;
             const albumData = await queryClient.fetchQuery({
-              queryKey: ['album', album.artist, album.name],
+              queryKey: queryKeys.album.detail(album.artist, album.name),
               queryFn: () => libraryApi.getAlbum(album.artist, album.name),
             });
             const trackIds = albumData.tracks.map((t) => t.id);
@@ -542,7 +596,7 @@ export function AlbumGrid({
           onRemoveDownload={async () => {
             const album = albumContextMenu.album!;
             const albumData = await queryClient.fetchQuery({
-              queryKey: ['album', album.artist, album.name],
+              queryKey: queryKeys.album.detail(album.artist, album.name),
               queryFn: () => libraryApi.getAlbum(album.artist, album.name),
             });
             for (const t of albumData.tracks) {
@@ -560,7 +614,7 @@ export function AlbumGrid({
             if (albumContextMenu.album) {
               const album = albumContextMenu.album;
               const albumData = await queryClient.fetchQuery({
-                queryKey: ['album', album.artist, album.name],
+                queryKey: queryKeys.album.detail(album.artist, album.name),
                 queryFn: () => libraryApi.getAlbum(album.artist, album.name),
               });
               const trackIds = albumData.tracks.map((t) => t.id);

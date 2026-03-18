@@ -30,6 +30,11 @@ export default defineConfig([
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       // Ignore unused variables that start with underscore
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      // Prefer axios api client from api/base.ts over raw fetch
+      'no-restricted-globals': ['warn', {
+        name: 'fetch',
+        message: 'Use api client from api/base.ts. If fetch is required (SSE, downloads, CORS), add eslint-disable with reason.',
+      }],
     },
   },
 ])

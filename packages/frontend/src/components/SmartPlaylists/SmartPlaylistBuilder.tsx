@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Plus, Trash2, Save, Loader2 } from 'lucide-react';
 import { smartPlaylistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import type { SmartPlaylistRule, SmartPlaylist } from '../../api';
 
 interface Props {
@@ -68,7 +69,7 @@ export function SmartPlaylistBuilder({ playlist, onClose, onSaved }: Props) {
   const [maxTracks, setMaxTracks] = useState<number | ''>(playlist?.max_tracks || '');
 
   const { data: fields } = useQuery({
-    queryKey: ['smart-playlist-fields'],
+    queryKey: queryKeys.smartPlaylists.fields,
     queryFn: smartPlaylistsApi.getAvailableFields,
   });
 
@@ -91,7 +92,7 @@ export function SmartPlaylistBuilder({ playlist, onClose, onSaved }: Props) {
       }
     },
     onSuccess: (saved) => {
-      queryClient.invalidateQueries({ queryKey: ['smart-playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.smartPlaylists.all });
       onSaved?.(saved);
       onClose();
     },

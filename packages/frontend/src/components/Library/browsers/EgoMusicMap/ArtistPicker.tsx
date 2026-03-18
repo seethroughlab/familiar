@@ -8,6 +8,8 @@ import { Search, X, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { libraryApi } from '../../../../api';
 import { tracksApi } from '../../../../api';
+import { queryKeys } from '../../../../api/queryKeys';
+import { STALE_TIME } from '../../../../api/queryDefaults';
 
 interface ArtistPickerProps {
   onSelect: (artistName: string) => void;
@@ -35,7 +37,7 @@ export function ArtistPicker({ onSelect, onClose, initialValue = '' }: ArtistPic
 
   // Fetch artists matching search (only artists with embeddings for the music map)
   const { data, isLoading } = useQuery({
-    queryKey: ['artists-picker', debouncedSearch],
+    queryKey: queryKeys.artistsPicker.search(debouncedSearch),
     queryFn: () =>
       libraryApi.listArtists({
         search: debouncedSearch || undefined,
@@ -43,7 +45,7 @@ export function ArtistPicker({ onSelect, onClose, initialValue = '' }: ArtistPic
         page_size: 20,
         has_embeddings: true,
       }),
-    staleTime: 30000,
+    staleTime: STALE_TIME.SHORT,
   });
 
   const handleSelect = useCallback(

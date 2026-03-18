@@ -1,4 +1,5 @@
 import { getApiUrl } from './base';
+import { trackFetchError } from '../utils/apiErrorTracker';
 
 export type MapEntityType = 'artists' | 'albums';
 
@@ -18,11 +19,13 @@ export const mapStreamApi = {
     limit?: number;
     signal?: AbortSignal;
   }): Promise<Response> => {
+    // eslint-disable-next-line no-restricted-globals -- SSE streaming requires raw fetch for ReadableStream access
     const response = await fetch(
       getApiUrl(`/library/map/stream?entity_type=${params.entityType}&limit=${params.limit ?? 200}`),
       { signal: params.signal },
     );
     if (!response.ok) {
+      trackFetchError(`/library/map/stream`, 'GET', response.status, 'map-stream');
       throw new Error(`HTTP error: ${response.status}`);
     }
     return response;

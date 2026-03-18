@@ -15,12 +15,11 @@ import {
 // Helper: start playback by clicking a track in the library
 async function startPlayback(page: Page) {
   await navigateToTab(page, 'Library');
-  await page.waitForTimeout(500);
 
   // Click the first track to start playing
   const firstTrack = page.locator('table tbody tr, [data-testid="track-row"]').first();
+  await firstTrack.waitFor({ timeout: 10000 });
   await firstTrack.dblClick();
-  await page.waitForTimeout(1000);
 
   // Wait for audio to actually start playing
   await page.waitForFunction(
@@ -35,10 +34,10 @@ async function startPlayback(page: Page) {
 // Helper: set crossfade settings via the UI
 async function setCrossfadeSettings(page: Page, enabled: boolean, duration: number) {
   await navigateToTab(page, 'Settings');
-  await page.waitForTimeout(300);
 
   // Find the card containing "Crossfade" heading and its controls
   const crossfadeCard = page.locator('div.rounded-lg:has(h4:text("Crossfade"))').first();
+  await crossfadeCard.waitFor({ timeout: 5000 }).catch(() => {});
   if (await crossfadeCard.isVisible()) {
     // Toggle if needed
     const toggle = crossfadeCard.locator('input[type="checkbox"]').first();
@@ -57,7 +56,6 @@ async function setCrossfadeSettings(page: Page, enabled: boolean, duration: numb
   }
 
   await navigateToTab(page, 'Library');
-  await page.waitForTimeout(300);
 }
 
 // Helper: get current track title from player
@@ -70,9 +68,13 @@ async function getCurrentTrackTitle(page: Page): Promise<string> {
   });
 }
 
+const IS_CI = !!process.env.CI;
+
 // These tests require a running backend with music files and real audio playback.
 // Skip in CI where the library is empty and headless Chromium can't play audio reliably.
-test.describe.skip('Crossfade Playback', () => {
+test.describe('Crossfade Playback', () => {
+  test.skip(IS_CI, 'Requires real audio playback (skipped in CI)');
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await ensureProfile(page);
@@ -153,12 +155,12 @@ test.describe.skip('Crossfade Playback', () => {
 
     // Now seek backward (should cancel crossfade)
     await seekAudio(page, 10);
-    await page.waitForTimeout(1000);
 
     // Should still be playing on one element
-    const audioStates = await getAllAudioStates(page);
-    const activeCount = audioStates.filter(s => !s.paused && s.currentTime > 0).length;
-    expect(activeCount).toBe(1);
+    await expect.poll(async () => {
+      const audioStates = await getAllAudioStates(page);
+      return audioStates.filter(s => !s.paused && s.currentTime > 0).length;
+    }, { timeout: 5000 }).toBe(1);
   });
 
   test('crossfade disabled still advances tracks', async ({ page }) => {
@@ -178,11 +180,7 @@ test.describe.skip('Crossfade Playback', () => {
     await seekAudio(page, playing.duration - 1);
 
     // Wait for track to end and next to start
-    await page.waitForTimeout(5000);
-
-    // Should still be playing
-    const stillPlaying = await isAnyAudioPlaying(page);
-    expect(stillPlaying).toBe(true);
+    await expect.poll(() => isAnyAudioPlaying(page), { timeout: 10000 }).toBe(true);
 
     // Track should have changed (or at least audio continued)
     const newStates = await getAllAudioStates(page);
@@ -196,14 +194,10 @@ test.describe.skip('Crossfade Playback', () => {
     if (await repeatBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       // Click until repeat-all is active (may need multiple clicks)
       await repeatBtn.click();
-      await page.waitForTimeout(200);
     }
 
     await setCrossfadeSettings(page, true, 2);
     await startPlayback(page);
-
-    // Navigate to the last track by going to queue and checking
-    await page.waitForTimeout(1000);
 
     const states = await getAllAudioStates(page);
     const playing = states.find(s => !s.paused);
@@ -215,11 +209,7 @@ test.describe.skip('Crossfade Playback', () => {
     // Seek near end
     await seekAudio(page, playing.duration - 3);
 
-    // Wait for transition
-    await page.waitForTimeout(5000);
-
-    // Should still be playing (wrapped around or continued)
-    const stillPlaying = await isAnyAudioPlaying(page);
-    expect(stillPlaying).toBe(true);
+    // Wait for transition — should still be playing (wrapped around or continued)
+    await expect.poll(() => isAnyAudioPlaying(page), { timeout: 10000 }).toBe(true);
   });
 });

@@ -70,8 +70,8 @@ export function MobileTrackCard({
 
       {/* Track info */}
       <div className="flex-1 min-w-0">
-        <div className={`truncate font-medium ${isCurrentTrack ? 'text-green-500' : 'text-white'}`}>
-          {track.title || 'Unknown'}
+        <div className={`truncate font-medium flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : 'text-white'}`}>
+          <span className="truncate">{track.title || 'Unknown'}</span>
         </div>
         <div className="text-sm text-zinc-400 truncate">
           {track.artist || 'Unknown Artist'}

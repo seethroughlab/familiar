@@ -7,11 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
+from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
 from app.db.models import Track
 from app.services.artwork import compute_album_hash, get_artwork_path
 
@@ -74,12 +75,12 @@ async def stream_track(
 
     if not track:
         logger.warning("Stream request for unknown track_id=%s", track_id)
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     file_path = Path(track.file_path)
     if not file_path.exists():
         logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)
-        raise HTTPException(status_code=404, detail="Audio file not found")
+        raise NotFoundError("Audio file not found")
 
     # Fix FLAC files missing PTS timestamps (causes Chromium playback errors)
     if file_path.suffix.lower() == ".flac":
@@ -181,11 +182,11 @@ async def report_playback_error(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     file_path = Path(track.file_path)
     if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Audio file not found")
+        raise NotFoundError("Audio file not found")
 
     logger.info("Playback error reported for track %s (%s)", track.title, file_path.name)
     background_tasks.add_task(_validate_and_fix_track, str(track_id))
@@ -265,7 +266,7 @@ async def get_track_artwork(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # Compute album hash
     album_hash = compute_album_hash(track.artist, track.album)
@@ -281,7 +282,7 @@ async def get_track_artwork(
 
         # Check again
         if not artwork_path.exists():
-            raise HTTPException(status_code=404, detail="No artwork available")
+            raise NotFoundError("No artwork available")
 
     # Stream the artwork file
     def stream_artwork() -> Iterator[bytes]:
@@ -318,21 +319,16 @@ async def upload_track_artwork(
 
     # Validate content type
     if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid image type. Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}",
-        )
+        raise ValidationError("Invalid image type", detail=f"Allowed: {', '.join(ALLOWED_IMAGE_TYPES)}")
 
     # Read file data
     image_data = await file.read()
 
     if len(image_data) > MAX_ARTWORK_SIZE:
-        raise HTTPException(
-            status_code=400, detail=f"Image too large. Max size: {MAX_ARTWORK_SIZE // 1024 // 1024}MB"
-        )
+        raise ValidationError("Image too large", detail=f"Max size: {MAX_ARTWORK_SIZE // 1024 // 1024}MB")
 
     if len(image_data) == 0:
-        raise HTTPException(status_code=400, detail="Empty file uploaded")
+        raise ValidationError("Empty file uploaded")
 
     # Get track
     query = select(Track).where(Track.id == track_id)
@@ -340,7 +336,7 @@ async def upload_track_artwork(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # Save to cache
     album_hash = compute_album_hash(track.artist, track.album)
@@ -392,7 +388,7 @@ async def delete_track_artwork(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # Remove cached artwork
     album_hash = compute_album_hash(track.artist, track.album)
@@ -446,13 +442,10 @@ async def get_track_lyrics(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if not track.title or not track.artist:
-        raise HTTPException(
-            status_code=400,
-            detail="Track must have title and artist to search for lyrics"
-        )
+        raise ValidationError("Track must have title and artist to search for lyrics")
 
     # Search for lyrics
     lyrics_service = get_lyrics_service()
@@ -464,7 +457,7 @@ async def get_track_lyrics(
     )
 
     if not lyrics:
-        raise HTTPException(status_code=404, detail="No lyrics found")
+        raise NotFoundError("No lyrics found")
 
     return LyricsResponse(
         synced=lyrics.synced,

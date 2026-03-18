@@ -6,6 +6,7 @@ import {
   isTrackOffline,
   downloadTrackForOffline,
   removeOfflineTrack,
+  getOfflineTrackIds,
 } from '../services/offlineService';
 
 interface UseOfflineTrackResult {
@@ -91,7 +92,6 @@ export function useOfflineTrackIds(): {
   const [offlineIds, setOfflineIds] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
-    const { getOfflineTrackIds } = await import('../services/offlineService');
     const ids = await getOfflineTrackIds();
     setOfflineIds(new Set(ids));
   }, []);

@@ -22,6 +22,8 @@ import {
 import { spotifyApi } from '../../../api/spotify';
 import type { SpotifyImportData } from '../../../api/spotify';
 import type { MatchingProgress } from '../../../api/spotify';
+import { queryKeys } from '../../../api/queryKeys';
+import { STALE_TIME } from '../../../api/queryDefaults';
 import { registerBrowser, type BrowserProps } from '../types';
 import {
   useSpotifyDiscovery,
@@ -51,9 +53,9 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
   const [matchFilter, setMatchFilter] = useState<MatchFilter>('all');
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['spotify-import'],
+    queryKey: queryKeys.spotifyImport.all,
     queryFn: () => spotifyApi.get(),
-    staleTime: 60_000,
+    staleTime: STALE_TIME.MEDIUM,
   });
 
   const isPending = data?.summary?.matching_status === 'pending';
@@ -63,7 +65,7 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
   useEffect(() => {
     if (!isPending) return;
     const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['spotify-import'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.spotifyImport.all });
     }, 5000);
     return () => clearInterval(interval);
   }, [isPending, queryClient]);
@@ -85,17 +87,17 @@ export function SpotifyBrowser({ onPlayTrack }: BrowserProps) {
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => spotifyApi.upload(file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spotify-import'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.spotifyImport.all }),
   });
 
   const rematchMutation = useMutation({
     mutationFn: () => spotifyApi.rematch(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spotify-import'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.spotifyImport.all }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => spotifyApi.remove(),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spotify-import'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.spotifyImport.all }),
   });
 
   const handleFileSelect = useCallback(

@@ -19,6 +19,7 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
   img.crossOrigin = 'anonymous';
 
   if (isNativeApp()) {
+    // eslint-disable-next-line no-restricted-globals -- CORS blob workaround for native iOS WKWebView
     const res = await fetch(url);
     const blob = await res.blob();
     img.src = URL.createObjectURL(blob);

@@ -70,7 +70,8 @@ class PrefetchService {
     let prevQueueIndex = usePlayerStore.getState().queueIndex;
     let prevQueueLength = usePlayerStore.getState().queue.length;
 
-    this.unsubscribe = usePlayerStore.subscribe((state) => {
+    this.unsubscribe = usePlayerStore.subscribe(() => {
+      const state = usePlayerStore.getState();
       const queueIndex = state.queueIndex;
       const queueLength = state.queue.length;
       if (queueIndex !== prevQueueIndex || queueLength !== prevQueueLength) {
@@ -192,6 +193,7 @@ class PrefetchService {
 
     try {
       const url = getApiUrl(`/tracks/${trackId}/stream`);
+      // eslint-disable-next-line no-restricted-globals -- Prefetch with AbortController for eviction during download
       const response = await fetch(url, { signal: abortController.signal });
 
       if (!response.ok) {

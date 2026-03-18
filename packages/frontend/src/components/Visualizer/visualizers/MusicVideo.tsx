@@ -16,8 +16,9 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { videosApi, type VideoSearchResult } from '../../../api';
+import { queryKeys } from '../../../api/queryKeys';
 import { usePlayerStore } from '../../../stores/playerStore';
-import { registerVisualizer, type VisualizerProps } from '../types';
+import type { VisualizerProps } from '../types';
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -35,7 +36,7 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
 
   // Get video status
   const { data: status, isLoading: statusLoading } = useQuery({
-    queryKey: ['video-status', trackId],
+    queryKey: queryKeys.videoStatus.detail(trackId!),
     queryFn: () => videosApi.getStatus(trackId!),
     enabled: !!trackId,
     refetchInterval: (query) => {
@@ -54,7 +55,7 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
     isError: searchError,
     refetch: searchVideos,
   } = useQuery({
-    queryKey: ['video-search', trackId],
+    queryKey: queryKeys.videoSearch.detail(trackId!),
     queryFn: () => videosApi.search(trackId!),
     enabled: false,
   });
@@ -64,7 +65,7 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
     mutationFn: ({ videoUrl }: { videoUrl: string }) =>
       videosApi.download(trackId!, videoUrl),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['video-status', trackId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.videoStatus.detail(trackId!) });
       setShowSearch(false);
     },
   });
@@ -73,7 +74,7 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
   const deleteMutation = useMutation({
     mutationFn: () => videosApi.delete(trackId!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['video-status', trackId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.videoStatus.detail(trackId!) });
     },
   });
 
@@ -285,12 +286,4 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
   );
 }
 
-registerVisualizer(
-  {
-    id: 'music-video',
-    name: 'Music Video',
-    description: 'Search and play synced music videos from YouTube',
-    usesMetadata: false,
-  },
-  MusicVideo,
-);
+export default MusicVideo;

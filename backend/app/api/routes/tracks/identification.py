@@ -4,10 +4,11 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Query
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
+from app.api.exceptions import FamiliarError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +128,7 @@ async def get_bulk_identify_progress(
     try:
         data: bytes | None = background_manager.redis.get(f"familiar:identify:{task_id}")  # type: ignore[assignment]
         if not data:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Task {task_id} not found or expired",
-            )
+            raise NotFoundError("Task not found or expired", detail=f"Task ID: {task_id}")
 
         progress = json.loads(data)
         return BulkIdentifyProgress(
@@ -147,10 +145,7 @@ async def get_bulk_identify_progress(
             started_at=progress.get("started_at"),
         )
     except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to parse task progress",
-        )
+        raise FamiliarError("Failed to parse task progress")
 
 
 @router.post("/{track_id}/identify", response_model=IdentifyTrackResponse)

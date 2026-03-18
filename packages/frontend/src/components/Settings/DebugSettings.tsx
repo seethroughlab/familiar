@@ -402,6 +402,7 @@ export function DebugSettings() {
                   console.log('[Test] Testing track stream API...');
                   try {
                     // Try to fetch headers only for a test track
+                    // eslint-disable-next-line no-restricted-globals -- Debug stream endpoint test action
                     const response = await fetch(getApiUrl('/tracks/test-id/stream'), { method: 'HEAD' });
                     console.log('[Test] Stream API response:', response.status, response.statusText);
                   } catch (e) {

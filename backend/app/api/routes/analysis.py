@@ -4,12 +4,13 @@ import json
 import logging
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
+from app.api.exceptions import ConflictError, NotFoundError, TrackNotFoundError, ValidationError
 from app.db.models import Track, TrackAnalysis
 from app.services.background import get_background_manager
 from app.services.track_analysis import (
@@ -33,13 +34,25 @@ class BulkAnalysisRequest(BaseModel):
 async def trigger_bulk_analysis(body: BulkAnalysisRequest, db: DbSession):
     """Trigger analysis for multiple tracks. Returns task_id for polling."""
     if not body.track_ids:
-        raise HTTPException(status_code=400, detail="No track IDs provided")
+        raise ValidationError("No track IDs provided")
 
     if len(body.track_ids) > 50:
-        raise HTTPException(status_code=400, detail="Maximum 50 tracks per bulk request")
+        raise ValidationError("Maximum 50 tracks per bulk request")
+
+    bg = get_background_manager()
+
+    # Reject if analysis queue is already saturated
+    queued = bg.get_analysis_task_count()
+    if queued >= 500:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": "Analysis queue is full",
+                "queue_depth": queued,
+            },
+        )
 
     task_id = str(uuid4())[:8]
-    bg = get_background_manager()
 
     import asyncio
     asyncio.create_task(bg.run_bulk_analysis(task_id, body.track_ids))
@@ -54,7 +67,7 @@ async def get_bulk_analysis_progress(task_id: str):
     data = bg.redis.get(f"familiar:analysis:{task_id}")
 
     if not data:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")
 
     return json.loads(data)
 
@@ -66,24 +79,35 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
     data = bg.redis.get(f"familiar:analysis:{task_id}")
 
     if not data:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise NotFoundError("Task not found")
 
     progress = json.loads(data)
     if progress["status"] != "completed":
-        raise HTTPException(status_code=409, detail=f"Task not complete (status: {progress['status']})")
+        raise ConflictError("Task not complete", detail=f"Status: {progress['status']}")
+
+    # Batch-fetch all analyses and tracks in two queries instead of 2N
+    track_uuids = [UUID(tid) for tid in progress["track_ids"]]
+
+    analyses_result = await db.execute(
+        select(TrackAnalysis).where(TrackAnalysis.track_id.in_(track_uuids))
+    )
+    analyses_by_id = {
+        str(a.track_id): a for a in analyses_result.scalars().all()
+    }
+
+    tracks_result = await db.execute(
+        select(Track).where(Track.id.in_(track_uuids))
+    )
+    tracks_by_id = {
+        str(t.id): t for t in tracks_result.scalars().all()
+    }
 
     analyses = []
     track_metas = []
 
     for tid in progress["track_ids"]:
-        analysis = (
-            await db.execute(
-                select(TrackAnalysis)
-                .where(TrackAnalysis.track_id == UUID(tid))
-            )
-        ).scalar_one_or_none()
-
-        track = (await db.execute(select(Track).where(Track.id == UUID(tid)))).scalar_one_or_none()
+        analysis = analyses_by_id.get(tid)
+        track = tracks_by_id.get(tid)
 
         if analysis and analysis.analysis_detail and track:
             analyses.append(analysis.analysis_detail)
@@ -96,7 +120,7 @@ async def get_bulk_analysis_report(task_id: str, db: DbSession):
             })
 
     if not analyses:
-        raise HTTPException(status_code=404, detail="No completed analyses found")
+        raise NotFoundError("No completed analyses found")
 
     report = generate_comparative_report(analyses, track_metas)
 
@@ -119,7 +143,7 @@ async def trigger_analysis(track_id: UUID, db: DbSession):
     """
     track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     bg = get_background_manager()
     await bg.run_track_analysis_full(str(track_id))
@@ -165,11 +189,11 @@ async def get_analysis_report(track_id: UUID, db: DbSession, format: str = "md")
     ).scalar_one_or_none()
 
     if not analysis or not analysis.analysis_detail:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+        raise NotFoundError("Analysis not found")
 
     track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # If melodic analysis hasn't run yet, is stale, or outdated version, run on-demand
     from app.config import MELODIC_VERSION
@@ -224,15 +248,15 @@ async def get_similarity_image(track_id: UUID, db: DbSession):
     ).scalar_one_or_none()
 
     if not analysis or not analysis.analysis_detail:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+        raise NotFoundError("Analysis not found")
 
     ssm_path = analysis.analysis_detail.get("structural", {}).get("self_similarity_png_path")
     if not ssm_path:
-        raise HTTPException(status_code=404, detail="Similarity image not available")
+        raise NotFoundError("Similarity image not available")
 
     ssm_file = Path(ssm_path)
     if not ssm_file.exists():
-        raise HTTPException(status_code=404, detail="Similarity image not found on disk")
+        raise NotFoundError("Similarity image not found on disk")
 
     def file_iter():
         with open(ssm_file, "rb") as f:
@@ -258,11 +282,11 @@ async def get_analysis_midi(track_id: UUID, db: DbSession):
     ).scalar_one_or_none()
 
     if not analysis or not analysis.midi_path:
-        raise HTTPException(status_code=404, detail="MIDI file not available")
+        raise NotFoundError("MIDI file not available")
 
     midi_file = Path(analysis.midi_path)
     if not midi_file.exists():
-        raise HTTPException(status_code=404, detail="MIDI file not found on disk")
+        raise NotFoundError("MIDI file not found on disk")
 
     track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
     filename = f"{track.artist or 'Unknown'} - {track.title or 'Unknown'}.mid" if track else f"{track_id}.mid"

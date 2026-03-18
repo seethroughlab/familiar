@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload, Trash2, Image, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
-import { tracksApi, getApiUrl } from '../../../api';
+import { tracksApi, getApiUrl, artworkApi } from '../../../api';
+import { queryKeys } from '../../../api/queryKeys';
 import { showWarning } from '../../../stores/toastStore';
 
 interface Props {
@@ -23,27 +24,11 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
   // Upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const response = await fetch(
-        getApiUrl(`/tracks/${trackId}/artwork?embed_in_file=${embedInFile}`),
-        {
-          method: 'POST',
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Upload failed');
-      }
-
-      return response.json();
+      return artworkApi.uploadTrackArtwork(trackId, file, embedInFile);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tracks'] });
-      queryClient.invalidateQueries({ queryKey: ['track-metadata'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trackMetadata.all });
       setPreviewUrl(null);
     },
   });
@@ -52,8 +37,8 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
   const deleteMutation = useMutation({
     mutationFn: () => tracksApi.deleteArtwork(trackId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tracks'] });
-      queryClient.invalidateQueries({ queryKey: ['track-metadata'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trackMetadata.all });
     },
   });
 

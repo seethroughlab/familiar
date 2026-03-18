@@ -33,6 +33,7 @@ import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
 import { isMobile } from '../../utils/platform';
 import { isVisualizerAvailable } from '../../player/audio/engineInstance';
+import { VISUALIZER_IDS } from '../Visualizer/constants';
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -74,7 +75,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const { seek, togglePlayPause } = useAudioControls();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { visualizerId } = useVisualizerStore();
-  const isMusicVideo = visualizerId === 'music-video';
+  const isMusicVideo = visualizerId === VISUALIZER_IDS.MUSIC_VIDEO;
 
   // Prefetch artwork for the current track
   const prefetchArtwork = useArtworkPrefetch();

@@ -3,12 +3,13 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
-from app.api.routes.tracks import TrackResponse
+from app.api.exceptions import TrackNotFoundError
+from app.api.schemas.tracks import TrackResponse
 from app.db.models import ProfileFavorite, Track
 
 logger = logging.getLogger(__name__)
@@ -144,10 +145,7 @@ async def add_favorite(
     # Verify track exists
     track = await db.get(Track, track_id)
     if not track:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Track not found",
-        )
+        raise TrackNotFoundError()
 
     # Check if already favorited
     result = await db.execute(
@@ -223,10 +221,7 @@ async def toggle_favorite(
     # Verify track exists
     track = await db.get(Track, track_id)
     if not track:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Track not found",
-        )
+        raise TrackNotFoundError()
 
     is_fav = await _toggle_local_favorite(db, profile.id, track_id)
     return FavoriteStatusResponse(track_id=track_id, is_favorite=is_fav)

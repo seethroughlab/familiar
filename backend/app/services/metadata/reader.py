@@ -22,6 +22,20 @@ _TEXT_FIELDS = {
 }
 
 
+def detect_lyrics_language(lyrics: str | None) -> str | None:
+    """Detect the language of lyrics text using langdetect.
+
+    Returns ISO 639-1 code (e.g., 'en', 'fr', 'de', 'ja') or None.
+    """
+    if not lyrics or len(lyrics.strip()) < 50:
+        return None
+    try:
+        from langdetect import detect
+        return detect(lyrics)
+    except Exception:
+        return None
+
+
 def _normalize_text(s: str | None) -> str | None:
     """Normalize Unicode whitespace and mojibake in metadata strings."""
     if not s:
@@ -116,6 +130,9 @@ def extract_metadata(file_path: Path) -> dict[str, Any]:
     for key in _TEXT_FIELDS:
         if key in metadata:
             metadata[key] = _normalize_text(metadata[key])
+
+    # Detect lyrics language
+    metadata["lyrics_language"] = detect_lyrics_language(metadata.get("lyrics"))
 
     return metadata
 

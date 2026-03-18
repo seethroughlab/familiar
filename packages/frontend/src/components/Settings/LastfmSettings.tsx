@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Loader2, User, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { lastfmApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { useSearchParams } from 'react-router-dom';
 
 export function LastfmSettings() {
@@ -9,7 +10,7 @@ export function LastfmSettings() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: status, isLoading } = useQuery({
-    queryKey: ['lastfm-status'],
+    queryKey: queryKeys.lastfmStatus.all,
     queryFn: lastfmApi.getStatus,
   });
 
@@ -23,7 +24,7 @@ export function LastfmSettings() {
   const callbackMutation = useMutation({
     mutationFn: (token: string) => lastfmApi.callback(token),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lastfm-status'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lastfmStatus.all });
       // Clean up URL params
       searchParams.delete('lastfm_callback');
       searchParams.delete('token');
@@ -34,7 +35,7 @@ export function LastfmSettings() {
   const disconnectMutation = useMutation({
     mutationFn: lastfmApi.disconnect,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lastfm-status'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lastfmStatus.all });
     },
   });
 

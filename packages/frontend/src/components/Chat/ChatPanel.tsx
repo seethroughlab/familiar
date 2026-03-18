@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Send, Loader2, Music, Wrench, Plus, History, AlertTriangle, WifiOff, X } from 'lucide-react';
 import { chatApi, parseChatStreamEvent, type ChatStreamEvent } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('ChatPanel');
@@ -403,8 +404,8 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
           // Navigate to Proposed Changes browser view
           chatNavigate('/library/proposed-changes');
           // Refresh the changes list
-          queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-          queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+          queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
         }
         break;
       }

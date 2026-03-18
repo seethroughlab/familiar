@@ -10,6 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+from migrations.helpers import column_exists
+
 # revision identifiers, used by Alembic.
 revision: str = "20260206_add_auto_download"
 down_revision: str | None = "20250101_000000_add_bitrate_mode"
@@ -17,31 +19,15 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def _column_exists(table_name: str, column_name: str) -> bool:
-    """Check if a column exists in a table."""
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            """
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = :table AND column_name = :column
-            """
-        ),
-        {"table": table_name, "column": column_name},
-    )
-    return result.fetchone() is not None
-
-
 def upgrade() -> None:
     """Add auto_download to playlists and smart_playlists."""
-    if not _column_exists("playlists", "auto_download"):
+    if not column_exists("playlists", "auto_download"):
         op.add_column(
             "playlists",
             sa.Column("auto_download", sa.Boolean(), nullable=True, server_default="false"),
         )
 
-    if not _column_exists("smart_playlists", "auto_download"):
+    if not column_exists("smart_playlists", "auto_download"):
         op.add_column(
             "smart_playlists",
             sa.Column("auto_download", sa.Boolean(), nullable=True, server_default="false"),

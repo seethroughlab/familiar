@@ -10,25 +10,25 @@
  *
  * Wraps TrackList with BrowserProps interface for the pluggable browser system.
  */
-import { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useNavigate } from 'react-router-dom';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { Play, Download, Check, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Loader2, Music, FolderOpen, Clock, Disc, ChevronUp, ChevronDown } from 'lucide-react';
 import { tracksApi } from '../../../api';
 import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import { usePlayerStore } from '../../../stores/playerStore';
-import { PlayIndicator, MobilePlayIndicator } from '../../common/PlayIndicator';
 import { useSelectionStore } from '../../../stores/selectionStore';
 import { useVisibleTracksStore } from '../../../stores/visibleTracksStore';
 import { useTrackContextMenu } from '../../../hooks/useTrackContextMenu';
 import { useArtworkPrefetchBatch } from '../../../hooks/useArtworkPrefetch';
-import { useLongPress } from '../../../hooks/useLongPress';
-import { useColumnStore, getVisibleColumns } from '../../../stores/columnStore';
-import { COLUMN_DEFINITIONS, getColumnDef, getAnalysisColumns, COLUMN_MAP } from '../columnDefinitions';
-import { OfflineButton } from './trackList/OfflineButton';
-import { FavoriteButton } from './trackList/FavoriteButton';
-import { useOfflineAlbum } from '../../../hooks/useOfflineAlbum';
+import { useScrollContainer } from '../../../hooks/useScrollContainer';
+import { useColumnStore } from '../../../stores/columnStore';
+import { getColumnDef } from '../columnDefinitions';
+import { TrackRow } from './trackList/TrackRow';
+import { MobileTrackCard } from './trackList/MobileTrackCard';
+import { AlbumOfflineButton } from './trackList/AlbumOfflineButton';
+import { useTrackListData, PAGE_SIZE } from './trackList/useTrackListData';
+import { useMobileJumpFetch } from './trackList/useMobileJumpFetch';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver'; // Still used for mobile view
 import { registerBrowser, type BrowserProps } from '../types';
 import { AlbumArtwork } from '../../AlbumArtwork';
@@ -37,11 +37,9 @@ import type { Track } from '../../../types';
 import { resolveTrackRowIntent } from '../../shared/trackRowInteraction';
 
 import { createLogger } from '../../../utils/logger';
-import { getDownloadedTracksPage } from '../../../services/libraryCache';
 
 const log = createLogger('TrackListBrowser');
 
-const PAGE_SIZE = 50;
 const ROW_HEIGHT = 40; // Height of each track row in pixels (desktop view)
 
 // Register this browser
@@ -58,259 +56,6 @@ registerBrowser(
   TrackListBrowser
 );
 
-
-interface AlbumTrack {
-  id: string;
-}
-
-interface AlbumOfflineButtonProps {
-  tracks: AlbumTrack[];
-  artist: string;
-  album: string;
-}
-
-function AlbumOfflineButton({ tracks, artist, album }: AlbumOfflineButtonProps) {
-  const {
-    offlineCount,
-    totalCount,
-    isFullyOffline,
-    isPartiallyOffline,
-    isDownloading,
-    currentTrack,
-    overallProgress,
-    download,
-    remove,
-  } = useOfflineAlbum(tracks, { artist, album });
-
-  if (isDownloading) {
-    return (
-      <button
-        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 rounded-full transition-colors"
-        title={`Downloading track ${currentTrack} of ${totalCount}...`}
-      >
-        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-        <span className="text-sm">{overallProgress}%</span>
-      </button>
-    );
-  }
-
-  if (isFullyOffline) {
-    return (
-      <button
-        onClick={remove}
-        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-full transition-colors"
-        title="Remove offline copies"
-      >
-        <Check className="w-4 h-4 text-green-500" />
-        <span className="text-sm">Downloaded</span>
-      </button>
-    );
-  }
-
-  return (
-    <button
-      onClick={download}
-      className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-full transition-colors"
-      title={isPartiallyOffline ? `Download remaining ${totalCount - offlineCount} tracks` : 'Download album for offline'}
-    >
-      <Download className="w-4 h-4" />
-      <span className="text-sm">
-        {isPartiallyOffline ? `${offlineCount}/${totalCount}` : 'Download'}
-      </span>
-    </button>
-  );
-}
-
-interface TrackRowProps {
-  track: Track;
-  index: number;
-  isCurrentTrack: boolean;
-  isPlaying: boolean;
-  isSelected: boolean;
-  onPlay: () => void;
-  onClick: (e: React.MouseEvent) => void;
-  onDoubleClick: () => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-  visibleColumnIds: string[];
-  gridColumns: string;
-}
-
-// Mobile card component for small screens
-function MobileTrackCard({
-  track,
-  index,
-  isCurrentTrack,
-  isPlaying,
-  isSelected,
-  onPlay,
-  onClick,
-  onContextMenu,
-  onLongPress,
-}: {
-  track: Track;
-  index: number;
-  isCurrentTrack: boolean;
-  isPlaying: boolean;
-  isSelected: boolean;
-  onPlay: () => void;
-  onClick: (e: React.MouseEvent) => void;
-  onContextMenu: (e: React.MouseEvent) => void;
-  onLongPress: (position: { x: number; y: number }) => void;
-}) {
-  const formatDuration = (seconds: number | null) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const longPressHandlers = useLongPress(onLongPress);
-
-  return (
-    <div
-      data-testid="track-row"
-      data-list-index={index}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/track-id', track.id);
-        e.dataTransfer.effectAllowed = 'copy';
-      }}
-      onClick={onClick}
-      onContextMenu={onContextMenu}
-      {...longPressHandlers}
-      className={`group flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-zinc-800/30 ${
-        isSelected
-          ? 'bg-purple-500/20'
-          : isCurrentTrack
-          ? 'bg-zinc-800/50'
-          : 'hover:bg-zinc-800/50'
-      }`}
-    >
-      {/* Play button / index - show play icon on mobile when selected, number otherwise */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onPlay(); }}
-        className="w-8 flex-shrink-0 flex items-center justify-center text-zinc-400"
-      >
-        <MobilePlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} isSelected={isSelected} index={index + 1} />
-      </button>
-
-      {/* Track info */}
-      <div className="flex-1 min-w-0">
-        <div className={`truncate font-medium flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : 'text-white'}`}>
-          <span className="truncate">{track.title || 'Unknown'}</span>
-        </div>
-        <div className="text-sm text-zinc-400 truncate">
-          {track.artist || 'Unknown Artist'}
-          {track.album && <span className="text-zinc-500"> • {track.album}</span>}
-        </div>
-      </div>
-
-      {/* Duration */}
-      <div className="text-sm text-zinc-400 flex-shrink-0">
-        {formatDuration(track.duration_seconds)}
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1 flex-shrink-0">
-        <FavoriteButton trackId={track.id} />
-        <OfflineButton trackId={track.id} />
-      </div>
-    </div>
-  );
-}
-
-function TrackRow({
-  track,
-  index,
-  isCurrentTrack,
-  isPlaying,
-  isSelected,
-  onPlay,
-  onClick,
-  onDoubleClick,
-  onContextMenu,
-  visibleColumnIds,
-  gridColumns,
-}: TrackRowProps) {
-  return (
-    <div
-      data-testid="track-row"
-      data-list-index={index}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData('application/track-id', track.id);
-        e.dataTransfer.effectAllowed = 'copy';
-      }}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
-      onMouseDown={(e) => {
-        // Prevent text selection when using modifier keys for multi-select
-        if (e.shiftKey || e.metaKey || e.ctrlKey) {
-          e.preventDefault();
-        }
-      }}
-      className={`group grid gap-4 px-4 py-2 rounded-md cursor-pointer select-none ${
-        isSelected
-          ? 'bg-purple-500/20 hover:bg-purple-500/30'
-          : isCurrentTrack
-          ? 'bg-zinc-800/50 hover:bg-zinc-800/70'
-          : 'hover:bg-zinc-800/50'
-      }`}
-      style={{ gridTemplateColumns: gridColumns }}
-    >
-      {/* Index / Play button column */}
-      <div className="flex items-center justify-center"
-        onClick={(e) => { e.stopPropagation(); onPlay(); }}
-        role="button"
-      >
-        <PlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} index={index + 1} />
-      </div>
-
-      {/* Title column (always visible) */}
-      <div className="min-w-0">
-        <div className={`truncate flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : ''}`}>
-          {track.title || 'Unknown'}
-        </div>
-      </div>
-
-      {/* Dynamic columns */}
-      {visibleColumnIds.map((colId) => {
-        const colDef = getColumnDef(colId);
-        if (!colDef) return null;
-
-        const rawValue = colDef.getValue(track);
-        const displayValue =
-          colDef.format && rawValue != null ? colDef.format(rawValue) : rawValue ?? '-';
-
-        return (
-          <div
-            key={colId}
-            className={`text-zinc-400 truncate ${
-              colDef.align === 'right'
-                ? 'text-right'
-                : colDef.align === 'center'
-                ? 'text-center'
-                : ''
-            }`}
-          >
-            {displayValue}
-          </div>
-        );
-      })}
-
-      {/* Favorite button */}
-      <div className="flex items-center justify-center">
-        <FavoriteButton trackId={track.id} />
-      </div>
-
-      {/* Offline button */}
-      <div className="flex items-center justify-center">
-        <OfflineButton trackId={track.id} />
-      </div>
-    </div>
-  );
-}
 
 export function TrackListBrowser({
   filters,
@@ -338,6 +83,29 @@ export function TrackListBrowser({
   const sortBy = useColumnStore((state) => state.sortBy);
   const sortOrder = useColumnStore((state) => state.sortOrder);
   const toggleSort = useColumnStore((state) => state.toggleSort);
+
+  // ── Data hook: query, sparse pages, columns, sort, queue filters ──
+  const {
+    allTracksUnfiltered,
+    allTracks,
+    total,
+    sparsePages,
+    isLoading,
+    error,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    handleLoadMore,
+    fetchPage,
+    loadedPagesRef,
+    fetchTracksPage,
+    visibleColumnIds,
+    gridColumns,
+    needsFeatures: _needsFeatures,
+    sortField,
+    queueFilters,
+  } = useTrackListData(filters, offlineTrackIds, isOffline);
+
   // Context menu (via hook — bulk actions and favorites handled automatically)
   const { handleContextMenu, openContextMenu, contextMenuElement } = useTrackContextMenu({
     onPlay: (track) => {
@@ -383,43 +151,6 @@ export function TrackListBrowser({
     columnId: string;
     headerEl: HTMLElement;
   } | null>(null);
-
-  // Get visible column IDs in order
-  const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
-
-  // Check if any analysis columns are visible
-  const analysisColumnIds = useMemo(
-    () => new Set(getAnalysisColumns().map((c) => c.id)),
-    []
-  );
-  const needsFeatures = useMemo(
-    () => visibleColumnIds.some((id) => analysisColumnIds.has(id)),
-    [visibleColumnIds, analysisColumnIds]
-  );
-
-  // Build map of custom column widths
-  const columnWidths = useMemo(() => {
-    return Object.fromEntries(columns.map(c => [c.id, c.width]));
-  }, [columns]);
-
-  // Build grid template columns
-  const gridColumns = useMemo(() => {
-    const cols: string[] = ['3rem']; // Index column
-    cols.push('1fr'); // Title (always visible, flexible)
-
-    for (const colId of visibleColumnIds) {
-      const customWidth = columnWidths[colId];
-      if (customWidth != null) {
-        cols.push(`${customWidth}px`);
-      } else {
-        const colDef = COLUMN_DEFINITIONS.find((d) => d.id === colId);
-        cols.push(colDef?.width || '1fr');
-      }
-    }
-
-    cols.push('3rem', '3rem'); // Favorite, Offline
-    return cols.join(' ');
-  }, [visibleColumnIds, columnWidths]);
 
   // Drag handlers for column reordering
   const handleDragStart = (colId: string) => {
@@ -503,184 +234,6 @@ export function TrackListBrowser({
       };
     }
   }, [resizing]);
-
-  // Get the sortField from column definition (may differ from column ID)
-  // 'title' is a special case since it's not in COLUMN_DEFINITIONS (always visible)
-  const sortField = useMemo(() => {
-    if (!sortBy) return undefined;
-    if (sortBy === 'title') return 'title';
-    const colDef = COLUMN_MAP.get(sortBy);
-    return colDef?.sortField;
-  }, [sortBy]);
-
-  const fetchTracksPage = useCallback(
-    async (pageNumber: number) => {
-      const params = {
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        year_from: filters.yearFrom,
-        year_to: filters.yearTo,
-        energy_min: filters.energyMin,
-        energy_max: filters.energyMax,
-        valence_min: filters.valenceMin,
-        valence_max: filters.valenceMax,
-        fx: filters.fx,
-        fx_min: filters.fxMin,
-        fx_max: filters.fxMax,
-        fy: filters.fy,
-        fy_min: filters.fyMin,
-        fy_max: filters.fyMax,
-        page: pageNumber,
-        page_size: PAGE_SIZE,
-        include_features: needsFeatures,
-        sort_by: sortField,
-        sort_order: sortOrder,
-      } as const;
-
-      try {
-        return await tracksApi.list(params);
-      } catch (error) {
-        if (isOffline) {
-          return await getDownloadedTracksPage(params);
-        }
-        throw error;
-      }
-    },
-    [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
-      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
-      needsFeatures, sortField, sortOrder, isOffline]
-  );
-
-  const {
-    data,
-    isLoading,
-    error,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: [
-      'tracks',
-      {
-        search: filters.search,
-        artist: filters.artist,
-        album: filters.album,
-        yearFrom: filters.yearFrom,
-        yearTo: filters.yearTo,
-        energyMin: filters.energyMin,
-        energyMax: filters.energyMax,
-        valenceMin: filters.valenceMin,
-        valenceMax: filters.valenceMax,
-        fx: filters.fx,
-        fxMin: filters.fxMin,
-        fxMax: filters.fxMax,
-        fy: filters.fy,
-        fyMin: filters.fyMin,
-        fyMax: filters.fyMax,
-        include_features: needsFeatures,
-        sortBy: sortField,
-        sortOrder,
-        offline: isOffline,
-      },
-    ],
-    queryFn: ({ pageParam = 1 }) => fetchTracksPage(pageParam),
-    getNextPageParam: (lastPage) => {
-      const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
-      return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
-    },
-    initialPageParam: 1,
-  });
-
-  const handleLoadMore = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
-    }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
-
-  // Track which pages we've loaded (either from infinite query or direct fetch)
-  const loadedPagesRef = useRef<Set<number>>(new Set([1]));
-  const [sparsePages, setSparsePages] = useState<Map<number, Track[]>>(new Map());
-
-  // Direct page fetching for sparse loading (when jumping to far indices)
-  const fetchPage = useCallback(async (pageNumber: number) => {
-    if (loadedPagesRef.current.has(pageNumber)) return;
-
-    loadedPagesRef.current.add(pageNumber); // Mark as loading to prevent duplicates
-
-    try {
-      const result = await fetchTracksPage(pageNumber);
-
-      setSparsePages(prev => new Map(prev).set(pageNumber, result.items));
-    } catch (error) {
-      // Remove from loaded set so it can be retried
-      loadedPagesRef.current.delete(pageNumber);
-      log.error(`Failed to fetch page ${pageNumber}:`, error);
-    }
-  }, [fetchTracksPage]);
-
-  // Reset sparse pages and loaded tracking when filters or sort changes
-  useEffect(() => {
-    loadedPagesRef.current = new Set([1]);
-    setSparsePages(new Map());
-  }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
-      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
-      sortField, sortOrder]);
-
-  // Track which pages came from infinite query
-  useEffect(() => {
-    if (data?.pages) {
-      data.pages.forEach(page => loadedPagesRef.current.add(page.page));
-    }
-  }, [data?.pages]);
-
-  // Flatten all pages into a single array (filter out any undefined/null entries defensively)
-  const allTracksUnfiltered = useMemo(
-    () => (data?.pages.flatMap((page) => page.items) ?? []).filter((t): t is Track => t != null),
-    [data]
-  );
-
-  // Build unified sparse array merging infinite query and direct-fetched pages
-  const allTracksSparse = useMemo(() => {
-    const totalCount = data?.pages[0]?.total ?? 0;
-    if (totalCount === 0) return [];
-
-    const arr: (Track | undefined)[] = new Array(totalCount);
-
-    // Fill from infinite query pages
-    data?.pages.forEach(page => {
-      const startIdx = (page.page - 1) * PAGE_SIZE;
-      page.items.forEach((track, i) => { arr[startIdx + i] = track; });
-    });
-
-    // Fill from directly-fetched sparse pages
-    sparsePages.forEach((tracks, pageNum) => {
-      const startIdx = (pageNum - 1) * PAGE_SIZE;
-      tracks.forEach((track, i) => { arr[startIdx + i] = track; });
-    });
-
-    return arr;
-  }, [data?.pages, sparsePages]);
-
-  const downloadedOnlyActive = filters.downloadedOnly || isOffline;
-
-  // Filter by downloaded tracks if downloadedOnly is enabled or offline mode is active
-  // Note: For downloaded-only mode, we use allTracksUnfiltered (dense array)
-  // since we can't filter a sparse array by offline status efficiently
-  const allTracks = useMemo(() => {
-    if (downloadedOnlyActive) {
-      if (!offlineTrackIds || offlineTrackIds.size === 0) return [];
-      return allTracksUnfiltered.filter(track => offlineTrackIds.has(track.id));
-    }
-    // Use sparse array for normal mode to support alphabet bar jumping
-    return allTracksSparse;
-  }, [allTracksUnfiltered, allTracksSparse, downloadedOnlyActive, offlineTrackIds]) as (Track | undefined)[];
-
-  const total = downloadedOnlyActive && offlineTrackIds
-    ? allTracks.length
-    : data?.pages[0]?.total ?? 0;
 
   // Desktop scroll container ref for virtualizer
   const desktopScrollRef = useRef<HTMLDivElement>(null);
@@ -865,137 +418,25 @@ export function TrackListBrowser({
     scrollToIndex, // Use virtualizer's scrollToIndex for instant navigation
   });
 
-  // Mobile jump-fetch state: when a letter is tapped on mobile, we fetch just that page
-  // and render from there instead of loading all pages from 1 to N.
-  const [mobileJump, setMobileJump] = useState<{
-    letter: string;
-    tracks: Track[];
-    nextPage: number;
-    hasMore: boolean;
-    isLoading: boolean;
-    prevPage: number;
-    hasPrevious: boolean;
-    isLoadingPrev: boolean;
-  } | null>(null);
-
-  // Guard: after a jump, don't fire the top sentinel until user scrolls down past threshold
-  const [prevSentinelReady, setPrevSentinelReady] = useState(false);
-  // For scroll position maintenance when prepending tracks
-  const prevLoadScrollRef = useRef<number | null>(null);
-
-  const handleMobileJumpToLetter = useCallback(async (letter: string) => {
-    if (!letterIndex || !(letter in letterIndex)) return;
-
-    const targetIndex = letterIndex[letter];
-    const targetPage = Math.floor(targetIndex / PAGE_SIZE) + 1;
-
-    setActiveLetter(letter);
-    setPrevSentinelReady(false);
-    setMobileJump(prev => ({
-      letter,
-      tracks: prev?.tracks ?? [],
-      nextPage: targetPage + 1,
-      hasMore: true,
-      isLoading: true,
-      prevPage: targetPage - 1,
-      hasPrevious: targetPage > 1,
-      isLoadingPrev: false,
-    }));
-
-    try {
-      const result = await fetchTracksPage(targetPage);
-
-      const totalPages = Math.ceil(result.total / PAGE_SIZE);
-      setMobileJump({
-        letter,
-        tracks: result.items,
-        nextPage: targetPage + 1,
-        hasMore: targetPage < totalPages,
-        isLoading: false,
-        prevPage: targetPage - 1,
-        hasPrevious: targetPage > 1,
-        isLoadingPrev: false,
-      });
-
-      // Scroll mobile view to top
-      window.scrollTo({ top: 0 });
-    } catch (err) {
-      log.error('Failed to jump to letter:', err);
-      setMobileJump(null);
-    }
-  }, [letterIndex, filters, needsFeatures, sortField, sortOrder, setActiveLetter]);
-
-  const handleMobileJumpLoadMore = useCallback(async () => {
-    if (!mobileJump || mobileJump.isLoading || !mobileJump.hasMore) return;
-
-    setMobileJump(prev => prev ? { ...prev, isLoading: true } : null);
-
-    try {
-      const result = await fetchTracksPage(mobileJump.nextPage);
-
-      const totalPages = Math.ceil(result.total / PAGE_SIZE);
-      setMobileJump(prev => prev ? {
-        ...prev,
-        tracks: [...prev.tracks, ...result.items],
-        nextPage: prev.nextPage + 1,
-        hasMore: prev.nextPage < totalPages,
-        isLoading: false,
-      } : null);
-    } catch (err) {
-      log.error('Failed to load more jump tracks:', err);
-      setMobileJump(prev => prev ? { ...prev, isLoading: false } : null);
-    }
-  }, [mobileJump, filters, needsFeatures, sortField, sortOrder]);
-
-  // Load previous pages when scrolling up after a mobile jump
-  const handleMobileJumpLoadPrevious = useCallback(async () => {
-    if (!mobileJump || mobileJump.isLoadingPrev || !mobileJump.hasPrevious) return;
-
-    setMobileJump(prev => prev ? { ...prev, isLoadingPrev: true } : null);
-
-    // Save scroll height before prepending so we can maintain position
-    prevLoadScrollRef.current = document.documentElement.scrollHeight;
-
-    try {
-      const result = await fetchTracksPage(mobileJump.prevPage);
-
-      setMobileJump(prev => prev ? {
-        ...prev,
-        tracks: [...result.items, ...prev.tracks],
-        prevPage: prev.prevPage - 1,
-        hasPrevious: prev.prevPage > 1,
-        isLoadingPrev: false,
-      } : null);
-    } catch (err) {
-      log.error('Failed to load previous jump tracks:', err);
-      setMobileJump(prev => prev ? { ...prev, isLoadingPrev: false } : null);
-    }
-  }, [mobileJump, filters, needsFeatures, sortField, sortOrder]);
-
-  // After prepending tracks, adjust scroll position so user doesn't jump
-  useLayoutEffect(() => {
-    if (prevLoadScrollRef.current !== null) {
-      const heightAfter = document.documentElement.scrollHeight;
-      const diff = heightAfter - prevLoadScrollRef.current;
-      if (diff > 0) window.scrollBy(0, diff);
-      prevLoadScrollRef.current = null;
-    }
+  // Mobile jump-fetch: letter tap loads target page directly instead of all pages 1..N
+  const {
+    mobileJump,
+    prevSentinelReady,
+    handleMobileJumpToLetter,
+    handleMobileJumpLoadMore,
+    handleMobileJumpLoadPrevious,
+  } = useMobileJumpFetch({
+    letterIndex,
+    pageSize: PAGE_SIZE,
+    fetchTracksPage,
+    setActiveLetter,
+    resetDeps: [
+      filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
+      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
+      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
+      sortField, sortOrder,
+    ],
   });
-
-  // Arm the top sentinel only after user scrolls down past threshold (avoids
-  // immediate trigger right after a jump scrolls to top)
-  useEffect(() => {
-    if (!mobileJump?.hasPrevious || prevSentinelReady) return;
-
-    const handleScroll = () => {
-      if (window.scrollY > 200) {
-        setPrevSentinelReady(true);
-      }
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [mobileJump?.hasPrevious, prevSentinelReady]);
 
   // Letter select routing: mobile uses jump-fetch, desktop uses virtualizer
   const handleLetterSelect = useCallback((letter: string) => {
@@ -1005,15 +446,6 @@ export function TrackListBrowser({
       jumpToLetter(letter);
     }
   }, [handleMobileJumpToLetter, jumpToLetter]);
-
-  // Reset mobileJump when filters/sort change
-  useEffect(() => {
-    setMobileJump(null);
-    setPrevSentinelReady(false);
-  }, [filters.search, filters.artist, filters.album, filters.yearFrom, filters.yearTo,
-      filters.energyMin, filters.energyMax, filters.valenceMin, filters.valenceMax,
-      filters.fx, filters.fxMin, filters.fxMax, filters.fy, filters.fyMin, filters.fyMax,
-      sortField, sortOrder]);
 
   // Unified mobile rendering: use jump tracks or regular infinite query
   const mobileTracks = mobileJump?.tracks ?? allTracksUnfiltered;
@@ -1034,29 +466,56 @@ export function TrackListBrowser({
     enabled: prevSentinelReady && !!mobileJump?.hasPrevious && !mobileJump?.isLoadingPrev,
   });
 
+  // Mobile virtualizer — uses the shared AppShell scroll container
+  const scrollContainerRef = useScrollContainer();
+  const mobileVirtualizer = useVirtualizer({
+    count: mobileTracks.length,
+    getScrollElement: () => scrollContainerRef?.current ?? null,
+    estimateSize: () => 64,
+    overscan: 10,
+    enabled: !!scrollContainerRef,
+  });
+
   // Update visible tracks store when tracks change (for LLM context)
-  // Use allTracksUnfiltered (dense array) for this since we only want loaded tracks
+  // Debounced to avoid O(n) .map() on every page load during rapid scrolling
   const setVisibleTracks = useVisibleTracksStore((state) => state.setVisibleTracks);
+  const prevTrackCountRef = useRef(0);
+  const prevFiltersRef = useRef(filters);
   useEffect(() => {
-    if (allTracksUnfiltered.length > 0) {
-      const visibleTracks = allTracksUnfiltered.map((t) => ({
-        id: t.id,
-        title: t.title || 'Unknown Title',
-        artist: t.artist || 'Unknown Artist',
-        album: t.album || 'Unknown Album',
-      }));
-
-      // Build filter description for LLM context
-      const filterParts: string[] = [];
-      if (filters.search) filterParts.push(`search: "${filters.search}"`);
-      if (filters.artist) filterParts.push(`artist: "${filters.artist}"`);
-      if (filters.album) filterParts.push(`album: "${filters.album}"`);
-      const filterDescription = filterParts.length > 0
-        ? `Filtered by ${filterParts.join(', ')}`
-        : 'All tracks';
-
-      setVisibleTracks(visibleTracks, total, filterDescription);
+    // Short-circuit: skip if count and filters haven't changed
+    if (
+      allTracksUnfiltered.length === prevTrackCountRef.current &&
+      filters === prevFiltersRef.current
+    ) {
+      return;
     }
+
+    const timer = setTimeout(() => {
+      if (allTracksUnfiltered.length > 0) {
+        prevTrackCountRef.current = allTracksUnfiltered.length;
+        prevFiltersRef.current = filters;
+
+        const visibleTracks = allTracksUnfiltered.map((t) => ({
+          id: t.id,
+          title: t.title || 'Unknown Title',
+          artist: t.artist || 'Unknown Artist',
+          album: t.album || 'Unknown Album',
+        }));
+
+        // Build filter description for LLM context
+        const filterParts: string[] = [];
+        if (filters.search) filterParts.push(`search: "${filters.search}"`);
+        if (filters.artist) filterParts.push(`artist: "${filters.artist}"`);
+        if (filters.album) filterParts.push(`album: "${filters.album}"`);
+        const filterDescription = filterParts.length > 0
+          ? `Filtered by ${filterParts.join(', ')}`
+          : 'All tracks';
+
+        setVisibleTracks(visibleTracks, total, filterDescription);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [allTracksUnfiltered, total, filters, setVisibleTracks]);
 
   // Prefetch artwork for visible albums (use dense array)
@@ -1075,27 +534,6 @@ export function TrackListBrowser({
 
   // Threshold for using lazy queue mode vs loading all tracks
   const LAZY_QUEUE_THRESHOLD = 200;
-
-  // Build filters object for queue source tracking
-  const queueFilters = useMemo(() => ({
-    search: filters.search,
-    artist: filters.artist,
-    album: filters.album,
-    year_from: filters.yearFrom,
-    year_to: filters.yearTo,
-    energy_min: filters.energyMin,
-    energy_max: filters.energyMax,
-    valence_min: filters.valenceMin,
-    valence_max: filters.valenceMax,
-    fx: filters.fx,
-    fx_min: filters.fxMin,
-    fx_max: filters.fxMax,
-    fy: filters.fy,
-    fy_min: filters.fyMin,
-    fy_max: filters.fyMax,
-    sort_by: sortField,
-    sort_order: sortOrder,
-  }), [filters, sortField, sortOrder]);
 
   const handlePlayTrack = useCallback(
     async (track: Track, index: number) => {
@@ -1362,8 +800,8 @@ export function TrackListBrowser({
         </div>
       )}
 
-      {/* Mobile view - card layout (visible below md breakpoint) */}
-      {/* Uses unified mobileTracks: either jump-fetched page or normal infinite query */}
+      {/* Mobile view - virtualized card layout (visible below md breakpoint) */}
+      {/* Uses shared scroll container from AppShell via context */}
       <div className="md:hidden">
         {mobileJump?.hasPrevious && (
           <div ref={mobilePrevSentinelRef} className="h-4" />
@@ -1373,23 +811,63 @@ export function TrackListBrowser({
             <Loader2 className="w-5 h-5 animate-spin text-zinc-400" />
           </div>
         )}
-        {mobileTracks.map((track, index) => track ? (
-          <MobileTrackCard
-            key={track.id}
-            track={track}
-            index={index}
-            isCurrentTrack={currentTrack?.id === track.id}
-            isPlaying={currentTrack?.id === track.id && isPlaying}
-            isSelected={false}
-            onPlay={() => handlePlayTrack(track, index)}
-            onClick={() => {
-              onClearSelection();
-              handlePlayTrack(track, index);
-            }}
-            onContextMenu={(e) => handleContextMenu(track, e)}
-            onLongPress={(position) => openContextMenu(track, position)}
-          />
-        ) : null)}
+        {scrollContainerRef ? (
+          // Virtualized rendering when scroll container is available
+          <div style={{ height: mobileVirtualizer.getTotalSize(), position: 'relative' }}>
+            {mobileVirtualizer.getVirtualItems().map((virtualRow) => {
+              const index = virtualRow.index;
+              const track = mobileTracks[index];
+              if (!track) return null;
+              return (
+                <div
+                  key={track.id}
+                  data-index={virtualRow.index}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <MobileTrackCard
+                    track={track}
+                    index={index}
+                    isCurrentTrack={currentTrack?.id === track.id}
+                    isPlaying={currentTrack?.id === track.id && isPlaying}
+                    isSelected={false}
+                    onPlay={() => handlePlayTrack(track, index)}
+                    onClick={() => {
+                      onClearSelection();
+                      handlePlayTrack(track, index);
+                    }}
+                    onContextMenu={(e) => handleContextMenu(track, e)}
+                    onLongPress={(position) => openContextMenu(track, position)}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          // Fallback: non-virtualized rendering (e.g. tests without AppShell)
+          mobileTracks.map((track, index) => track ? (
+            <MobileTrackCard
+              key={track.id}
+              track={track}
+              index={index}
+              isCurrentTrack={currentTrack?.id === track.id}
+              isPlaying={currentTrack?.id === track.id && isPlaying}
+              isSelected={false}
+              onPlay={() => handlePlayTrack(track, index)}
+              onClick={() => {
+                onClearSelection();
+                handlePlayTrack(track, index);
+              }}
+              onContextMenu={(e) => handleContextMenu(track, e)}
+              onLongPress={(position) => openContextMenu(track, position)}
+            />
+          ) : null)
+        )}
         {/* Loading indicator for infinite scroll */}
         {mobileIsLoading && (
           <div className="flex items-center justify-center py-4">

@@ -15,6 +15,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { downloadApi, favoritesApi, playlistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { clearAllOfflineTracks } from '../../services/offlineService';
 import { showSuccess, showError, showInfo } from '../../stores/toastStore';
 import type { Track } from '../../types';
@@ -97,7 +98,7 @@ export function CollectionContextMenu({ collectionPath, position, onClose }: Pro
           description: `Playlist from ${trackIds.length} favorites`,
           track_ids: trackIds,
         });
-        queryClient.invalidateQueries({ queryKey: ['playlists'] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
         showSuccess('Created playlist from favorites');
       } catch {
         showError('Failed to create playlist');
@@ -111,7 +112,7 @@ export function CollectionContextMenu({ collectionPath, position, onClose }: Pro
         for (const f of favorites) {
           await favoritesApi.remove(f.id);
         }
-        queryClient.invalidateQueries({ queryKey: ['favorites'] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.favorites.all });
         showSuccess('Cleared all favorites');
       } catch {
         showError('Failed to clear favorites');

@@ -49,6 +49,29 @@ vi.mock('../../stores/toastStore', () => ({
   showWarning: vi.fn(),
 }));
 
+// Mock API clients
+const mockLastfmApi = {
+  scrobble: vi.fn(),
+  updateNowPlaying: vi.fn(),
+};
+const mockFavoritesApi = {
+  toggle: vi.fn(),
+};
+
+vi.mock('../../api/integrations', () => ({
+  lastfmApi: mockLastfmApi,
+}));
+
+vi.mock('../../api/profiles', () => ({
+  favoritesApi: mockFavoritesApi,
+}));
+
+vi.mock('../../stores/connectivityStore', () => ({
+  useConnectivityStore: {
+    getState: vi.fn(() => ({ browserOnline: true })),
+  },
+}));
+
 // We need to import after mocks are set up
 const getModule = async () => await import('../syncService');
 const getDbModule = async () => await import('../../db');
@@ -196,8 +219,7 @@ describe('syncService', () => {
       ];
       mockToArray.mockResolvedValueOnce(actions);
 
-      // Mock fetch for executeAction
-      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+      mockLastfmApi.scrobble.mockResolvedValueOnce({ status: 'ok', message: 'Scrobbled' });
 
       const { processPendingActions } = await getModule();
       const result = await processPendingActions();
@@ -213,7 +235,7 @@ describe('syncService', () => {
       ];
       mockToArray.mockResolvedValueOnce(actions);
 
-      global.fetch = vi.fn().mockResolvedValue({ ok: false, statusText: 'Server Error' });
+      mockLastfmApi.scrobble.mockRejectedValueOnce(new Error('Server Error'));
 
       const { processPendingActions } = await getModule();
       await processPendingActions();
@@ -227,7 +249,7 @@ describe('syncService', () => {
       ];
       mockToArray.mockResolvedValueOnce(actions);
 
-      global.fetch = vi.fn().mockResolvedValue({ ok: false, statusText: 'Server Error' });
+      mockLastfmApi.scrobble.mockRejectedValueOnce(new Error('Server Error'));
 
       const { processPendingActions } = await getModule();
       const result = await processPendingActions();
@@ -246,56 +268,46 @@ describe('syncService', () => {
       expect(result).toEqual({ processed: 0, failed: 0 });
     });
 
-    it('should dispatch scrobble action with correct fetch call', async () => {
+    it('should dispatch scrobble action via lastfmApi', async () => {
       const actions = [
         { id: 1, profileId: 'profile-123', type: 'scrobble' as const, payload: { trackId: 'track-1', timestamp: '2024-01-01T00:00:00Z' }, createdAt: new Date(), retries: 0 },
       ];
       mockToArray.mockResolvedValueOnce(actions);
 
-      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+      mockLastfmApi.scrobble.mockResolvedValueOnce({ status: 'ok', message: 'Scrobbled' });
 
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/lastfm/scrobble', expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          'X-Profile-ID': 'profile-123',
-        }),
-      }));
+      expect(mockLastfmApi.scrobble).toHaveBeenCalledWith('track-1', expect.any(Number));
     });
 
-    it('should dispatch now_playing action correctly', async () => {
+    it('should dispatch now_playing action via lastfmApi', async () => {
       const actions = [
         { id: 1, profileId: 'profile-123', type: 'now_playing' as const, payload: { trackId: 'track-1' }, createdAt: new Date(), retries: 0 },
       ];
       mockToArray.mockResolvedValueOnce(actions);
 
-      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+      mockLastfmApi.updateNowPlaying.mockResolvedValueOnce({ status: 'ok', message: 'Updated' });
 
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/lastfm/now-playing', expect.objectContaining({
-        method: 'POST',
-      }));
+      expect(mockLastfmApi.updateNowPlaying).toHaveBeenCalledWith('track-1');
     });
 
-    it('should dispatch favorite_toggle action correctly', async () => {
+    it('should dispatch favorite_toggle action via favoritesApi', async () => {
       const actions = [
         { id: 1, profileId: 'profile-123', type: 'favorite_toggle' as const, payload: { trackId: 'track-1' }, createdAt: new Date(), retries: 0 },
       ];
       mockToArray.mockResolvedValueOnce(actions);
 
-      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+      mockFavoritesApi.toggle.mockResolvedValueOnce({ track_id: 'track-1', is_favorite: true });
 
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/favorites/track-1/toggle', expect.objectContaining({
-        method: 'POST',
-      }));
+      expect(mockFavoritesApi.toggle).toHaveBeenCalledWith('track-1');
     });
   });
 

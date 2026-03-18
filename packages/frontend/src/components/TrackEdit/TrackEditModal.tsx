@@ -15,6 +15,7 @@ import {
   Fingerprint,
 } from 'lucide-react';
 import { tracksApi, bulkTracksApi, type TrackMetadataUpdate } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { BasicMetadataTab } from './tabs/BasicMetadataTab';
 import { ExtendedMetadataTab } from './tabs/ExtendedMetadataTab';
@@ -73,14 +74,14 @@ export function TrackEditModal() {
 
   // Fetch single-track metadata (single edit mode)
   const { data: metadata, isLoading: isLoadingSingle, error: errorSingle } = useQuery({
-    queryKey: ['track-metadata', trackId],
+    queryKey: queryKeys.trackMetadata.detail(trackId),
     queryFn: () => tracksApi.getMetadata(trackId!),
     enabled: !!trackId && !isBulkEdit,
   });
 
   // Fetch common values across selected tracks (bulk edit mode)
   const { data: commonValues, isLoading: isLoadingCommon, error: errorCommon } = useQuery({
-    queryKey: ['track-common-values', selectedIds],
+    queryKey: queryKeys.trackCommonValues.detail(selectedIds),
     queryFn: () => bulkTracksApi.getCommonValues(selectedIds),
     enabled: isBulkEdit && selectedIds.length > 1,
   });
@@ -94,8 +95,8 @@ export function TrackEditModal() {
       return tracksApi.updateMetadata(trackId!, update);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tracks'] });
-      queryClient.invalidateQueries({ queryKey: ['track-metadata'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trackMetadata.all });
       handleClose();
     },
   });
@@ -106,9 +107,9 @@ export function TrackEditModal() {
       return bulkTracksApi.updateMetadata(selectedIds, metadata, writeToFiles);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tracks'] });
-      queryClient.invalidateQueries({ queryKey: ['track-metadata'] });
-      queryClient.invalidateQueries({ queryKey: ['track-common-values'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trackMetadata.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.trackCommonValues.all });
       handleClose();
     },
   });
@@ -197,8 +198,8 @@ export function TrackEditModal() {
           write_to_file: writeToFile,
         });
         // Invalidate to refresh UI
-        queryClient.invalidateQueries({ queryKey: ['tracks'] });
-        queryClient.invalidateQueries({ queryKey: ['track-metadata', targetTrackId] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
+        queryClient.invalidateQueries({ queryKey: queryKeys.trackMetadata.detail(targetTrackId) });
       } catch (error) {
         log.error(`Failed to update track ${targetTrackId}:`, error);
       }

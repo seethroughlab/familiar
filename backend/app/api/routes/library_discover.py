@@ -295,57 +295,94 @@ async def get_discover_dashboard(
             else:
                 raw_similar = []
 
-        # Process similar artists
-        for similar in raw_similar[:3]:  # Take top 3 from each
+        # First pass: collect all similar artist candidates and their normalized names
+    similar_candidates: list[tuple[str, str, dict, str]] = []  # (name, normalized, similar_data, based_on)
+
+    for row in top_artists:
+        artist_name = row.artist
+        if not artist_name:
+            continue
+
+        artist_normalized = artist_name.lower().strip()
+
+        # Check cached artist info for similar artists
+        cached_info = await db.get(ArtistInfo, artist_normalized)
+        if cached_info and cached_info.similar_artists:
+            raw_similar = cached_info.similar_artists
+        else:
+            # Try fetching from Last.fm
+            lastfm_service = get_lastfm_service()
+            if lastfm_service.is_configured():
+                try:
+                    info = await lastfm_service.get_artist_info(artist_name)
+                    if info:
+                        raw_similar = info.get("similar", {}).get("artist", [])
+                    else:
+                        raw_similar = []
+                except Exception:
+                    raw_similar = []
+            else:
+                raw_similar = []
+
+        for similar in raw_similar[:3]:
             name = similar.get("name", "")
             if not name:
                 continue
-
             normalized = name.lower().strip()
             if normalized in seen_recommendations:
                 continue
             seen_recommendations.add(normalized)
+            similar_candidates.append((name, normalized, similar, artist_name))
 
-            # Check if in library
-            lib_check = await db.execute(
-                select(func.count(Track.id))
-                .where(
-                    func.lower(func.trim(Track.artist)) == normalized,
-                    Track.status == TrackStatus.ACTIVE,
-                )
+    # Single GROUP BY query to check library counts for all candidate artists at once
+    all_normalized_names = [c[1] for c in similar_candidates]
+    lib_counts: dict[str, int] = {}
+    if all_normalized_names:
+        lib_result = await db.execute(
+            select(
+                func.lower(func.trim(Track.artist)).label("artist_norm"),
+                func.count(Track.id).label("cnt"),
             )
-            track_count = lib_check.scalar() or 0
-            in_library = track_count > 0
-
-            # Extract image URL
-            images = similar.get("image", [])
-            image_url = None
-            for img in images:
-                if img.get("size") == "large" and img.get("#text"):
-                    image_url = img["#text"]
-                    break
-
-            # Parse match score
-            try:
-                match_score = float(similar.get("match", 0))
-            except (ValueError, TypeError):
-                match_score = 0.0
-
-            recommended_artists.append(
-                DiscoverRecommendedArtist(
-                    name=name,
-                    match_score=match_score,
-                    in_library=in_library,
-                    track_count=track_count if in_library else None,
-                    image_url=image_url,
-                    lastfm_url=similar.get("url"),
-                    bandcamp_url=generate_artist_search_url("bandcamp", name),
-                    based_on_artist=artist_name,
-                )
+            .where(
+                func.lower(func.trim(Track.artist)).in_(all_normalized_names),
+                Track.status == TrackStatus.ACTIVE,
             )
+            .group_by(func.lower(func.trim(Track.artist)))
+        )
+        for lib_row in lib_result.all():
+            lib_counts[lib_row.artist_norm] = lib_row.cnt
 
-            if len(recommended_artists) >= recommendations_limit:
+    # Build recommended artists list using the pre-fetched counts
+    for name, normalized, similar, based_on_artist in similar_candidates:
+        track_count = lib_counts.get(normalized, 0)
+        in_library = track_count > 0
+
+        # Extract image URL
+        images = similar.get("image", [])
+        image_url = None
+        for img in images:
+            if img.get("size") == "large" and img.get("#text"):
+                image_url = img["#text"]
                 break
+
+        # Parse match score
+        try:
+            match_score = float(similar.get("match", 0))
+        except (ValueError, TypeError):
+            match_score = 0.0
+
+        recommended_artists.append(
+            DiscoverRecommendedArtist(
+                name=name,
+                match_score=match_score,
+                in_library=in_library,
+                track_count=track_count if in_library else None,
+                image_url=image_url,
+                lastfm_url=similar.get("url"),
+                bandcamp_url=generate_artist_search_url("bandcamp", name),
+                based_on_artist=based_on_artist,
+            )
+        )
 
         if len(recommended_artists) >= recommendations_limit:
             break

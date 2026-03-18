@@ -1,7 +1,6 @@
 """App settings endpoints for user-configurable settings."""
 
 import asyncio
-from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -231,9 +230,14 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
     )
 
 
-@router.delete("/lastfm")
-async def clear_lastfm_settings() -> dict[str, Any]:
+class ClearSettingsResponse(BaseModel):
+    status: str
+    message: str
+
+
+@router.delete("/lastfm", response_model=ClearSettingsResponse)
+async def clear_lastfm_settings() -> ClearSettingsResponse:
     """Clear Last.fm credentials."""
     service = get_app_settings_service()
     service.update(lastfm_api_key="", lastfm_api_secret="")
-    return {"status": "cleared", "message": "Last.fm credentials cleared"}
+    return ClearSettingsResponse(status="cleared", message="Last.fm credentials cleared")

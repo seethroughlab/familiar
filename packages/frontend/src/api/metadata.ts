@@ -74,6 +74,18 @@ export interface ArtworkQueueBatchResponse {
   queued_count: number;
   existing_count: number;
   queued_hashes: string[];
+  existing_hashes: string[];
+  pending_hashes: string[];
+}
+
+export interface ArtworkStatusBatchResponse {
+  status: Record<string, boolean>;
+  failed: string[];
+}
+
+export interface ArtworkUploadResponse {
+  status: string;
+  message: string;
 }
 
 export const artworkApi = {
@@ -101,6 +113,26 @@ export const artworkApi = {
    * Check if artwork exists for an artist/album.
    * Uses HEAD request for efficiency.
    */
+  statusBatch: async (hashes: string[]): Promise<ArtworkStatusBatchResponse> => {
+    const { data } = await api.post('/artwork/status/batch', { hashes });
+    return data;
+  },
+
+  uploadTrackArtwork: async (
+    trackId: string,
+    file: File,
+    embedInFile: boolean,
+  ): Promise<ArtworkUploadResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post(
+      `/tracks/${trackId}/artwork?embed_in_file=${embedInFile}`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return data;
+  },
+
   checkExists: async (artist: string, album: string): Promise<boolean> => {
     try {
       await api.head(`/artwork/check/${encodePathSegment(artist)}/${encodePathSegment(album)}`);

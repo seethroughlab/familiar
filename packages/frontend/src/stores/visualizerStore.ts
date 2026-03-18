@@ -3,7 +3,7 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_VISUALIZER_ID } from '../components/Visualizer/types';
+import { DEFAULT_VISUALIZER_ID, VISUALIZER_STORAGE_KEY } from '../components/Visualizer/constants';
 
 interface VisualizerState {
   // Current visualizer ID
@@ -21,7 +21,7 @@ export const useVisualizerStore = create<VisualizerState>()(
       setVisualizerId: (id: string) => set({ visualizerId: id }),
     }),
     {
-      name: 'familiar-visualizer',
+      name: VISUALIZER_STORAGE_KEY,
     }
   )
 );

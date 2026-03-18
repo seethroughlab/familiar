@@ -27,7 +27,7 @@ test:
 # Run backend API contract tests with required migration preflight
 test-contract:
 	uv run python -m alembic upgrade head
-	uv run pytest tests/test_api_contract_error_shapes.py -v --tb=short --no-cov
+	uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py -v --tb=short --no-cov
 
 # Lint code
 lint:

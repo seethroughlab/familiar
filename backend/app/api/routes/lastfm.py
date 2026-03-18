@@ -1,14 +1,19 @@
 """Last.fm endpoints for authentication and scrobbling."""
 
 import time
-from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import CurrentProfile, DbSession
+from app.api.exceptions import (
+    AuthenticationError,
+    ServiceUnavailableError,
+    TrackNotFoundError,
+    ValidationError,
+)
 from app.db.models import Track
 from app.services.lastfm import get_lastfm_service
 
@@ -85,18 +90,12 @@ async def get_auth_url(profile: CurrentProfile) -> LastfmAuthResponse:
     Requires X-Profile-ID header.
     """
     if not profile:
-        raise HTTPException(
-            status_code=401,
-            detail="Profile ID required - register at POST /profiles/register"
-        )
+        raise AuthenticationError("Profile ID required - register at POST /profiles/register")
 
     lastfm = get_lastfm_service()
 
     if not lastfm.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="Last.fm API not configured. Add credentials in Settings."
-        )
+        raise ServiceUnavailableError("Last.fm API not configured. Add credentials in Settings.")
 
     # Get frontend URL from settings
     from app.config import settings
@@ -120,18 +119,12 @@ async def handle_callback(
     Requires X-Profile-ID header.
     """
     if not profile:
-        raise HTTPException(
-            status_code=401,
-            detail="Profile ID required"
-        )
+        raise AuthenticationError("Profile ID required")
 
     lastfm = get_lastfm_service()
 
     if not lastfm.is_configured():
-        raise HTTPException(
-            status_code=503,
-            detail="Last.fm API not configured"
-        )
+        raise ServiceUnavailableError("Last.fm API not configured")
 
     try:
         # Exchange token for session
@@ -145,31 +138,30 @@ async def handle_callback(
             username=session.username
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to authenticate with Last.fm: {str(e)}"
-        )
+        raise ValidationError("Failed to authenticate with Last.fm", detail=str(e))
 
 
-@router.post("/disconnect")
+class LastfmDisconnectResponse(BaseModel):
+    """Last.fm disconnect response."""
+    status: str
+
+
+@router.post("/disconnect", response_model=LastfmDisconnectResponse)
 async def disconnect(
     db: DbSession,
     profile: CurrentProfile,
-) -> dict[str, Any]:
+) -> LastfmDisconnectResponse:
     """Disconnect from Last.fm.
 
     Requires X-Profile-ID header.
     """
     if not profile:
-        raise HTTPException(
-            status_code=401,
-            detail="Profile ID required"
-        )
+        raise AuthenticationError("Profile ID required")
 
     lastfm = get_lastfm_service()
     await lastfm.delete_session(db, profile.id)
 
-    return {"status": "disconnected"}
+    return LastfmDisconnectResponse(status="disconnected")
 
 
 @router.post("/now-playing", response_model=ScrobbleResponse)
@@ -183,19 +175,13 @@ async def update_now_playing(
     Requires X-Profile-ID header.
     """
     if not profile:
-        raise HTTPException(
-            status_code=401,
-            detail="Profile ID required"
-        )
+        raise AuthenticationError("Profile ID required")
 
     lastfm = get_lastfm_service()
     session = await lastfm.get_stored_session(db, profile.id)
 
     if not session:
-        raise HTTPException(
-            status_code=400,
-            detail="Not connected to Last.fm"
-        )
+        raise ValidationError("Not connected to Last.fm")
 
     # Get track from database
     query = select(Track).where(Track.id == UUID(request.track_id))
@@ -203,13 +189,10 @@ async def update_now_playing(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if not track.title or not track.artist:
-        raise HTTPException(
-            status_code=400,
-            detail="Track must have title and artist for scrobbling"
-        )
+        raise ValidationError("Track must have title and artist for scrobbling")
 
     success = await lastfm.update_now_playing(
         session_key=session.session_key,
@@ -244,19 +227,13 @@ async def scrobble_track(
     Requires X-Profile-ID header.
     """
     if not profile:
-        raise HTTPException(
-            status_code=401,
-            detail="Profile ID required"
-        )
+        raise AuthenticationError("Profile ID required")
 
     lastfm = get_lastfm_service()
     session = await lastfm.get_stored_session(db, profile.id)
 
     if not session:
-        raise HTTPException(
-            status_code=400,
-            detail="Not connected to Last.fm"
-        )
+        raise ValidationError("Not connected to Last.fm")
 
     # Get track from database
     query = select(Track).where(Track.id == UUID(request.track_id))
@@ -264,13 +241,10 @@ async def scrobble_track(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if not track.title or not track.artist:
-        raise HTTPException(
-            status_code=400,
-            detail="Track must have title and artist for scrobbling"
-        )
+        raise ValidationError("Track must have title and artist for scrobbling")
 
     timestamp = request.timestamp or int(time.time())
 

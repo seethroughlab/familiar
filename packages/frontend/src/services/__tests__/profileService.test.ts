@@ -38,6 +38,25 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
+// Mock profilesApi
+const mockProfilesApi = {
+  list: vi.fn(),
+  create: vi.fn(),
+  get: vi.fn(),
+  update: vi.fn(),
+  delete: vi.fn(),
+};
+
+vi.mock('../../api/profiles', () => ({
+  profilesApi: mockProfilesApi,
+}));
+
+vi.mock('../../stores/connectivityStore', () => ({
+  useConnectivityStore: {
+    getState: vi.fn(() => ({ browserOnline: true })),
+  },
+}));
+
 describe('profileService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -49,7 +68,6 @@ describe('profileService', () => {
     mockCachedProfilesPut.mockResolvedValue(undefined);
     mockCachedProfilesDelete.mockResolvedValue(undefined);
     mockCachedProfilesToArray.mockResolvedValue([]);
-    global.fetch = vi.fn();
   });
 
   afterEach(() => {
@@ -64,7 +82,6 @@ describe('profileService', () => {
     color: '#ff0000',
     avatar_url: null,
     created_at: '2024-01-01T00:00:00Z',
-    has_spotify: true,
     has_lastfm: false,
   };
 
@@ -73,7 +90,6 @@ describe('profileService', () => {
     name: 'Test User',
     color: '#ff0000',
     avatar_url: null,
-    has_spotify: true,
     has_lastfm: false,
     cachedAt: new Date(),
   };
@@ -88,7 +104,6 @@ describe('profileService', () => {
           id: 'profile-123',
           name: 'Test User',
           color: '#ff0000',
-          has_spotify: true,
           has_lastfm: false,
           cachedAt: expect.any(Date),
         })
@@ -272,24 +287,18 @@ describe('profileService', () => {
   describe('listProfiles', () => {
     it('should fetch profiles from API', async () => {
       const profiles = [sampleProfile];
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(profiles),
-      } as Response);
+      mockProfilesApi.list.mockResolvedValueOnce(profiles);
 
       const { listProfiles } = await getModule();
       const result = await listProfiles();
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('Test User');
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/profiles');
+      expect(mockProfilesApi.list).toHaveBeenCalled();
     });
 
     it('should cache fetched profiles', async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve([sampleProfile]),
-      } as Response);
+      mockProfilesApi.list.mockResolvedValueOnce([sampleProfile]);
 
       const { listProfiles } = await getModule();
       await listProfiles();
@@ -298,7 +307,7 @@ describe('profileService', () => {
     });
 
     it('should fall back to cache when offline with allowCache', async () => {
-      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'));
+      mockProfilesApi.list.mockRejectedValueOnce(new Error('Network error'));
       mockCachedProfilesToArray.mockResolvedValueOnce([sampleCachedProfile]);
 
       const { listProfiles } = await getModule();
@@ -309,7 +318,7 @@ describe('profileService', () => {
     });
 
     it('should throw when offline without allowCache', async () => {
-      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'));
+      mockProfilesApi.list.mockRejectedValueOnce(new Error('Network error'));
 
       const { listProfiles } = await getModule();
       await expect(listProfiles()).rejects.toThrow('Network error');
@@ -317,39 +326,27 @@ describe('profileService', () => {
   });
 
   describe('createProfile', () => {
-    it('should post to API and return created profile', async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(sampleProfile),
-      } as Response);
+    it('should call profilesApi.create and return created profile', async () => {
+      mockProfilesApi.create.mockResolvedValueOnce(sampleProfile);
 
       const { createProfile } = await getModule();
       const result = await createProfile({ name: 'Test User', color: '#ff0000' });
 
       expect(result.name).toBe('Test User');
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/profiles', expect.objectContaining({
-        method: 'POST',
-      }));
+      expect(mockProfilesApi.create).toHaveBeenCalledWith({ name: 'Test User', color: '#ff0000' });
     });
 
     it('should throw on API error', async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: false,
-        statusText: 'Bad Request',
-      } as Response);
+      mockProfilesApi.create.mockRejectedValueOnce(new Error('Bad Request'));
 
       const { createProfile } = await getModule();
-      await expect(createProfile({ name: '' })).rejects.toThrow('Failed to create profile');
+      await expect(createProfile({ name: '' })).rejects.toThrow('Bad Request');
     });
   });
 
   describe('getProfile', () => {
     it('should fetch profile by ID and cache it', async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(sampleProfile),
-      } as Response);
+      mockProfilesApi.get.mockResolvedValueOnce(sampleProfile);
 
       const { getProfile } = await getModule();
       const result = await getProfile('profile-123');
@@ -359,10 +356,9 @@ describe('profileService', () => {
     });
 
     it('should return null and clear cache for 404', async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      } as Response);
+      const axiosError = new Error('Not Found');
+      (axiosError as unknown as { response: { status: number } }).response = { status: 404 };
+      mockProfilesApi.get.mockRejectedValueOnce(axiosError);
 
       const { getProfile } = await getModule();
       const result = await getProfile('deleted-profile');
@@ -372,7 +368,7 @@ describe('profileService', () => {
     });
 
     it('should fall back to cache on network error with allowCache', async () => {
-      vi.mocked(global.fetch).mockRejectedValueOnce(new Error('Network error'));
+      mockProfilesApi.get.mockRejectedValueOnce(new Error('Network error'));
       mockCachedProfilesGet.mockResolvedValueOnce(sampleCachedProfile);
 
       const { getProfile } = await getModule();
@@ -385,14 +381,12 @@ describe('profileService', () => {
 
   describe('deleteProfile', () => {
     it('should delete via API', async () => {
-      vi.mocked(global.fetch).mockResolvedValueOnce({ ok: true } as Response);
+      mockProfilesApi.delete.mockResolvedValueOnce(undefined);
 
       const { deleteProfile } = await getModule();
       await deleteProfile('profile-123');
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/v1/profiles/profile-123', expect.objectContaining({
-        method: 'DELETE',
-      }));
+      expect(mockProfilesApi.delete).toHaveBeenCalledWith('profile-123');
     });
 
     it('should clear selection if deleting the selected profile', async () => {
@@ -404,7 +398,7 @@ describe('profileService', () => {
         createdAt: new Date(),
       });
 
-      vi.mocked(global.fetch).mockResolvedValueOnce({ ok: true } as Response);
+      mockProfilesApi.delete.mockResolvedValueOnce(undefined);
 
       const { selectProfile, deleteProfile } = await getModule();
       await selectProfile('profile-123');
@@ -431,11 +425,7 @@ describe('profileService', () => {
         createdAt: new Date(),
       });
 
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(sampleProfile),
-      } as Response);
+      mockProfilesApi.get.mockResolvedValueOnce(sampleProfile);
 
       const { validateSelectedProfile } = await getModule();
       const result = await validateSelectedProfile();
@@ -451,10 +441,9 @@ describe('profileService', () => {
         createdAt: new Date(),
       });
 
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      } as Response);
+      const axiosError = new Error('Not Found');
+      (axiosError as unknown as { response: { status: number } }).response = { status: 404 };
+      mockProfilesApi.get.mockRejectedValueOnce(axiosError);
 
       const { validateSelectedProfile } = await getModule();
       const result = await validateSelectedProfile();

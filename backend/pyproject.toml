@@ -42,6 +42,7 @@ dependencies = [
     "pyacoustid>=1.3.0",
     "trafilatura>=1.6.0",
     "curl_cffi>=0.7.0",
+    "langdetect>=1.0.9",
     "musicbrainzngs>=0.7.1",
     # S3 backup
     "boto3>=1.34.0",
@@ -56,6 +57,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",  # Coverage reporting
+    "pytest-rerunfailures>=14.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
     "httpx>=0.26.0",  # For TestClient
@@ -139,7 +141,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 # Coverage configuration - start low and increase over time
-addopts = "--cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=38"
+addopts = ""
 
 [tool.coverage.run]
 source = ["app"]

@@ -87,6 +87,9 @@ export interface AudioEngine {
   getPreloadingTrackId?(): string | null;
   isNextReady?(): boolean;
 
+  // Optional: Media session action availability (WebAudioEngine only)
+  updateMediaSessionActions?(info: { canGoNext: boolean; canGoPrevious: boolean }): void;
+
   // Optional: Visualizer (WebAudioEngine only)
   getAnalyser?(): AnalyserNode | null;
   getAudioContext?(): AudioContext | null;

@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Heart, Clock, Search, X, Download, Check, Loader2, RotateCw } from 'lucide-react';
+import { ArrowLeft, Play, Heart, Clock, Download, Check, Loader2, RotateCw } from 'lucide-react';
+import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { favoritesApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAutoDownload } from '../../hooks/useAutoDownload';
-import * as offlineService from '../../services/offlineService';
+import { useOfflineTrackState } from '../../hooks/useOfflineTrackState';
+import { useTrackSearch } from '../../hooks/useTrackSearch';
 import type { Track } from '../../types';
 import type { FavoriteTrack } from '../../api';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
@@ -30,8 +34,6 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { favorites, total, toggle } = useFavorites();
   const { isOffline } = useOfflineStatus();
-  const [searchFilter, setSearchFilter] = useState('');
-  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
 
   const getTrack = useCallback(
     (item: FavoriteItem): Track => ({
@@ -65,30 +67,15 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
 
   // Auto-download setting
   const { data: autoDownloadSetting } = useQuery({
-    queryKey: ['favorites-auto-download'],
+    queryKey: queryKeys.favorites.autoDownload,
     queryFn: () => favoritesApi.getAutoDownload(),
-    staleTime: 60000,
-    retry: isOffline ? false : 3,
+    staleTime: STALE_TIME.MEDIUM,
+    retry: offlineAwareRetry(isOffline),
   });
   const autoDownloadEnabled = autoDownloadSetting?.enabled ?? false;
 
-  // Check offline status
-  useEffect(() => {
-    const checkOfflineStatus = async () => {
-      const ids = await offlineService.getOfflineTrackIds();
-      setOfflineTrackIds(new Set(ids));
-    };
-    checkOfflineStatus();
-  }, []);
-
-  // Update offline track IDs when download job completes
-  useEffect(() => {
-    if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
-      offlineService.getOfflineTrackIds().then((ids) => {
-        setOfflineTrackIds(new Set(ids));
-      });
-    }
-  }, [downloadJob?.status]);
+  // Offline track state
+  const { offlineTrackIds } = useOfflineTrackState({ downloadJobStatus: downloadJob?.status });
 
   const favoriteTrackIds = useMemo(() => favorites.map(f => f.id), [favorites]);
   const allTracksOffline = favorites.length > 0 && favorites.every(f => offlineTrackIds.has(f.id));
@@ -110,16 +97,11 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
     startDownload(jobId, 'playlist', 'Favorites', tracksToDownload.map(f => f.id));
   };
 
-  const filteredFavorites = useMemo(() => {
-    const items: FavoriteItem[] = favorites.map(f => ({ ...f, _kind: 'local' as const }));
-    if (!searchFilter) return items;
-    const q = searchFilter.toLowerCase();
-    return items.filter(t =>
-      (t.title?.toLowerCase().includes(q)) ||
-      (t.artist?.toLowerCase().includes(q)) ||
-      (t.album?.toLowerCase().includes(q))
-    );
-  }, [favorites, searchFilter]);
+  const favoriteItems = useMemo<FavoriteItem[]>(
+    () => favorites.map(f => ({ ...f, _kind: 'local' as const })),
+    [favorites],
+  );
+  const { searchFilter, setSearchFilter, filteredTracks: filteredFavorites } = useTrackSearch(favoriteItems);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: FavoriteItem[]) => {
     const items = sortedItems ?? filteredFavorites;
@@ -182,7 +164,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const getItemId = useCallback((item: FavoriteItem) => item.id, []);
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="flex flex-col gap-4 p-4 min-h-full">
       {/* Header */}
       <div className="space-y-4">
         <button
@@ -251,7 +233,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
             onClick={async () => {
               const newValue = !autoDownloadEnabled;
               await favoritesApi.setAutoDownload(newValue);
-              queryClient.setQueryData(['favorites-auto-download'], { enabled: newValue });
+              queryClient.setQueryData(queryKeys.favorites.autoDownload, { enabled: newValue });
             }}
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
               autoDownloadEnabled
@@ -268,24 +250,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input
-          type="text"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          placeholder="Search tracks..."
-          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-        />
-        {searchFilter && (
-          <button
-            onClick={() => setSearchFilter('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

@@ -5,8 +5,6 @@ candidate ranking, filter presets, seed selection, and snippet window hints.
 No session persistence; all state lives on the client.
 """
 
-import math
-import random
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID

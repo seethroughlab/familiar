@@ -2,6 +2,7 @@
 
 import logging
 import multiprocessing
+import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -14,7 +15,7 @@ try:
 except RuntimeError:
     pass  # Context already set
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -64,12 +65,50 @@ logger = get_logger(__name__)
 
 # Request ID middleware for tracing
 class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Add unique request ID to each request for tracing."""
+    """Add unique request ID and request timing to each request."""
+
+    # Paths excluded from timing to reduce noise
+    _SKIP_TIMING_PREFIXES = ("/health", "/assets/", "/icons/", "/sw.js", "/manifest.json", "/workbox-")
 
     async def dispatch(self, request: Request, call_next):
         request_id = str(uuid.uuid4())[:8]
         request.state.request_id = request_id
+
+        path = request.url.path
+        skip_timing = any(path.startswith(p) for p in self._SKIP_TIMING_PREFIXES)
+
+        if skip_timing:
+            response = await call_next(request)
+            response.headers["X-Request-ID"] = request_id
+            return response
+
+        from app.services.metrics import get_metrics_collector, get_query_count, reset_query_count
+        reset_query_count()
+
+        start = time.perf_counter()
         response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+
+        query_count = get_query_count()
+
+        # Extract route template (e.g. /api/v1/tracks/{track_id}) or fall back to path
+        route = request.scope.get("route")
+        template = route.path if route else path
+
+        logger.info(
+            "request_completed",
+            extra={
+                "method": request.method,
+                "route": template,
+                "status_code": response.status_code,
+                "duration_ms": round(duration_ms, 2),
+                "query_count": query_count,
+                "request_id": request_id,
+            },
+        )
+
+        get_metrics_collector().record_request(request.method, template, response.status_code, duration_ms, query_count)
+
         response.headers["X-Request-ID"] = request_id
         return response
 
@@ -272,6 +311,23 @@ async def familiar_exception_handler(
         request_id=request_id,
     )
 
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(
+    request: Request, exc: HTTPException
+) -> JSONResponse:
+    """Normalize HTTPException responses to standard error envelope."""
+    request_id = getattr(request.state, "request_id", None)
+    if exc.status_code >= 500:
+        logger.error(f"[{request_id}] HTTPException {exc.status_code}: {exc.detail}")
+    else:
+        logger.warning(f"[{request_id}] HTTPException {exc.status_code}: {exc.detail}")
+    return create_error_response(
+        status_code=exc.status_code,
+        message=str(exc.detail) if exc.detail else "Request failed",
+        request_id=request_id,
+    )
 
 
 @app.exception_handler(Exception)

@@ -1,0 +1,2332 @@
+{
+  "config": {
+    "configFile": "/Users/jeff/Developer/familiar/packages/web/playwright.config.ts",
+    "rootDir": "/Users/jeff/Developer/familiar/packages/web/e2e",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": "/Users/jeff/Developer/familiar/packages/web/e2e/global-setup.ts",
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/jeff/Developer/familiar/packages/web/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/Users/jeff/Developer/familiar/packages/web/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "html",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "playwright-report/results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "ai-chat-mocked.spec.ts",
+      "file": "ai-chat-mocked.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "AI Chat (Mocked)",
+          "file": "ai-chat-mocked.spec.ts",
+          "line": 95,
+          "column": 6,
+          "specs": [
+            {
+              "title": "chat input is visible and enabled when API is configured",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-f0040ceed74a99f5e658",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 111,
+              "column": 3
+            },
+            {
+              "title": "sending message shows AI response",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-04a88027e1034c36de92",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 117,
+              "column": 3
+            },
+            {
+              "title": "tool calls are displayed during processing",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-fb5a06565a6aad36145c",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 138,
+              "column": 3
+            },
+            {
+              "title": "error message is displayed when API returns error",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-51d854e2f34528d08c67",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 158,
+              "column": 3
+            },
+            {
+              "title": "handles no tracks found gracefully",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-fe7bb84183b1f1145735",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 175,
+              "column": 3
+            },
+            {
+              "title": "chat shows disabled state when API is not configured",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-087691c6043ed36a1264",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 192,
+              "column": 3
+            },
+            {
+              "title": "queue updates when AI returns tracks",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-a251b433ea466ad42948",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 223,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Chat API (Mocked)",
+          "file": "ai-chat-mocked.spec.ts",
+          "line": 244,
+          "column": 6,
+          "specs": [
+            {
+              "title": "chat status endpoint returns configuration status",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1b408437c5f86ef83353-191b6da41bdaa086f85e",
+              "file": "ai-chat-mocked.spec.ts",
+              "line": 245,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "ai-chat.spec.ts",
+      "file": "ai-chat.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "AI Chat",
+          "file": "ai-chat.spec.ts",
+          "line": 10,
+          "column": 6,
+          "specs": [
+            {
+              "title": "add Anthropic API key in Admin panel",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires ANTHROPIC_API_KEY (skipped in CI due to library sync issues)",
+                      "location": {
+                        "file": "/Users/jeff/Developer/familiar/packages/web/e2e/ai-chat.spec.ts",
+                        "line": 13,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1f1ef7bcd9eb87d7ff46-cdb70b95dee012c8c0ea",
+              "file": "ai-chat.spec.ts",
+              "line": 26,
+              "column": 3
+            },
+            {
+              "title": "send \"Play something upbeat\" and AI responds",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires ANTHROPIC_API_KEY (skipped in CI due to library sync issues)",
+                      "location": {
+                        "file": "/Users/jeff/Developer/familiar/packages/web/e2e/ai-chat.spec.ts",
+                        "line": 13,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1f1ef7bcd9eb87d7ff46-700711a319cef25864da",
+              "file": "ai-chat.spec.ts",
+              "line": 52,
+              "column": 3
+            },
+            {
+              "title": "AI creates playlist that starts playing automatically",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires ANTHROPIC_API_KEY (skipped in CI due to library sync issues)",
+                      "location": {
+                        "file": "/Users/jeff/Developer/familiar/packages/web/e2e/ai-chat.spec.ts",
+                        "line": 13,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1f1ef7bcd9eb87d7ff46-7c642b14f8672779e3dd",
+              "file": "ai-chat.spec.ts",
+              "line": 90,
+              "column": 3
+            },
+            {
+              "title": "chat shows disabled state when no API key configured",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [
+                    {
+                      "type": "skip",
+                      "description": "Requires ANTHROPIC_API_KEY (skipped in CI due to library sync issues)",
+                      "location": {
+                        "file": "/Users/jeff/Developer/familiar/packages/web/e2e/ai-chat.spec.ts",
+                        "line": 13,
+                        "column": 8
+                      }
+                    }
+                  ],
+                  "expectedStatus": "skipped",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1f1ef7bcd9eb87d7ff46-682fb87e7461f6985820",
+              "file": "ai-chat.spec.ts",
+              "line": 128,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "audio-playback.spec.ts",
+      "file": "audio-playback.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Audio Playback",
+          "file": "audio-playback.spec.ts",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "clicking a track starts playback",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-3f0d169eb72fcb7c52c7",
+              "file": "audio-playback.spec.ts",
+              "line": 10,
+              "column": 3
+            },
+            {
+              "title": "play/pause button toggles playback",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-e5a0c613a4e011e759fe",
+              "file": "audio-playback.spec.ts",
+              "line": 32,
+              "column": 3
+            },
+            {
+              "title": "progress bar shows current position",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-3de72b7a40da45cdd079",
+              "file": "audio-playback.spec.ts",
+              "line": 59,
+              "column": 3
+            },
+            {
+              "title": "clicking progress bar seeks to position",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-e6ba6482abf6ffe18acd",
+              "file": "audio-playback.spec.ts",
+              "line": 77,
+              "column": 3
+            },
+            {
+              "title": "volume slider changes volume",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-6225326452e0958e1289",
+              "file": "audio-playback.spec.ts",
+              "line": 103,
+              "column": 3
+            },
+            {
+              "title": "next/previous track buttons work",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-ad3e262c80bc4cd2badd",
+              "file": "audio-playback.spec.ts",
+              "line": 137,
+              "column": 3
+            },
+            {
+              "title": "shuffle mode randomizes order",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-24273a50c1db6b5eedeb",
+              "file": "audio-playback.spec.ts",
+              "line": 179,
+              "column": 3
+            },
+            {
+              "title": "repeat mode toggles correctly",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "c77473dde06da91d3d24-b75c7c0b729c2d29fe29",
+              "file": "audio-playback.spec.ts",
+              "line": 212,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "crossfade-playback.spec.ts",
+      "file": "crossfade-playback.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Crossfade Playback",
+          "file": "crossfade-playback.spec.ts",
+          "line": 75,
+          "column": 6,
+          "specs": [
+            {
+              "title": "track transition without gap",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "aec97b01f94eb984907f-8b804e4c105cf6c05014",
+              "file": "crossfade-playback.spec.ts",
+              "line": 83,
+              "column": 3
+            },
+            {
+              "title": "both elements active during crossfade",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "aec97b01f94eb984907f-61a1440dcdf931b57456",
+              "file": "crossfade-playback.spec.ts",
+              "line": 108,
+              "column": 3
+            },
+            {
+              "title": "seek during crossfade cancels gracefully",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "aec97b01f94eb984907f-b8ba2e8116c902c5cfed",
+              "file": "crossfade-playback.spec.ts",
+              "line": 141,
+              "column": 3
+            },
+            {
+              "title": "crossfade disabled still advances tracks",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "aec97b01f94eb984907f-5e0cc9676a6d509f9b91",
+              "file": "crossfade-playback.spec.ts",
+              "line": 166,
+              "column": 3
+            },
+            {
+              "title": "repeat-all wraps last track to first",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "aec97b01f94eb984907f-01fc8a8e2ed2dfe5dc7f",
+              "file": "crossfade-playback.spec.ts",
+              "line": 191,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "library-sync.spec.ts",
+      "file": "library-sync.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Library Sync",
+          "file": "library-sync.spec.ts",
+          "line": 15,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Library section is visible in Settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-14b4d9ebb69ff5a1a5cd",
+              "file": "library-sync.spec.ts",
+              "line": 21,
+              "column": 3
+            },
+            {
+              "title": "Sync Now button is present and clickable",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-ab1dabd14f406b854708",
+              "file": "library-sync.spec.ts",
+              "line": 33,
+              "column": 3
+            },
+            {
+              "title": "Sync button triggers scan and shows progress",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-939cfda9ad69f5a9e5d4",
+              "file": "library-sync.spec.ts",
+              "line": 49,
+              "column": 3
+            },
+            {
+              "title": "Library shows content after sync",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-5fb4cc7fef576cae70e3",
+              "file": "library-sync.spec.ts",
+              "line": 70,
+              "column": 3
+            },
+            {
+              "title": "Sync status reflects in system health",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-41c08e33a836e354691e",
+              "file": "library-sync.spec.ts",
+              "line": 87,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Library Sync API",
+          "file": "library-sync.spec.ts",
+          "line": 115,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Can poll sync status endpoint",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-0459bd1357bf3b904950",
+              "file": "library-sync.spec.ts",
+              "line": 116,
+              "column": 3
+            },
+            {
+              "title": "Sync endpoint accepts POST request",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "d98709bcce70ecf579e8-0662848a3d0191b46fab",
+              "file": "library-sync.spec.ts",
+              "line": 129,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "mobile-screenshots.spec.ts",
+      "file": "mobile-screenshots.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Mobile - iphone-se (375x667)",
+          "file": "mobile-screenshots.spec.ts",
+          "line": 46,
+          "column": 8,
+          "specs": [
+            {
+              "title": "library",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-4a953809a577cc25fd5a",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "playlists",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-f054324164aea4aaf40a",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-47e9f685dc947c826265",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "player-bar",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-f6da0de5edaa6600cc2a",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 66,
+              "column": 5
+            },
+            {
+              "title": "full-player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-5c1eef342b71751b1efd",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 83,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "Mobile - iphone-14 (390x844)",
+          "file": "mobile-screenshots.spec.ts",
+          "line": 46,
+          "column": 8,
+          "specs": [
+            {
+              "title": "library",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-c667ff9eb6177a81e189",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "playlists",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-8c9ea72f000434f73f1e",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-01b2d386ccc497849be9",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "player-bar",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-cf1778162c20a70f62b4",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 66,
+              "column": 5
+            },
+            {
+              "title": "full-player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-a401c7e294a44c5347ea",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 83,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "Mobile - iphone-14-pro-max (430x932)",
+          "file": "mobile-screenshots.spec.ts",
+          "line": 46,
+          "column": 8,
+          "specs": [
+            {
+              "title": "library",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-13641ea03bc98ec66871",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "playlists",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-740511848d2bf2e1ad06",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-27b077c539d673fcfd71",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "player-bar",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-8292adf68b411fcee806",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 66,
+              "column": 5
+            },
+            {
+              "title": "full-player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-bb74803cc108662e745e",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 83,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "Mobile - pixel-7 (412x915)",
+          "file": "mobile-screenshots.spec.ts",
+          "line": 46,
+          "column": 8,
+          "specs": [
+            {
+              "title": "library",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-91b8eb7c92bd7a41a784",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "playlists",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-0ecbc87021cba18353f7",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-6808a2803f45fb24fdc9",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "player-bar",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-c25909868704a865dae6",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 66,
+              "column": 5
+            },
+            {
+              "title": "full-player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-df4ae6281eb8f516d70c",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 83,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "Mobile - galaxy-s21 (360x800)",
+          "file": "mobile-screenshots.spec.ts",
+          "line": 46,
+          "column": 8,
+          "specs": [
+            {
+              "title": "library",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-34a22c02ff38eba938c9",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "playlists",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-b85fd5096286c2726c44",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-f843d13d14f6dd3060c3",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 54,
+              "column": 7
+            },
+            {
+              "title": "player-bar",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-50f86ca538915d0ed79b",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 66,
+              "column": 5
+            },
+            {
+              "title": "full-player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "667b98cb6227f0453434-cf10c1c7ede6d04fb2b5",
+              "file": "mobile-screenshots.spec.ts",
+              "line": 83,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "offline-fallback.spec.ts",
+      "file": "offline-fallback.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Offline Fallback",
+          "file": "offline-fallback.spec.ts",
+          "line": 8,
+          "column": 6,
+          "specs": [
+            {
+              "title": "stream failure shows error state without crashing",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "893325a65ff6d7150218-17aa3f8067218dde5b3e",
+              "file": "offline-fallback.spec.ts",
+              "line": 14,
+              "column": 3
+            },
+            {
+              "title": "stream failure with offline track falls back to cached audio",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "893325a65ff6d7150218-04b76ab839b2cdefe056",
+              "file": "offline-fallback.spec.ts",
+              "line": 47,
+              "column": 3
+            },
+            {
+              "title": "network recovery after stream failure",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "893325a65ff6d7150218-d1814bf793f431c118d8",
+              "file": "offline-fallback.spec.ts",
+              "line": 113,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "offline-invariant.spec.ts",
+      "file": "offline-invariant.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Offline Invariant",
+          "file": "offline-invariant.spec.ts",
+          "line": 9,
+          "column": 6,
+          "specs": [
+            {
+              "title": "downloads view is empty when no tracks downloaded",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b915ea37068357c7b502-49a363ea16dfa9b74bfa",
+              "file": "offline-invariant.spec.ts",
+              "line": 15,
+              "column": 3
+            },
+            {
+              "title": "downloads count is less than or equal to library total",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b915ea37068357c7b502-ab98205f11ddaffe23e7",
+              "file": "offline-invariant.spec.ts",
+              "line": 54,
+              "column": 3
+            },
+            {
+              "title": "download a track and verify it appears in downloads",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b915ea37068357c7b502-0d10b813e399f9fa5e52",
+              "file": "offline-invariant.spec.ts",
+              "line": 89,
+              "column": 3
+            },
+            {
+              "title": "offline track IDs are consistent across IndexedDB and downloads view",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "b915ea37068357c7b502-3192ee9120808fd104ff",
+              "file": "offline-invariant.spec.ts",
+              "line": 179,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "playlists.spec.ts",
+      "file": "playlists.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Playlists",
+          "file": "playlists.spec.ts",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "create new playlist",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "bd26eca51b3e4ada7ca2-bd0880b80cb9a2fafa7c",
+              "file": "playlists.spec.ts",
+              "line": 11,
+              "column": 3
+            },
+            {
+              "title": "rename playlist",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "bd26eca51b3e4ada7ca2-f15ab462da81919c9c4e",
+              "file": "playlists.spec.ts",
+              "line": 49,
+              "column": 3
+            },
+            {
+              "title": "delete playlist",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "bd26eca51b3e4ada7ca2-2ade0f7e3d8aadd08b50",
+              "file": "playlists.spec.ts",
+              "line": 89,
+              "column": 3
+            },
+            {
+              "title": "add tracks to playlist",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "bd26eca51b3e4ada7ca2-9a0205b5cbc97863078d",
+              "file": "playlists.spec.ts",
+              "line": 132,
+              "column": 3
+            },
+            {
+              "title": "queue displays correctly",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "bd26eca51b3e4ada7ca2-357d87a4f91cf000a836",
+              "file": "playlists.spec.ts",
+              "line": 167,
+              "column": 3
+            },
+            {
+              "title": "drag to reorder tracks in playlist",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "bd26eca51b3e4ada7ca2-9bb92ed8124618c7663b",
+              "file": "playlists.spec.ts",
+              "line": 208,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "profiles.spec.ts",
+      "file": "profiles.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Profiles",
+          "file": "profiles.spec.ts",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "profile selector appears on first load",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1fd97f6a16028267a2f6-08f9371d506691f96ad9",
+              "file": "profiles.spec.ts",
+              "line": 5,
+              "column": 3
+            },
+            {
+              "title": "create a new profile from selector",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1fd97f6a16028267a2f6-8a2dc8daccca2906eb48",
+              "file": "profiles.spec.ts",
+              "line": 14,
+              "column": 3
+            },
+            {
+              "title": "settings has profile section",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1fd97f6a16028267a2f6-994b5405bc6872d9270b",
+              "file": "profiles.spec.ts",
+              "line": 40,
+              "column": 3
+            },
+            {
+              "title": "can select existing profile",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "1fd97f6a16028267a2f6-07fade429b9fd41cdda0",
+              "file": "profiles.spec.ts",
+              "line": 54,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "screenshots.spec.ts",
+      "file": "screenshots.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Profile Selector",
+          "file": "screenshots.spec.ts",
+          "line": 50,
+          "column": 6,
+          "specs": [
+            {
+              "title": "00 - Profile Selector",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-02271c4fd8d07655d889",
+              "file": "screenshots.spec.ts",
+              "line": 51,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Screenshot Capture",
+          "file": "screenshots.spec.ts",
+          "line": 96,
+          "column": 6,
+          "specs": [
+            {
+              "title": "01 - Library Tracks",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-b9dddf556a67f002f9fd",
+              "file": "screenshots.spec.ts",
+              "line": 107,
+              "column": 3
+            },
+            {
+              "title": "02 - Library Artists",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-04580dd08dd48b4f297c",
+              "file": "screenshots.spec.ts",
+              "line": 126,
+              "column": 3
+            },
+            {
+              "title": "03 - Library Albums",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-56c41a35c5db3b815214",
+              "file": "screenshots.spec.ts",
+              "line": 137,
+              "column": 3
+            },
+            {
+              "title": "04 - Library Mood Grid",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-2a4cf02129e746889c65",
+              "file": "screenshots.spec.ts",
+              "line": 147,
+              "column": 3
+            },
+            {
+              "title": "08 - Chat Panel",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-560514d7226738740a5c",
+              "file": "screenshots.spec.ts",
+              "line": 158,
+              "column": 3
+            },
+            {
+              "title": "05 - Library Music Map",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-98d28fe053289e0b6376",
+              "file": "screenshots.spec.ts",
+              "line": 176,
+              "column": 3
+            },
+            {
+              "title": "06 - Library 3D Explorer",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-3ce134988c473772f31c",
+              "file": "screenshots.spec.ts",
+              "line": 206,
+              "column": 3
+            },
+            {
+              "title": "07 - Library Discover",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-ab0f83bbfbb776b18242",
+              "file": "screenshots.spec.ts",
+              "line": 217,
+              "column": 3
+            },
+            {
+              "title": "09 - Playlist Detail",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-6b0b301c6c3e0cc696b1",
+              "file": "screenshots.spec.ts",
+              "line": 227,
+              "column": 3
+            },
+            {
+              "title": "10 - Full Player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-d6ac6267aea8f696ac07",
+              "file": "screenshots.spec.ts",
+              "line": 243,
+              "column": 3
+            },
+            {
+              "title": "11 - Keyboard Shortcuts",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-95cc19b7c8debc15b656",
+              "file": "screenshots.spec.ts",
+              "line": 281,
+              "column": 3
+            },
+            {
+              "title": "12 - Settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-e130a07a6da9cc374035",
+              "file": "screenshots.spec.ts",
+              "line": 295,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Admin Setup",
+          "file": "screenshots.spec.ts",
+          "line": 309,
+          "column": 6,
+          "specs": [
+            {
+              "title": "13 - Admin Setup Page",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-1e22543db7f093ef7726",
+              "file": "screenshots.spec.ts",
+              "line": 310,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "Mobile Screenshots",
+          "file": "screenshots.spec.ts",
+          "line": 335,
+          "column": 6,
+          "specs": [
+            {
+              "title": "14 - Mobile Library",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-1e8a89cc098de6af17af",
+              "file": "screenshots.spec.ts",
+              "line": 338,
+              "column": 3
+            },
+            {
+              "title": "15 - Mobile Full Player",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "677a4938ef65bfc6a6e5-945ffe7cda6ba1e73b08",
+              "file": "screenshots.spec.ts",
+              "line": 358,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "settings-admin.spec.ts",
+      "file": "settings-admin.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Settings",
+          "file": "settings-admin.spec.ts",
+          "line": 4,
+          "column": 6,
+          "specs": [
+            {
+              "title": "settings page loads",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-d52e717d9caf0176721c",
+              "file": "settings-admin.spec.ts",
+              "line": 10,
+              "column": 3
+            },
+            {
+              "title": "API key status is visible in settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-7defbe58f3ec85e706e6",
+              "file": "settings-admin.spec.ts",
+              "line": 18,
+              "column": 3
+            },
+            {
+              "title": "community cache is visible in settings",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-9ba970182bf11a634432",
+              "file": "settings-admin.spec.ts",
+              "line": 31,
+              "column": 3
+            },
+            {
+              "title": "library grid/list view toggle",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-db978f38c7dbcc0415de",
+              "file": "settings-admin.spec.ts",
+              "line": 43,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "title": "UI Elements",
+          "file": "settings-admin.spec.ts",
+          "line": 60,
+          "column": 6,
+          "specs": [
+            {
+              "title": "album artwork displays",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-8d42fe79d32c12ab248b",
+              "file": "settings-admin.spec.ts",
+              "line": 66,
+              "column": 3
+            },
+            {
+              "title": "no console errors on page load",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-58cad7157dc57241ec51",
+              "file": "settings-admin.spec.ts",
+              "line": 86,
+              "column": 3
+            },
+            {
+              "title": "main sidebar navigation works",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [],
+                  "status": "skipped"
+                }
+              ],
+              "id": "22c1e43a73c437a4a6a5-d34254cf82eda9259185",
+              "file": "settings-admin.spec.ts",
+              "line": 108,
+              "column": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-18T01:19:28.315Z",
+    "duration": 87.59999999999997,
+    "expected": 0,
+    "skipped": 97,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

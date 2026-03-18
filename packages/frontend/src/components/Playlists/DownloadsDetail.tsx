@@ -1,11 +1,13 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Trash2, HardDrive, X, Search } from 'lucide-react';
+import { ArrowLeft, Play, Trash2, HardDrive } from 'lucide-react';
+import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { removeOfflineTrack, clearAllOfflineTracks } from '../../services/offlineService';
 import type { Track } from '../../types';
 import { showError, showSuccess } from '../../stores/toastStore';
+import { useTrackSearch } from '../../hooks/useTrackSearch';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
 
 import { createLogger } from '../../utils/logger';
@@ -26,8 +28,6 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { tracks, total, totalSizeFormatted, refresh } = useDownloadedTracks();
-
-  const [searchFilter, setSearchFilter] = useState('');
 
   const getTrackFromDownload = useCallback(
     (t: DownloadedTrack): Track => ({
@@ -52,15 +52,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   // Clear all confirmation state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const searchedTracks = useMemo(() => {
-    if (!searchFilter) return tracks;
-    const q = searchFilter.toLowerCase();
-    return tracks.filter(t =>
-      (t.title?.toLowerCase().includes(q)) ||
-      (t.artist?.toLowerCase().includes(q)) ||
-      (t.album?.toLowerCase().includes(q))
-    );
-  }, [tracks, searchFilter]);
+  const { searchFilter, setSearchFilter, filteredTracks: searchedTracks } = useTrackSearch(tracks);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: DownloadedTrack[]) => {
     const items = sortedItems ?? searchedTracks;
@@ -169,7 +161,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   ), [handleBulkDelete]);
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="flex flex-col gap-4 p-4 min-h-full">
       {/* Header */}
       <div className="flex items-start gap-4">
         <button
@@ -217,24 +209,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input
-          type="text"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          placeholder="Search tracks..."
-          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-        />
-        {searchFilter && (
-          <button
-            onClick={() => setSearchFilter('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

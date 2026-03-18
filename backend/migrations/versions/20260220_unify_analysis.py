@@ -13,45 +13,12 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from migrations.helpers import column_exists, index_exists
+
 revision = "20260220_unify_analysis"
 down_revision = "20260219_frontend_logs"
 branch_labels = None
 depends_on = None
-
-
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT column_name FROM information_schema.columns "
-            "WHERE table_name = :table AND column_name = :column"
-        ),
-        {"table": table_name, "column": column_name},
-    )
-    return result.fetchone() is not None
-
-
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_name = :table"
-        ),
-        {"table": table_name},
-    )
-    return result.fetchone() is not None
-
-
-def _index_exists(index_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT indexname FROM pg_indexes WHERE indexname = :name"
-        ),
-        {"name": index_name},
-    )
-    return result.fetchone() is not None
 
 
 def upgrade() -> None:
@@ -244,11 +211,11 @@ def upgrade() -> None:
 
     # ── Step 7: Per-phase versioning ─────────────────────────────────
     # Rename version → features_version
-    if _column_exists("track_analysis", "version") and not _column_exists("track_analysis", "features_version"):
+    if column_exists("track_analysis", "version") and not column_exists("track_analysis", "features_version"):
         op.alter_column("track_analysis", "version", new_column_name="features_version")
 
     # Add embedding_version column
-    if not _column_exists("track_analysis", "embedding_version"):
+    if not column_exists("track_analysis", "embedding_version"):
         op.execute(sa.text(
             "ALTER TABLE track_analysis ADD COLUMN embedding_version INTEGER DEFAULT 0 NOT NULL"
         ))
@@ -275,9 +242,9 @@ def downgrade() -> None:
     op.execute(sa.text(
         "ALTER TABLE track_analysis DROP CONSTRAINT IF EXISTS uq_track_analysis_track_id"
     ))
-    if _column_exists("track_analysis", "embedding_version"):
+    if column_exists("track_analysis", "embedding_version"):
         op.drop_column("track_analysis", "embedding_version")
-    if _column_exists("track_analysis", "features_version") and not _column_exists("track_analysis", "version"):
+    if column_exists("track_analysis", "features_version") and not column_exists("track_analysis", "version"):
         op.alter_column("track_analysis", "features_version", new_column_name="version")
     # Re-add old constraint (may fail if duplicates exist, but best-effort for downgrade)
     op.execute(sa.text(
@@ -288,7 +255,7 @@ def downgrade() -> None:
     ))
 
     # Re-add features JSONB column
-    if not _column_exists("track_analysis", "features"):
+    if not column_exists("track_analysis", "features"):
         op.add_column("track_analysis", sa.Column("features", postgresql.JSONB(), server_default=sa.text("'{}'::jsonb")))
 
     # Populate features JSONB from typed columns
@@ -330,7 +297,7 @@ def downgrade() -> None:
         "ix_track_analysis_valence", "ix_track_analysis_key",
         "ix_track_analysis_swing_ratio", "ix_track_analysis_brightness",
     ]:
-        if _index_exists(idx_name):
+        if index_exists(idx_name):
             op.drop_index(idx_name, "track_analysis")
 
     # Drop typed columns
@@ -345,5 +312,5 @@ def downgrade() -> None:
         "analysis_detail", "has_melodic", "midi_path", "melodic_version",
     ]
     for col_name in typed_col_names:
-        if _column_exists("track_analysis", col_name):
+        if column_exists("track_analysis", col_name):
             op.drop_column("track_analysis", col_name)

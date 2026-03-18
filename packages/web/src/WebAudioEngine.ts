@@ -361,6 +361,18 @@ export class WebAudioEngine implements AudioEngine {
     }
   }
 
+  updateMediaSessionActions(info: { canGoNext: boolean; canGoPrevious: boolean }): void {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.setActionHandler('nexttrack',
+        info.canGoNext ? () => this.emit({ type: 'remoteNext' }) : null);
+      navigator.mediaSession.setActionHandler('previoustrack',
+        info.canGoPrevious ? () => this.emit({ type: 'remotePrevious' }) : null);
+    } catch (e) {
+      log.warn('Failed to update media session actions', e);
+    }
+  }
+
   // ========================================================================
   // Crossfade
   // ========================================================================
@@ -470,7 +482,11 @@ export class WebAudioEngine implements AudioEngine {
       nextGain.gain.linearRampToValueAtTime(1, now + duration);
     }
 
-    nextEl.play().catch(err => log.error('Play failed:', err));
+    nextEl.play().catch(err => {
+      log.error('Crossfade play failed:', err);
+      this.cancelCrossfade();
+      this.emit({ type: 'error', message: err?.message || 'Crossfade play failed', code: 'resource' });
+    });
 
     this.crossfadeActive = true;
     this.crossfadeTimeoutId = setTimeout(() => {
@@ -674,7 +690,8 @@ export class WebAudioEngine implements AudioEngine {
 
       if (action === 'cancel-crossfade') {
         this.cancelCrossfade();
-        // Don't emit error — just cancelled the crossfade preload
+        // Emit error so the hook can roll back the store (advanceToNextTrack already fired)
+        this.emit({ type: 'error', message: `Crossfade failed: ${message}`, code: 'resource' });
         return;
       }
 

@@ -510,6 +510,107 @@ class SmartPlaylistService:
 
 
 
+    async def convert_to_static(self, playlist: SmartPlaylist, profile_id: UUID) -> tuple[UUID, str, int]:
+        """Convert smart playlist to static. Returns (playlist_id, name, track_count)."""
+        from app.db.models import Playlist, PlaylistTrack
+
+        # Resolve current tracks
+        local_tracks = await self.get_tracks(playlist, limit=10000, offset=0)
+
+        # Create static playlist
+        static = Playlist(
+            profile_id=profile_id,
+            name=playlist.name,
+            description=f"Converted from smart playlist: {playlist.description or playlist.name}",
+            is_auto_generated=False,
+        )
+        self.db.add(static)
+        await self.db.flush()
+
+        # Add tracks
+        for i, track in enumerate(local_tracks):
+            pt = PlaylistTrack(
+                playlist_id=static.id,
+                track_id=track.id,
+                position=i,
+            )
+            self.db.add(pt)
+
+        await self.db.commit()
+        return static.id, static.name, len(local_tracks)
+
+    async def import_playlist_file(self, profile_id: UUID, data: dict) -> tuple[UUID, str, int, int]:
+        """Import .familiar playlist file. Returns (playlist_id, name, matched_count, total_tracks)."""
+        playlist_data = data.get("playlist", {})
+        name = playlist_data.get("name", "Imported Playlist")
+        description = playlist_data.get("description")
+        playlist_type = playlist_data.get("type", "smart")
+        rules = playlist_data.get("rules", [])
+        match_mode = playlist_data.get("match_mode", "all")
+        imported_tracks = playlist_data.get("tracks", [])
+
+        # Match tracks to local library
+        matched_count = 0
+        for track_info in imported_tracks:
+            title = track_info.get("title", "").lower()
+            artist = track_info.get("artist", "").lower()
+
+            if not title or not artist:
+                continue
+
+            # Try to find matching track
+            result = await self.db.execute(
+                select(Track).where(
+                    Track.title.ilike(f"%{title}%"),
+                    Track.artist.ilike(f"%{artist}%"),
+                ).limit(1)
+            )
+            track = result.scalar_one_or_none()
+            if track:
+                matched_count += 1
+
+        # If it's a smart playlist with rules, use those rules
+        # Otherwise, create rules based on the track metadata
+        if playlist_type == "smart" and rules:
+            playlist = await self.create(
+                profile_id=profile_id,
+                name=name,
+                description=description,
+                rules=rules,
+                match_mode=match_mode,
+            )
+        else:
+            # Create a smart playlist with artist rules from imported tracks
+            unique_artists = list(set(
+                t.get("artist") for t in imported_tracks
+                if t.get("artist")
+            ))[:20]  # Limit to 20 artists
+
+            if unique_artists:
+                artist_rules = [
+                    {"field": "artist", "operator": "contains", "value": artist}
+                    for artist in unique_artists
+                ]
+                playlist = await self.create(
+                    profile_id=profile_id,
+                    name=name,
+                    description=description or f"Imported playlist with {len(imported_tracks)} tracks",
+                    rules=artist_rules,
+                    match_mode="any",  # Match any of the artists
+                )
+            else:
+                # Fallback: create empty playlist
+                playlist = await self.create(
+                    profile_id=profile_id,
+                    name=name,
+                    description=description,
+                    rules=[],
+                    match_mode="all",
+                )
+
+        return playlist.id, playlist.name, matched_count, len(imported_tracks)
+
+
 async def get_smart_playlist_service(db: AsyncSession) -> SmartPlaylistService:
     """Factory function for dependency injection."""
     return SmartPlaylistService(db)

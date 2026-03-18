@@ -8,6 +8,7 @@
 
 import { create } from 'zustand';
 import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../api/queryKeys';
 import { playlistsApi } from '../api';
 
 export interface EphemeralTrack {
@@ -109,7 +110,7 @@ export function useSaveEphemeralPlaylist() {
   return async (id: string) => {
     const savedId = await savePlaylist(id);
     // Invalidate playlists query so the new playlist appears in the list
-    queryClient.invalidateQueries({ queryKey: ['playlists'] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
     return savedId;
   };
 }

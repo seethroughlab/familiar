@@ -3,6 +3,7 @@
  * Maps technical errors to user-friendly messages.
  */
 import { showError, showWarning, showSuccess } from '../stores/toastStore';
+import { AppError } from './appError';
 import type { ExternalToast } from 'sonner';
 
 /**
@@ -26,6 +27,16 @@ export function getUserFriendlyMessage(
   error: unknown,
   context?: string
 ): string {
+  // Fast path for normalized AppError
+  if (error instanceof AppError) {
+    if (error.statusCode === 401) return ERROR_MESSAGES.unauthorized;
+    if (error.statusCode === 403) return ERROR_MESSAGES.forbidden;
+    if (error.statusCode === 404) return ERROR_MESSAGES.notFound;
+    if (error.category === 'network') return ERROR_MESSAGES.network;
+    if (error.statusCode && error.statusCode >= 500) return ERROR_MESSAGES.server;
+    return error.message;
+  }
+
   // Handle axios/fetch errors
   if (error && typeof error === 'object') {
     const e = error as Record<string, unknown>;

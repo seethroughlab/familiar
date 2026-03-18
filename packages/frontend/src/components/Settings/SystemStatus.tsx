@@ -25,6 +25,9 @@ import {
   appSettingsApi,
   type SystemHealth,
   type ServiceStatus,
+  type ServiceDetails,
+  type AnalysisServiceDetails,
+  type BackgroundServiceDetails,
   type WorkerStatus,
   type DiagnosticsExport,
   type UpdateStatus,
@@ -730,6 +733,14 @@ export function SystemStatus() {
   );
 }
 
+function isAnalysisDetails(d: ServiceDetails): d is AnalysisServiceDetails {
+  return d != null && 'analyzed' in d && 'total' in d;
+}
+
+function isBackgroundDetails(d: ServiceDetails): d is BackgroundServiceDetails {
+  return d != null && 'workers' in d;
+}
+
 function ServiceStatusRow({ service }: { service: ServiceStatus }) {
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -770,13 +781,13 @@ function ServiceStatusRow({ service }: { service: ServiceStatus }) {
           <p className="text-xs text-zinc-400">{service.message}</p>
           {service.details && (
             <div className="mt-1 text-xs text-zinc-500">
-              {service.name === 'analysis' && service.details.pending !== undefined && (
+              {isAnalysisDetails(service.details) && (
                 <span>
-                  {(service.details.analyzed as number).toLocaleString()} /{' '}
-                  {(service.details.total as number).toLocaleString()} tracks analyzed
+                  {service.details.analyzed.toLocaleString()} /{' '}
+                  {service.details.total.toLocaleString()} tracks analyzed
                 </span>
               )}
-              {service.name === 'background_processing' && Array.isArray(service.details.workers) && (
+              {isBackgroundDetails(service.details) && service.details.workers && (
                 <span>
                   {service.details.workers.length} worker(s)
                 </span>

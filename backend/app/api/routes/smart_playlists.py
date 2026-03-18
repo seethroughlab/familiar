@@ -4,14 +4,12 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, UploadFile, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
-from app.api.exceptions import sanitize_error_for_client
-from app.api.routes.tracks import TrackResponse
-from app.db.models import Track
+from app.api.exceptions import NotFoundError, ValidationError, sanitize_error_for_client
+from app.api.schemas.tracks import TrackResponse
 from app.services.smart_playlists import SmartPlaylistService
 
 router = APIRouter(prefix="/smart-playlists", tags=["smart-playlists"])
@@ -127,10 +125,7 @@ async def create_smart_playlist(
             max_tracks=request.max_tracks,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=sanitize_error_for_client(e, "Invalid smart playlist configuration"),
-        )
+        raise ValidationError(sanitize_error_for_client(e, "Invalid smart playlist configuration"))
 
     return playlist_to_response(playlist)
 
@@ -146,10 +141,7 @@ async def get_smart_playlist(
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Smart playlist not found",
-        )
+        raise NotFoundError("Smart playlist not found")
 
     return playlist_to_response(playlist)
 
@@ -166,10 +158,7 @@ async def update_smart_playlist(
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Smart playlist not found",
-        )
+        raise NotFoundError("Smart playlist not found")
 
     update_data = request.model_dump(exclude_unset=True)
     if "rules" in update_data and update_data["rules"] is not None:
@@ -178,10 +167,7 @@ async def update_smart_playlist(
     try:
         playlist = await service.update(playlist, **update_data)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=sanitize_error_for_client(e, "Invalid smart playlist configuration"),
-        )
+        raise ValidationError(sanitize_error_for_client(e, "Invalid smart playlist configuration"))
 
     return playlist_to_response(playlist)
 
@@ -197,10 +183,7 @@ async def delete_smart_playlist(
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Smart playlist not found",
-        )
+        raise NotFoundError("Smart playlist not found")
 
     await service.delete(playlist)
 
@@ -218,10 +201,7 @@ async def get_smart_playlist_tracks(
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Smart playlist not found",
-        )
+        raise NotFoundError("Smart playlist not found")
 
     tracks = await service.get_tracks(playlist, limit=limit, offset=offset)
     total = await service.get_track_count(playlist)
@@ -248,10 +228,7 @@ async def refresh_smart_playlist(
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Smart playlist not found",
-        )
+        raise NotFoundError("Smart playlist not found")
 
     await service.refresh_playlist(playlist)
     return playlist_to_response(playlist)
@@ -276,45 +253,18 @@ async def convert_to_static(
     Resolves the current matching tracks and creates a new static Playlist.
     The smart playlist is NOT deleted.
     """
-    from app.db.models import Playlist, PlaylistTrack
-
     service = SmartPlaylistService(db)
     playlist = await service.get_by_id(playlist_id, profile.id)
 
     if not playlist:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Smart playlist not found",
-        )
+        raise NotFoundError("Smart playlist not found")
 
-    # Resolve current tracks
-    local_tracks = await service.get_tracks(playlist, limit=10000, offset=0)
-
-    # Create static playlist
-    static = Playlist(
-        profile_id=profile.id,
-        name=playlist.name,
-        description=f"Converted from smart playlist: {playlist.description or playlist.name}",
-        is_auto_generated=False,
-    )
-    db.add(static)
-    await db.flush()
-
-    # Add tracks
-    for i, track in enumerate(local_tracks):
-        pt = PlaylistTrack(
-            playlist_id=static.id,
-            track_id=track.id,
-            position=i,
-        )
-        db.add(pt)
-
-    await db.commit()
+    static_id, static_name, track_count = await service.convert_to_static(playlist, profile.id)
 
     return ConvertToStaticResponse(
-        playlist_id=str(static.id),
-        name=static.name,
-        track_count=len(local_tracks),
+        playlist_id=str(static_id),
+        name=static_name,
+        track_count=track_count,
     )
 
 
@@ -409,92 +359,21 @@ async def import_playlist(
         content = await file.read()
         data = json.loads(content.decode("utf-8"))
     except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid JSON: {e}",
-        )
+        raise ValidationError("Invalid JSON", detail=str(e))
 
     # Validate format
     if data.get("format") != "familiar-playlist":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file format. Expected a .familiar playlist file.",
-        )
+        raise ValidationError("Invalid file format. Expected a .familiar playlist file.")
 
-    playlist_data = data.get("playlist", {})
-    name = playlist_data.get("name", "Imported Playlist")
-    description = playlist_data.get("description")
-    playlist_type = playlist_data.get("type", "smart")
-    rules = playlist_data.get("rules", [])
-    match_mode = playlist_data.get("match_mode", "all")
-    imported_tracks = playlist_data.get("tracks", [])
-
-    # Match tracks to local library
-    matched_count = 0
-    for track_info in imported_tracks:
-        title = track_info.get("title", "").lower()
-        artist = track_info.get("artist", "").lower()
-
-        if not title or not artist:
-            continue
-
-        # Try to find matching track
-        result = await db.execute(
-            select(Track).where(
-                Track.title.ilike(f"%{title}%"),
-                Track.artist.ilike(f"%{artist}%"),
-            ).limit(1)
-        )
-        track = result.scalar_one_or_none()
-        if track:
-            matched_count += 1
-
-    # Create the smart playlist
     service = SmartPlaylistService(db)
-
-    # If it's a smart playlist with rules, use those rules
-    # Otherwise, create rules based on the track metadata
-    if playlist_type == "smart" and rules:
-        playlist = await service.create(
-            profile_id=profile.id,
-            name=name,
-            description=description,
-            rules=rules,
-            match_mode=match_mode,
-        )
-    else:
-        # Create a smart playlist with artist rules from imported tracks
-        unique_artists = list(set(
-            t.get("artist") for t in imported_tracks
-            if t.get("artist")
-        ))[:20]  # Limit to 20 artists
-
-        if unique_artists:
-            artist_rules = [
-                {"field": "artist", "operator": "contains", "value": artist}
-                for artist in unique_artists
-            ]
-            playlist = await service.create(
-                profile_id=profile.id,
-                name=name,
-                description=description or f"Imported playlist with {len(imported_tracks)} tracks",
-                rules=artist_rules,
-                match_mode="any",  # Match any of the artists
-            )
-        else:
-            # Fallback: create empty playlist
-            playlist = await service.create(
-                profile_id=profile.id,
-                name=name,
-                description=description,
-                rules=[],
-                match_mode="all",
-            )
+    playlist_id, playlist_name, matched_count, total_tracks = await service.import_playlist_file(
+        profile_id=profile.id, data=data,
+    )
 
     return PlaylistImportResult(
-        playlist_id=str(playlist.id),
-        playlist_name=playlist.name,
-        total_tracks=len(imported_tracks),
+        playlist_id=str(playlist_id),
+        playlist_name=playlist_name,
+        total_tracks=total_tracks,
         matched_tracks=matched_count,
-        unmatched_tracks=len(imported_tracks) - matched_count,
+        unmatched_tracks=total_tracks - matched_count,
     )

@@ -10,14 +10,18 @@ from app.services.redis_client import get_redis
 
 # analysis_pipeline.py
 from app.services.tasks.analysis_pipeline import (
+    run_track_analysis,
+    run_track_embedding,
+    run_track_features,
+)
+
+# analysis_queue.py
+from app.services.tasks.analysis_queue import (
     queue_tracks_for_backfill,
     queue_tracks_for_embeddings,
     queue_tracks_for_features,
     queue_tracks_for_melodic,
     queue_unanalyzed_tracks,
-    run_track_analysis,
-    run_track_embedding,
-    run_track_features,
 )
 from app.services.tasks.common import (
     MAX_FAILURES_STORED,
@@ -31,11 +35,13 @@ from app.services.tasks.common import (
 )
 
 # library_sync.py
-from app.services.tasks.library_sync import (
+from app.services.tasks.library_sync import run_library_sync
+
+# library_sync_progress.py
+from app.services.tasks.library_sync_progress import (
     SyncProgressReporter,
     clear_sync_progress,
     get_sync_progress,
-    run_library_sync,
 )
 
 __all__ = [
@@ -50,14 +56,16 @@ __all__ = [
     "get_recent_failures",
     "clear_task_failures",
     # library_sync
+    "run_library_sync",
+    # library_sync_progress
     "SyncProgressReporter",
     "get_sync_progress",
     "clear_sync_progress",
-    "run_library_sync",
     # analysis_pipeline
     "run_track_features",
     "run_track_embedding",
     "run_track_analysis",
+    # analysis_queue
     "queue_tracks_for_features",
     "queue_tracks_for_embeddings",
     "queue_tracks_for_melodic",

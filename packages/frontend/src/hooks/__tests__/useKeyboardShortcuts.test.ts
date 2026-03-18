@@ -7,7 +7,7 @@ import { useKeyboardShortcuts, SHORTCUTS, formatShortcutKey } from '../useKeyboa
 import { usePlayerStore } from '../../stores/playerStore'
 
 // Mock the persistence functions
-vi.mock('../../services/playerPersistence', () => ({
+vi.mock('../../player/persistence', () => ({
   debouncedSavePlayerState: vi.fn(),
   loadPlayerState: vi.fn(() => Promise.resolve(null)),
   fetchTracksBatched: vi.fn(() => Promise.resolve([])),
@@ -17,7 +17,15 @@ vi.mock('../../services/playerPersistence', () => ({
 // Mock engineInstance so keyboard seek tests can verify engine.seek()
 const mockSeek = vi.fn()
 vi.mock('../../player/audio/engineInstance', () => ({
-  getEngine: () => ({ seek: mockSeek }),
+  getEngine: () => ({ seek: mockSeek, cancelCrossfade: vi.fn() }),
+}))
+
+vi.mock('../../stores/connectivityStore', () => ({
+  useConnectivityStore: Object.assign(
+    (selector: (state: { offlineModeActive: boolean; offlineTrackIds: Set<string> }) => unknown) =>
+      selector({ offlineModeActive: false, offlineTrackIds: new Set() }),
+    { getState: () => ({ offlineModeActive: false, offlineTrackIds: new Set() }) }
+  ),
 }))
 
 // Helper to simulate keyboard events
@@ -171,36 +179,45 @@ describe('useKeyboardShortcuts', () => {
 
   describe('track navigation', () => {
     it('should call playNext on ArrowRight', () => {
-      const playNextSpy = vi.spyOn(usePlayerStore.getState(), 'playNext')
+      const track1 = { id: '1', title: 'T1', artist: 'A', album: 'B', album_artist: null, album_type: 'album', track_number: 1, disc_number: 1, year: 2024, genre: 'G', duration_seconds: 180, format: 'mp3', file_path: '/1.mp3', analysis_version: 1 }
+      const track2 = { id: '2', title: 'T2', artist: 'A', album: 'B', album_artist: null, album_type: 'album', track_number: 2, disc_number: 1, year: 2024, genre: 'G', duration_seconds: 180, format: 'mp3', file_path: '/2.mp3', analysis_version: 1 }
+      usePlayerStore.getState().setQueue([track1, track2], 0)
       renderHook(() => useKeyboardShortcuts())
 
       act(() => {
         fireKeyDown('ArrowRight')
       })
 
-      expect(playNextSpy).toHaveBeenCalled()
+      expect(usePlayerStore.getState().currentTrack?.id).toBe('2')
     })
 
     it('should call playPrevious on ArrowLeft', () => {
-      const playPreviousSpy = vi.spyOn(usePlayerStore.getState(), 'playPrevious')
+      const track1 = { id: '1', title: 'T1', artist: 'A', album: 'B', album_artist: null, album_type: 'album', track_number: 1, disc_number: 1, year: 2024, genre: 'G', duration_seconds: 180, format: 'mp3', file_path: '/1.mp3', analysis_version: 1 }
+      usePlayerStore.getState().setQueue([track1], 0)
+      usePlayerStore.setState({ currentTime: 5 })
       renderHook(() => useKeyboardShortcuts())
 
       act(() => {
         fireKeyDown('ArrowLeft')
       })
 
-      expect(playPreviousSpy).toHaveBeenCalled()
+      // playPrevious restarts current track when > 3 seconds
+      expect(usePlayerStore.getState().currentTime).toBe(0)
+      expect(mockSeek).toHaveBeenCalledWith(0)
     })
 
     it('should not navigate with modifier keys', () => {
-      const playNextSpy = vi.spyOn(usePlayerStore.getState(), 'playNext')
+      const track1 = { id: '1', title: 'T1', artist: 'A', album: 'B', album_artist: null, album_type: 'album', track_number: 1, disc_number: 1, year: 2024, genre: 'G', duration_seconds: 180, format: 'mp3', file_path: '/1.mp3', analysis_version: 1 }
+      const track2 = { id: '2', title: 'T2', artist: 'A', album: 'B', album_artist: null, album_type: 'album', track_number: 2, disc_number: 1, year: 2024, genre: 'G', duration_seconds: 180, format: 'mp3', file_path: '/2.mp3', analysis_version: 1 }
+      usePlayerStore.getState().setQueue([track1, track2], 0)
       renderHook(() => useKeyboardShortcuts())
 
       act(() => {
         fireKeyDown('ArrowRight', { shiftKey: true })
       })
 
-      expect(playNextSpy).not.toHaveBeenCalled()
+      // Should still be on track 1, no navigation
+      expect(usePlayerStore.getState().currentTrack?.id).toBe('1')
     })
   })
 

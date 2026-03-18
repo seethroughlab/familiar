@@ -49,19 +49,10 @@ test.describe('Settings', () => {
 
     if (await gridBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await gridBtn.click();
-      await page.waitForTimeout(300);
-
-      // Verify grid view is active
-      const _gridView = page.locator('.grid, [data-view="grid"]');
-      // Grid should be visible or button should be active
     }
 
     if (await listBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
       await listBtn.click();
-      await page.waitForTimeout(300);
-
-      // Verify list view is active
-      const _listView = page.locator('table, [data-view="list"]');
     }
   });
 });
@@ -83,7 +74,7 @@ test.describe('UI Elements', () => {
 
     // Click to play a track
     await trackRow.click();
-    await page.waitForTimeout(1000);
+    await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
 
     // Look for album art in player bar or now playing
     const albumArt = page.locator('[data-testid="album-art"], .album-art, img[alt*="album" i], img[alt*="cover" i]');
@@ -102,7 +93,7 @@ test.describe('UI Elements', () => {
 
     await page.goto('/');
     await ensureProfile(page);
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle').catch(() => {});
 
     // Filter out expected/acceptable errors
     const criticalErrors = errors.filter(e =>
@@ -123,7 +114,7 @@ test.describe('UI Elements', () => {
       const link = page.locator(`a:has-text("${linkText}")`).first();
       await expect(link).toBeVisible({ timeout: 5000 });
       await link.click();
-      await page.waitForTimeout(300);
+      await page.waitForLoadState('domcontentloaded');
     }
 
     // Verify Settings button works

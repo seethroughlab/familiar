@@ -6,10 +6,11 @@ for the ambient playback feature.
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession
+from app.api.exceptions import NotFoundError, TrackNotFoundError
 from app.services.ambient import (
     find_seed_by_artist,
     get_candidates,
@@ -97,7 +98,7 @@ async def get_seed(request: SeedRequest, db: DbSession) -> SeedResponse:
         seed = await pick_surprise_seed(db, request.filter_preset)
 
     if not seed:
-        raise HTTPException(404, "No suitable seed track found")
+        raise NotFoundError("No suitable seed track found")
 
     # Get initial candidates
     candidates, pool_size, _ = await get_candidates(
@@ -143,5 +144,5 @@ async def get_descriptor(track_id: str, db: DbSession) -> AmbientDescriptorRespo
     """Get a single track's ambient descriptor."""
     descriptor = await get_track_descriptor(db, UUID(track_id))
     if not descriptor:
-        raise HTTPException(404, "Track not found or not analyzed")
+        raise TrackNotFoundError("Track not found or not analyzed")
     return AmbientDescriptorResponse(**descriptor.to_dict())

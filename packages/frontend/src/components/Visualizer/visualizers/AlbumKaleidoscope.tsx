@@ -14,7 +14,7 @@ import { shaderMaterial } from '@react-three/drei';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { isMobile, isNativeApp } from '../../../utils/platform';
-import { registerVisualizer, type VisualizerProps } from '../types';
+import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { FrameScheduler } from '../effects/FrameScheduler';
 
@@ -518,6 +518,7 @@ export function AlbumKaleidoscope({ artworkUrl }: VisualizerProps) {
       // On Capacitor native, fetch via CapacitorHttp (bypasses CORS) and convert to blob URL.
       // Three.js TextureLoader uses <img crossOrigin="anonymous"> internally, which goes through
       // WKWebView's native networking (not CapacitorHttp), and may fail to load cross-origin images.
+      // eslint-disable-next-line no-restricted-globals -- CORS blob workaround for Three.js texture loading
       fetch(artworkUrl)
         .then((res) => res.blob())
         .then((blob) => {
@@ -560,13 +561,4 @@ export function AlbumKaleidoscope({ artworkUrl }: VisualizerProps) {
   );
 }
 
-// Register the visualizer
-registerVisualizer(
-  {
-    id: 'album-kaleidoscope',
-    name: 'Album Kaleidoscope',
-    description: 'Shader-based kaleidoscope with RGB split',
-    usesMetadata: true,
-  },
-  AlbumKaleidoscope
-);
+export default AlbumKaleidoscope;

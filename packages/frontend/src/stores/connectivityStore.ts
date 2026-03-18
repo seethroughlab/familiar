@@ -53,6 +53,7 @@ async function probeBackendReachability(): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
+    // eslint-disable-next-line no-restricted-globals -- Health probe with custom timeout and AbortController
     const response = await fetch(getApiUrl('/health'), {
       method: 'GET',
       cache: 'no-store',

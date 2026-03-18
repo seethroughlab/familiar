@@ -10,23 +10,16 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB
 
+from migrations.helpers import table_exists
+
 revision: str = "20260309_spotify_imports"
 down_revision: str | None = "20260307_drop_is_wishlist"
 branch_labels = None
 depends_on = None
 
 
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT EXISTS (SELECT FROM information_schema.tables "
-        "WHERE table_name = :table)"
-    ), {"table": table_name})
-    return result.scalar()
-
-
 def upgrade() -> None:
-    if not _table_exists("spotify_imports"):
+    if not table_exists("spotify_imports"):
         op.create_table(
             "spotify_imports",
             sa.Column("id", sa.Uuid(), primary_key=True),
@@ -42,5 +35,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if _table_exists("spotify_imports"):
+    if table_exists("spotify_imports"):
         op.drop_table("spotify_imports")

@@ -2,7 +2,7 @@
  * Library cache service for offline browsing.
  */
 import { db, isIndexedDBAvailable, type CachedTrack } from '../db';
-import { getApiUrl } from '../api/base';
+import api from '../api/base';
 import type { Track, TrackListResponse } from '../types';
 
 /**
@@ -12,12 +12,7 @@ export async function cacheLibrary(): Promise<{
   cached: number;
 }> {
   // Fetch all tracks from API
-  const response = await fetch(getApiUrl('/tracks?limit=10000'));
-  if (!response.ok) {
-    throw new Error(`Failed to fetch library: ${response.statusText}`);
-  }
-
-  const data = await response.json();
+  const { data } = await api.get('/tracks', { params: { limit: 10000 } });
   const tracks = data.items || data.tracks || data;
 
   if (!Array.isArray(tracks)) {

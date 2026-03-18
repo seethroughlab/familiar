@@ -1,17 +1,22 @@
-"""Playlist management endpoints."""
+"""Playlist CRUD endpoints (list, create, get, update, delete, duplicate)."""
 
 from uuid import UUID
 
-from fastapi import APIRouter, Body, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import PlaylistNotFoundError
 from app.db.models import Playlist, PlaylistTrack, Track
-from app.services.recommendations import RecommendationsService
 
-router = APIRouter(prefix="/playlists", tags=["playlists"])
+router = APIRouter()
+
+
+# ============================================================================
+# Request/Response Models
+# ============================================================================
 
 
 class PlaylistCreate(BaseModel):
@@ -58,7 +63,6 @@ class TrackInPlaylist(BaseModel):
     analysis_version: int | None = None
 
 
-
 class PlaylistResponse(BaseModel):
     """Playlist response."""
 
@@ -87,7 +91,11 @@ class PlaylistDetailResponse(BaseModel):
     updated_at: str
 
 
-@router.get("", response_model=list[PlaylistResponse])
+# ============================================================================
+# Endpoints
+# ============================================================================
+
+
 async def list_playlists(
     db: DbSession,
     profile: RequiredProfile,
@@ -139,7 +147,6 @@ async def list_playlists(
     return responses
 
 
-@router.post("", response_model=PlaylistDetailResponse, status_code=status.HTTP_201_CREATED)
 async def create_playlist(
     request: PlaylistCreate,
     db: DbSession,
@@ -157,16 +164,26 @@ async def create_playlist(
     db.add(playlist)
     await db.flush()  # Get the playlist ID
 
-    # Add tracks if provided
+    # Add tracks if provided — batch-fetch all tracks in one query
     tracks_added = []
-    for position, track_id_str in enumerate(request.track_ids):
+    valid_track_ids = []
+    for track_id_str in request.track_ids:
         try:
-            track_id = UUID(track_id_str)
+            valid_track_ids.append(UUID(track_id_str))
         except ValueError:
             continue
 
-        # Verify track exists (load analyses for analysis_version property)
-        track = await db.get(Track, track_id, options=[selectinload(Track.analyses)])
+    tracks_by_id: dict[UUID, Track] = {}
+    if valid_track_ids:
+        result = await db.execute(
+            select(Track)
+            .where(Track.id.in_(valid_track_ids))
+            .options(selectinload(Track.analyses))
+        )
+        tracks_by_id = {t.id: t for t in result.scalars().all()}
+
+    for position, track_id in enumerate(valid_track_ids):
+        track = tracks_by_id.get(track_id)
         if not track:
             continue
 
@@ -211,11 +228,6 @@ async def create_playlist(
     )
 
 
-# ============================================================================
-# Playlist CRUD by ID
-# ============================================================================
-
-
 @router.get("/{playlist_id}", response_model=PlaylistDetailResponse)
 async def get_playlist(
     playlist_id: UUID,
@@ -229,10 +241,7 @@ async def get_playlist(
     playlist = await db.get(Playlist, playlist_id)
 
     if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
+        raise PlaylistNotFoundError()
 
     result = await db.execute(
         select(PlaylistTrack)
@@ -290,10 +299,7 @@ async def update_playlist(
     playlist = await db.get(Playlist, playlist_id)
 
     if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
+        raise PlaylistNotFoundError()
 
     if request.name is not None:
         playlist.name = request.name
@@ -334,12 +340,10 @@ async def delete_playlist(
     playlist = await db.get(Playlist, playlist_id)
 
     if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
+        raise PlaylistNotFoundError()
 
     # Delete playlist tracks first (cascade should handle this, but be explicit)
+    from sqlalchemy import delete
     await db.execute(
         delete(PlaylistTrack).where(PlaylistTrack.playlist_id == playlist_id)
     )
@@ -358,10 +362,7 @@ async def duplicate_playlist(
     playlist = await db.get(Playlist, playlist_id)
 
     if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
+        raise PlaylistNotFoundError()
 
     # Create a copy
     new_playlist = Playlist(
@@ -395,295 +396,3 @@ async def duplicate_playlist(
     await db.commit()
 
     return await get_playlist(new_playlist.id, db, profile)
-
-
-@router.post("/{playlist_id}/tracks", response_model=PlaylistDetailResponse)
-async def add_tracks_to_playlist(
-    playlist_id: UUID,
-    db: DbSession,
-    profile: RequiredProfile,
-    track_ids: list[str] = Body(...),
-) -> PlaylistDetailResponse:
-    """Add tracks to an existing playlist."""
-    playlist = await db.get(Playlist, playlist_id)
-
-    if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
-
-    # Get current max position
-    result = await db.execute(
-        select(func.max(PlaylistTrack.position)).where(
-            PlaylistTrack.playlist_id == playlist_id
-        )
-    )
-    max_position = result.scalar() or -1
-
-    # Add new tracks
-    for i, track_id_str in enumerate(track_ids):
-        try:
-            track_id = UUID(track_id_str)
-        except ValueError:
-            continue
-
-        # Verify track exists
-        track = await db.get(Track, track_id)
-        if not track:
-            continue
-
-        # Check if already in playlist
-        existing = await db.execute(
-            select(PlaylistTrack).where(
-                PlaylistTrack.playlist_id == playlist_id,
-                PlaylistTrack.track_id == track_id,
-            )
-        )
-        if existing.scalar_one_or_none():
-            continue
-
-        playlist_track = PlaylistTrack(
-            playlist_id=playlist.id,
-            track_id=track_id,
-            position=max_position + 1 + i,
-        )
-        db.add(playlist_track)
-
-    await db.commit()
-
-    # Return updated playlist
-    return await get_playlist(playlist_id, db, profile)
-
-
-class ReorderTracksRequest(BaseModel):
-    """Request to reorder tracks in a playlist."""
-
-    track_ids: list[str] = Field(default=[], description="Track IDs in the new order (deprecated)")
-    playlist_track_ids: list[str] = Field(default=[], description="PlaylistTrack IDs in the new order")
-
-
-@router.put("/{playlist_id}/tracks/reorder", response_model=PlaylistDetailResponse)
-async def reorder_playlist_tracks(
-    playlist_id: UUID,
-    request: ReorderTracksRequest,
-    db: DbSession,
-    profile: RequiredProfile,
-) -> PlaylistDetailResponse:
-    """Reorder tracks in a playlist.
-
-    Use playlist_track_ids (preferred) - the PlaylistTrack.id values.
-    Falls back to track_ids for backwards compatibility (local tracks only).
-    """
-    playlist = await db.get(Playlist, playlist_id)
-
-    if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
-
-    # Prefer playlist_track_ids if provided
-    if request.playlist_track_ids:
-        # Get current playlist track IDs
-        result = await db.execute(
-            select(PlaylistTrack.id).where(PlaylistTrack.playlist_id == playlist_id)
-        )
-        current_pt_ids = {str(row[0]) for row in result.all()}
-
-        # Update positions for each playlist track
-        for position, pt_id_str in enumerate(request.playlist_track_ids):
-            if pt_id_str not in current_pt_ids:
-                continue
-            try:
-                pt_id = UUID(pt_id_str)
-            except ValueError:
-                continue
-
-            await db.execute(
-                update(PlaylistTrack)
-                .where(PlaylistTrack.id == pt_id)
-                .values(position=position)
-            )
-    elif request.track_ids:
-        # Backwards compatibility: use track_ids (local tracks only)
-        result = await db.execute(
-            select(PlaylistTrack.track_id).where(
-                PlaylistTrack.playlist_id == playlist_id,
-                PlaylistTrack.track_id.isnot(None),
-            )
-        )
-        current_track_ids = {str(row[0]) for row in result.all() if row[0]}
-
-        for position, track_id_str in enumerate(request.track_ids):
-            if track_id_str not in current_track_ids:
-                continue
-            try:
-                track_id = UUID(track_id_str)
-            except ValueError:
-                continue
-
-            await db.execute(
-                update(PlaylistTrack)
-                .where(
-                    PlaylistTrack.playlist_id == playlist_id,
-                    PlaylistTrack.track_id == track_id,
-                )
-                .values(position=position)
-            )
-
-    await db.commit()
-
-    # Return updated playlist
-    return await get_playlist(playlist_id, db, profile)
-
-
-@router.delete("/{playlist_id}/tracks/{track_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_track_from_playlist(
-    playlist_id: UUID,
-    track_id: UUID,
-    db: DbSession,
-    profile: RequiredProfile,
-) -> None:
-    """Remove a track from a playlist by track_id.
-
-    For backwards compatibility. Use DELETE /playlists/{id}/items/{playlist_track_id}
-    for explicit removal of playlist items (handles both local and external tracks).
-    """
-    playlist = await db.get(Playlist, playlist_id)
-
-    if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
-
-    await db.execute(
-        delete(PlaylistTrack).where(
-            PlaylistTrack.playlist_id == playlist_id,
-            PlaylistTrack.track_id == track_id,
-        )
-    )
-    await db.commit()
-
-
-@router.delete("/{playlist_id}/items/{playlist_track_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_playlist_item(
-    playlist_id: UUID,
-    playlist_track_id: UUID,
-    db: DbSession,
-    profile: RequiredProfile,
-) -> None:
-    """Remove an item from a playlist by its playlist_track_id.
-
-    Works for both local tracks and external tracks.
-    """
-    playlist = await db.get(Playlist, playlist_id)
-
-    if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
-
-    await db.execute(
-        delete(PlaylistTrack).where(
-            PlaylistTrack.id == playlist_track_id,
-            PlaylistTrack.playlist_id == playlist_id,
-        )
-    )
-    await db.commit()
-
-
-class RecommendedArtistResponse(BaseModel):
-    """A recommended artist."""
-
-    name: str
-    source: str
-    match_score: float
-    image_url: str | None
-    external_url: str | None
-    local_track_count: int
-
-
-class RecommendedTrackResponse(BaseModel):
-    """A recommended track."""
-
-    title: str
-    artist: str
-    source: str
-    match_score: float
-    external_url: str | None
-    local_track_id: str | None
-    album: str | None = None
-
-
-class RecommendationsResponse(BaseModel):
-    """Recommendations response."""
-
-    artists: list[RecommendedArtistResponse]
-    tracks: list[RecommendedTrackResponse]
-    sources_used: list[str]
-
-
-@router.get("/{playlist_id}/recommendations", response_model=RecommendationsResponse)
-async def get_playlist_recommendations(
-    playlist_id: UUID,
-    db: DbSession,
-    profile: RequiredProfile,
-    artist_limit: int = Query(10, ge=1, le=50),
-    track_limit: int = Query(10, ge=1, le=50),
-) -> RecommendationsResponse:
-    """Get recommendations based on a playlist's content.
-
-    Only available for auto-generated (AI) playlists.
-    Uses Last.fm for similar artists/tracks, with Bandcamp as fallback.
-    """
-    playlist = await db.get(Playlist, playlist_id)
-
-    if not playlist or playlist.profile_id != profile.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
-
-    if not playlist.is_auto_generated:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Recommendations only available for AI-generated playlists",
-        )
-
-    service = RecommendationsService(db)
-    try:
-        recs = await service.get_playlist_recommendations(
-            playlist_id, artist_limit, track_limit
-        )
-
-        return RecommendationsResponse(
-            artists=[
-                RecommendedArtistResponse(
-                    name=a.name,
-                    source=a.source,
-                    match_score=a.match_score,
-                    image_url=a.image_url,
-                    external_url=a.external_url,
-                    local_track_count=a.local_track_count,
-                )
-                for a in recs.artists
-            ],
-            tracks=[
-                RecommendedTrackResponse(
-                    title=t.title,
-                    artist=t.artist,
-                    source=t.source,
-                    match_score=t.match_score,
-                    external_url=t.external_url,
-                    local_track_id=t.local_track_id,
-                    album=t.album,
-                )
-                for t in recs.tracks
-            ],
-            sources_used=recs.sources_used,
-        )
-    finally:
-        await service.close()

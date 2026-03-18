@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { ListMusic } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { playlistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { showSuccess, showError } from '../../stores/toastStore';
 
@@ -67,8 +68,8 @@ export function SidebarPlaylistItem({
 
     try {
       await playlistsApi.addTracks(id, trackIds);
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
-      queryClient.invalidateQueries({ queryKey: ['playlist', id] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlist.detail(id) });
       const countLabel = trackIds.length === 1 ? '1 track' : `${trackIds.length} tracks`;
       showSuccess(`Added ${countLabel} to "${name}"`);
     } catch (err) {

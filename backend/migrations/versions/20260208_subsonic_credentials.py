@@ -10,6 +10,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+from migrations.helpers import table_exists
+
 # revision identifiers, used by Alembic.
 revision: str = "20260208_subsonic_creds"
 down_revision: str | None = "20260208_autodownload_nn"
@@ -17,21 +19,9 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def _table_exists(table_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(
-        sa.text(
-            "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
-            "WHERE table_name = :table)"
-        ),
-        {"table": table_name},
-    )
-    return bool(result.scalar())
-
-
 def upgrade() -> None:
     """Create subsonic_credentials table."""
-    if _table_exists("subsonic_credentials"):
+    if table_exists("subsonic_credentials"):
         return
 
     op.create_table(

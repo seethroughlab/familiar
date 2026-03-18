@@ -3,12 +3,18 @@
 import logging
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
-from app.api.exceptions import sanitize_error_for_client
+from app.api.exceptions import (
+    MapComputationError,
+    NotFoundError,
+    ServiceUnavailableError,
+    create_sse_error,
+    sanitize_error_for_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +75,9 @@ async def get_music_map(
     try:
         map_data = await service.compute_map(db, entity_type=entity_type, limit=limit)
     except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="Required dependencies not available. Install umap-learn for map visualization.",
-        )
+        raise ServiceUnavailableError("Required dependencies not available. Install umap-learn for map visualization.")
     except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to compute library map",
-        )
+        raise MapComputationError()
 
     return MusicMapResponse(
         nodes=[
@@ -164,10 +164,10 @@ async def get_music_map_stream(
                     yield f"event: complete\ndata: {json.dumps(response)}\n\n"
         except ImportError as e:
             logger.warning(f"Map computation missing dependency: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': 'Required dependencies not available. Install umap-learn for map visualization.'})}\n\n"
+            yield f"event: error\ndata: {create_sse_error('map_missing_dependency', 'Required dependencies not available. Install umap-learn for map visualization.')}\n\n"
         except Exception as e:
             logger.error(f"Map computation failed: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': 'Failed to compute library map. Please try again.'})}\n\n"
+            yield f"event: error\ndata: {create_sse_error('map_computation_failed', 'Failed to compute library map. Please try again.')}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -256,15 +256,9 @@ async def get_3d_music_map(
     try:
         map_data = await service.compute_3d_map(db, entity_type=entity_type)
     except ImportError:
-        raise HTTPException(
-            status_code=503,
-            detail="Required dependencies not available. Install umap-learn for map visualization.",
-        )
+        raise ServiceUnavailableError("Required dependencies not available. Install umap-learn for map visualization.")
     except Exception:
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to compute 3D library map",
-        )
+        raise MapComputationError("Failed to compute 3D library map")
 
     return MusicMap3DResponse(
         nodes=[
@@ -343,10 +337,10 @@ async def get_3d_music_map_stream(
                     yield f"event: complete\ndata: {json.dumps(response)}\n\n"
         except ImportError as e:
             logger.warning(f"3D map computation missing dependency: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': 'Required dependencies not available. Install umap-learn for map visualization.'})}\n\n"
+            yield f"event: error\ndata: {create_sse_error('3d_map_missing_dependency', 'Required dependencies not available. Install umap-learn for map visualization.')}\n\n"
         except Exception as e:
             logger.error(f"3D map computation failed: {e}")
-            yield f"event: error\ndata: {json.dumps({'error': 'Failed to compute 3D library map. Please try again.'})}\n\n"
+            yield f"event: error\ndata: {create_sse_error('3d_map_computation_failed', 'Failed to compute 3D library map. Please try again.')}\n\n"
 
     return StreamingResponse(
         event_stream(),
@@ -382,7 +376,7 @@ async def get_ego_centric_map(
     try:
         data = await service.compute_ego_map(db, center=center, limit=limit, mode=mode)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=sanitize_error_for_client(e, "Artist not found"))
+        raise NotFoundError(sanitize_error_for_client(e, "Artist not found"))
 
     return EgoMapResponse(
         center=EgoMapCenterResponse(

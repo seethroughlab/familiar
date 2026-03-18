@@ -19,7 +19,7 @@ Some endpoints (play history, favorites) require this header.
 
 ### Common Response Patterns
 - Paginated lists return `{ items, total, page, page_size }`
-- Errors return `{ detail: "error message" }`
+- Errors return the standard envelope (see [ERROR-CONTRACTS.md](ERROR-CONTRACTS.md))
 
 ---
 

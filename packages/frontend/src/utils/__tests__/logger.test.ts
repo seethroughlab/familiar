@@ -127,9 +127,7 @@ describe('logger', () => {
 
   describe('runtime debug toggle', () => {
     function stubLocalStorageDebug(value: string) {
-      // The test setup replaces localStorage with a mock object;
-      // override its getItem to return the desired debug flag.
-      (localStorage.getItem as ReturnType<typeof vi.fn>).mockReturnValue(value);
+      vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(value);
     }
 
     it('should enable verbose logging in prod when namespace matches localStorage.debug', async () => {

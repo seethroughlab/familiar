@@ -3,9 +3,10 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel
 
+from app.api.exceptions import NotFoundError, ValidationError
 from app.services.outputs import (
     AudioOutput,
     BrowserOutput,
@@ -91,16 +92,10 @@ async def create_output(request: CreateOutputRequest) -> dict[str, Any]:
         output = BrowserOutput(name=request.name)
     elif request.type == OutputType.SONOS:
         if not request.speaker_ip:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="speaker_ip required for Sonos output",
-            )
+            raise ValidationError("speaker_ip required for Sonos output")
         output = SonosOutput(name=request.name, speaker_ip=request.speaker_ip)
     else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported output type: {request.type}",
-        )
+        raise ValidationError("Unsupported output type", detail=f"Received: {request.type}")
 
     manager.register_output(output)
     return output.to_dict()
@@ -120,10 +115,7 @@ async def get_output(output_id: UUID) -> dict[str, Any]:
     manager = get_output_manager()
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Output not found",
-        )
+        raise NotFoundError("Output not found")
     return await output.get_status()
 
 
@@ -132,10 +124,7 @@ async def delete_output(output_id: UUID) -> None:
     """Unregister an audio output."""
     manager = get_output_manager()
     if not manager.unregister_output(output_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Output not found",
-        )
+        raise NotFoundError("Output not found")
 
 
 @router.post("/{output_id}/play")
@@ -145,10 +134,7 @@ async def play_to_output(output_id: UUID, request: PlayRequest) -> dict[str, str
     track_id = UUID(request.track_id) if request.track_id else None
     success = await manager.play_to_output(output_id, request.stream_url, track_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to start playback",
-        )
+        raise ValidationError("Failed to start playback")
     return {"status": "playing"}
 
 
@@ -158,7 +144,7 @@ async def pause_output(output_id: UUID) -> dict[str, str]:
     manager = get_output_manager()
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not found")
+        raise NotFoundError("Output not found")
     await output.pause()
     return {"status": "paused"}
 
@@ -169,7 +155,7 @@ async def resume_output(output_id: UUID) -> dict[str, str]:
     manager = get_output_manager()
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not found")
+        raise NotFoundError("Output not found")
     await output.resume()
     return {"status": "playing"}
 
@@ -180,7 +166,7 @@ async def stop_output(output_id: UUID) -> dict[str, str]:
     manager = get_output_manager()
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not found")
+        raise NotFoundError("Output not found")
     await output.stop()
     return {"status": "stopped"}
 
@@ -191,7 +177,7 @@ async def seek_output(output_id: UUID, request: SeekRequest) -> dict[str, str | 
     manager = get_output_manager()
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not found")
+        raise NotFoundError("Output not found")
     await output.seek(request.position_ms)
     return {"status": "seeked", "position_ms": request.position_ms}
 
@@ -202,7 +188,7 @@ async def set_output_volume(output_id: UUID, request: VolumeRequest) -> dict[str
     manager = get_output_manager()
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not found")
+        raise NotFoundError("Output not found")
     await output.set_volume(request.volume)
     return {"status": "volume_set", "volume": request.volume}
 
@@ -232,7 +218,7 @@ async def get_zone(zone_id: UUID) -> dict[str, Any]:
     manager = get_output_manager()
     zone = manager.get_zone(zone_id)
     if not zone:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
     return zone.to_dict()
 
 
@@ -241,7 +227,7 @@ async def delete_zone(zone_id: UUID) -> None:
     """Delete a zone."""
     manager = get_output_manager()
     if not manager.delete_zone(zone_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
 
 
 @router.post("/zones/{zone_id}/play")
@@ -251,7 +237,7 @@ async def play_to_zone(zone_id: UUID, request: PlayRequest) -> dict[str, Any]:
     track_id = UUID(request.track_id) if request.track_id else None
     results = await manager.play_to_zone(zone_id, request.stream_url, track_id)
     if not results:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
     return {"status": "playing", "results": {str(k): v for k, v in results.items()}}
 
 
@@ -261,7 +247,7 @@ async def pause_zone(zone_id: UUID) -> dict[str, Any]:
     manager = get_output_manager()
     zone = manager.get_zone(zone_id)
     if not zone:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
     results = await zone.pause()
     return {"status": "paused", "results": {str(k): v for k, v in results.items()}}
 
@@ -272,7 +258,7 @@ async def stop_zone(zone_id: UUID) -> dict[str, Any]:
     manager = get_output_manager()
     zone = manager.get_zone(zone_id)
     if not zone:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
     results = await zone.stop()
     return {"status": "stopped", "results": {str(k): v for k, v in results.items()}}
 
@@ -283,10 +269,10 @@ async def add_output_to_zone(zone_id: UUID, output_id: UUID) -> dict[str, Any]:
     manager = get_output_manager()
     zone = manager.get_zone(zone_id)
     if not zone:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
     output = manager.get_output(output_id)
     if not output:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not found")
+        raise NotFoundError("Output not found")
     zone.add_output(output)
     return zone.to_dict()
 
@@ -297,7 +283,7 @@ async def remove_output_from_zone(zone_id: UUID, output_id: UUID) -> dict[str, A
     manager = get_output_manager()
     zone = manager.get_zone(zone_id)
     if not zone:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found")
+        raise NotFoundError("Zone not found")
     if not zone.remove_output(output_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Output not in zone")
+        raise NotFoundError("Output not in zone")
     return zone.to_dict()

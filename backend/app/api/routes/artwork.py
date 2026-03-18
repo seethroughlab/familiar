@@ -3,10 +3,16 @@
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
+from app.api.exceptions import (
+    ConflictError,
+    NotFoundError,
+    UnprocessableEntityError,
+    ValidationError,
+)
 from app.services.artwork import compute_album_hash, get_artwork_path
 from app.services.background import get_background_manager
 
@@ -153,12 +159,12 @@ async def get_artwork_by_hash(album_hash: str, size: str) -> Any:
     from starlette.responses import FileResponse
 
     if size not in ("full", "thumb"):
-        raise HTTPException(status_code=400, detail="Size must be 'full' or 'thumb'")
+        raise ValidationError("Size must be 'full' or 'thumb'")
 
     artwork_path = get_artwork_path(album_hash, size)
 
     if not artwork_path.exists():
-        raise HTTPException(status_code=404, detail="Artwork not found")
+        raise NotFoundError("Artwork not found")
 
     return FileResponse(
         artwork_path,
@@ -232,10 +238,7 @@ async def regenerate_artwork(request: ArtworkRegenerateRequest) -> dict[str, Any
     full_path = get_artwork_path(album_hash, "full")
 
     if full_path.exists() and not is_generated_artwork(album_hash):
-        raise HTTPException(
-            status_code=409,
-            detail="Album has real artwork — will not overwrite with generated art",
-        )
+        raise ConflictError("Album has real artwork — will not overwrite with generated art")
 
     from app.services.generative_art import generate_album_art
 
@@ -244,10 +247,7 @@ async def regenerate_artwork(request: ArtworkRegenerateRequest) -> dict[str, Any
     if success:
         return {"status": "regenerated", "album_hash": album_hash}
     else:
-        raise HTTPException(
-            status_code=422,
-            detail="No analyzed tracks available for generation",
-        )
+        raise UnprocessableEntityError("No analyzed tracks available for generation")
 
 
 @router.post("/regenerate-stale")
@@ -300,6 +300,6 @@ async def check_artwork_exists(artist: str, album: str) -> None:
     full_path = get_artwork_path(album_hash, "full")
 
     if not full_path.exists():
-        raise HTTPException(status_code=404, detail="Artwork not found")
+        raise NotFoundError("Artwork not found")
 
     # 200 OK (no body for HEAD request)

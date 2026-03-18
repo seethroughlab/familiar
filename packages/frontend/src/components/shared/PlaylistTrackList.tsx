@@ -7,11 +7,10 @@
  * Customized via render props for per-view trailing cells, badges, bulk actions, etc.
  */
 import { useMemo, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Music, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
-import { PlayIndicator } from '../common/PlayIndicator';
 import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
-import { getColumnDef } from '../Library/columnDefinitions';
 import { useLocalSort, useSortedTracks, buildGridColumns } from './PlaylistColumns';
 import { PlaylistColumnHeader } from './PlaylistColumnHeader';
 import { useClientAlphabetBar } from './useClientAlphabetBar';
@@ -24,16 +23,8 @@ import { formatDuration } from '../../utils/format';
 import { FavoriteButton } from '../Library/browsers/trackList/FavoriteButton';
 import type { Track } from '../../types';
 import { resolveTrackRowIntent } from './trackRowInteraction';
-
-/** Context passed to render props for each track row. */
-export interface TrackRowContext<T> {
-  item: T;
-  track: Track;
-  index: number;
-  isCurrentTrack: boolean;
-  isPlaying: boolean;
-  isSelected: boolean;
-}
+import { PlaylistRow, type TrackRowContext } from './PlaylistRow';
+export type { TrackRowContext } from './PlaylistRow';
 
 export interface PlaylistTrackListProps<T> {
   /** The raw items to display (before sorting). */
@@ -132,13 +123,8 @@ export function PlaylistTrackList<T>({
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
 
-  // Auto-scroll to currently playing track
-  const currentTrackRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (currentTrackRef.current) {
-      currentTrackRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
-    }
-  }, [currentTrack?.id]);
+  // Scroll container for virtualization
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Column + sort state
   const columns = useColumnStore((s) => s.columns);
@@ -152,9 +138,30 @@ export function PlaylistTrackList<T>({
   // Sort items
   const sortedItems = useSortedTracks(visibleItems, sortBy, sortOrder, getTrack);
 
+  // Virtualizer
+  const virtualizer = useVirtualizer({
+    count: sortedItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 48,
+    overscan: 10,
+  });
+
+  // Auto-scroll to currently playing track
+  useEffect(() => {
+    if (!currentTrack?.id) return;
+    const idx = sortedItems.findIndex((item) => {
+      const track = getTrack(item);
+      return track?.id === currentTrack.id;
+    });
+    if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'center' });
+  }, [currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Alphabet bar (client-side, no backend call needed)
+  const scrollToIndex = useCallback((idx: number) => {
+    virtualizer.scrollToIndex(idx, { align: 'start' });
+  }, [virtualizer]);
   const { letterIndex, activeLetter, isVisible: alphabetBarVisible, jumpToLetter } =
-    useClientAlphabetBar({ sortedItems, getTrack, sortBy });
+    useClientAlphabetBar({ sortedItems, getTrack, sortBy, scrollToIndex });
 
   // Multi-select
   const {
@@ -246,20 +253,6 @@ export function PlaylistTrackList<T>({
     playItem(item);
   }, [playItem]);
 
-  // Build row context
-  const buildCtx = useCallback((item: T, index: number): TrackRowContext<T> => {
-    const track = getTrack(item);
-    const id = getItemId ? getItemId(item) : track?.id ?? '';
-    return {
-      item,
-      track: track ?? { id, file_path: '', title: null, artist: null, album: null, album_artist: null, album_type: 'album', track_number: null, disc_number: null, year: null, genre: null, duration_seconds: null, format: null, analysis_version: 0 },
-      index,
-      isCurrentTrack: currentTrack?.id === (track?.id ?? id),
-      isPlaying,
-      isSelected: isSelected(id),
-    };
-  }, [getTrack, getItemId, currentTrack?.id, isPlaying, isSelected]);
-
   // Default trailing renderers
   const defaultDesktopTrailing = useCallback((ctx: TrackRowContext<T>) => (
     <>
@@ -293,7 +286,7 @@ export function PlaylistTrackList<T>({
   }
 
   return (
-    <div>
+    <div className="flex flex-col min-h-0 flex-1">
       {/* Selection toolbar */}
       {selectedIds.size > 0 && (
         <div className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm p-3 rounded-lg flex items-center gap-3 border border-zinc-700 mb-2">
@@ -322,116 +315,64 @@ export function PlaylistTrackList<T>({
         trailingCount={trailingColumns.length}
       />
 
-      {/* Track rows */}
-      <div className="space-y-1">
-        {sortedItems.map((item, idx) => {
-          const ctx = buildCtx(item, idx);
-          const id = getItemId ? getItemId(item) : ctx.track.id;
-          const extraRowClass = getRowClassName?.(ctx) ?? '';
-          const selectedClass = ctx.isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : '';
-          const currentClass = ctx.isCurrentTrack ? 'bg-zinc-800/30' : '';
+      {/* Track rows (virtualized) */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto" style={{ contain: 'strict' }}>
+        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const idx = virtualRow.index;
+            const item = sortedItems[idx];
+            const track = getTrack(item);
+            const id = getItemId ? getItemId(item) : track?.id ?? '';
+            const trackObj = track ?? { id, file_path: '', title: null, artist: null, album: null, album_artist: null, album_type: 'album' as const, track_number: null, disc_number: null, year: null, genre: null, duration_seconds: null, format: null, analysis_version: 0 };
+            const isCurrent = currentTrack?.id === (track?.id ?? id);
+            const selected = isSelected(id);
+            const ctx = { item, track: trackObj, index: idx, isCurrentTrack: isCurrent, isPlaying, isSelected: selected } as TrackRowContext<T>;
+            const extraRowClass = getRowClassName?.(ctx) ?? '';
 
-          // Drag reorder classes
-          const dragClass = dragReorder
-            ? `${dragReorder.isDragged(item) ? 'opacity-50' : ''} ${dragReorder.isDropTarget(item) ? 'border-t-2 border-green-500' : ''}`
-            : '';
-
-          return (
-            <div key={id} data-list-index={idx} ref={ctx.isCurrentTrack ? currentTrackRef : undefined}>
-              {/* Mobile layout */}
-              <div
-                data-testid="playlist-track-row-mobile"
-                onClick={() => handleMobileRowClick(item)}
-                onDoubleClick={() => handleRowDoubleClick(item)}
-                onContextMenu={(e) => ctx.track.id && handleContextMenu(ctx.track, e)}
-                className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${currentClass} ${selectedClass} ${extraRowClass}`}
-              >
-                <div className="w-8 flex-shrink-0 text-center cursor-pointer" onClick={(e) => handlePlayClick(item, e)}>
-                  <PlayIndicator isCurrent={ctx.isCurrentTrack} isPlaying={ctx.isPlaying} index={idx + 1} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium truncate ${ctx.isCurrentTrack ? 'text-green-500' : ''}`}>
-                      {ctx.track.title || 'Unknown Title'}
-                    </span>
-                    {renderTitleBadge?.(ctx)}
-                  </div>
-                  <div className="text-sm text-zinc-400 truncate">
-                    {ctx.track.artist || 'Unknown Artist'}
-                    {ctx.track.album && <span className="text-zinc-500"> &bull; {ctx.track.album}</span>}
-                  </div>
-                </div>
-                {mobileTrailing(ctx)}
-              </div>
-
-              {/* Desktop layout */}
-              <div
-                data-testid="playlist-track-row-desktop"
+            return (
+              <PlaylistRow
+                key={id}
+                id={id}
+                virtualStart={virtualRow.start}
+                virtualIndex={virtualRow.index}
+                index={idx}
+                trackId={trackObj.id}
+                trackTitle={trackObj.title}
+                trackArtist={trackObj.artist}
+                trackAlbum={trackObj.album}
+                trackDurationSeconds={trackObj.duration_seconds}
+                isCurrentTrack={isCurrent}
+                isPlaying={isPlaying}
+                isSelected={selected}
+                gridColumns={gridColumns}
+                visibleColumnIds={visibleColumnIds}
+                isDragged={dragReorder ? dragReorder.isDragged(item) : false}
+                isDropTarget={dragReorder ? dragReorder.isDropTarget(item) : false}
                 draggable={dragReorder ? !dragReorder.disabled : true}
-                onDragStart={(e) => {
-                  if (dragReorder && !dragReorder.disabled) {
-                    dragReorder.onDragStart(item, e);
-                  } else {
-                    e.dataTransfer.setData('application/track-id', ctx.track.id);
-                    e.dataTransfer.effectAllowed = 'copy';
-                  }
-                }}
+                extraRowClass={extraRowClass}
+                renderTitleBadge={renderTitleBadge as ((ctx: TrackRowContext<unknown>) => ReactNode) | undefined}
+                renderDragHandle={renderDragHandle as ((ctx: TrackRowContext<unknown>) => ReactNode) | undefined}
+                desktopTrailing={desktopTrailing as (ctx: TrackRowContext<unknown>) => ReactNode}
+                mobileTrailing={mobileTrailing as (ctx: TrackRowContext<unknown>) => ReactNode}
+                item={item}
+                track={trackObj}
+                onMobileClick={() => handleMobileRowClick(item)}
+                onDesktopClick={(e) => handleRowClick(item, idx, e)}
+                onDoubleClick={() => handleRowDoubleClick(item)}
+                onPlayClick={(e) => handlePlayClick(item, e)}
+                onContextMenu={(e) => handleContextMenu(trackObj, e)}
+                onDragStart={dragReorder && !dragReorder.disabled
+                  ? (e) => dragReorder.onDragStart(item, e)
+                  : (e) => { e.dataTransfer.setData('application/track-id', trackObj.id); e.dataTransfer.effectAllowed = 'copy'; }}
                 onDragOver={dragReorder && !dragReorder.disabled ? (e) => dragReorder.onDragOver(item, e) : undefined}
                 onDragLeave={dragReorder ? dragReorder.onDragLeave : undefined}
                 onDrop={dragReorder && !dragReorder.disabled ? () => dragReorder.onDrop(item) : undefined}
                 onDragEnd={dragReorder ? dragReorder.onDragEnd : undefined}
-                onClick={(e) => handleRowClick(item, idx, e)}
-                onDoubleClick={() => handleRowDoubleClick(item)}
-                onContextMenu={(e) => ctx.track.id && handleContextMenu(ctx.track, e)}
-                className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${currentClass} ${selectedClass} ${dragClass} ${extraRowClass}`}
-                style={{ gridTemplateColumns: gridColumns }}
-              >
-                {/* Index cell */}
-                <div className="flex items-center">
-                  {renderDragHandle?.(ctx)}
-                  <div className="flex-1 text-center cursor-pointer" onClick={(e) => handlePlayClick(item, e)}>
-                    <PlayIndicator isCurrent={ctx.isCurrentTrack} isPlaying={ctx.isPlaying} index={idx + 1} />
-                  </div>
-                </div>
-
-                {/* Title + artist */}
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-medium truncate ${ctx.isCurrentTrack ? 'text-green-500' : ''}`}>
-                      {ctx.track.title || 'Unknown Title'}
-                    </span>
-                    {renderTitleBadge?.(ctx)}
-                  </div>
-                  <div className="text-sm text-zinc-400 truncate sm:hidden">
-                    {ctx.track.artist || 'Unknown Artist'}
-                    {ctx.track.album && <span className="text-zinc-500"> &bull; {ctx.track.album}</span>}
-                  </div>
-                </div>
-
-                {/* Dynamic columns */}
-                {visibleColumnIds.map((colId) => {
-                  const colDef = getColumnDef(colId);
-                  if (!colDef) return <div key={colId} />;
-                  const raw = colDef.getValue(ctx.track);
-                  const display = colDef.format ? colDef.format(raw) : (raw ?? '-');
-                  return (
-                    <div
-                      key={colId}
-                      className={`hidden sm:block text-sm text-zinc-400 truncate ${
-                        colDef.align === 'right' ? 'text-right' : colDef.align === 'center' ? 'text-center' : ''
-                      }`}
-                    >
-                      {String(display)}
-                    </div>
-                  );
-                })}
-
-                {/* Trailing cells */}
-                {desktopTrailing(ctx)}
-              </div>
-            </div>
-          );
-        })}
+                measureElement={virtualizer.measureElement}
+              />
+            );
+          })}
+        </div>
       </div>
 
       {/* Context menu */}

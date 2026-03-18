@@ -27,5 +27,5 @@ class FrontendLog(Base):
     namespace: Mapped[str] = mapped_column(String(200))
     message: Mapped[str] = mapped_column(Text)
     context: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    client_ts: Mapped[datetime] = mapped_column(DateTime)
+    client_ts: Mapped[datetime] = mapped_column(DateTime, index=True)
     server_ts: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

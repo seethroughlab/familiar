@@ -6,6 +6,7 @@
  * When offline, it returns cached data.
  */
 import { useState, useCallback, useEffect } from 'react';
+import { STALE_TIME, offlineAwareRetry } from '../api/queryDefaults';
 import { createLogger } from '../utils/logger';
 import {
   useQuery,
@@ -115,9 +116,9 @@ export function useOfflineQuery<TData, TError = Error>(
   const query = useQuery<TData, TError>({
     ...queryOptions,
     queryFn: wrappedQueryFn,
-    retry: isOffline ? false : (queryOptions.retry ?? 3),
+    retry: offlineAwareRetry(isOffline, typeof queryOptions.retry === 'number' ? queryOptions.retry : 3),
     // Keep stale data available while revalidating
-    staleTime: queryOptions.staleTime ?? 30000,
+    staleTime: queryOptions.staleTime ?? STALE_TIME.SHORT,
   });
 
   // Reset cache status when data changes

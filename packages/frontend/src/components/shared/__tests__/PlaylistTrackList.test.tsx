@@ -54,6 +54,22 @@ vi.mock('../../Library/AlphabetBar', () => ({
   AlphabetBar: () => null,
 }));
 
+// Mock react-virtual so rows render in jsdom (no layout engine = 0 height scroll container)
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: ({ count }: { count: number }) => ({
+    getTotalSize: () => count * 48,
+    getVirtualItems: () =>
+      Array.from({ length: count }, (_, i) => ({
+        index: i,
+        start: i * 48,
+        size: 48,
+        key: i,
+      })),
+    measureElement: () => {},
+    scrollToIndex: vi.fn(),
+  }),
+}));
+
 function makeTrack(id: string) {
   return {
     id,

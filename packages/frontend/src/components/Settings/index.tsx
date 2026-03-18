@@ -14,7 +14,7 @@ import { AISettings } from './AISettings';
 import { DataManagement } from './DataManagement';
 import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
-import { S3BackupSettings } from './S3BackupSettings';
+import { S3BackupSettings } from './S3Backup';
 import { ServerSettings } from './ServerSettings';
 import { isNativeApp } from '../../utils/platform';
 

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Zap, Plus, MoreVertical, Pencil, Trash2, RefreshCw, Play, Loader2, Upload, CloudOff } from 'lucide-react';
 import { smartPlaylistsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { offlineAwareRetry } from '../../api/queryDefaults';
 import type { SmartPlaylist } from '../../api';
 import { SmartPlaylistBuilder } from './SmartPlaylistBuilder';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -35,7 +37,7 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
   }, []);
 
   const { data: playlists, isLoading } = useQuery({
-    queryKey: ['smart-playlists'],
+    queryKey: queryKeys.smartPlaylists.all,
     queryFn: async () => {
       try {
         const data = await smartPlaylistsApi.list();
@@ -68,20 +70,20 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
         throw error;
       }
     },
-    retry: isOffline ? false : 3,
+    retry: offlineAwareRetry(isOffline),
   });
 
   const deleteMutation = useMutation({
     mutationFn: smartPlaylistsApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.smartPlaylists.all });
     },
   });
 
   const refreshMutation = useMutation({
     mutationFn: smartPlaylistsApi.refresh,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['smart-playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.smartPlaylists.all });
     },
   });
 

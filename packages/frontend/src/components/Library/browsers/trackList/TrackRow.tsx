@@ -16,6 +16,7 @@ export interface TrackRowProps {
   isSelected: boolean;
   onPlay: () => void;
   onClick: (e: React.MouseEvent) => void;
+  onDoubleClick: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   visibleColumnIds: string[];
   gridColumns: string;
@@ -29,6 +30,7 @@ export function TrackRow({
   isSelected,
   onPlay,
   onClick,
+  onDoubleClick,
   onContextMenu,
   visibleColumnIds,
   gridColumns,
@@ -44,6 +46,7 @@ export function TrackRow({
         e.dataTransfer.effectAllowed = 'copy';
       }}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       onMouseDown={(e) => {
         // Prevent text selection when using modifier keys for multi-select
@@ -71,7 +74,7 @@ export function TrackRow({
 
       {/* Title column (always visible) */}
       <div className="min-w-0">
-        <div className={`truncate ${isCurrentTrack ? 'text-green-500' : ''}`}>
+        <div className={`truncate flex items-center gap-1.5 ${isCurrentTrack ? 'text-green-500' : ''}`}>
           {track.title || 'Unknown'}
         </div>
       </div>

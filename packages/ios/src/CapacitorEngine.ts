@@ -1,6 +1,6 @@
 import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familiar/frontend/src/player/audio/types';
 import { FamiliarAudio } from './plugins/familiarAudio';
-import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/frontend/src/hooks/useAudioAnalyser';
+import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/frontend/src/player/audio/nativeAnalysisBuffers';
 import { log } from '@familiar/frontend/src/player/audio/platform';
 import { tracksApi } from '@familiar/frontend/src/api';
 import { getOfflineTrackNativeUri } from '@familiar/frontend/src/services/offlineService';

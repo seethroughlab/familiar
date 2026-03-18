@@ -6,7 +6,6 @@ import { Page } from '@playwright/test';
 export async function ensureProfile(page: Page, profileName = 'Test User') {
   // Wait for page to settle (use domcontentloaded instead of networkidle to avoid timeout)
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForTimeout(1000); // Brief wait for initial render
 
   // Check if we're on profile selector (shows "Who's listening?")
   const profileSelector = page.getByRole('heading', { name: "Who's listening?" });
@@ -21,7 +20,6 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
     } else {
       // No profiles exist - create one
       await page.getByRole('button', { name: /Add Profile/ }).click();
-      await page.waitForTimeout(300);
 
       // Fill in profile name in the modal dialog
       const nameInput = page.getByPlaceholder('Enter name');
@@ -32,8 +30,6 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
       await page.getByRole('button', { name: 'Create' }).click();
     }
 
-    // Wait for app to load after profile selection
-    await page.waitForTimeout(500);
   }
 
   // Wait for main app to load - sidebar links (desktop) or bottom nav buttons (mobile)
@@ -62,7 +58,7 @@ export async function navigateToView(page: Page, label: string) {
   const link = page.getByRole('link', { name: label, exact: true });
   if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
     await link.click();
-    await page.waitForTimeout(300);
+    await page.waitForLoadState('domcontentloaded');
     return;
   }
 
@@ -70,7 +66,7 @@ export async function navigateToView(page: Page, label: string) {
   const mobileButton = page.locator(`nav button:has-text("${label}")`);
   if (await mobileButton.isVisible({ timeout: 1000 }).catch(() => false)) {
     await mobileButton.click();
-    await page.waitForTimeout(300);
+    await page.waitForLoadState('domcontentloaded');
     return;
   }
 
@@ -78,16 +74,16 @@ export async function navigateToView(page: Page, label: string) {
   const moreButton = page.locator('nav button:has-text("More")');
   if (await moreButton.isVisible({ timeout: 1000 }).catch(() => false)) {
     await moreButton.click();
-    await page.waitForTimeout(300);
     const sheetLink = page.getByRole('link', { name: label, exact: true });
+    await sheetLink.waitFor({ timeout: 3000 });
     await sheetLink.click();
-    await page.waitForTimeout(300);
+    await page.waitForLoadState('domcontentloaded');
     return;
   }
 
   // Fallback: try clicking the link anyway (will fail with a clear error)
   await link.click();
-  await page.waitForTimeout(300);
+  await page.waitForLoadState('domcontentloaded');
 }
 
 /**
@@ -131,7 +127,6 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
       // These are visible in the sidebar by default, no navigation needed
       break;
   }
-  await page.waitForTimeout(300);
 }
 
 /**
@@ -359,6 +354,24 @@ export async function waitForTrackChange(page: Page, currentTitle: string, timeo
  * during a given monitoring window.
  * Returns true if a gap was detected.
  */
+/**
+ * Wait for visual content (images/canvas) to be ready for screenshots.
+ */
+export async function waitForContentReady(page: Page, opts?: {
+  images?: boolean; canvas?: boolean; timeout?: number
+}) {
+  const timeout = opts?.timeout ?? 10000;
+  if (opts?.images) {
+    await page.waitForFunction(() => {
+      const images = Array.from(document.querySelectorAll('img'));
+      return images.length > 0 && images.every(img => img.complete);
+    }, { timeout }).catch(() => {});
+  }
+  if (opts?.canvas) {
+    await page.waitForSelector('canvas', { timeout }).catch(() => {});
+  }
+}
+
 export async function detectAudioGap(page: Page, durationMs: number): Promise<boolean> {
   return page.evaluate(async (ms) => {
     const pollInterval = 50;

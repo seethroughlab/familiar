@@ -24,10 +24,11 @@ import {
   type ChangeStatus,
   type ChangeScope,
   type ChangePreview,
-} from '../../../api';
-import { registerBrowser, type BrowserProps } from '../types';
+} from '../../../../api';
+import type { BrowserProps } from '../../types';
+import { queryKeys } from '../../../../api/queryKeys';
 
-import { createLogger } from '../../../utils/logger';
+import { createLogger } from '../../../../utils/logger';
 
 const log = createLogger('ProposedChangesBrowser');
 
@@ -350,7 +351,7 @@ function ProposedChangesBrowser(_props: BrowserProps) {
 
   // Fetch stats
   const { data: stats } = useQuery({
-    queryKey: ['proposed-changes-stats'],
+    queryKey: queryKeys.proposedChanges.stats,
     queryFn: proposedChangesApi.getStats,
     refetchInterval: 30000,
   });
@@ -361,7 +362,7 @@ function ProposedChangesBrowser(_props: BrowserProps) {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['proposed-changes', statusFilter],
+    queryKey: queryKeys.proposedChanges.list(statusFilter),
     queryFn: () => proposedChangesApi.list({ status: statusFilter || undefined, limit: 100 }),
   });
 
@@ -369,32 +370,32 @@ function ProposedChangesBrowser(_props: BrowserProps) {
   const rejectMutation = useMutation({
     mutationFn: proposedChangesApi.reject,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
   const applyMutation = useMutation({
     mutationFn: ({ id, scope }: { id: string; scope: ChangeScope }) => proposedChangesApi.apply(id, scope),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
   const undoMutation = useMutation({
     mutationFn: proposedChangesApi.undo,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: proposedChangesApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
@@ -566,18 +567,4 @@ function ProposedChangesBrowser(_props: BrowserProps) {
   );
 }
 
-// Register the browser
-registerBrowser(
-  {
-    id: 'proposed-changes',
-    name: 'Proposed Changes',
-    description: 'Review metadata corrections',
-    icon: 'FileEdit',
-    category: 'traditional',
-    requiresFeatures: false,
-    requiresEmbeddings: false,
-  },
-  ProposedChangesBrowser
-);
-
-export { ProposedChangesBrowser };
+export default ProposedChangesBrowser;

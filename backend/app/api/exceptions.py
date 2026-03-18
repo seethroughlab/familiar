@@ -66,6 +66,30 @@ class ProfileNotFoundError(NotFoundError):
     message = "Profile not found"
 
 
+# 401 Unauthorized
+class AuthenticationError(FamiliarError):
+    """Authentication or profile identification required."""
+
+    status_code = 401
+    message = "Authentication required"
+
+
+# 413 Payload Too Large
+class PayloadTooLargeError(FamiliarError):
+    """Request payload exceeds size or count limits."""
+
+    status_code = 413
+    message = "Request too large"
+
+
+# 422 Unprocessable Entity
+class UnprocessableEntityError(FamiliarError):
+    """Request is syntactically valid but cannot be processed."""
+
+    status_code = 422
+    message = "Cannot process request"
+
+
 # 409 Conflict errors
 class ConflictError(FamiliarError):
     """Request conflicts with current state."""

@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Upload, FileJson, Loader2, Check, X, AlertCircle } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { playlistSharingApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import type { PlaylistImportResult } from '../../api';
 import type { FamiliarPlaylist } from '../../types';
 
@@ -20,7 +21,7 @@ export function PlaylistImport({ onImportComplete, onClose }: Props) {
   const importMutation = useMutation({
     mutationFn: playlistSharingApi.importPlaylist,
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['smart-playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.smartPlaylists.all });
       onImportComplete?.(result);
     },
   });

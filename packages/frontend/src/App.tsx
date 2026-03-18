@@ -291,7 +291,7 @@ function App() {
               <Route
                 key={path}
                 path={`/library/${path}`}
-                element={<LibraryBrowser browserId={browserId} />}
+                element={<LibraryBrowser key={browserId} browserId={browserId} />}
               />
             ))}
 

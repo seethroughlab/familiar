@@ -2,12 +2,13 @@
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
-from app.api.routes.library_sync import CancelResponse
+from app.api.exceptions import ConflictError
+from app.api.schemas.common import CancelResponse
 from app.db.models import Track, TrackAnalysis
 from app.utils.time import utcnow
 
@@ -220,10 +221,7 @@ async def start_analysis(limit: int = 500) -> AnalysisStartResponse:
 
     # Check if sync is running - can't run both simultaneously
     if bg.is_sync_running():
-        raise HTTPException(
-            status_code=409,
-            detail="Cannot start analysis while a sync is running. Cancel sync first or wait for it to complete.",
-        )
+        raise ConflictError("Cannot start analysis while a sync is running. Cancel sync first or wait for it to complete.")
 
     try:
         queued = await queue_unanalyzed_tracks(limit=limit)

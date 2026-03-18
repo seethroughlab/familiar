@@ -237,10 +237,7 @@ class AmbientCoordinator {
     }
 
     store.setCurrentSnippet(prev);
-    store.addToHistory; // intentional: we slice from history above
-    // Actually set the new history
-    // Note: we can't directly set history, use the store pattern
-    // We'll just play the prev snippet
+    // History was already sliced above; just play the prev snippet
     await this.playSnippet(prev);
   }
 

@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     executor_auto_recovery_backoff_seconds: int = 900
     executor_auto_recovery_max_attempts: int = 3
 
+    # Analysis worker pool size (default 1 for memory safety; increase with CPU headroom)
+    max_analysis_workers: int = 1
+
     @property
     def sync_database_url(self) -> str:
         """Synchronous database URL for Alembic or sync operations."""
@@ -108,6 +111,12 @@ GENERATIVE_ART_VERSION = 4
 # Mood tags history:
 #   v1: CLAP-based mood/genre/instrumentation/energy tags
 MOOD_TAGS_VERSION = 1
+
+def adaptive_queue_limit(base: int = 100) -> int:
+    """Scale queue burst by CPU count, clamped to [50, 500]."""
+    cpus = os.cpu_count() or 2
+    return max(50, min(cpus * base, 500))
+
 
 # Supported audio formats
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}

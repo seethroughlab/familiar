@@ -10,7 +10,7 @@
  * Run with: npx playwright test mobile-screenshots
  */
 import { test } from '@playwright/test';
-import { ensureProfile, navigateToTab } from './helpers';
+import { ensureProfile, navigateToTab, waitForContentReady } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,10 +30,10 @@ const MOBILE_VIEWPORTS = {
 
 // Screens to capture
 const SCREENS = [
-  { name: 'library', tab: 'Library', wait: 1000 },
-  { name: 'playlists', tab: 'Playlists', wait: 500 },
-  { name: 'settings', tab: 'Settings', wait: 500 },
-];
+  { name: 'library', tab: 'Library' },
+  { name: 'playlists', tab: 'Playlists' },
+  { name: 'settings', tab: 'Settings' },
+] as const;
 
 test.beforeAll(async () => {
   if (!fs.existsSync(SCREENSHOT_DIR)) {
@@ -52,8 +52,8 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
 
     for (const screen of SCREENS) {
       test(`${screen.name}`, async ({ page }) => {
-        await navigateToTab(page, screen.tab);
-        await page.waitForTimeout(screen.wait);
+        await navigateToTab(page, screen.tab as 'Library' | 'Playlists' | 'Settings');
+        await waitForContentReady(page, { images: true }).catch(() => {});
 
         await page.screenshot({
           path: path.join(SCREENSHOT_DIR, `${deviceName}-${screen.name}.png`),
@@ -65,13 +65,12 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
     // Player bar test
     test('player-bar', async ({ page }) => {
       await navigateToTab(page, 'Library');
-      await page.waitForTimeout(500);
 
       // Try to play a track
       const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
       if (await trackRow.isVisible()) {
         await trackRow.dblclick();
-        await page.waitForTimeout(1000);
+        await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
       }
 
       await page.screenshot({
@@ -83,20 +82,19 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
     // Full player test
     test('full-player', async ({ page }) => {
       await navigateToTab(page, 'Library');
-      await page.waitForTimeout(500);
 
       // Play a track
       const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
       if (await trackRow.isVisible()) {
         await trackRow.dblclick();
-        await page.waitForTimeout(1000);
+        await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
       }
 
       // Expand to full player
       const expandButton = page.locator('button[aria-label="Expand player"]').first();
       if (await expandButton.isVisible()) {
         await expandButton.click();
-        await page.waitForTimeout(500);
+        await waitForContentReady(page, { images: true }).catch(() => {});
       }
 
       await page.screenshot({

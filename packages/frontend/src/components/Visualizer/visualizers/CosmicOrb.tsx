@@ -16,7 +16,7 @@ import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { extractPalette } from '../../../utils/colorExtraction';
 import { isMobile } from '../../../utils/platform';
-import { registerVisualizer, type VisualizerProps } from '../types';
+import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { GPUParticles } from '../effects/GPUParticles';
 import { FrameScheduler } from '../effects/FrameScheduler';
@@ -569,13 +569,4 @@ export function CosmicOrb({ artworkUrl }: VisualizerProps) {
   );
 }
 
-// Register the visualizer
-registerVisualizer(
-  {
-    id: 'cosmic-orb',
-    name: 'Cosmic Orb',
-    description: 'Glowing orb with album colors and reflective ground',
-    usesMetadata: true,
-  },
-  CosmicOrb
-);
+export default CosmicOrb;

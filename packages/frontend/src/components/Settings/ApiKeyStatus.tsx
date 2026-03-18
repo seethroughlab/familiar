@@ -1,10 +1,11 @@
 import { Cloud, Radio, Fingerprint, CheckCircle, XCircle, Server } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { appSettingsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 
 export function ApiKeyStatus() {
   const { data: settings, isLoading } = useQuery({
-    queryKey: ['app-settings'],
+    queryKey: queryKeys.appSettings.all,
     queryFn: appSettingsApi.get,
   });
 

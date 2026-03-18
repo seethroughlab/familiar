@@ -13,12 +13,14 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Users, Loader2 } from 'lucide-react';
 import { libraryApi, type ArtistSummary } from '../../../api';
+import { queryKeys } from '../../../api/queryKeys';
 import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 import { AlbumArtwork } from '../../AlbumArtwork';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useIntersectionObserver } from '../../../hooks/useIntersectionObserver';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import { useGridColumns } from '../../../hooks/useGridColumns';
+import { useScrollContainer } from '../../../hooks/useScrollContainer';
 import { getDownloadedArtistsPage } from '../../../services/libraryCache';
 
 const PAGE_SIZE = 50;
@@ -105,7 +107,7 @@ export function ArtistList({
     fetchNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['library-artists', { search: filters.search, sortBy, offline: isOffline }],
+    queryKey: queryKeys.artists.list({ search: filters.search, sortBy, offline: isOffline }),
     queryFn: ({ pageParam = 1 }) => fetchArtistsPage(pageParam),
     getNextPageParam: (lastPage) => {
       const totalPages = Math.ceil(lastPage.total / PAGE_SIZE);
@@ -193,6 +195,18 @@ export function ArtistList({
   useEffect(() => {
     virtualizer.measure();
   }, [cols, virtualizer]);
+
+  // --- Mobile virtualizer (row-based, shared scroll container) ---
+  const MOBILE_COLS = 2; // grid-cols-2 on mobile (< sm uses 2, sm uses 3 but still below md)
+  const scrollContainerRef = useScrollContainer();
+  const mobileRowCount = Math.ceil(allArtistsDense.length / MOBILE_COLS);
+  const mobileVirtualizer = useVirtualizer({
+    count: mobileRowCount,
+    getScrollElement: () => scrollContainerRef?.current ?? null,
+    estimateSize: () => 220,
+    overscan: 3,
+    enabled: !!scrollContainerRef,
+  });
 
   // Fetch pages for visible rows
   useEffect(() => {
@@ -319,19 +333,57 @@ export function ArtistList({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Mobile view — intersection-observer infinite scroll */}
+      {/* Mobile view — virtualized grid (shared scroll container from AppShell) */}
       <div className="md:hidden p-4" data-alphabet-scroll-container>
         {sortControls}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
-          {allArtistsDense.map((artist, index) => (
-            <ArtistCard
-              key={artist.name}
-              artist={artist}
-              index={index}
-              onClick={() => onGoToArtist(artist.name)}
-            />
-          ))}
-        </div>
+        {scrollContainerRef ? (
+          <div style={{ height: mobileVirtualizer.getTotalSize(), position: 'relative' }}>
+            {mobileVirtualizer.getVirtualItems().map((virtualRow) => {
+              const rowStartIdx = virtualRow.index * MOBILE_COLS;
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={mobileVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
+                    {Array.from({ length: MOBILE_COLS }, (_, colIdx) => {
+                      const itemIdx = rowStartIdx + colIdx;
+                      if (itemIdx >= allArtistsDense.length) return null;
+                      const artist = allArtistsDense[itemIdx];
+                      return (
+                        <ArtistCard
+                          key={artist.name}
+                          artist={artist}
+                          index={itemIdx}
+                          onClick={() => onGoToArtist(artist.name)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
+            {allArtistsDense.map((artist, index) => (
+              <ArtistCard
+                key={artist.name}
+                artist={artist}
+                index={index}
+                onClick={() => onGoToArtist(artist.name)}
+              />
+            ))}
+          </div>
+        )}
         {isFetchingNextPage && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />

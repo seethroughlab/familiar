@@ -8,26 +8,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Cloud,
   CloudUpload,
-  CloudDownload,
   Shield,
   ShieldCheck,
   ShieldX,
   Loader2,
   CheckCircle,
   XCircle,
-  Clock,
-  DollarSign,
-  HardDrive,
   Square,
-  History,
-  AlertTriangle,
-  RefreshCw,
-  Database,
-  Music,
-  Image,
-  Video,
-  Settings,
-  User,
 } from 'lucide-react';
 import {
   appSettingsApi,
@@ -40,39 +27,45 @@ import {
   type S3BackupHistoryEntry,
   type S3ManifestSummary,
   type S3RestoreState,
-} from '../../api';
-import { showSuccess, showError, showWarning } from '../../stores/toastStore';
-
-import { createLogger } from '../../utils/logger';
+} from '../../../api';
+import { showSuccess, showError, showWarning } from '../../../stores/toastStore';
+import { createLogger } from '../../../utils/logger';
+import { formatRelativeTime, formatBytes, formatDuration } from './utils';
+import { CostEstimateCard } from './CostEstimateCard';
+import { BackupProgressBar } from './BackupProgressBar';
+import { BackupHistory } from './BackupHistory';
+import { RestoreSection } from './RestoreSection';
 
 const log = createLogger('S3BackupSettings');
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-}
+function ValidationResult({ validation }: { validation: S3ValidateResponse }) {
+  if (validation.valid) {
+    return (
+      <div className="flex items-center gap-1.5 text-green-400 text-sm">
+        <ShieldCheck className="w-4 h-4" />
+        All permissions verified
+      </div>
+    );
+  }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-}
-
-function formatRelativeTime(isoStr: string): string {
-  const date = new Date(isoStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
+  return (
+    <div className="space-y-1">
+      {validation.error && (
+        <div className="flex items-center gap-1.5 text-red-400 text-xs">
+          <ShieldX className="w-3.5 h-3.5" />
+          {validation.error}
+        </div>
+      )}
+      <div className="flex gap-3 text-xs">
+        {Object.entries(validation.permissions).map(([perm, ok]) => (
+          <div key={perm} className={`flex items-center gap-1 ${ok ? 'text-green-400' : 'text-red-400'}`}>
+            {ok ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+            {perm}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function S3BackupSettings() {
@@ -505,345 +498,6 @@ export function S3BackupSettings() {
           </>
         )}
       </div>
-    </div>
-  );
-}
-
-function CostEstimateCard({
-  estimate,
-  isLoading,
-}: {
-  estimate: S3CostEstimate | null;
-  isLoading: boolean;
-}) {
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-2 text-sm text-zinc-400 py-2">
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Calculating library size...
-      </div>
-    );
-  }
-
-  if (!estimate) return null;
-
-  const categoryIcons: Record<string, React.ReactNode> = {
-    audio: <Music className="w-3.5 h-3.5" />,
-    artwork: <Image className="w-3.5 h-3.5" />,
-    videos: <Video className="w-3.5 h-3.5" />,
-    database: <Database className="w-3.5 h-3.5" />,
-    settings: <Settings className="w-3.5 h-3.5" />,
-    profiles: <User className="w-3.5 h-3.5" />,
-  };
-
-  return (
-    <div className="bg-zinc-900/50 rounded-lg p-3 space-y-2">
-      <div className="flex items-center gap-2 text-sm">
-        <DollarSign className="w-4 h-4 text-green-400" />
-        <span className="text-zinc-300 font-medium">Cost Estimate</span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-        {Object.entries(estimate.by_category).map(([name, cat]) => (
-          <div key={name} className="flex items-center justify-between text-zinc-400">
-            <div className="flex items-center gap-1.5">
-              {categoryIcons[name] || <HardDrive className="w-3.5 h-3.5" />}
-              <span className="capitalize">{name}</span>
-            </div>
-            <span>{formatBytes(cat.size_bytes)}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="border-t border-zinc-700 pt-2 space-y-1">
-        <div className="flex justify-between text-sm">
-          <span className="text-zinc-300">Total: {estimate.storage_gb.toFixed(1)} GB</span>
-          <span className="text-green-400 font-medium">
-            ${estimate.monthly_cost.toFixed(2)}/mo
-          </span>
-        </div>
-        <div className="flex justify-between text-xs text-zinc-500">
-          <span>Initial upload: ~${estimate.initial_upload_cost.toFixed(2)}</span>
-          <span>Full restore: ~${estimate.estimated_restore_cost.toFixed(2)}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ValidationResult({ validation }: { validation: S3ValidateResponse }) {
-  if (validation.valid) {
-    return (
-      <div className="flex items-center gap-1.5 text-green-400 text-sm">
-        <ShieldCheck className="w-4 h-4" />
-        All permissions verified
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      {validation.error && (
-        <div className="flex items-center gap-1.5 text-red-400 text-xs">
-          <ShieldX className="w-3.5 h-3.5" />
-          {validation.error}
-        </div>
-      )}
-      <div className="flex gap-3 text-xs">
-        {Object.entries(validation.permissions).map(([perm, ok]) => (
-          <div key={perm} className={`flex items-center gap-1 ${ok ? 'text-green-400' : 'text-red-400'}`}>
-            {ok ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-            {perm}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BackupProgressBar({ progress }: { progress: S3BackupProgress }) {
-  const pct = progress.files_total > 0
-    ? Math.round((progress.files_uploaded / progress.files_total) * 100)
-    : 0;
-
-  const phaseLabels: Record<string, string> = {
-    starting: 'Starting...',
-    database: 'Backing up database...',
-    settings: 'Backing up settings...',
-    audio: 'Uploading audio files...',
-    artwork: 'Uploading artwork...',
-    videos: 'Uploading videos...',
-    profiles: 'Uploading profiles...',
-    manifest: 'Writing manifest...',
-  };
-
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between text-xs text-zinc-400">
-        <span>{phaseLabels[progress.phase] || progress.phase}</span>
-        <span>
-          {progress.files_uploaded}/{progress.files_total} files
-          {' '}({formatBytes(progress.bytes_uploaded)})
-        </span>
-      </div>
-      <div className="w-full bg-zinc-700 rounded-full h-1.5">
-        <div
-          className="bg-sky-500 h-1.5 rounded-full transition-all duration-300"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {progress.current_file && (
-        <div className="text-xs text-zinc-500 truncate">
-          {progress.current_file}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BackupHistory({ entries }: { entries: S3BackupHistoryEntry[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? entries : entries.slice(0, 3);
-
-  return (
-    <div className="py-3 border-t border-zinc-700">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-sm text-zinc-300">
-          <History className="w-4 h-4" />
-          Backup History
-        </div>
-        {entries.length > 3 && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-sky-400 hover:text-sky-300"
-          >
-            {expanded ? 'Show less' : `Show all (${entries.length})`}
-          </button>
-        )}
-      </div>
-      <div className="space-y-1">
-        {visible.map((entry, i) => (
-          <div key={i} className="flex items-center justify-between text-xs text-zinc-400">
-            <div className="flex items-center gap-2">
-              {entry.status === 'success' ? (
-                <CheckCircle className="w-3 h-3 text-green-400" />
-              ) : (
-                <XCircle className="w-3 h-3 text-red-400" />
-              )}
-              <span>{formatRelativeTime(entry.timestamp)}</span>
-            </div>
-            <span>
-              {entry.files_uploaded} uploaded, {entry.files_skipped} skipped
-              {' — '}{formatBytes(entry.bytes_uploaded)}
-              {' — '}{formatDuration(entry.duration_seconds)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function RestoreSection({
-  onLoadManifest,
-  isLoadingManifest,
-  manifest,
-  restoreState,
-  isInitiatingRestore,
-  onInitiateRestore,
-  onCheckStatus,
-  onDownloadRestore,
-  showRestoreConfirm,
-  setShowRestoreConfirm,
-}: {
-  onLoadManifest: () => void;
-  isLoadingManifest: boolean;
-  manifest: S3ManifestSummary | null;
-  restoreState: S3RestoreState | null;
-  isInitiatingRestore: boolean;
-  onInitiateRestore: () => void;
-  onCheckStatus: () => void;
-  onDownloadRestore: () => void;
-  showRestoreConfirm: boolean;
-  setShowRestoreConfirm: (v: boolean) => void;
-}) {
-  return (
-    <div className="py-3 border-t border-zinc-700 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-zinc-300">
-          <CloudDownload className="w-4 h-4" />
-          Restore from Backup
-        </div>
-        <button
-          onClick={onLoadManifest}
-          disabled={isLoadingManifest}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-400/10 rounded transition-colors disabled:opacity-50"
-        >
-          {isLoadingManifest ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="w-3.5 h-3.5" />
-          )}
-          Check Backup Contents
-        </button>
-      </div>
-      <p className="text-xs text-zinc-500">
-        Fetches the backup index from S3 to show what's available to restore.
-      </p>
-
-      {manifest && (
-        <div className="bg-zinc-900/50 rounded-lg p-3 space-y-2">
-          <div className="text-xs text-zinc-400">
-            Last backup: {manifest.last_backup_at ? formatRelativeTime(manifest.last_backup_at) : 'never'}
-          </div>
-          <div className="text-sm text-zinc-300">
-            {manifest.file_count.toLocaleString()} files, {formatBytes(manifest.total_size_bytes)}
-          </div>
-          {Object.entries(manifest.by_category).length > 0 && (
-            <div className="flex flex-wrap gap-3 text-xs text-zinc-400">
-              {Object.entries(manifest.by_category).map(([cat, info]) => (
-                <span key={cat}>
-                  {cat}: {info.count} ({formatBytes(info.size_bytes)})
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Restore state */}
-          {(!restoreState || restoreState.status === 'none') && (
-            <div className="pt-2 space-y-2">
-              <div className="flex items-center gap-2 text-xs text-amber-400">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Glacier retrieval takes 12-48 hours (Bulk tier)
-              </div>
-              <button
-                onClick={onInitiateRestore}
-                disabled={isInitiatingRestore}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 text-white text-sm rounded transition-colors"
-              >
-                {isInitiatingRestore ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <CloudDownload className="w-3.5 h-3.5" />
-                )}
-                Start Restore
-              </button>
-            </div>
-          )}
-
-          {restoreState?.status === 'retrieving' && (
-            <div className="pt-2 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-amber-400">
-                <Clock className="w-4 h-4" />
-                Glacier retrieval in progress...
-              </div>
-              <div className="text-xs text-zinc-400">
-                Files available: {restoreState.files_available || 0} / {restoreState.total_files || 0}
-                {restoreState.initiated_at && (
-                  <> (started {formatRelativeTime(restoreState.initiated_at)})</>
-                )}
-              </div>
-              <button
-                onClick={onCheckStatus}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-400/10 rounded transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Check Status
-              </button>
-            </div>
-          )}
-
-          {restoreState?.status === 'available' && (
-            <div className="pt-2 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-green-400">
-                <CheckCircle className="w-4 h-4" />
-                Files are ready for download
-              </div>
-
-              {!showRestoreConfirm ? (
-                <button
-                  onClick={() => setShowRestoreConfirm(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded transition-colors"
-                >
-                  <CloudDownload className="w-3.5 h-3.5" />
-                  Download & Restore
-                </button>
-              ) : (
-                <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-red-400">
-                    <AlertTriangle className="w-4 h-4" />
-                    This will replace your current database
-                  </div>
-                  <p className="text-xs text-zinc-400">
-                    A local safety backup will be created first. Existing files that match the backup will be skipped.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={onDownloadRestore}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded transition-colors"
-                    >
-                      Confirm Restore
-                    </button>
-                    <button
-                      onClick={() => setShowRestoreConfirm(false)}
-                      className="px-3 py-1.5 text-zinc-400 hover:text-zinc-300 text-sm rounded transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {restoreState?.status === 'complete' && (
-            <div className="pt-2 flex items-center gap-2 text-sm text-green-400">
-              <CheckCircle className="w-4 h-4" />
-              Restore complete
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

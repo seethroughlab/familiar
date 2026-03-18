@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -21,6 +21,12 @@ engine = create_async_engine(
     pool_pre_ping=True,     # Detect stale connections
     pool_recycle=1800,      # Recycle after 30 mins
 )
+
+# Count SQL queries per request (only on the async engine used by FastAPI)
+@event.listens_for(engine.sync_engine, "before_cursor_execute")
+def _count_query(conn, cursor, statement, parameters, context, executemany):
+    from app.services.metrics import increment_query_count
+    increment_query_count()
 
 # Async session factory (for FastAPI)
 async_session_maker = async_sessionmaker(

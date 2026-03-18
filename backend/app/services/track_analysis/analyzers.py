@@ -1190,7 +1190,7 @@ def _find_segment_boundaries(
     sim_matrix: np.ndarray,
     threshold_factor: float = 0.25,
     rms: np.ndarray | None = None,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Find segment boundaries using Foote novelty with optional RMS supplementation."""
     import librosa
     from scipy.signal import find_peaks
@@ -1198,9 +1198,11 @@ def _find_segment_boundaries(
     try:
         novelty = librosa.segment.novelty(sim_matrix, kernel_size=16)
         threshold = np.mean(novelty) + np.std(novelty) * threshold_factor
-        peaks, _ = find_peaks(novelty, height=threshold, distance=5)
+        peaks, properties = find_peaks(novelty, height=threshold, distance=5)
     except Exception:
         peaks = np.array([])
+        properties = {}
+        novelty = np.array([])
 
     # Supplement with energy-based boundaries from RMS envelope
     if rms is not None and len(rms) > 0:
@@ -1213,17 +1215,26 @@ def _find_segment_boundaries(
             )
             rms_diff = np.abs(np.diff(rms_ds))
             rms_threshold = np.mean(rms_diff) + np.std(rms_diff) * 1.5
-            rms_peaks, _ = find_peaks(rms_diff, height=rms_threshold, distance=5)
+            rms_peaks, rms_props = find_peaks(rms_diff, height=rms_threshold, distance=5)
 
             # Merge RMS peaks with novelty peaks if not within 3 frames of existing
             for rp in rms_peaks:
                 if len(peaks) == 0 or np.min(np.abs(peaks - rp)) > 3:
                     peaks = np.append(peaks, rp)
+                    # Append the corresponding peak height
+                    rp_idx = np.where(rms_peaks == rp)[0]
+                    if len(rp_idx) > 0 and "peak_heights" in rms_props:
+                        properties.setdefault("peak_heights", np.array([]))
+                        properties["peak_heights"] = np.append(
+                            properties["peak_heights"],
+                            rms_props["peak_heights"][rp_idx[0]],
+                        )
             peaks = np.sort(peaks)
         except Exception:
             pass
 
-    return peaks
+    peak_heights = properties.get("peak_heights", np.array([]))
+    return peaks, peak_heights, novelty
 
 
 def _analyze_structural(
@@ -1282,7 +1293,7 @@ def _analyze_structural(
 
     # Segmentation using Foote novelty + RMS supplementation
     rms = shared["rms"]
-    peaks = _find_segment_boundaries(sim_matrix, threshold_factor=0.25, rms=rms)
+    peaks, peak_heights, novelty = _find_segment_boundaries(sim_matrix, threshold_factor=0.25, rms=rms)
 
     # Convert peak frames to times
     frames_to_time_factor = duration / max(sim_matrix.shape[0], 1)
@@ -1299,7 +1310,7 @@ def _analyze_structural(
 
     # Single-section retry: if only 1 segment for track > 60s, retry with lower threshold
     if len(segments) <= 1 and duration > 60:
-        peaks = _find_segment_boundaries(sim_matrix, threshold_factor=0.0, rms=rms)
+        peaks, peak_heights, novelty = _find_segment_boundaries(sim_matrix, threshold_factor=0.0, rms=rms)
         if len(peaks) > 0:
             boundary_times = [0.0] + [round(float(p * frames_to_time_factor), 2) for p in peaks] + [round(duration, 2)]
             segments = []
@@ -1425,6 +1436,15 @@ def _analyze_structural(
             "density": density,
         })
 
+    # Compute boundary confidence: how sharp/clear the novelty peaks are
+    boundary_confidence = None
+    if len(peak_heights) > 0 and len(novelty) > 0:
+        novelty_std = float(np.std(novelty))
+        if novelty_std > 0:
+            raw = float(np.mean(peak_heights)) / novelty_std
+            # Normalize to 0-1 with sigmoid-like scaling (raw ~2-5 is typical)
+            boundary_confidence = round(min(raw / 5.0, 1.0), 3)
+
     return {
         "segments": segments,
         "form": form,
@@ -1432,6 +1452,7 @@ def _analyze_structural(
         "avg_section_length": round(float(np.mean([s["duration"] for s in segments])), 2) if segments else 0,
         "self_similarity_png_path": ssm_png_path,
         "section_profiles": section_profiles,
+        "boundary_confidence": boundary_confidence,
     }
 
 

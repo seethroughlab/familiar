@@ -93,6 +93,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 "bpm_max": {"type": "number", "description": "Maximum BPM"},
                 "key": {"type": "string", "description": "Musical key to filter by. Supports major keys ('C', 'F', 'G#', 'Bb') and minor keys ('Am', 'F#m', 'A minor'). Plain letter matches both major and minor (e.g., 'A' matches 'A' and 'Am')."},
                 "mood_tag": {"type": "string", "description": "Filter by mood/genre/instrumentation tag (e.g., 'dreamy', 'jazz', 'piano', 'energetic'). Use get_available_mood_tags to see all available tags."},
+                "lyrics_language": {"type": "string", "description": "ISO 639-1 language code for lyrics (e.g., 'en', 'fr', 'de', 'ja', 'es'). Only applies to tracks with lyrics."},
                 "energy_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum energy (0-1)"},
                 "energy_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum energy (0-1)"},
                 "danceability_min": {"type": "number", "minimum": 0, "maximum": 1},
@@ -119,6 +120,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                 "speechiness_min": {"type": "number", "minimum": 0, "maximum": 1, "description": "Minimum speechiness (0=singing/instrumental, 1=spoken word)"},
                 "speechiness_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum speechiness"},
                 "tempo_character": {"type": "string", "enum": ["grid-locked", "slight drift", "breathing"], "description": "Tempo feel: 'grid-locked' (tight quantized), 'slight drift' (natural), 'breathing' (rubato/expressive)"},
+                "tempo_cv_max": {"type": "number", "minimum": 0, "maximum": 1, "description": "Maximum tempo CV (coefficient of variation). <0.05 = beatmatch-safe/grid-locked, <0.15 = natural, >0.15 = rubato"},
                 "pitch_range_min": {"type": "integer", "description": "Minimum pitch range in semitones (narrow=<12, wide=24+)"},
                 "pitch_range_max": {"type": "integer", "description": "Maximum pitch range in semitones"},
                 "limit": {"type": "integer", "default": 20}
@@ -160,7 +162,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                         "acousticness", "instrumentalness", "speechiness",
                         "brightness", "dynamic_range_db", "harmonic_complexity",
                         "swing_ratio", "syncopation", "note_density", "pitch_range",
-                        "section_count",
+                        "section_count", "tempo_cv",
                     ],
                     "description": "The audio feature to get statistics for"
                 }
@@ -695,6 +697,7 @@ Use filter_tracks with these features. Use get_feature_distribution first to cal
 - swing_min/max (0-1): 0=straight/quantized, 0.5+=swung (jazz, shuffle)
 - syncopation_min (0-1): rhythmic complexity, off-beat emphasis
 - tempo_character: "grid-locked" (electronic/quantized), "slight drift" (live band), "breathing" (rubato/expressive)
+- tempo_cv_max: tempo coefficient of variation. "beatmatch-safe" → tempo_cv_max=0.05, "natural feel" → tempo_cv_max=0.15
 
 **Harmonic:**
 - key: musical key with mode (e.g., "C" for C major, "Am" for A minor, "F#m" for F# minor). Plain letter matches both major and minor.
@@ -732,6 +735,8 @@ Use filter_tracks with these features. Use get_feature_distribution first to cal
 - "jazzy" → swing_min>0.3, harmonic_complexity_min>0.5
 - "tight electronic" → tempo_character="grid-locked", energy>0.5
 - "loose live feel" → tempo_character="breathing", swing_min>0.2
+- "beatmatch-safe" → tempo_cv_max=0.05
+- "French lyrics" → lyrics_language="fr"
 
 ## Metadata Corrections
 

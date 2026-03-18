@@ -106,15 +106,13 @@ Each platform entry point (`packages/web/src/main.tsx`, `packages/ios/src/main.t
 ### Add a database migration
 1. Create file in `backend/migrations/versions/` named `YYYYMMDD_slug.py`
 2. **Revision ID must be ≤32 characters** (alembic_version column limit)
-3. Always use the `_column_exists()` guard pattern for idempotent migrations:
+3. Always use the shared guard helpers from `migrations.helpers` for idempotent migrations:
 ```python
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name = :table AND column_name = :column"
-    ), {"table": table_name, "column": column_name})
-    return result.fetchone() is not None
+from migrations.helpers import column_exists, table_exists, index_exists
+
+def upgrade():
+    if not column_exists("tracks", "my_new_col"):
+        op.add_column("tracks", sa.Column("my_new_col", sa.Text()))
 ```
 4. Add corresponding field to the SQLAlchemy model in `models.py`
 5. `deploy-dev.sh` auto-runs `alembic upgrade head` on deploy

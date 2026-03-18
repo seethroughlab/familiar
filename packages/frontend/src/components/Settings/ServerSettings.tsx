@@ -30,6 +30,7 @@ export function ServerSettings({ onConnected }: ServerSettingsProps = {}) {
     setErrorMsg('');
 
     try {
+      // eslint-disable-next-line no-restricted-globals -- Connection test with custom URL and timeout
       const res = await fetch(`${trimmed}/api/v1/health`, {
         signal: AbortSignal.timeout(5000),
       });

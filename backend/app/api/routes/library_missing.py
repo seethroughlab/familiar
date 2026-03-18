@@ -3,11 +3,12 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
+from app.api.exceptions import InvalidPathError, TrackNotFoundError, ValidationError
 from app.db.models import Track, TrackStatus
 
 logger = logging.getLogger(__name__)
@@ -56,10 +57,35 @@ class LocateRequest(BaseModel):
     new_path: str
 
 
+class LocateResponse(BaseModel):
+    """Response from locating a missing track."""
+
+    status: str
+    track_id: str
+    old_path: str
+    new_path: str
+
+
+class DeleteTrackResponse(BaseModel):
+    """Response from deleting a missing track."""
+
+    status: str
+    track_id: str
+    title: str
+
+
 class BatchDeleteRequest(BaseModel):
     """Request to delete multiple tracks."""
 
     track_ids: list[str]
+
+
+class BatchDeleteResponse(BaseModel):
+    """Response from batch deleting missing tracks."""
+
+    status: str
+    deleted: int
+    errors: list[str]
 
 
 @router.get("/missing", response_model=MissingTracksResponse)
@@ -126,7 +152,7 @@ async def relocate_missing_tracks(
 
     search_path = Path(request.search_path)
     if not search_path.exists() or not search_path.is_dir():
-        raise HTTPException(status_code=400, detail="Search path does not exist or is not a directory")
+        raise InvalidPathError("Search path does not exist or is not a directory")
 
     # Get all missing tracks
     result = await db.execute(
@@ -175,12 +201,12 @@ async def relocate_missing_tracks(
     )
 
 
-@router.post("/missing/{track_id}/locate")
+@router.post("/missing/{track_id}/locate", response_model=LocateResponse)
 async def locate_single_track(
     db: DbSession,
     track_id: str,
     request: LocateRequest,
-) -> dict:
+) -> LocateResponse:
     """Manually set a new path for a missing track.
 
     Use this when you know exactly where the file has moved to.
@@ -189,21 +215,21 @@ async def locate_single_track(
 
     new_path = Path(request.new_path)
     if not new_path.exists():
-        raise HTTPException(status_code=400, detail="File does not exist at specified path")
+        raise InvalidPathError("File does not exist at specified path")
     if not new_path.is_file():
-        raise HTTPException(status_code=400, detail="Path is not a file")
+        raise InvalidPathError("Path is not a file")
 
     try:
         track_uuid = UUID(track_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid track ID")
+        raise ValidationError("Invalid track ID")
 
     track = await db.get(Track, track_uuid)
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if track.status not in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
-        raise HTTPException(status_code=400, detail="Track is not missing")
+        raise ValidationError("Track is not missing")
 
     old_path = track.file_path
     track.file_path = str(new_path)
@@ -212,19 +238,19 @@ async def locate_single_track(
 
     await db.commit()
 
-    return {
-        "status": "relocated",
-        "track_id": track_id,
-        "old_path": old_path,
-        "new_path": str(new_path),
-    }
+    return LocateResponse(
+        status="relocated",
+        track_id=track_id,
+        old_path=old_path,
+        new_path=str(new_path),
+    )
 
 
-@router.delete("/missing/{track_id}")
+@router.delete("/missing/{track_id}", response_model=DeleteTrackResponse)
 async def delete_missing_track(
     db: DbSession,
     track_id: str,
-) -> dict:
+) -> DeleteTrackResponse:
     """Permanently delete a missing track from the database.
 
     This is irreversible - the track and all its analysis data will be removed.
@@ -234,31 +260,31 @@ async def delete_missing_track(
     try:
         track_uuid = UUID(track_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid track ID")
+        raise ValidationError("Invalid track ID")
 
     track = await db.get(Track, track_uuid)
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if track.status not in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
-        raise HTTPException(status_code=400, detail="Track is not missing - cannot delete active tracks")
+        raise ValidationError("Track is not missing - cannot delete active tracks")
 
     title = track.title or Path(track.file_path).name
     await db.delete(track)
     await db.commit()
 
-    return {
-        "status": "deleted",
-        "track_id": track_id,
-        "title": title,
-    }
+    return DeleteTrackResponse(
+        status="deleted",
+        track_id=track_id,
+        title=title,
+    )
 
 
-@router.delete("/missing/batch")
+@router.delete("/missing/batch", response_model=BatchDeleteResponse)
 async def delete_missing_tracks_batch(
     db: DbSession,
     request: BatchDeleteRequest,
-) -> dict:
+) -> BatchDeleteResponse:
     """Permanently delete multiple missing tracks from the database.
 
     This is irreversible - the tracks and all their analysis data will be removed.
@@ -290,8 +316,8 @@ async def delete_missing_tracks_batch(
 
     await db.commit()
 
-    return {
-        "status": "completed",
-        "deleted": deleted,
-        "errors": errors,
-    }
+    return BatchDeleteResponse(
+        status="completed",
+        deleted=deleted,
+        errors=errors,
+    )

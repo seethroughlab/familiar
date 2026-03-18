@@ -28,6 +28,14 @@ from app.main import app
 
 
 @pytest.fixture(autouse=True)
+def deterministic_random():
+    """Seed stdlib random for reproducible test runs."""
+    import random
+    random.seed(42)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def reset_artwork_fetcher():
     """Reset the artwork fetcher singleton between tests.
 
@@ -43,11 +51,10 @@ def reset_artwork_fetcher():
     af._artwork_fetcher = None
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def client() -> Generator[TestClient, None, None]:
-    """Provide a test client for the entire test session.
+    """Provide a per-test TestClient to prevent state leakage between tests.
 
-    Using session scope with proper context management.
     TestClient handles async endpoints synchronously, avoiding event loop issues.
     """
     with TestClient(app, raise_server_exceptions=False) as c:
@@ -122,3 +129,31 @@ async def async_db():
         await session.commit()
 
     await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Shared contract-test assertion helpers
+# ---------------------------------------------------------------------------
+
+
+def assert_error_shape(response, *, status_code: int) -> None:
+    """Verify the standard error envelope: {error: true, status_code, message}."""
+    assert response.status_code == status_code
+    payload = response.json()
+    assert isinstance(payload, dict)
+    assert payload.get("error") is True
+    assert isinstance(payload.get("message"), str)
+    assert payload.get("status_code") == status_code
+
+
+def assert_full_envelope(response, *, status_code: int) -> dict:
+    """Strict envelope check — returns payload for further assertions."""
+    assert_error_shape(response, status_code=status_code)
+    payload = response.json()
+    # message must be non-empty
+    assert len(payload["message"]) > 0
+    # detail and request_id are optional keys (only present when non-None)
+    for key in ("detail", "request_id"):
+        if key in payload:
+            assert isinstance(payload[key], str)
+    return payload

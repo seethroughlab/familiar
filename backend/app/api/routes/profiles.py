@@ -4,13 +4,19 @@ import io
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, UploadFile, status
 from fastapi.responses import FileResponse
 from PIL import Image
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import (
+    NotFoundError,
+    PayloadTooLargeError,
+    ProfileNotFoundError,
+    ValidationError,
+)
 from app.config import settings
 from app.db.models import Profile
 
@@ -131,10 +137,7 @@ async def get_profile(
     """Get a profile by ID."""
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise ProfileNotFoundError()
 
     await db.refresh(profile, ["lastfm_profile"])
     has_lastfm = profile.lastfm_profile is not None
@@ -151,10 +154,7 @@ async def update_profile(
     """Update a profile."""
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise ProfileNotFoundError()
 
     update_data = request.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -176,10 +176,7 @@ async def delete_profile(
     """Delete a profile and all associated data."""
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise ProfileNotFoundError()
 
     # Delete avatar file if it exists
     if profile.avatar_path:
@@ -213,18 +210,12 @@ async def upload_avatar(
     """
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise ProfileNotFoundError()
 
     # Validate file size
     contents = await file.read()
     if len(contents) > MAX_AVATAR_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Image too large. Maximum size is 5MB.",
-        )
+        raise PayloadTooLargeError("Image too large. Maximum size is 5MB.")
 
     # Validate and process image
     try:
@@ -259,10 +250,7 @@ async def upload_avatar(
 
     except Exception as e:
         logger.error(f"Failed to process avatar: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid image file. Please upload a JPEG, PNG, WebP, or GIF.",
-        )
+        raise ValidationError("Invalid image file. Please upload a JPEG, PNG, WebP, or GIF.")
 
     await db.refresh(profile, ["lastfm_profile"])
     has_lastfm = profile.lastfm_profile is not None
@@ -278,23 +266,14 @@ async def get_avatar(
     """Get a profile's avatar image."""
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise ProfileNotFoundError()
 
     if not profile.avatar_path:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile has no avatar",
-        )
+        raise NotFoundError("Profile has no avatar")
 
     avatar_file = PROFILES_DIR / f"{profile_id}.jpg"
     if not avatar_file.exists():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Avatar file not found",
-        )
+        raise NotFoundError("Avatar file not found")
 
     return FileResponse(
         avatar_file,
@@ -311,10 +290,7 @@ async def delete_avatar(
     """Delete a profile's avatar image."""
     profile = await db.get(Profile, profile_id)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise ProfileNotFoundError()
 
     if profile.avatar_path:
         avatar_file = PROFILES_DIR / f"{profile_id}.jpg"

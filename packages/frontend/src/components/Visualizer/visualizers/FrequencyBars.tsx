@@ -12,7 +12,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
 import { isMobile } from '../../../utils/platform';
-import { registerVisualizer, type VisualizerProps } from '../types';
+import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { FrameScheduler } from '../effects/FrameScheduler';
 
@@ -304,13 +304,4 @@ export function FrequencyBars(_props: VisualizerProps) {
   );
 }
 
-// Register the visualizer
-registerVisualizer(
-  {
-    id: 'frequency-bars',
-    name: 'Frequency Bars',
-    description: 'Enhanced spectrum analyzer with 128 bars',
-    usesMetadata: false,
-  },
-  FrequencyBars
-);
+export default FrequencyBars;

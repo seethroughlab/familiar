@@ -11,6 +11,7 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Sparkles, Loader2, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { libraryApi, type MoodCell } from '../../../api';
+import { queryKeys } from '../../../api/queryKeys';
 import { registerBrowser, type BrowserProps } from '../types';
 import { useOfflineStatus } from '../../../hooks/useOfflineStatus';
 
@@ -90,7 +91,7 @@ export function MoodGrid({ onGoToMood }: BrowserProps) {
 
   // Fetch aggregated mood distribution
   const { data, isLoading, error } = useQuery({
-    queryKey: ['library-mood-distribution', xAxis, yAxis],
+    queryKey: queryKeys.libraryMoodDistribution.detail(xAxis, yAxis),
     queryFn: () => libraryApi.getMoodDistribution(10, xAxis, yAxis),
     enabled: !isOffline,
   });

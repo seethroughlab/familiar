@@ -4,12 +4,13 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
+from app.api.exceptions import TrackNotFoundError
 from app.db.models import Track
 
 from . import TrackFeaturesResponse
@@ -218,7 +219,7 @@ async def update_track_metadata(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # Track which fields were updated for file writing
     updated_fields: dict[str, Any] = {}
@@ -313,7 +314,7 @@ async def get_track_metadata(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     response = TrackMetadataResponse.model_validate(track)
 

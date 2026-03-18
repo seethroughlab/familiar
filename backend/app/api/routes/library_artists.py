@@ -4,12 +4,13 @@ import asyncio
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
+from app.api.exceptions import NotFoundError
 from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.utils.time import utcnow
 
@@ -250,7 +251,7 @@ async def get_artist_detail(
     stats = result.one_or_none()
 
     if not stats or stats.track_count == 0:
-        raise HTTPException(status_code=404, detail="Artist not found in library")
+        raise NotFoundError("Artist not found in library")
 
     # Get albums by this artist
     albums_query = (
@@ -674,7 +675,7 @@ async def get_artist_image(
                 )
 
     # No image available
-    raise HTTPException(status_code=404, detail="No artist image available")
+    raise NotFoundError("No artist image available")
 
 
 async def _cache_artist_images(

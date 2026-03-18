@@ -1,11 +1,28 @@
 import api from './base';
 
 // Health/System Status API
+export interface AnalysisServiceDetails {
+  total: number;
+  analyzed: number;
+  pending: number;
+}
+
+export interface BackgroundServiceDetails {
+  sync_running: boolean;
+  active_analyses: number;
+  workers?: unknown[];
+}
+
+export type ServiceDetails =
+  | AnalysisServiceDetails
+  | BackgroundServiceDetails
+  | Record<string, unknown>;
+
 export interface ServiceStatus {
   name: string;
   status: 'healthy' | 'degraded' | 'unhealthy';
   message: string | null;
-  details: Record<string, unknown> | null;
+  details: ServiceDetails | null;
 }
 
 export interface SystemHealth {
@@ -72,11 +89,17 @@ export interface DiagnosticsExport {
   exported_at: string;
   version: string;
   deployment_mode: string;
+  /** Variable system info (OS, hardware, Python version, etc.) — shape depends on host. */
   system_info: Record<string, unknown>;
+  /** Full health snapshot — shape mirrors SystemHealth but serialized as plain object. */
   system_health: Record<string, unknown>;
+  /** Library statistics — shape varies by analysis version and enabled features. */
   library_stats: Record<string, unknown>;
+  /** Recent task failures — each entry's shape depends on the failing task type. */
   recent_failures: Array<Record<string, unknown>>;
+  /** Recent log entries — each entry's shape depends on the log handler configuration. */
   recent_logs: Array<Record<string, unknown>>;
+  /** Scrubbed settings — shape varies as new settings are added. */
   settings_summary: Record<string, unknown>;
 }
 

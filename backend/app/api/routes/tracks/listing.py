@@ -3,12 +3,13 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import Float, cast, func, nulls_last, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentProfile, DbSession
+from app.api.exceptions import TrackNotFoundError, ValidationError
 from app.db.models import ProfilePlayHistory, Track, TrackAnalysis
 
 from . import (
@@ -161,7 +162,7 @@ async def get_tracks_batch(
     Limited to 50 tracks per request.
     """
     if len(request.ids) > 50:
-        raise HTTPException(status_code=400, detail="Maximum 50 tracks per batch")
+        raise ValidationError("Maximum 50 tracks per batch")
 
     if not request.ids:
         return []
@@ -169,7 +170,7 @@ async def get_tracks_batch(
     try:
         uuids = [UUID(id_str) for id_str in request.ids]
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid track ID format")
+        raise ValidationError("Invalid track ID format")
 
     query = select(Track).where(Track.id.in_(uuids))
     result = await db.execute(query)
@@ -502,7 +503,7 @@ async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     response = TrackResponse.model_validate(track)
 

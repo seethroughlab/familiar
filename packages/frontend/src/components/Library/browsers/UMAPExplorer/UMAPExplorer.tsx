@@ -11,7 +11,6 @@ import { RotateCcw, Info, Volume2, VolumeX, Music } from 'lucide-react';
 import * as THREE from 'three';
 import { tracksApi, mapStreamApi, parseMapErrorMessage, parseMapProgressEvent } from '../../../../api';
 import type { MapNode3D, MusicMap3DResponse } from '../../../../api';
-import { registerBrowser } from '../../types';
 import type { BrowserProps } from '../../types';
 import { ArtistPoints, POSITION_SCALE } from './ArtistPoints';
 import { usePreviewAudio } from '../../../../hooks/usePreviewAudio';
@@ -505,18 +504,5 @@ function UMAPExplorer(props: BrowserProps) {
   return <UMAPExplorerInner {...props} />;
 }
 
-// Register the browser
-registerBrowser(
-  {
-    id: 'umap-explorer',
-    name: '3D Explorer',
-    description: 'Explore your entire library in 3D space based on audio similarity',
-    icon: 'Box',
-    category: 'spatial',
-    requiresFeatures: false,
-    requiresEmbeddings: true,
-  },
-  UMAPExplorer
-);
-
+export default UMAPExplorer;
 export { UMAPExplorer };

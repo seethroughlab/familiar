@@ -8,6 +8,7 @@ export interface AnalysisStatus {
 export interface AnalysisResult {
   track_id: string;
   version: number;
+  /** JSONB analysis output — shape varies by analysis version. */
   results: Record<string, unknown>;
   midi_path: string | null;
   section_errors: Array<{ section: string; error: string }>;

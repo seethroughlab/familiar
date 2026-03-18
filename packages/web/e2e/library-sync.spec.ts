@@ -20,7 +20,6 @@ test.describe('Library Sync', () => {
 
   test('Library section is visible in Settings', async ({ page }) => {
     await navigateToTab(page, 'Settings');
-    await page.waitForTimeout(500);
 
     // Find Library section heading (the actual text in the UI)
     const librarySection = page.getByText('Library').first();
@@ -33,7 +32,6 @@ test.describe('Library Sync', () => {
 
   test('Sync Now button is present and clickable', async ({ page }) => {
     await navigateToTab(page, 'Settings');
-    await page.waitForTimeout(500);
 
     // Find sync button - it may say "Sync Now" or just "Sync"
     const syncButton = page.locator('button').filter({
@@ -50,7 +48,6 @@ test.describe('Library Sync', () => {
 
   test('Sync button triggers scan and shows progress', async ({ page }) => {
     await navigateToTab(page, 'Settings');
-    await page.waitForTimeout(500);
 
     // Find sync button
     const syncButton = page.locator('button').filter({
@@ -73,7 +70,7 @@ test.describe('Library Sync', () => {
   test('Library shows content after sync', async ({ page }) => {
     // Navigate to Artists view (more reliable than Tracks which uses virtualizer)
     await navigateToView(page, 'Artists');
-    await page.waitForTimeout(2000);
+    await page.locator('text=/\\d+\\s*artist/i').first().waitFor({ timeout: 10000 }).catch(() => {});
 
     // Verify we're on the artists page and it rendered something
     // The artists view shows "N artists" text when loaded
@@ -89,7 +86,6 @@ test.describe('Library Sync', () => {
 
   test('Sync status reflects in system health', async ({ page }) => {
     await navigateToTab(page, 'Settings');
-    await page.waitForTimeout(500);
 
     // Navigate to Debug section if available
     const debugSection = page.locator('text=/debug/i').first();
@@ -97,7 +93,7 @@ test.describe('Library Sync', () => {
 
     if (hasDebug) {
       await debugSection.click();
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('domcontentloaded');
     }
 
     // Check for system health or status section

@@ -1,4 +1,5 @@
 import api, { getApiUrl } from './base';
+import { trackFetchError } from '../utils/apiErrorTracker';
 
 export interface ChatStatusResponse {
   configured: boolean;
@@ -34,8 +35,8 @@ export interface ChatEphemeralTrackPayload {
 
 export type ChatStreamEvent =
   | { type: 'text'; content: string }
-  | { type: 'tool_call'; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; name: string; result: Record<string, unknown> }
+  | { type: 'tool_call'; name: string; /** LLM tool input — schema varies by tool. */ input: Record<string, unknown> }
+  | { type: 'tool_result'; name: string; /** LLM tool output — schema varies by tool. */ result: Record<string, unknown> }
   | { type: 'queue'; tracks: ChatQueueTrackPayload[] }
   | { type: 'playback'; action: string }
   | { type: 'error'; content?: string; message?: string }
@@ -176,6 +177,7 @@ export const chatApi = {
   },
 
   stream: async (request: ChatStreamRequest, profileId?: string | null): Promise<Response> => {
+    // eslint-disable-next-line no-restricted-globals -- SSE streaming requires raw fetch for ReadableStream access
     const response = await fetch(getApiUrl('/chat/stream'), {
       method: 'POST',
       headers: {
@@ -186,6 +188,7 @@ export const chatApi = {
     });
 
     if (!response.ok) {
+      trackFetchError('/chat/stream', 'POST', response.status, 'chat-stream');
       throw new Error(await parseErrorMessage(response));
     }
 

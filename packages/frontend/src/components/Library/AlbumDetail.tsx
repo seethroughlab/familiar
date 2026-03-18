@@ -11,6 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import { libraryApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { AlbumArtwork } from '../AlbumArtwork';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -176,8 +177,10 @@ export function AlbumDetail({
   const albumName = albumNameProp || routeParams.album || '';
   const onBack = onBackProp || (() => routeNavigate(-1));
 
-  const { currentTrack, isPlaying, setQueue, setIsPlaying } =
-    usePlayerStore();
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setQueue = usePlayerStore((s) => s.setQueue);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isOffline } = useOfflineStatus();
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(new Set());
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
@@ -224,7 +227,7 @@ export function AlbumDetail({
   });
 
   const { data: album, isLoading } = useQuery({
-    queryKey: ['album', artistName, albumName],
+    queryKey: queryKeys.album.detail(artistName, albumName),
     queryFn: async () => {
       try {
         return await libraryApi.getAlbum(artistName, albumName, 8, source);

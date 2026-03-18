@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.api.ratelimit import SCAN_RATE_LIMIT, limiter
+from app.api.schemas.common import CancelResponse as _BaseCancelResponse
 from app.services.tasks import get_sync_progress
 
 logger = logging.getLogger(__name__)
@@ -51,12 +52,9 @@ class SyncStatus(BaseModel):
     progress: SyncProgress | None = None
 
 
-class CancelResponse(BaseModel):
-    """Response for cancel operations."""
+class CancelResponse(_BaseCancelResponse):
+    """Extended cancel response with sync-specific fields."""
 
-    status: str
-    message: str
-    requested: bool = True
     in_process_tasks_cancelled: int = 0
     subprocess_may_continue: bool = False
 
@@ -120,9 +118,7 @@ async def get_sync_status_endpoint() -> SyncStatus:
     - analyzing: Extracting audio features
     - complete: Sync finished
     """
-    from datetime import datetime, timedelta
-
-    from app.services.background import SYNC_HEARTBEAT_STALE_SECONDS
+    from app.services.background.sync import is_heartbeat_stale
     from app.services.tasks import clear_sync_progress
 
     progress = get_sync_progress()
@@ -136,20 +132,13 @@ async def get_sync_status_endpoint() -> SyncStatus:
 
     # Check if the sync is stale (no heartbeat for 5 minutes)
     status = progress.get("status", "idle")
-    if status == "running":
-        last_heartbeat = progress.get("last_heartbeat")
-        if last_heartbeat:
-            try:
-                heartbeat_time = datetime.fromisoformat(last_heartbeat)
-                if datetime.now() - heartbeat_time > timedelta(seconds=SYNC_HEARTBEAT_STALE_SECONDS):
-                    clear_sync_progress()
-                    return SyncStatus(
-                        status="error",
-                        message="Sync was interrupted (worker stopped responding)",
-                        progress=None,
-                    )
-            except (ValueError, TypeError):
-                pass
+    if status == "running" and is_heartbeat_stale(progress):
+        clear_sync_progress()
+        return SyncStatus(
+            status="error",
+            message="Sync was interrupted (worker stopped responding)",
+            progress=None,
+        )
 
     # Convert Redis progress to SyncProgress model
     sync_progress = SyncProgress(

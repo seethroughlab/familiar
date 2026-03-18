@@ -19,6 +19,8 @@ interface UseClientAlphabetBarOptions<T> {
   sortedItems: T[];
   getTrack: (item: T) => Track | null;
   sortBy: string | null;
+  /** When provided, uses virtualizer scrollToIndex instead of DOM query. */
+  scrollToIndex?: (index: number) => void;
 }
 
 interface UseClientAlphabetBarResult {
@@ -48,6 +50,7 @@ export function useClientAlphabetBar<T>({
   sortedItems,
   getTrack,
   sortBy,
+  scrollToIndex,
 }: UseClientAlphabetBarOptions<T>): UseClientAlphabetBarResult {
   const [activeLetter, setActiveLetter] = useState<string | undefined>();
 
@@ -83,11 +86,15 @@ export function useClientAlphabetBar<T>({
     const targetIdx = letterIndex[letter];
     setActiveLetter(letter);
 
-    const el = document.querySelector(`[data-list-index="${targetIdx}"]`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'instant', block: 'start' });
+    if (scrollToIndex) {
+      scrollToIndex(targetIdx);
+    } else {
+      const el = document.querySelector(`[data-list-index="${targetIdx}"]`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     }
-  }, [letterIndex]);
+  }, [letterIndex, scrollToIndex]);
 
   return {
     letterIndex,

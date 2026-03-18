@@ -1,5 +1,6 @@
 """Visualization aggregation endpoints (years, mood, letter-index)."""
 
+import json
 import logging
 from typing import Literal
 
@@ -245,6 +246,19 @@ async def get_letter_index(
         artist: Filter by artist (for tracks/albums)
         album: Filter by album (for tracks only)
     """
+    from app.services.redis_client import get_redis
+
+    # Check Redis cache (60s TTL — only changes on library scans)
+    cache_key = f"familiar:letter_index:{entity_type}:{sort_field}:{search or ''}:{artist or ''}:{album or ''}"
+    try:
+        redis = get_redis()
+        cached = redis.get(cache_key)
+        if cached:
+            data = json.loads(cached)
+            return LetterIndexResponse(**data)
+    except Exception:
+        pass  # Redis unavailable — fall through to DB
+
     from sqlalchemy import case
 
     letters: dict[str, int] = {}
@@ -455,4 +469,13 @@ async def get_letter_index(
         for row in result.all():
             letters[row.letter] = row.first_index - 1
 
-    return LetterIndexResponse(letters=letters, total=total)
+    response = LetterIndexResponse(letters=letters, total=total)
+
+    # Cache result in Redis (60s TTL)
+    try:
+        redis = get_redis()
+        redis.set(cache_key, json.dumps(response.model_dump()), ex=60)
+    except Exception:
+        pass  # Redis unavailable — serve uncached
+
+    return response

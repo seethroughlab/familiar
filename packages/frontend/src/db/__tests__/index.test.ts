@@ -293,12 +293,10 @@ describe('Interface type validation', () => {
       name: 'Test User',
       color: '#ff0000',
       avatar_url: null,
-      has_spotify: true,
       has_lastfm: false,
       cachedAt: new Date(),
     }
 
-    expect(profile.has_spotify).toBe(true)
     expect(profile.has_lastfm).toBe(false)
   })
 })

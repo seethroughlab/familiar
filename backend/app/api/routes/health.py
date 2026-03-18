@@ -50,21 +50,31 @@ def is_running_in_docker() -> bool:
     return False
 
 
-@router.get("/health")
-async def health_check() -> dict[str, Any]:
+class HealthCheckResponse(BaseModel):
+    status: str
+
+
+class DbHealthResponse(BaseModel):
+    status: str
+    database: str
+    error: str | None = None
+
+
+@router.get("/health", response_model=HealthCheckResponse)
+async def health_check() -> HealthCheckResponse:
     """Basic liveness check."""
-    return {"status": "healthy"}
+    return HealthCheckResponse(status="healthy")
 
 
-@router.get("/health/db")
-async def db_health_check(db: DbSession) -> dict[str, Any]:
+@router.get("/health/db", response_model=DbHealthResponse)
+async def db_health_check(db: DbSession) -> DbHealthResponse:
     """Database connectivity check."""
     try:
         await db.execute(text("SELECT 1"))
-        return {"status": "healthy", "database": "connected"}
+        return DbHealthResponse(status="healthy", database="connected")
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
-        return {"status": "unhealthy", "database": "disconnected", "error": "Connection failed"}
+        return DbHealthResponse(status="unhealthy", database="disconnected", error="Connection failed")
 
 
 @router.get("/health/system", response_model=SystemHealth)
@@ -308,12 +318,26 @@ class BackgroundEvent(BaseModel):
     details: dict[str, Any] = {}
 
 
+class PhaseQueue(BaseModel):
+    """Per-phase analysis queue status."""
+
+    phase: str
+    pending: int
+    completed: int
+    total: int
+    percent: float
+    stall_recoveries: int = 0
+    requeue_attempts: int = 0
+    forced_exit_reason: str | None = None
+
+
 class WorkerStatus(BaseModel):
     """Detailed worker and queue status."""
 
     workers: list[WorkerInfo]
     queues: list[QueueStats]
     analysis_progress: dict[str, Any]
+    phase_queues: list[PhaseQueue] = []
     recent_failures: list[TaskFailure] = []
     background_events: list[BackgroundEvent] = []
 
@@ -401,10 +425,72 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
         "percent": round((analyzed_tracks / total_tracks * 100), 1) if total_tracks > 0 else 0,
     }
 
+    # Per-phase analysis queues
+    from app.config import EMBEDDING_VERSION, MELODIC_VERSION, MOOD_TAGS_VERSION
+    from app.services.tasks import get_sync_progress
+
+    phase_queues: list[PhaseQueue] = []
+    try:
+        features_done = analyzed_tracks  # Already computed above
+
+        embeddings_done = await db.scalar(
+            select(func.count(TrackAnalysis.id)).where(
+                TrackAnalysis.features_version >= FEATURES_VERSION,
+                TrackAnalysis.embedding_version >= EMBEDDING_VERSION,
+            )
+        ) or 0
+
+        melodic_done = await db.scalar(
+            select(func.count(TrackAnalysis.id)).where(
+                TrackAnalysis.features_version >= FEATURES_VERSION,
+                TrackAnalysis.melodic_version >= MELODIC_VERSION,
+            )
+        ) or 0
+
+        mood_done = await db.scalar(
+            select(func.count(TrackAnalysis.id)).where(
+                TrackAnalysis.features_version >= FEATURES_VERSION,
+                TrackAnalysis.mood_tags_version >= MOOD_TAGS_VERSION,
+            )
+        ) or 0
+
+        # Overlay runtime stats from sync progress if running
+        sync_progress = get_sync_progress()
+        requeue_attempts = {}
+        stall_recoveries = {}
+        forced_exit_reasons = {}
+        if sync_progress and sync_progress.get("status") == "running":
+            requeue_attempts = sync_progress.get("phase_requeue_attempts", {})
+            stall_recoveries = sync_progress.get("phase_stall_recoveries", {})
+            forced_exit_reasons = sync_progress.get("phase_forced_exit_reasons", {})
+
+        phase_data = [
+            ("features", features_done, total_tracks),
+            ("embeddings", embeddings_done, total_tracks),
+            ("melodic", melodic_done, total_tracks),
+            ("mood_tags", mood_done, total_tracks),
+        ]
+        for phase_name, completed, total in phase_data:
+            pending = total - completed
+            pct = round((completed / total * 100), 1) if total > 0 else 0.0
+            phase_queues.append(PhaseQueue(
+                phase=phase_name,
+                pending=pending,
+                completed=completed,
+                total=total,
+                percent=pct,
+                stall_recoveries=stall_recoveries.get(phase_name, 0),
+                requeue_attempts=requeue_attempts.get(phase_name, 0),
+                forced_exit_reason=forced_exit_reasons.get(phase_name),
+            ))
+    except Exception as e:
+        logger.warning(f"Could not compute phase queues: {e}")
+
     return WorkerStatus(
         workers=workers,
         queues=queues,
         analysis_progress=analysis_progress,
+        phase_queues=phase_queues,
         recent_failures=recent_failures,
         background_events=background_events,
     )

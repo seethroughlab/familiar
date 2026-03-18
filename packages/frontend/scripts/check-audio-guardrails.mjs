@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const useAudioEnginePath = path.join(repoRoot, 'src', 'player', 'useAudioEngine.ts');
-const playerStorePath = path.join(repoRoot, 'src', 'player', 'playerStore.ts');
+const playerStorePath = path.join(repoRoot, 'src', 'player', 'queueStore.ts');
 
 const useAudioEngineSource = fs.readFileSync(useAudioEnginePath, 'utf8');
 const playerStoreSource = fs.readFileSync(playerStorePath, 'utf8');

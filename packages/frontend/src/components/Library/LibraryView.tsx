@@ -5,9 +5,9 @@
  * Renders the selected browser with BrowserProps.
  * Browser selection is controlled by the route via browserId prop.
  */
-import { useCallback, useMemo } from 'react';
+import { Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { SelectionIndicator } from './SelectionIndicator';
@@ -285,30 +285,32 @@ export function LibraryView({ browserId }: LibraryViewProps) {
       {/* Browser content */}
       <div className="md:flex-1 md:overflow-y-auto md:min-h-0">
         {BrowserComponent ? (
-          <BrowserComponent
-            key={`browser-${browserId}`}
-            tracks={[]}
-            artists={artists}
-            albums={albums}
-            isLoading={false}
-            selectedTrackIds={selectedTrackIds}
-            onSelectTrack={selectTrack}
-            onSelectAll={selectAll}
-            onClearSelection={clearSelection}
-            onGoToArtist={handleGoToArtist}
-            onGoToAlbum={handleGoToAlbum}
-            onGoToYear={handleGoToYear}
-            onGoToYearRange={handleGoToYearRange}
-            onGoToGenre={handleGoToGenre}
-            onGoToMood={handleGoToMood}
-            onPlayTrack={handlePlayTrack}
-            onPlayTrackAt={handlePlayTrackAt}
-            onQueueTrack={handleQueueTrack}
-            onEditTrack={handleEditTrack}
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            offlineTrackIds={offlineIds}
-          />
+          <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-zinc-400" /></div>}>
+            <BrowserComponent
+              key={`browser-${browserId}`}
+              tracks={[]}
+              artists={artists}
+              albums={albums}
+              isLoading={false}
+              selectedTrackIds={selectedTrackIds}
+              onSelectTrack={selectTrack}
+              onSelectAll={selectAll}
+              onClearSelection={clearSelection}
+              onGoToArtist={handleGoToArtist}
+              onGoToAlbum={handleGoToAlbum}
+              onGoToYear={handleGoToYear}
+              onGoToYearRange={handleGoToYearRange}
+              onGoToGenre={handleGoToGenre}
+              onGoToMood={handleGoToMood}
+              onPlayTrack={handlePlayTrack}
+              onPlayTrackAt={handlePlayTrackAt}
+              onQueueTrack={handleQueueTrack}
+              onEditTrack={handleEditTrack}
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              offlineTrackIds={offlineIds}
+            />
+          </Suspense>
         ) : (
           <div className="flex items-center justify-center py-20 text-zinc-500">
             Browser not found: {browserId}

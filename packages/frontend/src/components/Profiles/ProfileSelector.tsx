@@ -13,6 +13,7 @@ import {
   selectProfile,
   type Profile,
 } from '../../services/profileService';
+import { useConnectivityStore } from '../../stores/connectivityStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 
 import { createLogger } from '../../utils/logger';
@@ -76,12 +77,12 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
 
       // Check if we got cached profiles (network failed but cache succeeded)
       // We detect this by checking if we're offline
-      if (!navigator.onLine && profileList.length > 0) {
+      if (!useConnectivityStore.getState().browserOnline && profileList.length > 0) {
         setUsingCache(true);
       }
     } catch (err) {
       // Check if we have any cached profiles to show
-      if (!navigator.onLine) {
+      if (!useConnectivityStore.getState().browserOnline) {
         setError('Connect to the network to create your first profile');
       } else {
         setError('Failed to load profiles');

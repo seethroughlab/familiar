@@ -1,19 +1,20 @@
 import { Database, Cloud, Upload } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appSettingsApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 
 export function CommunityCache() {
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useQuery({
-    queryKey: ['app-settings'],
+    queryKey: queryKeys.appSettings.all,
     queryFn: appSettingsApi.get,
   });
 
   const updateMutation = useMutation({
     mutationFn: appSettingsApi.update,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['app-settings'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.appSettings.all });
     },
   });
 

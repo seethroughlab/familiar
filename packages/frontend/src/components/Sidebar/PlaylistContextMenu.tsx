@@ -15,6 +15,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
 import { playlistsApi, downloadApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import type { Playlist } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { showSuccess, showError } from '../../stores/toastStore';
@@ -111,7 +112,7 @@ export function PlaylistContextMenu({ playlist, position, onClose, onRename }: P
   const handleDuplicate = async () => {
     try {
       const dup = await playlistsApi.duplicate(playlist.id);
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
       showSuccess(`Duplicated as "${dup.name}"`);
     } catch {
       showError('Failed to duplicate playlist');
@@ -123,7 +124,7 @@ export function PlaylistContextMenu({ playlist, position, onClose, onRename }: P
     if (!confirm(`Delete "${playlist.name}"?`)) return;
     try {
       await playlistsApi.delete(playlist.id);
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
       showSuccess(`Deleted "${playlist.name}"`);
     } catch {
       showError('Failed to delete playlist');

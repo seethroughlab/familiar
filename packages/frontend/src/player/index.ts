@@ -5,7 +5,11 @@
 
 // Store & types
 export { usePlayerStore } from './playerStore';
-export type { QueueSourceType, QueueSource, LibraryFilters } from './playerStore';
+export type { QueueSourceType, QueueSource, LibraryFilters, RepeatMode, CrossfadeState } from './playerStore';
+
+// Split stores (prefer these for new code — more focused subscriptions)
+export { usePlaybackStore } from './playbackStore';
+export { useQueueStore } from './queueStore';
 
 // Audio settings
 export { useAudioSettingsStore } from './audioSettingsStore';

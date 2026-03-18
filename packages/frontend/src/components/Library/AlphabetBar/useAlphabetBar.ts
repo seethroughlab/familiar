@@ -6,6 +6,8 @@
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { libraryApi } from '../../../api';
+import { queryKeys } from '../../../api/queryKeys';
+import { STALE_TIME } from '../../../api/queryDefaults';
 
 interface UseAlphabetBarOptions {
   entityType: 'tracks' | 'artists' | 'albums';
@@ -83,7 +85,7 @@ export function useAlphabetBar({
 
   // Fetch letter index from API
   const { data: letterIndexData, isLoading } = useQuery({
-    queryKey: ['letter-index', entityType, sortField, filters.search, filters.artist, filters.album],
+    queryKey: queryKeys.letterIndex.detail(entityType, sortField, filters.search ?? '', filters.artist ?? '', filters.album ?? ''),
     queryFn: () =>
       libraryApi.getLetterIndex({
         entity_type: entityType,
@@ -93,7 +95,7 @@ export function useAlphabetBar({
         album: filters.album,
       }),
     enabled: isVisible,
-    staleTime: 30000, // Cache for 30 seconds
+    staleTime: STALE_TIME.SHORT,
   });
 
   const letterIndex = letterIndexData?.letters;

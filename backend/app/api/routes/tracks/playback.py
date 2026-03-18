@@ -4,11 +4,12 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.exceptions import TrackNotFoundError
 from app.db.models import ProfilePlayHistory, Track
 from app.utils.time import utcnow
 
@@ -56,7 +57,7 @@ async def record_play(
     # Verify track exists
     track = await db.get(Track, track_id)
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # Get or create play history record
     result = await db.execute(

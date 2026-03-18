@@ -15,6 +15,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { organizerApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import type { OrganizeStats, OrganizeResult } from '../../api';
 
 export function LibraryOrganizer() {
@@ -23,7 +24,7 @@ export function LibraryOrganizer() {
   const [previewStats, setPreviewStats] = useState<OrganizeStats | null>(null);
 
   const { data: templatesData, isLoading: templatesLoading } = useQuery({
-    queryKey: ['organize-templates'],
+    queryKey: queryKeys.organizeTemplates.all,
     queryFn: organizerApi.getTemplates,
   });
 

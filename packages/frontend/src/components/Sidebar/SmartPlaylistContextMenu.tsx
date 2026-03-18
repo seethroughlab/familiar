@@ -17,6 +17,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
 import { smartPlaylistsApi, downloadApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import type { SmartPlaylist } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { showSuccess, showError } from '../../stores/toastStore';
@@ -156,7 +157,7 @@ export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRu
   const handleConvertToStatic = async () => {
     try {
       const result = await smartPlaylistsApi.convertToStatic(playlist.id);
-      queryClient.invalidateQueries({ queryKey: ['playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all });
       showSuccess(`Created static playlist "${result.name}" with ${result.track_count} tracks`);
       navigate(`/playlists/${result.playlist_id}`);
     } catch {
@@ -169,7 +170,7 @@ export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRu
     if (!confirm(`Delete "${playlist.name}"?`)) return;
     try {
       await smartPlaylistsApi.delete(playlist.id);
-      queryClient.invalidateQueries({ queryKey: ['smart-playlists'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.smartPlaylists.all });
       showSuccess(`Deleted "${playlist.name}"`);
     } catch {
       showError('Failed to delete smart playlist');

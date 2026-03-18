@@ -142,4 +142,123 @@ describe('connectivityStore', () => {
     expect(state.counters.pending_sync_local_url_total).toBe(2);
     expect(state.counters.pending_sync_local_url_local).toBe(1);
   });
+
+  it('noteStreamLoadSuccess resets failure counter', () => {
+    useConnectivityStore.setState({ consecutiveNetworkFailures: 3 });
+
+    useConnectivityStore.getState().noteStreamLoadSuccess();
+
+    expect(useConnectivityStore.getState().consecutiveNetworkFailures).toBe(0);
+  });
+
+  it('refreshOfflineTrackIds updates the Set', async () => {
+    const { getOfflineTrackIds } = await import('../../services/offlineService');
+    (getOfflineTrackIds as ReturnType<typeof vi.fn>).mockResolvedValueOnce(['a', 'b']);
+
+    await useConnectivityStore.getState().refreshOfflineTrackIds();
+
+    const ids = useConnectivityStore.getState().offlineTrackIds;
+    expect(ids.has('a')).toBe(true);
+    expect(ids.has('b')).toBe(true);
+    expect(ids.size).toBe(2);
+  });
+
+  it('browser offline event sets offlineModeActive', async () => {
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10); // let initial probe run
+
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+    window.dispatchEvent(new Event('offline'));
+
+    const state = useConnectivityStore.getState();
+    expect(state.browserOnline).toBe(false);
+    expect(state.offlineModeActive).toBe(true);
+  });
+
+  it('browser online event triggers recovery probe', async () => {
+    // Start in offline state
+    useConnectivityStore.setState({
+      browserOnline: false,
+      reachabilityState: 'unreachable',
+      offlineModeActive: true,
+    });
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10); // initial probe
+
+    // Go online
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+    window.dispatchEvent(new Event('online'));
+
+    // Recovery probe fires after 300ms delay
+    await vi.advanceTimersByTimeAsync(400);
+
+    const state = useConnectivityStore.getState();
+    expect(state.browserOnline).toBe(true);
+    expect(state.reachabilityState).toBe('reachable');
+  });
+
+  it('probe uses 8s interval when offline, 20s when online', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10); // initial probe
+    const callsAfterInit = fetchMock.mock.calls.length;
+
+    // Online: next probe at 20s — no probe before that
+    await vi.advanceTimersByTimeAsync(19_000);
+    expect(fetchMock.mock.calls.length).toBe(callsAfterInit);
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterInit); // probe at ~20s
+
+    // Switch to offline probing — the probe that just ran was reachable,
+    // so schedule the next probe to fail
+    fetchMock.mockImplementation(async () => ({ ok: false }));
+    // Wait for the next online-interval probe to fire and fail
+    await vi.advanceTimersByTimeAsync(20_100);
+    const callsAfterFirstFail = fetchMock.mock.calls.length;
+
+    // Now offline interval (8s) should apply
+    await vi.advanceTimersByTimeAsync(7_000);
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirstFail); // no probe yet at 7s
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirstFail); // probe at ~8s
+  });
+
+  it('startMonitoring is idempotent', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    useConnectivityStore.getState().startMonitoring();
+    useConnectivityStore.getState().startMonitoring(); // second call should be a no-op
+    await vi.advanceTimersByTimeAsync(10);
+
+    // Only one initial probe should have fired
+    expect(fetchMock.mock.calls.length).toBe(1);
+  });
+
+  it('stopMonitoring clears timers', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10); // initial probe
+    const callsAfterInit = fetchMock.mock.calls.length;
+
+    useConnectivityStore.getState().stopMonitoring();
+    await vi.advanceTimersByTimeAsync(30_000); // well past any probe interval
+
+    expect(fetchMock.mock.calls.length).toBe(callsAfterInit); // no more probes
+  });
+
+  it('noteStreamLoadFailure with "other" category does not escalate counter', () => {
+    useConnectivityStore.setState({ consecutiveNetworkFailures: 0 });
+
+    useConnectivityStore.getState().noteStreamLoadFailure('other');
+
+    // 'other' increments by 1 then decrements by 1 (net 0)
+    const state = useConnectivityStore.getState();
+    expect(state.consecutiveNetworkFailures).toBe(0);
+    expect(state.forcedOffline).toBe(false);
+  });
 });

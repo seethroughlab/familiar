@@ -6,6 +6,8 @@ import { useState } from 'react';
 import { Search, Shuffle, Loader2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { tracksApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME } from '../../api/queryDefaults';
 import { useThemeStore } from '../../stores/themeStore';
 
 interface Props {
@@ -20,10 +22,10 @@ export function AmbientSeedPicker({ onSelectTrack, onSelectArtist, onSurpriseMe,
   const light = useThemeStore((s) => s.resolvedTheme === 'light');
 
   const { data: results } = useQuery({
-    queryKey: ['ambient-seed-search', query],
+    queryKey: queryKeys.ambientSeedSearch.search(query),
     queryFn: () => tracksApi.list({ search: query, page_size: 10, include_features: false }),
     enabled: query.length >= 2,
-    staleTime: 30000,
+    staleTime: STALE_TIME.SHORT,
   });
 
   const tracks = results?.items ?? [];

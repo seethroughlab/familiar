@@ -22,6 +22,20 @@ logger = logging.getLogger(__name__)
 SYNC_HEARTBEAT_STALE_SECONDS = 300
 
 
+def is_heartbeat_stale(progress: dict) -> bool:
+    """Check if a running sync's heartbeat exceeds the stale threshold."""
+    from datetime import datetime, timedelta
+
+    last_heartbeat = progress.get("last_heartbeat")
+    if not last_heartbeat:
+        return False
+    try:
+        heartbeat_time = datetime.fromisoformat(last_heartbeat)
+        return datetime.now() - heartbeat_time > timedelta(seconds=SYNC_HEARTBEAT_STALE_SECONDS)
+    except (ValueError, TypeError):
+        return False
+
+
 class SyncMixin(_SyncBase):
     """Mixin providing sync and maintenance task management for BackgroundManager."""
 

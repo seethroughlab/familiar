@@ -17,6 +17,7 @@ import {
   type IdentifyTrackResponse,
   type TrackMetadataUpdate,
 } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 
 interface Props {
   trackIds: string[];
@@ -248,7 +249,7 @@ export function BulkAutoPopulatePanel({ trackIds, onApplyToTrack }: Props) {
 
   // Poll for progress
   const { data: progress } = useQuery<BulkIdentifyProgress>({
-    queryKey: ['bulk-identify', taskId],
+    queryKey: queryKeys.bulkIdentify.detail(taskId!),
     queryFn: () => bulkTracksApi.getIdentifyProgress(taskId!),
     enabled: !!taskId && startMutation.isSuccess,
     refetchInterval: (query) => {

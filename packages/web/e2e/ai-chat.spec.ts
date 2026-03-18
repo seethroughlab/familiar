@@ -20,7 +20,7 @@ test.describe('AI Chat', () => {
     const apiKeyInput = page.locator('input[type="password"], input[placeholder*="key" i]').first();
     await apiKeyInput.fill(API_KEY!);
     await page.locator('button:has-text("Save")').first().click();
-    await page.waitForTimeout(1000);
+    await page.locator('text=Configured, text=saved').first().waitFor({ timeout: 5000 }).catch(() => {});
   }
 
   test('add Anthropic API key in Admin panel', async ({ page }) => {
@@ -38,9 +38,6 @@ test.describe('AI Chat', () => {
     // Click save button in the Claude section
     const saveButton = page.locator('button:has-text("Save")').first();
     await saveButton.click();
-
-    // Wait for save confirmation
-    await page.waitForTimeout(1000);
 
     // Verify key was saved - should show "Configured" badge or success toast
     const configuredBadge = page.locator('text=Configured');
@@ -114,9 +111,8 @@ test.describe('AI Chat', () => {
       // Check if audio started playing
       try {
         await waitForAudioReady(page, 15000);
-        const playing = await isAudioPlaying(page);
-        // Audio ready and potentially playing - success
-        expect(playing || true).toBe(true); // Pass if we got this far
+        // Audio ready — playback depends on real tracks, not meaningful to assert here
+        void 0;
       } catch {
         // Audio didn't start but we got a response - that's okay
         // Claude may have responded with text about no matching tracks
@@ -138,7 +134,7 @@ test.describe('AI Chat', () => {
     const removeButton = page.locator('button:has-text("Remove")');
     if (await removeButton.isVisible({ timeout: 1000 }).catch(() => false)) {
       await removeButton.click();
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle').catch(() => {});
     }
 
     // Go to main app

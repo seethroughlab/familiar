@@ -42,5 +42,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Data migration - no downgrade needed
+    # One-way: data normalization
     pass

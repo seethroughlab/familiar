@@ -7,11 +7,12 @@ rejecting, applying, and undoing changes.
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.api.exceptions import NotFoundError, ValidationError
 from app.db.models import ChangeScope, ChangeSource, ChangeStatus
 from app.services.proposed_changes import (
     ApplyResult,
@@ -194,7 +195,7 @@ async def list_changes(
             status_enum = ChangeStatus(status)
             changes = await service.get_by_status(status_enum, limit=limit, offset=offset)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            raise ValidationError("Invalid status value", detail=f"Received: {status}")
     else:
         changes = await service.get_all(limit=limit, offset=offset)
 
@@ -221,7 +222,7 @@ async def get_change(
     service = ProposedChangesService(db)
     change = await service.get_by_id(change_id)
     if not change:
-        raise HTTPException(status_code=404, detail="Change not found")
+        raise NotFoundError("Change not found")
     return _change_to_response(change)
 
 
@@ -234,7 +235,7 @@ async def preview_change(
     service = ProposedChangesService(db)
     preview = await service.preview(change_id)
     if not preview:
-        raise HTTPException(status_code=404, detail="Change not found")
+        raise NotFoundError("Change not found")
     return _preview_to_response(preview)
 
 
@@ -260,12 +261,12 @@ async def create_change(
     try:
         source_enum = ChangeSource(request.source)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid source: {request.source}")
+        raise ValidationError("Invalid source value", detail=f"Received: {request.source}")
 
     try:
         scope_enum = ChangeScope(request.scope)
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid scope: {request.scope}")
+        raise ValidationError("Invalid scope value", detail=f"Received: {request.scope}")
 
     change = await service.create_change(
         change_type=request.change_type,
@@ -292,7 +293,7 @@ async def reject_change(
     service = ProposedChangesService(db)
     change = await service.reject(change_id)
     if not change:
-        raise HTTPException(status_code=404, detail="Change not found")
+        raise NotFoundError("Change not found")
     return _change_to_response(change)
 
 
@@ -310,7 +311,7 @@ async def apply_change(
         try:
             scope_enum = ChangeScope(scope)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid scope: {scope}")
+            raise ValidationError("Invalid scope value", detail=f"Received: {scope}")
 
     result = await service.apply(change_id, scope_override=scope_enum)
     return _apply_result_to_response(result)
@@ -336,7 +337,7 @@ async def delete_change(
     service = ProposedChangesService(db)
     success = await service.delete(change_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Change not found")
+        raise NotFoundError("Change not found")
     return {"status": "deleted"}
 
 
@@ -353,7 +354,7 @@ async def batch_apply(
         try:
             scope_enum = ChangeScope(request.scope)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid scope: {request.scope}")
+            raise ValidationError("Invalid scope value", detail=f"Received: {request.scope}")
 
     change_ids = []
     for change_id_str in request.change_ids:

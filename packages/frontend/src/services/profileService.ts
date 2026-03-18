@@ -5,7 +5,8 @@
  * No passwords needed - protected by Tailscale.
  */
 import { db, type CachedProfile, isIndexedDBAvailable } from '../db';
-import { getApiUrl } from '../api/base';
+import { profilesApi, type ProfileResponse, type ProfileCreate } from '../api/profiles';
+import { useConnectivityStore } from '../stores/connectivityStore';
 import { createLogger } from '../utils/logger';
 import {
   getSelectedProfileId,
@@ -15,19 +16,8 @@ import {
 
 const log = createLogger('ProfileService');
 
-export interface Profile {
-  id: string;
-  name: string;
-  color: string | null;
-  avatar_url: string | null;
-  created_at: string;
-  has_lastfm: boolean;
-}
-
-export interface ProfileCreate {
-  name: string;
-  color?: string;
-}
+export type Profile = ProfileResponse;
+export type { ProfileCreate };
 
 export interface ListProfilesOptions {
   allowCache?: boolean;
@@ -143,11 +133,7 @@ export { getSelectedProfileId, selectProfile, clearSelectedProfile };
  */
 export async function listProfiles(options?: ListProfilesOptions): Promise<Profile[]> {
   try {
-    const response = await fetch(getApiUrl('/profiles'));
-    if (!response.ok) {
-      throw new Error(`Failed to list profiles: ${response.statusText}`);
-    }
-    const profiles: Profile[] = await response.json();
+    const profiles = await profilesApi.list();
 
     // Cache all profiles for offline use
     await Promise.all(profiles.map((p) => cacheProfile(p)));
@@ -169,19 +155,7 @@ export async function listProfiles(options?: ListProfilesOptions): Promise<Profi
  * Create a new profile.
  */
 export async function createProfile(data: ProfileCreate): Promise<Profile> {
-  const response = await fetch(getApiUrl('/profiles'), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to create profile: ${response.statusText}`);
-  }
-
-  return response.json();
+  return profilesApi.create(data);
 }
 
 /**
@@ -193,22 +167,22 @@ export async function getProfile(
   options?: { allowCache?: boolean }
 ): Promise<Profile | null> {
   try {
-    const response = await fetch(getApiUrl(`/profiles/${profileId}`));
-    if (response.status === 404) {
-      // Profile deleted on server - clear cache
-      await clearCachedProfile(profileId);
-      return null;
-    }
-    if (!response.ok) {
-      throw new Error(`Failed to get profile: ${response.statusText}`);
-    }
-    const profile: Profile = await response.json();
+    const profile = await profilesApi.get(profileId);
 
     // Cache for offline use
     await cacheProfile(profile);
 
     return profile;
-  } catch (error) {
+  } catch (error: unknown) {
+    // Profile deleted on server - clear cache
+    if (
+      typeof error === 'object' && error !== null &&
+      'response' in error &&
+      (error as { response?: { status?: number } }).response?.status === 404
+    ) {
+      await clearCachedProfile(profileId);
+      return null;
+    }
     // If offline and cache allowed, return cached profile
     if (options?.allowCache) {
       const cached = await getCachedProfile(profileId);
@@ -224,32 +198,14 @@ export async function getProfile(
  * Update a profile.
  */
 export async function updateProfile(profileId: string, data: Partial<ProfileCreate>): Promise<Profile> {
-  const response = await fetch(getApiUrl(`/profiles/${profileId}`), {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(data),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to update profile: ${response.statusText}`);
-  }
-
-  return response.json();
+  return profilesApi.update(profileId, data);
 }
 
 /**
  * Delete a profile.
  */
 export async function deleteProfile(profileId: string): Promise<void> {
-  const response = await fetch(getApiUrl(`/profiles/${profileId}`), {
-    method: 'DELETE',
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to delete profile: ${response.statusText}`);
-  }
+  await profilesApi.delete(profileId);
 
   // If this was the selected profile, clear it
   const selectedId = await getSelectedProfileId();
@@ -342,7 +298,7 @@ function scheduleBackgroundValidation(profileId: string): void {
     }
   };
 
-  if (navigator.onLine) {
+  if (useConnectivityStore.getState().browserOnline) {
     // Already online, validate immediately
     handleOnline();
   } else {

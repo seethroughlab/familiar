@@ -25,8 +25,6 @@ vi.mock('../audio/engineInstance', () => ({
     seek: mockSeek,
     getDuration: mockGetDuration,
     isCrossfading: mockIsCrossfading,
-  }),
-  getWebEngine: () => ({
     cancelCrossfade: mockCancelCrossfade,
   }),
 }))
@@ -34,6 +32,14 @@ vi.mock('../audio/engineInstance', () => ({
 // Mock eventHandlers — return a fixed effective crossfade duration
 vi.mock('../audio/eventHandlers', () => ({
   getEffectiveCrossfadeDuration: () => 5,
+}))
+
+// Mock audioSettingsStore
+vi.mock('../audioSettingsStore', () => ({
+  useAudioSettingsStore: () => ({
+    crossfadeEnabled: true,
+    crossfadeDuration: 5,
+  }),
 }))
 
 // Mock platform

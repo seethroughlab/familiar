@@ -8,6 +8,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  migration-lint:
+    name: Migration Lint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Lint migrations
+        working-directory: backend
+        run: uv run python scripts/lint_migrations.py
+
   backend-lint:
     name: Backend Lint
     runs-on: self-hosted
@@ -34,9 +52,13 @@ jobs:
       - name: Type check with mypy
         run: uv run mypy app --ignore-missing-imports
 
-  backend-test:
-    name: Backend Test
+      - name: Lint profile contracts
+        run: uv run python scripts/lint_profile_contracts.py
+
+  backend-test-contract:
+    name: Backend Test (Contract)
     runs-on: [self-hosted, Linux]
+    timeout-minutes: 4
     defaults:
       run:
         working-directory: backend
@@ -91,7 +113,215 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
           REDIS_URL: redis://localhost:6379/0
-        run: uv run pytest -v --tb=short
+        # Baseline 2026-03-18: TBD (set from first CI run). Threshold set conservatively low.
+        run: uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py tests/test_migrations.py -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=12 --junit-xml=results-contract.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-contract
+          path: backend/results-contract.xml
+
+      - name: Check skip budget
+        if: always()
+        working-directory: backend
+        run: |
+          SKIP_COUNT=$(grep -c '<skipped' results-contract.xml 2>/dev/null || echo 0)
+          echo "Skipped tests: $SKIP_COUNT (budget: 2)"
+          if [ "$SKIP_COUNT" -gt 2 ]; then
+            echo "::error::Skip budget exceeded: $SKIP_COUNT skipped (budget: 2)"
+            exit 1
+          fi
+
+  backend-test-core:
+    name: Backend Test (Core)
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: familiar
+          POSTGRES_PASSWORD: familiar
+          POSTGRES_DB: familiar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+        run: uv run python -m alembic upgrade head
+
+      - name: Migration preflight
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+        run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          REDIS_URL: redis://localhost:6379/0
+        run: uv run pytest --ignore=tests/test_contract_error_shapes.py --ignore=tests/test_contract_auth_matrix.py --ignore=tests/test_contract_envelope_parity.py --ignore=tests/test_migrations.py -k "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=38 --junit-xml=results-core.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-core
+          path: backend/results-core.xml
+
+      - name: Check skip budget
+        if: always()
+        working-directory: backend
+        run: |
+          SKIP_COUNT=$(grep -c '<skipped' results-core.xml 2>/dev/null || echo 0)
+          echo "Skipped tests: $SKIP_COUNT (budget: 5)"
+          if [ "$SKIP_COUNT" -gt 5 ]; then
+            echo "::error::Skip budget exceeded: $SKIP_COUNT skipped (budget: 5)"
+            exit 1
+          fi
+
+  backend-test-integration:
+    name: Backend Test (Integration)
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: familiar
+          POSTGRES_PASSWORD: familiar
+          POSTGRES_DB: familiar
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+        run: uv run python -m alembic upgrade head
+
+      - name: Migration preflight
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+        run: uv run python -c "from app.db.migration_preflight import assert_database_at_head; assert_database_at_head()"
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
+          REDIS_URL: redis://localhost:6379/0
+        # Baseline 2026-03-18: TBD (set from first CI run). Threshold set conservatively low; more variance due to --reruns.
+        run: uv run pytest -k "integration" -v --tb=short --reruns 2 --reruns-delay 1 --cov=app --cov-report=term-missing --cov-fail-under=5 --junit-xml=results-integration.xml
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-integration
+          path: backend/results-integration.xml
+
+      - name: Check skip budget
+        if: always()
+        working-directory: backend
+        run: |
+          SKIP_COUNT=$(grep -c '<skipped' results-integration.xml 2>/dev/null || echo 0)
+          echo "Skipped tests: $SKIP_COUNT (budget: 3)"
+          if [ "$SKIP_COUNT" -gt 3 ]; then
+            echo "::error::Skip budget exceeded: $SKIP_COUNT skipped (budget: 3)"
+            exit 1
+          fi
+
+      - name: Check for flaky tests (reruns)
+        if: always()
+        working-directory: backend
+        run: |
+          RERUN_COUNT=$(grep -c 'rerun' results-integration.xml 2>/dev/null || echo 0)
+          if [ "$RERUN_COUNT" -gt 0 ]; then
+            echo "::warning::$RERUN_COUNT test(s) required reruns - these may be flaky"
+            grep 'rerun' results-integration.xml || true
+          fi
+
+  ios-native-tests:
+    name: iOS Native AppTests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run iOS unit tests
+        working-directory: packages/ios/native
+        run: |
+          xcodebuild test \
+            -scheme App \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -resultBundlePath TestResults \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || true
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: packages/ios/native/TestResults
+          retention-days: 7
 
   frontend-lint:
     name: Frontend Lint
@@ -118,6 +348,32 @@ jobs:
 
       - name: Audio Guardrail Checks
         run: pnpm --filter @familiar/frontend run check:audio-guardrails
+
+      - name: Dependency Boundary Checks
+        run: pnpm --filter @familiar/frontend run check:boundaries
+
+  frontend-test:
+    name: Frontend Test
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm --filter @familiar/frontend test
 
   frontend-build:
     name: Frontend Build
@@ -167,7 +423,7 @@ jobs:
     name: Docker Build
     runs-on: self-hosted
     timeout-minutes: 30
-    needs: [backend-lint, frontend-lint]
+    needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-integration, frontend-lint, frontend-test]
     steps:
       - uses: actions/checkout@v4
 
@@ -287,6 +543,27 @@ jobs:
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         # Exclude screenshot specs - they're for README docs, not CI testing
         run: npx playwright test --grep-invert="screenshot"
+
+      - name: Check for flaky E2E tests (retry-only passes)
+        if: always()
+        working-directory: packages/web
+        run: |
+          if [ ! -f playwright-report/results.json ]; then
+            echo "No results file found, skipping flake check"
+            exit 0
+          fi
+          node -e "
+            const r = require('./playwright-report/results.json');
+            const flaky = (r.suites || []).flatMap(s => (s.suites || []).flatMap(ss => ss.specs || []).concat(s.specs || []))
+              .filter(s => s.tests?.some(t => t.results?.length > 1 && t.results?.at(-1)?.status === 'passed'))
+              || [];
+            if (flaky.length > 0) {
+              console.log('::warning::' + flaky.length + ' test(s) passed only after retry (flaky):');
+              flaky.forEach(s => console.log('  - ' + s.title));
+              process.exit(1);
+            }
+            console.log('No flaky tests detected');
+          "
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

@@ -10,6 +10,7 @@ import {
 } from '../db';
 import { getApiUrl } from '../api/base';
 import { computeAlbumHash } from '../utils/albumHash';
+import { trackFetchError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 import { isNativeApp } from '../utils/platform';
 
@@ -65,8 +66,10 @@ async function ensureTrackMetadataCached(trackId: string): Promise<CachedTrack |
 
   // Fetch metadata from API
   try {
+    // eslint-disable-next-line no-restricted-globals -- Offline track metadata fetch before download
     const response = await fetch(getApiUrl(`/tracks/${trackId}`));
     if (!response.ok) {
+      trackFetchError(`/tracks/${trackId}`, 'GET', response.status, 'offline-track-metadata');
       log.warn('Could not fetch track metadata:', trackId);
       return null;
     }
@@ -178,6 +181,7 @@ async function downloadAndStoreAudio(
   log.info('Fetching track:', trackId, resumeFrom > 0 ? '(resuming)' : '');
   let response: Response;
   try {
+    // eslint-disable-next-line no-restricted-globals -- Resumable download with Range headers and AbortController
     response = await fetch(getApiUrl(`/tracks/${trackId}/stream`), {
       headers,
       signal: controller.signal,
@@ -470,9 +474,10 @@ export async function downloadArtworkForOffline(
   }
 
   // Try to fetch thumb size (smaller, sufficient for offline)
+  // eslint-disable-next-line no-restricted-globals -- Offline artwork blob storage
   const response = await fetch(getApiUrl(`/artwork/${hash}/thumb`));
   if (!response.ok) {
-    // Artwork not available - not an error, just unavailable
+    trackFetchError(`/artwork/${hash}/thumb`, 'GET', response.status, 'offline-artwork');
     return null;
   }
 

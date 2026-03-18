@@ -13,6 +13,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
+from migrations.helpers import column_exists
+
 # revision identifiers, used by Alembic.
 revision: str = "20260209_full_file_hash"
 down_revision: str | None = "20260209_hnsw_idx"
@@ -20,20 +22,11 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def _column_exists(table_name: str, column_name: str) -> bool:
-    conn = op.get_bind()
-    result = conn.execute(sa.text(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name = :table AND column_name = :column"
-    ), {"table": table_name, "column": column_name})
-    return result.fetchone() is not None
-
-
 def upgrade() -> None:
-    if not _column_exists("tracks", "full_file_hash"):
+    if not column_exists("tracks", "full_file_hash"):
         op.add_column("tracks", sa.Column("full_file_hash", sa.String(64), nullable=True))
 
 
 def downgrade() -> None:
-    if _column_exists("tracks", "full_file_hash"):
+    if column_exists("tracks", "full_file_hash"):
         op.drop_column("tracks", "full_file_hash")

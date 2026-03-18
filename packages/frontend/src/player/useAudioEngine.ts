@@ -16,14 +16,7 @@ import {
   getEffectiveCrossfadeDuration,
 } from './audio/eventHandlers';
 
-// Module-level cache: albumKey -> { avgLufs, albumPeak }
-const albumGainCache = new Map<string, { avgLufs: number; albumPeak: number | null }>();
-
-// Queue transition flag — suppresses ended events during crossfade setup
-let queueTransition = false;
-const MAX_AUTO_ADVANCES_PER_WINDOW = 8;
-const AUTO_ADVANCE_WINDOW_MS = 15000;
-const failureAdvanceTimestamps: number[] = [];
+// (Module-level mutable state moved to store/refs — see playerStore._circuitBreakerTimestamps, queueTransitionRef, albumGainCacheRef)
 
 type PlaybackErrorCategory = 'offline-unavailable' | 'network-unreachable' | 'media-decode' | 'other';
 
@@ -52,14 +45,6 @@ function classifyPlaybackError(error: unknown): PlaybackErrorCategory {
   return 'other';
 }
 
-function registerFailureAdvanceAndCheckCircuitBreaker(): boolean {
-  const now = Date.now();
-  failureAdvanceTimestamps.push(now);
-  while (failureAdvanceTimestamps.length > 0 && now - failureAdvanceTimestamps[0] > AUTO_ADVANCE_WINDOW_MS) {
-    failureAdvanceTimestamps.shift();
-  }
-  return failureAdvanceTimestamps.length <= MAX_AUTO_ADVANCES_PER_WINDOW;
-}
 
 function getAlbumKey(track: Track): string | null {
   if (!track.album) return null;
@@ -113,6 +98,12 @@ export function useAudioEngine() {
   crossfadeEnabledRef.current = crossfadeEnabled;
   crossfadeDurationRef.current = crossfadeDuration;
 
+  // Queue transition flag — scoped to hook lifecycle (not module-level)
+  const queueTransitionRef = useRef(false);
+
+  // Album gain cache — scoped to hook lifecycle
+  const albumGainCacheRef = useRef(new Map<string, { avgLufs: number; albumPeak: number | null }>());
+
   // --------------------------------------------------------------------------
   // Normalization
   // --------------------------------------------------------------------------
@@ -151,7 +142,7 @@ export function useAudioEngine() {
 
   const applyNormalizationGain = useCallback((track: Track | null, isCurrent: boolean): void => {
     const albumKey = track ? getAlbumKey(track) : null;
-    const albumData = albumKey ? albumGainCache.get(albumKey) : undefined;
+    const albumData = albumKey ? albumGainCacheRef.current.get(albumKey) : undefined;
     const linearGain = computeNormalizationGain(track, albumData);
 
     if (isCurrent) {
@@ -191,7 +182,7 @@ export function useAudioEngine() {
       if (state.repeat !== 'all' && idx <= startIdx) break;
       const candidate = queue[idx];
       if (candidate && connectivity.offlineTrackIds.has(candidate.track.id)) {
-        if (!registerFailureAdvanceAndCheckCircuitBreaker()) {
+        if (!usePlayerStore.getState().registerFailureAdvance()) {
           stopForCircuitBreaker();
           return true;
         }
@@ -262,7 +253,7 @@ export function useAudioEngine() {
 
       switch (event.type) {
         case 'ended': {
-          if (queueTransition) return;
+          if (queueTransitionRef.current) return;
           const state = usePlayerStore.getState();
           // Ignore stale/stray ended events while a newly selected track is still loading.
           if (state.isLoadingAudio) {
@@ -276,6 +267,19 @@ export function useAudioEngine() {
 
         case 'error': {
           const state = usePlayerStore.getState();
+
+          // If error during crossfade, roll back the store to the previous track
+          if (state.crossfadeState === 'crossfading') {
+            log.warn('Crossfade failed, rolling back to previous track');
+            setCrossfadeState('idle');
+            const prevTrack = state.history[state.history.length - 1];
+            if (prevTrack) {
+              state.setQueueByTrackId(state.queue.map(q => q.track), prevTrack.id, state.queueSource ?? undefined);
+            }
+            setIsLoadingAudio(false);
+            break;
+          }
+
           const trackName = state.currentTrack?.title || state.currentTrack?.file_path || 'Unknown track';
           log.error('Playback error for "%s": %s', trackName, event.message);
           const category = classifyPlaybackError(event);
@@ -297,7 +301,7 @@ export function useAudioEngine() {
           noteStreamLoadFailure('other');
           const hasNextTrack = !!state.getNextTrack();
           if (hasNextTrack) {
-            if (!registerFailureAdvanceAndCheckCircuitBreaker()) {
+            if (!usePlayerStore.getState().registerFailureAdvance()) {
               stopForCircuitBreaker();
               break;
             }
@@ -330,7 +334,7 @@ export function useAudioEngine() {
 
           // Crossfade timing (only for engines that support it)
           if (!engine.capabilities.crossfade) break;
-          if (engine.isCrossfading?.() || queueTransition) break;
+          if (engine.isCrossfading?.() || queueTransitionRef.current) break;
           if (event.duration <= 0) break;
 
           const timeRemaining = event.duration - event.currentTime;
@@ -359,9 +363,9 @@ export function useAudioEngine() {
                 crossfadeEnabledRef.current,
                 crossfadeDurationRef.current,
               );
-              queueTransition = true;
+              queueTransitionRef.current = true;
               executeCrossfadeRef.current(effectiveDuration, nextTrack);
-              setTimeout(() => { queueTransition = false; }, 1000);
+              setTimeout(() => { queueTransitionRef.current = false; }, 1000);
             }
           }
           break;
@@ -408,6 +412,7 @@ export function useAudioEngine() {
     noteStreamLoadFailure,
     advanceToNextDownloadedTrack,
     stopForCircuitBreaker,
+    setCrossfadeState,
   ]);
 
   useEffect(() => {
@@ -427,11 +432,11 @@ export function useAudioEngine() {
       : -1;
 
     if (newIndex >= 0) {
-      state.setQueue(filteredTracks, newIndex, state.queueSource ?? undefined);
+      state.setQueue(filteredTracks, newIndex, state.queueSource ?? undefined, { preservePlaybackState: true });
       return;
     }
 
-    state.setQueue(filteredTracks, 0, state.queueSource ?? undefined);
+    state.setQueue(filteredTracks, 0, state.queueSource ?? undefined, { preservePlaybackState: true });
     if (filteredTracks.length === 0) {
       setIsPlaying(false);
       setIsLoadingAudio(false);
@@ -451,6 +456,22 @@ export function useAudioEngine() {
       artworkUrl: currentTrack.id ? tracksApi.getArtworkUrl(currentTrack.id) : undefined,
     });
   }, [currentTrack, engine]);
+
+  // --------------------------------------------------------------------------
+  // Effect: Sync media session action availability (Web only)
+  // --------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isInitialized || !currentTrack) return;
+    if (!engine.updateMediaSessionActions) return;
+
+    const state = usePlayerStore.getState();
+    const canGoNext = !!state.getNextTrack();
+    engine.updateMediaSessionActions({
+      canGoNext,
+      canGoPrevious: true, // always true — restarts current track if > 3s (matches iOS native)
+    });
+  }, [currentTrack?.id, queueIndex, queueLength, engine, isInitialized]);
 
   // --------------------------------------------------------------------------
   // Effect: Sync pending next/previous track info to native (lock screen controls)
@@ -679,7 +700,7 @@ export function useAudioEngine() {
         const state = usePlayerStore.getState();
         const hasNextTrack = !!state.getNextTrack();
         if (hasNextTrack) {
-          if (!registerFailureAdvanceAndCheckCircuitBreaker()) {
+          if (!usePlayerStore.getState().registerFailureAdvance()) {
             stopForCircuitBreaker();
             return;
           }
@@ -705,12 +726,12 @@ export function useAudioEngine() {
     const apply = async () => {
       if (shouldUseAlbumGain()) {
         const albumKey = getAlbumKey(currentTrack);
-        if (albumKey && !albumGainCache.has(albumKey)) {
+        if (albumKey && !albumGainCacheRef.current.has(albumKey)) {
           try {
             const resp = await tracksApi.getAlbumGain(currentTrack.id);
             if (!cancelled && resp.album_gain_db != null) {
               const avgLufs = -14.0 - resp.album_gain_db;
-              albumGainCache.set(albumKey, { avgLufs, albumPeak: resp.album_peak });
+              albumGainCacheRef.current.set(albumKey, { avgLufs, albumPeak: resp.album_peak });
             }
           } catch (e) {
             log.warn('Failed to fetch album gain, falling back to track gain', e);

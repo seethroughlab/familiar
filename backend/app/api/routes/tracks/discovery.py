@@ -4,11 +4,12 @@ import logging
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession
+from app.api.exceptions import NotFoundError, TrackNotFoundError
 from app.db.models import Track, TrackAnalysis
 
 from . import TrackResponse
@@ -70,7 +71,7 @@ async def get_album_gain(
     # Get the track to find its album_artist and album
     track = await db.get(Track, track_id)
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     if not track.album:
         return AlbumGainResponse()
@@ -138,7 +139,7 @@ async def get_similar_tracks(
     embedding = result.scalar_one_or_none()
 
     if embedding is None:
-        raise HTTPException(status_code=404, detail="Track not analyzed yet")
+        raise NotFoundError("Track not analyzed yet")
 
     # Find similar tracks using cosine distance
     # Note: pgvector uses <=> for cosine distance, <-> for L2 distance
@@ -182,7 +183,7 @@ async def get_track_discover(
     track = result.scalar_one_or_none()
 
     if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     # Get similar tracks (reuse the embedding similarity logic)
     similar_tracks: list[TrackResponse] = []

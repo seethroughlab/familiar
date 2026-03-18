@@ -22,9 +22,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+      statuses: read
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify CI passed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          STATUS=$(gh api repos/${{ github.repository }}/commits/$SHA/status --jq '.state')
+          if [ "$STATUS" != "success" ]; then
+            echo "::error::CI has not passed on this commit (status: $STATUS)"
+            gh api repos/${{ github.repository }}/commits/$SHA/check-runs \
+              --jq '.check_runs[] | select(.conclusion != "success") | "\(.name): \(.conclusion)"'
+            exit 1
+          fi
 
       - name: Free up disk space
         run: |

@@ -1,17 +1,16 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, X, ListPlus, Trash2, CloudOff, Search, RotateCw } from 'lucide-react';
+import { useState, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Play, Loader2, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, ListPlus, Trash2, CloudOff, RotateCw } from 'lucide-react';
+import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { playlistsApi, tracksApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 import { showError } from '../../stores/toastStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import { useDownloadStore, getPlaylistJobId } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
-import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
-import { useAutoDownload } from '../../hooks/useAutoDownload';
+import { usePlaylistDetailData } from '../../hooks/usePlaylistDetailData';
 import { DiscoveryPanel, usePlaylistDiscovery, type DiscoveryItem } from '../Discovery';
-import * as offlineService from '../../services/offlineService';
 import * as playlistCache from '../../services/playlistCache';
 import type { Track } from '../../types';
 import type { PlaylistDetail as PlaylistDetailType, PlaylistTrack as PlaylistTrackType } from '../../api';
@@ -95,9 +94,7 @@ interface Props {
 }
 
 export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp }: Props) {
-  const routeParams = useParams<{ id: string }>();
   const routeNavigate = useNavigate();
-  const playlistId = playlistIdProp || routeParams.id || '';
   const onBack = onBackProp || (() => routeNavigate(-1));
   const queryClient = useQueryClient();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
@@ -107,158 +104,44 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
-  const { isOffline } = useOfflineStatus();
   const { navigateToArtist } = useAppNavigation();
-  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
-  const [usingCachedData, setUsingCachedData] = useState(false);
-  const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
-  const [searchFilter, setSearchFilter] = useState('');
 
-  const getTrackFromPlaylistItem = useCallback(
-    (t: PlaylistTrackType): Track | null => {
-      return {
-        id: t.id,
-        file_path: '',
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        album_artist: t.album_artist ?? null,
-        album_type: (t.album_type as Track['album_type']) ?? 'album',
-        track_number: t.track_number ?? null,
-        disc_number: t.disc_number ?? null,
-        year: t.year ?? null,
-        genre: t.genre ?? null,
-        duration_seconds: t.duration_seconds,
-        format: t.format ?? null,
-        analysis_version: t.analysis_version ?? 0,
-      };
-    },
-    [],
-  );
-
-  // Use global download store
-  const { jobs, startDownload } = useDownloadStore();
-  const jobId = getPlaylistJobId(playlistId);
-  const downloadJob = jobs.get(jobId);
-  const isDownloading = downloadJob?.status === 'downloading' || downloadJob?.status === 'queued';
-  const downloadProgress = {
-    current: downloadJob ? downloadJob.completedIds.length + (downloadJob.currentProgress > 0 ? 1 : 0) : 0,
-    total: downloadJob?.trackIds.length ?? 0,
-  };
+  const {
+    playlistId,
+    playlist,
+    isLoading,
+    recommendations,
+    recommendationsLoading,
+    usingCachedData,
+    isDownloading,
+    downloadProgress,
+    startDownload,
+    jobId,
+    offlineTrackIds,
+    allTracksOffline,
+    offlineCount,
+    searchFilter,
+    setSearchFilter,
+    showDownloadedOnly,
+    setShowDownloadedOnly,
+    filteredTracks,
+    getTrackFromPlaylistItem,
+    totalDuration,
+    isOffline,
+  } = usePlaylistDetailData(playlistIdProp);
 
   // Drag-to-reorder state
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
-  const { data: playlist, isLoading } = useQuery({
-    queryKey: ['playlist', playlistId],
-    queryFn: async () => {
-      try {
-        const data = await playlistsApi.get(playlistId);
-        await playlistCache.cachePlaylist(data);
-        setUsingCachedData(false);
-        return data;
-      } catch (error) {
-        if (isOffline) {
-          const cached = await playlistCache.getCachedPlaylist(playlistId);
-          if (cached) {
-            const tracks = await playlistCache.resolveTrackIds(cached.track_ids);
-            setUsingCachedData(true);
-            return {
-              id: cached.id,
-              name: cached.name,
-              description: cached.description,
-              is_auto_generated: cached.is_auto_generated,
-              generation_prompt: cached.generation_prompt,
-              tracks: tracks.map((t, idx) => ({
-                id: t.id,
-                playlist_track_id: t.id,
-                type: 'local' as const,
-                title: t.title,
-                artist: t.artist,
-                album: t.album,
-                duration_seconds: t.durationSeconds,
-                position: idx,
-              })),
-              created_at: '',
-              updated_at: '',
-            } as PlaylistDetailType;
-          }
-        }
-        throw error;
-      }
-    },
-    retry: isOffline ? false : 3,
-  });
-
-  // Fetch recommendations for AI-generated playlists
-  const { data: recommendations, isLoading: recommendationsLoading } = useQuery({
-    queryKey: ['playlist-recommendations', playlistId],
-    queryFn: () => playlistsApi.getRecommendations(playlistId),
-    staleTime: 1000 * 60 * 10,
-    retry: 1,
-    enabled: !!playlist?.is_auto_generated && !isOffline && !usingCachedData,
-  });
-
-  // Check which tracks are already offline
-  useEffect(() => {
-    const checkOfflineStatus = async () => {
-      const ids = await offlineService.getOfflineTrackIds();
-      setOfflineTrackIds(new Set(ids));
-    };
-    checkOfflineStatus();
-  }, []);
-
   const handleDownloadPlaylist = async () => {
     if (!playlist || playlist.tracks.length === 0) return;
-    const localTracks = playlist.tracks.filter(t => t.type === 'local');
-    const tracksToDownload = localTracks.filter((t) => !offlineTrackIds.has(t.id));
+    const localTracksForDownload = playlist.tracks.filter(t => t.type === 'local');
+    const tracksToDownload = localTracksForDownload.filter((t) => !offlineTrackIds.has(t.id));
     if (tracksToDownload.length === 0) return;
     startDownload(jobId, 'playlist', playlist.name, tracksToDownload.map((t) => t.id));
     await playlistCache.cachePlaylist(playlist);
   };
-
-  // Update offline track IDs when download job completes
-  useEffect(() => {
-    if (downloadJob?.status === 'completed' || downloadJob?.status === 'failed') {
-      offlineService.getOfflineTrackIds().then((ids) => {
-        setOfflineTrackIds(new Set(ids));
-      });
-    }
-  }, [downloadJob?.status]);
-
-  // Count only local tracks for offline status
-  const localTracks = playlist?.tracks.filter(t => t.type === 'local') ?? [];
-  const localTrackIds = useMemo(() => localTracks.map(t => t.id), [localTracks]);
-  const allTracksOffline = localTracks.length > 0 && localTracks.every(t => offlineTrackIds.has(t.id));
-  const offlineCount = localTracks.filter(t => offlineTrackIds.has(t.id)).length;
-
-  // Auto-download new tracks when enabled
-  useAutoDownload({
-    enabled: playlist?.auto_download ?? false,
-    jobId,
-    jobType: 'playlist',
-    jobName: playlist?.name ?? '',
-    trackIds: localTrackIds,
-  });
-
-  // Filter by downloaded tracks and search query
-  const filteredTracks = useMemo(() => {
-    if (!playlist) return [];
-    let result = playlist.tracks;
-    if (showDownloadedOnly) {
-      result = result.filter(t => offlineTrackIds.has(t.id));
-    }
-    if (searchFilter) {
-      const q = searchFilter.toLowerCase();
-      result = result.filter(t =>
-        (t.title?.toLowerCase().includes(q)) ||
-        (t.artist?.toLowerCase().includes(q)) ||
-        (t.album?.toLowerCase().includes(q))
-      );
-    }
-    return result;
-  }, [playlist, showDownloadedOnly, offlineTrackIds, searchFilter]);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: PlaylistTrackType[]) => {
     const items = sortedItems ?? filteredTracks;
@@ -366,7 +249,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     const [draggedTrack] = tracks.splice(draggedIndex, 1);
     tracks.splice(targetIndex, 0, draggedTrack);
 
-    queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
+    queryClient.setQueryData(queryKeys.playlist.detail(playlistId), (old: PlaylistDetailType | undefined) => {
       if (!old) return old;
       return { ...old, tracks };
     });
@@ -379,7 +262,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     } catch (error) {
       log.error('Failed to reorder tracks:', error);
       showError('Failed to reorder tracks');
-      queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlist.detail(playlistId) });
     }
   }, [playlist, draggedTrackId, playlistId, queryClient]);
 
@@ -421,7 +304,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
 
     // Optimistically remove from cache
     const previousTracks = playlist.tracks;
-    queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
+    queryClient.setQueryData(queryKeys.playlist.detail(playlistId), (old: PlaylistDetailType | undefined) => {
       if (!old) return old;
       return { ...old, tracks: old.tracks.filter(t => t.playlist_track_id !== playlistTrack.playlist_track_id) };
     });
@@ -432,7 +315,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       log.error('Failed to remove track from playlist:', error);
       showError('Failed to remove track');
       // Rollback
-      queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
+      queryClient.setQueryData(queryKeys.playlist.detail(playlistId), (old: PlaylistDetailType | undefined) => {
         if (!old) return old;
         return { ...old, tracks: previousTracks };
       });
@@ -443,7 +326,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     if (!playlist) return;
     const remainingTracks = playlist.tracks.filter(t => !selectedIds.has(t.playlist_track_id));
 
-    queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) => {
+    queryClient.setQueryData(queryKeys.playlist.detail(playlistId), (old: PlaylistDetailType | undefined) => {
       if (!old) return old;
       return { ...old, tracks: remainingTracks };
     });
@@ -455,14 +338,9 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     } catch (error) {
       log.error('Failed to remove tracks:', error);
       showError('Failed to remove tracks');
-      queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.playlist.detail(playlistId) });
     }
   }, [playlist, playlistId, queryClient]);
-
-  const totalDuration = playlist?.tracks.reduce(
-    (sum, t) => sum + (t.duration_seconds || 0),
-    0
-  ) || 0;
 
   // Item ID uses playlist_track_id for uniqueness (supports duplicate tracks)
   const getItemId = useCallback((t: PlaylistTrackType) => t.playlist_track_id, []);
@@ -607,7 +485,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="flex flex-col gap-4 p-4 min-h-full">
       {/* Header */}
       <div className="space-y-4">
         {/* Back button row */}
@@ -696,7 +574,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
               if (!playlist) return;
               const newValue = !playlist.auto_download;
               await playlistsApi.update(playlist.id, { auto_download: newValue });
-              queryClient.setQueryData(['playlist', playlistId], (old: PlaylistDetailType | undefined) =>
+              queryClient.setQueryData(queryKeys.playlist.detail(playlistId), (old: PlaylistDetailType | undefined) =>
                 old ? { ...old, auto_download: newValue } : old
               );
             }}
@@ -733,24 +611,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-        <input
-          type="text"
-          value={searchFilter}
-          onChange={(e) => setSearchFilter(e.target.value)}
-          placeholder="Search tracks..."
-          className="w-full pl-9 pr-8 py-2 bg-zinc-800 rounded-lg text-sm placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-600"
-        />
-        {searchFilter && (
-          <button
-            onClick={() => setSearchFilter('')}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-500 hover:text-zinc-300"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

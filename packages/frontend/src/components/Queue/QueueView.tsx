@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListMusic, ListX, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -42,22 +43,14 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
 
-  // Ref for auto-scrolling to the current track
-  const currentTrackRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (currentTrackRef.current) {
-      currentTrackRef.current.scrollIntoView({ block: 'center', behavior: 'instant' });
-    }
-  }, [queueIndex]);
+  // Scroll container + virtualizer
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   // Pointer-event drag-to-reorder state (works on both mouse and touch)
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const [pointerDeltaY, setPointerDeltaY] = useState(0);
   const dragStartY = useRef(0);
-  const itemRectsRef = useRef<DOMRect[]>([]);
-  const rowRefsRef = useRef<(HTMLDivElement | null)[]>([]);
 
   // Flag to suppress the synthetic click that fires after a pointer-event drag reorder
   const didDragRef = useRef(false);
@@ -73,6 +66,8 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const reorderShuffleOrder = usePlayerStore((state) => state.reorderShuffleOrder);
   const jumpToQueueIndex = usePlayerStore((state) => state.jumpToQueueIndex);
 
+  const ROW_HEIGHT = 56;
+
   // Pointer-event drag handlers for reorder (works on touch + mouse)
   const handlePointerDown = useCallback((index: number, e: React.PointerEvent) => {
     e.preventDefault();
@@ -80,8 +75,6 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     dragStartY.current = e.clientY;
     setDraggedIndex(index);
     setPointerDeltaY(0);
-    // Snapshot all row bounding rects for hit-testing
-    itemRectsRef.current = rowRefsRef.current.map(el => el?.getBoundingClientRect() ?? new DOMRect());
   }, []);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
@@ -89,21 +82,17 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     const deltaY = e.clientY - dragStartY.current;
     setPointerDeltaY(deltaY);
 
-    // Hit-test: which row's vertical midpoint has the pointer crossed?
-    const rects = itemRectsRef.current;
-    for (let i = 0; i < rects.length; i++) {
-      const mid = rects[i].top + rects[i].height / 2;
-      if (e.clientY < mid) {
-        setDropTargetIndex(i !== draggedIndex ? i : null);
-        return;
-      }
-    }
-    // Past the last item
-    const lastIdx = rects.length - 1;
-    if (lastIdx >= 0 && lastIdx !== draggedIndex) {
-      setDropTargetIndex(lastIdx);
-    }
-  }, [draggedIndex]);
+    // Index-based hit-test using row height and scroll position
+    const container = scrollRef.current;
+    if (!container) return;
+    const containerTop = container.getBoundingClientRect().top;
+    const scrollTop = container.scrollTop;
+    const targetIndex = Math.min(
+      Math.max(Math.round((e.clientY - containerTop + scrollTop) / ROW_HEIGHT), 0),
+      queue.length - 1,
+    );
+    setDropTargetIndex(targetIndex !== draggedIndex ? targetIndex : null);
+  }, [draggedIndex, queue.length]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
@@ -260,6 +249,22 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
 
   const isEmpty = totalCount === 0;
 
+  // Virtualizer for the track list
+  const virtualizer = useVirtualizer({
+    count: displayTracks.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 10,
+  });
+
+  // Auto-scroll to current track
+  useEffect(() => {
+    const currentDisplayIndex = displayTracks.findIndex(item => item.isCurrent);
+    if (currentDisplayIndex >= 0) {
+      virtualizer.scrollToIndex(currentDisplayIndex, { align: 'center' });
+    }
+  }, [queueIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div
       className={`h-full flex flex-col ${isDragOver ? 'ring-2 ring-green-500 ring-inset' : ''}`}
@@ -334,7 +339,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
       </div>
 
       {/* Track list */}
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
         {isEmpty ? (
           <div className={`flex flex-col items-center justify-center h-full text-center px-4 ${
             isDragOver ? 'bg-green-900/10' : ''
@@ -355,8 +360,10 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
             )}
           </div>
         ) : (
-          <div className="py-1 space-y-1">
-            {displayTracks.map((item, displayIndex) => {
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const displayIndex = virtualRow.index;
+              const item = displayTracks[displayIndex];
               const { track, queueId, isCurrent, actualQueueIndex } = item;
               const isDragged = draggedIndex === displayIndex;
               const isReorderTarget = dropTargetIndex === displayIndex && draggedIndex !== null;
@@ -365,10 +372,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
               return (
                 <div
                   key={queueId}
-                  ref={(el) => {
-                    rowRefsRef.current[displayIndex] = el;
-                    if (isCurrent) (currentTrackRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-                  }}
+                  data-index={virtualRow.index}
                   onDragOver={(e) => handleRowDragOver(e, displayIndex)}
                   onDragLeave={handleRowDragLeave}
                   onDrop={(e) => {
@@ -379,7 +383,16 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                   }}
                   onClick={() => handleTrackClick(actualQueueIndex)}
                   onContextMenu={(e) => handleContextMenu(track, e)}
-                  style={isDragged ? { transform: `translateY(${pointerDeltaY}px)`, zIndex: 10, position: 'relative' } : undefined}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: isDragged
+                      ? `translateY(${virtualRow.start + pointerDeltaY}px)`
+                      : `translateY(${virtualRow.start}px)`,
+                    zIndex: isDragged ? 10 : undefined,
+                  }}
                   className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
                     isDragged ? 'shadow-lg' : ''
                   } ${

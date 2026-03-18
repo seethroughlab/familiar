@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { FileEdit } from 'lucide-react';
 import { proposedChangesApi } from '../api';
+import { queryKeys } from '../api/queryKeys';
 import { useAppNavigation } from '../hooks/useAppNavigation';
 
 export function ProposedChangesIndicator() {
@@ -8,7 +9,7 @@ export function ProposedChangesIndicator() {
 
   // Fetch pending changes count
   const { data: stats } = useQuery({
-    queryKey: ['proposed-changes-stats'],
+    queryKey: queryKeys.proposedChanges.stats,
     queryFn: () => proposedChangesApi.getStats(),
     refetchInterval: 30000, // Check every 30 seconds
   });

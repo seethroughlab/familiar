@@ -3,11 +3,12 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.api.exceptions import TrackNotFoundError
 from app.services.organizer import (
     TEMPLATES,
     LibraryOrganizer,
@@ -162,7 +163,7 @@ async def organize_track(
     )
 
     if result.status == "error" and result.message == "Track not found":
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     return _result_to_response(result)
 
@@ -178,6 +179,6 @@ async def preview_track(
     result = await organizer.preview_track(track_id, template)
 
     if result.status == "error" and result.message == "Track not found":
-        raise HTTPException(status_code=404, detail="Track not found")
+        raise TrackNotFoundError()
 
     return _result_to_response(result)

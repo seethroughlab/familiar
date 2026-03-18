@@ -19,6 +19,7 @@ import {
   type ChangeScope,
   type ChangePreview,
 } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
 
 import { createLogger } from '../../utils/logger';
 
@@ -324,7 +325,7 @@ export function ProposedChangesPanel() {
 
   // Fetch stats
   const { data: stats } = useQuery({
-    queryKey: ['proposed-changes-stats'],
+    queryKey: queryKeys.proposedChanges.stats,
     queryFn: proposedChangesApi.getStats,
     refetchInterval: 30000,
   });
@@ -335,7 +336,7 @@ export function ProposedChangesPanel() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ['proposed-changes', statusFilter],
+    queryKey: queryKeys.proposedChanges.list(statusFilter),
     queryFn: () => proposedChangesApi.list({ status: statusFilter || undefined, limit: 100 }),
   });
 
@@ -343,32 +344,32 @@ export function ProposedChangesPanel() {
   const rejectMutation = useMutation({
     mutationFn: proposedChangesApi.reject,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
   const applyMutation = useMutation({
     mutationFn: ({ id, scope }: { id: string; scope: ChangeScope }) => proposedChangesApi.apply(id, scope),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
   const undoMutation = useMutation({
     mutationFn: proposedChangesApi.undo,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: proposedChangesApi.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes'] });
-      queryClient.invalidateQueries({ queryKey: ['proposed-changes-stats'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
     },
   });
 
