@@ -114,7 +114,7 @@ test.describe('Offline Fallback', () => {
     await navigateToTab(page, 'Library');
 
     const trackRows = page.locator('[data-testid="track-row"], .track-row, tr');
-    await trackRows.first().waitFor({ timeout: 10000 }).catch(() => {});
+    await trackRows.first().waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
     const trackCount = await trackRows.count();
     if (trackCount < 2) {
       test.skip(true, 'Need at least 2 tracks for recovery test');
@@ -127,6 +127,7 @@ test.describe('Offline Fallback', () => {
     );
 
     // Try to play — should fail gracefully
+    await trackRows.first().scrollIntoViewIfNeeded();
     await trackRows.first().dblclick();
 
     // Wait for error state
