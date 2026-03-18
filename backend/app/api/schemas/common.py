@@ -9,3 +9,5 @@ class CancelResponse(BaseModel):
     status: str
     message: str
     requested: bool = True
+    in_process_tasks_cancelled: int = 0
+    subprocess_may_continue: bool = False

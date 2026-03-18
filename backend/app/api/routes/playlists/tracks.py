@@ -54,10 +54,10 @@ async def add_tracks_to_playlist(
     tracks_by_id: dict[UUID, Track] = {}
     if valid_track_ids:
         # Fetch existing tracks in one query
-        result = await db.execute(
+        tracks_result = await db.execute(
             select(Track).where(Track.id.in_(valid_track_ids))
         )
-        tracks_by_id = {t.id: t for t in result.scalars().all()}
+        tracks_by_id = {t.id: t for t in tracks_result.scalars().all()}
 
         # Check which are already in the playlist
         existing_result = await db.execute(

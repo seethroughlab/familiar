@@ -20,7 +20,7 @@ REQUIRED_PROFILE_ENDPOINTS = [
     ("GET", "/api/v1/library/discover/prompts"),
     ("GET", "/api/v1/bandcamp/search?q=test"),
     ("POST", "/api/v1/export-import/export"),
-    ("POST", f"/api/v1/download/playlist/{ZERO_UUID}"),
+    ("GET", f"/api/v1/download/playlist/{ZERO_UUID}"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/played"),
 ]
 

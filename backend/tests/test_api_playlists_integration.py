@@ -117,7 +117,7 @@ class TestRecommendations:
             {"name": "Similar Track", "artist": {"name": "Similar Artist"}, "match": "0.7", "url": "http://example.com"},
         ]
 
-        with patch("app.api.routes.playlists.RecommendationsService") as MockRecSvc:
+        with patch("app.api.routes.playlists.recommendations.RecommendationsService") as MockRecSvc:
             instance = AsyncMock()
             instance.get_playlist_recommendations.return_value = AsyncMock(
                 artists=[],

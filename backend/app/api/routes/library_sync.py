@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.api.ratelimit import SCAN_RATE_LIMIT, limiter
-from app.api.schemas.common import CancelResponse as _BaseCancelResponse
+from app.api.schemas.common import CancelResponse
 from app.services.tasks import get_sync_progress
 
 logger = logging.getLogger(__name__)
@@ -51,12 +51,6 @@ class SyncStatus(BaseModel):
     message: str
     progress: SyncProgress | None = None
 
-
-class CancelResponse(_BaseCancelResponse):
-    """Extended cancel response with sync-specific fields."""
-
-    in_process_tasks_cancelled: int = 0
-    subprocess_may_continue: bool = False
 
 
 @router.post("/sync", response_model=SyncStatus)

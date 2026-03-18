@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.exceptions import FamiliarError
 from app.api.ratelimit import limiter
@@ -63,54 +63,68 @@ setup_logging()
 logger = get_logger(__name__)
 
 
-# Request ID middleware for tracing
-class RequestIDMiddleware(BaseHTTPMiddleware):
+# Pure ASGI middleware for request ID + timing (avoids BaseHTTPMiddleware event-loop issues)
+class RequestIDMiddleware:
     """Add unique request ID and request timing to each request."""
 
-    # Paths excluded from timing to reduce noise
     _SKIP_TIMING_PREFIXES = ("/health", "/assets/", "/icons/", "/sw.js", "/manifest.json", "/workbox-")
 
-    async def dispatch(self, request: Request, call_next):
-        request_id = str(uuid.uuid4())[:8]
-        request.state.request_id = request_id
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-        path = request.url.path
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = str(uuid.uuid4())[:8]
+        scope.setdefault("state", {})
+        scope["state"]["request_id"] = request_id
+
+        path = scope["path"]
         skip_timing = any(path.startswith(p) for p in self._SKIP_TIMING_PREFIXES)
 
+        status_code = 500  # default in case send is never called with response
+
+        async def send_with_request_id(message: Message) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+                headers = list(message.get("headers", []))
+                headers.append((b"x-request-id", request_id.encode()))
+                message = {**message, "headers": headers}
+            await send(message)
+
         if skip_timing:
-            response = await call_next(request)
-            response.headers["X-Request-ID"] = request_id
-            return response
+            await self.app(scope, receive, send_with_request_id)
+            return
 
         from app.services.metrics import get_metrics_collector, get_query_count, reset_query_count
         reset_query_count()
 
         start = time.perf_counter()
-        response = await call_next(request)
+        await self.app(scope, receive, send_with_request_id)
         duration_ms = (time.perf_counter() - start) * 1000
 
         query_count = get_query_count()
 
-        # Extract route template (e.g. /api/v1/tracks/{track_id}) or fall back to path
-        route = request.scope.get("route")
+        route = scope.get("route")
         template = route.path if route else path
+        method = scope.get("method", "?")
 
         logger.info(
             "request_completed",
             extra={
-                "method": request.method,
+                "method": method,
                 "route": template,
-                "status_code": response.status_code,
+                "status_code": status_code,
                 "duration_ms": round(duration_ms, 2),
                 "query_count": query_count,
                 "request_id": request_id,
             },
         )
 
-        get_metrics_collector().record_request(request.method, template, response.status_code, duration_ms, query_count)
-
-        response.headers["X-Request-ID"] = request_id
-        return response
+        get_metrics_collector().record_request(method, template, status_code, duration_ms, query_count)
 
 
 def create_error_response(
