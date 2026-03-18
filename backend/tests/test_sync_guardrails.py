@@ -74,7 +74,7 @@ class TestSharedRetryWindow:
 class TestSyncProgressReporterResilience:
     def test_update_tolerates_missing_last_phase_attribute(self) -> None:
         mock_redis = MagicMock()
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             reporter = SyncProgressReporter()
             del reporter._last_phase_emitted
             reporter._update({"phase": "reading", "status": "running"})
@@ -83,7 +83,7 @@ class TestSyncProgressReporterResilience:
 
     def test_update_backfills_guardrail_fields_when_missing(self) -> None:
         mock_redis = MagicMock()
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             reporter = SyncProgressReporter()
             del reporter.phase_requeue_attempts
             del reporter.phase_stall_recoveries

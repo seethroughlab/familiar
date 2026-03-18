@@ -51,11 +51,14 @@ def reset_artwork_fetcher():
     af._artwork_fetcher = None
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def client() -> Generator[TestClient, None, None]:
-    """Provide a per-test TestClient to prevent state leakage between tests.
+    """Provide a test client for the entire test session.
 
+    Using session scope with proper context management.
     TestClient handles async endpoints synchronously, avoiding event loop issues.
+    Must be session-scoped because the async engine's connection pool binds
+    connections to a single event loop.
     """
     with TestClient(app, raise_server_exceptions=False) as c:
         yield c

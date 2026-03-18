@@ -32,7 +32,7 @@ class TestSyncProgressReporter:
     @pytest.fixture
     def reporter(self, mock_redis):
         """Create SyncProgressReporter with mocked Redis."""
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             return SyncProgressReporter()
 
     def test_init_sets_initial_progress(self, reporter, mock_redis):
@@ -233,7 +233,7 @@ class TestSyncProgressPhases:
 
     @pytest.fixture
     def reporter(self, mock_redis):
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             return SyncProgressReporter()
 
     def test_phase_transitions(self, reporter, mock_redis):
@@ -270,7 +270,7 @@ class TestProgressPersistence:
         """Progress should be stored at SYNC_PROGRESS_KEY."""
         mock_redis = MagicMock()
 
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             SyncProgressReporter()
 
             call_args = mock_redis.set.call_args[0]
@@ -280,7 +280,7 @@ class TestProgressPersistence:
         """All progress updates should be valid JSON."""
         mock_redis = MagicMock()
 
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             reporter = SyncProgressReporter()
             reporter.set_discovering(10, 500)
             reporter.set_reading(100, 500, 80, 15, 5)
@@ -301,7 +301,7 @@ class TestGetSyncProgress:
         mock_redis = MagicMock()
         mock_redis.get.return_value = json.dumps({"status": "running", "phase": "reading"}).encode()
 
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             from app.services.tasks import get_sync_progress
             result = get_sync_progress()
 
@@ -313,7 +313,7 @@ class TestGetSyncProgress:
         mock_redis = MagicMock()
         mock_redis.get.side_effect = Exception("Redis down")
 
-        with patch("app.services.tasks.library_sync.get_redis", return_value=mock_redis):
+        with patch("app.services.tasks.library_sync_progress.get_redis", return_value=mock_redis):
             from app.services.tasks import get_sync_progress
             result = get_sync_progress()
 
