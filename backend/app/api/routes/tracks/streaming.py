@@ -1,6 +1,5 @@
 """Track streaming, artwork, and lyrics endpoints."""
 
-import asyncio
 import logging
 from collections.abc import Iterator
 from datetime import datetime
@@ -106,38 +105,15 @@ async def stream_track(
                 exc_info=True,
             )
 
-    # Fix non-FLAC files missing PTS timestamps
-    elif file_path.suffix.lower() in (".mp3", ".ogg", ".m4a", ".aac", ".wav"):
-        from app.services.flac_remux import needs_remux, remux_audio_in_place
-
-        try:
-            if await needs_remux(file_path):
-                logger.info("Re-muxing %s for PTS fix: %s", file_path.suffix, file_path.name)
-                await remux_audio_in_place(file_path)
-                from app.services.scanner import compute_file_hash
-
-                track.file_hash = compute_file_hash(file_path)
-                track.file_size = file_path.stat().st_size
-                track.file_modified_at = datetime.fromtimestamp(
-                    file_path.stat().st_mtime
-                )
-                await db.commit()
-        except Exception:
-            logger.warning(
-                "PTS check/re-mux failed for %s, serving as-is",
-                track_id,
-                exc_info=True,
-            )
-
     # Transcode tracks with browser-unsupported codecs
     if track.needs_transcode:
         logger.info("Transcoding (unsupported codec=%s) track_id=%s", track.codec, track_id)
-        return await _stream_transcoded(file_path)
+        return await _get_or_transcode(track_id, file_path, request)
 
     # Transcode formats that browsers can't natively decode
     if file_path.suffix.lower() in TRANSCODE_EXTENSIONS:
         logger.debug("Transcoding track_id=%s path=%s to FLAC", track_id, file_path)
-        return await _stream_transcoded(file_path)
+        return await _get_or_transcode(track_id, file_path, request)
 
     mime_type = get_audio_mime_type(file_path)
     logger.debug("Streaming track_id=%s path=%s type=%s", track_id, file_path, mime_type)
@@ -146,27 +122,25 @@ async def stream_track(
     return await stream_file(file_path, request, mime_type)
 
 
-async def _stream_transcoded(file_path: Path) -> StreamingResponse:
-    """Transcode an audio file to FLAC via ffmpeg and stream the result."""
-    process = await asyncio.create_subprocess_exec(
-        "ffmpeg", "-i", str(file_path), "-f", "flac", "-loglevel", "error", "pipe:1",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -> StreamingResponse:
+    """Transcode audio to FLAC (cached to disk), then serve via stream_file().
 
-    async def stream_output():
-        assert process.stdout is not None
-        try:
-            while chunk := await process.stdout.read(64 * 1024):
-                yield chunk
-        finally:
-            await process.wait()
+    Caching to disk ensures the served file has complete FLAC headers (streaminfo +
+    seektable), Content-Length, and range request support — fixing PTS errors during
+    crossfade that occurred with the previous chunked-stream approach.
+    """
+    from app.api.streaming import stream_file
+    from app.services.flac_remux import transcode_to_file
 
-    return StreamingResponse(
-        stream_output(),
-        media_type="audio/flac",
-        headers={"Cache-Control": "private, max-age=3600"},
-    )
+    cache_dir = Path("data/transcode_cache")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cached = cache_dir / f"{track_id}.flac"
+
+    # Re-transcode if source is newer or cache doesn't exist
+    if not cached.exists() or file_path.stat().st_mtime > cached.stat().st_mtime:
+        await transcode_to_file(file_path, cached)
+
+    return await stream_file(cached, request, "audio/flac")
 
 
 @router.post("/{track_id}/report-playback-error")

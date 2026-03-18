@@ -197,33 +197,34 @@ step "Finding connected device"
 if [[ -n "$DEVICE_UDID" ]]; then
     green "Using specified device: $DEVICE_UDID"
 else
-    # List connected devices and grab the first iPhone UDID
-    DEVICE_JSON=$(xcrun devicectl list devices --json-output /dev/stdout 2>/dev/null || true)
+    # List connected devices — write JSON to temp file since /dev/stdout doesn't work
+    DEVICE_JSON_FILE=$(mktemp)
+    trap "rm -f '$DEVICE_JSON_FILE'" EXIT
+    xcrun devicectl list devices --json-output "$DEVICE_JSON_FILE" 2>/dev/null || true
 
-    if [[ -z "$DEVICE_JSON" ]]; then
+    if [[ ! -s "$DEVICE_JSON_FILE" ]]; then
         die "No device output from devicectl. Is a device connected via USB?"
     fi
 
-    # Extract first connected device UDID
-    DEVICE_UDID=$(echo "$DEVICE_JSON" | python3 -c "
+    # Extract first connected device UDID (prefer wired, fall back to any)
+    DEVICE_UDID=$(python3 -c "
 import sys, json
-data = json.load(sys.stdin)
+data = json.load(open('$DEVICE_JSON_FILE'))
 devices = data.get('result', {}).get('devices', [])
 for d in devices:
     conn = d.get('connectionProperties', {})
     if conn.get('transportType') == 'wired':
         print(d['identifier'])
         sys.exit(0)
-# Fall back to any device if no wired device found
 for d in devices:
     print(d['identifier'])
     sys.exit(0)
 sys.exit(1)
 " 2>/dev/null) || die "No connected device found. Connect an iPhone via USB and try again."
 
-    DEVICE_NAME=$(echo "$DEVICE_JSON" | python3 -c "
+    DEVICE_NAME=$(python3 -c "
 import sys, json
-data = json.load(sys.stdin)
+data = json.load(open('$DEVICE_JSON_FILE'))
 devices = data.get('result', {}).get('devices', [])
 for d in devices:
     if d['identifier'] == '$DEVICE_UDID':

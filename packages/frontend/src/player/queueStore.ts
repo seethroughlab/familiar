@@ -786,8 +786,6 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       usePlaybackStore.setState({
         currentTrack: track,
         currentTime: 0,
-        crossfadeState: 'idle',
-        nextTrackPreloaded: false,
       });
       persistCombinedState();
       refillFromReservoir();
@@ -801,8 +799,6 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     usePlaybackStore.setState({
       currentTrack: track,
       currentTime: 0,
-      crossfadeState: 'idle',
-      nextTrackPreloaded: false,
     });
     persistCombinedState();
     refillFromReservoir();

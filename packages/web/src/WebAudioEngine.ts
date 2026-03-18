@@ -740,7 +740,12 @@ export class WebAudioEngine implements AudioEngine {
     // This is the primary source of time updates for the seek bar and crossfade timing.
     const handleTimeUpdate = (e: Event) => {
       const target = e.target as HTMLAudioElement;
-      if (target !== this.getCurrentElement()) return;
+      // During crossfade, track the incoming (next) element's time so the
+      // playhead matches the new track the user increasingly hears.
+      const trackedElement = this.crossfadeActive
+        ? this.getNextElement()
+        : this.getCurrentElement();
+      if (target !== trackedElement) return;
       if (target.paused) return;
 
       const duration = Number.isFinite(target.duration) && target.duration > 0 ? target.duration : 0;

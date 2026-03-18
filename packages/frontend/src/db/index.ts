@@ -346,4 +346,17 @@ export class FamiliarDB extends Dexie {
   }
 }
 
-export const db = new FamiliarDB();
+// Lazy singleton – defers Dexie/IndexedDB initialization until first access.
+// On iOS (WKWebView) IndexedDB may not be ready at module evaluation time,
+// so constructing FamiliarDB() eagerly causes a black screen on launch.
+let _db: FamiliarDB | undefined;
+export const db = new Proxy({} as FamiliarDB, {
+  get(_target, prop, receiver) {
+    if (!_db) _db = new FamiliarDB();
+    return Reflect.get(_db, prop, receiver);
+  },
+  set(_target, prop, value) {
+    if (!_db) _db = new FamiliarDB();
+    return Reflect.set(_db, prop, value);
+  },
+});

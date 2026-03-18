@@ -72,6 +72,50 @@ async def needs_transcode_check(file_path: Path) -> bool:
     return False
 
 
+async def transcode_to_file(source: Path, dest: Path) -> None:
+    """Transcode audio file to FLAC, writing a complete file to dest.
+
+    Unlike piping to stdout, this produces proper streaminfo + seektable headers,
+    enabling Content-Length and range requests when served.
+    """
+    # Write to a temp file first, then rename for atomicity
+    fd, tmp_path = tempfile.mkstemp(suffix=".flac", dir=dest.parent)
+    os.close(fd)
+    tmp = Path(tmp_path)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y",
+            "-i", str(source),
+            "-c:a", "flac",
+            "-f", "flac",
+            str(tmp),
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"ffmpeg timed out transcoding {source.name}")
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg transcode failed (rc={proc.returncode}) for {source.name}: "
+                f"{stderr.decode()[:500]}"
+            )
+
+        if tmp.stat().st_size == 0:
+            raise RuntimeError(f"Transcoded file is empty for {source.name}")
+
+        os.replace(tmp, dest)
+        logger.info("Transcoded to FLAC cache: %s → %s (%d bytes)", source.name, dest.name, dest.stat().st_size)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 async def needs_remux(file_path: Path) -> bool:
     """Check if a FLAC file is missing PTS timestamps.
 
@@ -97,7 +141,7 @@ async def needs_remux(file_path: Path) -> bool:
         logger.warning("ffprobe timed out checking PTS for %s", file_path.name)
         return False
 
-    pts_value = stdout.decode().strip()
+    pts_value = stdout.decode().strip().rstrip(",")
     if not pts_value or pts_value == "N/A":
         return True
 
