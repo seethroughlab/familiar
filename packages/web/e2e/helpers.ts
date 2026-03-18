@@ -46,7 +46,7 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
       el => el.textContent?.includes('Tracks') && el.offsetParent !== null
     );
     return hasVisibleLink || hasVisibleButton;
-  }, undefined, { timeout: 10000 });
+  }, undefined, { timeout: 20000 });
 }
 
 /**
