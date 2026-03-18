@@ -19,7 +19,7 @@ async function startPlayback(page: Page) {
   // Click the first track to start playing
   const firstTrack = page.locator('table tbody tr, [data-testid="track-row"]').first();
   await firstTrack.waitFor({ timeout: 10000 });
-  await firstTrack.dblClick();
+  await firstTrack.dblclick();
 
   // Wait for audio to actually start playing
   await page.waitForFunction(

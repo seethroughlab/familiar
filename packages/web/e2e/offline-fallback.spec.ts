@@ -27,7 +27,7 @@ test.describe('Offline Fallback', () => {
       return;
     }
 
-    await trackRow.dblClick();
+    await trackRow.dblclick();
 
     // Wait a moment for the error to propagate
     await expect.poll(
@@ -90,7 +90,7 @@ test.describe('Offline Fallback', () => {
       route.fulfill({ status: 503, body: 'Service Unavailable' }),
     );
 
-    await trackRow.dblClick();
+    await trackRow.dblclick();
 
     // Check that the app handles the failure gracefully
     // Either it shows an error or falls back to offline — either is acceptable
@@ -127,7 +127,7 @@ test.describe('Offline Fallback', () => {
     );
 
     // Try to play — should fail gracefully
-    await trackRows.first().dblClick();
+    await trackRows.first().dblclick();
 
     // Wait for error state
     await expect.poll(
@@ -142,7 +142,7 @@ test.describe('Offline Fallback', () => {
     await page.unroute('**/api/v1/tracks/*/stream');
 
     // Try playing another track — should work now (if backend is running with tracks)
-    await trackRows.nth(1).dblClick();
+    await trackRows.nth(1).dblclick();
 
     // Check: either audio plays or we're still in a functional state
     await expect.poll(
