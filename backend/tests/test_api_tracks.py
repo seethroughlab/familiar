@@ -81,7 +81,7 @@ def test_get_track_not_found(client: TestClient) -> None:
     """Test getting a non-existent track returns 404."""
     response = client.get(f"/api/v1/tracks/{uuid4()}")
     assert response.status_code == 404
-    assert response.json()["detail"] == "Track not found"
+    assert response.json()["message"] == "Track not found"
 
 
 def test_record_play_requires_profile(client: TestClient) -> None:

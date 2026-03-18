@@ -196,7 +196,7 @@ class TestProfileAvatar:
         profile_id = test_profile["id"]
         response = client.get(f"/api/v1/profiles/{profile_id}/avatar")
         assert response.status_code == 404
-        assert "no avatar" in response.json()["detail"].lower()
+        assert "no avatar" in response.json()["message"].lower()
 
     def test_delete_avatar_not_found_profile(self, client: TestClient) -> None:
         """Test deleting avatar for non-existent profile."""

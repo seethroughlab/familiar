@@ -274,8 +274,8 @@ REVERSIBLE_MIGRATIONS = _get_reversible_migrations()
 # downgrades from head to {revision}-1), not the individual migrations.
 _BROKEN_DOWNGRADE_CHAIN = {
     "20241231_000000_baseline",
-    "20250101_bitrate_mode",
-    "20260206_auto_download",
+    "20250101_000000_add_bitrate_mode",
+    "20260206_add_auto_download",
     "20260206_track_file_size",
     "20260208_autodownload_nn",
     "20260208_subsonic_creds",

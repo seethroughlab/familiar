@@ -44,7 +44,7 @@ def test_invalid_profile_id_format(client: TestClient) -> None:
         headers={"X-Profile-ID": "not-a-uuid"},
     )
     assert response.status_code == 400
-    assert "Invalid profile ID format" in response.json()["detail"]
+    assert "Invalid profile ID format" in response.json()["message"]
 
 
 def test_nonexistent_profile_id(client: TestClient) -> None:
@@ -54,4 +54,4 @@ def test_nonexistent_profile_id(client: TestClient) -> None:
         headers={"X-Profile-ID": str(uuid4())},
     )
     assert response.status_code == 401
-    assert "Invalid profile ID" in response.json()["detail"]
+    assert "Invalid profile ID" in response.json()["message"]

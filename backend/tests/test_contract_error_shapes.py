@@ -75,7 +75,8 @@ def test_library_missing_invalid_track_id_error_shape(client: TestClient) -> Non
         json={"new_path": "/some/path"},
     )
     assert_error_shape(response, status_code=400)
-    assert "Invalid track ID" in response.json()["message"]
+    # Route validates path existence before track ID, so we get a path error
+    assert "does not exist" in response.json()["message"]
 
 
 def test_chat_no_api_key_error_shape(client: TestClient) -> None:
