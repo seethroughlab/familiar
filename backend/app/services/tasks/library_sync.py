@@ -179,6 +179,7 @@ async def _async_scan_worker(
         "still_missing": 0,
         "relocated": 0,
         "recovered": 0,
+        "pending_review": 0,
         "compilation_albums": 0,
         "compilation_tracks": 0,
     }
@@ -223,6 +224,7 @@ async def _async_scan_worker(
                 results["still_missing"] += scan_results.get("still_missing", 0)
                 results["relocated"] += scan_results.get("relocated", 0)
                 results["recovered"] += scan_results.get("recovered", 0)
+                results["pending_review"] += scan_results.get("pending_review", 0)
 
             orphan_results = await scanner.cleanup_orphaned_tracks(library_paths)
             results["marked_missing"] += orphan_results.get("orphaned", 0)

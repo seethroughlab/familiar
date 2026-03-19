@@ -90,6 +90,7 @@ class AppSettings(BaseModel):
     update_channel: str = "disabled"  # "disabled", "stable", "beta", "alpha"
 
 
+
 class AppSettingsService:
     """Service for managing user-configurable app settings."""
 

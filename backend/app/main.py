@@ -43,6 +43,7 @@ from app.api.routes import (
     library,
     organizer,
     outputs,
+    pending_review,
     playlists,
     profiles,
     proposed_changes,
@@ -175,6 +176,21 @@ def validate_library_path() -> None:
             )
     except PermissionError:
         logging.warning(f"⚠️  Cannot read library path (permission denied): {path}")
+
+    # Zero-touch enforcement: library should be read-only
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(dir=path, delete=True):
+            pass
+        # If we got here, the directory is writable — warn
+        logging.warning(
+            "⚠️  Library path is writable: %s. "
+            "For zero-touch safety, mount the music library as read-only (:ro in docker-compose).",
+            path,
+        )
+    except OSError:
+        # Expected — directory is read-only, which is what we want
+        pass
 
 
 @asynccontextmanager
@@ -382,6 +398,7 @@ app.include_router(download.router, prefix="/api/v1")
 app.include_router(updates.router, prefix="/api/v1")
 app.include_router(spotify_import.router, prefix="/api/v1")
 app.include_router(ambient.router, prefix="/api/v1")
+app.include_router(pending_review.router, prefix="/api/v1")
 
 
 # Serve frontend static files in production

@@ -351,6 +351,7 @@ class LibraryScanner:
             "still_missing": 0,   # Already missing, still not found
             "recovered": 0,       # Previously missing, now found
             "relocated": 0,       # Found at different path
+            "pending_review": 0,  # New tracks awaiting user review
         }
 
         # Track IDs to queue for analysis after commit
@@ -433,13 +434,15 @@ class LibraryScanner:
 
                     if is_collision:
                         # Different files that happen to share a partial hash.
-                        # Treat the new file as truly new.
-                        logger.info(f"NEW (collision): {file_path.name}")
+                        # Treat the new file as truly new — pending review.
+                        logger.info(f"NEW (collision, pending review): {file_path.name}")
                         track = await self._create_track(file_path, file_hash, file_mtime, file_size)
                         track.full_file_hash = full_hash_new
-                        pending_analysis_ids.append(str(track.id))
-                        results["new"] += 1
-                        results["queued"] += 1
+                        track.status = TrackStatus.PENDING_REVIEW
+                        # Run duplicate detection for review_info
+                        from app.services.duplicate_detection import detect_duplicate_for_track
+                        track.review_info = await detect_duplicate_for_track(self.db, track)
+                        results["pending_review"] += 1
                     else:
                         # Genuine relocation (old file gone, or full hashes match)
                         logger.info(f"RELOCATED (by hash): {Path(old_path).name} -> {path_str}")
@@ -452,12 +455,14 @@ class LibraryScanner:
                         if old_path in existing_paths:
                             del existing_paths[old_path]
                 else:
-                    # Truly new file
-                    logger.info(f"NEW: {file_path.name}")
+                    # Truly new file — pending review
+                    logger.info(f"NEW (pending review): {file_path.name}")
                     track = await self._create_track(file_path, file_hash, file_mtime, file_size)
-                    pending_analysis_ids.append(str(track.id))
-                    results["new"] += 1
-                    results["queued"] += 1
+                    track.status = TrackStatus.PENDING_REVIEW
+                    # Run duplicate detection for review_info
+                    from app.services.duplicate_detection import detect_duplicate_for_track
+                    track.review_info = await detect_duplicate_for_track(self.db, track)
+                    results["pending_review"] += 1
                     # Add to hash lookup so subsequent files with same hash are detected
                     existing_hashes[file_hash] = track
             else:

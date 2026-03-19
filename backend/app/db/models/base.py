@@ -34,6 +34,8 @@ class TrackStatus(enum.Enum):
     ACTIVE = "active"  # File exists at path
     MISSING = "missing"  # File not found, awaiting user action
     PENDING_DELETION = "pending_deletion"  # Missing >30 days, suggested for cleanup
+    PENDING_REVIEW = "pending_review"  # Newly discovered, awaiting user review
+    SKIPPED = "skipped"  # User chose to permanently ignore this file
 
 
 class ChangeStatus(enum.Enum):
@@ -58,7 +60,5 @@ class ChangeScope(enum.Enum):
     """Scope of changes to apply."""
 
     DB_ONLY = "db_only"  # Just update Familiar's database
-    DB_AND_ID3 = "db_and_id3"  # Also write to audio file tags
-    DB_ID3_FILES = "db_id3_files"  # Also rename/move files
 
 

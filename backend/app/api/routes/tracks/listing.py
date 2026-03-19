@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import CurrentProfile, DbSession
 from app.api.exceptions import TrackNotFoundError, ValidationError
-from app.db.models import ProfilePlayHistory, Track, TrackAnalysis
+from app.db.models import ProfilePlayHistory, Track, TrackAnalysis, TrackStatus
 
 from . import (
     FEATURE_FILTER_AXES,
@@ -68,7 +68,7 @@ async def list_track_ids(
     has_fy = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx or has_fy
 
-    query = select(Track.id)
+    query = select(Track.id).where(Track.status == TrackStatus.ACTIVE)
 
     if search:
         search_filter = f"%{search}%"
@@ -234,7 +234,7 @@ async def list_tracks(
     has_fy_list = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx_list or has_fy_list
 
-    query = select(Track)
+    query = select(Track).where(Track.status == TrackStatus.ACTIVE)
 
     # Include analysis features if requested
     if include_features:
@@ -405,7 +405,7 @@ async def get_track_index(
     has_fy_idx = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx_idx or has_fy_idx
 
-    base_query = select(Track.id)
+    base_query = select(Track.id).where(Track.status == TrackStatus.ACTIVE)
 
     if search:
         search_filter = f"%{search}%"
