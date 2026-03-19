@@ -17,9 +17,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add new enum values (IF NOT EXISTS works in PG 12+)
-    op.execute("ALTER TYPE trackstatus ADD VALUE IF NOT EXISTS 'pending_review'")
-    op.execute("ALTER TYPE trackstatus ADD VALUE IF NOT EXISTS 'skipped'")
+    # Add new enum values outside a transaction — PG requires enum ADD VALUE
+    # to be committed before the value can be referenced in the same session.
+    connection = op.get_bind()
+    connection.execute(sa.text("COMMIT"))
+    connection.execute(sa.text("ALTER TYPE trackstatus ADD VALUE IF NOT EXISTS 'pending_review'"))
+    connection.execute(sa.text("ALTER TYPE trackstatus ADD VALUE IF NOT EXISTS 'skipped'"))
+    connection.execute(sa.text("BEGIN"))
 
     # Add review_info JSONB column
     if not column_exists("tracks", "review_info"):
