@@ -94,11 +94,20 @@ async def import_preview(
 
     Session expires after 24 hours if not executed.
     """
+    import tempfile
+    from pathlib import Path
+
     from app.services.import_service import (
         ImportPreviewService,
         MusicImportError,
-        save_upload_to_temp,
     )
+
+    def save_upload_to_temp(content: bytes, filename: str) -> Path:
+        suffix = Path(filename).suffix
+        fd, path = tempfile.mkstemp(suffix=suffix)
+        with open(fd, "wb") as f:
+            f.write(content)
+        return Path(path)
 
     if not file.filename:
         raise ValidationError("No filename provided")

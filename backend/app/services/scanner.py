@@ -441,7 +441,7 @@ class LibraryScanner:
                         track.status = TrackStatus.PENDING_REVIEW
                         # Run duplicate detection for review_info
                         from app.services.duplicate_detection import detect_duplicate_for_track
-                        track.review_info = await detect_duplicate_for_track(self.db, track)
+                        track.review_info = await detect_duplicate_for_track(self.db, track) or {}
                         results["pending_review"] += 1
                     else:
                         # Genuine relocation (old file gone, or full hashes match)
@@ -459,9 +459,9 @@ class LibraryScanner:
                     logger.info(f"NEW (pending review): {file_path.name}")
                     track = await self._create_track(file_path, file_hash, file_mtime, file_size)
                     track.status = TrackStatus.PENDING_REVIEW
-                    # Run duplicate detection for review_info
+                    # Run duplicate detection for review_info (default to {} so recovery knows it was pending)
                     from app.services.duplicate_detection import detect_duplicate_for_track
-                    track.review_info = await detect_duplicate_for_track(self.db, track)
+                    track.review_info = await detect_duplicate_for_track(self.db, track) or {}
                     results["pending_review"] += 1
                     # Add to hash lookup so subsequent files with same hash are detected
                     existing_hashes[file_hash] = track

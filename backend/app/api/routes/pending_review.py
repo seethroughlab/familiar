@@ -583,4 +583,4 @@ async def bulk_skip_all(db: DbSession) -> dict[str, Any]:
         .values(status=TrackStatus.SKIPPED, review_info=None)
     )
     await db.commit()
-    return {"status": "skipped", "count": result.rowcount}
+    return {"status": "skipped", "count": result.rowcount}  # type: ignore[attr-defined]
