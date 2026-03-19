@@ -121,7 +121,7 @@ export interface QueueActions {
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   reorderShuffleOrder: (fromIndex: number, toIndex: number) => void;
   jumpToQueueIndex: (index: number) => void;
-  setLazyQueue: (ids: string[], source?: QueueSource) => Promise<void>;
+  setLazyQueue: (ids: string[], source?: QueueSource, options?: { initialTrack?: Track }) => Promise<void>;
   exitLazyMode: () => void;
   getNextTrack: () => Track | null;
   getUpcomingTrackIds: (count: number) => string[];
@@ -590,7 +590,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     persistCombinedState();
   },
 
-  setLazyQueue: async (ids: string[], source?: QueueSource) => {
+  setLazyQueue: async (ids: string[], source?: QueueSource, options?: { initialTrack?: Track }) => {
     let resolvedIds = ids;
     const connectivity = useConnectivityStore.getState();
     if (connectivity.offlineModeActive) {
@@ -626,6 +626,16 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       queueSource: source || null,
     });
 
+    // Optimistic state: show loading indicator and start audio load immediately
+    if (options?.initialTrack) {
+      usePlaybackStore.setState({
+        currentTrack: options.initialTrack,
+        isPlaying: true,
+        currentTime: 0,
+        isLoadingAudio: true,
+      });
+    }
+
     try {
       const tracks = await tracksApi.getBatch(windowIds);
       if (tracks.length > 0) {
@@ -654,6 +664,9 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
           isLoadingAudio: true,
         });
         persistCombinedState();
+      } else if (options?.initialTrack) {
+        // getBatch returned empty — clean up optimistic state
+        usePlaybackStore.setState({ currentTrack: null, isPlaying: false, isLoadingAudio: false });
       }
     } catch (error) {
       log.error('Failed to start lazy queue:', error);
@@ -661,6 +674,9 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
         lazyQueueIds: null,
         lazyQueueIndex: -1,
       });
+      if (options?.initialTrack) {
+        usePlaybackStore.setState({ currentTrack: null, isPlaying: false, isLoadingAudio: false });
+      }
     }
   },
 

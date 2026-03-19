@@ -6,6 +6,7 @@ import { getColumnDef } from '../../columnDefinitions';
 import { PlayIndicator } from '../../../common/PlayIndicator';
 import { FavoriteButton } from './FavoriteButton';
 import { OfflineButton } from './OfflineButton';
+import { usePlayerStore } from '../../../../stores/playerStore';
 import type { Track } from '../../../../types';
 
 export interface TrackRowProps {
@@ -35,6 +36,9 @@ export function TrackRow({
   visibleColumnIds,
   gridColumns,
 }: TrackRowProps) {
+  const isLoadingAudio = usePlayerStore((s) => s.isLoadingAudio);
+  const loadingClass = isCurrentTrack && isLoadingAudio ? 'animate-pulse bg-green-500/5' : '';
+
   return (
     <div
       data-testid="track-row"
@@ -60,12 +64,13 @@ export function TrackRow({
           : isCurrentTrack
           ? 'bg-zinc-800/50 hover:bg-zinc-800/70'
           : 'hover:bg-zinc-800/50'
-      }`}
+      } ${loadingClass}`}
       style={{ gridTemplateColumns: gridColumns }}
     >
       {/* Index / Play button column */}
-      <div className="flex items-center justify-center"
+      <div className="flex items-center justify-center active:scale-90 active:opacity-70 transition-transform duration-75"
         onClick={(e) => { e.stopPropagation(); onPlay(); }}
+        onTouchStart={() => {/* iOS :active CSS requires touch listener */}}
         role="button"
         aria-label={isCurrentTrack && isPlaying ? `Pause ${track.title || 'track'}` : `Play ${track.title || 'track'}`}
       >

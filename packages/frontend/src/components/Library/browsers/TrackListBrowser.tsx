@@ -546,6 +546,13 @@ export function TrackListBrowser({
       // This ensures shuffle considers ALL tracks, not just loaded ones
       if (total >= LAZY_QUEUE_THRESHOLD) {
         setIsLoadingPlayAll(true);
+        // Optimistic: show track as loading immediately, before getIds
+        usePlayerStore.setState({
+          currentTrack: track,
+          isPlaying: true,
+          currentTime: 0,
+          isLoadingAudio: true,
+        });
         try {
           const response = await tracksApi.getIds({
             shuffle: shuffle,
@@ -556,10 +563,14 @@ export function TrackListBrowser({
             await setLazyQueue(response.ids, {
               type: 'library',
               filters: queueFilters,
-            });
+            }, { initialTrack: track });
+          } else {
+            // No tracks matched — clean up optimistic state
+            usePlayerStore.setState({ currentTrack: null, isPlaying: false, isLoadingAudio: false });
           }
         } catch (error) {
           log.error('Failed to play track:', error);
+          usePlayerStore.setState({ currentTrack: null, isPlaying: false, isLoadingAudio: false });
         } finally {
           setIsLoadingPlayAll(false);
         }

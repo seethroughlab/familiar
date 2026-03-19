@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from 'react';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { getColumnDef } from '../Library/columnDefinitions';
+import { usePlayerStore } from '../../stores/playerStore';
 import type { Track } from '../../types';
 
 /** Context passed to render props for each track row. */
@@ -73,6 +74,8 @@ export const PlaylistRow = memo(function PlaylistRow(props: PlaylistRowProps) {
     measureElement,
   } = props;
 
+  const isLoadingAudio = usePlayerStore((s) => s.isLoadingAudio);
+  const loadingClass = isCurrentTrack && isLoadingAudio ? 'animate-pulse bg-green-500/5' : '';
   const selectedClass = isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : '';
   const currentClass = isCurrentTrack ? 'bg-zinc-800/30' : '';
   const dragClass = `${isDragged ? 'opacity-50' : ''} ${isDropTarget ? 'border-t-2 border-green-500' : ''}`;
@@ -102,9 +105,9 @@ export const PlaylistRow = memo(function PlaylistRow(props: PlaylistRowProps) {
         onClick={onMobileClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={track.id ? onContextMenu : undefined}
-        className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${currentClass} ${selectedClass} ${extraRowClass}`}
+        className={`sm:hidden flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-colors ${currentClass} ${selectedClass} ${loadingClass} ${extraRowClass}`}
       >
-        <div className="w-8 flex-shrink-0 text-center cursor-pointer" onClick={onPlayClick}>
+        <div className="w-8 flex-shrink-0 text-center cursor-pointer active:scale-90 active:opacity-70 transition-transform duration-75" onClick={onPlayClick} onTouchStart={() => {/* iOS :active CSS */}}>
           <PlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} index={index + 1} />
         </div>
         <div className="flex-1 min-w-0">
@@ -134,13 +137,13 @@ export const PlaylistRow = memo(function PlaylistRow(props: PlaylistRowProps) {
         onClick={onDesktopClick}
         onDoubleClick={onDoubleClick}
         onContextMenu={track.id ? onContextMenu : undefined}
-        className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${currentClass} ${selectedClass} ${dragClass} ${extraRowClass}`}
+        className={`hidden sm:grid group gap-4 px-4 py-2 items-center rounded-lg hover:bg-zinc-800/50 cursor-pointer transition-all ${currentClass} ${selectedClass} ${loadingClass} ${dragClass} ${extraRowClass}`}
         style={{ gridTemplateColumns: gridColumns }}
       >
         {/* Index cell */}
         <div className="flex items-center">
           {renderDragHandle?.(ctx)}
-          <div className="flex-1 text-center cursor-pointer" onClick={onPlayClick}>
+          <div className="flex-1 text-center cursor-pointer active:scale-90 active:opacity-70 transition-transform duration-75" onClick={onPlayClick} onTouchStart={() => {/* iOS :active CSS */}}>
             <PlayIndicator isCurrent={isCurrentTrack} isPlaying={isPlaying} index={index + 1} />
           </div>
         </div>
