@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError, ValidationError
 from app.db.models import Track, TrackStatus
 
@@ -366,6 +366,7 @@ async def get_stats(db: DbSession) -> PendingStatsResponse:
 @router.post("/{track_id}/approve")
 async def approve_track(
     db: DbSession,
+    _profile: RequiredProfile,
     track_id: UUID,
     request: ApproveRequest,
 ) -> dict[str, str]:
@@ -380,6 +381,7 @@ async def approve_track(
 @router.post("/{track_id}/replace")
 async def replace_track(
     db: DbSession,
+    _profile: RequiredProfile,
     track_id: UUID,
     request: ReplaceRequest,
 ) -> dict[str, str]:
@@ -415,6 +417,7 @@ async def replace_track(
 @router.post("/{track_id}/skip")
 async def skip_track(
     db: DbSession,
+    _profile: RequiredProfile,
     track_id: UUID,
 ) -> dict[str, str]:
     """Permanently ignore a pending track."""
@@ -428,6 +431,7 @@ async def skip_track(
 @router.patch("/{track_id}/metadata")
 async def update_track_metadata(
     db: DbSession,
+    _profile: RequiredProfile,
     track_id: UUID,
     request: MetadataUpdateRequest,
 ) -> dict[str, str]:
@@ -448,6 +452,7 @@ async def update_track_metadata(
 @router.post("/group/approve")
 async def group_approve(
     db: DbSession,
+    _profile: RequiredProfile,
     request: GroupApproveRequest,
 ) -> dict[str, Any]:
     """Approve all pending tracks in a folder."""
@@ -466,6 +471,7 @@ async def group_approve(
 @router.post("/group/skip")
 async def group_skip(
     db: DbSession,
+    _profile: RequiredProfile,
     request: GroupSkipRequest,
 ) -> dict[str, Any]:
     """Skip all pending tracks in a folder."""
@@ -484,6 +490,7 @@ async def group_skip(
 @router.post("/group/replace-upgrades")
 async def group_replace_upgrades(
     db: DbSession,
+    _profile: RequiredProfile,
     request: GroupReplaceUpgradesRequest,
 ) -> dict[str, Any]:
     """Replace all upgrades within a group."""
@@ -515,6 +522,7 @@ async def group_replace_upgrades(
 @router.post("/group/skip-downgrades")
 async def group_skip_downgrades(
     db: DbSession,
+    _profile: RequiredProfile,
     request: GroupSkipDowngradesRequest,
 ) -> dict[str, Any]:
     """Skip all downgrades within a group."""
@@ -534,6 +542,7 @@ async def group_skip_downgrades(
 @router.post("/group/metadata")
 async def group_metadata(
     db: DbSession,
+    _profile: RequiredProfile,
     request: GroupMetadataRequest,
 ) -> dict[str, Any]:
     """Edit shared metadata for all pending tracks in a group."""
@@ -559,6 +568,7 @@ async def group_metadata(
 @router.post("/bulk/approve-all")
 async def bulk_approve_all(
     db: DbSession,
+    _profile: RequiredProfile,
     request: BulkRequest,
 ) -> dict[str, Any]:
     """Approve all pending tracks globally."""
@@ -575,7 +585,7 @@ async def bulk_approve_all(
 
 
 @router.post("/bulk/skip-all")
-async def bulk_skip_all(db: DbSession) -> dict[str, Any]:
+async def bulk_skip_all(db: DbSession, _profile: RequiredProfile) -> dict[str, Any]:
     """Skip all pending tracks globally."""
     result = await db.execute(
         update(Track)
