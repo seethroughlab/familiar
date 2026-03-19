@@ -363,8 +363,12 @@ export function useAudioEngine() {
                 crossfadeEnabledRef.current,
                 crossfadeDurationRef.current,
               );
+              // Clamp to remaining time minus 0.5s buffer so the old track's
+              // scheduleFile callback doesn't fire mid-crossfade
+              const clampedDuration = Math.min(effectiveDuration, timeRemaining - 0.5);
+              if (clampedDuration < 0.5) break; // not enough time for a meaningful crossfade
               queueTransitionRef.current = true;
-              executeCrossfadeRef.current(effectiveDuration, nextTrack);
+              executeCrossfadeRef.current(clampedDuration, nextTrack);
               setTimeout(() => { queueTransitionRef.current = false; }, 1000);
             }
           }

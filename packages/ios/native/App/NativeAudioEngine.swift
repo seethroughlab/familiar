@@ -416,6 +416,10 @@ class NativeAudioEngine {
             DispatchQueue.main.async {
                 guard self.activePlayerIndex == scheduledIndex else { return }
                 guard self.stateQueue.sync(execute: { self.seekOperationToken == scheduleSeekToken }) else { return }
+                guard !self.isCrossfadingFlag else {
+                    print("[FamiliarAudio] scheduleFile callback: blocked by isCrossfadingFlag")
+                    return
+                }
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
@@ -536,6 +540,10 @@ class NativeAudioEngine {
             guard let self = self else { return }
             DispatchQueue.main.async {
                 guard self.stateQueue.sync(execute: { token == self.seekOperationToken }) else { return }
+                guard !self.isCrossfadingFlag else {
+                    print("[FamiliarAudio] seek callback: blocked by isCrossfadingFlag")
+                    return
+                }
                 if self.isPlayerScheduled && !self.isPaused {
                     self.isPlayerScheduled = false
                     self.stopTimeUpdates()
@@ -913,6 +921,7 @@ class NativeAudioEngine {
     func executeCrossfade(duration: Double, completion: @escaping (Bool, String?) -> Void) {
         let crossfadeToken = nextCrossfadeToken()
         let clampedDuration = max(0.001, duration)
+        print("[FamiliarAudio] executeCrossfade: duration=\(duration) preloadState=\(preloadState)")
 
         guard case .ready = preloadState else {
             completion(false, "preload-not-ready")
@@ -953,7 +962,7 @@ class NativeAudioEngine {
         nextPlayerNode.play()
 
         let startTime = Date()
-        crossfadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
             guard let self = self else { timer.invalidate(); return }
             guard self.stateQueue.sync(execute: { crossfadeToken == self.crossfadeOperationToken }) else {
                 timer.invalidate()
@@ -974,6 +983,8 @@ class NativeAudioEngine {
                 )
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        crossfadeTimer = timer
     }
 
     private func finishCrossfade(
@@ -982,6 +993,7 @@ class NativeAudioEngine {
         nextTempFileURL: URL?,
         completion: @escaping () -> Void
     ) {
+        print("[FamiliarAudio] finishCrossfade: nextTrackId=\(nextTrackId)")
         crossfadeTimer?.invalidate()
         crossfadeTimer = nil
 

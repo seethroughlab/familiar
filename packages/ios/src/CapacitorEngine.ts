@@ -194,8 +194,24 @@ export class CapacitorEngine implements AudioEngine {
   executeCrossfade(duration: number, onComplete: () => void): void {
     this.localIsCrossfading = true;
     this.recordDiagnostic('crossfade-start', { duration });
+
+    // Defense in depth: if native crossfade doesn't resolve within duration + 5s,
+    // force-reset to prevent the engine from getting permanently stuck
+    const timeoutMs = (duration + 5) * 1000;
+    const timeoutId = setTimeout(() => {
+      if (this.localIsCrossfading) {
+        log.error('Crossfade timed out after %ds, force-resetting', duration + 5);
+        this.localIsCrossfading = false;
+        this.nextLoadedTrackId = null;
+        this.recordDiagnostic('crossfade-timeout');
+        FamiliarAudio.cancelCrossfade().catch(() => {});
+        onComplete();
+      }
+    }, timeoutMs);
+
     FamiliarAudio.executeCrossfade({ duration })
       .then((result) => {
+        clearTimeout(timeoutId);
         if (result.success === false) {
           this.localIsCrossfading = false;
           this.recordDiagnostic('crossfade-rejected', { reason: result.reason });
@@ -213,6 +229,7 @@ export class CapacitorEngine implements AudioEngine {
         onComplete();
       })
       .catch(e => {
+        clearTimeout(timeoutId);
         this.localIsCrossfading = false;
         this.recordDiagnostic('crossfade-error');
         log.error('executeCrossfade failed', e);
