@@ -31,8 +31,8 @@ class SpotifyImportResponse(BaseModel):
     profile_id: str
     imported_at: str
     spotify_username: str | None = None
-    favorites: dict | None = None
-    playlists: dict | None = None
+    favorites: list | dict | None = None
+    playlists: list | dict | None = None
     streaming_stats: dict | None = None
     match_results: dict | None = None
     summary: dict | None = None
