@@ -34,17 +34,24 @@ import { CollectionContextMenu } from './CollectionContextMenu';
 import { LibraryItemContextMenu } from './LibraryItemContextMenu';
 import { SmartPlaylistBuilder } from '../SmartPlaylists';
 
-const LIBRARY_ITEMS = [
-  { path: '/library/tracks', label: 'Tracks', icon: List },
-  { path: '/library/artists', label: 'Artists', icon: Users },
-  { path: '/library/albums', label: 'Albums', icon: Grid3X3 },
-  { path: '/library/mood-grid', label: 'Mood Grid', icon: Smile },
-  { path: '/library/music-map', label: 'Music Map', icon: Map },
-  { path: '/library/explorer', label: '3D Explorer', icon: Activity },
-  { path: '/library/discover', label: 'Discover', icon: Sparkles },
-  { path: '/library/proposed-changes', label: 'Changes', icon: FileText },
-  { path: '/library/pending-review', label: 'Review', icon: Inbox },
-];
+import { LIBRARY_ITEMS as LIBRARY_ITEM_DEFS } from '../../routes';
+
+const LIBRARY_ICON_MAP: Record<string, typeof List> = {
+  '/library/tracks': List,
+  '/library/artists': Users,
+  '/library/albums': Grid3X3,
+  '/library/mood-grid': Smile,
+  '/library/music-map': Map,
+  '/library/explorer': Activity,
+  '/library/discover': Sparkles,
+  '/library/proposed-changes': FileText,
+  '/library/pending-review': Inbox,
+};
+
+const LIBRARY_ITEMS = LIBRARY_ITEM_DEFS.map((item) => ({
+  ...item,
+  icon: LIBRARY_ICON_MAP[item.path] ?? List,
+}));
 
 const COLLECTION_ITEMS = [
   { path: '/favorites', label: 'Favorites', icon: Heart, countKey: 'favorites' as const },

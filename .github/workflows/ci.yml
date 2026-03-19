@@ -114,7 +114,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
           REDIS_URL: redis://localhost:6379/0
         # Baseline 2026-03-18: TBD (set from first CI run). Threshold set conservatively low.
-        run: uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py tests/test_migrations.py -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=12 --junit-xml=results-contract.xml
+        run: uv run pytest tests/test_contract_error_shapes.py tests/test_contract_auth_matrix.py tests/test_contract_envelope_parity.py tests/test_contract_happy_path.py tests/test_migrations.py -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=12 --junit-xml=results-contract.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
