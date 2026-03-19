@@ -14,6 +14,7 @@ from app.db.models import (
     ProfilePlayHistory,
     Track,
     TrackAnalysis,
+    TrackStatus,
 )
 from app.utils.time import utcnow
 
@@ -46,7 +47,7 @@ class SearchHandlersMixin:
                 Track.genre.ilike(search_filter),
             ])
 
-        stmt = select(Track).where(or_(*conditions)).limit(limit * 5)
+        stmt = select(Track).where(Track.active_filter(), or_(*conditions)).limit(limit * 5)
         result = await self.db.execute(stmt)
         all_tracks = list(result.scalars().all())
 
@@ -81,6 +82,7 @@ class SearchHandlersMixin:
         similar_stmt = (
             select(Track)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+            .where(Track.active_filter())
             .where(Track.id != UUID(track_id))
             .where(TrackAnalysis.embedding.isnot(None))
             .order_by(TrackAnalysis.embedding.cosine_distance(embedding))
@@ -130,6 +132,7 @@ class SearchHandlersMixin:
         similar_stmt = (
             select(Track)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+            .where(Track.active_filter())
             .where(TrackAnalysis.embedding.isnot(None))
             .order_by(TrackAnalysis.embedding.cosine_distance(embedding))
             .limit(limit * 4)  # Fetch extra for diversity filtering
@@ -272,7 +275,7 @@ class SearchHandlersMixin:
         ]) or (sort_by in ("play_count", "last_played"))
 
         # --- Build query ---
-        stmt = select(Track)
+        stmt = select(Track).where(Track.active_filter())
 
         # Join TrackAnalysis only when audio feature filters are used
         if has_audio_features:

@@ -38,18 +38,6 @@ class PreviewRequest(BaseModel):
     limit: int = 100
 
 
-class OrganizeRequest(BaseModel):
-    """Organization request."""
-    template: str = TEMPLATES["artist-album"]
-    dry_run: bool = True
-
-
-class OrganizeTrackRequest(BaseModel):
-    """Single track organization request."""
-    template: str = TEMPLATES["artist-album"]
-    dry_run: bool = False
-
-
 class OrganizeResultResponse(BaseModel):
     """Single track result."""
     track_id: str
@@ -128,44 +116,6 @@ async def preview_organization(
         limit=request.limit,
     )
     return _stats_to_response(stats)
-
-
-@router.post("/run", response_model=OrganizeStatsResponse)
-async def run_organization(
-    request: OrganizeRequest,
-    db: AsyncSession = Depends(get_db),
-) -> OrganizeStatsResponse:
-    """Organize library files according to template.
-
-    Set dry_run=true to preview without moving files.
-    This operation moves files and updates the database.
-    """
-    organizer = LibraryOrganizer(db)
-    stats = await organizer.organize_all(
-        template=request.template,
-        dry_run=request.dry_run,
-    )
-    return _stats_to_response(stats)
-
-
-@router.post("/track/{track_id}", response_model=OrganizeResultResponse)
-async def organize_track(
-    track_id: UUID,
-    request: OrganizeTrackRequest,
-    db: AsyncSession = Depends(get_db),
-) -> OrganizeResultResponse:
-    """Organize a single track."""
-    organizer = LibraryOrganizer(db)
-    result = await organizer.organize_track(
-        track_id=track_id,
-        template=request.template,
-        dry_run=request.dry_run,
-    )
-
-    if result.status == "error" and result.message == "Track not found":
-        raise TrackNotFoundError()
-
-    return _result_to_response(result)
 
 
 @router.get("/track/{track_id}/preview", response_model=OrganizeResultResponse)

@@ -1,11 +1,11 @@
 """Service for managing proposed metadata changes.
 
 Handles the lifecycle of proposed changes: create, preview, approve, reject, apply, undo.
-Changes can affect database records, ID3 tags, and file organization depending on scope.
+Changes update database records only.
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -19,7 +19,6 @@ from app.db.models import (
     ProposedChange,
     Track,
 )
-from app.services.metadata.writer import WriteResult, write_metadata
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -47,10 +46,6 @@ class ApplyResult:
     success: bool
     error: str | None = None
     db_updated: bool = False
-    id3_written: bool = False
-    id3_errors: list[str] = field(default_factory=list)
-    files_moved: bool = False
-    files_errors: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -274,14 +269,8 @@ class ProposedChangesService:
     async def apply(
         self,
         change_id: UUID,
-        scope_override: ChangeScope | None = None,
     ) -> ApplyResult:
-        """Apply a change.
-
-        Args:
-            change_id: The change to apply
-            scope_override: Override the change's default scope
-        """
+        """Apply a change (DB-only update)."""
         change = await self.get_by_id(change_id)
         if not change:
             return ApplyResult(
@@ -297,7 +286,6 @@ class ProposedChangesService:
                 error=f"Cannot apply change with status {change.status.value}",
             )
 
-        scope = scope_override or change.scope
         result = ApplyResult(change_id=change_id, success=True)
 
         try:
@@ -315,33 +303,17 @@ class ProposedChangesService:
                     error="No tracks found for this change",
                 )
 
-            # Step 1: Update database
+            # Update database
             if change.change_type == "metadata" and change.field:
                 await self._apply_metadata_to_db(tracks, change.field, change.new_value)
                 result.db_updated = True
-
-            # Step 2: Write to ID3 tags if scope includes it
-            if scope in (ChangeScope.DB_AND_ID3, ChangeScope.DB_ID3_FILES):
-                if change.change_type == "metadata" and change.field:
-                    id3_results = await self._apply_metadata_to_files(
-                        tracks, change.field, change.new_value
-                    )
-                    result.id3_written = any(r.success for r in id3_results)
-                    result.id3_errors = [r.error for r in id3_results if r.error]
-
-            # Step 3: Reorganize files if scope includes it
-            if scope == ChangeScope.DB_ID3_FILES:
-                # TODO: Integrate with LibraryOrganizer
-                # For now, just note that this would happen
-                logger.info(f"File reorganization would happen for {len(tracks)} tracks")
-                result.files_moved = False
 
             # Mark change as applied
             change.status = ChangeStatus.APPLIED
             change.applied_at = utcnow()
             await self.db.commit()
 
-            logger.info(f"Applied change {change_id} with scope {scope.value}")
+            logger.info(f"Applied change {change_id}")
 
         except Exception as e:
             logger.error(f"Failed to apply change {change_id}: {e}")
@@ -363,47 +335,14 @@ class ProposedChangesService:
                 setattr(track, field, new_value)
         await self.db.commit()
 
-    async def _apply_metadata_to_files(
-        self,
-        tracks: list[Track],
-        field: str,
-        new_value: Any,
-    ) -> list[WriteResult]:
-        """Write metadata to audio files."""
-        from pathlib import Path
-
-        results = []
-        for track in tracks:
-            try:
-                file_path = Path(track.file_path)
-                if not file_path.exists():
-                    results.append(WriteResult(
-                        success=False,
-                        file_path=track.file_path,
-                        error=f"File not found: {track.file_path}",
-                    ))
-                    continue
-
-                metadata = {field: new_value}
-                result = write_metadata(file_path, metadata)
-                results.append(result)
-            except Exception as e:
-                results.append(WriteResult(
-                    success=False,
-                    file_path=track.file_path,
-                    error=str(e),
-                ))
-        return results
-
     async def apply_batch(
         self,
         change_ids: list[UUID],
-        scope_override: ChangeScope | None = None,
     ) -> list[ApplyResult]:
         """Apply multiple changes."""
         results = []
         for change_id in change_ids:
-            result = await self.apply(change_id, scope_override)
+            result = await self.apply(change_id)
             results.append(result)
         return results
 

@@ -2,7 +2,6 @@
 
 import logging
 from collections import defaultdict
-from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -10,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
-from app.db.models import Track
+from app.db.models import Track, TrackStatus
 from app.services.normalize import normalize_for_duplicate_matching
 from app.services.quality import QualityScore, calculate_quality_score
 
@@ -45,15 +44,6 @@ class DeduplicatePreviewResponse(BaseModel):
     total_groups: int
     total_duplicates: int
     groups: list[DuplicateGroup]
-
-
-class DeduplicateExecuteRequest(BaseModel):
-    track_ids: list[UUID]
-
-
-class DeduplicateExecuteResponse(BaseModel):
-    deleted_count: int
-    errors: list[str]
 
 
 # ── Helpers ────────────────────────────────────────────────────
@@ -114,7 +104,7 @@ async def deduplicate_preview(
     album: str | None = Query(None),
 ) -> DeduplicatePreviewResponse:
     """Find duplicate tracks and show what would be kept/removed."""
-    stmt = select(Track)
+    stmt = select(Track).where(Track.active_filter())
     if artist:
         stmt = stmt.where(Track.artist.ilike(f"%{artist}%"))
     if album:
@@ -167,38 +157,3 @@ async def deduplicate_preview(
         total_duplicates=total_dupes,
         groups=duplicate_groups,
     )
-
-
-@router.post("/execute", response_model=DeduplicateExecuteResponse)
-async def deduplicate_execute(
-    db: DbSession,
-    request: DeduplicateExecuteRequest,
-) -> DeduplicateExecuteResponse:
-    """Delete specified duplicate tracks (files + DB records)."""
-    errors: list[str] = []
-    deleted = 0
-
-    for track_id in request.track_ids:
-        result = await db.execute(select(Track).where(Track.id == track_id))
-        track = result.scalar_one_or_none()
-        if not track:
-            errors.append(f"Track {track_id} not found")
-            continue
-
-        # Delete file from disk
-        try:
-            path = Path(track.file_path)
-            if path.exists():
-                path.unlink()
-        except OSError as e:
-            errors.append(f"Failed to delete file {track.file_path}: {e}")
-            continue
-
-        # Delete DB record (cascade removes analyses, playlist entries)
-        await db.delete(track)
-        deleted += 1
-
-    await db.commit()
-
-    logger.info("Deduplication: deleted %d tracks, %d errors", deleted, len(errors))
-    return DeduplicateExecuteResponse(deleted_count=deleted, errors=errors)

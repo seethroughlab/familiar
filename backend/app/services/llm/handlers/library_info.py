@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, text
 
-from app.db.models import Track, TrackAnalysis
+from app.db.models import Track, TrackAnalysis, TrackStatus
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -20,22 +20,24 @@ class LibraryInfoHandlersMixin:
 
     async def _get_library_stats(self: "ToolExecutor") -> dict[str, Any]:
         """Get library statistics."""
-        total_result = await self.db.execute(select(func.count(Track.id)))
+        total_result = await self.db.execute(
+            select(func.count(Track.id)).where(Track.active_filter())
+        )
         total_tracks = total_result.scalar() or 0
 
         artists_result = await self.db.execute(
-            select(func.count(func.distinct(Track.artist)))
+            select(func.count(func.distinct(Track.artist))).where(Track.active_filter())
         )
         total_artists = artists_result.scalar() or 0
 
         albums_result = await self.db.execute(
-            select(func.count(func.distinct(Track.album)))
+            select(func.count(func.distinct(Track.album))).where(Track.active_filter())
         )
         total_albums = albums_result.scalar() or 0
 
         genres_result = await self.db.execute(
             select(Track.genre, func.count(Track.id).label("count"))
-            .where(Track.genre.isnot(None))
+            .where(Track.active_filter(), Track.genre.isnot(None))
             .group_by(Track.genre)
             .order_by(text("count DESC"))
             .limit(10)
@@ -101,7 +103,7 @@ class LibraryInfoHandlersMixin:
 
         genres_result = await self.db.execute(
             select(Track.genre, func.count(Track.id).label("count"))
-            .where(Track.genre.isnot(None))
+            .where(Track.active_filter(), Track.genre.isnot(None))
             .where(Track.genre != "")
             .group_by(Track.genre)
             .order_by(text("count DESC"))

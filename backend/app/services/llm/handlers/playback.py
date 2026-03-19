@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from app.db.models import Track, TrackAnalysis
+from app.db.models import Track, TrackAnalysis, TrackStatus
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -41,7 +41,7 @@ class PlaybackHandlersMixin:
         valid_uuids = self._safe_parse_uuids(track_ids)
         if not valid_uuids:
             return {"queued": 0, "clear_existing": clear_existing, "tracks": [], "note": "No valid track IDs provided"}
-        stmt = select(Track).where(Track.id.in_(valid_uuids))
+        stmt = select(Track).where(Track.active_filter(), Track.id.in_(valid_uuids))
         result = await self.db.execute(stmt)
         tracks = result.scalars().all()
 
@@ -77,7 +77,7 @@ class PlaybackHandlersMixin:
 
     async def _get_track_details(self: "ToolExecutor", track_id: str) -> dict[str, Any]:
         """Get detailed track info including features."""
-        stmt = select(Track).where(Track.id == UUID(track_id))
+        stmt = select(Track).where(Track.active_filter(), Track.id == UUID(track_id))
         result = await self.db.execute(stmt)
         track = result.scalar_one_or_none()
 

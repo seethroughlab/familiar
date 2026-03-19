@@ -14,6 +14,7 @@ from app.db.models import (
     ChangeStatus,
     ProposedChange,
     Track,
+    TrackStatus,
 )
 from app.services.metadata.lookup import get_metadata_lookup_service
 
@@ -33,7 +34,7 @@ class MetadataHandlersMixin:
         except ValueError:
             return {"error": "Invalid track ID"}
 
-        stmt = select(Track).where(Track.id == track_uuid)
+        stmt = select(Track).where(Track.active_filter(), Track.id == track_uuid)
         result = await self.db.execute(stmt)
         track = result.scalar_one_or_none()
 
@@ -90,7 +91,7 @@ class MetadataHandlersMixin:
         valid_uuids = self._safe_parse_uuids(track_ids)
         if not valid_uuids:
             return {"error": "No valid track IDs provided"}
-        stmt = select(Track).where(Track.id.in_(valid_uuids))
+        stmt = select(Track).where(Track.active_filter(), Track.id.in_(valid_uuids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 
@@ -153,7 +154,7 @@ class MetadataHandlersMixin:
         artist: str | None = None,
     ) -> dict[str, Any]:
         """Get all tracks from a specific album."""
-        stmt = select(Track).where(Track.album.ilike(f"%{album}%"))
+        stmt = select(Track).where(Track.active_filter(), Track.album.ilike(f"%{album}%"))
 
         if artist:
             stmt = stmt.where(
@@ -323,7 +324,7 @@ class MetadataHandlersMixin:
         # Get all distinct artists
         stmt = (
             select(Track.artist, func.count(Track.id).label("track_count"))
-            .where(Track.artist.isnot(None), Track.artist != "")
+            .where(Track.active_filter(), Track.artist.isnot(None), Track.artist != "")
             .group_by(Track.artist)
             .order_by(func.count(Track.id).desc())
         )
@@ -386,6 +387,7 @@ class MetadataHandlersMixin:
         """Propose merging duplicate artists by changing the artist field."""
         # Find all tracks with the source artist
         stmt = select(Track).where(
+            Track.active_filter(),
             func.lower(Track.artist) == source_artist.lower()
         )
         result = await self.db.execute(stmt)

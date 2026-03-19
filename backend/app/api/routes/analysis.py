@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.api.exceptions import ConflictError, NotFoundError, TrackNotFoundError, ValidationError
-from app.db.models import Track, TrackAnalysis
+from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.services.background import get_background_manager
 from app.services.track_analysis import (
     generate_comparative_report,
@@ -141,7 +141,7 @@ async def trigger_analysis(track_id: UUID, db: DbSession):
     Runs all missing phases (features, embedding, deep analysis/melodic)
     using a dedicated on-demand executor. Caching is handled internally.
     """
-    track = (await db.execute(select(Track).where(Track.id == track_id))).scalar_one_or_none()
+    track = (await db.execute(select(Track).where(Track.id == track_id, Track.active_filter()))).scalar_one_or_none()
     if not track:
         raise TrackNotFoundError()
 
