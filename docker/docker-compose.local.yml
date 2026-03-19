@@ -44,7 +44,7 @@ services:
     ports:
       - "${API_PORT:-4400}:8000"
     volumes:
-      - ${MUSIC_LIBRARY_PATH:-/data/music}:/music:rw  # Single library mount, rw for imports
+      - ${MUSIC_LIBRARY_PATH:-/data/music}:/music:ro  # Read-only: Familiar never writes to the library
       - art_data:/data/art
       - videos_data:/data/videos
       - app_data:/app/data  # Persists settings.json

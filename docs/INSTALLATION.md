@@ -130,7 +130,7 @@ Familiar works great on OpenMediaVault NAS systems. Here's how to set it up.
        ports:
          - "4400:8000"
        volumes:
-         - /path/to/music:/music:rw  # Your music library (rw allows imports)
+         - /path/to/music:/music:ro  # Your music library (read-only)
          - /path/to/familiar/data:/app/data
          - /path/to/familiar/art:/data/art
          - /path/to/familiar/videos:/data/videos
@@ -317,7 +317,7 @@ Familiar supports Synology NAS with Container Manager (DSM 7.2+) or Docker (olde
        ports:
          - "4400:8000"
        volumes:
-         - /volume1/music:/music:rw  # Your music library (rw allows imports)
+         - /volume1/music:/music:ro  # Your music library (read-only)
          - /volume1/docker/familiar/data:/app/data
          - /volume1/docker/familiar/art:/data/art
          - /volume1/docker/familiar/videos:/data/videos

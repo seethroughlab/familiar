@@ -80,7 +80,7 @@ services:
       options:
         tag: "familiar-api"
     volumes:
-      - ${MUSIC_LIBRARY_PATH:-/data/music}:/music:rw  # Single library mount, rw for imports
+      - ${MUSIC_LIBRARY_PATH:-/data/music}:/music:ro  # Read-only: Familiar never writes to the library
       - ${IMPORTS_INCOMING_PATH:-/data/downloads}:/imports-incoming:ro  # External files available for local-path import
       - app_data:/app/data  # Persists settings.json
       - art_data:/data/art
