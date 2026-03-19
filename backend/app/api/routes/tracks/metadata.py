@@ -54,9 +54,6 @@ class TrackMetadataUpdateRequest(BaseModel):
     # User overrides for analysis values (bpm, key, etc.)
     user_overrides: dict[str, Any] | None = None
 
-    # Whether to write changes to the audio file tags
-    write_to_file: bool = False
-
 
 class TrackMetadataResponse(BaseModel):
     """Extended track response with all metadata fields."""
@@ -99,10 +96,6 @@ class TrackMetadataResponse(BaseModel):
     # Analysis
     features: TrackFeaturesResponse | None = None
 
-    # Write status (only set after update)
-    file_write_status: str | None = None
-    file_write_error: str | None = None
-
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -111,7 +104,6 @@ class BulkMetadataUpdateRequest(BaseModel):
 
     track_ids: list[UUID]
     metadata: TrackMetadataUpdateRequest
-    write_to_files: bool = False
 
 
 class BulkEditErrorResponse(BaseModel):
@@ -204,33 +196,27 @@ async def update_track_metadata(
     track_id: UUID,
     request: TrackMetadataUpdateRequest,
 ) -> TrackMetadataResponse:
-    """Update track metadata in the database and optionally write to audio file.
+    """Update track metadata in the database.
 
-    Only provided fields are updated. Set write_to_file=true to also update
-    the audio file's embedded tags.
+    Only provided fields are updated.
 
     Returns the updated track with all metadata fields.
     """
-    from pathlib import Path
 
-    # Get track
-    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id)
+    # Get track (only ACTIVE tracks can be edited via this endpoint)
+    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id, Track.active_filter())
     result = await db.execute(query)
     track = result.scalar_one_or_none()
 
     if not track:
         raise TrackNotFoundError()
 
-    # Track which fields were updated for file writing
-    updated_fields: dict[str, Any] = {}
-
     # Update only provided fields
-    update_data = request.model_dump(exclude_unset=True, exclude={"write_to_file"})
+    update_data = request.model_dump(exclude_unset=True)
 
     for field, value in update_data.items():
         if hasattr(track, field):
             setattr(track, field, value)
-            updated_fields[field] = value
 
     # Commit database changes
     await db.commit()
@@ -264,38 +250,6 @@ async def update_track_metadata(
                         features_data[key] = val
             response.features = TrackFeaturesResponse(**features_data)
 
-    # Optionally write to audio file
-    if request.write_to_file and updated_fields:
-        from app.services.metadata.writer import write_lyrics, write_metadata
-
-        file_path = Path(track.file_path)
-
-        # Separate lyrics from other metadata (needs special handling)
-        lyrics_value = updated_fields.pop("lyrics", None)
-        updated_fields.pop("user_overrides", None)  # Don't write to file
-
-        # Write standard metadata
-        if updated_fields:
-            write_result = write_metadata(file_path, updated_fields)
-            if write_result.success:
-                response.file_write_status = "success"
-            else:
-                response.file_write_status = "partial"
-                response.file_write_error = write_result.error
-
-        # Write lyrics separately if provided
-        if lyrics_value is not None:
-            lyrics_result = write_lyrics(file_path, lyrics_value)
-            if not lyrics_result.success:
-                if response.file_write_status == "success":
-                    response.file_write_status = "partial"
-                response.file_write_error = (
-                    f"{response.file_write_error or ''} Lyrics: {lyrics_result.error}".strip()
-                )
-
-        if response.file_write_status is None:
-            response.file_write_status = "success"
-
     return response
 
 
@@ -309,7 +263,7 @@ async def get_track_metadata(
     Returns all metadata fields including composer, conductor, lyrics, etc.
     User overrides are merged with analysis features.
     """
-    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id)
+    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id, Track.active_filter())
     result = await db.execute(query)
     track = result.scalar_one_or_none()
 
@@ -353,7 +307,6 @@ async def bulk_update_metadata(
     """Update metadata for multiple tracks at once.
 
     Only provided (non-None) fields in metadata are applied to all tracks.
-    Set write_to_files=true to also update audio file tags.
 
     Returns summary with success/failure counts and any errors.
     """
@@ -361,15 +314,12 @@ async def bulk_update_metadata(
 
     service = BulkEditorService(db)
 
-    # Extract metadata dict (exclude write_to_file as it's handled separately)
-    metadata_dict = request.metadata.model_dump(
-        exclude_unset=True, exclude={"write_to_file"}
-    )
+    # Extract metadata dict
+    metadata_dict = request.metadata.model_dump(exclude_unset=True)
 
     result = await service.apply_to_tracks(
         track_ids=request.track_ids,
         metadata=metadata_dict,
-        write_to_files=request.write_to_files,
     )
 
     return BulkEditResultResponse(

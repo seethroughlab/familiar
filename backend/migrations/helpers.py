@@ -58,6 +58,19 @@ def index_exists(index_name: str) -> bool:
     return result.fetchone() is not None
 
 
+def enum_value_exists(enum_name: str, value: str) -> bool:
+    """Check whether *value* exists in PostgreSQL enum *enum_name*."""
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(
+            "SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid "
+            "WHERE t.typname = :enum_name AND e.enumlabel = :value"
+        ),
+        {"enum_name": enum_name, "value": value},
+    )
+    return result.fetchone() is not None
+
+
 def constraint_exists(table_name: str, constraint_name: str) -> bool:
     """Check whether *constraint_name* exists on *table_name*."""
     conn = op.get_bind()

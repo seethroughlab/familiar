@@ -20,21 +20,23 @@ describe('FamiliarDB types', () => {
   it('should have all expected table properties on db', async () => {
     const { db } = await import('../index')
 
-    // Verify table definitions exist (they may be undefined in test environment
-    // but the properties should be declared)
-    expect('deviceProfile' in db).toBe(true)
-    expect('chatSessions' in db).toBe(true)
-    expect('cachedTracks' in db).toBe(true)
-    expect('offlineTracks' in db).toBe(true)
-    expect('offlineArtwork' in db).toBe(true)
-    expect('pendingActions' in db).toBe(true)
-    expect('playerState' in db).toBe(true)
-    expect('cachedProfiles' in db).toBe(true)
-    expect('cachedPlaylists' in db).toBe(true)
-    expect('cachedSmartPlaylists' in db).toBe(true)
-    expect('cachedFavorites' in db).toBe(true)
-    expect('downloadQueue' in db).toBe(true)
-    expect('partialDownloads' in db).toBe(true)
+    // Dexie table properties are defined via TypeScript !: assertions and
+    // only become real properties after the DB opens. Check the table names
+    // from Dexie's schema instead of using `in` on the instance.
+    const tableNames = db.tables.map((t) => t.name)
+    expect(tableNames).toContain('deviceProfile')
+    expect(tableNames).toContain('chatSessions')
+    expect(tableNames).toContain('cachedTracks')
+    expect(tableNames).toContain('offlineTracks')
+    expect(tableNames).toContain('offlineArtwork')
+    expect(tableNames).toContain('pendingActions')
+    expect(tableNames).toContain('playerState')
+    expect(tableNames).toContain('cachedProfiles')
+    expect(tableNames).toContain('cachedPlaylists')
+    expect(tableNames).toContain('cachedSmartPlaylists')
+    expect(tableNames).toContain('cachedFavorites')
+    expect(tableNames).toContain('downloadQueue')
+    expect(tableNames).toContain('partialDownloads')
   })
 })
 

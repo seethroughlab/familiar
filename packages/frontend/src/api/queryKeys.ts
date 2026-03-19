@@ -112,6 +112,13 @@ export const queryKeys = {
     all: ['spotify-import'] as const,
   },
 
+  // ── Pending Review ──────────────────────────────────────────────────
+  pendingTracks: {
+    all: ['pending-tracks'] as const,
+    groups: (params?: Record<string, unknown>) => ['pending-tracks', 'groups', params] as const,
+    stats: ['pending-tracks', 'stats'] as const,
+  },
+
   // ── Proposed Changes ──────────────────────────────────────────────────
   proposedChanges: {
     all: ['proposed-changes'] as const,

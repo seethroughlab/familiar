@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.services.flac_remux import needs_remux, remux_flac_in_place
+from app.services.flac_remux import needs_remux
 
 # Skip all tests if ffmpeg/ffprobe not available
 pytestmark = pytest.mark.skipif(
@@ -86,70 +86,3 @@ class TestNeedsRemux:
             assert await needs_remux(Path("/fake/file.flac")) is False
 
 
-class TestRemuxInPlace:
-    """Tests for remux_flac_in_place() atomic re-muxing."""
-
-    @pytest.mark.asyncio
-    async def test_remux_preserves_audio(self):
-        """Re-muxed file should still be a valid FLAC of similar size."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            flac = Path(tmpdir) / "test.flac"
-            _generate_flac(flac)
-            original_size = flac.stat().st_size
-
-            await remux_flac_in_place(flac)
-
-            assert flac.exists()
-            new_size = flac.stat().st_size
-            # Size should be similar (lossless copy)
-            assert new_size > 0
-            assert abs(new_size - original_size) / original_size < 0.5
-
-    @pytest.mark.asyncio
-    async def test_remux_produces_valid_pts(self):
-        """After re-mux, the file should have valid PTS."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            flac = Path(tmpdir) / "test.flac"
-            _generate_flac(flac)
-
-            await remux_flac_in_place(flac)
-
-            assert await needs_remux(flac) is False
-
-    @pytest.mark.asyncio
-    async def test_original_untouched_on_ffmpeg_failure(self):
-        """If ffmpeg fails, the original file should be preserved."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            flac = Path(tmpdir) / "test.flac"
-            _generate_flac(flac)
-            original_content = flac.read_bytes()
-
-            mock_proc = AsyncMock()
-            mock_proc.communicate.return_value = (b"", b"encode error")
-            mock_proc.returncode = 1
-
-            with patch("app.services.flac_remux.asyncio.create_subprocess_exec", return_value=mock_proc):
-                with pytest.raises(RuntimeError, match="ffmpeg failed"):
-                    await remux_flac_in_place(flac)
-
-            # Original should be untouched
-            assert flac.read_bytes() == original_content
-
-    @pytest.mark.asyncio
-    async def test_no_leftover_temp_files_on_failure(self):
-        """No temp files should remain after a failed re-mux."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            flac = Path(tmpdir) / "test.flac"
-            _generate_flac(flac)
-
-            mock_proc = AsyncMock()
-            mock_proc.communicate.return_value = (b"", b"error")
-            mock_proc.returncode = 1
-
-            with patch("app.services.flac_remux.asyncio.create_subprocess_exec", return_value=mock_proc):
-                with pytest.raises(RuntimeError):
-                    await remux_flac_in_place(flac)
-
-            # Only the original should remain
-            files = list(Path(tmpdir).iterdir())
-            assert files == [flac]

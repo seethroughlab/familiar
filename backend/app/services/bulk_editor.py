@@ -5,7 +5,6 @@ Provides operations for editing metadata across multiple tracks at once.
 
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -13,7 +12,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track
-from app.services.metadata.writer import write_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -73,14 +71,12 @@ class BulkEditorService:
         self,
         track_ids: list[UUID],
         metadata: dict[str, Any],
-        write_to_files: bool = True,
     ) -> BulkEditResult:
         """Apply metadata changes to multiple tracks.
 
         Args:
             track_ids: List of track UUIDs to update
             metadata: Dict of field -> value to apply. Only non-None values are applied.
-            write_to_files: If True, write changes to audio files as well as database
 
         Returns:
             BulkEditResult with success/failure counts and any errors
@@ -100,7 +96,7 @@ class BulkEditorService:
             )
 
         # Fetch all tracks
-        stmt = select(Track).where(Track.id.in_(track_ids))
+        stmt = select(Track).where(Track.active_filter(), Track.id.in_(track_ids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 
@@ -123,30 +119,6 @@ class BulkEditorService:
 
         for track in tracks:
             try:
-                # Write to file first if requested
-                if write_to_files:
-                    file_path = Path(track.file_path)
-                    if not file_path.exists():
-                        errors.append(
-                            BulkEditError(
-                                track_id=str(track.id),
-                                file_path=track.file_path,
-                                error="File not found",
-                            )
-                        )
-                        continue
-
-                    write_result = write_metadata(file_path, updates)
-                    if not write_result.success:
-                        errors.append(
-                            BulkEditError(
-                                track_id=str(track.id),
-                                file_path=track.file_path,
-                                error=write_result.error or "Write failed",
-                            )
-                        )
-                        continue
-
                 # Update database
                 for field_name, value in updates.items():
                     setattr(track, field_name, value)
@@ -188,7 +160,7 @@ class BulkEditorService:
         if not track_ids:
             return {}
 
-        stmt = select(Track).where(Track.id.in_(track_ids))
+        stmt = select(Track).where(Track.active_filter(), Track.id.in_(track_ids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 
@@ -224,7 +196,7 @@ class BulkEditorService:
         Returns:
             List of dicts with track metadata
         """
-        stmt = select(Track).where(Track.id.in_(track_ids))
+        stmt = select(Track).where(Track.active_filter(), Track.id.in_(track_ids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 

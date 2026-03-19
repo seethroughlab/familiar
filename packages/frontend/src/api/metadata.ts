@@ -35,11 +35,6 @@ export const organizerApi = {
     return data;
   },
 
-  run: async (template: string, dryRun = true): Promise<OrganizeStats> => {
-    const { data } = await api.post('/library/organize/run', { template, dry_run: dryRun });
-    return data;
-  },
-
   previewTrack: async (trackId: string, template: string): Promise<OrganizeResult> => {
     const { data } = await api.get(`/library/organize/track/${trackId}/preview`, {
       params: { template },
@@ -47,13 +42,6 @@ export const organizerApi = {
     return data;
   },
 
-  organizeTrack: async (trackId: string, template: string, dryRun = false): Promise<OrganizeResult> => {
-    const { data } = await api.post(`/library/organize/track/${trackId}`, {
-      template,
-      dry_run: dryRun,
-    });
-    return data;
-  },
 };
 
 // Artwork prefetch API
@@ -146,7 +134,7 @@ export const artworkApi = {
 // Proposed Changes API
 export type ChangeStatus = 'pending' | 'rejected' | 'applied';
 export type ChangeSource = 'user_request' | 'llm_suggestion' | 'musicbrainz' | 'spotify';
-export type ChangeScope = 'db_only' | 'db_and_id3' | 'db_id3_files';
+export type ChangeScope = 'db_only';
 
 export interface ProposedChange {
   id: string;
@@ -183,10 +171,6 @@ export interface ApplyResult {
   success: boolean;
   error: string | null;
   db_updated: boolean;
-  id3_written: boolean;
-  id3_errors: string[];
-  files_moved: boolean;
-  files_errors: string[];
 }
 
 export interface ChangeStats {
@@ -251,10 +235,8 @@ export const proposedChangesApi = {
     return data;
   },
 
-  apply: async (changeId: string, scope?: ChangeScope): Promise<ApplyResult> => {
-    const { data } = await api.post(`/proposed-changes/${changeId}/apply`, null, {
-      params: scope ? { scope } : undefined,
-    });
+  apply: async (changeId: string): Promise<ApplyResult> => {
+    const { data } = await api.post(`/proposed-changes/${changeId}/apply`);
     return data;
   },
 
@@ -268,10 +250,9 @@ export const proposedChangesApi = {
     return data;
   },
 
-  batchApply: async (changeIds: string[], scope?: ChangeScope): Promise<ApplyResult[]> => {
+  batchApply: async (changeIds: string[]): Promise<ApplyResult[]> => {
     const { data } = await api.post('/proposed-changes/batch/apply', {
       change_ids: changeIds,
-      scope,
     });
     return data;
   },

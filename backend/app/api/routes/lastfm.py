@@ -184,7 +184,7 @@ async def update_now_playing(
         raise ValidationError("Not connected to Last.fm")
 
     # Get track from database
-    query = select(Track).where(Track.id == UUID(request.track_id))
+    query = select(Track).where(Track.id == UUID(request.track_id), Track.active_filter())
     result = await db.execute(query)
     track = result.scalar_one_or_none()
 
@@ -236,7 +236,7 @@ async def scrobble_track(
         raise ValidationError("Not connected to Last.fm")
 
     # Get track from database
-    query = select(Track).where(Track.id == UUID(request.track_id))
+    query = select(Track).where(Track.id == UUID(request.track_id), Track.active_filter())
     result = await db.execute(query)
     track = result.scalar_one_or_none()
 

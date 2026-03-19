@@ -102,6 +102,9 @@ class Track(Base):
     )
     missing_since: Mapped[datetime | None] = mapped_column(DateTime)  # When file was first not found
 
+    # Review queue metadata (populated when status=PENDING_REVIEW, null otherwise)
+    review_info: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
     # Relationships
     analyses: Mapped[list["TrackAnalysis"]] = relationship(
         back_populates="track", cascade="all, delete"
@@ -109,6 +112,11 @@ class Track(Base):
     playlist_entries: Mapped[list["PlaylistTrack"]] = relationship(
         back_populates="track", cascade="all, delete"
     )
+
+    @classmethod
+    def active_filter(cls):
+        """Standard filter to exclude non-active tracks from queries."""
+        return cls.status == TrackStatus.ACTIVE
 
     @property
     def analysis_version(self) -> int:

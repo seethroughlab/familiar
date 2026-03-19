@@ -82,7 +82,7 @@ class AnalysisHandlersMixin:
 
                 # Load track metadata
                 track = (
-                    await self.db.execute(select(Track).where(Track.id == UUID(tid)))
+                    await self.db.execute(select(Track).where(Track.active_filter(), Track.id == UUID(tid)))
                 ).scalar_one_or_none()
 
                 if track:

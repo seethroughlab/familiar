@@ -135,18 +135,7 @@ function LegacyRedirect() {
   return null;
 }
 
-// Browser ID to route path mapping
-const BROWSER_ROUTES = [
-  { path: 'tracks', browserId: 'track-list' },
-  { path: 'artists', browserId: 'artist-list' },
-  { path: 'albums', browserId: 'album-grid' },
-  { path: 'mood-grid', browserId: 'mood-grid' },
-  { path: 'music-map', browserId: 'ego-music-map' },
-  { path: 'explorer', browserId: 'umap-explorer' },
-  { path: 'discover', browserId: 'discover' },
-  { path: 'proposed-changes', browserId: 'proposed-changes' },
-  { path: 'spotify', browserId: 'spotify' },
-];
+import { BROWSER_ROUTES } from './routes';
 
 // PWA Reset utility
 function resetPWAState() {

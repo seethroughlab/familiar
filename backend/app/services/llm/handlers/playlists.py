@@ -48,7 +48,7 @@ class PlaylistHandlersMixin:
         valid_uuids = self._safe_parse_uuids(track_ids)
         if not valid_uuids:
             return {"tracks": [], "count": 0, "note": "No valid track IDs provided"}
-        stmt = select(Track).where(Track.id.in_(valid_uuids))
+        stmt = select(Track).where(Track.active_filter(), Track.id.in_(valid_uuids))
         result = await self.db.execute(stmt)
         tracks = list(result.scalars().all())
 
@@ -258,6 +258,7 @@ class PlaylistHandlersMixin:
         if track:
             # Search for specific track
             stmt = select(Track).where(
+                Track.active_filter(),
                 func.lower(Track.artist).contains(artist.lower()),
                 func.lower(Track.title).contains(track.lower()),
             ).limit(1)
@@ -268,6 +269,7 @@ class PlaylistHandlersMixin:
 
             # Try fuzzy match on title
             stmt = select(Track).where(
+                Track.active_filter(),
                 func.lower(Track.artist).contains(artist.lower()),
             ).limit(100)
             result = await self.db.execute(stmt)
@@ -292,6 +294,7 @@ class PlaylistHandlersMixin:
         if album:
             # Search for album tracks
             stmt = select(Track).where(
+                Track.active_filter(),
                 func.lower(Track.artist).contains(artist.lower()),
                 func.lower(Track.album).contains(album.lower()),
             ).order_by(Track.disc_number, Track.track_number).limit(limit)
@@ -302,6 +305,7 @@ class PlaylistHandlersMixin:
 
             # Try album_artist match
             stmt = select(Track).where(
+                Track.active_filter(),
                 func.lower(Track.album_artist).contains(artist.lower()),
                 func.lower(Track.album).contains(album.lower()),
             ).order_by(Track.disc_number, Track.track_number).limit(limit)
@@ -312,6 +316,7 @@ class PlaylistHandlersMixin:
 
         # Fall back to any tracks by artist
         stmt = select(Track).where(
+            Track.active_filter(),
             func.lower(Track.artist).contains(artist.lower()),
         ).limit(limit)
         result = await self.db.execute(stmt)

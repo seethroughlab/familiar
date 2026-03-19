@@ -1,14 +1,13 @@
-"""Library organization service for reorganizing music files."""
+"""Library organization service for previewing music file reorganization."""
 
 import logging
 import re
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import MUSIC_LIBRARY_PATH
@@ -92,9 +91,9 @@ class OrganizeStats:
 
 
 class LibraryOrganizer:
-    """Reorganizes music files according to a template.
+    """Previews music file reorganization according to a template.
 
-    Only moves files with complete metadata to avoid creating
+    Only considers files with complete metadata to avoid creating
     messy folder structures from poorly-tagged files.
     """
 
@@ -140,7 +139,7 @@ class LibraryOrganizer:
         Does not move any files.
         """
         result = await self.db.execute(
-            select(Track).where(Track.id == track_id)
+            select(Track).where(Track.active_filter(), Track.id == track_id)
         )
         track = result.scalar_one_or_none()
 
@@ -181,157 +180,16 @@ class LibraryOrganizer:
             message="Ready to move",
         )
 
-    async def organize_track(
-        self,
-        track_id: UUID,
-        template: str = TEMPLATES["artist-album"],
-        dry_run: bool = False,
-    ) -> OrganizeResult:
-        """Organize a single track according to template.
-
-        Args:
-            track_id: Track to organize
-            template: Path template with placeholders
-            dry_run: If True, don't actually move files
-
-        Returns:
-            OrganizeResult with status and paths
-        """
-        result = await self.db.execute(
-            select(Track).where(Track.id == track_id)
-        )
-        track = result.scalar_one_or_none()
-
-        if not track:
-            return OrganizeResult(
-                track_id=track_id,
-                old_path="",
-                new_path=None,
-                status="error",
-                message="Track not found",
-            )
-
-        old_path = Path(track.file_path)
-
-        # Check metadata completeness
-        if not self._has_complete_metadata(track):
-            return OrganizeResult(
-                track_id=track_id,
-                old_path=str(old_path),
-                new_path=None,
-                status="skipped",
-                message="Incomplete metadata",
-            )
-
-        # Generate new path
-        new_path = self._format_path(track, template)
-
-        # Skip if already at target
-        if old_path == new_path:
-            return OrganizeResult(
-                track_id=track_id,
-                old_path=str(old_path),
-                new_path=str(new_path),
-                status="skipped",
-                message="Already organized",
-            )
-
-        if dry_run:
-            return OrganizeResult(
-                track_id=track_id,
-                old_path=str(old_path),
-                new_path=str(new_path),
-                status="moved",
-                message="Would move (dry run)",
-            )
-
-        try:
-            # Check source exists
-            if not old_path.exists():
-                return OrganizeResult(
-                    track_id=track_id,
-                    old_path=str(old_path),
-                    new_path=str(new_path),
-                    status="error",
-                    message="Source file not found",
-                )
-
-            # Check target doesn't already exist
-            if new_path.exists():
-                return OrganizeResult(
-                    track_id=track_id,
-                    old_path=str(old_path),
-                    new_path=str(new_path),
-                    status="error",
-                    message="Target path already exists",
-                )
-
-            # Create parent directories
-            new_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Move the file
-            shutil.move(str(old_path), str(new_path))
-
-            # Update database
-            await self.db.execute(
-                update(Track)
-                .where(Track.id == track_id)
-                .values(file_path=str(new_path))
-            )
-            await self.db.commit()
-
-            # Try to remove empty parent directories
-            self._cleanup_empty_dirs(old_path.parent)
-
-            logger.info(f"Organized track: {old_path} -> {new_path}")
-
-            return OrganizeResult(
-                track_id=track_id,
-                old_path=str(old_path),
-                new_path=str(new_path),
-                status="moved",
-                message="Successfully moved",
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to organize {track_id}: {e}")
-            return OrganizeResult(
-                track_id=track_id,
-                old_path=str(old_path),
-                new_path=str(new_path),
-                status="error",
-                message=str(e),
-            )
-
-    def _cleanup_empty_dirs(self, directory: Path) -> None:
-        """Remove empty parent directories up to library root."""
-        try:
-            while directory != self.library_root and directory.exists():
-                if any(directory.iterdir()):
-                    break  # Directory not empty
-                directory.rmdir()
-                logger.debug(f"Removed empty directory: {directory}")
-                directory = directory.parent
-        except Exception as e:
-            logger.warning(f"Failed to cleanup empty dirs: {e}")
-
-    async def organize_all(
+    async def preview_all(
         self,
         template: str = TEMPLATES["artist-album"],
-        dry_run: bool = False,
-        limit: int | None = None,
+        limit: int = 100,
     ) -> OrganizeStats:
-        """Organize all tracks in the library.
+        """Preview organization for all tracks (limited).
 
-        Args:
-            template: Path template to use
-            dry_run: If True, don't actually move files
-            limit: Maximum number of tracks to process
-
-        Returns:
-            OrganizeStats with counts and results
+        Returns what would happen without moving any files.
         """
-        query = select(Track)
+        query = select(Track).where(Track.active_filter())
         if limit:
             query = query.limit(limit)
 
@@ -347,7 +205,7 @@ class LibraryOrganizer:
         )
 
         for track in tracks:
-            organize_result = await self.organize_track(track.id, template, dry_run)
+            organize_result = await self.preview_track(track.id, template)
             stats.results.append(organize_result)
 
             if organize_result.status == "moved":
@@ -358,17 +216,6 @@ class LibraryOrganizer:
                 stats.errors += 1
 
         return stats
-
-    async def preview_all(
-        self,
-        template: str = TEMPLATES["artist-album"],
-        limit: int = 100,
-    ) -> OrganizeStats:
-        """Preview organization for all tracks (limited).
-
-        Returns what would happen without moving any files.
-        """
-        return await self.organize_all(template, dry_run=True, limit=limit)
 
 
 def get_available_templates() -> dict[str, str]:

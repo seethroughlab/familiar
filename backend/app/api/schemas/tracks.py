@@ -42,6 +42,7 @@ class TrackResponse(BaseModel):
     genre: str | None
     duration_seconds: float | None
     format: str | None
+    status: str = "active"
     analysis_version: int
     features: TrackFeaturesResponse | None = None
     # Play history (profile-specific, populated when profile header is present)

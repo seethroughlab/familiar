@@ -9,7 +9,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download, Disc3,
+  Heart, Download, Disc3, Inbox,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
@@ -20,7 +20,7 @@ import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { playlistsApi, smartPlaylistsApi, pendingTracksApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { spotifyApi } from '../../api/spotify';
 import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
@@ -34,16 +34,24 @@ import { CollectionContextMenu } from './CollectionContextMenu';
 import { LibraryItemContextMenu } from './LibraryItemContextMenu';
 import { SmartPlaylistBuilder } from '../SmartPlaylists';
 
-const LIBRARY_ITEMS = [
-  { path: '/library/tracks', label: 'Tracks', icon: List },
-  { path: '/library/artists', label: 'Artists', icon: Users },
-  { path: '/library/albums', label: 'Albums', icon: Grid3X3 },
-  { path: '/library/mood-grid', label: 'Mood Grid', icon: Smile },
-  { path: '/library/music-map', label: 'Music Map', icon: Map },
-  { path: '/library/explorer', label: '3D Explorer', icon: Activity },
-  { path: '/library/discover', label: 'Discover', icon: Sparkles },
-  { path: '/library/proposed-changes', label: 'Changes', icon: FileText },
-];
+import { LIBRARY_ITEMS as LIBRARY_ITEM_DEFS } from '../../routes';
+
+const LIBRARY_ICON_MAP: Record<string, typeof List> = {
+  '/library/tracks': List,
+  '/library/artists': Users,
+  '/library/albums': Grid3X3,
+  '/library/mood-grid': Smile,
+  '/library/music-map': Map,
+  '/library/explorer': Activity,
+  '/library/discover': Sparkles,
+  '/library/proposed-changes': FileText,
+  '/library/pending-review': Inbox,
+};
+
+const LIBRARY_ITEMS = LIBRARY_ITEM_DEFS.map((item) => ({
+  ...item,
+  icon: LIBRARY_ICON_MAP[item.path] ?? List,
+}));
 
 const COLLECTION_ITEMS = [
   { path: '/favorites', label: 'Favorites', icon: Heart, countKey: 'favorites' as const },
@@ -85,6 +93,15 @@ export function Sidebar() {
     favorites: favoritesCount,
     downloads: downloadsCount,
   };
+
+  // Pending review count
+  const { data: pendingStats } = useQuery({
+    queryKey: queryKeys.pendingTracks.stats,
+    queryFn: () => pendingTracksApi.getStats(),
+    staleTime: STALE_TIME.MEDIUM,
+    retry: offlineAwareRetry(isOffline, 1),
+  });
+  const pendingReviewCount = pendingStats?.total_tracks ?? 0;
 
   // Spotify import existence check (shares cache with SpotifyBrowser)
   const { data: spotifyImport } = useQuery({
@@ -232,7 +249,12 @@ export function Sidebar() {
                 }`}
               >
                 <item.icon className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate flex-1">{item.label}</span>
+                {item.path === '/library/pending-review' && pendingReviewCount > 0 && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-600 text-white min-w-[1.25rem] text-center">
+                    {pendingReviewCount}
+                  </span>
+                )}
               </Link>
             </div>
           ))}

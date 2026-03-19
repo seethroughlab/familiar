@@ -24,7 +24,7 @@ async def queue_tracks_for_features(limit: int | None = None) -> int:
         limit = adaptive_queue_limit()
     from sqlalchemy import or_, select
 
-    from app.db.models import Track, TrackAnalysis
+    from app.db.models import Track, TrackAnalysis, TrackStatus
     from app.db.session import async_session_maker
     from app.services.background import get_background_manager
 
@@ -36,10 +36,12 @@ async def queue_tracks_for_features(limit: int | None = None) -> int:
         # 1. No TrackAnalysis row (never attempted)
         # 2. Outdated features_version
         # 3. Previously failed but 24h has passed (retry window open)
+        # Only analyze ACTIVE tracks (not PENDING_REVIEW or SKIPPED)
         result = await db.execute(
             select(Track.id)
             .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
+                Track.status == TrackStatus.ACTIVE,
                 or_(
                     TrackAnalysis.id.is_(None),
                     TrackAnalysis.features_version < FEATURES_VERSION,
@@ -213,7 +215,7 @@ async def queue_unanalyzed_tracks(limit: int | None = None) -> int:
         limit = adaptive_queue_limit()
     from sqlalchemy import and_, or_, select
 
-    from app.db.models import Track, TrackAnalysis
+    from app.db.models import Track, TrackAnalysis, TrackStatus
     from app.db.session import async_session_maker
     from app.services.analysis import get_analysis_capabilities
     from app.services.background import get_background_manager
@@ -229,6 +231,7 @@ async def queue_unanalyzed_tracks(limit: int | None = None) -> int:
             select(Track.id)
             .outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
+                Track.status == TrackStatus.ACTIVE,
                 or_(
                     TrackAnalysis.id.is_(None),
                     TrackAnalysis.features_version < FEATURES_VERSION,

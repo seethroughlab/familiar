@@ -351,6 +351,7 @@ class LibraryScanner:
             "still_missing": 0,   # Already missing, still not found
             "recovered": 0,       # Previously missing, now found
             "relocated": 0,       # Found at different path
+            "pending_review": 0,  # New tracks awaiting user review
         }
 
         # Track IDs to queue for analysis after commit
@@ -433,13 +434,15 @@ class LibraryScanner:
 
                     if is_collision:
                         # Different files that happen to share a partial hash.
-                        # Treat the new file as truly new.
-                        logger.info(f"NEW (collision): {file_path.name}")
+                        # Treat the new file as truly new — pending review.
+                        logger.info(f"NEW (collision, pending review): {file_path.name}")
                         track = await self._create_track(file_path, file_hash, file_mtime, file_size)
                         track.full_file_hash = full_hash_new
-                        pending_analysis_ids.append(str(track.id))
-                        results["new"] += 1
-                        results["queued"] += 1
+                        track.status = TrackStatus.PENDING_REVIEW
+                        # Run duplicate detection for review_info
+                        from app.services.duplicate_detection import detect_duplicate_for_track
+                        track.review_info = await detect_duplicate_for_track(self.db, track) or {}
+                        results["pending_review"] += 1
                     else:
                         # Genuine relocation (old file gone, or full hashes match)
                         logger.info(f"RELOCATED (by hash): {Path(old_path).name} -> {path_str}")
@@ -452,12 +455,14 @@ class LibraryScanner:
                         if old_path in existing_paths:
                             del existing_paths[old_path]
                 else:
-                    # Truly new file
-                    logger.info(f"NEW: {file_path.name}")
+                    # Truly new file — pending review
+                    logger.info(f"NEW (pending review): {file_path.name}")
                     track = await self._create_track(file_path, file_hash, file_mtime, file_size)
-                    pending_analysis_ids.append(str(track.id))
-                    results["new"] += 1
-                    results["queued"] += 1
+                    track.status = TrackStatus.PENDING_REVIEW
+                    # Run duplicate detection for review_info (default to {} so recovery knows it was pending)
+                    from app.services.duplicate_detection import detect_duplicate_for_track
+                    track.review_info = await detect_duplicate_for_track(self.db, track) or {}
+                    results["pending_review"] += 1
                     # Add to hash lookup so subsequent files with same hash are detected
                     existing_hashes[file_hash] = track
             else:
@@ -466,7 +471,8 @@ class LibraryScanner:
                 # Check if track was previously missing and is now recovered
                 if existing.status in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
                     logger.info(f"RECOVERED: {file_path.name}")
-                    existing.status = TrackStatus.ACTIVE
+                    # Restore to pre-missing status: PENDING_REVIEW if never approved, ACTIVE otherwise
+                    existing.status = TrackStatus.PENDING_REVIEW if existing.review_info is not None else TrackStatus.ACTIVE
                     existing.missing_since = None
                     results["recovered"] += 1
 
@@ -538,14 +544,14 @@ class LibraryScanner:
                     track.file_path = new_path
                     # If it was missing, recover it
                     if track.status in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
-                        track.status = TrackStatus.ACTIVE
+                        track.status = TrackStatus.PENDING_REVIEW if track.review_info is not None else TrackStatus.ACTIVE
                         track.missing_since = None
                         results["recovered"] += 1
                     results["relocated"] += 1
                     continue
 
             # File not found - mark as missing instead of deleting
-            if track.status == TrackStatus.ACTIVE:
+            if track.status in (TrackStatus.ACTIVE, TrackStatus.PENDING_REVIEW):
                 # First time this track is missing
                 logger.info(f"MISSING: {Path(path_str).name}")
                 track.status = TrackStatus.MISSING

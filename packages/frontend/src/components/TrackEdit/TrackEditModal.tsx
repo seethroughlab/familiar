@@ -59,7 +59,6 @@ export function TrackEditModal() {
   const [formData, setFormData] = useState<Partial<TrackMetadataUpdate>>({});
   const [changedFields, setChangedFields] = useState<Set<string>>(new Set());
   const [isDirty, setIsDirty] = useState(false);
-  const [writeToFile, setWriteToFile] = useState(true);
 
   // Get selected IDs for bulk editing
   const selectedIds = getSelectedIds();
@@ -103,8 +102,8 @@ export function TrackEditModal() {
 
   // Bulk update mutation — uses dedicated bulk endpoint
   const bulkUpdateMutation = useMutation({
-    mutationFn: async ({ metadata, writeToFiles }: { metadata: Partial<TrackMetadataUpdate>; writeToFiles: boolean }) => {
-      return bulkTracksApi.updateMetadata(selectedIds, metadata, writeToFiles);
+    mutationFn: async ({ metadata }: { metadata: Partial<TrackMetadataUpdate> }) => {
+      return bulkTracksApi.updateMetadata(selectedIds, metadata);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
@@ -193,10 +192,7 @@ export function TrackEditModal() {
   const handleApplyToTrack = useCallback(
     async (targetTrackId: string, metadata: Partial<TrackMetadataUpdate>) => {
       try {
-        await tracksApi.updateMetadata(targetTrackId, {
-          ...metadata,
-          write_to_file: writeToFile,
-        });
+        await tracksApi.updateMetadata(targetTrackId, metadata);
         // Invalidate to refresh UI
         queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
         queryClient.invalidateQueries({ queryKey: queryKeys.trackMetadata.detail(targetTrackId) });
@@ -204,7 +200,7 @@ export function TrackEditModal() {
         log.error(`Failed to update track ${targetTrackId}:`, error);
       }
     },
-    [writeToFile, queryClient]
+    [queryClient]
   );
 
   const handleFieldChange = (field: keyof TrackMetadataUpdate, value: unknown) => {
@@ -220,11 +216,10 @@ export function TrackEditModal() {
       for (const field of changedFields) {
         changedData[field as keyof TrackMetadataUpdate] = formData[field as keyof TrackMetadataUpdate] as never;
       }
-      bulkUpdateMutation.mutate({ metadata: changedData, writeToFiles: writeToFile });
+      bulkUpdateMutation.mutate({ metadata: changedData });
     } else {
       const update: TrackMetadataUpdate = {
         ...formData,
-        write_to_file: writeToFile,
       };
       updateMutation.mutate(update);
     }
@@ -339,17 +334,7 @@ export function TrackEditModal() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-t border-zinc-700">
-          <label className="flex items-center gap-2 text-sm text-zinc-400">
-            <input
-              type="checkbox"
-              checked={writeToFile}
-              onChange={(e) => setWriteToFile(e.target.checked)}
-              className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
-            />
-            Write changes to audio file
-          </label>
-
+        <div className="flex items-center justify-end px-4 py-3 sm:px-6 sm:py-4 border-t border-zinc-700">
           <div className="flex items-center gap-3">
             {activeMutation.isSuccess && (
               <span className="flex items-center gap-1 text-sm text-green-400">

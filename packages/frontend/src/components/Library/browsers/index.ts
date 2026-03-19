@@ -13,6 +13,7 @@ import './MoodGrid';
 import './EgoMusicMap';
 import './UMAPExplorer';
 import './ProposedChangesBrowser';
+import './PendingReviewBrowser';
 import './DiscoverBrowser';
 import './SpotifyBrowser';
 

@@ -282,12 +282,10 @@ export const bulkTracksApi = {
   updateMetadata: async (
     trackIds: string[],
     metadata: Partial<TrackMetadataUpdate>,
-    writeToFiles: boolean
   ): Promise<BulkEditResultResponse> => {
     const { data } = await api.post('/tracks/bulk/metadata', {
       track_ids: trackIds,
       metadata,
-      write_to_files: writeToFiles,
     });
     return data;
   },
@@ -329,9 +327,6 @@ export interface TrackMetadataUpdate {
 
   // User overrides for analysis values
   user_overrides?: Record<string, number | string | null>;
-
-  // Whether to write changes to the audio file
-  write_to_file?: boolean;
 }
 
 export interface TrackMetadataResponse {

@@ -186,7 +186,7 @@ class TestLibraryScanner:
             # artist3/album1/celebration.mp3, artist3/album1/epic_boss_battle.mp3
             assert results["total"] == 9
             # 8 are new, last one matches hash of electronic_short (relocated)
-            assert results["new"] == 8
+            assert results["pending_review"] == 8
             assert results["relocated"] == 1
 
     async def test_scan_creates_tracks_with_metadata(self, clean_db):
@@ -224,11 +224,11 @@ class TestLibraryScanner:
 
             # First scan
             results1 = await scanner.scan(tmp_path)
-            assert results1["new"] == 1
+            assert results1["pending_review"] == 1
 
             # Second scan - same file
             results2 = await scanner.scan(tmp_path)
-            assert results2["new"] == 0
+            assert results2["pending_review"] == 0
             assert results2["unchanged"] == 1
 
     async def test_hash_based_relocation_after_move(self, clean_db):
@@ -246,7 +246,7 @@ class TestLibraryScanner:
 
             # First scan - discovers file at original location
             results1 = await scanner.scan(tmp_path / "original_location")
-            assert results1["new"] == 1
+            assert results1["pending_review"] == 1
             assert results1["total"] == 1
 
             # Get the track and verify its path
@@ -267,7 +267,7 @@ class TestLibraryScanner:
             results2 = await scanner.scan(tmp_path / "new_location")
 
             # Should relocate the existing track, not create a new one
-            assert results2["new"] == 0, "Should not create new track"
+            assert results2["pending_review"] == 0, "Should not create new track"
             assert results2["relocated"] == 1, "Should relocate by hash"
             assert results2["total"] == 1
 
@@ -310,12 +310,12 @@ class TestLibraryScanner:
 
             # Scan first mount point
             results1 = await scanner.scan(tmp_path / "data")
-            assert results1["new"] == 1
+            assert results1["pending_review"] == 1
             assert results1["total"] == 1
 
             # Scan second mount point - should match by hash
             results2 = await scanner.scan(tmp_path / "srv")
-            assert results2["new"] == 0, "Should not create duplicate"
+            assert results2["pending_review"] == 0, "Should not create duplicate"
             assert results2["relocated"] == 1, "Should relocate to new path"
 
             # Verify only one track exists
@@ -390,7 +390,8 @@ class TestLibraryScanner:
 
             # Refresh and verify status
             await clean_db.refresh(track)
-            assert track.status == TrackStatus.ACTIVE
+            # Recovered tracks go back to PENDING_REVIEW (their initial state from scan)
+            assert track.status == TrackStatus.PENDING_REVIEW
             assert track.missing_since is None
 
     async def test_multi_file_relocation_to_new_structure(self, clean_db):
@@ -423,7 +424,7 @@ class TestLibraryScanner:
 
             # First scan - discovers all files in flat structure
             results1 = await scanner.scan(original_dir)
-            assert results1["new"] == 4, f"Expected 4 new tracks, got {results1}"
+            assert results1["pending_review"] == 4, f"Expected 4 new tracks, got {results1}"
             assert results1["total"] == 4
 
             # Get all tracks and store their IDs for verification
@@ -466,7 +467,7 @@ class TestLibraryScanner:
             results2 = await scanner.scan(new_base)
 
             # All 4 files should be matched by hash, not created as new
-            assert results2["new"] == 0, f"Should not create new tracks, got {results2}"
+            assert results2["pending_review"] == 0, f"Should not create new tracks, got {results2}"
             assert results2["relocated"] == 4, f"Should relocate all 4 tracks by hash, got {results2}"
             assert results2["total"] == 4
 
@@ -509,7 +510,7 @@ class TestLibraryScanner:
             # - artist3/album1/epic_boss_battle.mp3
             assert results["total"] == 9
             # 8 unique files (electronic_short_relocated is a duplicate)
-            assert results["new"] == 8
+            assert results["pending_review"] == 8
             assert results["relocated"] == 1  # The duplicate
 
 

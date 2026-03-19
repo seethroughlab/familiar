@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.exceptions import NotFoundError, ValidationError
-from app.db.models import ChangeScope, ChangeSource, ChangeStatus
+from app.db.models import ChangeSource, ChangeStatus
 from app.services.proposed_changes import (
     ApplyResult,
     ChangePreview,
@@ -70,10 +70,6 @@ class ApplyResultResponse(BaseModel):
     success: bool
     error: str | None
     db_updated: bool
-    id3_written: bool
-    id3_errors: list[str]
-    files_moved: bool
-    files_errors: list[str]
 
 
 class ChangeStatsResponse(BaseModel):
@@ -97,14 +93,12 @@ class CreateChangeRequest(BaseModel):
     source_detail: str | None = None
     confidence: float = 1.0
     reason: str | None = None
-    scope: str = "db_only"
 
 
 class BatchApplyRequest(BaseModel):
     """Request for batch apply."""
 
     change_ids: list[str]
-    scope: str | None = None  # Override scope for all changes
 
 
 # ============================================================================
@@ -157,10 +151,6 @@ def _apply_result_to_response(result: ApplyResult) -> ApplyResultResponse:
         success=result.success,
         error=result.error,
         db_updated=result.db_updated,
-        id3_written=result.id3_written,
-        id3_errors=result.id3_errors,
-        files_moved=result.files_moved,
-        files_errors=result.files_errors,
     )
 
 
@@ -263,11 +253,6 @@ async def create_change(
     except ValueError:
         raise ValidationError("Invalid source value", detail=f"Received: {request.source}")
 
-    try:
-        scope_enum = ChangeScope(request.scope)
-    except ValueError:
-        raise ValidationError("Invalid scope value", detail=f"Received: {request.scope}")
-
     change = await service.create_change(
         change_type=request.change_type,
         target_type=request.target_type,
@@ -279,7 +264,6 @@ async def create_change(
         source_detail=request.source_detail,
         confidence=request.confidence,
         reason=request.reason,
-        scope=scope_enum,
     )
     return _change_to_response(change)
 
@@ -300,20 +284,12 @@ async def reject_change(
 @router.post("/{change_id}/apply", response_model=ApplyResultResponse)
 async def apply_change(
     change_id: UUID,
-    scope: str | None = Query(None, description="Override scope: db_only, db_and_id3, db_id3_files"),
     db: AsyncSession = Depends(get_db),
 ) -> ApplyResultResponse:
-    """Apply a proposed change."""
+    """Apply a proposed change (DB only)."""
     service = ProposedChangesService(db)
 
-    scope_enum = None
-    if scope:
-        try:
-            scope_enum = ChangeScope(scope)
-        except ValueError:
-            raise ValidationError("Invalid scope value", detail=f"Received: {scope}")
-
-    result = await service.apply(change_id, scope_override=scope_enum)
+    result = await service.apply(change_id)
     return _apply_result_to_response(result)
 
 
@@ -346,15 +322,8 @@ async def batch_apply(
     request: BatchApplyRequest,
     db: AsyncSession = Depends(get_db),
 ) -> list[ApplyResultResponse]:
-    """Apply multiple approved changes at once."""
+    """Apply multiple approved changes at once (DB only)."""
     service = ProposedChangesService(db)
-
-    scope_enum = None
-    if request.scope:
-        try:
-            scope_enum = ChangeScope(request.scope)
-        except ValueError:
-            raise ValidationError("Invalid scope value", detail=f"Received: {request.scope}")
 
     change_ids = []
     for change_id_str in request.change_ids:
@@ -363,5 +332,5 @@ async def batch_apply(
         except ValueError:
             continue  # Skip invalid UUIDs
 
-    results = await service.apply_batch(change_ids, scope_override=scope_enum)
+    results = await service.apply_batch(change_ids)
     return [_apply_result_to_response(r) for r in results]

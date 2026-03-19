@@ -15,7 +15,6 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [embedInFile, setEmbedInFile] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // Get current artwork URL
@@ -24,7 +23,7 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
   // Upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      return artworkApi.uploadTrackArtwork(trackId, file, embedInFile);
+      return artworkApi.uploadTrackArtwork(trackId, file, false);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
@@ -190,17 +189,6 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
 
       {/* Controls */}
       <div className="flex flex-col items-center gap-4">
-        {/* Embed checkbox */}
-        <label className="flex items-center gap-2 text-sm text-zinc-400">
-          <input
-            type="checkbox"
-            checked={embedInFile}
-            onChange={(e) => setEmbedInFile(e.target.checked)}
-            className="w-4 h-4 rounded border-zinc-600 bg-zinc-800 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
-          />
-          Embed in audio file tags
-        </label>
-
         {/* Buttons */}
         <div className="flex items-center gap-3">
           <input

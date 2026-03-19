@@ -68,7 +68,7 @@ class DiscoveryHandlersMixin:
         # Get top artists by track count
         result = await self.db.execute(
             select(Track.artist, func.count(Track.id).label("count"))
-            .where(Track.artist.isnot(None))
+            .where(Track.active_filter(), Track.artist.isnot(None))
             .group_by(Track.artist)
             .order_by(func.count(Track.id).desc())
             .limit(limit * 2)
@@ -131,7 +131,7 @@ class DiscoveryHandlersMixin:
         # Check if the requested artist is in the library
         artist_in_library_stmt = (
             select(func.count(Track.id))
-            .where(Track.artist.ilike(f"%{artist}%"))
+            .where(Track.active_filter(), Track.artist.ilike(f"%{artist}%"))
         )
         artist_count = await self.db.scalar(artist_in_library_stmt) or 0
         requested_artist_in_library = artist_count > 0
@@ -157,7 +157,7 @@ class DiscoveryHandlersMixin:
         for similar_name in similar_names:
             stmt = (
                 select(Track.artist, func.count(Track.id).label("track_count"))
-                .where(func.lower(Track.artist) == similar_name.lower())
+                .where(Track.active_filter(), func.lower(Track.artist) == similar_name.lower())
                 .group_by(Track.artist)
             )
             result = await self.db.execute(stmt)
@@ -209,6 +209,7 @@ class DiscoveryHandlersMixin:
 
         # Search local library for exact match first
         stmt = select(Track).where(
+            Track.active_filter(),
             func.lower(Track.title) == title.lower(),
             func.lower(Track.artist) == artist.lower(),
         ).limit(1)
@@ -227,6 +228,7 @@ class DiscoveryHandlersMixin:
 
         # Try fuzzy match on local library
         stmt = select(Track).where(
+            Track.active_filter(),
             func.lower(Track.artist).contains(artist.lower()),
         ).limit(200)
         result = await self.db.execute(stmt)
@@ -313,6 +315,7 @@ class DiscoveryHandlersMixin:
 
             # Check if in local library
             stmt = select(Track).where(
+                Track.active_filter(),
                 func.lower(Track.title) == similar_name.lower(),
                 func.lower(Track.artist) == similar_artist.lower(),
             ).limit(1)

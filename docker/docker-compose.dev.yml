@@ -55,7 +55,7 @@ services:
       # Data persistence (app reads from /app/data relative to workdir)
       - /opt/familiar/data:/app/data
       # Music library - OMV default path (override with MUSIC_LIBRARY_PATH env var)
-      - ${MUSIC_LIBRARY_PATH:-/srv/dev-disk-by-uuid-8dfd5250-f9f8-470e-b821-820ea31be6e6/music}:/music:rw
+      - ${MUSIC_LIBRARY_PATH:-/srv/dev-disk-by-uuid-8dfd5250-f9f8-470e-b821-820ea31be6e6/music}:/music:ro
     environment:
       - DATABASE_URL=postgresql+asyncpg://familiar:${POSTGRES_PASSWORD:-familiar}@postgres:5432/familiar
       - REDIS_URL=redis://redis:6379/0

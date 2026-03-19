@@ -7,8 +7,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { ScrollContainerContext } from '../hooks/useScrollContainer';
-import { useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '../api/queryKeys';
 import { Loader2 } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -19,7 +17,7 @@ import { PlayerBar } from './Player/PlayerBar';
 import { Sidebar } from './Sidebar/Sidebar';
 import { ContentToolbar } from './ContentToolbar';
 import { ErrorBoundary } from './ErrorBoundary';
-import { GlobalDropZone, ImportModal, SpotifyImportModal, detectZipType } from './Import';
+import { SpotifyImportModal } from './Import';
 import { InstallPrompt } from './PWA/InstallPrompt';
 import { OfflineIndicator } from './PWA/OfflineIndicator';
 import { ShortcutsHelp } from './KeyboardShortcuts';
@@ -44,9 +42,7 @@ function LazyLoadSpinner() {
 
 export function AppShell() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [importFiles, setImportFiles] = useState<File[] | null>(null);
   const [spotifyImportFile, setSpotifyImportFile] = useState<File | null>(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
@@ -99,18 +95,6 @@ export function AppShell() {
   const playlistPickerTrackIds = useUIStore((s) => s.playlistPickerTrackIds);
 
   return (
-    <GlobalDropZone onFilesDropped={async (files) => {
-      // Check if any file is a ZIP that looks like a Spotify export
-      const zips = files.filter(f => f.name.toLowerCase().endsWith('.zip'));
-      if (zips.length === 1) {
-        const type = await detectZipType(zips[0]);
-        if (type === 'spotify') {
-          setSpotifyImportFile(zips[0]);
-          return;
-        }
-      }
-      setImportFiles(files);
-    }}>
       <div className={`h-dynamic-screen flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
         {/* Main content area */}
         <div className="flex-1 flex overflow-hidden min-h-0">
@@ -272,17 +256,6 @@ export function AppShell() {
         {/* Playlist picker modal */}
         {playlistPickerTrackIds && <PlaylistPickerModal trackIds={playlistPickerTrackIds} />}
 
-        {/* Import modal */}
-        {importFiles && (
-          <ImportModal
-            files={importFiles}
-            onClose={() => {
-              setImportFiles(null);
-              queryClient.refetchQueries({ queryKey: queryKeys.tracks.all });
-            }}
-          />
-        )}
-
         {/* Spotify import modal */}
         {spotifyImportFile && (
           <SpotifyImportModal
@@ -291,6 +264,5 @@ export function AppShell() {
           />
         )}
       </div>
-    </GlobalDropZone>
   );
 }
