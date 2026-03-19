@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.api.exceptions import ConflictError, NotFoundError, TrackNotFoundError, ValidationError
-from app.db.models import Track, TrackAnalysis, TrackStatus
+from app.db.models import Track, TrackAnalysis
 from app.services.background import get_background_manager
 from app.services.track_analysis import (
     generate_comparative_report,

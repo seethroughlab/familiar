@@ -14,7 +14,7 @@ from app.api.exceptions import (
     TrackNotFoundError,
     ValidationError,
 )
-from app.db.models import Track, TrackStatus
+from app.db.models import Track
 from app.services.lastfm import get_lastfm_service
 
 router = APIRouter(prefix="/lastfm", tags=["lastfm"])

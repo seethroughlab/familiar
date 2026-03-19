@@ -20,13 +20,15 @@ depends_on = None
 
 def upgrade() -> None:
     conn = op.get_bind()
+    # Cast scope to text for comparison so this works on fresh DBs where
+    # the enum never had the removed values.
     conn.execute(
         sa.text(
             "UPDATE proposed_changes SET scope = 'db_only' "
-            "WHERE scope IN ('db_and_id3', 'db_id3_files')"
+            "WHERE scope::text IN ('db_and_id3', 'db_id3_files')"
         )
     )
 
 
 def downgrade() -> None:
-    pass
+    pass  # One-way: removed enum values cannot be re-added, no data to restore

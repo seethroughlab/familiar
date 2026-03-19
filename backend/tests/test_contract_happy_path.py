@@ -8,25 +8,25 @@ The auth matrix tests prove endpoints reject bad auth; these tests prove
 endpoints succeed with valid auth and seeded data.
 """
 
+from uuid import uuid4
+
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import uuid4
 
 from app.db.models import TrackStatus
 from app.db.models.spotify import SpotifyImport
-from app.utils.time import utcnow
 from tests.conftest import make_profile_headers
 from tests.factories import (
-    insert_test_track,
-    insert_test_profile,
     insert_test_analysis,
     insert_test_play_history,
-    insert_test_proposed_change,
     insert_test_playlist,
     insert_test_playlist_track,
+    insert_test_profile,
+    insert_test_proposed_change,
     insert_test_smart_playlist,
+    insert_test_track,
 )
 
 

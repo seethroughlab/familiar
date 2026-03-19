@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import DbSession
-from app.db.models import Track, TrackStatus
+from app.db.models import Track
 from app.services.normalize import normalize_for_duplicate_matching
 from app.services.quality import QualityScore, calculate_quality_score
 

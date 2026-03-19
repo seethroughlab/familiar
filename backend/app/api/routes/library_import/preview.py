@@ -5,10 +5,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
+    pass
 
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
+
 from app.api.deps import DbSession
 from app.api.exceptions import (
     FileOperationError,
@@ -72,8 +73,9 @@ class ImportFromPathRequest(BaseModel):
 # Duplicate detection (delegated to shared service)
 # ============================================================================
 
-from app.services.duplicate_detection import enrich_tracks_with_duplicates as _enrich_tracks_with_duplicates  # noqa: E402
-
+from app.services.duplicate_detection import (  # noqa: E402
+    enrich_tracks_with_duplicates as _enrich_tracks_with_duplicates,
+)
 
 # ============================================================================
 # Endpoints
