@@ -14,7 +14,6 @@ from app.db.models import (
     ProfilePlayHistory,
     Track,
     TrackAnalysis,
-    TrackStatus,
 )
 from app.utils.time import utcnow
 

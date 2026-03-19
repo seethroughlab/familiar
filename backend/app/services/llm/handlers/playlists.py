@@ -12,7 +12,6 @@ from app.db.models import (
     Playlist,
     PlaylistTrack,
     Track,
-    TrackStatus,
 )
 
 if TYPE_CHECKING:

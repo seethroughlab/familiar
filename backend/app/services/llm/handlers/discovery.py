@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from app.db.models import Track, TrackStatus
+from app.db.models import Track
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor

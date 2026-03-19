@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
 from app.api.exceptions import TrackNotFoundError
-from app.db.models import Track, TrackStatus
+from app.db.models import Track
 
 from . import TrackFeaturesResponse
 

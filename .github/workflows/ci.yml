@@ -192,7 +192,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://familiar:familiar@localhost:5432/familiar
           REDIS_URL: redis://localhost:6379/0
-        run: uv run pytest --ignore=tests/test_contract_error_shapes.py --ignore=tests/test_contract_auth_matrix.py --ignore=tests/test_contract_envelope_parity.py --ignore=tests/test_migrations.py -k "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=35 --junit-xml=results-core.xml
+        run: uv run pytest --ignore=tests/test_contract_error_shapes.py --ignore=tests/test_contract_auth_matrix.py --ignore=tests/test_contract_envelope_parity.py --ignore=tests/test_contract_happy_path.py --ignore=tests/test_migrations.py -k "not integration" -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=35 --junit-xml=results-core.xml
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

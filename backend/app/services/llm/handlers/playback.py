@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from app.db.models import Track, TrackAnalysis, TrackStatus
+from app.db.models import Track, TrackAnalysis
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor

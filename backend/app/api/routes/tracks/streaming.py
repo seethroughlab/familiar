@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from app.api.deps import DbSession
 from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
-from app.db.models import Track, TrackStatus
+from app.db.models import Track
 from app.services.artwork import compute_album_hash, get_artwork_path
 
 from . import AUDIO_MIME_TYPES

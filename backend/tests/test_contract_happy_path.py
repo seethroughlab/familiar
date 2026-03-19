@@ -177,11 +177,12 @@ def test_seeded_endpoint_returns_ok(
 
 
 def test_track_by_id_serializes(client: TestClient, seeded_db: dict):
-    """GET /tracks/batch with explicit IDs returns valid data."""
+    """POST /tracks/batch with explicit IDs returns valid data."""
     track_id = str(seeded_db["tracks"][0].id)
     headers = make_profile_headers({"id": str(seeded_db["profile"].id)})
-    response = client.get(
-        f"/api/v1/tracks/batch?ids={track_id}",
+    response = client.post(
+        "/api/v1/tracks/batch",
+        json={"ids": [track_id]},
         headers=headers,
     )
     assert response.status_code == 200, response.text[:300]

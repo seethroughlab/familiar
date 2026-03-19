@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track, TrackStatus
-from app.services.quality import QualityScore, calculate_quality_score, compare_quality
+from app.services.quality import calculate_quality_score, compare_quality
 
 logger = logging.getLogger(__name__)
 

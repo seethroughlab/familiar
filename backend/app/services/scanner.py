@@ -471,7 +471,8 @@ class LibraryScanner:
                 # Check if track was previously missing and is now recovered
                 if existing.status in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
                     logger.info(f"RECOVERED: {file_path.name}")
-                    existing.status = TrackStatus.ACTIVE
+                    # Restore to pre-missing status: PENDING_REVIEW if never approved, ACTIVE otherwise
+                    existing.status = TrackStatus.PENDING_REVIEW if existing.review_info is not None else TrackStatus.ACTIVE
                     existing.missing_since = None
                     results["recovered"] += 1
 
@@ -543,14 +544,14 @@ class LibraryScanner:
                     track.file_path = new_path
                     # If it was missing, recover it
                     if track.status in (TrackStatus.MISSING, TrackStatus.PENDING_DELETION):
-                        track.status = TrackStatus.ACTIVE
+                        track.status = TrackStatus.PENDING_REVIEW if track.review_info is not None else TrackStatus.ACTIVE
                         track.missing_since = None
                         results["recovered"] += 1
                     results["relocated"] += 1
                     continue
 
             # File not found - mark as missing instead of deleting
-            if track.status == TrackStatus.ACTIVE:
+            if track.status in (TrackStatus.ACTIVE, TrackStatus.PENDING_REVIEW):
                 # First time this track is missing
                 logger.info(f"MISSING: {Path(path_str).name}")
                 track.status = TrackStatus.MISSING

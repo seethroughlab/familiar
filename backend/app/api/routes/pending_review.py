@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbSession

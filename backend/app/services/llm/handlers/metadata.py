@@ -14,7 +14,6 @@ from app.db.models import (
     ChangeStatus,
     ProposedChange,
     Track,
-    TrackStatus,
 )
 from app.services.metadata.lookup import get_metadata_lookup_service
 

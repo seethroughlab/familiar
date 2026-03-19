@@ -33,6 +33,7 @@ _MANUAL_INDEXES = {
     "ix_tracks_title_trgm",
     "ix_tracks_artist_trgm",
     "ix_tracks_album_trgm",
+    "ix_tracks_pending_review",
 }
 
 
