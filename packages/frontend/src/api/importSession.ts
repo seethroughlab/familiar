@@ -63,25 +63,6 @@ export interface ImportTrackPayload {
   replace_track_id: string | null;
 }
 
-export interface ExecuteImportOptions {
-  format: 'original' | 'flac' | 'mp3';
-  mp3_quality: number;
-  organization: 'organized' | 'imports';
-  queue_analysis: boolean;
-}
-
-export interface ExecuteImportRequest {
-  session_id: string;
-  tracks: ImportTrackPayload[];
-  options: ExecuteImportOptions;
-}
-
-export interface ExecuteImportResponse {
-  imported_count: number;
-  replaced_count?: number;
-  errors?: string[];
-}
-
 export const importSessionApi = {
   preview: async (
     file: File,
@@ -103,8 +84,4 @@ export const importSessionApi = {
     return data;
   },
 
-  execute: async (request: ExecuteImportRequest): Promise<ExecuteImportResponse> => {
-    const { data } = await api.post('/library/import/execute', request);
-    return data;
-  },
 };

@@ -14,7 +14,6 @@ import {
   Trash2,
   ClipboardList,
   X,
-  ChevronDown,
   AlertCircle,
   FileEdit,
 } from 'lucide-react';
@@ -46,14 +45,6 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const SCOPE_LABELS: Record<ChangeScope, string> = {
   db_only: 'Database Only',
-  db_and_id3: 'DB + ID3 Tags',
-  db_id3_files: 'DB + ID3 + Files',
-};
-
-const SCOPE_LABELS_SHORT: Record<ChangeScope, string> = {
-  db_only: 'DB',
-  db_and_id3: 'DB+ID3',
-  db_id3_files: 'DB+ID3+Files',
 };
 
 function formatValue(value: unknown): string {
@@ -162,7 +153,7 @@ interface ChangeCardProps {
   change: ProposedChange;
   onPreview: () => void;
   onReject: () => void;
-  onApply: (scope: ChangeScope) => void;
+  onApply: () => void;
   onUndo: () => void;
   onDelete: () => void;
   isLoading: boolean;
@@ -177,9 +168,6 @@ function ChangeCard({
   onDelete,
   isLoading,
 }: ChangeCardProps) {
-  const [selectedScope, setSelectedScope] = useState<ChangeScope>(change.scope);
-  const [showScopeDropdown, setShowScopeDropdown] = useState(false);
-
   const isPending = change.status === 'pending';
   const isApplied = change.status === 'applied';
   const isRejected = change.status === 'rejected';
@@ -251,38 +239,6 @@ function ChangeCard({
 
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-700/50">
-        {/* Scope selector (for pending) */}
-        {isPending && (
-          <div className="relative">
-            <button
-              onClick={() => setShowScopeDropdown(!showScopeDropdown)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded text-sm transition-colors"
-            >
-              <span className="sm:hidden">{SCOPE_LABELS_SHORT[selectedScope]}</span>
-              <span className="hidden sm:inline">{SCOPE_LABELS[selectedScope]}</span>
-              <ChevronDown className="w-3 h-3" />
-            </button>
-            {showScopeDropdown && (
-              <div className="absolute bottom-full left-0 mb-1 bg-zinc-700 rounded shadow-lg border border-zinc-600 z-10">
-                {(Object.keys(SCOPE_LABELS) as ChangeScope[]).map((scope) => (
-                  <button
-                    key={scope}
-                    onClick={() => {
-                      setSelectedScope(scope);
-                      setShowScopeDropdown(false);
-                    }}
-                    className={`block w-full text-left px-3 py-2 text-sm hover:bg-zinc-600 whitespace-nowrap ${
-                      selectedScope === scope ? 'text-purple-400' : 'text-zinc-200'
-                    }`}
-                  >
-                    {SCOPE_LABELS[scope]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
         <div className="flex-1" />
 
         {/* Preview button */}
@@ -299,7 +255,7 @@ function ChangeCard({
         {isPending && (
           <>
             <button
-              onClick={() => onApply(selectedScope)}
+              onClick={() => onApply()}
               disabled={isLoading}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm transition-colors disabled:opacity-50"
             >
@@ -376,7 +332,7 @@ function ProposedChangesBrowser(_props: BrowserProps) {
   });
 
   const applyMutation = useMutation({
-    mutationFn: ({ id, scope }: { id: string; scope: ChangeScope }) => proposedChangesApi.apply(id, scope),
+    mutationFn: ({ id }: { id: string }) => proposedChangesApi.apply(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
@@ -418,10 +374,10 @@ function ProposedChangesBrowser(_props: BrowserProps) {
     });
   };
 
-  const handleApply = (changeId: string, scope: ChangeScope) => {
+  const handleApply = (changeId: string) => {
     setLoadingChangeId(changeId);
     applyMutation.mutate(
-      { id: changeId, scope },
+      { id: changeId },
       {
         onSettled: () => setLoadingChangeId(null),
       }
@@ -543,7 +499,7 @@ function ProposedChangesBrowser(_props: BrowserProps) {
                     change={change}
                     onPreview={() => handlePreview(change.id)}
                     onReject={() => handleReject(change.id)}
-                    onApply={(scope) => handleApply(change.id, scope)}
+                    onApply={() => handleApply(change.id)}
                     onUndo={() => handleUndo(change.id)}
                     onDelete={() => handleDelete(change.id)}
                     isLoading={loadingChangeId === change.id}
@@ -557,8 +513,7 @@ function ProposedChangesBrowser(_props: BrowserProps) {
 
       {/* Info text */}
       <p className="text-xs text-zinc-500 mt-6 text-center">
-        Changes can be applied at different scopes: database only (fast, reversible), with ID3 tags (writes to files),
-        or with file organization (moves files to match metadata).
+        Changes are applied to the database and are reversible.
       </p>
 
       {/* Preview modal */}

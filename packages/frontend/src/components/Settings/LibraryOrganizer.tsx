@@ -5,7 +5,6 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   FolderTree,
-  Play,
   Eye,
   Loader2,
   CheckCircle,
@@ -30,14 +29,6 @@ export function LibraryOrganizer() {
 
   const previewMutation = useMutation({
     mutationFn: () => organizerApi.preview(selectedTemplate || templatesData?.templates[0].template || '', 100),
-    onSuccess: (data) => {
-      setPreviewStats(data);
-      setShowResults(true);
-    },
-  });
-
-  const organizeMutation = useMutation({
-    mutationFn: () => organizerApi.run(selectedTemplate || templatesData?.templates[0].template || '', false),
     onSuccess: (data) => {
       setPreviewStats(data);
       setShowResults(true);
@@ -97,7 +88,7 @@ export function LibraryOrganizer() {
         <div>
           <h4 className="font-medium text-white">Library Organization</h4>
           <p className="text-xs text-zinc-400">
-            Reorganize files into a consistent folder structure
+            Preview how your library would be organized
           </p>
         </div>
       </div>
@@ -130,30 +121,11 @@ export function LibraryOrganizer() {
         )}
       </div>
 
-      {/* Warning */}
-      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-md">
-        <div className="flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-amber-200">
-            <p className="font-medium">This will move files on disk</p>
-            <p className="text-amber-300/80 mt-1">
-              Only tracks with complete metadata (title, artist, album) will be moved.
-              Always preview changes first.
-            </p>
-            <p className="text-amber-300/80 mt-2">
-              <strong>Note:</strong> If you use other music applications (iTunes, Plex, Roon, etc.),
-              reorganizing files may break their stored paths. Consider whether those apps can
-              handle file location changes before proceeding.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Action buttons */}
       <div className="flex flex-col sm:flex-row gap-2">
         <button
           onClick={() => previewMutation.mutate()}
-          disabled={previewMutation.isPending || organizeMutation.isPending}
+          disabled={previewMutation.isPending}
           className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {previewMutation.isPending ? (
@@ -162,22 +134,6 @@ export function LibraryOrganizer() {
             <Eye className="w-4 h-4" />
           )}
           Preview
-        </button>
-        <button
-          onClick={() => {
-            if (confirm('Are you sure you want to reorganize your library? This will move files on disk.')) {
-              organizeMutation.mutate();
-            }
-          }}
-          disabled={previewMutation.isPending || organizeMutation.isPending}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {organizeMutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Play className="w-4 h-4" />
-          )}
-          Organize
         </button>
       </div>
 
@@ -193,9 +149,7 @@ export function LibraryOrganizer() {
               </div>
               <div className="text-center">
                 <div className="text-xl font-bold text-green-500">{previewStats.moved}</div>
-                <div className="text-xs text-zinc-500">
-                  {organizeMutation.isSuccess ? 'Moved' : 'To Move'}
-                </div>
+                <div className="text-xs text-zinc-500">Would Move</div>
               </div>
               <div className="text-center">
                 <div className="text-xl font-bold text-yellow-500">{previewStats.skipped}</div>

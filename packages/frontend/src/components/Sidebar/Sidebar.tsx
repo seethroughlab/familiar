@@ -9,7 +9,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download, Disc3,
+  Heart, Download, Disc3, Inbox,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
@@ -20,7 +20,7 @@ import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { playlistsApi, smartPlaylistsApi, pendingTracksApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { spotifyApi } from '../../api/spotify';
 import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
@@ -43,6 +43,7 @@ const LIBRARY_ITEMS = [
   { path: '/library/explorer', label: '3D Explorer', icon: Activity },
   { path: '/library/discover', label: 'Discover', icon: Sparkles },
   { path: '/library/proposed-changes', label: 'Changes', icon: FileText },
+  { path: '/library/pending-review', label: 'Review', icon: Inbox },
 ];
 
 const COLLECTION_ITEMS = [
@@ -85,6 +86,15 @@ export function Sidebar() {
     favorites: favoritesCount,
     downloads: downloadsCount,
   };
+
+  // Pending review count
+  const { data: pendingStats } = useQuery({
+    queryKey: queryKeys.pendingTracks.stats,
+    queryFn: () => pendingTracksApi.getStats(),
+    staleTime: STALE_TIME.MEDIUM,
+    retry: offlineAwareRetry(isOffline, 1),
+  });
+  const pendingReviewCount = pendingStats?.total_tracks ?? 0;
 
   // Spotify import existence check (shares cache with SpotifyBrowser)
   const { data: spotifyImport } = useQuery({
@@ -232,7 +242,12 @@ export function Sidebar() {
                 }`}
               >
                 <item.icon className="w-4 h-4 flex-shrink-0" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate flex-1">{item.label}</span>
+                {item.path === '/library/pending-review' && pendingReviewCount > 0 && (
+                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-600 text-white min-w-[1.25rem] text-center">
+                    {pendingReviewCount}
+                  </span>
+                )}
               </Link>
             </div>
           ))}
