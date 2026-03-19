@@ -173,15 +173,20 @@ async def _get_pending_track(db: AsyncSession, track_id: UUID) -> Track:
     return track
 
 
+def _escape_like(s: str) -> str:
+    """Escape SQL LIKE wildcards in a string."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def _get_pending_tracks_in_folder(db: AsyncSession, folder_path: str) -> list[Track]:
     """Get all PENDING_REVIEW tracks whose file_path starts with folder_path/."""
-    prefix = folder_path.rstrip("/") + "/"
+    escaped_prefix = _escape_like(folder_path.rstrip("/")) + "/"
     result = await db.execute(
         select(Track).where(
             Track.status == TrackStatus.PENDING_REVIEW,
-            Track.file_path.like(prefix + "%"),
+            Track.file_path.like(escaped_prefix + "%", escape="\\"),
             # Ensure we only get files directly in this folder (not subfolders)
-            ~Track.file_path.like(prefix + "%/%"),
+            ~Track.file_path.like(escaped_prefix + "%/%", escape="\\"),
         )
     )
     return list(result.scalars().all())
