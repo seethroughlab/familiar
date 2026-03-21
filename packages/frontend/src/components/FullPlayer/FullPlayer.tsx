@@ -259,28 +259,28 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             artworkUrl={artworkUrl}
             lyrics={lyrics}
             isPlaying={isPlaying}
-            className="absolute inset-0"
+            className="absolute inset-0 -translate-y-12"
           />
         )}
-      </div>
 
-      {/* Album art thumbnail - z-20 to render above controls gradient */}
-      {(isVisualizerAvailable() || isMusicVideo) && !(isFullscreen && !controlsVisible) && (
-        <div className="absolute bottom-80 left-8 z-20">
-          {imageError ? (
-            <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">
-              <Music className="w-12 h-12 text-zinc-600" />
-            </div>
-          ) : (
-            <img
-              src={artworkUrl}
-              alt="Album art"
-              className="w-24 h-24 rounded-lg shadow-2xl object-cover"
-              onError={() => setImageError(true)}
-            />
-          )}
-        </div>
-      )}
+        {/* Album art thumbnail - inside content area so it's positioned relative to visualizer bounds */}
+        {(isVisualizerAvailable() || isMusicVideo) && !(isFullscreen && !controlsVisible) && (
+          <div className="absolute bottom-80 left-1/2 -translate-x-1/2 z-20">
+            {imageError ? (
+              <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">
+                <Music className="w-12 h-12 text-zinc-600" />
+              </div>
+            ) : (
+              <img
+                src={artworkUrl}
+                alt="Album art"
+                className="w-24 h-24 rounded-lg shadow-2xl object-cover"
+                onError={() => setImageError(true)}
+              />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Bottom controls - includes safe area padding for home indicator */}
       <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
