@@ -3,6 +3,135 @@ import AVFoundation
 import Foundation
 import MediaPlayer
 
+// MARK: - Custom Waveshaper Audio Unit
+
+private let waveshaperComponentDesc = AudioComponentDescription(
+    componentType: kAudioUnitType_Effect,
+    componentSubType: 0x77736870, // "wshp"
+    componentManufacturer: 0x466D6C72, // "Fmlr"
+    componentFlags: 0,
+    componentFlagsMask: 0
+)
+
+class WaveshaperAudioUnit: AUAudioUnit {
+    static let tableSize = 8192
+
+    /// Active lookup table pointer — swapped atomically (word-aligned store on ARM64).
+    private var tablePtr: UnsafeMutablePointer<Float>
+    private(set) var drive: Float = 1.0
+    private(set) var satType: String = "warm"
+    var wetDryMix: Float = 0.0 // 0…1
+
+    private var _inputBusArray: AUAudioUnitBusArray!
+    private var _outputBusArray: AUAudioUnitBusArray!
+
+    override var inputBusses: AUAudioUnitBusArray { _inputBusArray }
+    override var outputBusses: AUAudioUnitBusArray { _outputBusArray }
+
+    override init(componentDescription: AudioComponentDescription,
+                  options: AudioComponentInstantiationOptions = []) throws {
+        tablePtr = .allocate(capacity: Self.tableSize)
+        tablePtr.initialize(repeating: 0, count: Self.tableSize)
+        try super.init(componentDescription: componentDescription, options: options)
+
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        let inBus = try AUAudioUnitBus(format: format)
+        let outBus = try AUAudioUnitBus(format: format)
+        _inputBusArray = AUAudioUnitBusArray(audioUnit: self, busType: .input, busses: [inBus])
+        _outputBusArray = AUAudioUnitBusArray(audioUnit: self, busType: .output, busses: [outBus])
+        maximumFramesToRender = 4096
+        regenerateTable(drive: 1.0, type: "warm")
+    }
+
+    /// Recompute the waveshaping lookup table. Called from the main thread;
+    /// the old buffer is deallocated after a short delay so the audio thread
+    /// never reads freed memory.
+    func regenerateTable(drive: Float, type: String) {
+        self.drive = max(1.0, drive)
+        self.satType = type
+        let n = Self.tableSize
+        let d = self.drive
+        let newPtr = UnsafeMutablePointer<Float>.allocate(capacity: n)
+
+        for i in 0..<n {
+            let x = Float(i) * 2.0 / Float(n) - 1.0
+            switch type {
+            case "tape":
+                let k = d * 2.0
+                let denom = 1.0 - exp(-k)
+                let base: Float
+                if x >= 0 {
+                    base = (1.0 - exp(-k * x)) / denom
+                } else {
+                    base = -(1.0 - exp(k * x)) / denom
+                }
+                newPtr[i] = base * 0.9 + (x * x * x) * 0.1 * d
+            case "hard":
+                let hx = x * d
+                if hx > 0.5 {
+                    let delta = hx - 0.5
+                    newPtr[i] = 0.5 + delta / (1.0 + delta * delta)
+                } else if hx < -0.5 {
+                    let delta = hx + 0.5
+                    newPtr[i] = -0.5 + delta / (1.0 + delta * delta)
+                } else {
+                    newPtr[i] = hx
+                }
+                newPtr[i] = max(-1.0, min(1.0, newPtr[i]))
+            default: // "warm"
+                newPtr[i] = tanh(x * d)
+            }
+        }
+
+        let oldPtr = tablePtr
+        tablePtr = newPtr
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            oldPtr.deallocate()
+        }
+    }
+
+    override var internalRenderBlock: AUInternalRenderBlock {
+        return { [unowned self] actionFlags, timestamp, frameCount, outputBusNumber, outputData, _, pullInputBlock in
+            guard let pullInputBlock = pullInputBlock else {
+                return kAudioUnitErr_NoConnection
+            }
+            var pullFlags = AudioUnitRenderActionFlags(rawValue: 0)
+            let status = pullInputBlock(&pullFlags, timestamp, frameCount, 0, outputData)
+            guard status == noErr else { return status }
+
+            let table = self.tablePtr
+            let mix = self.wetDryMix
+            let compensation = 1.0 / sqrt(max(self.drive, 1.0))
+            let halfTable = Float(Self.tableSize) / 2.0
+            let tableMax = Self.tableSize - 1
+
+            let bufList = UnsafeMutableAudioBufferListPointer(outputData)
+            for buf in bufList {
+                guard let data = buf.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                for i in 0..<Int(frameCount) {
+                    let dry = data[i]
+                    let clamped = max(Float(-1.0), min(1.0, dry))
+                    let pos = (clamped + 1.0) * halfTable
+                    let idx = min(Int(pos), tableMax)
+                    let frac = pos - Float(idx)
+                    let idx1 = min(idx + 1, tableMax)
+                    let wet = (table[idx] + frac * (table[idx1] - table[idx])) * compensation
+                    data[i] = dry * (1.0 - mix) + wet * mix
+                }
+            }
+            return noErr
+        }
+    }
+
+    override func allocateRenderResources() throws {
+        try super.allocateRenderResources()
+    }
+
+    deinit {
+        tablePtr.deallocate()
+    }
+}
+
 protocol NativeAudioEngineDelegate: AnyObject {
     func audioEngineDidFinishPlaying()
     func audioEngineDidAutoAdvance(loadedTrackId: String)
@@ -42,7 +171,9 @@ class NativeAudioEngine {
     private let eqNode: AVAudioUnitEQ
     private let reverbNode = AVAudioUnitReverb()
     private let delayNode = AVAudioUnitDelay()
-    private let distortionNode = AVAudioUnitDistortion()
+    private var waveshaperNode: AVAudioUnit?
+    private var waveshaperAU: WaveshaperAudioUnit?
+    private static var waveshaperRegistered = false
 
     // Additional built-in effect nodes
     private var compressorNode: AVAudioUnitEffect?
@@ -137,8 +268,10 @@ class NativeAudioEngine {
         setupEQBands()
         setupFilterBands()
         setupCompressorNode()
+        registerWaveshaper()
         setupAudioGraph()
         setupRemoteCommands()
+        instantiateWaveshaper()
     }
 
     private func nextLoadToken() -> UInt64 {
@@ -198,14 +331,14 @@ class NativeAudioEngine {
         let hpBand = filterNode.bands[0]
         hpBand.filterType = .highPass
         hpBand.frequency = 20
-        hpBand.bandwidth = 0.7
+        hpBand.bandwidth = qToBandwidth(0.7)
         hpBand.bypass = false
 
         // Band 1: Lowpass
         let lpBand = filterNode.bands[1]
         lpBand.filterType = .lowPass
         lpBand.frequency = 20000
-        lpBand.bandwidth = 0.7
+        lpBand.bandwidth = qToBandwidth(0.7)
         lpBand.bypass = false
 
         // Start bypassed
@@ -224,6 +357,45 @@ class NativeAudioEngine {
         compressorNode?.bypass = true
     }
 
+    private func registerWaveshaper() {
+        guard !Self.waveshaperRegistered else { return }
+        AUAudioUnit.registerSubclass(
+            WaveshaperAudioUnit.self,
+            as: waveshaperComponentDesc,
+            name: "Familiar Waveshaper",
+            version: 1
+        )
+        Self.waveshaperRegistered = true
+    }
+
+    private func instantiateWaveshaper() {
+        AVAudioUnit.instantiate(with: waveshaperComponentDesc) { [weak self] avUnit, error in
+            DispatchQueue.main.async {
+                guard let self = self, let unit = avUnit else {
+                    print("[FamiliarAudio] Failed to instantiate waveshaper: \(error?.localizedDescription ?? "unknown")")
+                    return
+                }
+                self.waveshaperAU = unit.auAudioUnit as? WaveshaperAudioUnit
+                self.waveshaperNode = unit
+                unit.auAudioUnit.shouldBypassEffect = true
+
+                let wasRunning = self.engine.isRunning
+                if wasRunning { self.engine.pause() }
+                self.engine.attach(unit)
+                self.connectChain()
+                if wasRunning { try? self.engine.start() }
+            }
+        }
+    }
+
+    /// Convert Web Audio Q (resonance) to AVAudioUnitEQ bandwidth (octaves).
+    /// Web Audio BiquadFilter Q is the classic EE definition; Apple's EQ bands
+    /// use bandwidth in octaves.  Formula: BW = 2 * asinh(1/(2*Q)) / ln(2)
+    private func qToBandwidth(_ q: Float) -> Float {
+        let q64 = Double(max(0.1, q))
+        let bw = 2.0 * asinh(1.0 / (2.0 * q64)) / log(2.0)
+        return Float(max(0.05, bw))
+    }
 
     private func setupAudioGraph() {
         engine.attach(playerNodes[0])
@@ -231,7 +403,7 @@ class NativeAudioEngine {
         engine.attach(inputMixer)
         engine.attach(eqNode)
         if let comp = compressorNode { engine.attach(comp) }
-        engine.attach(distortionNode)
+        // waveshaperNode is attached asynchronously in instantiateWaveshaper()
         engine.attach(filterNode)
         engine.attach(delayNode)
         engine.attach(reverbPreDelayNode)
@@ -240,7 +412,6 @@ class NativeAudioEngine {
         // Default effect states
         reverbNode.wetDryMix = 0
         delayNode.wetDryMix = 0
-        distortionNode.wetDryMix = 0
         reverbPreDelayNode.bypass = true     // start bypassed — its lowPassCutoff filters even at 0ms delay
         reverbPreDelayNode.wetDryMix = 100  // pure pass-through
         reverbPreDelayNode.feedback = 0
@@ -254,7 +425,7 @@ class NativeAudioEngine {
     }
 
     /// Build the ordered effect chain and connect nodes sequentially.
-    /// Chain order: playerNodes[0,1] → inputMixer → EQ → Compressor → Distortion → Filter → Delay → preDelay → Reverb → mainMixer
+    /// Chain order: playerNodes[0,1] → inputMixer → EQ → Compressor → Waveshaper → Filter → Delay → preDelay → Reverb → mainMixer
     private func connectChain() {
         // Let AVAudioEngine negotiate formats across the graph. Forcing per-track
         // processing formats during load can trigger graph reconfiguration crashes.
@@ -263,7 +434,7 @@ class NativeAudioEngine {
 
         var chain: [AVAudioNode] = [inputMixer, eqNode]
         if let comp = compressorNode { chain.append(comp) }
-        chain.append(distortionNode)
+        if let ws = waveshaperNode { chain.append(ws) }
         chain.append(filterNode)
         chain.append(delayNode)
         chain.append(reverbPreDelayNode)
@@ -660,29 +831,18 @@ class NativeAudioEngine {
         delayNode.wetDryMix = wetDryMix * 100
     }
 
-    // MARK: - Effects: Distortion (Saturation)
+    // MARK: - Effects: Saturation (Custom Waveshaper)
 
     func setDistortion(preset: String, wetDryMix: Float, enabled: Bool, drive: Float = 1) {
+        guard let ws = waveshaperNode, let au = waveshaperAU else { return }
+
         if masterBypassed || !enabled {
-            distortionNode.bypass = true
+            ws.auAudioUnit.shouldBypassEffect = true
             return
         }
-        distortionNode.bypass = false
-
-        let avPreset = distortionPreset(from: preset)
-        distortionNode.loadFactoryPreset(avPreset)
-        distortionNode.wetDryMix = wetDryMix * 100
-        // Map drive 1–5 → preGain 0–14 dB
-        distortionNode.preGain = (drive - 1) * 3.5
-    }
-
-    private func distortionPreset(from name: String) -> AVAudioUnitDistortionPreset {
-        switch name {
-        case "warm": return .drumsBitBrush
-        case "tape": return .speechCosmicInterference
-        case "hard": return .drumsLoFi
-        default: return .drumsBitBrush
-        }
+        ws.auAudioUnit.shouldBypassEffect = false
+        au.wetDryMix = wetDryMix
+        au.regenerateTable(drive: drive, type: preset)
     }
 
     // MARK: - Effects: Compressor
@@ -700,8 +860,13 @@ class NativeAudioEngine {
         let au = comp.audioUnit
         // kDynamicsProcessorParam_Threshold = 0
         AudioUnitSetParameter(au, 0, kAudioUnitScope_Global, 0, threshold, 0)
-        // kDynamicsProcessorParam_HeadRoom = 1 (approximate knee)
-        AudioUnitSetParameter(au, 1, kAudioUnitScope_Global, 0, knee, 0)
+        // kDynamicsProcessorParam_HeadRoom = 1
+        // Apple's DynamicsProcessor uses headRoom instead of ratio:
+        // signals above threshold are limited to threshold + headRoom.
+        // headRoom = 20/ratio maps: 2:1→10dB, 4:1→5dB, 10:1→2dB, 20:1→1dB
+        let clampedRatio = max(Float(1.0), ratio)
+        let headRoom = 20.0 / clampedRatio
+        AudioUnitSetParameter(au, 1, kAudioUnitScope_Global, 0, headRoom, 0)
         // kDynamicsProcessorParam_ExpansionRatio = 2 — not used
         // kDynamicsProcessorParam_AttackTime = 4
         let clampedAttack = max(0.0001, min(0.2, attack))
@@ -723,9 +888,9 @@ class NativeAudioEngine {
 
         filterNode.bypass = false
         filterNode.bands[0].frequency = highpassFreq
-        filterNode.bands[0].bandwidth = highpassQ
+        filterNode.bands[0].bandwidth = qToBandwidth(highpassQ)
         filterNode.bands[1].frequency = lowpassFreq
-        filterNode.bands[1].bandwidth = lowpassQ
+        filterNode.bands[1].bandwidth = qToBandwidth(lowpassQ)
     }
 
     // MARK: - Master Bypass
@@ -739,7 +904,7 @@ class NativeAudioEngine {
             reverbNode.bypass = true
             reverbPreDelayNode.bypass = true
             delayNode.bypass = true
-            distortionNode.bypass = true
+            waveshaperNode?.auAudioUnit.shouldBypassEffect = true
         }
     }
 
