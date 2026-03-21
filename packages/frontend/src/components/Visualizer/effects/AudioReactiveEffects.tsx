@@ -49,6 +49,8 @@ interface AudioReactiveEffectsProps {
   bloomThreshold?: number;
   bloomRadius?: number;
   vignetteIntensity?: number;
+  /** Run post-processing at half canvas resolution (quarters pixel count) */
+  halfResolution?: boolean;
 }
 
 export function AudioReactiveEffects({
@@ -58,6 +60,7 @@ export function AudioReactiveEffects({
   bloomThreshold = 0.85,
   bloomRadius = 0.5,
   vignetteIntensity = 0.5,
+  halfResolution = false,
 }: AudioReactiveEffectsProps) {
   const { gl, scene, camera, size } = useThree();
 
@@ -66,7 +69,15 @@ export function AudioReactiveEffects({
 
   // Create composer with useMemo to avoid recreating on every render
   const composer = useMemo(() => {
-    const effectComposer = new EffectComposer(gl);
+    // Half-res: create a smaller render target to quarter pixel count
+    const w = halfResolution ? Math.ceil(size.width / 2) : size.width;
+    const h = halfResolution ? Math.ceil(size.height / 2) : size.height;
+    const renderTarget = halfResolution
+      ? new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType })
+      : undefined;
+    const effectComposer = renderTarget
+      ? new EffectComposer(gl, renderTarget)
+      : new EffectComposer(gl);
 
     // Render scene
     const renderPass = new RenderPass(scene, camera);
@@ -75,7 +86,7 @@ export function AudioReactiveEffects({
     // Bloom
     if (enableBloom) {
       const bloomPass = new UnrealBloomPass(
-        new THREE.Vector2(size.width, size.height),
+        new THREE.Vector2(w, h),
         bloomIntensity,
         bloomRadius,
         bloomThreshold
@@ -99,7 +110,7 @@ export function AudioReactiveEffects({
     effectComposer.addPass(outputPass);
 
     return effectComposer;
-  }, [gl, scene, camera, enableBloom, enableVignette, size.width, size.height, bloomIntensity, bloomRadius, bloomThreshold, vignetteIntensity]);
+  }, [gl, scene, camera, enableBloom, enableVignette, size.width, size.height, bloomIntensity, bloomRadius, bloomThreshold, vignetteIntensity, halfResolution]);
 
   // Update refs after composer creation (must be in useEffect, not during render)
   useEffect(() => {
@@ -110,13 +121,15 @@ export function AudioReactiveEffects({
 
   // Handle size changes
   useEffect(() => {
-    composer.setSize(size.width, size.height);
+    const w = halfResolution ? Math.ceil(size.width / 2) : size.width;
+    const h = halfResolution ? Math.ceil(size.height / 2) : size.height;
+    composer.setSize(w, h);
     composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     if (bloomPassRef.current) {
-      bloomPassRef.current.resolution.set(size.width, size.height);
+      bloomPassRef.current.resolution.set(w, h);
     }
-  }, [composer, size]);
+  }, [composer, size, halfResolution]);
 
   // Cleanup
   useEffect(() => {

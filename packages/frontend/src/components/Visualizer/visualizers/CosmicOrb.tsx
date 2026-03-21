@@ -528,16 +528,15 @@ function CosmicOrbScene({ palette }: { palette: string[] }) {
         minPolarAngle={Math.PI / 4}
       />
 
-      {/* Post-processing effects (disabled on mobile — expensive) */}
-      {!mobile && (
-        <AudioReactiveEffects
-          enableBloom
-          enableVignette
-          bloomIntensity={1.2}
-          bloomThreshold={0.4}
-          vignetteIntensity={0.4}
-        />
-      )}
+      {/* Post-processing effects (half-res on mobile for performance) */}
+      <AudioReactiveEffects
+        enableBloom
+        enableVignette
+        bloomIntensity={mobile ? 0.8 : 1.2}
+        bloomThreshold={mobile ? 0.5 : 0.4}
+        vignetteIntensity={0.4}
+        halfResolution={mobile}
+      />
 
       <FrameScheduler />
     </>
