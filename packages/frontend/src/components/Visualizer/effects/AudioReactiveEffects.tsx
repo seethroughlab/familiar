@@ -13,6 +13,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import * as THREE from 'three';
 import { getAudioData } from '../../../hooks/useAudioAnalyser';
+import { useVisualizerStore } from '../../../stores/visualizerStore';
 
 // Vignette shader
 const VignetteShader = {
@@ -63,6 +64,8 @@ export function AudioReactiveEffects({
   halfResolution = false,
 }: AudioReactiveEffectsProps) {
   const { gl, scene, camera, size } = useThree();
+  const glowLevel = useVisualizerStore((s) => s.glowLevel);
+  const glowScale = glowLevel / 100;
 
   const bloomPassRef = useRef<UnrealBloomPass | null>(null);
   const vignettePassRef = useRef<ShaderPass | null>(null);
@@ -146,8 +149,10 @@ export function AudioReactiveEffects({
     const intensity = (audioData?.averageFrequency ?? 128) / 255;
 
     if (bloomPassRef.current) {
-      bloomPassRef.current.strength = bloomIntensity + bass * 1.5;
-      bloomPassRef.current.threshold = Math.max(0.3, bloomThreshold - intensity * 0.2);
+      const rawStrength = bloomIntensity + bass * 1.5;
+      bloomPassRef.current.strength = rawStrength * glowScale;
+      const rawThreshold = Math.max(0.3, bloomThreshold - intensity * 0.2);
+      bloomPassRef.current.threshold = rawThreshold + (1.0 - glowScale) * 0.3;
     }
 
     if (vignettePassRef.current) {

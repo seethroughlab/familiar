@@ -6,7 +6,7 @@
  *
  * Customized via render props for per-view trailing cells, badges, bulk actions, etc.
  */
-import { useMemo, useCallback, useRef, useEffect, type ReactNode } from 'react';
+import { useMemo, useCallback, useRef, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Music, X } from 'lucide-react';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -19,6 +19,7 @@ import { useMultiSelect } from '../../hooks/useMultiSelect';
 import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
+import { useScrollContainer } from '../../hooks/useScrollContainer';
 import { formatDuration } from '../../utils/format';
 import { FavoriteButton } from '../Library/browsers/trackList/FavoriteButton';
 import type { Track } from '../../types';
@@ -123,8 +124,25 @@ export function PlaylistTrackList<T>({
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
 
-  // Scroll container for virtualization
+  // Scroll container for virtualization — prefer AppShell's shared scroll
+  // container so the header above the track list scrolls away on mobile.
+  const parentScrollRef = useScrollContainer();
+  const useParentScroll = !!parentScrollRef;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const virtualContainerRef = useRef<HTMLDivElement>(null);
+
+  // Measure offset of virtual items from scroll container for scrollMargin.
+  // Re-measured when items change (header may show/hide loading states).
+  const [scrollMargin, setScrollMargin] = useState(0);
+  useLayoutEffect(() => {
+    if (!useParentScroll) return;
+    const scrollEl = parentScrollRef?.current;
+    const listEl = virtualContainerRef.current;
+    if (!scrollEl || !listEl) return;
+    const scrollRect = scrollEl.getBoundingClientRect();
+    const listRect = listEl.getBoundingClientRect();
+    setScrollMargin(listRect.top - scrollRect.top + scrollEl.scrollTop);
+  }, [useParentScroll, parentScrollRef, items.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Column + sort state
   const columns = useColumnStore((s) => s.columns);
@@ -141,9 +159,12 @@ export function PlaylistTrackList<T>({
   // Virtualizer
   const virtualizer = useVirtualizer({
     count: sortedItems.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement: () => useParentScroll
+      ? (parentScrollRef?.current ?? null)
+      : scrollRef.current,
     estimateSize: () => 48,
     overscan: 10,
+    scrollMargin: useParentScroll ? scrollMargin : 0,
   });
 
   // Auto-scroll to currently playing track
@@ -286,7 +307,7 @@ export function PlaylistTrackList<T>({
   }
 
   return (
-    <div className="flex flex-col min-h-0 flex-1">
+    <div className={useParentScroll ? 'flex flex-col' : 'flex flex-col min-h-0 flex-1'}>
       {/* Selection toolbar */}
       {selectedIds.size > 0 && (
         <div className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm p-3 rounded-lg flex items-center gap-3 border border-zinc-700 mb-2">
@@ -315,8 +336,12 @@ export function PlaylistTrackList<T>({
         trailingCount={trailingColumns.length}
       />
 
-      {/* Track rows (virtualized) */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto" style={{ contain: 'strict' }}>
+      {/* Track rows (virtualized) — when using parent scroll, no inner scroll wrapper */}
+      <div
+        ref={useParentScroll ? virtualContainerRef : scrollRef}
+        className={useParentScroll ? '' : 'flex-1 min-h-0 overflow-y-auto'}
+        style={useParentScroll ? undefined : { contain: 'strict' }}
+      >
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const idx = virtualRow.index;
@@ -333,7 +358,7 @@ export function PlaylistTrackList<T>({
               <PlaylistRow
                 key={id}
                 id={id}
-                virtualStart={virtualRow.start}
+                virtualStart={virtualRow.start - (useParentScroll ? scrollMargin : 0)}
                 virtualIndex={virtualRow.index}
                 index={idx}
                 trackId={trackObj.id}

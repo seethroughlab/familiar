@@ -161,7 +161,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   ), [handleBulkDelete]);
 
   return (
-    <div className="flex flex-col gap-4 p-4 min-h-full">
+    <div className="flex flex-col gap-4 p-4">
       {/* Header */}
       <div className="flex items-start gap-4">
         <button

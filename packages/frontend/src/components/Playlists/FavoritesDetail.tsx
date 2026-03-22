@@ -164,7 +164,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const getItemId = useCallback((item: FavoriteItem) => item.id, []);
 
   return (
-    <div className="flex flex-col gap-4 p-4 min-h-full">
+    <div className="flex flex-col gap-4 p-4">
       {/* Header */}
       <div className="space-y-4">
         <button

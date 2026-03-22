@@ -22,7 +22,7 @@ const visualizerIcons: Record<string, typeof Sparkles> = {
 export function VisualizerPicker() {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { visualizerId, setVisualizerId } = useVisualizerStore();
+  const { visualizerId, setVisualizerId, glowLevel, setGlowLevel } = useVisualizerStore();
 
   const visualizers = getVisualizers();
   const currentVisualizer = visualizers.find(v => v.metadata.id === visualizerId);
@@ -89,6 +89,21 @@ export function VisualizerPicker() {
             <span className="text-xs text-zinc-500 uppercase tracking-wide">
               Choose Visualizer
             </span>
+          </div>
+
+          <div className="px-3 py-2.5 border-b border-zinc-700">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-zinc-400">Glow</span>
+              <span className="text-xs text-zinc-500 tabular-nums">{glowLevel}%</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={glowLevel}
+              onChange={(e) => setGlowLevel(Number(e.target.value))}
+              className="w-full h-1.5 bg-zinc-700 rounded-full appearance-none cursor-pointer accent-purple-500 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-purple-500"
+            />
           </div>
 
           <div className="max-h-80 overflow-y-auto">

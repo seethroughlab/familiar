@@ -322,7 +322,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   }
 
   return (
-    <div className="flex flex-col gap-4 p-4 min-h-full">
+    <div className="flex flex-col gap-4 p-4">
       {/* Header */}
       <div className="space-y-4">
         {/* Back button row */}
