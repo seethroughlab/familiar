@@ -16,13 +16,9 @@ import os
 import tempfile
 from pathlib import Path
 
+from app.services.metadata import BROWSER_SUPPORTED_CODECS
+
 logger = logging.getLogger(__name__)
-
-
-BROWSER_SUPPORTED_CODECS = {
-    "mp3", "aac", "vorbis", "opus", "flac",
-    "pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_u8",
-}
 
 
 async def detect_codec(file_path: Path) -> tuple[str | None, int]:
