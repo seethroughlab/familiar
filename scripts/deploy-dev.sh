@@ -88,6 +88,10 @@ if [ "$DEPLOY_BACKEND" = true ]; then
     }
 fi
 
+# Restart again to pick up code copied via docker cp
+echo "Restarting container with new code..."
+ssh root@$NAS_HOST "docker restart familiar-api"
+
 echo ""
 echo "Done! Changes deployed in ${SECONDS}s"
 echo "View at: http://$NAS_HOST:4400"
