@@ -17,6 +17,8 @@ from app.db.models import Track, TrackStatus
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pending-tracks", tags=["pending-review"])
+group_router = APIRouter(prefix="/pending-tracks/group", tags=["pending-review"])
+bulk_router = APIRouter(prefix="/pending-tracks/bulk", tags=["pending-review"])
 
 
 # ============================================================================
@@ -364,6 +366,158 @@ async def get_stats(db: DbSession) -> PendingStatsResponse:
 
 
 # ============================================================================
+# Group actions (on group_router to avoid /{track_id} path conflict)
+# ============================================================================
+
+
+@group_router.post("/approve")
+async def group_approve(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: GroupApproveRequest,
+) -> dict[str, Any]:
+    """Approve all pending tracks in a folder."""
+    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
+    if not tracks:
+        raise ValidationError("No pending tracks found in folder")
+
+    for track in tracks:
+        _apply_metadata_overrides(track, request.metadata_overrides)
+        await _activate_track(db, track, request.queue_analysis)
+
+    await db.commit()
+    return {"status": "approved", "count": len(tracks)}
+
+
+@group_router.post("/skip")
+async def group_skip(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: GroupSkipRequest,
+) -> dict[str, Any]:
+    """Skip all pending tracks in a folder."""
+    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
+    if not tracks:
+        raise ValidationError("No pending tracks found in folder")
+
+    for track in tracks:
+        track.status = TrackStatus.SKIPPED
+        track.review_info = None
+
+    await db.commit()
+    return {"status": "skipped", "count": len(tracks)}
+
+
+@group_router.post("/replace-upgrades")
+async def group_replace_upgrades(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: GroupReplaceUpgradesRequest,
+) -> dict[str, Any]:
+    """Replace all upgrades within a group."""
+    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
+    replaced = 0
+
+    for track in tracks:
+        if not (track.review_info and track.review_info.get("trump_status") == "trumps"):
+            continue
+        old_track_id_str = track.review_info.get("duplicate_of")
+        if not old_track_id_str:
+            continue
+
+        old_track_id = UUID(old_track_id_str)
+        old_result = await db.execute(select(Track).where(Track.id == old_track_id))
+        old_track = old_result.scalar_one_or_none()
+        if not old_track:
+            continue
+
+        await _transfer_user_data(db, old_track_id, track.id)
+        await _activate_track(db, track, request.queue_analysis)
+        old_track.status = TrackStatus.SKIPPED
+        replaced += 1
+
+    await db.commit()
+    return {"status": "replaced", "count": replaced}
+
+
+@group_router.post("/skip-downgrades")
+async def group_skip_downgrades(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: GroupSkipDowngradesRequest,
+) -> dict[str, Any]:
+    """Skip all downgrades within a group."""
+    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
+    skipped = 0
+
+    for track in tracks:
+        if track.review_info and track.review_info.get("trump_status") == "trumped_by":
+            track.status = TrackStatus.SKIPPED
+            track.review_info = None
+            skipped += 1
+
+    await db.commit()
+    return {"status": "skipped", "count": skipped}
+
+
+@group_router.post("/metadata")
+async def group_metadata(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: GroupMetadataRequest,
+) -> dict[str, Any]:
+    """Edit shared metadata for all pending tracks in a group."""
+    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
+    if not tracks:
+        raise ValidationError("No pending tracks found in folder")
+
+    _allowed = {"artist", "album", "year", "album_artist", "genre"}
+    for track in tracks:
+        for key, value in request.metadata.items():
+            if key in _allowed:
+                setattr(track, key, value)
+
+    await db.commit()
+    return {"status": "updated", "count": len(tracks)}
+
+
+# ============================================================================
+# Bulk actions (on bulk_router to avoid /{track_id} path conflict)
+# ============================================================================
+
+
+@bulk_router.post("/approve-all")
+async def bulk_approve_all(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: BulkRequest,
+) -> dict[str, Any]:
+    """Approve all pending tracks globally."""
+    result = await db.execute(
+        select(Track).where(Track.status == TrackStatus.PENDING_REVIEW)
+    )
+    tracks = list(result.scalars().all())
+
+    for track in tracks:
+        await _activate_track(db, track, request.queue_analysis)
+
+    await db.commit()
+    return {"status": "approved", "count": len(tracks)}
+
+
+@bulk_router.post("/skip-all")
+async def bulk_skip_all(db: DbSession, _profile: RequiredProfile) -> dict[str, Any]:
+    """Skip all pending tracks globally."""
+    result = await db.execute(
+        update(Track)
+        .where(Track.status == TrackStatus.PENDING_REVIEW)
+        .values(status=TrackStatus.SKIPPED, review_info=None)
+    )
+    await db.commit()
+    return {"status": "skipped", "count": result.rowcount}  # type: ignore[attr-defined]
+
+
+# ============================================================================
 # Single track actions
 # ============================================================================
 
@@ -447,155 +601,3 @@ async def update_track_metadata(
         setattr(track, key, value)
     await db.commit()
     return {"status": "updated", "track_id": str(track_id)}
-
-
-# ============================================================================
-# Group actions
-# ============================================================================
-
-
-@router.post("/group/approve")
-async def group_approve(
-    db: DbSession,
-    _profile: RequiredProfile,
-    request: GroupApproveRequest,
-) -> dict[str, Any]:
-    """Approve all pending tracks in a folder."""
-    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
-    if not tracks:
-        raise ValidationError("No pending tracks found in folder")
-
-    for track in tracks:
-        _apply_metadata_overrides(track, request.metadata_overrides)
-        await _activate_track(db, track, request.queue_analysis)
-
-    await db.commit()
-    return {"status": "approved", "count": len(tracks)}
-
-
-@router.post("/group/skip")
-async def group_skip(
-    db: DbSession,
-    _profile: RequiredProfile,
-    request: GroupSkipRequest,
-) -> dict[str, Any]:
-    """Skip all pending tracks in a folder."""
-    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
-    if not tracks:
-        raise ValidationError("No pending tracks found in folder")
-
-    for track in tracks:
-        track.status = TrackStatus.SKIPPED
-        track.review_info = None
-
-    await db.commit()
-    return {"status": "skipped", "count": len(tracks)}
-
-
-@router.post("/group/replace-upgrades")
-async def group_replace_upgrades(
-    db: DbSession,
-    _profile: RequiredProfile,
-    request: GroupReplaceUpgradesRequest,
-) -> dict[str, Any]:
-    """Replace all upgrades within a group."""
-    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
-    replaced = 0
-
-    for track in tracks:
-        if not (track.review_info and track.review_info.get("trump_status") == "trumps"):
-            continue
-        old_track_id_str = track.review_info.get("duplicate_of")
-        if not old_track_id_str:
-            continue
-
-        old_track_id = UUID(old_track_id_str)
-        old_result = await db.execute(select(Track).where(Track.id == old_track_id))
-        old_track = old_result.scalar_one_or_none()
-        if not old_track:
-            continue
-
-        await _transfer_user_data(db, old_track_id, track.id)
-        await _activate_track(db, track, request.queue_analysis)
-        old_track.status = TrackStatus.SKIPPED
-        replaced += 1
-
-    await db.commit()
-    return {"status": "replaced", "count": replaced}
-
-
-@router.post("/group/skip-downgrades")
-async def group_skip_downgrades(
-    db: DbSession,
-    _profile: RequiredProfile,
-    request: GroupSkipDowngradesRequest,
-) -> dict[str, Any]:
-    """Skip all downgrades within a group."""
-    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
-    skipped = 0
-
-    for track in tracks:
-        if track.review_info and track.review_info.get("trump_status") == "trumped_by":
-            track.status = TrackStatus.SKIPPED
-            track.review_info = None
-            skipped += 1
-
-    await db.commit()
-    return {"status": "skipped", "count": skipped}
-
-
-@router.post("/group/metadata")
-async def group_metadata(
-    db: DbSession,
-    _profile: RequiredProfile,
-    request: GroupMetadataRequest,
-) -> dict[str, Any]:
-    """Edit shared metadata for all pending tracks in a group."""
-    tracks = await _get_pending_tracks_in_folder(db, request.folder_path)
-    if not tracks:
-        raise ValidationError("No pending tracks found in folder")
-
-    _allowed = {"artist", "album", "year", "album_artist", "genre"}
-    for track in tracks:
-        for key, value in request.metadata.items():
-            if key in _allowed:
-                setattr(track, key, value)
-
-    await db.commit()
-    return {"status": "updated", "count": len(tracks)}
-
-
-# ============================================================================
-# Bulk actions
-# ============================================================================
-
-
-@router.post("/bulk/approve-all")
-async def bulk_approve_all(
-    db: DbSession,
-    _profile: RequiredProfile,
-    request: BulkRequest,
-) -> dict[str, Any]:
-    """Approve all pending tracks globally."""
-    result = await db.execute(
-        select(Track).where(Track.status == TrackStatus.PENDING_REVIEW)
-    )
-    tracks = list(result.scalars().all())
-
-    for track in tracks:
-        await _activate_track(db, track, request.queue_analysis)
-
-    await db.commit()
-    return {"status": "approved", "count": len(tracks)}
-
-
-@router.post("/bulk/skip-all")
-async def bulk_skip_all(db: DbSession, _profile: RequiredProfile) -> dict[str, Any]:
-    """Skip all pending tracks globally."""
-    result = await db.execute(
-        update(Track)
-        .where(Track.status == TrackStatus.PENDING_REVIEW)
-        .values(status=TrackStatus.SKIPPED, review_info=None)
-    )
-    await db.commit()
-    return {"status": "skipped", "count": result.rowcount}  # type: ignore[attr-defined]
