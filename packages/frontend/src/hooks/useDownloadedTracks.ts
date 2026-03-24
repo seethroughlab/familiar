@@ -49,6 +49,11 @@ export function useDownloadedTracks(): UseDownloadedTracksResult {
 
   useEffect(() => {
     refresh();
+
+    // Re-fetch when offline tracks change (downloads complete, deletions, etc.)
+    const handler = () => { refresh(); };
+    window.addEventListener('offline-tracks-updated', handler);
+    return () => window.removeEventListener('offline-tracks-updated', handler);
   }, [refresh]);
 
   return {
