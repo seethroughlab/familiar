@@ -42,7 +42,7 @@ class TestGetAuthUrl:
     def test_returns_url_with_api_key(self, service):
         url = service.get_auth_url("http://localhost/callback")
         assert "test_api_key" in url
-        assert "http://localhost/callback" in url
+        assert "http%3A%2F%2Flocalhost%2Fcallback" in url
 
     def test_raises_if_not_configured(self):
         mock = MagicMock()
