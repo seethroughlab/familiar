@@ -39,8 +39,8 @@ interface ConnectivityState {
   incrementCounterBy: (name: keyof ConnectivityCounters, amount: number) => void;
 }
 
-const PROBE_TIMEOUT_MS = 3500;
-const PROBE_ONLINE_INTERVAL_MS = 20000;
+const PROBE_TIMEOUT_MS = 8000;
+const PROBE_ONLINE_INTERVAL_MS = 30000;
 const PROBE_OFFLINE_INTERVAL_MS = 8000;
 
 let started = false;
@@ -118,7 +118,7 @@ async function runProbe(): Promise<void> {
     });
   } else {
     const nextProbeFailures = current.consecutiveProbeFailures + 1;
-    const shouldForce = current.browserOnline && nextProbeFailures >= 2;
+    const shouldForce = current.browserOnline && nextProbeFailures >= 3;
     useConnectivityStore.setState({
       reachabilityState: 'unreachable',
       consecutiveProbeFailures: nextProbeFailures,
@@ -260,7 +260,7 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
     const nextFailures = state.consecutiveNetworkFailures + 1;
 
     if (category === 'network-unreachable') {
-      const shouldForce = !state.offlineModeActive && nextFailures >= 2;
+      const shouldForce = !state.offlineModeActive && nextFailures >= 3;
       set({
         consecutiveNetworkFailures: nextFailures,
         reachabilityState: 'unreachable',

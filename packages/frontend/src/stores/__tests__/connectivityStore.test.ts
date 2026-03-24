@@ -62,7 +62,20 @@ describe('connectivityStore', () => {
     expect(state.counters.offline_mode_forced).toBe(0);
   });
 
-  it('forces offline mode after 2 consecutive network-unreachable load failures', () => {
+  it('does not force offline after 2 consecutive network-unreachable load failures', () => {
+    useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
+    useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
+
+    const state = useConnectivityStore.getState();
+    expect(state.forcedOffline).toBe(false);
+    expect(state.offlineModeActive).toBe(false);
+    expect(state.reachabilityState).toBe('unreachable');
+    expect(state.counters.network_unreachable_load_failures).toBe(2);
+    expect(state.counters.offline_mode_forced).toBe(0);
+  });
+
+  it('forces offline mode after 3 consecutive network-unreachable load failures', () => {
+    useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
     useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
     useConnectivityStore.getState().noteStreamLoadFailure('network-unreachable');
 
@@ -70,7 +83,7 @@ describe('connectivityStore', () => {
     expect(state.forcedOffline).toBe(true);
     expect(state.offlineModeActive).toBe(true);
     expect(state.reachabilityState).toBe('unreachable');
-    expect(state.counters.network_unreachable_load_failures).toBe(2);
+    expect(state.counters.network_unreachable_load_failures).toBe(3);
     expect(state.counters.offline_mode_forced).toBe(1);
   });
 
@@ -87,7 +100,7 @@ describe('connectivityStore', () => {
     expect(state.consecutiveProbeFailures).toBe(1);
   });
 
-  it('forces offline after 2 consecutive failed probes', async () => {
+  it('does not force offline after 2 consecutive failed probes', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
 
     useConnectivityStore.getState().startMonitoring();
@@ -95,9 +108,24 @@ describe('connectivityStore', () => {
     await vi.advanceTimersByTimeAsync(8000 + 10);  // second probe fails (PROBE_OFFLINE_INTERVAL_MS)
 
     const state = useConnectivityStore.getState();
+    expect(state.forcedOffline).toBe(false);
+    expect(state.offlineModeActive).toBe(false);
+    expect(state.consecutiveProbeFailures).toBe(2);
+    expect(state.counters.offline_mode_forced).toBe(0);
+  });
+
+  it('forces offline after 3 consecutive failed probes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
+
+    useConnectivityStore.getState().startMonitoring();
+    await vi.advanceTimersByTimeAsync(10);  // first probe fails
+    await vi.advanceTimersByTimeAsync(8000 + 10);  // second probe fails
+    await vi.advanceTimersByTimeAsync(8000 + 10);  // third probe fails
+
+    const state = useConnectivityStore.getState();
     expect(state.forcedOffline).toBe(true);
     expect(state.offlineModeActive).toBe(true);
-    expect(state.consecutiveProbeFailures).toBe(2);
+    expect(state.consecutiveProbeFailures).toBe(3);
     expect(state.counters.offline_mode_forced).toBe(1);
   });
 
@@ -197,7 +225,7 @@ describe('connectivityStore', () => {
     expect(state.reachabilityState).toBe('reachable');
   });
 
-  it('probe uses 8s interval when offline, 20s when online', async () => {
+  it('probe uses 8s interval when offline, 30s when online', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -205,17 +233,17 @@ describe('connectivityStore', () => {
     await vi.advanceTimersByTimeAsync(10); // initial probe
     const callsAfterInit = fetchMock.mock.calls.length;
 
-    // Online: next probe at 20s — no probe before that
-    await vi.advanceTimersByTimeAsync(19_000);
+    // Online: next probe at 30s — no probe before that
+    await vi.advanceTimersByTimeAsync(29_000);
     expect(fetchMock.mock.calls.length).toBe(callsAfterInit);
     await vi.advanceTimersByTimeAsync(1_100);
-    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterInit); // probe at ~20s
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(callsAfterInit); // probe at ~30s
 
     // Switch to offline probing — the probe that just ran was reachable,
     // so schedule the next probe to fail
     fetchMock.mockImplementation(async () => ({ ok: false }));
     // Wait for the next online-interval probe to fire and fail
-    await vi.advanceTimersByTimeAsync(20_100);
+    await vi.advanceTimersByTimeAsync(30_100);
     const callsAfterFirstFail = fetchMock.mock.calls.length;
 
     // Now offline interval (8s) should apply

@@ -101,6 +101,9 @@ export function useAudioEngine() {
   // Queue transition flag — scoped to hook lifecycle (not module-level)
   const queueTransitionRef = useRef(false);
 
+  // Pre-offline queue snapshot — restored when connectivity recovers
+  const preOfflineQueueRef = useRef<{ tracks: Track[]; index: number; source: import('./queueStore').QueueSource | null } | null>(null);
+
   // Album gain cache — scoped to hook lifecycle
   const albumGainCacheRef = useRef(new Map<string, { avgLufs: number; albumPeak: number | null }>());
 
@@ -420,14 +423,36 @@ export function useAudioEngine() {
   ]);
 
   useEffect(() => {
-    if (!offlineModeActive) return;
     const state = usePlayerStore.getState();
+
+    if (!offlineModeActive) {
+      // Restore pre-offline queue when connectivity recovers
+      const saved = preOfflineQueueRef.current;
+      if (saved && saved.tracks.length > 0) {
+        const currentId = state.currentTrack?.id;
+        const restoredIndex = currentId
+          ? saved.tracks.findIndex((t) => t.id === currentId)
+          : saved.index;
+        state.setQueue(saved.tracks, Math.max(0, restoredIndex), saved.source ?? undefined, { preservePlaybackState: true });
+        preOfflineQueueRef.current = null;
+      }
+      return;
+    }
+
     if (state.queue.length === 0) return;
 
-    const filteredTracks = state.queue
-      .map((item) => item.track)
-      .filter((track) => offlineTrackIds.has(track.id));
-    if (filteredTracks.length === state.queue.length) return;
+    const allTracks = state.queue.map((item) => item.track);
+    const filteredTracks = allTracks.filter((track) => offlineTrackIds.has(track.id));
+    if (filteredTracks.length === allTracks.length) return;
+
+    // Save the full queue before filtering so we can restore on recovery
+    if (!preOfflineQueueRef.current) {
+      preOfflineQueueRef.current = {
+        tracks: allTracks,
+        index: state.queueIndex,
+        source: state.queueSource,
+      };
+    }
 
     incrementConnectivityCounter('offline_queue_rebuild_count');
     const currentId = state.currentTrack?.id;
