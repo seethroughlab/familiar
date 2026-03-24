@@ -1,13 +1,10 @@
-import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Radio, Loader2, User, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { lastfmApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
-import { useSearchParams } from 'react-router-dom';
 
 export function LastfmSettings() {
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const { data: status, isLoading } = useQuery({
     queryKey: queryKeys.lastfmStatus.all,
@@ -21,34 +18,12 @@ export function LastfmSettings() {
     },
   });
 
-  const callbackMutation = useMutation({
-    mutationFn: (token: string) => lastfmApi.callback(token),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.lastfmStatus.all });
-      // Clean up URL params
-      searchParams.delete('lastfm_callback');
-      searchParams.delete('token');
-      setSearchParams(searchParams);
-    },
-  });
-
   const disconnectMutation = useMutation({
     mutationFn: lastfmApi.disconnect,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lastfmStatus.all });
     },
   });
-
-  // Handle callback from Last.fm auth
-  useEffect(() => {
-    const isCallback = searchParams.get('lastfm_callback');
-    const token = searchParams.get('token');
-
-    if (isCallback && token && !callbackMutation.isPending) {
-      callbackMutation.mutate(token);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only run on URL change, not mutation state
-  }, [searchParams]);
 
   if (isLoading) {
     return (
@@ -132,10 +107,10 @@ export function LastfmSettings() {
 
           <button
             onClick={() => connectMutation.mutate()}
-            disabled={connectMutation.isPending || callbackMutation.isPending}
+            disabled={connectMutation.isPending}
             className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium transition-colors"
           >
-            {connectMutation.isPending || callbackMutation.isPending ? (
+            {connectMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Connecting...

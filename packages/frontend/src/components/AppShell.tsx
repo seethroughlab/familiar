@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { ScrollContainerContext } from '../hooks/useScrollContainer';
 import { Loader2 } from 'lucide-react';
+import { useLastfmCallback } from '../hooks/useLastfmCallback';
 import { useUIStore } from '../stores/uiStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -73,6 +74,9 @@ export function AppShell() {
 
   // One-time initialization (audio engine, sync, logging, hydration, events, triple-tap)
   useAppBootstrap({ navigate, setShowSettings, setShowFullPlayer, closeRightPanel });
+
+  // Handle Last.fm OAuth callback token in URL
+  useLastfmCallback();
 
   // Keyboard shortcuts
   useKeyboardShortcuts({

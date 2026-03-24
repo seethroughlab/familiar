@@ -100,7 +100,7 @@ async def get_auth_url(profile: CurrentProfile) -> LastfmAuthResponse:
     # Get frontend URL from settings
     from app.config import settings
     base_url = settings.frontend_url or "http://localhost:4400"
-    callback_url = f"{base_url.rstrip('/')}/settings?lastfm_callback=true"
+    callback_url = base_url.rstrip('/')
     auth_url = lastfm.get_auth_url(callback_url)
 
     return LastfmAuthResponse(auth_url=auth_url)

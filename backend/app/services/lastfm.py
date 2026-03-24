@@ -4,6 +4,7 @@ import hashlib
 import time
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 from uuid import UUID
 
 import httpx
@@ -47,7 +48,7 @@ class LastfmService:
 
         api_key, _ = self._get_credentials()
         assert api_key is not None  # mypy narrowing
-        return f"{self.AUTH_URL}?api_key={api_key}&cb={callback_url}"
+        return f"{self.AUTH_URL}?api_key={api_key}&cb={quote(callback_url, safe='')}"
 
     def _sign_params(self, params: dict[str, Any]) -> str:
         """Generate API signature for authenticated requests."""
