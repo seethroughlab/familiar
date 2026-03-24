@@ -2,10 +2,11 @@
  * Rain Window Visualizer — Three.js + GLSL rewrite.
  *
  * Two-pass FBO rendering:
- *   Pass 1: Bokeh background + trails → WebGLRenderTarget
- *   Pass 2: Compositor samples FBO with per-droplet refraction, SSS, caustics
+ *   Pass 1: Bokeh background → WebGLRenderTarget
+ *   Pass 2: Compositor samples FBO with per-droplet + per-trail refraction, SSS, caustics
  *
- * Droplets act as tiny lenses — refracting, tinting, and concentrating background light.
+ * Droplets and trails act as tiny lenses — refracting, tinting, and concentrating background light.
+ * Trail data is packed into a DataTexture for the compositor to render as tapered refractive streaks.
  */
 import { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame, useThree, extend } from '@react-three/fiber';
@@ -21,7 +22,8 @@ import { FrameScheduler } from '../effects/FrameScheduler';
 const mobile = isMobile();
 
 const MAX_DROPLETS = 60;
-const MAX_TRAIL = 30;
+const MAX_TRAIL = mobile ? 12 : 30;
+const TRAIL_TEX_WIDTH = MAX_DROPLETS * MAX_TRAIL;
 
 // ============================================================================
 // Droplet Physics
@@ -48,7 +50,8 @@ interface ResidualDrop {
 }
 
 function createDroplet(canvasWidth: number): Droplet {
-  const radius = 2 + Math.random() * Math.random() * 6;
+  const scale = Math.min(canvasWidth / 1200, 1);
+  const radius = (2 + Math.random() * Math.random() * 6) * scale;
   return {
     x: Math.random() * canvasWidth,
     y: -radius * 2,
@@ -242,9 +245,11 @@ const COMPOSITOR_VERT = `
 
 const COMPOSITOR_FRAG = /* glsl */ `
   uniform sampler2D tBackground;
+  uniform sampler2D tTrailData;
   uniform vec4 uDroplets[${MAX_DROPLETS}];
   uniform vec3 uDropletDir[${MAX_DROPLETS}];
   uniform int uDropletCount;
+  uniform int uActiveDropletCount;
   uniform vec2 uResolution;
   uniform float uTime;
   uniform float uBass;
@@ -255,6 +260,80 @@ const COMPOSITOR_FRAG = /* glsl */ `
     vec3 color = texture2D(tBackground, vUv).rgb;
     vec2 fragCoord = vUv * uResolution;
 
+    // --- Render trail streaks (refractive, tapered) ---
+    for (int i = 0; i < ${MAX_DROPLETS}; i++) {
+      if (i >= uActiveDropletCount) break;
+
+      float dropRadius = uDroplets[i].z;
+      if (dropRadius < 0.1) continue;
+
+      // Fetch first trail point — skip droplets with no trail
+      vec4 tp0 = texture2D(tTrailData, vec2((float(i * ${MAX_TRAIL}) + 0.5) / ${TRAIL_TEX_WIDTH}.0, 0.5));
+      if (tp0.a < 0.5) continue;
+
+      // Quick rejection: trails run roughly vertically from the droplet upward
+      // (in shader coords, trail points have higher Y than droplet since Y is flipped)
+      vec2 dropPos = uDroplets[i].xy;
+      if (abs(fragCoord.x - dropPos.x) > dropRadius * 3.0 + 20.0) continue;
+
+      // Iterate trail segments
+      vec4 prevPt = tp0;
+      for (int j = 1; j < ${MAX_TRAIL}; j++) {
+        vec4 currPt = texture2D(tTrailData, vec2((float(i * ${MAX_TRAIL} + j) + 0.5) / ${TRAIL_TEX_WIDTH}.0, 0.5));
+        if (currPt.a < 0.5) break;
+
+        vec2 p0 = prevPt.xy;
+        vec2 p1 = currPt.xy;
+        float age0 = prevPt.z;
+        float age1 = currPt.z;
+
+        vec2 segDir = p1 - p0;
+        float segLen = length(segDir);
+        if (segLen < 0.5) { prevPt = currPt; continue; }
+        segDir /= segLen;
+
+        // Capsule SDF
+        vec2 toFrag = fragCoord - p0;
+        float along = clamp(dot(toFrag, segDir), 0.0, segLen);
+        vec2 nearest = p0 + segDir * along;
+        float dist = length(fragCoord - nearest);
+
+        // Taper width by age: newer = wider, older = thinner
+        float t = along / segLen;
+        float localAge = mix(age0, age1, t);
+        float ageFactor = 1.0 - localAge;
+        float width = mix(0.4, dropRadius * 0.6, ageFactor * ageFactor);
+
+        // Skip if fragment is too far
+        if (dist > width * 1.5) { prevPt = currPt; continue; }
+
+        float nd = dist / max(width, 0.1);
+        float edge = smoothstep(1.0, 0.5, nd);
+        if (edge < 0.001) { prevPt = currPt; continue; }
+
+        // Simplified refraction (single texture fetch)
+        vec2 refractDir = dist > 0.1 ? (nearest - fragCoord) / dist : vec2(0.0);
+        float refractStr = (1.0 - nd * nd) * 0.02 * width;
+        vec2 refractedUv = vUv + refractDir * refractStr / uResolution;
+        vec3 trailColor = texture2D(tBackground, refractedUv).rgb;
+
+        // Subtle SSS
+        float sss = smoothstep(1.0, 0.0, nd);
+        trailColor *= 1.0 + sss * sss * 0.25;
+
+        // Fresnel rim
+        float fresnel = pow(nd, 3.0) * 0.3;
+        trailColor = mix(trailColor, vec3(0.7, 0.85, 1.0), fresnel);
+
+        // Age-based opacity fade
+        float trailOpacity = ageFactor * ageFactor * 0.5;
+
+        color = mix(color, trailColor, edge * trailOpacity);
+        prevPt = currPt;
+      }
+    }
+
+    // --- Render droplets (full refraction) ---
     for (int i = 0; i < ${MAX_DROPLETS}; i++) {
       if (i >= uDropletCount) break;
 
@@ -280,8 +359,8 @@ const COMPOSITOR_FRAG = /* glsl */ `
       // t: 0 at trailing end, 1 at leading end (epsilon avoids div-by-zero)
       float t = (clampedAlong + halfLen + 0.001) / (2.0 * halfLen + 0.002);
 
-      // Taper radius: full at leading end, 35% at trailing end
-      float taperRadius = radius * mix(0.35, 1.0, t);
+      // Taper radius: full at leading end, sharp point at trailing end
+      float taperRadius = radius * mix(0.05, 1.0, t * t);
       // Branchless stationary fallback — pure circle when stretch ≈ 0
       taperRadius = mix(radius, taperRadius, step(0.01, stretch));
 
@@ -345,9 +424,11 @@ const COMPOSITOR_FRAG = /* glsl */ `
 const CompositorMaterial = shaderMaterial(
   {
     tBackground: null as THREE.Texture | null,
+    tTrailData: null as THREE.DataTexture | null,
     uDroplets: Array.from({ length: MAX_DROPLETS }, () => new THREE.Vector4()),
     uDropletDir: Array.from({ length: MAX_DROPLETS }, () => new THREE.Vector3()),
     uDropletCount: 0,
+    uActiveDropletCount: 0,
     uResolution: new THREE.Vector2(),
     uTime: 0,
     uBass: 0,
@@ -408,7 +489,23 @@ function RainWindowScene({ palette }: { palette: string[] }) {
     []
   );
 
-  // FBO scene: bokeh background quad + trail line segments
+  // Trail data texture — packed Float32 RGBA, one texel per trail point
+  const trailTex = useMemo(() => {
+    const data = new Float32Array(TRAIL_TEX_WIDTH * 4);
+    const texture = new THREE.DataTexture(
+      data,
+      TRAIL_TEX_WIDTH,
+      1,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    );
+    texture.minFilter = THREE.NearestFilter;
+    texture.magFilter = THREE.NearestFilter;
+    texture.needsUpdate = true;
+    return { data, texture };
+  }, []);
+
+  // FBO scene: bokeh background quad
   const fbo = useMemo(() => {
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
@@ -438,32 +535,10 @@ function RainWindowScene({ palette }: { palette: string[] }) {
     );
     scene.add(bokehMesh);
 
-    // — Trail line segments —
-    const trailPositions = new Float32Array(MAX_DROPLETS * MAX_TRAIL * 2 * 3);
-    const trailGeometry = new THREE.BufferGeometry();
-    trailGeometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(trailPositions, 3)
-    );
-    trailGeometry.setDrawRange(0, 0);
-
-    const trailMaterial = new THREE.LineBasicMaterial({
-      color: 0xc8dcff,
-      transparent: true,
-      opacity: 0.15,
-      blending: THREE.AdditiveBlending,
-      depthTest: false,
-      depthWrite: false,
-    });
-    const trailMesh = new THREE.LineSegments(trailGeometry, trailMaterial);
-    scene.add(trailMesh);
-
     return {
       scene,
       camera,
       bokehMaterial,
-      trailPositions,
-      trailGeometry,
     };
   }, []);
 
@@ -488,9 +563,9 @@ function RainWindowScene({ palette }: { palette: string[] }) {
     return () => {
       renderTarget.dispose();
       fbo.bokehMaterial.dispose();
-      fbo.trailGeometry.dispose();
+      trailTex.texture.dispose();
     };
-  }, [renderTarget, fbo]);
+  }, [renderTarget, fbo, trailTex]);
 
   // Main animation loop
   useFrame(() => {
@@ -525,47 +600,13 @@ function RainWindowScene({ palette }: { palette: string[] }) {
       bokehBrightness[i] = bokeh.brightness + smoothedBass * 0.2;
     });
 
-    // --- Update trail vertices (NDC coords for ortho camera) ---
-    const tp = fbo.trailPositions;
-    let vertexCount = 0;
-    const maxVerts = MAX_DROPLETS * MAX_TRAIL * 2;
-
-    for (const droplet of dropletsRef.current) {
-      if (droplet.trail.length < 2) continue;
-      for (let j = 0; j < droplet.trail.length - 1; j++) {
-        if (vertexCount >= maxVerts) break;
-        const a = droplet.trail[j];
-        const b = droplet.trail[j + 1];
-        // Pixel coords → NDC (-1..1)
-        const ax = (a.x / width) * 2 - 1;
-        const ay = 1 - (a.y / height) * 2;
-        const bx = (b.x / width) * 2 - 1;
-        const by = 1 - (b.y / height) * 2;
-
-        const idx = vertexCount * 3;
-        tp[idx] = ax;
-        tp[idx + 1] = ay;
-        tp[idx + 2] = 0;
-        tp[idx + 3] = bx;
-        tp[idx + 4] = by;
-        tp[idx + 5] = 0;
-        vertexCount += 2;
-      }
-      if (vertexCount >= maxVerts) break;
-    }
-
-    (
-      fbo.trailGeometry.attributes.position as THREE.BufferAttribute
-    ).needsUpdate = true;
-    fbo.trailGeometry.setDrawRange(0, vertexCount);
-
-    // --- Render FBO (bokeh + trails → texture) ---
+    // --- Render FBO (bokeh → texture) ---
     gl.setRenderTarget(renderTarget);
     gl.render(fbo.scene, fbo.camera);
     gl.setRenderTarget(null);
 
     // --- Spawn droplets (rate slightly boosted by bass) ---
-    const spawnRate = 0.02 + smoothedBass * 0.02;
+    const spawnRate = mobile ? 0.04 + smoothedBass * 0.04 : 0.02 + smoothedBass * 0.02;
     if (Math.random() < spawnRate) {
       dropletsRef.current.push(createDroplet(width));
     }
@@ -590,8 +631,25 @@ function RainWindowScene({ palette }: { palette: string[] }) {
       residuals.splice(0, residuals.length - 120);
     }
 
-    // --- Pack active droplets + residuals into uniform arrays ---
+    // --- Pack trail data into texture ---
+    const td = trailTex.data;
+    td.fill(0);
     const activeCount = Math.min(dropletsRef.current.length, MAX_DROPLETS);
+    for (let i = 0; i < activeCount; i++) {
+      const d = dropletsRef.current[i];
+      const base = i * MAX_TRAIL * 4;
+      for (let j = 0; j < d.trail.length && j < MAX_TRAIL; j++) {
+        const t = d.trail[j];
+        const idx = base + j * 4;
+        td[idx] = t.x;                    // R: x
+        td[idx + 1] = height - t.y;       // G: y (flipped for shader coords)
+        td[idx + 2] = t.age / MAX_TRAIL;  // B: normalized age (0=newest, 1=oldest)
+        td[idx + 3] = 1.0;                // A: valid flag
+      }
+    }
+    trailTex.texture.needsUpdate = true;
+
+    // --- Pack active droplets + residuals into uniform arrays ---
     for (let i = 0; i < activeCount; i++) {
       const d = dropletsRef.current[i];
       dropletUniforms[i].set(d.x, height - d.y, d.radius, d.opacity);
@@ -627,9 +685,11 @@ function RainWindowScene({ palette }: { palette: string[] }) {
     const mat = compositorRef.current;
     if (mat) {
       mat.uniforms.tBackground.value = renderTarget.texture;
+      mat.uniforms.tTrailData.value = trailTex.texture;
       mat.uniforms.uDroplets.value = dropletUniforms;
       mat.uniforms.uDropletDir.value = dirUniforms;
       mat.uniforms.uDropletCount.value = count;
+      mat.uniforms.uActiveDropletCount.value = activeCount;
       mat.uniforms.uResolution.value.set(width, height);
       mat.uniforms.uTime.value = timeRef.current;
       mat.uniforms.uBass.value = smoothedBass;
