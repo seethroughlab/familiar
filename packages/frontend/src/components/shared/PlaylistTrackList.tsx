@@ -146,7 +146,7 @@ export function PlaylistTrackList<T>({
 
   // Column + sort state
   const columns = useColumnStore((s) => s.columns);
-  const { sortBy, sortOrder, toggleSort } = useLocalSort(sortPersistKey, defaultSortBy ?? null);
+  const { sortBy, sortOrder, toggleSort, clearSort } = useLocalSort(sortPersistKey, defaultSortBy ?? null);
   const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
   const gridColumns = useMemo(
     () => buildGridColumns(columns, trailingColumns),
@@ -333,6 +333,7 @@ export function PlaylistTrackList<T>({
         sortBy={sortBy}
         sortOrder={sortOrder}
         toggleSort={toggleSort}
+        clearSort={clearSort}
         trailingCount={trailingColumns.length}
       />
 

@@ -19,6 +19,7 @@ export function DesktopColumnHeader({ gridColumns }: DesktopColumnHeaderProps) {
   const sortBy = useColumnStore((state) => state.sortBy);
   const sortOrder = useColumnStore((state) => state.sortOrder);
   const toggleSort = useColumnStore((state) => state.toggleSort);
+  const setSortBy = useColumnStore((state) => state.setSortBy);
   const setColumnWidth = useColumnStore((state) => state.setColumnWidth);
   const resetColumnWidth = useColumnStore((state) => state.resetColumnWidth);
 
@@ -119,7 +120,18 @@ export function DesktopColumnHeader({ gridColumns }: DesktopColumnHeaderProps) {
       className="grid gap-4 px-4 py-2 text-sm text-zinc-400 border-b border-zinc-800 flex-shrink-0"
       style={{ gridTemplateColumns: gridColumns }}
     >
-      <div>#</div>
+      <div
+        onClick={() => setSortBy(null)}
+        className={`cursor-pointer hover:text-white flex items-center gap-1 ${
+          sortBy === null ? 'text-white' : ''
+        }`}
+        title="Click to sort by default order"
+      >
+        <span>#</span>
+        {sortBy === null && (
+          <ChevronDown className="w-3 h-3 flex-shrink-0" />
+        )}
+      </div>
       <div
         onClick={() => toggleSort('title')}
         className={`cursor-pointer hover:text-white flex items-center gap-1 ${

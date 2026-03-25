@@ -79,18 +79,18 @@ export function useLocalSort(persistKey?: string, defaultSortBy: string | null =
         persist(columnId, 'desc');
         return columnId;
       } else {
-        setSortOrder(defaultSortOrder);
-        persist(defaultSortBy, defaultSortOrder);
-        return defaultSortBy;
+        setSortOrder('asc');
+        persist(null, 'asc');
+        return null;
       }
     });
-  }, [sortOrder, persist, defaultSortBy, defaultSortOrder]);
+  }, [sortOrder, persist]);
 
   const clearSort = useCallback(() => {
-    setSortBy(defaultSortBy);
-    setSortOrder(defaultSortOrder);
-    persist(defaultSortBy, defaultSortOrder);
-  }, [persist, defaultSortBy, defaultSortOrder]);
+    setSortBy(null);
+    setSortOrder('asc');
+    persist(null, 'asc');
+  }, [persist]);
 
   return { sortBy, sortOrder, toggleSort, clearSort };
 }
