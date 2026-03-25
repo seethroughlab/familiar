@@ -21,7 +21,13 @@ export function ContentToolbar() {
   const [mobileSearchExpanded, setMobileSearchExpanded] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const isLibraryView = location.pathname.startsWith('/library/');
+  const pathname = location.pathname;
+  const hasTrackList = pathname.startsWith('/library/')
+    || pathname === '/favorites'
+    || pathname === '/downloads'
+    || pathname.startsWith('/playlists/')
+    || pathname.startsWith('/smart-playlists/')
+    || pathname.startsWith('/ephemeral/');
   const searchValue = searchParams.get('search') || '';
 
   const updateSearch = (value: string) => {
@@ -45,8 +51,8 @@ export function ContentToolbar() {
     </div>
   );
 
-  // Non-library views: just show indicators row
-  if (!isLibraryView) {
+  // Views without track lists: just show indicators row
+  if (!hasTrackList) {
     return (
       <div className={`pt-safe-top md:pt-2 px-4 pb-2 flex items-center justify-end border-b ${light ? 'border-zinc-200 bg-white/80' : 'border-zinc-800/50 bg-zinc-900/80'} backdrop-blur-sm`}>
         {indicators}

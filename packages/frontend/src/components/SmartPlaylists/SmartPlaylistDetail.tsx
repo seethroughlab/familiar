@@ -1,8 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, RotateCw } from 'lucide-react';
-import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { smartPlaylistsApi, tracksApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
@@ -95,6 +94,8 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isOffline } = useOfflineStatus();
   const { navigateToArtist } = useAppNavigation();
+  const [searchParams] = useSearchParams();
+  const search = searchParams.get('search') || '';
   const [usingCachedData, setUsingCachedData] = useState(false);
 
   const getTrackFromItem = useCallback(
@@ -113,6 +114,8 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
       duration_seconds: t.duration_seconds,
       format: t.format ?? null,
       analysis_version: t.analysis_version ?? 0,
+      last_played_at: t.last_played_at ?? null,
+      play_count: t.play_count ?? null,
     }),
     [],
   );
@@ -192,7 +195,7 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const { offlineTrackIds } = useOfflineTrackState({ downloadJobStatus: downloadJob?.status });
 
   // Filter by downloaded tracks and search query
-  const { searchFilter, setSearchFilter, showDownloadedOnly, setShowDownloadedOnly, filteredTracks } = useTrackSearch(allTracks, offlineTrackIds);
+  const { showDownloadedOnly, setShowDownloadedOnly, filteredTracks } = useTrackSearch(allTracks, offlineTrackIds, search);
 
   // Fetch discovery data based on the first track in the playlist (not available offline)
   const firstTrackId = filteredTracks[0]?.id;
@@ -464,9 +467,6 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
           )}
         </div>
       </div>
-
-      {/* Search */}
-      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

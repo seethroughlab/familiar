@@ -68,6 +68,7 @@ type RecommendationsResponse = {
 
 export function usePlaylistDetailData(
   playlistIdProp?: string,
+  externalSearch?: string,
 ): UsePlaylistDetailDataResult {
   const routeParams = useParams<{ id: string }>();
   const playlistId = playlistIdProp || routeParams.id || '';
@@ -91,6 +92,8 @@ export function usePlaylistDetailData(
         duration_seconds: t.duration_seconds,
         format: t.format ?? null,
         analysis_version: t.analysis_version ?? 0,
+        last_played_at: t.last_played_at ?? null,
+        play_count: t.play_count ?? null,
       };
     },
     [],
@@ -177,7 +180,7 @@ export function usePlaylistDetailData(
 
   // Filter by downloaded tracks and search query
   const playlistTracks = playlist?.tracks ?? [];
-  const { searchFilter, setSearchFilter, showDownloadedOnly, setShowDownloadedOnly, filteredTracks } = useTrackSearch(playlistTracks, offlineTrackIds);
+  const { searchFilter, setSearchFilter, showDownloadedOnly, setShowDownloadedOnly, filteredTracks } = useTrackSearch(playlistTracks, offlineTrackIds, externalSearch);
 
   const totalDuration = playlist?.tracks.reduce(
     (sum, t) => sum + (t.duration_seconds || 0),

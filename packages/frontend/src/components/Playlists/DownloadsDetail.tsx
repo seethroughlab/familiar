@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play, Trash2, HardDrive } from 'lucide-react';
-import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { removeOfflineTrack, clearAllOfflineTracks } from '../../services/offlineService';
@@ -28,6 +27,8 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { tracks, total, totalSizeFormatted, refresh } = useDownloadedTracks();
+  const [searchParams] = useSearchParams();
+  const search = searchParams.get('search') || '';
 
   const getTrackFromDownload = useCallback(
     (t: DownloadedTrack): Track => ({
@@ -52,7 +53,7 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
   // Clear all confirmation state
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  const { searchFilter, setSearchFilter, filteredTracks: searchedTracks } = useTrackSearch(tracks);
+  const { filteredTracks: searchedTracks } = useTrackSearch(tracks, undefined, search);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: DownloadedTrack[]) => {
     const items = sortedItems ?? searchedTracks;
@@ -207,9 +208,6 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
           </button>
         </div>
       </div>
-
-      {/* Search */}
-      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

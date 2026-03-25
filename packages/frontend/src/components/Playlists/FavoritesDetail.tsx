@@ -1,8 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play, Heart, Clock, Download, Check, Loader2, RotateCw } from 'lucide-react';
-import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { favoritesApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
@@ -34,6 +33,8 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { favorites, total, toggle } = useFavorites();
   const { isOffline } = useOfflineStatus();
+  const [searchParams] = useSearchParams();
+  const search = searchParams.get('search') || '';
 
   const getTrack = useCallback(
     (item: FavoriteItem): Track => ({
@@ -51,6 +52,8 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       duration_seconds: item.duration_seconds,
       format: item.format ?? null,
       analysis_version: item.analysis_version ?? 0,
+      last_played_at: item.last_played_at ?? null,
+      play_count: item.play_count ?? null,
     }),
     [],
   );
@@ -101,7 +104,7 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
     () => favorites.map(f => ({ ...f, _kind: 'local' as const })),
     [favorites],
   );
-  const { searchFilter, setSearchFilter, filteredTracks: filteredFavorites } = useTrackSearch(favoriteItems);
+  const { filteredTracks: filteredFavorites } = useTrackSearch(favoriteItems, undefined, search);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: FavoriteItem[]) => {
     const items = sortedItems ?? filteredFavorites;
@@ -248,9 +251,6 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
 
         </div>
       </div>
-
-      {/* Search */}
-      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

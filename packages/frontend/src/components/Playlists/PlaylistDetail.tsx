@@ -1,8 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play, Loader2, Sparkles, Clock, Download, Check, WifiOff, Heart, GripVertical, ListPlus, Trash2, CloudOff, RotateCw } from 'lucide-react';
-import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { playlistsApi, tracksApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { showError } from '../../stores/toastStore';
@@ -105,6 +104,8 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { navigateToArtist } = useAppNavigation();
+  const [searchParams] = useSearchParams();
+  const search = searchParams.get('search') || '';
 
   const {
     playlistId,
@@ -120,15 +121,13 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
     offlineTrackIds,
     allTracksOffline,
     offlineCount,
-    searchFilter,
-    setSearchFilter,
     showDownloadedOnly,
     setShowDownloadedOnly,
     filteredTracks,
     getTrackFromPlaylistItem,
     totalDuration,
     isOffline,
-  } = usePlaylistDetailData(playlistIdProp);
+  } = usePlaylistDetailData(playlistIdProp, search);
 
   // Drag-to-reorder state
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
@@ -609,9 +608,6 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
 
         </div>
       </div>
-
-      {/* Search */}
-      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play, Clock, Save, Trash2, Loader2 } from 'lucide-react';
-import { TrackSearchInput } from '../shared/TrackSearchInput';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useEphemeralPlaylistStore, useSaveEphemeralPlaylist } from '../../stores/ephemeralPlaylistStore';
 import type { EphemeralPlaylist, EphemeralTrack } from '../../stores/ephemeralPlaylistStore';
@@ -70,8 +69,10 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
   const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
   const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
 
+  const [searchParams] = useSearchParams();
+  const search = searchParams.get('search') || '';
   const playlistTracks = playlist?.tracks ?? [];
-  const { searchFilter, setSearchFilter, filteredTracks: searchedTracks } = useTrackSearch(playlistTracks);
+  const { filteredTracks: searchedTracks } = useTrackSearch(playlistTracks, undefined, search);
 
   const handlePlay = useCallback((startIndex = 0, sortedItems?: EphemeralTrack[]) => {
     const items = sortedItems ?? searchedTracks;
@@ -171,9 +172,6 @@ export function EphemeralPlaylistDetail({ playlist: playlistProp, onBack: onBack
           </button>
         </div>
       </div>
-
-      {/* Search */}
-      <TrackSearchInput value={searchFilter} onChange={setSearchFilter} />
 
       {/* Track list */}
       <PlaylistTrackList

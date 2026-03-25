@@ -10,12 +10,18 @@ interface Searchable {
 /**
  * Search filter + downloaded-only toggle for track lists.
  * Replaces ~15 lines of duplicated state + useMemo in 5 detail pages.
+ *
+ * Pass `externalSearch` to use an externally-managed search value (e.g. URL params)
+ * instead of internal state.
  */
 export function useTrackSearch<T extends Searchable>(
   tracks: T[],
   offlineTrackIds?: Set<string>,
+  externalSearch?: string,
 ) {
-  const [searchFilter, setSearchFilter] = useState('');
+  const [internalSearch, setInternalSearch] = useState('');
+  const searchFilter = externalSearch ?? internalSearch;
+  const setSearchFilter = setInternalSearch;
   const [showDownloadedOnly, setShowDownloadedOnly] = useState(false);
 
   const filteredTracks = useMemo(() => {
