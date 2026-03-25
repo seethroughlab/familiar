@@ -6,7 +6,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, UploadFile, status
 from pydantic import BaseModel, Field
-
 from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
