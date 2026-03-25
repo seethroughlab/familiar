@@ -7,9 +7,12 @@ from uuid import UUID
 from fastapi import APIRouter, File, UploadFile, status
 from pydantic import BaseModel, Field
 
+from sqlalchemy import select
+
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError, ValidationError, sanitize_error_for_client
 from app.api.schemas.tracks import TrackResponse
+from app.db.models import ProfilePlayHistory
 from app.services.smart_playlists import SmartPlaylistService
 
 router = APIRouter(prefix="/smart-playlists", tags=["smart-playlists"])
@@ -206,9 +209,26 @@ async def get_smart_playlist_tracks(
     tracks = await service.get_tracks(playlist, limit=limit, offset=offset)
     total = await service.get_track_count(playlist)
 
+    # Fetch play history for all tracks
+    track_ids = [t.id for t in tracks]
+    play_history_map = {}
+    if track_ids:
+        ph_result = await db.execute(
+            select(ProfilePlayHistory).where(
+                ProfilePlayHistory.profile_id == profile.id,
+                ProfilePlayHistory.track_id.in_(track_ids),
+            )
+        )
+        play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
+
     track_responses = []
     for t in tracks:
-        track_responses.append(TrackResponse.model_validate(t))
+        resp = TrackResponse.model_validate(t)
+        if t.id in play_history_map:
+            ph = play_history_map[t.id]
+            resp.last_played_at = ph.last_played_at
+            resp.play_count = ph.play_count
+        track_responses.append(resp)
 
     return SmartPlaylistTracksResponse(
         playlist=playlist_to_response(playlist),

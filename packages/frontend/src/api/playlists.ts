@@ -50,6 +50,8 @@ export interface SmartPlaylistTracksResponse {
     duration_seconds: number | null;
     format: string | null;
     analysis_version: number;
+    last_played_at?: string | null;
+    play_count?: number | null;
   }>;
   total: number;
 }
@@ -187,6 +189,8 @@ export interface PlaylistTrack {
   album_artist?: string | null;
   album_type?: string | null;
   analysis_version?: number | null;
+  last_played_at?: string | null;
+  play_count?: number | null;
 }
 
 export interface PlaylistDetail {

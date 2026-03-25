@@ -82,6 +82,8 @@ export interface FavoriteTrack {
   format: string | null;
   analysis_version: number;
   favorited_at: string;
+  last_played_at?: string | null;
+  play_count?: number | null;
 }
 
 export interface FavoritesListResponse {

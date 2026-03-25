@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
 from app.api.schemas.tracks import TrackResponse
-from app.db.models import ProfileFavorite, Track
+from app.db.models import ProfileFavorite, ProfilePlayHistory, Track
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +85,28 @@ async def list_favorites(
         )
     ) or 0
 
+    # Fetch play history for all favorite tracks
+    track_ids = [track.id for _, track in rows]
+    play_history_map = {}
+    if track_ids:
+        ph_result = await db.execute(
+            select(ProfilePlayHistory).where(
+                ProfilePlayHistory.profile_id == profile.id,
+                ProfilePlayHistory.track_id.in_(track_ids),
+            )
+        )
+        play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
+
     favorites = []
     for favorite, track in rows:
         resp = FavoriteTrackResponse.model_validate(
             track, from_attributes=True
         )
         resp.favorited_at = favorite.favorited_at.isoformat()
+        if track.id in play_history_map:
+            ph = play_history_map[track.id]
+            resp.last_played_at = ph.last_played_at
+            resp.play_count = ph.play_count
         favorites.append(resp)
 
     return FavoritesListResponse(

@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import PlaylistNotFoundError
-from app.db.models import Playlist, PlaylistTrack, Track
+from app.db.models import Playlist, PlaylistTrack, ProfilePlayHistory, Track
 
 router = APIRouter()
 
@@ -61,6 +61,8 @@ class TrackInPlaylist(BaseModel):
     album_artist: str | None = None
     album_type: str | None = None
     analysis_version: int | None = None
+    last_played_at: str | None = None
+    play_count: int | None = None
 
 
 class PlaylistResponse(BaseModel):
@@ -253,9 +255,22 @@ async def get_playlist(
     )
     playlist_tracks = result.scalars().all()
 
+    # Fetch play history for all tracks in the playlist
+    local_track_ids = [pt.track.id for pt in playlist_tracks if pt.track]
+    play_history_map = {}
+    if local_track_ids:
+        ph_result = await db.execute(
+            select(ProfilePlayHistory).where(
+                ProfilePlayHistory.profile_id == profile.id,
+                ProfilePlayHistory.track_id.in_(local_track_ids),
+            )
+        )
+        play_history_map = {ph.track_id: ph for ph in ph_result.scalars().all()}
+
     tracks = []
     for pt in playlist_tracks:
         if pt.track:
+            ph = play_history_map.get(pt.track.id)
             tracks.append(TrackInPlaylist(
                 id=str(pt.track.id),
                 playlist_track_id=str(pt.id),
@@ -273,6 +288,8 @@ async def get_playlist(
                 album_artist=pt.track.album_artist,
                 album_type=pt.track.album_type.value if pt.track.album_type else None,
                 analysis_version=pt.track.analysis_version,
+                last_played_at=ph.last_played_at.isoformat() if ph and ph.last_played_at else None,
+                play_count=ph.play_count if ph else None,
             ))
 
     return PlaylistDetailResponse(
