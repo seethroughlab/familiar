@@ -15,11 +15,11 @@ export interface FamiliarAmbientSynthPlugin {
     lowpassFreq: number;
   }): Promise<void>;
 
-  startTransition(options: {
-    droneRootNote: number;
-    droneSecondNote: number;
-    droneAttackMs: number;
-    droneReleaseMs: number;
+  startDrone(options: { rootNote: number; secondNote: number }): Promise<void>;
+
+  glideDrone(options: { rootNote: number; secondNote: number; glideMs: number }): Promise<void>;
+
+  playMotif(options: {
     motifNotes: number[];
     motifTimingsMs: number[];
     motifNoteDurationMs: number;

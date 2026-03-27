@@ -17,7 +17,7 @@ import { ambientApi } from '../../api/ambient';
 import { tracksApi } from '../../api';
 import { getAmbientSynthBridge } from './ambientSynthBridge';
 import { selectSnippetWindow } from './snippetSelection';
-import { buildTransitionRecipe } from './transitionRecipes';
+import { computeDroneTarget, buildMotifRecipe } from './transitionRecipes';
 import { getOfflineCandidates, pickOfflineSurpriseSeed } from './offlineScoring';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { createLogger } from '../../utils/logger';
@@ -31,8 +31,18 @@ import type {
 
 const log = createLogger('AmbientCoordinator');
 
-/** Snippet volume ceiling — keeps songs distant/background-like */
-const SNIPPET_VOLUME = 0.35;
+/** Snippet volume ceiling — ghostly hint, drone is the bed */
+const SNIPPET_VOLUME = 0.15;
+
+/** Fade in/out duration for snippets — very slow for ambient feel */
+const FADE_DURATION_MS = 8000;
+
+/** Intermission range (drone + motif play, no snippet audio) */
+const INTERMISSION_MIN_MS = 25000;
+const INTERMISSION_MAX_MS = 40000;
+
+/** Duration for drone pitch glide between keys */
+const DRONE_GLIDE_MS = 8000;
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -140,16 +150,18 @@ class AmbientCoordinator {
       );
       store.setUpcomingSnippets(upcoming);
 
-      // Configure synth
+      // Configure synth and start continuous drone at seed key
       const synth = getAmbientSynthBridge();
       if (synth) {
         await synth.configure({
           droneVolume: 0.3,
           motifVolume: 0.2,
-          reverbMix: 0.6,
-          delayMix: 0.3,
-          lowpassFreq: 2000,
+          reverbMix: 0.75,
+          delayMix: 0.4,
+          lowpassFreq: 1500,
         });
+        const droneTarget = computeDroneTarget(seedSnippet);
+        await synth.startDrone(droneTarget.rootNote, droneTarget.secondNote);
       }
 
       // Load and play the seed
@@ -174,7 +186,7 @@ class AmbientCoordinator {
     const synth = getAmbientSynthBridge();
     if (synth) {
       try {
-        await synth.stopWithRelease(2000);
+        await synth.stopWithRelease(4000);
       } catch (e) {
         log.warn('Synth stop failed:', e);
       }
@@ -210,9 +222,9 @@ class AmbientCoordinator {
   }
 
   async skipToNext(): Promise<void> {
-    // Quick fade-out before switching (300ms)
-    await this.fadeOut(300);
-    await this.doAdvance(2000);
+    // Quick fade-out before switching
+    await this.fadeOut(1000);
+    await this.doAdvance(3000);
   }
 
   async skipToPrevious(): Promise<void> {
@@ -264,7 +276,7 @@ class AmbientCoordinator {
 
           // Check if snippet end reached
           const timeToEnd = snippet.endTime - event.currentTime;
-          if (timeToEnd <= 4) {
+          if (timeToEnd <= FADE_DURATION_MS / 1000) {
             // Trigger transition to next
             this.advanceToNext();
           }
@@ -334,8 +346,8 @@ class AmbientCoordinator {
 
     this.scheduleTransition();
 
-    // Fade in the snippet
-    this.fadeIn(4000);
+    // Fade in the snippet — slow and ghostly
+    this.fadeIn(FADE_DURATION_MS);
   }
 
   private scheduleTransition(): void {
@@ -351,7 +363,7 @@ class AmbientCoordinator {
     if (timeToEnd > 0) {
       this.transitionTimer = setTimeout(() => {
         this.advanceToNext();
-      }, Math.max(timeToEnd - 4000, 100)); // Start transition 4s before end
+      }, Math.max(timeToEnd - FADE_DURATION_MS, 100));
     }
   }
 
@@ -414,8 +426,7 @@ class AmbientCoordinator {
     this.advancing = true;
     this.clearTransitionTimer();
     try {
-      // Fade out over 4s (transition fires before snippet end)
-      await this.fadeOut(4000);
+      await this.fadeOut(FADE_DURATION_MS);
       await this.doAdvance();
     } finally {
       this.advancing = false;
@@ -423,8 +434,8 @@ class AmbientCoordinator {
   }
 
   private async doAdvance(intermissionMs?: number): Promise<void> {
-    // Default: random 10-20s; skips use a shorter explicit value
-    const pause = intermissionMs ?? (10000 + Math.random() * 10000);
+    const pause = intermissionMs ??
+      (INTERMISSION_MIN_MS + Math.random() * (INTERMISSION_MAX_MS - INTERMISSION_MIN_MS));
     const store = useAmbientStore.getState();
     const { currentSnippet, upcomingSnippets } = store;
 
@@ -443,35 +454,30 @@ class AmbientCoordinator {
     store.setCurrentSnippet(next);
     store.setUpcomingSnippets(rest);
 
-    // Trigger transition synth
-    await this.executeTransition(currentSnippet, next);
+    // Glide drone to next key + play motif during intermission
+    const synth = getAmbientSynthBridge();
+    if (synth) {
+      try {
+        const droneTarget = computeDroneTarget(next);
+        const glideMs = intermissionMs ? Math.min(intermissionMs, DRONE_GLIDE_MS) : DRONE_GLIDE_MS;
+        await synth.glideDrone(droneTarget.rootNote, droneTarget.secondNote, glideMs);
 
-    // Intermission: let the synth bridge breathe before next snippet
+        const motif = buildMotifRecipe(next, store.controls.transitionDensity);
+        await synth.playMotif(motif.motifNotes, motif.motifTimingsMs, motif.motifNoteDurationMs);
+      } catch (e) {
+        log.warn('Transition synth failed:', e);
+      }
+    }
+
+    // Intermission: drone continues, motif plays, no snippet audio
     await sleep(pause);
 
-    // Play the next snippet (includes fade-in)
+    // Play the next snippet (includes fade-in, drone continues underneath)
     await this.playSnippet(next);
 
     // Prefetch more candidates if running low
     if (rest.length < 2) {
       this.prefetchCandidates();
-    }
-  }
-
-  private async executeTransition(
-    current: AmbientSnippet | null,
-    next: AmbientSnippet,
-  ): Promise<void> {
-    const synth = getAmbientSynthBridge();
-    if (!synth || !current) return;
-
-    const store = useAmbientStore.getState();
-    const recipe = buildTransitionRecipe(current, next, store.controls.transitionDensity);
-
-    try {
-      await synth.startTransition(recipe);
-    } catch (e) {
-      log.warn('Transition synth failed:', e);
     }
   }
 

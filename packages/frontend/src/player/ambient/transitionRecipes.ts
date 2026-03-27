@@ -1,76 +1,60 @@
 /**
- * Transition recipe builder — computes drone/motif parameters
- * for synth transitions between ambient snippets.
+ * Drone target + motif recipe builders for ambient transitions.
+ *
+ * computeDroneTarget() extracts root + fifth from a snippet's key.
+ * buildMotifRecipe() picks motif notes and timing based on density.
  */
 
-import type { AmbientSnippet, TransitionRecipe, TransitionDensity } from './types';
-import { keyToMidiNote, getScaleNotes, parseKey } from './compatibilityScoring';
+import type { AmbientSnippet, DroneTarget, MotifRecipe, TransitionDensity } from './types';
+import { keyToMidiNote, getScaleNotes } from './compatibilityScoring';
 
 /**
- * Build a transition recipe from current snippet to next snippet.
- *
- * Computes drone root/second notes from target key, motif notes
- * from scale degrees, timing based on density setting.
+ * Compute the drone root + second note (perfect fifth) from a snippet's key.
  */
-export function buildTransitionRecipe(
-  _currentSnippet: AmbientSnippet,
+export function computeDroneTarget(snippet: AmbientSnippet): DroneTarget {
+  const key = snippet.descriptor.key;
+  const root = keyToMidiNote(key, 2); // Low octave for drone
+  const secondNote = root + 7; // Perfect fifth
+  return { rootNote: root, secondNote };
+}
+
+/**
+ * Build a motif recipe for the intermission before the next snippet.
+ * Picks notes from the target key's scale with timing based on density.
+ */
+export function buildMotifRecipe(
   nextSnippet: AmbientSnippet,
   density: TransitionDensity,
-): TransitionRecipe {
+): MotifRecipe {
   const targetKey = nextSnippet.descriptor.key;
-
-  // Drone notes: root + fifth (or root + minor third for minor keys)
-  const root = keyToMidiNote(targetKey, 2); // Low octave for drone
-  const parsed = parseKey(targetKey);
-  const secondInterval = parsed?.mode === 'minor' ? 7 : 7; // Perfect fifth for both
-  const droneSecond = root + secondInterval;
-
-  // Motif notes: pick from target key scale
   const scaleNotes = getScaleNotes(targetKey, 4); // Higher octave for motif
 
-  // Density determines note count and timing
   let motifNotes: number[];
   let motifTimingsMs: number[];
-  let motifNoteDuration: number;
-  let droneAttack: number;
-  let droneRelease: number;
+  let motifNoteDurationMs: number;
 
   switch (density) {
     case 'sparse':
       motifNotes = pickMotifNotes(scaleNotes, 2);
       motifTimingsMs = [0, 3000];
-      motifNoteDuration = 4500;
-      droneAttack = 6000;
-      droneRelease = 8000;
+      motifNoteDurationMs = 4500;
       break;
 
     case 'lush':
       motifNotes = pickMotifNotes(scaleNotes, 5);
       motifTimingsMs = [0, 1200, 2400, 4000, 5600];
-      motifNoteDuration = 2200;
-      droneAttack = 4000;
-      droneRelease = 5000;
+      motifNoteDurationMs = 2200;
       break;
 
     case 'moderate':
     default:
       motifNotes = pickMotifNotes(scaleNotes, 3);
       motifTimingsMs = [0, 1800, 4200];
-      motifNoteDuration = 3000;
-      droneAttack = 5000;
-      droneRelease = 7000;
+      motifNoteDurationMs = 3000;
       break;
   }
 
-  return {
-    droneRootNote: root,
-    droneSecondNote: droneSecond,
-    droneAttackMs: droneAttack,
-    droneReleaseMs: droneRelease,
-    motifNotes,
-    motifTimingsMs,
-    motifNoteDurationMs: motifNoteDuration,
-  };
+  return { motifNotes, motifTimingsMs, motifNoteDurationMs };
 }
 
 /**

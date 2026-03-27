@@ -52,11 +52,12 @@ export interface AmbientSnippet {
   compatibility_score: number;
 }
 
-export interface TransitionRecipe {
-  droneRootNote: number;
-  droneSecondNote: number;
-  droneAttackMs: number;
-  droneReleaseMs: number;
+export interface DroneTarget {
+  rootNote: number;
+  secondNote: number;
+}
+
+export interface MotifRecipe {
   motifNotes: number[];
   motifTimingsMs: number[];
   motifNoteDurationMs: number;

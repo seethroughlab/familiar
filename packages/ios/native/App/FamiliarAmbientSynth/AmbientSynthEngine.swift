@@ -15,11 +15,13 @@ class AmbientSynthEngine {
     // Oscillator state (accessed from audio render thread via closures)
     private var drone1Phase: Float = 0
     private var drone1Freq: Float = 0
+    private var drone1TargetFreq: Float = 0
     private var drone1Amp: Float = 0
     private var drone1TargetAmp: Float = 0
 
     private var drone2Phase: Float = 0
     private var drone2Freq: Float = 0
+    private var drone2TargetFreq: Float = 0
     private var drone2Amp: Float = 0
     private var drone2TargetAmp: Float = 0
 
@@ -30,6 +32,7 @@ class AmbientSynthEngine {
 
     private var isRunning = false
     private var sampleRate: Float = 44100
+    private var freqSmoothingCoeff: Float = 0.0005
 
     // Public mix level parameters (set via configure/updateMix)
     var droneLevel: Float = 0.3
@@ -76,7 +79,9 @@ class AmbientSynthEngine {
             guard let self = self else { return noErr }
             return self.renderOscillator(
                 phase: &self.drone1Phase,
-                freq: self.drone1Freq,
+                freq: &self.drone1Freq,
+                targetFreq: self.drone1TargetFreq,
+                freqSmoothing: self.freqSmoothingCoeff,
                 amp: &self.drone1Amp,
                 targetAmp: self.drone1TargetAmp,
                 frameCount: frameCount,
@@ -89,7 +94,9 @@ class AmbientSynthEngine {
             guard let self = self else { return noErr }
             return self.renderOscillator(
                 phase: &self.drone2Phase,
-                freq: self.drone2Freq,
+                freq: &self.drone2Freq,
+                targetFreq: self.drone2TargetFreq,
+                freqSmoothing: self.freqSmoothingCoeff,
                 amp: &self.drone2Amp,
                 targetAmp: self.drone2TargetAmp,
                 frameCount: frameCount,
@@ -98,11 +105,14 @@ class AmbientSynthEngine {
             )
         }
 
+        // Motif doesn't need frequency glide — notes change instantly
         let motifSource = AVAudioSourceNode { [weak self] _, _, frameCount, audioBufferList -> OSStatus in
             guard let self = self else { return noErr }
             return self.renderOscillator(
                 phase: &self.motifPhase,
-                freq: self.motifFreq,
+                freq: &self.motifFreq,
+                targetFreq: self.motifFreq,
+                freqSmoothing: 1.0,
                 amp: &self.motifAmp,
                 targetAmp: self.motifTargetAmp,
                 frameCount: frameCount,
@@ -137,26 +147,38 @@ class AmbientSynthEngine {
         }
     }
 
-    func startTransition(
-        droneRootNote: Int,
-        droneSecondNote: Int,
-        droneAttackMs: Int,
-        droneReleaseMs: Int,
+    /// Start the continuous drone at the given key. Called once at session start.
+    func startDrone(rootNote: Int, secondNote: Int) {
+        setupEngineIfNeeded()
+
+        let rootFreq = midiToFreq(rootNote)
+        let secondFreq = midiToFreq(secondNote)
+
+        // Set both current and target to the same value (instant, no glide)
+        drone1Freq = rootFreq
+        drone1TargetFreq = rootFreq
+        drone2Freq = secondFreq
+        drone2TargetFreq = secondFreq
+
+        // Ramp in amplitude via existing smoothing
+        drone1TargetAmp = droneLevel
+        drone2TargetAmp = droneLevel * 0.7
+    }
+
+    /// Smoothly glide the drone to a new key over glideMs milliseconds.
+    func glideDrone(rootNote: Int, secondNote: Int, glideMs: Int) {
+        drone1TargetFreq = midiToFreq(rootNote)
+        drone2TargetFreq = midiToFreq(secondNote)
+        // Coefficient so freq reaches ~95% of target in glideMs
+        freqSmoothingCoeff = 3.0 / (Float(glideMs) / 1000.0 * sampleRate)
+    }
+
+    /// Play motif notes independently of the drone. Drone is unaffected.
+    func playMotif(
         motifNotes: [Int],
         motifTimingsMs: [Int],
         motifNoteDurationMs: Int
     ) {
-        setupEngineIfNeeded()
-
-        // Set drone frequencies
-        drone1Freq = midiToFreq(droneRootNote)
-        drone2Freq = midiToFreq(droneSecondNote)
-
-        // Ramp in drones
-        drone1TargetAmp = droneLevel
-        drone2TargetAmp = droneLevel * 0.7
-
-        // Schedule motif notes
         for (i, note) in motifNotes.enumerated() {
             let timing = i < motifTimingsMs.count ? motifTimingsMs[i] : i * 1000
             let delay = Double(timing) / 1000.0
@@ -172,13 +194,6 @@ class AmbientSynthEngine {
             DispatchQueue.main.asyncAfter(deadline: .now() + fadeOutDelay) { [weak self] in
                 self?.motifTargetAmp = 0
             }
-        }
-
-        // Schedule drone release
-        let releaseSec = Double(droneReleaseMs) / 1000.0
-        DispatchQueue.main.asyncAfter(deadline: .now() + releaseSec) { [weak self] in
-            self?.drone1TargetAmp = 0
-            self?.drone2TargetAmp = 0
         }
     }
 
@@ -206,7 +221,9 @@ class AmbientSynthEngine {
 
     private func renderOscillator(
         phase: inout Float,
-        freq: Float,
+        freq: inout Float,
+        targetFreq: Float,
+        freqSmoothing: Float,
         amp: inout Float,
         targetAmp: Float,
         frameCount: UInt32,
@@ -217,11 +234,13 @@ class AmbientSynthEngine {
         let buffer = ablPointer[0]
         let ptr = buffer.mData?.assumingMemoryBound(to: Float.self)
 
-        let smoothingCoeff: Float = 0.0005 // Very slow for ambient smoothness
+        let ampSmoothingCoeff: Float = 0.0005 // Very slow for ambient smoothness
 
         for frame in 0..<Int(frameCount) {
             // Smooth volume transitions
-            amp += (targetAmp - amp) * smoothingCoeff
+            amp += (targetAmp - amp) * ampSmoothingCoeff
+            // Smooth frequency transitions (glide)
+            freq += (targetFreq - freq) * freqSmoothing
 
             let sample: Float
             switch waveform {

@@ -7,7 +7,9 @@ public class FamiliarAmbientSynthPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "FamiliarAmbientSynth"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "configure", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "startTransition", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "startDrone", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "glideDrone", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "playMotif", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopImmediate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stopWithRelease", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateMix", returnType: CAPPluginReturnPromise),
@@ -32,20 +34,26 @@ public class FamiliarAmbientSynthPlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve()
     }
 
-    @objc func startTransition(_ call: CAPPluginCall) {
-        let rootNote = call.getInt("droneRootNote") ?? 48
-        let secondNote = call.getInt("droneSecondNote") ?? 55
-        let attackMs = call.getInt("droneAttackMs") ?? 3000
-        let releaseMs = call.getInt("droneReleaseMs") ?? 4000
+    @objc func startDrone(_ call: CAPPluginCall) {
+        let rootNote = call.getInt("rootNote") ?? 48
+        let secondNote = call.getInt("secondNote") ?? 55
+        synthEngine.startDrone(rootNote: rootNote, secondNote: secondNote)
+        call.resolve()
+    }
+
+    @objc func glideDrone(_ call: CAPPluginCall) {
+        let rootNote = call.getInt("rootNote") ?? 48
+        let secondNote = call.getInt("secondNote") ?? 55
+        let glideMs = call.getInt("glideMs") ?? 5000
+        synthEngine.glideDrone(rootNote: rootNote, secondNote: secondNote, glideMs: glideMs)
+        call.resolve()
+    }
+
+    @objc func playMotif(_ call: CAPPluginCall) {
         let motifNotes = call.getArray("motifNotes", Int.self) ?? []
         let motifTimings = call.getArray("motifTimingsMs", Int.self) ?? []
         let motifDuration = call.getInt("motifNoteDurationMs") ?? 2000
-
-        synthEngine.startTransition(
-            droneRootNote: rootNote,
-            droneSecondNote: secondNote,
-            droneAttackMs: attackMs,
-            droneReleaseMs: releaseMs,
+        synthEngine.playMotif(
             motifNotes: motifNotes,
             motifTimingsMs: motifTimings,
             motifNoteDurationMs: motifDuration

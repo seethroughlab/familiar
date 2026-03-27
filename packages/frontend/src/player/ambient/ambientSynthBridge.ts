@@ -5,8 +5,6 @@
  * Web never registers (ambient mode requires native synth).
  */
 
-import type { TransitionRecipe } from './types';
-
 export interface AmbientSynthBridge {
   configure(params: {
     droneVolume: number;
@@ -16,7 +14,11 @@ export interface AmbientSynthBridge {
     lowpassFreq: number;
   }): Promise<void>;
 
-  startTransition(recipe: TransitionRecipe): Promise<void>;
+  startDrone(rootNote: number, secondNote: number): Promise<void>;
+
+  glideDrone(rootNote: number, secondNote: number, glideMs: number): Promise<void>;
+
+  playMotif(motifNotes: number[], motifTimingsMs: number[], motifNoteDurationMs: number): Promise<void>;
 
   stopImmediate(): Promise<void>;
 
@@ -27,8 +29,6 @@ export interface AmbientSynthBridge {
     motifVolume?: number;
     reverbMix?: number;
   }): Promise<void>;
-
-  onTransitionComplete(handler: () => void): () => void;
 }
 
 let _bridge: AmbientSynthBridge | null = null;

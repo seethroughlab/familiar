@@ -4,12 +4,9 @@
  */
 
 import type { AmbientSynthBridge } from '@familiar/frontend/src/player/ambient/ambientSynthBridge';
-import type { TransitionRecipe } from '@familiar/frontend/src/player/ambient/types';
 import { FamiliarAmbientSynth } from './plugins/familiarAmbientSynth';
 
 export class CapacitorAmbientSynthAdapter implements AmbientSynthBridge {
-  private transitionCompleteHandlers = new Set<() => void>();
-
   async configure(params: {
     droneVolume: number;
     motifVolume: number;
@@ -20,13 +17,16 @@ export class CapacitorAmbientSynthAdapter implements AmbientSynthBridge {
     await FamiliarAmbientSynth.configure(params);
   }
 
-  async startTransition(recipe: TransitionRecipe): Promise<void> {
-    await FamiliarAmbientSynth.startTransition(recipe);
-    // Estimate transition complete based on drone attack + motif duration
-    const estimatedDuration = recipe.droneAttackMs + recipe.motifNoteDurationMs;
-    setTimeout(() => {
-      this.transitionCompleteHandlers.forEach(h => h());
-    }, estimatedDuration);
+  async startDrone(rootNote: number, secondNote: number): Promise<void> {
+    await FamiliarAmbientSynth.startDrone({ rootNote, secondNote });
+  }
+
+  async glideDrone(rootNote: number, secondNote: number, glideMs: number): Promise<void> {
+    await FamiliarAmbientSynth.glideDrone({ rootNote, secondNote, glideMs });
+  }
+
+  async playMotif(motifNotes: number[], motifTimingsMs: number[], motifNoteDurationMs: number): Promise<void> {
+    await FamiliarAmbientSynth.playMotif({ motifNotes, motifTimingsMs, motifNoteDurationMs });
   }
 
   async stopImmediate(): Promise<void> {
@@ -43,10 +43,5 @@ export class CapacitorAmbientSynthAdapter implements AmbientSynthBridge {
     reverbMix?: number;
   }): Promise<void> {
     await FamiliarAmbientSynth.updateMix(params);
-  }
-
-  onTransitionComplete(handler: () => void): () => void {
-    this.transitionCompleteHandlers.add(handler);
-    return () => this.transitionCompleteHandlers.delete(handler);
   }
 }
