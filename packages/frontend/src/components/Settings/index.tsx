@@ -16,6 +16,7 @@ import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { S3BackupSettings } from './S3Backup';
 import { ServerSettings } from './ServerSettings';
+import { ShuffleWeightSettings } from './ShuffleWeightSettings';
 import { isNativeApp } from '../../utils/platform';
 
 export function SettingsPanel() {
@@ -92,6 +93,7 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <PlaybackSettings />
+            <ShuffleWeightSettings />
             <AudioEffectsSettings />
           </div>
         </section>

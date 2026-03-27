@@ -11,6 +11,7 @@ import { tracksApi } from '../api';
 import { getEngine } from './audio/engineInstance';
 import { createLogger } from '../utils/logger';
 import { useConnectivityStore } from '../stores/connectivityStore';
+import { useShuffleWeightStore } from '../stores/shuffleWeightStore';
 
 import type { QueueSource } from './playerStore.types';
 
@@ -833,8 +834,11 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       usePlaybackStore.setState({ shuffle: newShuffle });
 
       try {
+        const weightState = useShuffleWeightStore.getState();
+        const useWeighted = newShuffle && weightState.enabled && weightState.activePreset;
         const response = await tracksApi.getIds({
-          shuffle: newShuffle,
+          shuffle: newShuffle && !useWeighted,
+          shuffle_preset: useWeighted ? weightState.activePreset! : undefined,
           start_with: currentTrack?.id,
           ...queueSource.filters,
         });

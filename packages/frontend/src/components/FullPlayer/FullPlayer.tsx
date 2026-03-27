@@ -31,6 +31,8 @@ import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useShuffleWeightStore } from '../../stores/shuffleWeightStore';
+import { ShuffleWeightPopover } from '../Player/ShuffleWeightPopover';
 import { isMobile } from '../../utils/platform';
 import { isVisualizerAvailable } from '../../player/audio/engineInstance';
 import { VISUALIZER_IDS } from '../Visualizer/constants';
@@ -72,10 +74,36 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const toggleConsume = usePlayerStore((s) => s.toggleConsume);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
 
+  const weightedEnabled = useShuffleWeightStore((s) => s.enabled);
+
   const { seek, togglePlayPause } = useAudioControls();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
   const { visualizerId } = useVisualizerStore();
   const isMusicVideo = visualizerId === VISUALIZER_IDS.MUSIC_VIDEO;
+
+  // Shuffle weight popover (long-press / right-click)
+  const shuffleButtonRef = useRef<HTMLButtonElement>(null);
+  const [shufflePopoverOpen, setShufflePopoverOpen] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleShufflePointerDown = useCallback(() => {
+    longPressTimerRef.current = setTimeout(() => {
+      setShufflePopoverOpen(true);
+      longPressTimerRef.current = null;
+    }, 500);
+  }, []);
+
+  const handleShufflePointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const handleShuffleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setShufflePopoverOpen(true);
+  }, []);
 
   // Prefetch artwork for the current track
   const prefetchArtwork = useArtworkPrefetch();
@@ -342,16 +370,29 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
         {/* Controls */}
         <div className="flex items-center justify-center gap-3 sm:gap-6">
-          <button
-            onClick={toggleShuffle}
-            className={`p-3 rounded-full transition-colors ${
-              shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
-            }`}
-            aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
-            aria-pressed={shuffle}
-          >
-            <Shuffle className="w-5 h-5" />
-          </button>
+          <div className="relative">
+            <button
+              ref={shuffleButtonRef}
+              onClick={toggleShuffle}
+              onContextMenu={handleShuffleContextMenu}
+              onPointerDown={handleShufflePointerDown}
+              onPointerUp={handleShufflePointerUp}
+              onPointerLeave={handleShufflePointerUp}
+              className={`p-3 rounded-full transition-colors ${
+                shuffle && weightedEnabled ? 'text-amber-400' : shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+              }`}
+              aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
+              aria-pressed={shuffle}
+            >
+              <Shuffle className="w-5 h-5" />
+            </button>
+            <ShuffleWeightPopover
+              isOpen={shufflePopoverOpen}
+              onClose={() => setShufflePopoverOpen(false)}
+              buttonRef={shuffleButtonRef}
+              position="above"
+            />
+          </div>
 
           <button
             onClick={playPrevious}

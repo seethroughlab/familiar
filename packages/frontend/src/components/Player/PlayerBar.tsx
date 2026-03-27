@@ -3,6 +3,7 @@ import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp,
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
+import { useShuffleWeightStore } from '../../stores/shuffleWeightStore';
 import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { tracksApi } from '../../api';
@@ -12,6 +13,7 @@ import { initialContextMenuState } from '../Library/types';
 import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useUIStore } from '../../stores/uiStore';
+import { ShuffleWeightPopover } from './ShuffleWeightPopover';
 
 interface PlayerBarProps {
   onExpandClick?: () => void;
@@ -76,9 +78,35 @@ export function PlayerBar({
   const toggleConsume = usePlayerStore((s) => s.toggleConsume);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
 
+  const weightedEnabled = useShuffleWeightStore((s) => s.enabled);
+
   const { seek, togglePlayPause } = useAudioControls();
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+
+  // Shuffle weight popover (long-press / right-click)
+  const shuffleButtonRef = useRef<HTMLButtonElement>(null);
+  const [shufflePopoverOpen, setShufflePopoverOpen] = useState(false);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleShufflePointerDown = useCallback(() => {
+    longPressTimerRef.current = setTimeout(() => {
+      setShufflePopoverOpen(true);
+      longPressTimerRef.current = null;
+    }, 500);
+  }, []);
+
+  const handleShufflePointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  const handleShuffleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setShufflePopoverOpen(true);
+  }, []);
 
   // Prefetch artwork for the current track
   const prefetchArtwork = useArtworkPrefetch();
@@ -261,17 +289,30 @@ export function PlayerBar({
         {/* Controls */}
         <div className="flex-1 flex flex-col items-center gap-1">
           <div className="flex items-center gap-4">
-            <button
-              onClick={toggleShuffle}
-              className={`p-2 rounded-full transition-colors ${
-                !hasTrack ? 'text-zinc-600' : shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
-              }`}
-              aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
-              aria-pressed={shuffle}
-              disabled={!hasTrack}
-            >
-              <Shuffle className="w-4 h-4" />
-            </button>
+            <div className="relative">
+              <button
+                ref={shuffleButtonRef}
+                onClick={toggleShuffle}
+                onContextMenu={handleShuffleContextMenu}
+                onPointerDown={handleShufflePointerDown}
+                onPointerUp={handleShufflePointerUp}
+                onPointerLeave={handleShufflePointerUp}
+                className={`p-2 rounded-full transition-colors ${
+                  !hasTrack ? 'text-zinc-600' : shuffle && weightedEnabled ? 'text-amber-400' : shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
+                }`}
+                aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
+                aria-pressed={shuffle}
+                disabled={!hasTrack}
+              >
+                <Shuffle className="w-4 h-4" />
+              </button>
+              <ShuffleWeightPopover
+                isOpen={shufflePopoverOpen}
+                onClose={() => setShufflePopoverOpen(false)}
+                buttonRef={shuffleButtonRef}
+                position="above"
+              />
+            </div>
             <button
               data-testid="prev-track"
               onClick={playPrevious}

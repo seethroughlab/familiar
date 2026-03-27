@@ -43,6 +43,7 @@ export const tracksApi = {
    */
   getIds: async (params?: {
     shuffle?: boolean;
+    shuffle_preset?: string;
     start_with?: string;
     search?: string;
     artist?: string;
