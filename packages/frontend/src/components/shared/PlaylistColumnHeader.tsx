@@ -1,12 +1,12 @@
 /**
- * Column header for playlist views with clickable sort indicators.
- * Simplified version of the library's DesktopColumnHeader — no drag-to-reorder
- * or column resizing (those are library-specific).
+ * Column header for playlist views with clickable sort indicators
+ * and column resize handles.
  */
 import { useMemo } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { getVisibleColumns, type ColumnConfig } from '../../stores/columnStore';
 import { getColumnDef } from '../Library/columnDefinitions';
+import { useColumnResize } from '../../hooks/useColumnResize';
 
 interface Props {
   columns: ColumnConfig[];
@@ -29,6 +29,7 @@ export function PlaylistColumnHeader({
   trailingCount = 2,
 }: Props) {
   const visibleColumnIds = useMemo(() => getVisibleColumns(columns), [columns]);
+  const { resizingColumnId, handleResizeStart, resetColumnWidth } = useColumnResize();
 
   return (
     <div
@@ -74,24 +75,39 @@ export function PlaylistColumnHeader({
         return (
           <div
             key={colId}
-            onClick={() => isSortable && toggleSort(colId)}
-            className={`truncate flex items-center gap-1 ${
-              colDef.align === 'right'
-                ? 'justify-end'
-                : colDef.align === 'center'
-                ? 'justify-center'
-                : ''
-            } ${isSortable ? 'cursor-pointer hover:text-white' : ''} ${
-              isSorted ? 'text-white' : ''
-            }`}
-            title={isSortable ? `Click to sort by ${colDef.label}` : colDef.label}
+            className="relative"
           >
-            <span>{colDef.shortLabel || colDef.label}</span>
-            {isSorted && (
-              sortOrder === 'asc'
-                ? <ChevronUp className="w-3 h-3 flex-shrink-0" />
-                : <ChevronDown className="w-3 h-3 flex-shrink-0" />
-            )}
+            <div
+              onClick={() => isSortable && toggleSort(colId)}
+              className={`truncate flex items-center gap-1 ${
+                colDef.align === 'right'
+                  ? 'justify-end'
+                  : colDef.align === 'center'
+                  ? 'justify-center'
+                  : ''
+              } ${isSortable ? 'cursor-pointer hover:text-white' : ''} ${
+                isSorted ? 'text-white' : ''
+              }`}
+              title={isSortable ? `Click to sort by ${colDef.label}` : colDef.label}
+            >
+              <span>{colDef.shortLabel || colDef.label}</span>
+              {isSorted && (
+                sortOrder === 'asc'
+                  ? <ChevronUp className="w-3 h-3 flex-shrink-0" />
+                  : <ChevronDown className="w-3 h-3 flex-shrink-0" />
+              )}
+            </div>
+
+            {/* Resize handle */}
+            <div
+              className={`absolute right-0 top-1 bottom-1 w-1.5 cursor-col-resize
+                         transition-colors border-r border-transparent
+                         hover:border-zinc-500 hover:bg-zinc-500/20
+                         ${resizingColumnId === colId ? 'border-zinc-400 bg-zinc-500/30' : ''}`}
+              onMouseDown={(e) => handleResizeStart(colId, e)}
+              onDoubleClick={() => resetColumnWidth(colId)}
+              title="Drag to resize, double-click to reset"
+            />
           </div>
         );
       })}

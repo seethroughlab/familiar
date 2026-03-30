@@ -23,6 +23,7 @@ import { useTrackContextMenu } from '../../../hooks/useTrackContextMenu';
 import { useArtworkPrefetchBatch } from '../../../hooks/useArtworkPrefetch';
 import { useScrollContainer } from '../../../hooks/useScrollContainer';
 import { useColumnStore } from '../../../stores/columnStore';
+import { useColumnResize } from '../../../hooks/useColumnResize';
 import { getColumnDef } from '../columnDefinitions';
 import { TrackRow } from './trackList/TrackRow';
 import { MobileTrackCard } from './trackList/MobileTrackCard';
@@ -145,12 +146,7 @@ export function TrackListBrowser({
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   // Resize state for columns
-  const setColumnWidth = useColumnStore((state) => state.setColumnWidth);
-  const resetColumnWidth = useColumnStore((state) => state.resetColumnWidth);
-  const [resizing, setResizing] = useState<{
-    columnId: string;
-    headerEl: HTMLElement;
-  } | null>(null);
+  const { resizingColumnId, handleResizeStart, resetColumnWidth } = useColumnResize();
 
   // Drag handlers for column reordering
   const handleDragStart = (colId: string) => {
@@ -186,54 +182,6 @@ export function TrackListBrowser({
     setDropTargetId(null);
   };
 
-  // Minimum column width in pixels
-  const MIN_COLUMN_WIDTH = 50;
-
-  // Resize handlers
-  const handleResizeStart = useCallback((columnId: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const headerEl = e.currentTarget.parentElement;
-    if (!headerEl) return;
-
-    setResizing({ columnId, headerEl });
-  }, []);
-
-  // Handle resize mouse move and mouse up
-  useEffect(() => {
-    if (!resizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const left = resizing.headerEl.getBoundingClientRect().left;
-      const newWidth = Math.max(MIN_COLUMN_WIDTH, e.clientX - left);
-      setColumnWidth(resizing.columnId, newWidth);
-    };
-
-    const handleMouseUp = () => {
-      setResizing(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizing, setColumnWidth]);
-
-  // Apply resize cursor and prevent text selection during resize
-  useEffect(() => {
-    if (resizing) {
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      return () => {
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-    }
-  }, [resizing]);
 
   // Desktop scroll container ref for virtualizer
   const desktopScrollRef = useRef<HTMLDivElement>(null);
@@ -971,7 +919,7 @@ export function TrackListBrowser({
                   className={`absolute right-0 top-1 bottom-1 w-1.5 cursor-col-resize
                              transition-colors border-r border-transparent
                              hover:border-zinc-500 hover:bg-zinc-500/20
-                             ${resizing?.columnId === colId ? 'border-zinc-400 bg-zinc-500/30' : ''}`}
+                             ${resizingColumnId === colId ? 'border-zinc-400 bg-zinc-500/30' : ''}`}
                   onMouseDown={(e) => handleResizeStart(colId, e)}
                   onDoubleClick={() => resetColumnWidth(colId)}
                   title="Drag to resize, double-click to reset"
