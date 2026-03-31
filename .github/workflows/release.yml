@@ -44,22 +44,19 @@ jobs:
 
       - name: Free up disk space
         run: |
-          # Remove large pre-installed tools (~30GB total)
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /usr/share/swift
-          sudo rm -rf /usr/local/.ghcup
-          sudo rm -rf /usr/local/graalvm
-          sudo rm -rf /usr/local/share/powershell
-          sudo rm -rf /opt/microsoft
-          sudo rm -rf /opt/az
-          # Clean Docker
-          sudo docker image prune --all --force
-          sudo docker builder prune --all --force
-          # Show available space
+          # Only run cleanup on GitHub-hosted runners (self-hosted may not have passwordless sudo)
+          if sudo -n true 2>/dev/null; then
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+              /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/share/swift \
+              /usr/local/.ghcup /usr/local/graalvm /usr/local/share/powershell \
+              /opt/microsoft /opt/az
+            sudo docker image prune --all --force
+            sudo docker builder prune --all --force
+          else
+            echo "Skipping disk cleanup (no passwordless sudo)"
+            docker image prune --all --force || true
+            docker builder prune --all --force || true
+          fi
           df -h /
 
       - name: Set up QEMU
