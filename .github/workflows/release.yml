@@ -18,7 +18,7 @@ env:
 jobs:
   build-and-push:
     name: Build and Push Docker Images
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     permissions:
       contents: read
       packages: write
@@ -109,7 +109,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux]
     needs: build-and-push
     permissions:
       contents: write
