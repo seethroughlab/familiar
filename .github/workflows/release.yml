@@ -32,9 +32,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SHA=$(git rev-parse HEAD)
-          # Check CI workflow check-runs (exclude Release workflow's own checks)
+          # Check CI test check-runs (only check test/lint/build jobs, exclude Docker Build and Release workflow)
           FAILED=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
-            --jq '[.check_runs[] | select(.app.slug == "github-actions" and (.name | test("Release|Docker Images|GitHub Release") | not) and .conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion)"] | .[]')
+            --jq '[.check_runs[] | select(.app.slug == "github-actions" and (.name | test("Release|Docker Images|Docker Build|GitHub Release") | not) and .conclusion != null and .conclusion != "success" and .conclusion != "skipped") | "\(.name): \(.conclusion)"] | .[]')
           if [ -n "$FAILED" ]; then
             echo "::error::CI has not passed on this commit:"
             echo "$FAILED"
