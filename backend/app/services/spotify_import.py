@@ -324,6 +324,42 @@ class SpotifyImportService:
 
     # ---- Matching ----
 
+    @staticmethod
+    def _iter_unique_tracks(
+        favorites: list[dict[str, Any]],
+        playlists: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        """Deduplicate tracks across favorites+playlists, tracking sources.
+
+        Returns dict keyed by normalized "artist:track" with values:
+            {"artist": str, "track": str, "album": str, "sources": list[str]}
+        """
+        result: dict[str, dict[str, Any]] = {}
+
+        def add(artist: str, track: str, album: str, source: str) -> None:
+            if not artist or not track:
+                return
+            key = f"{normalize_for_matching(artist)}:{normalize_for_matching(track)}"
+            if key not in result:
+                result[key] = {
+                    "artist": artist,
+                    "track": track,
+                    "album": album,
+                    "sources": [source],
+                }
+            elif source not in result[key]["sources"]:
+                result[key]["sources"].append(source)
+
+        for fav in favorites:
+            add(fav.get("artist", ""), fav.get("track", ""), fav.get("album", ""), "favorites")
+
+        for pl in playlists:
+            pl_name = pl.get("name", "Untitled")
+            for item in pl.get("items", []):
+                add(item.get("artist", ""), item.get("track", ""), item.get("album", ""), pl_name)
+
+        return result
+
     async def _match_all(
         self,
         favorites: list[dict[str, Any]],
@@ -409,6 +445,25 @@ class SpotifyImportService:
             [{"artist": t["artist"], "track": t["track"]} for t in top_tracks]
         )
 
+        # Count unique tracks the same way _match_all does
+        seen: set[str] = set()
+        for fav in favorites:
+            a, t = fav.get("artist", ""), fav.get("track", "")
+            if a and t:
+                seen.add(f"{normalize_for_matching(a)}:{normalize_for_matching(t)}")
+        for pl in playlists:
+            for item in pl.get("items", []):
+                a, t = item.get("artist", ""), item.get("track", "")
+                if a and t:
+                    seen.add(f"{normalize_for_matching(a)}:{normalize_for_matching(t)}")
+        for tr in streaming_stats.get("top_tracks", []):
+            a, t = tr.get("artist", ""), tr.get("track", "")
+            if a and t:
+                seen.add(f"{normalize_for_matching(a)}:{normalize_for_matching(t)}")
+
+        total_unique = len(seen)
+        total_matched = len(match_results)
+
         return {
             "total_favorites": len(favorites),
             "matched_favorites": matched_favorites,
@@ -418,6 +473,9 @@ class SpotifyImportService:
             "total_top_tracks": len(top_tracks),
             "matched_top_tracks": matched_top_tracks,
             "total_top_artists": len(streaming_stats.get("top_artists", [])),
-            "total_matched": len(match_results),
+            "total_matched": total_matched,
+            "total_unique_tracks": total_unique,
+            "total_unmatched": total_unique - total_matched,
+            "match_rate": round(total_matched / total_unique * 100, 1) if total_unique else 0.0,
             "matching_status": matching_status,
         }

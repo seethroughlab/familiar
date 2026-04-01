@@ -9,11 +9,13 @@ import json
 import logging
 from uuid import uuid4
 
-from fastapi import APIRouter, Form, UploadFile
+from fastapi import APIRouter, Form, Query, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError, ValidationError
+from app.db.models import SpotifyImport
 from app.services.spotify_import import SpotifyImportService
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,34 @@ class SpotifyDeleteResponse(BaseModel):
 class SpotifyRematchResponse(BaseModel):
     task_id: str
     status: str
+
+
+class SpotifyUnmatchedTrack(BaseModel):
+    artist: str
+    track: str
+    album: str
+    sources: list[str]
+
+
+class SpotifyUnmatchedResponse(BaseModel):
+    tracks: list[SpotifyUnmatchedTrack]
+    total: int
+    limit: int
+    offset: int
+    warning: str | None = None
+
+
+class SpotifyStatsResponse(BaseModel):
+    total_favorites: int
+    matched_favorites: int
+    total_playlist_tracks: int
+    matched_playlist_tracks: int
+    total_unique_tracks: int | None = None
+    total_matched: int
+    total_unmatched: int | None = None
+    match_rate: float | None = None
+    matching_status: str
+    imported_at: str
 
 
 def _serialize_import(import_) -> dict:
@@ -176,3 +206,89 @@ async def rematch_spotify_import(
     asyncio.create_task(bg.run_spotify_rematch(task_id, profile.id))
 
     return SpotifyRematchResponse(task_id=task_id, status="processing")
+
+
+@router.get("/unmatched", response_model=SpotifyUnmatchedResponse)
+async def get_spotify_unmatched(
+    db: DbSession,
+    profile: RequiredProfile,
+    search: str | None = Query(None, description="Free-text search across artist, track, album"),
+    artist: str | None = Query(None, description="Filter by artist (case-insensitive contains)"),
+    album: str | None = Query(None, description="Filter by album (case-insensitive contains)"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+) -> SpotifyUnmatchedResponse:
+    """Search unmatched Spotify tracks with filtering and pagination."""
+    service = SpotifyImportService(db)
+    import_ = await service.get_import(profile.id)
+    if not import_:
+        raise NotFoundError("No Spotify import found")
+
+    unique = SpotifyImportService._iter_unique_tracks(import_.favorites, import_.playlists)
+    match_results = import_.match_results or {}
+
+    # Filter to unmatched only
+    unmatched = [v for k, v in unique.items() if k not in match_results]
+
+    # Apply filters (case-insensitive substring on original values)
+    if search:
+        s = search.lower()
+        unmatched = [
+            t for t in unmatched
+            if s in t["artist"].lower() or s in t["track"].lower() or s in t["album"].lower()
+        ]
+    if artist:
+        a = artist.lower()
+        unmatched = [t for t in unmatched if a in t["artist"].lower()]
+    if album:
+        al = album.lower()
+        unmatched = [t for t in unmatched if al in t["album"].lower()]
+
+    # Sort for deterministic pagination
+    unmatched.sort(key=lambda t: (t["artist"].lower(), t["track"].lower()))
+
+    total = len(unmatched)
+    page = unmatched[offset : offset + limit]
+
+    warning = None
+    summary = import_.summary or {}
+    if summary.get("matching_status") == "pending":
+        warning = "Matching has not run yet — all tracks appear unmatched"
+
+    return SpotifyUnmatchedResponse(
+        tracks=[SpotifyUnmatchedTrack(**t) for t in page],
+        total=total,
+        limit=limit,
+        offset=offset,
+        warning=warning,
+    )
+
+
+@router.get("/stats", response_model=SpotifyStatsResponse)
+async def get_spotify_stats(
+    db: DbSession,
+    profile: RequiredProfile,
+) -> SpotifyStatsResponse:
+    """Lightweight match statistics without loading heavy JSONB fields."""
+    result = await db.execute(
+        select(SpotifyImport.summary, SpotifyImport.imported_at).where(
+            SpotifyImport.profile_id == profile.id
+        )
+    )
+    row = result.one_or_none()
+    if not row:
+        raise NotFoundError("No Spotify import found")
+
+    summary, imported_at = row
+    return SpotifyStatsResponse(
+        total_favorites=summary.get("total_favorites", 0),
+        matched_favorites=summary.get("matched_favorites", 0),
+        total_playlist_tracks=summary.get("total_playlist_tracks", 0),
+        matched_playlist_tracks=summary.get("matched_playlist_tracks", 0),
+        total_unique_tracks=summary.get("total_unique_tracks"),
+        total_matched=summary.get("total_matched", 0),
+        total_unmatched=summary.get("total_unmatched"),
+        match_rate=summary.get("match_rate"),
+        matching_status=summary.get("matching_status", "unknown"),
+        imported_at=imported_at.isoformat(),
+    )
