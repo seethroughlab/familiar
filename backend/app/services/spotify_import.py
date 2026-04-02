@@ -17,7 +17,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import SpotifyImport
+from app.db.models import ProfileFavorite, SpotifyImport
 from app.services.export_import.matching import TrackMatcher, normalize_for_matching
 from app.utils.time import utcnow
 
@@ -115,6 +115,13 @@ class SpotifyImportService:
         import_.match_results = match_results
         import_.summary = summary
         import_.imported_at = utcnow()
+
+        favorites_created = await self._sync_favorites(
+            import_.profile_id, import_.favorites, match_results
+        )
+        if favorites_created:
+            logger.info(f"Auto-favorited {favorites_created} tracks from Spotify favorites")
+
         await self.db.commit()
         await self.db.refresh(import_)
         return import_
@@ -141,6 +148,50 @@ class SpotifyImportService:
         )
         await self.db.commit()
         return result.rowcount > 0  # type: ignore[attr-defined]
+
+    async def _sync_favorites(
+        self,
+        profile_id: UUID,
+        favorites: list[dict[str, Any]],
+        match_results: dict[str, Any],
+    ) -> int:
+        """Create ProfileFavorite entries for matched Spotify favorites.
+
+        Only adds new favorites — existing ones are left untouched.
+        """
+        matched_track_ids: set[UUID] = set()
+        for fav in favorites:
+            artist = fav.get("artist", "")
+            track = fav.get("track", "")
+            if not artist or not track:
+                continue
+            key = f"{normalize_for_matching(artist)}:{normalize_for_matching(track)}"
+            match = match_results.get(key)
+            if match:
+                matched_track_ids.add(UUID(match["track_id"]))
+
+        if not matched_track_ids:
+            return 0
+
+        # Find which are already favorited
+        result = await self.db.execute(
+            select(ProfileFavorite.track_id).where(
+                ProfileFavorite.profile_id == profile_id,
+                ProfileFavorite.track_id.in_(matched_track_ids),
+            )
+        )
+        already_favorited = set(result.scalars().all())
+
+        new_track_ids = matched_track_ids - already_favorited
+        if not new_track_ids:
+            return 0
+
+        now = utcnow()
+        self.db.add_all([
+            ProfileFavorite(profile_id=profile_id, track_id=tid, favorited_at=now)
+            for tid in new_track_ids
+        ])
+        return len(new_track_ids)
 
     # ---- ZIP parsing ----
 

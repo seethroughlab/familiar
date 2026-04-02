@@ -6,10 +6,11 @@ exact match, and fuzzy matching strategies.
 
 import logging
 import re
+from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -59,6 +60,9 @@ class TrackMatcher:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self._track_cache: dict[str, Track] | None = None
+        self._all_tracks: list[Track] | None = None
+        self._artist_index: dict[str, list[tuple[Track, str, str]]] | None = None
+        self._artist_keys: list[str] | None = None
 
     async def _get_all_tracks(self) -> list[Track]:
         """Get all tracks from database (cached for batch matching)."""
@@ -76,7 +80,10 @@ class TrackMatcher:
             return
 
         tracks = await self._get_all_tracks()
+        self._all_tracks = tracks
         self._track_cache = {}
+
+        artist_idx: dict[str, list[tuple[Track, str, str]]] = defaultdict(list)
 
         for track in tracks:
             # Index by ISRC
@@ -87,10 +94,15 @@ class TrackMatcher:
             if track.musicbrainz_track_id:
                 self._track_cache[f"mbid:{track.musicbrainz_track_id}"] = track
 
-            # Index by normalized title+artist for exact matching
+            # Pre-compute normalized strings for exact + fuzzy matching
             if track.title and track.artist:
-                key = f"exact:{normalize_for_matching(track.title)}:{normalize_for_matching(track.artist)}"
-                self._track_cache[key] = track
+                norm_title = normalize_for_matching(track.title)
+                norm_artist = normalize_for_matching(track.artist)
+                self._track_cache[f"exact:{norm_title}:{norm_artist}"] = track
+                artist_idx[norm_artist].append((track, norm_title, norm_artist))
+
+        self._artist_index = dict(artist_idx)
+        self._artist_keys = list(artist_idx.keys())
 
     async def match_track_ref(
         self,
@@ -146,39 +158,41 @@ class TrackMatcher:
         album: str | None,
         duration: float | None,
     ) -> tuple[Track | None, str | None, float | None]:
-        """Fuzzy match against all tracks."""
+        """Fuzzy match against all tracks using artist pre-filtering."""
+        assert self._artist_keys is not None and self._artist_index is not None
+
         normalized_title = normalize_for_matching(title)
         normalized_artist = normalize_for_matching(artist)
 
-        tracks = await self._get_all_tracks()
+        # Phase 1: Find candidate artists (cutoff=50 is safe:
+        # max title 100*0.6=60 + artist 50*0.4=20 + duration boost 5 = 85)
+        artist_matches = process.extract(
+            normalized_artist,
+            self._artist_keys,
+            scorer=fuzz.ratio,
+            score_cutoff=50,
+            limit=None,
+        )
+
+        # Phase 2: Score only tracks from matching artists
         best_match: Track | None = None
         best_score: float = 0.0
 
-        for track in tracks:
-            if not track.title or not track.artist:
-                continue
+        for matched_artist, artist_score, _idx in artist_matches:
+            for track, local_title, _local_artist in self._artist_index[matched_artist]:
+                title_score = fuzz.ratio(normalized_title, local_title)
+                combined = (title_score * 0.6) + (artist_score * 0.4)
 
-            local_title = normalize_for_matching(track.title)
-            local_artist = normalize_for_matching(track.artist)
+                if duration and track.duration_seconds:
+                    duration_diff = abs(duration - track.duration_seconds)
+                    if duration_diff < 3:
+                        combined = min(100, combined + 5)
+                    elif duration_diff > 30:
+                        combined = combined * 0.9
 
-            # Calculate fuzzy scores
-            title_score = fuzz.ratio(normalized_title, local_title)
-            artist_score = fuzz.ratio(normalized_artist, local_artist)
-
-            # Combined score with weights (title matters more)
-            combined = (title_score * 0.6) + (artist_score * 0.4)
-
-            # Duration disambiguation: boost score if durations match closely
-            if duration and track.duration_seconds:
-                duration_diff = abs(duration - track.duration_seconds)
-                if duration_diff < 3:  # Within 3 seconds
-                    combined = min(100, combined + 5)
-                elif duration_diff > 30:  # Very different duration
-                    combined = combined * 0.9
-
-            if combined >= self.FUZZY_THRESHOLD and combined > best_score:
-                best_score = combined
-                best_match = track
+                if combined >= self.FUZZY_THRESHOLD and combined > best_score:
+                    best_score = combined
+                    best_match = track
 
         if best_match:
             return best_match, "fuzzy", best_score / 100.0
