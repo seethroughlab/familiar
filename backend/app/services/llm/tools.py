@@ -326,6 +326,71 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     # Discovery tools
     {
+        "name": "get_new_releases",
+        "description": "Find recent releases by the user's most-played artists via MusicBrainz. Use when the user asks about new music from artists they listen to, what's new, or recent releases. May take 10-15 seconds due to MusicBrainz lookups. Returns releases with in_library flag indicating if the user already has them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days_back": {
+                    "type": "integer",
+                    "description": "How far back to look for releases (default 90 days, max 365)",
+                    "default": 90
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max releases to return (default 20)",
+                    "default": 20
+                }
+            }
+        }
+    },
+    {
+        "name": "get_discovery_recommendations",
+        "description": "Get recommended artists based on the user's most-played artists. Returns external artists similar to what the user listens to (via Last.fm), plus unheard tracks and deep cuts from artists they already have. Use when the user wants to discover new artists, asks 'who should I listen to', or wants recommendations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "include_in_library": {
+                    "type": "boolean",
+                    "description": "Include artists already in library (default false, external only)",
+                    "default": False
+                },
+                "seed_artists": {
+                    "type": "integer",
+                    "description": "Number of top-played artists to base recommendations on (default 5)",
+                    "default": 5
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max recommended artists to return (default 8)",
+                    "default": 8
+                }
+            }
+        }
+    },
+    {
+        "name": "get_spotify_unmatched",
+        "description": "Find Spotify favorites and playlist tracks that aren't in the user's local library. Requires a prior Spotify data import. Use when the user asks what they're missing from Spotify, what to add next, or wants to compare libraries. Returns unmatched tracks with stats.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "search": {
+                    "type": "string",
+                    "description": "Free-text search across artist, track, and album names"
+                },
+                "artist": {
+                    "type": "string",
+                    "description": "Filter by artist name (case-insensitive)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 50)",
+                    "default": 50
+                }
+            }
+        }
+    },
+    {
         "name": "get_similar_artists_in_library",
         "description": "Find artists similar to a given artist that exist in the user's library. Uses Last.fm to find similar artists, then checks which ones the user actually has. IMPORTANT: Use this when the user asks for music like an artist they may not have. Returns similar artists in the library plus a Bandcamp link if the requested artist isn't in the library.",
         "input_schema": {
@@ -772,6 +837,23 @@ While handling requests, if you notice metadata issues, proactively use propose_
 After proposing a fix, briefly mention it: "I've proposed a fix for the missing artwork on that album - you can review it in Proposed Changes."
 
 Don't ask permission first - just propose the change. The user reviews all proposals before they're applied.
+
+## New Releases & Discovery
+
+**"What's new from my favorite artists?"** or **"Any new releases?"**:
+1. Use get_new_releases to find recent releases from top-played artists
+2. Present releases grouped by artist, highlighting ones NOT in the library
+3. For releases not in library, suggest searching Bandcamp to purchase them
+
+**"Recommend artists I don't have"** or **"Who should I listen to?"**:
+1. Use get_discovery_recommendations to get similar artists + unheard tracks
+2. Present recommended_artists with Bandcamp links for discovery
+3. Optionally mention unheard_tracks and deep_cuts for re-discovering existing library
+
+**"What Spotify tracks am I missing?"** or **"What should I add from Spotify?"**:
+1. Use get_spotify_unmatched to find unmatched Spotify tracks
+2. Present stats (match rate) and top unmatched tracks
+3. If user asks about a specific artist, use the artist filter
 
 ## Discovery Suggestions
 

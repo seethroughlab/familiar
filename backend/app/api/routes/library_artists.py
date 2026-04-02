@@ -4,12 +4,12 @@ import asyncio
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError
 from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.utils.time import utcnow
@@ -198,6 +198,138 @@ class ArtistDetailResponse(BaseModel):
     # Cache status
     lastfm_fetched: bool = False
     lastfm_error: str | None = None
+
+
+# ── New Releases ──────────────────────────────────────────────
+
+
+class NewRelease(BaseModel):
+    """A recent release by a library artist."""
+
+    artist_name: str
+    title: str
+    release_type: str | None
+    release_date: str
+    artwork_url: str | None
+    musicbrainz_release_group_id: str | None
+    in_library: bool
+
+
+class ArtistNewReleasesResponse(BaseModel):
+    """New releases from artists in the user's library."""
+
+    releases: list[NewRelease]
+    artists_checked: int
+    artists_skipped: int
+
+
+@router.get("/artists/new-releases", response_model=ArtistNewReleasesResponse)
+async def get_artist_new_releases(
+    db: DbSession,
+    profile: RequiredProfile,
+    days_back: int = Query(90, ge=1, le=365),
+    limit: int = Query(20, ge=1, le=100),
+) -> ArtistNewReleasesResponse:
+    """Find recent releases by your most-played artists via MusicBrainz.
+
+    On-demand lookup — may take 10-15 seconds depending on how many
+    artists have MusicBrainz IDs cached.
+    """
+    from app.db.models import ArtistInfo, ProfilePlayHistory
+    from app.services.metadata.musicbrainz import get_artist_releases_recent
+
+    # Get top 15 artists by play count
+    play_history_query = (
+        select(
+            func.lower(func.trim(Track.artist)).label("artist_normalized"),
+            Track.artist,
+            func.sum(ProfilePlayHistory.play_count).label("total_plays"),
+        )
+        .join(Track, ProfilePlayHistory.track_id == Track.id)
+        .where(
+            Track.artist.isnot(None),
+            ProfilePlayHistory.profile_id == profile.id,
+        )
+        .group_by(func.lower(func.trim(Track.artist)), Track.artist)
+        .order_by(func.sum(ProfilePlayHistory.play_count).desc())
+        .limit(15)
+    )
+    play_result = await db.execute(play_history_query)
+    top_artists = play_result.fetchall()
+
+    # Look up MusicBrainz IDs from ArtistInfo cache
+    all_releases: list[NewRelease] = []
+    artists_checked = 0
+    artists_skipped = 0
+
+    for row in top_artists:
+        artist_normalized = row.artist_normalized
+        artist_display = row.artist
+
+        # Check ArtistInfo cache for musicbrainz_id
+        cached = await db.get(ArtistInfo, artist_normalized)
+        if not cached or not cached.musicbrainz_id:
+            artists_skipped += 1
+            continue
+
+        artists_checked += 1
+
+        # Call MusicBrainz (synchronous, rate-limited at 1 req/sec)
+        releases = await asyncio.to_thread(
+            get_artist_releases_recent,
+            cached.musicbrainz_id,
+            days_back,
+        )
+
+        for r in releases:
+            all_releases.append(NewRelease(
+                artist_name=artist_display,
+                title=r["title"],
+                release_type=r.get("release_type"),
+                release_date=r["release_date"],
+                artwork_url=r.get("artwork_url"),
+                musicbrainz_release_group_id=r.get("musicbrainz_release_group_id"),
+                in_library=False,  # will be updated below
+            ))
+
+    # Cross-reference with library to mark releases user already has
+    if all_releases:
+        # Build set of (normalized_artist, lower_album) from library
+        album_pairs_query = (
+            select(
+                func.lower(func.trim(Track.artist)),
+                func.lower(func.trim(Track.album)),
+            )
+            .where(
+                Track.artist.isnot(None),
+                Track.album.isnot(None),
+                Track.status == TrackStatus.ACTIVE,
+            )
+            .distinct()
+        )
+        album_result = await db.execute(album_pairs_query)
+        library_albums = {(a, b) for a, b in album_result.fetchall()}
+
+        for release in all_releases:
+            key = (
+                release.artist_name.lower().strip(),
+                release.title.lower().strip(),
+            )
+            if key in library_albums:
+                release.in_library = True
+
+    # Sort by release date descending, truncate
+    all_releases.sort(key=lambda r: r.release_date, reverse=True)
+    all_releases = all_releases[:limit]
+
+    return ArtistNewReleasesResponse(
+        releases=all_releases,
+        artists_checked=artists_checked,
+        artists_skipped=artists_skipped,
+    )
+
+
+# ── Artist Detail ─────────────────────────────────────────────
 
 
 @router.get("/artists/{artist_name}", response_model=ArtistDetailResponse)

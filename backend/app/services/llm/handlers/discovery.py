@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from app.db.models import Track
+from app.db.models import Track, TrackStatus
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -186,6 +187,354 @@ class DiscoveryHandlersMixin:
             "count": len(artists_in_library),
             "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}" if not requested_artist_in_library else None,
             "note": f"Found {len(artists_in_library)} similar artists in your library. Search for their tracks to build a playlist." if artists_in_library else "No similar artists found in library.",
+        }
+
+    async def _get_new_releases(
+        self: "ToolExecutor",
+        days_back: int = 90,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Find recent releases by the user's most-played artists via MusicBrainz."""
+        from app.db.models import ArtistInfo, ProfilePlayHistory
+        from app.services.metadata.musicbrainz import get_artist_releases_recent
+
+        if not self.profile_id:
+            return {"error": "Profile required for new releases lookup"}
+
+        try:
+            days_back = max(1, min(365, int(days_back)))
+            limit = max(1, min(100, int(limit)))
+        except (ValueError, TypeError):
+            days_back, limit = 90, 20
+
+        # Get top 15 artists by play count
+        play_query = (
+            select(
+                func.lower(func.trim(Track.artist)).label("artist_normalized"),
+                Track.artist,
+                func.sum(ProfilePlayHistory.play_count).label("total_plays"),
+            )
+            .join(Track, ProfilePlayHistory.track_id == Track.id)
+            .where(
+                Track.artist.isnot(None),
+                ProfilePlayHistory.profile_id == self.profile_id,
+            )
+            .group_by(func.lower(func.trim(Track.artist)), Track.artist)
+            .order_by(func.sum(ProfilePlayHistory.play_count).desc())
+            .limit(15)
+        )
+        play_result = await self.db.execute(play_query)
+        top_artists = play_result.fetchall()
+
+        if not top_artists:
+            return {"releases": [], "artists_checked": 0, "note": "No play history found."}
+
+        all_releases: list[dict[str, Any]] = []
+        artists_checked = 0
+        artists_skipped = 0
+
+        for row in top_artists:
+            cached = await self.db.get(ArtistInfo, row.artist_normalized)
+            if not cached or not cached.musicbrainz_id:
+                artists_skipped += 1
+                continue
+
+            artists_checked += 1
+            releases = await asyncio.to_thread(
+                get_artist_releases_recent,
+                cached.musicbrainz_id,
+                days_back,
+            )
+
+            for r in releases:
+                all_releases.append({
+                    "artist": row.artist,
+                    "title": r["title"],
+                    "type": r.get("release_type"),
+                    "date": r["release_date"],
+                    "in_library": False,
+                })
+
+        # Cross-reference with library
+        if all_releases:
+            album_pairs_query = (
+                select(
+                    func.lower(func.trim(Track.artist)),
+                    func.lower(func.trim(Track.album)),
+                )
+                .where(
+                    Track.artist.isnot(None),
+                    Track.album.isnot(None),
+                    Track.status == TrackStatus.ACTIVE,
+                )
+                .distinct()
+            )
+            album_result = await self.db.execute(album_pairs_query)
+            library_albums = {(a, b) for a, b in album_result.fetchall()}
+
+            for release in all_releases:
+                key = (release["artist"].lower().strip(), release["title"].lower().strip())
+                if key in library_albums:
+                    release["in_library"] = True
+
+        all_releases.sort(key=lambda r: r["date"], reverse=True)
+        all_releases = all_releases[:limit]
+
+        new_count = sum(1 for r in all_releases if not r["in_library"])
+        return {
+            "releases": all_releases,
+            "artists_checked": artists_checked,
+            "artists_skipped": artists_skipped,
+            "count": len(all_releases),
+            "new_releases_not_in_library": new_count,
+            "note": f"Found {len(all_releases)} recent releases ({new_count} not in library) from {artists_checked} artists (last {days_back} days)."
+            if all_releases
+            else f"No recent releases found in the last {days_back} days.",
+        }
+
+    async def _get_discovery_recommendations(
+        self: "ToolExecutor",
+        include_in_library: bool = False,
+        seed_artists: int = 5,
+        limit: int = 8,
+    ) -> dict[str, Any]:
+        """Get recommended artists based on top-played artists, plus unheard tracks and deep cuts."""
+        from app.db.models import ArtistInfo, ProfilePlayHistory
+        from app.services.lastfm import get_lastfm_service
+        from app.services.search_links import generate_artist_search_url
+
+        if not self.profile_id:
+            return {"error": "Profile required for discovery recommendations"}
+
+        try:
+            seed_artists = max(1, min(20, int(seed_artists)))
+            limit = max(1, min(50, int(limit)))
+        except (ValueError, TypeError):
+            seed_artists, limit = 5, 8
+
+        # Get top-played artists
+        play_query = (
+            select(
+                func.lower(func.trim(Track.artist)).label("artist_normalized"),
+                Track.artist,
+                func.sum(ProfilePlayHistory.play_count).label("total_plays"),
+            )
+            .join(Track, ProfilePlayHistory.track_id == Track.id)
+            .where(
+                Track.artist.isnot(None),
+                ProfilePlayHistory.profile_id == self.profile_id,
+            )
+            .group_by(func.lower(func.trim(Track.artist)), Track.artist)
+            .order_by(func.sum(ProfilePlayHistory.play_count).desc())
+            .limit(seed_artists)
+        )
+        play_result = await self.db.execute(play_query)
+        top_artists = play_result.fetchall()
+
+        if not top_artists:
+            return {"recommended_artists": [], "unheard_tracks": [], "deep_cuts": [], "note": "No play history found."}
+
+        # Collect similar artist candidates
+        seen: set[str] = set()
+        candidates: list[tuple[str, dict, str]] = []  # (normalized, similar_data, based_on)
+
+        for row in top_artists:
+            artist_name = row.artist
+            artist_normalized = row.artist_normalized
+
+            cached_info = await self.db.get(ArtistInfo, artist_normalized)
+            if cached_info and cached_info.similar_artists:
+                raw_similar = cached_info.similar_artists
+            else:
+                lastfm = get_lastfm_service()
+                if lastfm.is_configured():
+                    try:
+                        info = await lastfm.get_artist_info(artist_name)
+                        raw_similar = info.get("similar", {}).get("artist", []) if info else []
+                    except Exception:
+                        raw_similar = []
+                else:
+                    raw_similar = []
+
+            for similar in raw_similar[:3]:
+                name = similar.get("name", "")
+                if not name:
+                    continue
+                normalized = name.lower().strip()
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                candidates.append((normalized, similar, artist_name))
+
+        # Batch check library counts
+        all_normalized = [c[0] for c in candidates]
+        lib_counts: dict[str, int] = {}
+        if all_normalized:
+            lib_result = await self.db.execute(
+                select(
+                    func.lower(func.trim(Track.artist)).label("n"),
+                    func.count(Track.id).label("cnt"),
+                )
+                .where(
+                    func.lower(func.trim(Track.artist)).in_(all_normalized),
+                    Track.status == TrackStatus.ACTIVE,
+                )
+                .group_by(func.lower(func.trim(Track.artist)))
+            )
+            for r in lib_result.all():
+                lib_counts[r.n] = r.cnt
+
+        recommended: list[dict[str, Any]] = []
+        for normalized, similar, based_on in candidates:
+            tc = lib_counts.get(normalized, 0)
+            in_library = tc > 0
+            if not include_in_library and in_library:
+                continue
+
+            try:
+                match_score = float(similar.get("match", 0))
+            except (ValueError, TypeError):
+                match_score = 0.0
+
+            recommended.append({
+                "name": similar.get("name", ""),
+                "match_score": round(match_score, 2),
+                "in_library": in_library,
+                "track_count": tc if in_library else None,
+                "bandcamp_url": generate_artist_search_url("bandcamp", similar.get("name", "")),
+                "based_on": based_on,
+            })
+
+        recommended.sort(key=lambda a: a["match_score"], reverse=True)
+        recommended = recommended[:limit]
+
+        # Unheard tracks from top artists
+        top_artist_names = [row.artist_normalized for row in top_artists if row.artist_normalized]
+        unheard_tracks: list[dict[str, Any]] = []
+        deep_cuts: list[dict[str, Any]] = []
+
+        if top_artist_names:
+            played_ids = (
+                select(ProfilePlayHistory.track_id)
+                .where(ProfilePlayHistory.profile_id == self.profile_id)
+            )
+
+            unheard_result = await self.db.execute(
+                select(Track.id, Track.title, Track.artist, Track.album)
+                .where(
+                    func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                    Track.status == TrackStatus.ACTIVE,
+                    Track.id.notin_(played_ids),
+                )
+                .order_by(func.random())
+                .limit(10)
+            )
+            unheard_ids = set()
+            for row in unheard_result.fetchall():
+                unheard_ids.add(row.id)
+                unheard_tracks.append({
+                    "id": str(row.id),
+                    "title": row.title,
+                    "artist": row.artist,
+                    "album": row.album,
+                })
+
+            deep_result = await self.db.execute(
+                select(Track.id, Track.title, Track.artist, Track.album, ProfilePlayHistory.play_count)
+                .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
+                .where(
+                    func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                    Track.status == TrackStatus.ACTIVE,
+                    ProfilePlayHistory.profile_id == self.profile_id,
+                    ProfilePlayHistory.play_count > 0,
+                )
+                .order_by(ProfilePlayHistory.play_count.asc())
+                .limit(10)
+            )
+            for row in deep_result.fetchall():
+                if row.id not in unheard_ids:
+                    deep_cuts.append({
+                        "id": str(row.id),
+                        "title": row.title,
+                        "artist": row.artist,
+                        "album": row.album,
+                        "play_count": row.play_count,
+                    })
+
+        return {
+            "recommended_artists": recommended,
+            "unheard_tracks": unheard_tracks,
+            "deep_cuts": deep_cuts,
+            "note": f"Found {len(recommended)} recommended artists, {len(unheard_tracks)} unheard tracks, and {len(deep_cuts)} deep cuts from your top artists."
+            if recommended or unheard_tracks
+            else "Not enough listening history for recommendations yet.",
+        }
+
+    async def _get_spotify_unmatched(
+        self: "ToolExecutor",
+        search: str | None = None,
+        artist: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Find Spotify tracks not matched to local library, with summary stats."""
+        from app.db.models import SpotifyImport
+        from app.services.spotify_import import SpotifyImportService
+
+        if not self.profile_id:
+            return {"error": "Profile required for Spotify lookup"}
+
+        try:
+            limit = max(1, min(200, int(limit)))
+        except (ValueError, TypeError):
+            limit = 50
+
+        # Get import
+        result = await self.db.execute(
+            select(SpotifyImport).where(SpotifyImport.profile_id == self.profile_id)
+        )
+        import_ = result.scalar_one_or_none()
+
+        if not import_:
+            return {"error": "No Spotify import found. Import your Spotify data first via Settings."}
+
+        # Get stats from summary
+        summary = import_.summary or {}
+        stats = {
+            "total_unique_tracks": summary.get("total_unique_tracks"),
+            "total_matched": summary.get("total_matched", 0),
+            "total_unmatched": summary.get("total_unmatched"),
+            "match_rate": summary.get("match_rate"),
+        }
+
+        # Get unmatched tracks
+        unique = SpotifyImportService._iter_unique_tracks(import_.favorites, import_.playlists)
+        match_results = import_.match_results or {}
+        unmatched = [v for k, v in unique.items() if k not in match_results]
+
+        # Apply filters
+        if search:
+            s = search.lower()
+            unmatched = [
+                t for t in unmatched
+                if s in t["artist"].lower() or s in t["track"].lower() or s in t["album"].lower()
+            ]
+        if artist:
+            a = artist.lower()
+            unmatched = [t for t in unmatched if a in t["artist"].lower()]
+
+        unmatched.sort(key=lambda t: (t["artist"].lower(), t["track"].lower()))
+        total_filtered = len(unmatched)
+        page = unmatched[:limit]
+
+        return {
+            "stats": stats,
+            "unmatched_tracks": [
+                {"artist": t["artist"], "track": t["track"], "album": t["album"]}
+                for t in page
+            ],
+            "total_unmatched_shown": len(page),
+            "total_unmatched_matching_filter": total_filtered,
+            "note": f"Showing {len(page)} of {total_filtered} unmatched Spotify tracks. Match rate: {stats.get('match_rate', 'unknown')}.",
         }
 
     async def _identify_track(

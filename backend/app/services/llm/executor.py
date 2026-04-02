@@ -88,6 +88,9 @@ class ToolExecutor(
             "get_visible_tracks": self._get_visible_tracks,
             # Discovery tools
             "get_similar_artists_in_library": self._get_similar_artists_in_library,
+            "get_new_releases": self._get_new_releases,
+            "get_discovery_recommendations": self._get_discovery_recommendations,
+            "get_spotify_unmatched": self._get_spotify_unmatched,
             # Web page reading tools
             "fetch_webpage": self._fetch_webpage,
             "create_playlist_from_items": self._create_playlist_from_items,

@@ -229,7 +229,11 @@ Respond with ONLY a JSON array, no other text:
 async def get_discover_dashboard(
     db: DbSession,
     profile: RequiredProfile,
-    recommendations_limit: int = Query(8, ge=1, le=20),
+    recommendations_limit: int = Query(8, ge=1, le=50),
+    include_in_library: bool = Query(False),
+    seed_artists: int = Query(5, ge=1, le=20),
+    similar_per_artist: int = Query(3, ge=1, le=15),
+    min_match_score: float = Query(0.0, ge=0.0, le=1.0),
 ) -> DiscoverResponse:
     """Get aggregated discovery data for the dashboard.
 
@@ -261,41 +265,12 @@ async def get_discover_dashboard(
         )
         .group_by(func.lower(func.trim(Track.artist)), Track.artist)
         .order_by(func.sum(ProfilePlayHistory.play_count).desc())
-        .limit(5)  # Top 5 artists
+        .limit(seed_artists)
     )
     play_result = await db.execute(play_history_query)
     top_artists = play_result.fetchall()
 
-    # For each top artist, get similar artists
     seen_recommendations: set[str] = set()
-
-    for row in top_artists:
-        artist_name = row.artist
-        if not artist_name:
-            continue
-
-        artist_normalized = artist_name.lower().strip()
-
-        # Check cached artist info for similar artists
-        cached_info = await db.get(ArtistInfo, artist_normalized)
-        if cached_info and cached_info.similar_artists:
-            raw_similar = cached_info.similar_artists
-        else:
-            # Try fetching from Last.fm
-            lastfm_service = get_lastfm_service()
-            if lastfm_service.is_configured():
-                try:
-                    info = await lastfm_service.get_artist_info(artist_name)
-                    if info:
-                        raw_similar = info.get("similar", {}).get("artist", [])
-                    else:
-                        raw_similar = []
-                except Exception:
-                    raw_similar = []
-            else:
-                raw_similar = []
-
-        # First pass: collect all similar artist candidates and their normalized names
     similar_candidates: list[tuple[str, str, dict, str]] = []  # (name, normalized, similar_data, based_on)
 
     for row in top_artists:
@@ -324,9 +299,15 @@ async def get_discover_dashboard(
             else:
                 raw_similar = []
 
-        for similar in raw_similar[:3]:
+        for similar in raw_similar[:similar_per_artist]:
             name = similar.get("name", "")
             if not name:
+                continue
+            try:
+                score = float(similar.get("match", 0))
+            except (ValueError, TypeError):
+                score = 0.0
+            if score < min_match_score:
                 continue
             normalized = name.lower().strip()
             if normalized in seen_recommendations:
@@ -384,11 +365,13 @@ async def get_discover_dashboard(
             )
         )
 
-        if len(recommended_artists) >= recommendations_limit:
-            break
+    # Filter to external artists only (unless caller wants all)
+    if not include_in_library:
+        recommended_artists = [a for a in recommended_artists if not a.in_library]
 
-    # Filter to external artists only
-    recommended_artists = [a for a in recommended_artists if not a.in_library]
+    # Sort by match score (best first) and apply limit
+    recommended_artists.sort(key=lambda a: a.match_score, reverse=True)
+    recommended_artists = recommended_artists[:recommendations_limit]
 
     # 2. Track-based discovery using top artist names
     unheard_tracks: list[DiscoverTrack] = []
