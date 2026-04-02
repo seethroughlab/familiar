@@ -102,10 +102,13 @@ export function useAudioEngine() {
   const queueTransitionRef = useRef(false);
 
   // Pre-offline queue snapshot — restored when connectivity recovers
-  const preOfflineQueueRef = useRef<{ tracks: Track[]; index: number; source: import('./queueStore').QueueSource | null } | null>(null);
+  const preOfflineQueueRef = useRef<{ tracks: Track[]; index: number; source: import('./playerStore.types').QueueSource | null } | null>(null);
 
   // Album gain cache — scoped to hook lifecycle
   const albumGainCacheRef = useRef(new Map<string, { avgLufs: number; albumPeak: number | null }>());
+
+  // Track IDs that have already been retried once — prevents infinite retry loops
+  const retriedTrackIdsRef = useRef(new Set<string>());
 
   // --------------------------------------------------------------------------
   // Normalization
@@ -287,8 +290,10 @@ export function useAudioEngine() {
           log.error('Playback error for "%s": %s', trackName, event.message);
           const category = classifyPlaybackError(event);
 
-          if (state.currentTrack?.id) {
-            tracksApi.reportPlaybackError(state.currentTrack.id).catch(() => {});
+          const trackId = state.currentTrack?.id;
+          if (trackId) {
+            // Report error to backend (clears transcode cache if applicable)
+            tracksApi.reportPlaybackError(trackId).catch(() => {});
           }
 
           if (category === 'network-unreachable' || category === 'offline-unavailable') {
@@ -298,6 +303,28 @@ export function useAudioEngine() {
               setIsPlaying(false);
               setIsLoadingAudio(false);
             });
+            break;
+          }
+
+          // Single retry before skipping — cache may have been cleared by reportPlaybackError
+          if (trackId && !retriedTrackIdsRef.current.has(trackId)) {
+            retriedTrackIdsRef.current.add(trackId);
+            log.info('Retrying playback for "%s" after error', trackName);
+            setIsLoadingAudio(true);
+            setTimeout(() => {
+              // Re-trigger load by resetting the loaded track ID
+              const currentState = usePlayerStore.getState();
+              if (currentState.currentTrack?.id === trackId) {
+                const url = tracksApi.getStreamUrl(trackId);
+                engine.load(trackId, url).then(() => {
+                  if (usePlayerStore.getState().currentTrack?.id === trackId) {
+                    engine.play().catch(() => {});
+                  }
+                }).catch(() => {
+                  // Retry failed — will hit this error handler again, but retriedTrackIds will prevent infinite loop
+                });
+              }
+            }, 1500);
             break;
           }
 
@@ -323,6 +350,8 @@ export function useAudioEngine() {
           const state = usePlayerStore.getState();
           if (event.trackId === state.currentTrack?.id) {
             setIsLoadingAudio(false);
+            // Clear retry state on successful playback
+            retriedTrackIdsRef.current.delete(event.trackId);
           }
           break;
         }
@@ -722,6 +751,33 @@ export function useAudioEngine() {
           noteStreamLoadFailure(category);
           await advanceToNextDownloadedTrack(category);
           return;
+        }
+
+        // Single retry before skipping
+        if (currentTrack.id && !retriedTrackIdsRef.current.has(currentTrack.id)) {
+          retriedTrackIdsRef.current.add(currentTrack.id);
+          const trackName = currentTrack.title || 'Unknown track';
+          log.info('Retrying load for "%s" after error', trackName);
+          tracksApi.reportPlaybackError(currentTrack.id).catch(() => {});
+          setIsLoadingAudio(true);
+          await new Promise(r => setTimeout(r, 1500));
+          // Re-check that this track is still current before retrying
+          if (usePlayerStore.getState().currentTrack?.id === currentTrack.id) {
+            const retryUrl = tracksApi.getStreamUrl(currentTrack.id);
+            try {
+              await engine.load(currentTrack.id, retryUrl);
+              noteStreamLoadSuccess();
+              if (isPlaying) {
+                await engine.play();
+              }
+              setIsLoadingAudio(false);
+              return;
+            } catch {
+              // Retry failed — fall through to skip
+              log.error('Retry also failed for "%s"', trackName);
+              setIsLoadingAudio(false);
+            }
+          }
         }
 
         // Auto-advance on error
