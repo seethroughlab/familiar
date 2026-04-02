@@ -58,7 +58,8 @@ async def needs_transcode_check(file_path: Path) -> bool:
     """Check if file's codec is unsupported by browsers."""
     codec, bits = await detect_codec(file_path)
     if not codec:
-        return False
+        # ffprobe failed — safer to transcode than risk browser decode failure
+        return True
     if codec not in BROWSER_SUPPORTED_CODECS:
         return True
     if codec == "flac" and bits > 24:

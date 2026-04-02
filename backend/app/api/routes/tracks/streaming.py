@@ -1,5 +1,6 @@
 """Track streaming, artwork, and lyrics endpoints."""
 
+import asyncio
 import logging
 from collections.abc import Iterator
 from pathlib import Path
@@ -10,13 +11,17 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
-from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
+from app.api.exceptions import NotFoundError, TrackNotFoundError, TranscodeError, ValidationError
 from app.db.models import Track
 from app.services.artwork import compute_album_hash, get_artwork_path
 
 from . import AUDIO_MIME_TYPES
 
 logger = logging.getLogger(__name__)
+
+# Per-track locks to prevent redundant concurrent transcodes
+_transcode_locks: dict[UUID, asyncio.Lock] = {}
+_locks_lock = asyncio.Lock()
 
 router = APIRouter()
 
@@ -102,6 +107,8 @@ async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -
     Caching to disk ensures the served file has complete FLAC headers (streaminfo +
     seektable), Content-Length, and range request support — fixing PTS errors during
     crossfade that occurred with the previous chunked-stream approach.
+
+    Uses per-track locking to prevent redundant concurrent transcodes.
     """
     from app.api.streaming import stream_file
     from app.services.flac_remux import transcode_to_file
@@ -110,9 +117,32 @@ async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -
     cache_dir.mkdir(parents=True, exist_ok=True)
     cached = cache_dir / f"{track_id}.flac"
 
-    # Re-transcode if source is newer or cache doesn't exist
-    if not cached.exists() or file_path.stat().st_mtime > cached.stat().st_mtime:
-        await transcode_to_file(file_path, cached)
+    # Acquire per-track lock to prevent redundant concurrent transcodes
+    async with _locks_lock:
+        if track_id not in _transcode_locks:
+            _transcode_locks[track_id] = asyncio.Lock()
+        lock = _transcode_locks[track_id]
+
+    async with lock:
+        # Re-transcode if source is newer or cache doesn't exist
+        needs_transcode = not cached.exists() or file_path.stat().st_mtime > cached.stat().st_mtime
+        # Also re-transcode if cached file is empty (corrupt from prior crash)
+        if not needs_transcode and cached.stat().st_size == 0:
+            cached.unlink(missing_ok=True)
+            needs_transcode = True
+
+        if needs_transcode:
+            try:
+                await transcode_to_file(file_path, cached)
+            except RuntimeError:
+                logger.exception("Transcode failed: track_id=%s path=%s", track_id, file_path)
+                cached.unlink(missing_ok=True)
+                raise TranscodeError(f"Failed to transcode {file_path.name}")
+
+    # Clean up lock if no one else is waiting
+    async with _locks_lock:
+        if track_id in _transcode_locks and not lock.locked():
+            del _transcode_locks[track_id]
 
     return await stream_file(cached, request, "audio/flac")
 
@@ -139,8 +169,20 @@ async def report_playback_error(
     if not file_path.exists():
         raise NotFoundError("Audio file not found")
 
-    logger.info("Playback error reported for track %s (%s) — skipped (auto-repair removed)", track.title, file_path.name)
-    return {"status": "skipped", "reason": "auto-repair removed"}
+    # Clear transcode cache if it exists — may be corrupt
+    cache_file = Path("data/transcode_cache") / f"{track_id}.flac"
+    cache_cleared = False
+    if cache_file.exists():
+        cache_file.unlink(missing_ok=True)
+        cache_cleared = True
+        logger.info("Cleared transcode cache for track %s (%s)", track.title, file_path.name)
+
+    if cache_cleared:
+        logger.info("Playback error reported for track %s (%s) — cache cleared, retry may help", track.title, file_path.name)
+        return {"status": "retry", "reason": "cache_cleared"}
+
+    logger.info("Playback error reported for track %s (%s) — skipped", track.title, file_path.name)
+    return {"status": "skip", "reason": "no_cache"}
 
 
 @router.get("/{track_id}/artwork")

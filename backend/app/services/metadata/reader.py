@@ -180,7 +180,10 @@ def extract_metadata(file_path: Path) -> dict[str, Any]:
     metadata["codec"] = codec
 
     needs_transcode = False
-    if codec and codec not in BROWSER_SUPPORTED_CODECS:
+    if not codec:
+        # ffprobe failed — safer to transcode than risk browser decode failure
+        needs_transcode = True
+    elif codec not in BROWSER_SUPPORTED_CODECS:
         needs_transcode = True
     # Even whitelisted codecs may need transcode for edge-case params
     if codec == "flac" and metadata.get("bit_depth") and metadata["bit_depth"] > 24:

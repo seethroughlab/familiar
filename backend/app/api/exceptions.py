@@ -172,6 +172,13 @@ class LibraryImportError(FamiliarError):
     message = "Failed to import library data"
 
 
+class TranscodeError(FamiliarError):
+    """Audio transcoding failed."""
+
+    status_code = 502
+    message = "Audio transcoding failed"
+
+
 def create_sse_error(
     error_code: str,
     user_message: str | None = None,
