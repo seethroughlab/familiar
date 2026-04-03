@@ -54,53 +54,43 @@ function getStarburstMagnitude(
 
 function getRingColor(index: number, intensity: number): THREE.Color {
   const t = index / BAR_COUNT;
-  const hue = (0.56 + t * 0.95) % 1;
-  const lightness = Math.min(0.38 + intensity * 0.28, 0.76);
-  return new THREE.Color().setHSL(hue, 0.82, lightness);
+  const hue = 0.53 + Math.sin(t * Math.PI * 2) * 0.09;
+  const saturation = 0.78 + Math.cos(t * Math.PI * 2) * 0.04;
+  const lightness = Math.min(0.46 + intensity * 0.18, 0.7);
+  return new THREE.Color().setHSL(hue, saturation, lightness);
 }
 
 function CenterHalo({ mobileMode }: { mobileMode: boolean }) {
   const coreRef = useRef<THREE.Mesh>(null);
-  const ringRef = useRef<THREE.Mesh>(null);
 
-  useFrame((_, delta) => {
+  useFrame(() => {
     const audioData = getAudioData();
     const bass = audioData?.bass ?? 0;
     const mid = audioData?.mid ?? 0;
     const average = (audioData?.averageFrequency ?? 0) / 255;
-    const pulse = softLimit(0.18 + bass * 0.95 + mid * 0.25, 0.5, 1.35);
+    const pulse = softLimit(0.16 + bass * 0.8 + mid * 0.18, 0.48, 1.1);
 
     if (coreRef.current) {
       const scale = mobileMode
-        ? 1.05 + pulse * 0.6
-        : 1.1 + pulse * 0.45;
+        ? 1.14 + pulse * 0.5
+        : 0.96 + pulse * 0.34;
       coreRef.current.scale.setScalar(THREE.MathUtils.lerp(coreRef.current.scale.x, scale, 0.12));
       const material = coreRef.current.material as THREE.MeshBasicMaterial;
-      material.opacity = THREE.MathUtils.lerp(material.opacity, 0.22 + average * 0.26 + bass * 0.18, 0.12);
-    }
-
-    if (ringRef.current) {
-      ringRef.current.rotation.z += delta * (mobileMode ? 0.05 : 0.035);
-      const ringScale = mobileMode
-        ? 1.55 + pulse * 0.55
-        : 1.65 + pulse * 0.45;
-      ringRef.current.scale.setScalar(THREE.MathUtils.lerp(ringRef.current.scale.x, ringScale, 0.1));
-      const material = ringRef.current.material as THREE.MeshBasicMaterial;
-      material.opacity = THREE.MathUtils.lerp(material.opacity, 0.09 + bass * 0.12 + average * 0.1, 0.1);
+      material.opacity = THREE.MathUtils.lerp(
+        material.opacity,
+        mobileMode
+          ? 0.19 + average * 0.18 + bass * 0.12
+          : 0.14 + average * 0.12 + bass * 0.08,
+        0.12,
+      );
     }
   });
 
   return (
-    <group>
-      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[1.65, mobileMode ? 0.08 : 0.06, 16, 96]} />
-        <meshBasicMaterial color="#8be9ff" transparent opacity={0.12} toneMapped={false} />
-      </mesh>
-      <mesh ref={coreRef}>
-        <sphereGeometry args={[mobileMode ? 0.8 : 0.72, 32, 32]} />
-        <meshBasicMaterial color="#9f7aea" transparent opacity={0.24} toneMapped={false} />
-      </mesh>
-    </group>
+    <mesh ref={coreRef}>
+      <sphereGeometry args={[mobileMode ? 0.92 : 0.7, 32, 32]} />
+      <meshBasicMaterial color="#97d8ff" transparent opacity={mobileMode ? 0.2 : 0.16} toneMapped={false} />
+    </mesh>
   );
 }
 
@@ -231,8 +221,8 @@ function FrequencyBarsScene() {
       mesh.scale.z = 0.16 + magnitude * 0.05;
 
       const material = mesh.material as THREE.MeshStandardMaterial;
-      const rawIntensity = 0.42 + magnitude * 0.85 + bass * 0.28 + mid * 0.08;
-      material.emissiveIntensity = softLimit(rawIntensity, 0.7, 1.55);
+      const rawIntensity = 0.54 + magnitude * 0.72 + bass * 0.22 + mid * 0.05;
+      material.emissiveIntensity = softLimit(rawIntensity, 0.82, 1.2);
       material.metalness = 0.14 + treble * 0.18;
       material.roughness = 0.34 - treble * 0.12;
     });
@@ -243,10 +233,9 @@ function FrequencyBarsScene() {
       <color attach="background" args={['#050510']} />
       <fog attach="fog" args={['#050510', 7, 18]} />
 
-      <ambientLight intensity={0.2} />
-      <pointLight position={[0, 0, 6]} intensity={1.5} color="#7dd3fc" distance={18} />
-      <pointLight position={[0, 0, -6]} intensity={1.1} color="#c084fc" distance={16} />
-      <pointLight position={[4, 4, 5]} intensity={0.7} color="#f472b6" distance={16} />
+      <ambientLight intensity={0.24} />
+      <pointLight position={[0, 0, 6]} intensity={1.3} color="#8bdcff" distance={18} />
+      <pointLight position={[0, 0, -6]} intensity={0.95} color="#c18cff" distance={16} />
 
       <CenterHalo mobileMode={false} />
 
@@ -266,8 +255,8 @@ function FrequencyBarsScene() {
       <AudioReactiveEffects
         enableBloom
         enableVignette
-        bloomIntensity={1.35}
-        bloomThreshold={0.45}
+        bloomIntensity={1.1}
+        bloomThreshold={0.52}
         bloomRadius={0.7}
         vignetteIntensity={0.32}
         halfResolution={false}
