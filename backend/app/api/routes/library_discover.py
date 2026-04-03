@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import Track, TrackStatus
 from app.services.app_settings import get_app_settings_service
+from app.services.llm.models import get_anthropic_model
 from app.services.redis_client import get_redis
 from app.utils.time import utcnow
 
@@ -152,7 +153,7 @@ async def get_curated_prompts(
     )
     day_of_week = datetime.now().strftime("%A")
 
-    llm_prompt = f"""Generate 5 listening suggestions for a music lover based on their library.
+    llm_prompt = f"""Generate 6 home-screen starter prompts for a music lover based on their library.
 
 Library context:
 - Top genres: {', '.join(top_genres) if top_genres else 'Unknown'}
@@ -162,13 +163,18 @@ Library context:
 - Current time: {day_of_week} {time_of_day}
 
 Rules:
-- Each suggestion should be a natural language prompt the user can send to an AI DJ
+- Each item should be a natural language prompt the user can send to Familiar's AI DJ
+- Return a deliberate mix:
+  - 3 prompts for using or rediscovering the user's existing library
+  - 3 prompts for discovering new artists, scenes, or recent releases
 - Reference specific artists/genres from their library when possible
-- Mix different moods and styles — don't make them all similar
-- Consider the time of day for 1-2 suggestions
+- Make the discovery prompts feel adjacent to their taste, not generic
+- Consider the time of day for 1-2 prompts
 - Keep prompts conversational (10-20 words)
 - Each context line should be a brief explanation (5-10 words)
 - Choose an icon from: music, headphones, radio, mic, sparkles, sun, moon, coffee, zap, heart
+- Avoid repetitive phrasing such as "make me a playlist"
+- Do not mention the words "library guidance" or "discovery prompt" explicitly
 
 Respond with ONLY a JSON array, no other text:
 [{{"prompt": "...", "context": "...", "icon": "..."}}]"""
@@ -180,7 +186,7 @@ Respond with ONLY a JSON array, no other text:
 
         client = anthropic.Anthropic(api_key=api_key, timeout=15.0)
         message = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model=get_anthropic_model("utility"),
             max_tokens=600,
             messages=[{"role": "user", "content": llm_prompt}],
         )

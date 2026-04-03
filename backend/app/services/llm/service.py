@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.app_settings import get_app_settings_service
 
 from .executor import ToolExecutor
+from .models import get_anthropic_model
 from .tools import MUSIC_TOOLS, SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -93,7 +94,7 @@ class LLMService:
             try:
                 # Force tool use on first turn to prevent hallucination
                 create_kwargs: dict[str, Any] = {
-                    "model": "claude-sonnet-4-5-20250929",
+                    "model": get_anthropic_model("chat"),
                     "max_tokens": 2048,
                     "system": system_prompt,
                     "tools": cast(Any, MUSIC_TOOLS),
@@ -195,4 +196,3 @@ class LLMService:
                 yield {"type": "queue", "tracks": queued, "clear": clear_queue}
             yield {"type": "text", "content": "I found some tracks for you."}
             yield {"type": "done"}
-

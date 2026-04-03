@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Track
 from app.services.app_settings import get_app_settings_service
 
+from .models import get_anthropic_model
 from .handlers import (
     AnalysisHandlersMixin,
     DiscoveryHandlersMixin,
@@ -180,7 +181,7 @@ Respond with ONLY the playlist name, nothing else."""
 
             anthropic_client = anthropic.Anthropic(api_key=api_key, timeout=_PLAYLIST_NAME_TIMEOUT)
             message = anthropic_client.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model=get_anthropic_model("utility"),
                 max_tokens=50,
                 messages=[{"role": "user", "content": prompt}],
             )

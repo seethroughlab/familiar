@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.services.llm.models import get_anthropic_model
 from app.services.llm.service import LLMService
 
 
@@ -138,6 +139,7 @@ class TestLLMServiceChat:
 
         text_event = next(e for e in events if e["type"] == "text")
         assert "Hello" in text_event["content"]
+        assert mock_claude_client.messages.create.call_args.kwargs["model"] == get_anthropic_model("chat")
 
     @pytest.mark.asyncio
     async def test_chat_tool_use_flow(self, service, mock_claude_client, mock_db):

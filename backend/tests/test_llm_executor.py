@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.services.llm.models import get_anthropic_model
 from app.services.llm.executor import ToolExecutor
 from app.services.llm.tools import MUSIC_TOOLS
 
@@ -133,6 +134,32 @@ class TestHelperMethods:
 
         result = executor._apply_diversity(tracks, max_per_artist=2, max_per_album=2)
         assert len(result) == 5
+
+    @pytest.mark.asyncio
+    async def test_generate_playlist_name_uses_shared_utility_model(self, executor):
+        """Playlist naming should use the centralized Anthropic model helper."""
+        message = MagicMock()
+        first_block = MagicMock()
+        first_block.text = "Midnight Drive"
+        message.content = [first_block]
+
+        with patch("app.services.llm.executor.get_app_settings_service") as mock_settings:
+            settings = MagicMock()
+            settings.get_effective.return_value = "sk-test-key"
+            mock_settings.return_value = settings
+
+            with patch("app.services.llm.executor.anthropic.Anthropic") as mock_anthropic:
+                mock_client = MagicMock()
+                mock_client.messages.create.return_value = message
+                mock_anthropic.return_value = mock_client
+
+                name = await executor._generate_playlist_name_llm([
+                    {"artist": "Boards of Canada", "genre": "Ambient"},
+                    {"artist": "Autechre", "genre": "Electronic"},
+                ])
+
+        assert name == "Midnight Drive"
+        assert mock_client.messages.create.call_args.kwargs["model"] == get_anthropic_model("utility")
 
 
 class TestQueuedTracksState:
