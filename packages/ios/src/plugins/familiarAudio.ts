@@ -1,6 +1,22 @@
 import { registerPlugin } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
 
+export interface AudioAnalysisMetricsPayload {
+  emittedAtMs: number;
+  cadenceHz: number;
+  binCount: number;
+  averageFrequency: number;
+  rms: number;
+  peak: number;
+  averageBinLevel: number;
+  variance: number;
+  strongestBinIndex: number;
+  strongestBinValue: number;
+  bass: number;
+  mid: number;
+  treble: number;
+}
+
 export interface FamiliarAudioPlugin {
   // Playback
   load(options: { url: string; trackId: string }): Promise<void>;
@@ -131,7 +147,11 @@ export interface FamiliarAudioPlugin {
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'audioAnalysis',
-    handler: (data: { frequencyData: number[]; timeDomainData: number[] }) => void,
+    handler: (data: {
+      frequencyData: number[];
+      timeDomainData: number[];
+      metrics?: AudioAnalysisMetricsPayload;
+    }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'nativeAutoAdvanced',

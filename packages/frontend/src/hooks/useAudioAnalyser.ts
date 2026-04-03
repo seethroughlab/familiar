@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 import { getAudioAnalyser, getAudioContext } from '../player/audio/engineInstance';
 import { isMobile } from '../utils/platform';
+import {
+  computeFrequencyBands,
+} from '../player/audio/analysisMetrics';
+import { recordConsumedAnalysisFrame } from '../player/audio/analysisDiagnostics';
 
 const mobile = isMobile();
 
@@ -45,34 +49,12 @@ export { setNativeAnalysisBuffers, clearNativeAnalysisBuffers };
 
 // ---------------------------------------------------------------------------
 
-function computeBands(freqData: Uint8Array, binCount: number): void {
-  let sum = 0;
-  for (let i = 0; i < binCount; i++) {
-    sum += freqData[i];
-  }
-
-  const bassEnd = Math.floor(binCount * 0.1);
-  const midEnd = Math.floor(binCount * 0.5);
-
-  let bassSum = 0;
-  for (let i = 0; i < bassEnd; i++) {
-    bassSum += freqData[i];
-  }
-
-  let midSum = 0;
-  for (let i = bassEnd; i < midEnd; i++) {
-    midSum += freqData[i];
-  }
-
-  let trebleSum = 0;
-  for (let i = midEnd; i < binCount; i++) {
-    trebleSum += freqData[i];
-  }
-
-  sharedData!.averageFrequency = sum / binCount;
-  sharedData!.bass = bassSum / bassEnd / 255;
-  sharedData!.mid = midSum / (midEnd - bassEnd) / 255;
-  sharedData!.treble = trebleSum / (binCount - midEnd) / 255;
+function computeBands(freqData: Uint8Array): void {
+  const bands = computeFrequencyBands(freqData);
+  sharedData!.averageFrequency = bands.averageFrequency;
+  sharedData!.bass = bands.bass;
+  sharedData!.mid = bands.mid;
+  sharedData!.treble = bands.treble;
 }
 
 function analyseLoop() {
@@ -104,8 +86,9 @@ function analyseLoop() {
 
     sharedData.frequencyData.set(nativeBuffers.frequency);
     sharedData.timeDomainData.set(nativeBuffers.timeDomain);
-    computeBands(sharedData.frequencyData, binCount);
+    computeBands(sharedData.frequencyData);
     sharedAudioDataRef.current = sharedData;
+    recordConsumedAnalysisFrame('native', sharedData.frequencyData, sharedData.timeDomainData);
     return;
   }
 
@@ -137,8 +120,9 @@ function analyseLoop() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   analyser.getByteTimeDomainData(sharedData.timeDomainData as any);
 
-  computeBands(sharedData.frequencyData, binCount);
+  computeBands(sharedData.frequencyData);
   sharedAudioDataRef.current = sharedData;
+  recordConsumedAnalysisFrame('web', sharedData.frequencyData, sharedData.timeDomainData);
 }
 
 function startLoop() {

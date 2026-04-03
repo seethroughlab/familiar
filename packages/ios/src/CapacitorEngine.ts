@@ -1,6 +1,13 @@
 import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familiar/frontend/src/player/audio/types';
-import { FamiliarAudio } from './plugins/familiarAudio';
+import {
+  FamiliarAudio,
+  type AudioAnalysisMetricsPayload,
+} from './plugins/familiarAudio';
 import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/frontend/src/player/audio/nativeAnalysisBuffers';
+import {
+  recordBridgeAnalysisReceipt,
+  recordProducerAnalysisMetrics,
+} from '@familiar/frontend/src/player/audio/analysisDiagnostics';
 import { log } from '@familiar/frontend/src/player/audio/platform';
 import { tracksApi } from '@familiar/frontend/src/api';
 import { getOfflineTrackNativeUri } from '@familiar/frontend/src/services/offlineService';
@@ -433,6 +440,7 @@ export class CapacitorEngine implements AudioEngine {
     FamiliarAudio.addListener('audioAnalysis', (data) => {
       const freq: number[] = data.frequencyData;
       const time: number[] = data.timeDomainData;
+      const metrics = data.metrics as AudioAnalysisMetricsPayload | undefined;
       // Lazily allocate buffers, then reuse via element-wise copy
       if (!this.analysisFreqBuffer || this.analysisFreqBuffer.length !== freq.length) {
         this.analysisFreqBuffer = new Uint8Array(freq.length);
@@ -442,6 +450,18 @@ export class CapacitorEngine implements AudioEngine {
       }
       for (let i = 0; i < freq.length; i++) this.analysisFreqBuffer[i] = freq[i];
       for (let i = 0; i < time.length; i++) this.analysisTimeBuffer[i] = time[i];
+      if (metrics) {
+        recordProducerAnalysisMetrics(metrics);
+      }
+      recordBridgeAnalysisReceipt(this.analysisFreqBuffer, this.analysisTimeBuffer);
+      this.recordDiagnostic('analysis-frame', {
+        binCount: this.analysisFreqBuffer.length,
+        strongestBinIndex: metrics?.strongestBinIndex,
+        strongestBinValue: metrics?.strongestBinValue,
+        bass: metrics?.bass,
+        mid: metrics?.mid,
+        treble: metrics?.treble,
+      });
       setNativeAnalysisBuffers(this.analysisFreqBuffer, this.analysisTimeBuffer);
     }).then(h => this.listenerCleanups.push(() => h.remove()));
   }

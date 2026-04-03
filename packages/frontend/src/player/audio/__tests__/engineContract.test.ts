@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioEngine, EngineEvent } from '../types';
 import { CapacitorEngine } from '../../../../../ios/src/CapacitorEngine';
+import type { FamiliarAudioPlugin } from '../../../../../ios/src/plugins/familiarAudio';
 
 vi.hoisted(() => {
   const g = globalThis as unknown as { window?: Record<string, unknown> };
@@ -14,6 +15,7 @@ vi.hoisted(() => {
 
 const familiarAudioMock = vi.hoisted(() => {
   const listeners = new Map<string, Set<(data?: unknown) => void>>();
+  type CrossfadeResult = Awaited<ReturnType<FamiliarAudioPlugin['executeCrossfade']>>;
   return {
   load: vi.fn(async () => {}),
   loadLocal: vi.fn(async () => {}),
@@ -28,7 +30,7 @@ const familiarAudioMock = vi.hoisted(() => {
   isNextReady: vi.fn(async () => ({ ready: true })),
   getPreloadingTrackId: vi.fn(async () => ({ trackId: null })),
   isCrossfading: vi.fn(async () => ({ crossfading: false })),
-  executeCrossfade: vi.fn(async () => ({ success: true })),
+  executeCrossfade: vi.fn(async (): Promise<CrossfadeResult> => ({ success: true })),
   cancelCrossfade: vi.fn(async () => {}),
   setNextNormalizationVolume: vi.fn(async () => {}),
   setNowPlayingInfo: vi.fn(async () => {}),

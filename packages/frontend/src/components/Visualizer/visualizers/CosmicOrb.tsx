@@ -20,6 +20,7 @@ import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { GPUParticles } from '../effects/GPUParticles';
 import { FrameScheduler } from '../effects/FrameScheduler';
+import { sampleVisualizerBinValue } from '../../../player/audio/analysisMetrics';
 
 const mobile = isMobile();
 
@@ -210,15 +211,18 @@ function CircularWaveform({ color }: { color: string }) {
     const segments = positions.count;
 
     for (let i = 0; i < segments; i++) {
-      const dataIndex = frequencyData
-        ? Math.floor((i / segments) * frequencyData.length)
+      const value = frequencyData
+        ? Math.min(1, Math.max(0, sampleVisualizerBinValue(frequencyData, i, segments, {
+          usableBinsRatio: 0.85,
+          lowFrequencyEmphasis: 0.2,
+          minWindowSize: 2,
+        }) - 0.01) * 1.2)
         : 0;
-      const value = frequencyData ? frequencyData[dataIndex] / 255 : 0;
       const angle = (i / segments) * Math.PI * 2;
 
       // Add secondary wave oscillation
-      const wave = Math.sin(timeRef.current * 3 + i * 0.1) * 0.15 * (1 + bass);
-      const radius = 2.0 + value * 1.8 + bass * 0.6 + wave;
+      const wave = Math.sin(timeRef.current * 3 + i * 0.1) * 0.18 * (1 + bass * (mobile ? 1.4 : 1));
+      const radius = 2.1 + value * (mobile ? 2.4 : 2.0) + bass * (mobile ? 1.0 : 0.7) + wave;
 
       positions.setXYZ(i, Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
     }
@@ -271,14 +275,17 @@ function SecondaryWaveform({ color }: { color: string }) {
     const segments = positions.count;
 
     for (let i = 0; i < segments; i++) {
-      const dataIndex = frequencyData
-        ? Math.floor(((i + segments / 2) % segments / segments) * frequencyData.length)
+      const value = frequencyData
+        ? Math.min(1, Math.max(0, sampleVisualizerBinValue(frequencyData, i, segments, {
+          usableBinsRatio: 0.85,
+          lowFrequencyEmphasis: 0.18,
+          minWindowSize: 2,
+        }) - 0.01) * 1.15)
         : 0;
-      const value = frequencyData ? frequencyData[dataIndex] / 255 : 0;
       const angle = (i / segments) * Math.PI * 2;
 
-      const wave = Math.cos(timeRef.current * 2 + i * 0.15) * 0.2 * (1 + mid);
-      const radius = 2.8 + value * 1.5 + mid * 0.4 + wave;
+      const wave = Math.cos(timeRef.current * 2 + i * 0.15) * 0.22 * (1 + mid * (mobile ? 1.3 : 1));
+      const radius = 2.9 + value * (mobile ? 2.0 : 1.6) + mid * (mobile ? 0.7 : 0.45) + wave;
 
       positions.setXYZ(i, Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
     }
@@ -312,24 +319,28 @@ function ReactiveOrb({ palette }: { palette: string[] }) {
     const mid = audioData?.mid ?? 0;
     const treble = audioData?.treble ?? 0;
     const intensity = (audioData?.averageFrequency ?? 0) / 255;
+    const bassDrive = mobile ? bass * 1.7 : bass;
+    const midDrive = mobile ? mid * 1.35 : mid;
+    const trebleDrive = mobile ? treble * 1.2 : treble;
+    const intensityDrive = mobile ? Math.min(1, intensity * 1.35) : intensity;
 
     // Update shader uniforms
     materialRef.current.uniforms.uTime.value += delta;
-    materialRef.current.uniforms.uBass.value = bass;
-    materialRef.current.uniforms.uMid.value = mid;
-    materialRef.current.uniforms.uTreble.value = treble;
-    materialRef.current.uniforms.uIntensity.value = intensity;
+    materialRef.current.uniforms.uBass.value = bassDrive;
+    materialRef.current.uniforms.uMid.value = midDrive;
+    materialRef.current.uniforms.uTreble.value = trebleDrive;
+    materialRef.current.uniforms.uIntensity.value = intensityDrive;
     materialRef.current.uniforms.uColor.value = colors.base;
     materialRef.current.uniforms.uEmissive.value = colors.emissive;
 
     // Scale based on bass
     if (meshRef.current) {
-      const targetScale = 1 + bass * 0.3;
+      const targetScale = 1.03 + bassDrive * (mobile ? 0.52 : 0.34) + intensityDrive * 0.08;
       meshRef.current.scale.setScalar(
-        THREE.MathUtils.lerp(meshRef.current.scale.x, targetScale, 0.1)
+        THREE.MathUtils.lerp(meshRef.current.scale.x, targetScale, mobile ? 0.18 : 0.1)
       );
-      meshRef.current.rotation.x += 0.005 + mid * 0.01;
-      meshRef.current.rotation.y += 0.008 + treble * 0.01;
+      meshRef.current.rotation.x += 0.005 + midDrive * 0.014;
+      meshRef.current.rotation.y += 0.008 + trebleDrive * 0.012;
     }
   });
 
@@ -356,11 +367,11 @@ function GlowingCore({ color }: { color: string }) {
 
     const audioData = getAudioData();
     const bass = audioData?.bass ?? 0;
-    const scale = 0.4 + bass * 0.3;
+    const scale = 0.42 + bass * (mobile ? 0.46 : 0.32);
     meshRef.current.scale.setScalar(scale);
 
     const material = meshRef.current.material as THREE.MeshBasicMaterial;
-    material.opacity = 0.6 + bass * 0.4;
+    material.opacity = 0.62 + bass * (mobile ? 0.5 : 0.4);
   });
 
   return (

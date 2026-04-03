@@ -1,13 +1,13 @@
 /**
- * Frequency Bars Visualizer - Enhanced spectrum analyzer.
+ * Frequency Bars Visualizer - Circular starburst spectrum.
  *
  * Features:
- * - 128 frequency bars with gradient colors
- * - Reflective floor effect
- * - Atmospheric fog
- * - Smooth animations
+ * - 128 radial bars arranged in a seamless ring
+ * - Interleaved low/high frequency mapping to avoid a visible seam
+ * - Strong center glow and portrait-friendly framing
+ * - Shared FFT mapping across mobile and desktop with lighter mobile rendering
  */
-import { useRef, useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useAudioAnalyser, getAudioData } from '../../../hooks/useAudioAnalyser';
@@ -15,33 +15,110 @@ import { isMobile } from '../../../utils/platform';
 import type { VisualizerProps } from '../types';
 import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
 import { FrameScheduler } from '../effects/FrameScheduler';
+import {
+  getInterleavedSpectrumIndex,
+  getRadialBarLayout,
+  getRadialBarLength,
+  sampleVisualizerBinValue,
+} from '../../../player/audio/analysisMetrics';
 
 const mobile = isMobile();
+const BAR_COUNT = 128;
 
-// Soft limiter - linear response up to threshold, then compresses
-const softLimit = (value: number, threshold: number, max: number): number => {
+function softLimit(value: number, threshold: number, max: number): number {
   if (value <= threshold) return value;
   const excess = value - threshold;
   const range = max - threshold;
-  return threshold + range * (1 - Math.exp(-excess / range));
-};
+  return threshold + range * (1 - Math.exp(-excess / Math.max(0.0001, range)));
+}
 
+function getStarburstMagnitude(
+  frequencyData: Uint8Array | undefined,
+  index: number,
+  totalBars: number,
+  time: number,
+): number {
+  if (!frequencyData) {
+    return (Math.sin(time * 2.4 + index * 0.32) + 1) / 2;
+  }
 
-// Mobile: single instanced draw call, MeshBasicMaterial, no spotlights
+  const mappedIndex = getInterleavedSpectrumIndex(index, totalBars);
+  const sampled = sampleVisualizerBinValue(frequencyData, mappedIndex, totalBars, {
+    usableBinsRatio: 0.84,
+    lowFrequencyEmphasis: 0.24,
+    minWindowSize: 2,
+  });
+
+  return Math.min(1, Math.max(0, sampled - 0.015) * 1.28);
+}
+
+function getRingColor(index: number, intensity: number): THREE.Color {
+  const t = index / BAR_COUNT;
+  const hue = (0.56 + t * 0.95) % 1;
+  const lightness = Math.min(0.38 + intensity * 0.28, 0.76);
+  return new THREE.Color().setHSL(hue, 0.82, lightness);
+}
+
+function CenterHalo({ mobileMode }: { mobileMode: boolean }) {
+  const coreRef = useRef<THREE.Mesh>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
+
+  useFrame((_, delta) => {
+    const audioData = getAudioData();
+    const bass = audioData?.bass ?? 0;
+    const mid = audioData?.mid ?? 0;
+    const average = (audioData?.averageFrequency ?? 0) / 255;
+    const pulse = softLimit(0.18 + bass * 0.95 + mid * 0.25, 0.5, 1.35);
+
+    if (coreRef.current) {
+      const scale = mobileMode
+        ? 1.05 + pulse * 0.6
+        : 1.1 + pulse * 0.45;
+      coreRef.current.scale.setScalar(THREE.MathUtils.lerp(coreRef.current.scale.x, scale, 0.12));
+      const material = coreRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = THREE.MathUtils.lerp(material.opacity, 0.22 + average * 0.26 + bass * 0.18, 0.12);
+    }
+
+    if (ringRef.current) {
+      ringRef.current.rotation.z += delta * (mobileMode ? 0.05 : 0.035);
+      const ringScale = mobileMode
+        ? 1.55 + pulse * 0.55
+        : 1.65 + pulse * 0.45;
+      ringRef.current.scale.setScalar(THREE.MathUtils.lerp(ringRef.current.scale.x, ringScale, 0.1));
+      const material = ringRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = THREE.MathUtils.lerp(material.opacity, 0.09 + bass * 0.12 + average * 0.1, 0.1);
+    }
+  });
+
+  return (
+    <group>
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[1.65, mobileMode ? 0.08 : 0.06, 16, 96]} />
+        <meshBasicMaterial color="#8be9ff" transparent opacity={0.12} toneMapped={false} />
+      </mesh>
+      <mesh ref={coreRef}>
+        <sphereGeometry args={[mobileMode ? 0.8 : 0.72, 32, 32]} />
+        <meshBasicMaterial color="#9f7aea" transparent opacity={0.24} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 function FrequencyBarsMobileScene() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const timeRef = useRef(0);
-  const currentScales = useRef(new Float32Array(128).fill(0.1));
+  const currentLengths = useRef(new Float32Array(BAR_COUNT).fill(0.8));
 
   useAudioAnalyser(true);
 
-  const barCount = 128;
-  const barWidth = 0.06;
-  const spacing = 0.015;
-  const totalWidth = barCount * (barWidth + spacing);
-
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
+  const rotationAxis = useMemo(() => new THREE.Vector3(0, 0, 1), []);
+  const geometry = useMemo(() => {
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    box.translate(0, 0.5, 0);
+    return box;
+  }, []);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
@@ -51,31 +128,27 @@ function FrequencyBarsMobileScene() {
     const frequencyData = audioData?.frequencyData;
     const bass = audioData?.bass ?? 0;
 
-    for (let i = 0; i < barCount; i++) {
-      let value: number;
-      if (frequencyData) {
-        const usableBins = Math.floor(frequencyData.length * 0.75);
-        const dataIndex = Math.floor((i / barCount) * usableBins);
-        value = frequencyData[dataIndex] / 255;
-      } else {
-        value = (Math.sin(timeRef.current * 3 + i * 0.15) + 1) / 2;
-      }
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const magnitude = getStarburstMagnitude(frequencyData, i, BAR_COUNT, timeRef.current);
+      const layout = getRadialBarLayout(i, BAR_COUNT, {
+        baseThickness: 0.11,
+        thicknessTaper: 0.28,
+      });
+      const targetLength = getRadialBarLength(magnitude, {
+        minLength: 0.62,
+        maxExtraLength: 4.25,
+        responseCurve: 1.15,
+      });
+      currentLengths.current[i] = THREE.MathUtils.lerp(currentLengths.current[i], targetLength, 0.22);
 
-      const targetHeight = 0.1 + value * 4;
-      currentScales.current[i] = THREE.MathUtils.lerp(currentScales.current[i], targetHeight, 0.25);
-      const h = currentScales.current[i];
-
-      const x = i * (barWidth + spacing) - totalWidth / 2;
-      dummy.position.set(x, h / 2 - 1, 0);
-      dummy.scale.set(barWidth, h, barWidth);
+      dummy.position.set(layout.directionX * 1.5, layout.directionY * 1.5, 0);
+      dummy.quaternion.setFromAxisAngle(rotationAxis, layout.angle - Math.PI / 2);
+      dummy.scale.set(layout.thickness, currentLengths.current[i], 0.18);
       dummy.updateMatrix();
       meshRef.current.setMatrixAt(i, dummy.matrix);
 
-      const t = i / barCount;
-      const hue = 0.5 + t * 0.4;
-      const rawIntensity = 0.3 + value * 0.7 + bass * 0.3;
-      const lightness = Math.min(0.45 + rawIntensity * 0.25, 0.75);
-      tempColor.setHSL(hue, 0.8, lightness);
+      const intensity = 0.35 + magnitude * 0.85 + bass * 0.3;
+      tempColor.copy(getRingColor(i, intensity));
       meshRef.current.setColorAt(i, tempColor);
     }
 
@@ -88,20 +161,15 @@ function FrequencyBarsMobileScene() {
   return (
     <>
       <color attach="background" args={['#050510']} />
+      <ambientLight intensity={0.85} />
+      <pointLight position={[0, 0, 4]} intensity={1.15} color="#7dd3fc" distance={12} />
+      <pointLight position={[0, 0, -3]} intensity={0.7} color="#c084fc" distance={14} />
 
-      <ambientLight intensity={0.9} />
-      <pointLight position={[8, 4, -3]} intensity={1.2} color="#a855f7" distance={15} />
-      <pointLight position={[-8, 4, -3]} intensity={1.2} color="#06b6d4" distance={15} />
+      <CenterHalo mobileMode />
 
-      <instancedMesh ref={meshRef} args={[undefined, undefined, barCount]}>
-        <boxGeometry args={[1, 1, 1]} />
+      <instancedMesh ref={meshRef} args={[geometry, undefined, BAR_COUNT]}>
         <meshBasicMaterial toneMapped={false} />
       </instancedMesh>
-
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
-        <planeGeometry args={[25, 25]} />
-        <meshBasicMaterial color="#030308" />
-      </mesh>
 
       <FrameScheduler />
     </>
@@ -110,41 +178,31 @@ function FrequencyBarsMobileScene() {
 
 function FrequencyBarsScene() {
   const meshesRef = useRef<THREE.Mesh[]>([]);
-  const spotlightsRef = useRef<THREE.SpotLight[]>([]);
-  const spotlightTargetsRef = useRef<THREE.Object3D[]>([]);
   const timeRef = useRef(0);
 
   useAudioAnalyser(true);
 
-  const barCount = 128;
-  const barWidth = 0.06;
-  const spacing = 0.015;
-  const totalWidth = barCount * (barWidth + spacing);
+  const geometry = useMemo(() => {
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    box.translate(0, 0.5, 0);
+    return box;
+  }, []);
 
-  // Create geometry once
-  const geometry = useMemo(() => new THREE.BoxGeometry(barWidth, 1, barWidth), []);
-
-  // Create materials with gradient colors - highly emissive for glow effect
   const materials = useMemo(() => {
-    return Array.from({ length: barCount }, (_, i) => {
-      const t = i / barCount;
-      // Gradient from cyan through purple to pink
-      const hue = 0.5 + t * 0.4;
+    return Array.from({ length: BAR_COUNT }, (_, index) => {
+      const color = getRingColor(index, 0.45);
       return new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(hue, 0.8, 0.5),
-        emissive: new THREE.Color().setHSL(hue, 1.0, 0.4),
-        emissiveIntensity: 0.6,
-        metalness: 0.3,
-        roughness: 0.4,
+        color,
+        emissive: color.clone(),
+        emissiveIntensity: 0.68,
+        metalness: 0.18,
+        roughness: 0.3,
       });
     });
   }, []);
 
-
   useFrame((_, delta) => {
     timeRef.current += delta;
-
-    if (!meshesRef.current.length) return;
 
     const audioData = getAudioData();
     const frequencyData = audioData?.frequencyData;
@@ -152,139 +210,68 @@ function FrequencyBarsScene() {
     const mid = audioData?.mid ?? 0;
     const treble = audioData?.treble ?? 0;
 
-    meshesRef.current.forEach((mesh, i) => {
+    meshesRef.current.forEach((mesh, index) => {
       if (!mesh) return;
 
-      let value: number;
-      if (frequencyData) {
-        // Use only the useful frequency range (0-16kHz, ~75% of bins)
-        // This avoids dead bars on the right from empty high-frequency bins
-        const usableBins = Math.floor(frequencyData.length * 0.75);
-        const dataIndex = Math.floor((i / barCount) * usableBins);
-        value = frequencyData[dataIndex] / 255;
-      } else {
-        // Fallback wave animation
-        value = (Math.sin(timeRef.current * 3 + i * 0.15) + 1) / 2;
-      }
+      const magnitude = getStarburstMagnitude(frequencyData, index, BAR_COUNT, timeRef.current);
+      const layout = getRadialBarLayout(index, BAR_COUNT, {
+        baseThickness: 0.1,
+        thicknessTaper: 0.2,
+      });
+      const length = getRadialBarLength(magnitude, {
+        minLength: 0.56,
+        maxExtraLength: 3.85,
+        responseCurve: 1.18,
+      });
 
-      const targetHeight = 0.1 + value * 4;
-      mesh.scale.y = THREE.MathUtils.lerp(mesh.scale.y, targetHeight, 0.25);
-      mesh.position.y = mesh.scale.y / 2 - 1;
+      mesh.position.set(layout.directionX * 1.4, layout.directionY * 1.4, 0);
+      mesh.rotation.z = layout.angle - Math.PI / 2;
+      mesh.scale.x = layout.thickness;
+      mesh.scale.y = THREE.MathUtils.lerp(mesh.scale.y, length, 0.2);
+      mesh.scale.z = 0.16 + magnitude * 0.05;
 
-      // Update emissive intensity based on value - soft limited to prevent washout
       const material = mesh.material as THREE.MeshStandardMaterial;
-      const rawIntensity = 0.3 + value * 0.7 + bass * 0.3;
-      material.emissiveIntensity = softLimit(rawIntensity, 0.6, 1.2);
-    });
-
-    // Animate spotlights - sweep across bars with audio reactivity
-    spotlightsRef.current.forEach((spotlight, i) => {
-      if (!spotlight) return;
-
-      const target = spotlightTargetsRef.current[i];
-      const phase = (i / 3) * Math.PI * 2; // Offset each spotlight
-      const speed = 0.5 + bass * 0.5; // Speed up with bass
-      const sweepWidth = totalWidth * 0.6;
-
-      // Sweep pattern - each spotlight moves differently
-      const xOffset = Math.sin(timeRef.current * speed + phase) * sweepWidth;
-      const zOffset = Math.cos(timeRef.current * speed * 0.7 + phase) * 1.5;
-
-      // Update spotlight position (sweeping from above and slightly behind bars)
-      spotlight.position.x = xOffset;
-      spotlight.position.z = -3 + zOffset; // Behind bars, pointing toward camera
-      spotlight.position.y = 8 + Math.sin(timeRef.current * 0.3 + phase) * 2;
-
-      // Link target if available and update its position
-      if (target) {
-        spotlight.target = target;
-        target.position.x = xOffset;
-        target.position.z = 0;
-        target.position.y = 1; // Aim at middle of bars, not the floor
-      }
-
-      // Intensity pulses with different frequencies - soft limited to prevent washout
-      const pulseFactors = [bass, mid, treble];
-      const compressedPulse = softLimit(pulseFactors[i], 0.5, 0.85);
-      spotlight.intensity = 25 + compressedPulse * 35;
-
-      // Slight color shift based on audio
-      const hueShift = pulseFactors[i] * 0.1;
-      const baseHues = [0.85, 0.5, 0.75]; // Pink, Cyan, Purple
-      spotlight.color.setHSL(baseHues[i] + hueShift, 0.9, 0.6);
+      const rawIntensity = 0.42 + magnitude * 0.85 + bass * 0.28 + mid * 0.08;
+      material.emissiveIntensity = softLimit(rawIntensity, 0.7, 1.55);
+      material.metalness = 0.14 + treble * 0.18;
+      material.roughness = 0.34 - treble * 0.12;
     });
   });
-
-  // Spotlight colors: pink, cyan, purple
-  const spotlightColors = ['#ff66b2', '#06b6d4', '#a855f7'];
 
   return (
     <>
       <color attach="background" args={['#050510']} />
-      <fog attach="fog" args={['#050510', 8, 20]} />
+      <fog attach="fog" args={['#050510', 7, 18]} />
 
-      {/* Ambient fill light - slightly brighter */}
-      <ambientLight intensity={0.15} />
+      <ambientLight intensity={0.2} />
+      <pointLight position={[0, 0, 6]} intensity={1.5} color="#7dd3fc" distance={18} />
+      <pointLight position={[0, 0, -6]} intensity={1.1} color="#c084fc" distance={16} />
+      <pointLight position={[4, 4, 5]} intensity={0.7} color="#f472b6" distance={16} />
 
-      {/* Subtle rim lights for depth */}
-      <pointLight position={[8, 4, -3]} intensity={0.5} color="#a855f7" distance={15} />
-      <pointLight position={[-8, 4, -3]} intensity={0.5} color="#06b6d4" distance={15} />
+      <CenterHalo mobileMode={false} />
 
-      {/* Moving spotlights with targets */}
-      {spotlightColors.map((color, i) => (
-        <group key={i}>
-          <object3D
-            ref={(el) => { if (el) spotlightTargetsRef.current[i] = el; }}
-            position={[0, 1, 0]}
-          />
-          <spotLight
-            ref={(el) => { if (el) spotlightsRef.current[i] = el; }}
-            position={[(i - 1) * 3, 8, -3]}
-            angle={0.4}
-            penumbra={0.6}
-            intensity={50}
-            color={color}
-            distance={20}
-            decay={1.5}
-            castShadow={false}
-          />
-        </group>
-      ))}
-
-      {/* Floor - matte to minimize spotlight reflections */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.5, 0]}>
-        <planeGeometry args={[25, 25]} />
-        <meshStandardMaterial
-          color="#030308"
-          metalness={0.05}
-          roughness={0.95}
-        />
-      </mesh>
-
-      {/* Frequency bars */}
       <group>
-        {Array.from({ length: barCount }, (_, i) => (
+        {Array.from({ length: BAR_COUNT }, (_, index) => (
           <mesh
-            key={i}
-            ref={(el) => { if (el) meshesRef.current[i] = el; }}
+            key={index}
+            ref={(element) => {
+              if (element) meshesRef.current[index] = element;
+            }}
             geometry={geometry}
-            material={materials[i]}
-            position={[i * (barWidth + spacing) - totalWidth / 2, 0, 0]}
+            material={materials[index]}
           />
         ))}
       </group>
 
-      {/* Post-processing effects (disabled on mobile — expensive) */}
-      {!mobile && (
-        <AudioReactiveEffects
-          enableBloom
-          enableVignette
-          bloomIntensity={1.5}
-          bloomThreshold={0.5}
-          bloomRadius={0.6}
-          vignetteIntensity={0.4}
-        />
-      )}
+      <AudioReactiveEffects
+        enableBloom
+        enableVignette
+        bloomIntensity={1.35}
+        bloomThreshold={0.45}
+        bloomRadius={0.7}
+        vignetteIntensity={0.32}
+        halfResolution={false}
+      />
     </>
   );
 }
@@ -293,9 +280,9 @@ export function FrequencyBars(_props: VisualizerProps) {
   return (
     <div className="w-full h-full">
       <Canvas
-        camera={{ position: [0, 2, 6], fov: 50 }}
+        camera={{ position: [0, 0, mobile ? 10.5 : 9.25], fov: mobile ? 40 : 44 }}
         gl={{ antialias: !mobile, alpha: true }}
-        dpr={mobile ? [1, 1] : [1, 2]}
+        dpr={mobile ? [1, 1.5] : [1, 2]}
         frameloop={mobile ? 'demand' : 'always'}
       >
         {mobile ? <FrequencyBarsMobileScene /> : <FrequencyBarsScene />}

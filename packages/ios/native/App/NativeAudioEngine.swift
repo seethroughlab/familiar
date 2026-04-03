@@ -136,13 +136,223 @@ protocol NativeAudioEngineDelegate: AnyObject {
     func audioEngineDidFinishPlaying()
     func audioEngineDidAutoAdvance(loadedTrackId: String)
     func audioEngineDidUpdateTime(currentTime: Double, duration: Double)
-    func audioEngineDidUpdateAnalysis(frequencyData: [UInt8], timeDomainData: [UInt8])
+    func audioEngineDidUpdateAnalysis(
+        frequencyData: [UInt8],
+        timeDomainData: [UInt8],
+        metrics: NativeAudioAnalysisMetrics
+    )
     func audioEngineDidEncounterError(message: String, category: NativeAudioEngine.NativeAudioErrorCategory)
     func audioEngineRemotePlay()
     func audioEngineRemotePause()
     func audioEngineRemoteNext(loadedTrackId: String?)
     func audioEngineRemotePrevious(nativeAction: String?, loadedTrackId: String?)
     func audioEngineRemoteSeek(time: Double)
+}
+
+struct NativeAudioAnalysisMetrics {
+    let emittedAtMs: Int64
+    let cadenceHz: Double
+    let binCount: Int
+    let averageFrequency: Double
+    let rms: Double
+    let peak: Double
+    let averageBinLevel: Double
+    let variance: Double
+    let strongestBinIndex: Int
+    let strongestBinValue: Double
+    let bass: Double
+    let mid: Double
+    let treble: Double
+
+    func asDictionary() -> [String: Any] {
+        [
+            "emittedAtMs": emittedAtMs,
+            "cadenceHz": cadenceHz,
+            "binCount": binCount,
+            "averageFrequency": averageFrequency,
+            "rms": rms,
+            "peak": peak,
+            "averageBinLevel": averageBinLevel,
+            "variance": variance,
+            "strongestBinIndex": strongestBinIndex,
+            "strongestBinValue": strongestBinValue,
+            "bass": bass,
+            "mid": mid,
+            "treble": treble,
+        ]
+    }
+}
+
+struct NativeAudioAnalysisFrame {
+    let frequencyData: [UInt8]
+    let timeDomainData: [UInt8]
+    let metrics: NativeAudioAnalysisMetrics
+}
+
+final class NativeAudioAnalysisProcessor {
+    static let fftSize = 256
+    private static let binCount = fftSize / 2
+    private static let log2n = vDSP_Length(log2(Double(fftSize)))
+    private static let minDecibels: Float = -100
+    private static let maxDecibels: Float = -30
+    private static let rangeDecibels: Float = maxDecibels - minDecibels
+
+    private var fftSetup: FFTSetup?
+    private var previousFrequencyData: [Float]?
+    private var lastEmitTime: CFAbsoluteTime = 0
+
+    private var window: [Float]
+    private var windowedSamples: [Float]
+    private var realPart: [Float]
+    private var imagPart: [Float]
+    private var magnitudes: [Float]
+    private var sqrtMagnitudes: [Float]
+    private var frequencyFloats: [Float]
+    private var frequencyBytes: [UInt8]
+    private var timeDomainBytes: [UInt8]
+
+    init() {
+        fftSetup = vDSP_create_fftsetup(Self.log2n, FFTRadix(kFFTRadix2))
+        window = [Float](repeating: 0, count: Self.fftSize)
+        vDSP_hann_window(&window, vDSP_Length(Self.fftSize), Int32(vDSP_HANN_NORM))
+        windowedSamples = [Float](repeating: 0, count: Self.fftSize)
+        realPart = [Float](repeating: 0, count: Self.binCount)
+        imagPart = [Float](repeating: 0, count: Self.binCount)
+        magnitudes = [Float](repeating: 0, count: Self.binCount)
+        sqrtMagnitudes = [Float](repeating: 0, count: Self.binCount)
+        frequencyFloats = [Float](repeating: 0, count: Self.binCount)
+        frequencyBytes = [UInt8](repeating: 0, count: Self.binCount)
+        timeDomainBytes = [UInt8](repeating: 128, count: Self.binCount)
+    }
+
+    deinit {
+        if let setup = fftSetup {
+            vDSP_destroy_fftsetup(setup)
+        }
+    }
+
+    func process(samples: [Float], now: CFAbsoluteTime) -> NativeAudioAnalysisFrame? {
+        guard samples.count >= Self.fftSize, let fftSetup else { return nil }
+
+        let truncatedSamples = Array(samples.prefix(Self.fftSize))
+        let timeSamples = Array(truncatedSamples.prefix(Self.binCount))
+        for i in 0..<Self.binCount {
+            let clamped = max(-1.0, min(1.0, timeSamples[i]))
+            timeDomainBytes[i] = UInt8(clamped * 127.0 + 128.0)
+        }
+
+        vDSP_vmul(truncatedSamples, 1, window, 1, &windowedSamples, 1, vDSP_Length(Self.fftSize))
+
+        realPart.withUnsafeMutableBufferPointer { realPtr in
+            imagPart.withUnsafeMutableBufferPointer { imagPtr in
+                guard let realBase = realPtr.baseAddress,
+                      let imagBase = imagPtr.baseAddress else { return }
+
+                var splitComplex = DSPSplitComplex(realp: realBase, imagp: imagBase)
+                windowedSamples.withUnsafeBufferPointer { windowedPtr in
+                    guard let windowedBase = windowedPtr.baseAddress else { return }
+                    windowedBase.withMemoryRebound(to: DSPComplex.self, capacity: Self.binCount) { complexPtr in
+                        vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(Self.binCount))
+                    }
+                }
+
+                vDSP_fft_zrip(fftSetup, &splitComplex, 1, Self.log2n, FFTDirection(FFT_FORWARD))
+                vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(Self.binCount))
+            }
+        }
+
+        var count = Int32(Self.binCount)
+        vvsqrtf(&sqrtMagnitudes, magnitudes, &count)
+
+        var scale = 1.0 / Float(Self.fftSize)
+        vDSP_vsmul(sqrtMagnitudes, 1, &scale, &sqrtMagnitudes, 1, vDSP_Length(Self.binCount))
+
+        for i in 0..<Self.binCount {
+            let mag = max(sqrtMagnitudes[i], 1e-20)
+            let dB = 20.0 * log10f(mag)
+            let clamped = max(Self.minDecibels, min(Self.maxDecibels, dB))
+            frequencyFloats[i] = (clamped - Self.minDecibels) / Self.rangeDecibels
+        }
+
+        if let previous = previousFrequencyData {
+            for i in 0..<Self.binCount {
+                frequencyFloats[i] = 0.8 * previous[i] + 0.2 * frequencyFloats[i]
+            }
+        }
+        previousFrequencyData = frequencyFloats
+
+        for i in 0..<Self.binCount {
+            frequencyBytes[i] = UInt8(max(0, min(255, frequencyFloats[i] * 255.0)))
+        }
+
+        var sum: Double = 0
+        var varianceSum: Double = 0
+        var strongestBinIndex = 0
+        var strongestBinValue: Double = 0
+        for (index, value) in frequencyFloats.enumerated() {
+            let normalized = Double(value)
+            sum += normalized
+            if normalized > strongestBinValue {
+                strongestBinValue = normalized
+                strongestBinIndex = index
+            }
+        }
+        let averageBinLevel = Self.binCount > 0 ? sum / Double(Self.binCount) : 0
+        for value in frequencyFloats {
+            let delta = Double(value) - averageBinLevel
+            varianceSum += delta * delta
+        }
+        let variance = Self.binCount > 0 ? varianceSum / Double(Self.binCount) : 0
+
+        let bassEnd = max(1, Int(Double(Self.binCount) * 0.1))
+        let midEnd = max(bassEnd + 1, Int(Double(Self.binCount) * 0.5))
+
+        func averageRange(_ start: Int, _ end: Int) -> Double {
+            guard start < end else { return 0 }
+            let slice = frequencyFloats[start..<end]
+            let total = slice.reduce(0) { $0 + Double($1) }
+            return total / Double(max(1, end - start))
+        }
+
+        var rmsAccumulator: Double = 0
+        var peak: Double = 0
+        for sample in truncatedSamples {
+            let sampleValue = Double(sample)
+            rmsAccumulator += sampleValue * sampleValue
+            peak = max(peak, abs(sampleValue))
+        }
+        let rms = sqrt(rmsAccumulator / Double(truncatedSamples.count))
+
+        let cadenceHz: Double
+        if lastEmitTime > 0, now > lastEmitTime {
+            cadenceHz = 1.0 / (now - lastEmitTime)
+        } else {
+            cadenceHz = 0
+        }
+        lastEmitTime = now
+
+        let metrics = NativeAudioAnalysisMetrics(
+            emittedAtMs: Int64(now * 1000.0),
+            cadenceHz: cadenceHz,
+            binCount: Self.binCount,
+            averageFrequency: sum / Double(Self.binCount) * 255.0,
+            rms: rms,
+            peak: peak,
+            averageBinLevel: averageBinLevel,
+            variance: variance,
+            strongestBinIndex: strongestBinIndex,
+            strongestBinValue: strongestBinValue,
+            bass: averageRange(0, bassEnd),
+            mid: averageRange(bassEnd, midEnd),
+            treble: averageRange(midEnd, Self.binCount)
+        )
+
+        return NativeAudioAnalysisFrame(
+            frequencyData: frequencyBytes,
+            timeDomainData: timeDomainBytes,
+            metrics: metrics
+        )
+    }
 }
 
 class NativeAudioEngine {
@@ -240,25 +450,11 @@ class NativeAudioEngine {
     private var pendingPreviousArtworkUrl: String?
 
     // FFT analysis
-    private static let analysisFFTSize = 256
-    private static let analysisBinCount = 128  // fftSize / 2
-    private static let analysisLog2n = vDSP_Length(log2(Double(analysisFFTSize)))
-    private var fftSetup: FFTSetup?
-    private var previousFrequencyData: [Float]?
     private var isAnalysisEnabled = false
     private var lastAnalysisTime: CFAbsoluteTime = 0
     private static let analysisMinInterval: CFAbsoluteTime = 1.0 / 60.0  // ~60fps
-
-    // Pre-allocated FFT work buffers (reused each frame to avoid per-frame allocations)
-    private var fftWindow: [Float]?
-    private var fftWindowedSamples: [Float]?
-    private var fftRealPart: [Float]?
-    private var fftImagPart: [Float]?
-    private var fftMagnitudes: [Float]?
-    private var fftSqrtMagnitudes: [Float]?
-    private var fftFrequencyFloats: [Float]?
-    private var fftFrequencyBytes: [UInt8]?
-    private var fftTimeDomainBytes: [UInt8]?
+    private var analysisProcessor: NativeAudioAnalysisProcessor?
+    private var analysisSampleBuffer: [Float] = []
 
     // MARK: - Initialization
 
@@ -1506,47 +1702,18 @@ class NativeAudioEngine {
     private func enableAnalysis() {
         guard !isAnalysisEnabled else { return }
         isAnalysisEnabled = true
-
-        if fftSetup == nil {
-            fftSetup = vDSP_create_fftsetup(NativeAudioEngine.analysisLog2n, FFTRadix(kFFTRadix2))
-        }
-        previousFrequencyData = nil
-
-        let fftSize = NativeAudioEngine.analysisFFTSize
-        let binCount = NativeAudioEngine.analysisBinCount
-        let halfSize = fftSize / 2
         let mixer = engine.mainMixerNode
         let format = mixer.outputFormat(forBus: 0)
+        analysisProcessor = NativeAudioAnalysisProcessor()
+        analysisSampleBuffer.removeAll(keepingCapacity: true)
+        analysisSampleBuffer.reserveCapacity(NativeAudioAnalysisProcessor.fftSize)
+        lastAnalysisTime = 0
 
-        // Pre-allocate all work buffers once (reused every frame)
-        var window = [Float](repeating: 0, count: fftSize)
-        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
-        fftWindow = window
-        fftWindowedSamples = [Float](repeating: 0, count: fftSize)
-        fftRealPart = [Float](repeating: 0, count: halfSize)
-        fftImagPart = [Float](repeating: 0, count: halfSize)
-        fftMagnitudes = [Float](repeating: 0, count: halfSize)
-        fftSqrtMagnitudes = [Float](repeating: 0, count: halfSize)
-        fftFrequencyFloats = [Float](repeating: 0, count: binCount)
-        fftFrequencyBytes = [UInt8](repeating: 0, count: binCount)
-        fftTimeDomainBytes = [UInt8](repeating: 128, count: binCount)
-
-        // Buffer to accumulate samples across tap callbacks
-        var sampleBuffer = [Float]()
-        sampleBuffer.reserveCapacity(fftSize)
-
-        mixer.installTap(onBus: 0, bufferSize: AVAudioFrameCount(fftSize), format: format) {
+        mixer.installTap(onBus: 0, bufferSize: AVAudioFrameCount(NativeAudioAnalysisProcessor.fftSize), format: format) {
             [weak self] buffer, _ in
-            guard let self = self, self.isAnalysisEnabled, let fftSetup = self.fftSetup,
-                  var windowedSamples = self.fftWindowedSamples,
-                  let window = self.fftWindow,
-                  var realPart = self.fftRealPart,
-                  var imagPart = self.fftImagPart,
-                  var magnitudes = self.fftMagnitudes,
-                  var sqrtMagnitudes = self.fftSqrtMagnitudes,
-                  var frequencyFloats = self.fftFrequencyFloats,
-                  var frequencyBytes = self.fftFrequencyBytes,
-                  var timeDomainBytes = self.fftTimeDomainBytes else { return }
+            guard let self = self,
+                  self.isAnalysisEnabled,
+                  let processor = self.analysisProcessor else { return }
 
             // Throttle to ~60fps
             let now = CFAbsoluteTimeGetCurrent()
@@ -1556,84 +1723,22 @@ class NativeAudioEngine {
             let frameCount = Int(buffer.frameLength)
 
             // Accumulate samples
-            sampleBuffer.append(contentsOf: UnsafeBufferPointer(start: channelData, count: frameCount))
+            self.analysisSampleBuffer.append(contentsOf: UnsafeBufferPointer(start: channelData, count: frameCount))
 
-            guard sampleBuffer.count >= fftSize else { return }
+            guard self.analysisSampleBuffer.count >= NativeAudioAnalysisProcessor.fftSize else { return }
 
             // Take exactly fftSize samples
-            let samples = Array(sampleBuffer.prefix(fftSize))
-            sampleBuffer.removeFirst(fftSize)
+            let samples = Array(self.analysisSampleBuffer.prefix(NativeAudioAnalysisProcessor.fftSize))
+            self.analysisSampleBuffer.removeFirst(NativeAudioAnalysisProcessor.fftSize)
 
             self.lastAnalysisTime = now
-
-            // --- Time domain: scale float [-1,1] → byte [0,255] centered at 128 ---
-            for i in 0..<binCount {
-                let clamped = max(-1.0, min(1.0, samples[i]))
-                timeDomainBytes[i] = UInt8(clamped * 127.0 + 128.0)
-            }
-
-            // --- FFT: apply window, compute magnitudes, convert to dB, scale to bytes ---
-            vDSP_vmul(samples, 1, window, 1, &windowedSamples, 1, vDSP_Length(fftSize))
-
-            // Pack into split complex format for FFT and process within a single pointer scope.
-            realPart.withUnsafeMutableBufferPointer { realPtr in
-                imagPart.withUnsafeMutableBufferPointer { imagPtr in
-                    guard let realBase = realPtr.baseAddress,
-                          let imagBase = imagPtr.baseAddress else { return }
-
-                    var splitComplex = DSPSplitComplex(realp: realBase, imagp: imagBase)
-                    windowedSamples.withUnsafeBufferPointer { windowedPtr in
-                        guard let windowedBase = windowedPtr.baseAddress else { return }
-                        windowedBase.withMemoryRebound(to: DSPComplex.self, capacity: halfSize) { complexPtr in
-                            vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfSize))
-                        }
-                    }
-
-                    // Forward FFT
-                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, NativeAudioEngine.analysisLog2n, FFTDirection(FFT_FORWARD))
-
-                    // Compute magnitudes
-                    vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfSize))
-                }
-            }
-
-            // Square root to get actual magnitudes
-            var count = Int32(halfSize)
-            vvsqrtf(&sqrtMagnitudes, magnitudes, &count)
-
-            // Scale by 1/fftSize
-            var scale = 1.0 / Float(fftSize)
-            vDSP_vsmul(sqrtMagnitudes, 1, &scale, &sqrtMagnitudes, 1, vDSP_Length(halfSize))
-
-            // Convert to dB: 20 * log10(magnitude), clamp to [minDecibels, maxDecibels]
-            let minDecibels: Float = -100
-            let maxDecibels: Float = -30
-            let rangeDecibels = maxDecibels - minDecibels
-
-            for i in 0..<binCount {
-                let mag = max(sqrtMagnitudes[i], 1e-20)  // avoid log(0)
-                let dB = 20.0 * log10f(mag)
-                let clamped = max(minDecibels, min(maxDecibels, dB))
-                frequencyFloats[i] = (clamped - minDecibels) / rangeDecibels
-            }
-
-            // Smooth: 0.8 * previous + 0.2 * current (matching Web Audio smoothingTimeConstant)
-            if let previous = self.previousFrequencyData {
-                for i in 0..<binCount {
-                    frequencyFloats[i] = 0.8 * previous[i] + 0.2 * frequencyFloats[i]
-                }
-            }
-            self.previousFrequencyData = frequencyFloats
-
-            // Scale to bytes [0, 255]
-            for i in 0..<binCount {
-                frequencyBytes[i] = UInt8(max(0, min(255, frequencyFloats[i] * 255.0)))
-            }
+            guard let frame = processor.process(samples: samples, now: now) else { return }
 
             DispatchQueue.main.async { [weak self] in
                 self?.delegate?.audioEngineDidUpdateAnalysis(
-                    frequencyData: frequencyBytes,
-                    timeDomainData: timeDomainBytes
+                    frequencyData: frame.frequencyData,
+                    timeDomainData: frame.timeDomainData,
+                    metrics: frame.metrics
                 )
             }
         }
@@ -1643,17 +1748,9 @@ class NativeAudioEngine {
         guard isAnalysisEnabled else { return }
         isAnalysisEnabled = false
         engine.mainMixerNode.removeTap(onBus: 0)
-
-        // Release work buffers
-        fftWindow = nil
-        fftWindowedSamples = nil
-        fftRealPart = nil
-        fftImagPart = nil
-        fftMagnitudes = nil
-        fftSqrtMagnitudes = nil
-        fftFrequencyFloats = nil
-        fftFrequencyBytes = nil
-        fftTimeDomainBytes = nil
+        analysisProcessor = nil
+        analysisSampleBuffer.removeAll(keepingCapacity: false)
+        lastAnalysisTime = 0
     }
 
     // MARK: - MIME → Extension
@@ -1698,10 +1795,6 @@ class NativeAudioEngine {
         downloadTask = nil
         audioFile = nil
         cleanupTempFile()
-        if let setup = fftSetup {
-            vDSP_destroy_fftsetup(setup)
-            fftSetup = nil
-        }
         engine.stop()
         NotificationCenter.default.removeObserver(self)
     }

@@ -12,7 +12,7 @@ registerVisualizer(
   lazy(() => import('./CosmicOrb'))
 );
 registerVisualizer(
-  { id: 'frequency-bars', name: 'Frequency Bars', description: 'Enhanced spectrum analyzer with 128 bars', usesMetadata: false },
+  { id: 'frequency-bars', name: 'Frequency Bars', description: 'Circular starburst spectrum with 128 interleaved bars', usesMetadata: false },
   lazy(() => import('./FrequencyBars'))
 );
 registerVisualizer(

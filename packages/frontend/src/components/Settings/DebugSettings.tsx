@@ -9,6 +9,12 @@ import {
   isVisualizerAvailable,
   getCurrentMode,
 } from '../../player/audio/engineInstance';
+import {
+  getAudioAnalysisDiagnosticsSnapshot,
+  isVisualizerDebugEnabled,
+  setVisualizerDebugEnabled,
+  type AudioAnalysisDiagnosticsSnapshot,
+} from '../../player/audio/analysisDiagnostics';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import * as offlineService from '../../services/offlineService';
@@ -70,6 +76,10 @@ export function DebugSettings() {
   const [logs, setLogs] = useState<typeof logBuffer>([]);
   const [offlineCount, setOfflineCount] = useState<number | null>(null);
   const [apiErrors, setApiErrors] = useState<TrackedError[]>([]);
+  const [visualizerDebugEnabled, setVisualizerDebugEnabledState] = useState(isVisualizerDebugEnabled());
+  const [visualizerDiagnostics, setVisualizerDiagnostics] = useState<AudioAnalysisDiagnosticsSnapshot>(
+    getAudioAnalysisDiagnosticsSnapshot(),
+  );
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const { jobs, activeJobId } = useDownloadStore();
@@ -92,6 +102,7 @@ export function DebugSettings() {
       setLogs([...logBuffer]);
       const ids = await offlineService.getOfflineTrackIds();
       setOfflineCount(ids.length);
+      setVisualizerDiagnostics(getAudioAnalysisDiagnosticsSnapshot());
     };
 
     const interval = setInterval(refreshData, 500);
@@ -120,7 +131,22 @@ export function DebugSettings() {
 
   const refreshLogs = () => {
     setLogs([...logBuffer]);
+    setVisualizerDiagnostics(getAudioAnalysisDiagnosticsSnapshot());
   };
+
+  const toggleVisualizerDebug = () => {
+    const next = !visualizerDebugEnabled;
+    setVisualizerDebugEnabled(next);
+    setVisualizerDebugEnabledState(next);
+    setVisualizerDiagnostics(getAudioAnalysisDiagnosticsSnapshot());
+  };
+
+  const formatPercent = (value: number | null | undefined) =>
+    value == null ? '—' : `${(value * 100).toFixed(1)}%`;
+  const formatNumber = (value: number | null | undefined, digits = 2) =>
+    value == null ? '—' : value.toFixed(digits);
+  const formatAge = (value: number | null | undefined) =>
+    value == null ? '—' : `${Math.round(value)} ms`;
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -218,6 +244,97 @@ export function DebugSettings() {
                 {currentTrack ? currentTrack.title : 'none'}
               </div>
             </div>
+          </div>
+
+          {/* Visualizer Debug */}
+          <div className="bg-zinc-900/50 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h5 className="text-sm font-medium text-zinc-300">Visualizer Debug</h5>
+                <p className="text-xs text-zinc-500">
+                  Inspect native FFT production, JS bridge receipt, and visualizer consumption.
+                </p>
+              </div>
+              <button
+                onClick={toggleVisualizerDebug}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                  visualizerDebugEnabled
+                    ? 'bg-green-500/20 text-green-300'
+                    : 'bg-zinc-700 text-zinc-300'
+                }`}
+              >
+                {visualizerDebugEnabled ? 'Enabled' : 'Disabled'}
+              </button>
+            </div>
+
+            {!visualizerDebugEnabled ? (
+              <p className="text-xs text-zinc-500">
+                Enable to collect FFT cadence, variance, and band metrics while audio plays.
+              </p>
+            ) : (
+              <div className="space-y-3 text-xs font-mono">
+                {([
+                  ['Native Producer', visualizerDiagnostics.producer],
+                  ['Bridge Receipt', visualizerDiagnostics.bridge],
+                  ['Visualizer Consume', visualizerDiagnostics.consumer],
+                ] as const).map(([label, metrics]) => (
+                  <div key={label} className="rounded bg-zinc-800/70 p-2">
+                    <div className="text-zinc-300 font-medium mb-2">{label}</div>
+                    {!metrics ? (
+                      <div className="text-zinc-500">No analysis frames yet</div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        <div className="text-zinc-400">cadence</div>
+                        <div className="text-zinc-200">{formatNumber(metrics.cadenceHz, 1)} Hz</div>
+
+                        {'eventAgeMs' in metrics && (
+                          <>
+                            <div className="text-zinc-400">event age</div>
+                            <div className="text-zinc-200">{formatAge(metrics.eventAgeMs)}</div>
+                          </>
+                        )}
+                        {'frameAgeMs' in metrics && (
+                          <>
+                            <div className="text-zinc-400">frame age</div>
+                            <div className="text-zinc-200">{formatAge(metrics.frameAgeMs)}</div>
+                          </>
+                        )}
+                        {'source' in metrics && (
+                          <>
+                            <div className="text-zinc-400">source</div>
+                            <div className="text-zinc-200">{metrics.source}</div>
+                          </>
+                        )}
+
+                        <div className="text-zinc-400">bin count</div>
+                        <div className="text-zinc-200">{metrics.binCount}</div>
+
+                        <div className="text-zinc-400">avg level</div>
+                        <div className="text-zinc-200">{formatPercent(metrics.averageBinLevel)}</div>
+
+                        <div className="text-zinc-400">variance</div>
+                        <div className="text-zinc-200">{formatNumber(metrics.variance, 4)}</div>
+
+                        <div className="text-zinc-400">rms / peak</div>
+                        <div className="text-zinc-200">
+                          {formatPercent(metrics.rms)} / {formatPercent(metrics.peak)}
+                        </div>
+
+                        <div className="text-zinc-400">strongest bin</div>
+                        <div className="text-zinc-200">
+                          {metrics.strongestBinIndex} ({formatPercent(metrics.strongestBinValue)})
+                        </div>
+
+                        <div className="text-zinc-400">bass / mid / treble</div>
+                        <div className="text-zinc-200">
+                          {formatPercent(metrics.bass)} / {formatPercent(metrics.mid)} / {formatPercent(metrics.treble)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Download State */}

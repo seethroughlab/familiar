@@ -356,10 +356,15 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
         notifyListeners("remoteSeek", data: ["time": time])
     }
 
-    func audioEngineDidUpdateAnalysis(frequencyData: [UInt8], timeDomainData: [UInt8]) {
+    func audioEngineDidUpdateAnalysis(
+        frequencyData: [UInt8],
+        timeDomainData: [UInt8],
+        metrics: NativeAudioAnalysisMetrics
+    ) {
         notifyListeners("audioAnalysis", data: [
             "frequencyData": frequencyData,
             "timeDomainData": timeDomainData,
+            "metrics": metrics.asDictionary(),
         ])
     }
 }
