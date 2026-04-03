@@ -19,6 +19,11 @@ export const BROWSER_ROUTES = [
   { path: 'spotify', browserId: 'spotify' },
 ] as const;
 
+export const HOME_ROUTE = {
+  path: '/home',
+  label: 'Home',
+} as const;
+
 /** Sidebar library navigation items. */
 export const LIBRARY_ITEMS = [
   { path: '/library/tracks', label: 'Tracks' },

@@ -6,13 +6,13 @@
  */
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { List, Users, Heart, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { Home, Users, Heart, MessageSquare, MoreHorizontal } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { MobileMoreSheet } from './MobileMoreSheet';
 
 const NAV_ITEMS = [
-  { path: '/library/tracks', label: 'Tracks', icon: List, match: '/library/tracks' },
+  { path: '/home', label: 'Home', icon: Home, match: '/home' },
   { path: '/library/artists', label: 'Artists', icon: Users, match: '/library/artists' },
   { path: '/favorites', label: 'Favorites', icon: Heart, match: '/favorites' },
 ] as const;

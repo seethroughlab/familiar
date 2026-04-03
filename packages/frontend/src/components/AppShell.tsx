@@ -25,6 +25,7 @@ import { ShortcutsHelp } from './KeyboardShortcuts';
 import { TrackEditModal } from './TrackEdit';
 import { MobileBottomNav } from './MobileNav';
 import { PlaylistPickerModal } from './Playlists/PlaylistPickerModal';
+import { HomeRouteTracker } from './Home';
 
 // Lazy-loaded components
 const FullPlayer = lazy(() => import('./FullPlayer').then(m => ({ default: m.FullPlayer })));
@@ -100,6 +101,7 @@ export function AppShell() {
 
   return (
       <div className={`h-dynamic-screen flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
+        <HomeRouteTracker />
         {/* Main content area */}
         <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Sidebar - hidden on mobile */}

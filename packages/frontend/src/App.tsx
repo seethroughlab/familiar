@@ -19,6 +19,7 @@ import { initializeProfile, type Profile } from './services/profileService';
 // Layout
 import { AppShell } from './components/AppShell';
 import { LibraryBrowser } from './components/Library/LibraryBrowser';
+import { HomeScreen } from './components/Home';
 
 // Lazy-loaded route components
 const ArtistDetail = lazy(() => import('./components/Library/ArtistDetail').then(m => ({ default: m.ArtistDetail })));
@@ -63,7 +64,7 @@ function LegacyRedirect() {
       return;
     }
 
-    let newPath = '/library/artists'; // default
+    let newPath = '/home'; // default
 
     // Check for detail views first
     const artistDetail = params.get('artistDetail');
@@ -109,14 +110,14 @@ function LegacyRedirect() {
       newPath = browserMap[browser];
     } else if (hash === 'settings') {
       // Settings is now a modal, redirect to default
-      navigate('/library/artists', { replace: true });
+      navigate('/home', { replace: true });
       return;
     } else if (hash === 'playlists') {
       // Playlists are now in the sidebar
-      navigate('/library/artists', { replace: true });
+      navigate('/home', { replace: true });
       return;
     } else if (hash === 'queue') {
-      navigate('/library/artists', { replace: true });
+      navigate('/home', { replace: true });
       return;
     }
 
@@ -275,6 +276,7 @@ function App() {
           <Route element={<AppShell />}>
             {/* Legacy /admin redirect */}
             <Route path="/admin" element={<Navigate to="/" replace />} />
+            <Route path="/home" element={<HomeScreen />} />
             {/* Library browser views */}
             {BROWSER_ROUTES.map(({ path, browserId }) => (
               <Route
@@ -326,8 +328,8 @@ function App() {
             } />
 
             {/* Default redirect */}
-            <Route index element={<Navigate to="/library/artists" replace />} />
-            <Route path="*" element={<Navigate to="/library/artists" replace />} />
+            <Route index element={<Navigate to="/home" replace />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
           </Route>
         </Routes>
       </QueryClientProvider>

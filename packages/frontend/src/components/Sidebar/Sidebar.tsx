@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
+  House,
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
   Heart, Download, Disc3, Inbox,
   Settings, PanelLeftClose, PanelLeft,
@@ -34,7 +35,7 @@ import { CollectionContextMenu } from './CollectionContextMenu';
 import { LibraryItemContextMenu } from './LibraryItemContextMenu';
 import { SmartPlaylistBuilder } from '../SmartPlaylists';
 
-import { LIBRARY_ITEMS as LIBRARY_ITEM_DEFS } from '../../routes';
+import { HOME_ROUTE, LIBRARY_ITEMS as LIBRARY_ITEM_DEFS } from '../../routes';
 
 const LIBRARY_ICON_MAP: Record<string, typeof List> = {
   '/library/tracks': List,
@@ -156,6 +157,16 @@ export function Sidebar() {
     return (
       <div className={`w-14 flex flex-col border-r ${bgClass} h-full`}>
         <div className="flex-1 py-2 space-y-0.5 overflow-y-auto">
+          <Link
+            to={HOME_ROUTE.path}
+            className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
+              isActive(HOME_ROUTE.path) ? activeClass : `${textClass} ${hoverClass}`
+            }`}
+            title={HOME_ROUTE.label}
+          >
+            <House className="w-5 h-5" />
+          </Link>
+          <div className={`mx-3 my-2 border-t ${dividerClass}`} />
           {LIBRARY_ITEMS.map((item) => (
             <div key={item.path} onContextMenu={(e) => libraryMenu.open(item.path, e)}>
               <Link
@@ -235,6 +246,20 @@ export function Sidebar() {
   return (
     <div className={`w-60 flex flex-col border-r ${bgClass} h-full`}>
       <div className="flex-1 overflow-y-auto min-h-0 py-2">
+        <div className="px-2">
+          <Link
+            to={HOME_ROUTE.path}
+            className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+              isActive(HOME_ROUTE.path) ? activeClass : `${textClass} ${hoverClass}`
+            }`}
+          >
+            <House className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate flex-1">{HOME_ROUTE.label}</span>
+          </Link>
+        </div>
+
+        <div className={`mx-4 my-3 border-t ${dividerClass}`} />
+
         {/* Library section */}
         <div className={`px-4 py-1 text-xs font-semibold uppercase tracking-wider ${sectionClass}`}>
           Library

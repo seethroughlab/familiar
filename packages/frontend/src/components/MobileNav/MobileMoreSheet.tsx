@@ -7,7 +7,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Grid3X3, Smile, Map, Activity, Sparkles, FileText,
+  List, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
   Download, MessageSquare, Settings, Waves,
   ListMusic, Clock, X,
 } from 'lucide-react';
@@ -26,6 +26,7 @@ interface Props {
 }
 
 const LIBRARY_ITEMS = [
+  { path: '/library/tracks', label: 'Tracks', icon: List },
   { path: '/library/albums', label: 'Albums', icon: Grid3X3 },
   { path: '/library/mood-grid', label: 'Mood Grid', icon: Smile },
   { path: '/library/music-map', label: 'Music Map', icon: Map },
