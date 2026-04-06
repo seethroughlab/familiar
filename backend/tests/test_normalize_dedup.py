@@ -50,23 +50,27 @@ class TestNormalizeForDuplicateMatching:
     def test_strip_version(self):
         assert normalize_for_duplicate_matching("Song (Acoustic Version)") == "song"
 
-    def test_strip_feat(self):
-        assert normalize_for_duplicate_matching("Song (feat. Artist)") == "song"
-        assert normalize_for_duplicate_matching("Song (ft. Artist)") == "song"
-        assert normalize_for_duplicate_matching("Song [featuring Artist]") == "song"
+    def test_preserve_feat(self):
+        """feat/ft/featuring are identity-bearing — must not be stripped."""
+        assert normalize_for_duplicate_matching("Song (feat. Artist)") == "song (feat. artist)"
+        assert normalize_for_duplicate_matching("Song (ft. Artist)") == "song (ft. artist)"
+        assert normalize_for_duplicate_matching("Song [featuring Artist]") == "song [featuring artist]"
 
-    def test_strip_remix(self):
-        assert normalize_for_duplicate_matching("Song (Club Remix)") == "song"
+    def test_preserve_remix(self):
+        """Remixes are distinct tracks — must not be stripped."""
+        assert normalize_for_duplicate_matching("Song (Club Remix)") == "song (club remix)"
 
-    def test_strip_edit(self):
-        assert normalize_for_duplicate_matching("Song (Radio Edit)") == "song"
+    def test_preserve_edit(self):
+        """Edits (e.g. Radio Edit) are distinct cuts — must not be stripped."""
+        assert normalize_for_duplicate_matching("Song (Radio Edit)") == "song (radio edit)"
 
     def test_strip_mono_stereo(self):
         assert normalize_for_duplicate_matching("Song (Mono)") == "song"
         assert normalize_for_duplicate_matching("Song (Stereo)") == "song"
 
-    def test_strip_live_at(self):
-        assert normalize_for_duplicate_matching("Song (Live at Wembley)") == "song"
+    def test_preserve_live_at(self):
+        """Live recordings are distinct performances — must not be stripped."""
+        assert normalize_for_duplicate_matching("Song (Live at Wembley)") == "song (live at wembley)"
 
     def test_multiple_parentheticals(self):
         assert normalize_for_duplicate_matching(
@@ -132,7 +136,7 @@ class TestNormalizeForDuplicateMatching:
         assert normalize_for_duplicate_matching("Hey Jude - Remastered 2009") == "hey jude"
 
     def test_dash_radio_edit(self):
-        assert normalize_for_duplicate_matching("Song - Radio Edit") == "song"
+        assert normalize_for_duplicate_matching("Song - Radio Edit") == "song - radio edit"
 
     def test_dash_remaster_with_year(self):
         assert normalize_for_duplicate_matching("Song - 2015 Remaster") == "song"
@@ -140,3 +144,21 @@ class TestNormalizeForDuplicateMatching:
     def test_dash_preserves_non_suffix(self):
         """Non-suffix dashes should be preserved."""
         assert normalize_for_duplicate_matching("Rock - Roll") == "rock - roll"
+
+    # --- Regression: identity-bearing suffixes must not cause false duplicates ---
+
+    def test_named_remix_distinct_from_original(self):
+        """A named remix is a different track than the original."""
+        original = normalize_for_duplicate_matching("Eyes Be Closed")
+        remix = normalize_for_duplicate_matching("Eyes Be Closed (Grimes Remix)")
+        assert original != remix
+
+    def test_feat_distinct_from_original(self):
+        original = normalize_for_duplicate_matching("Song")
+        feat = normalize_for_duplicate_matching("Song (feat. Artist)")
+        assert original != feat
+
+    def test_live_distinct_from_studio(self):
+        original = normalize_for_duplicate_matching("Song")
+        live = normalize_for_duplicate_matching("Song (Live at Wembley)")
+        assert original != live

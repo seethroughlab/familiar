@@ -65,14 +65,13 @@ def normalize_for_matching(name: str | None) -> str:
 # Regex for parenthetical suffixes commonly found in reissues, remasters, etc.
 _PAREN_SUFFIX_RE = re.compile(
     r'\s*[\(\[][^\)\]]*(?:remaster|deluxe|expanded|special|anniversary|collector|'
-    r'bonus\s*track|edition|version|feat\.?|ft\.?|featuring|remix|edit|mono|stereo|'
-    r'live\s+at)[^\)\]]*[\)\]]',
+    r'bonus\s*track|edition|version|mono|stereo)[^\)\]]*[\)\]]',
     re.IGNORECASE,
 )
 
 _DASH_SUFFIX_RE = re.compile(
     r'\s+-\s+(?:\d{4}\s+)?(?:remaster(?:ed)?|deluxe|expanded|special|anniversary|'
-    r'collector|bonus\s*track|edition|version|remix|edit|radio\s+edit|mono|stereo)\b.*$',
+    r'collector|bonus\s*track|edition|version|mono|stereo)\b.*$',
     re.IGNORECASE,
 )
 
@@ -140,7 +139,9 @@ def normalize_for_duplicate_matching(
     """Normalize a string for duplicate detection during import.
 
     Builds on normalize_for_matching() with additional steps:
-    - Strip parenthetical suffixes containing remaster/deluxe/feat/remix/etc.
+    - Strip parenthetical suffixes containing release-variant keywords
+      (remaster/deluxe/edition/etc.) but preserve identity-bearing suffixes
+      (remix, feat, edit, live at).
     - Optionally strip leading articles (the/a/an) for artist matching.
 
     Args:

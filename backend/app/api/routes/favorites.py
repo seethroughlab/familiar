@@ -73,6 +73,7 @@ async def list_favorites(
         select(ProfileFavorite, Track)
         .join(Track, ProfileFavorite.track_id == Track.id)
         .where(ProfileFavorite.profile_id == profile.id)
+        .where(Track.active_filter())
         .order_by(ProfileFavorite.favorited_at.desc())
         .limit(limit)
         .offset(offset)
@@ -80,9 +81,11 @@ async def list_favorites(
     rows = result.all()
 
     local_count = await db.scalar(
-        select(func.count()).select_from(ProfileFavorite).where(
-            ProfileFavorite.profile_id == profile.id
-        )
+        select(func.count())
+        .select_from(ProfileFavorite)
+        .join(Track, ProfileFavorite.track_id == Track.id)
+        .where(ProfileFavorite.profile_id == profile.id)
+        .where(Track.active_filter())
     ) or 0
 
     # Fetch play history for all favorite tracks
