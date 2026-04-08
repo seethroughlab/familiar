@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Track
 from app.services.app_settings import get_app_settings_service
 
-from .models import get_anthropic_model
 from .handlers import (
     AnalysisHandlersMixin,
     DiscoveryHandlersMixin,
@@ -23,6 +22,7 @@ from .handlers import (
     PlaylistHandlersMixin,
     SearchHandlersMixin,
 )
+from .models import get_anthropic_model
 
 # Timeout for LLM calls (shorter for playlist name generation)
 _PLAYLIST_NAME_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)

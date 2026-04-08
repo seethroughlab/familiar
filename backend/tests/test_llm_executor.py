@@ -9,8 +9,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.services.llm.models import get_anthropic_model
 from app.services.llm.executor import ToolExecutor
+from app.services.llm.models import get_anthropic_model
 from app.services.llm.tools import MUSIC_TOOLS
 
 
