@@ -68,8 +68,6 @@ export class WebAudioEngine implements AudioEngine {
   // Visibility recovery handler ref
   private visibilityHandler: (() => void) | null = null;
 
-  // AudioContext statechange handler
-  private contextStateHandler: (() => void) | null = null;
 
   // DOM event listener refs for cleanup
   private domListenerCleanups: (() => void)[] = [];
@@ -81,7 +79,7 @@ export class WebAudioEngine implements AudioEngine {
   initialize(): boolean {
     try {
       if (!this.audioContext) {
-        this.audioContext = new AudioContext();
+        this.audioContext = new AudioContext({ latencyHint: 'playback' });
       }
 
       if (!this.analyser) {
@@ -147,8 +145,6 @@ export class WebAudioEngine implements AudioEngine {
       // Set up visibility recovery
       this.setupVisibilityRecovery();
 
-      // Set up AudioContext statechange auto-resume
-      this.setupContextStateRecovery();
 
       log.info('WebAudioEngine initialized');
       return true;
@@ -174,10 +170,6 @@ export class WebAudioEngine implements AudioEngine {
       this.visibilityHandler = null;
     }
 
-    if (this.contextStateHandler && this.audioContext) {
-      this.audioContext.removeEventListener('statechange', this.contextStateHandler);
-      this.contextStateHandler = null;
-    }
 
     this.cleanupElement(this.elementA, this.currentOfflineUrl);
     this.cleanupElement(this.elementB, this.nextOfflineUrl);
@@ -797,21 +789,6 @@ export class WebAudioEngine implements AudioEngine {
       }
     };
     document.addEventListener('visibilitychange', this.visibilityHandler);
-  }
-
-  // ========================================================================
-  // AudioContext State Recovery
-  // ========================================================================
-
-  private setupContextStateRecovery(): void {
-    if (!this.audioContext) return;
-    this.contextStateHandler = () => {
-      if (this.audioContext?.state === 'suspended') {
-        log.debug('AudioContext suspended, attempting resume');
-        this.audioContext.resume().catch(e => log.error('Failed to resume AudioContext', e));
-      }
-    };
-    this.audioContext.addEventListener('statechange', this.contextStateHandler);
   }
 
 }

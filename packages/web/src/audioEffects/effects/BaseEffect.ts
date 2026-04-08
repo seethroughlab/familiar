@@ -12,6 +12,8 @@ export abstract class BaseEffect {
   protected wetGain: GainNode;
   protected _enabled: boolean = false;
   protected _mix: number = 1; // 1 = fully wet when enabled
+  private wetFirstNode: AudioNode | null = null;
+  private wetLastNode: AudioNode | null = null;
 
   constructor(audioContext: AudioContext) {
     this.audioContext = audioContext;
@@ -81,6 +83,12 @@ export abstract class BaseEffect {
     const smoothTime = 0.02; // 20ms smooth transition
 
     if (this._enabled) {
+      // Connect wet processing path so effect nodes run
+      if (this.wetFirstNode && this.wetLastNode) {
+        try { this.inputNode.connect(this.wetFirstNode); } catch { /* already connected */ }
+        try { this.wetLastNode.connect(this.wetGain); } catch { /* already connected */ }
+      }
+
       // Equal-power crossfade
       const wetAmount = this._mix;
       const dryAmount = 1 - this._mix;
@@ -91,6 +99,12 @@ export abstract class BaseEffect {
       // Bypassed: dry only
       this.wetGain.gain.setTargetAtTime(0, now, smoothTime);
       this.dryGain.gain.setTargetAtTime(1, now, smoothTime);
+
+      // Disconnect wet processing path so effect nodes stop processing
+      if (this.wetFirstNode && this.wetLastNode) {
+        try { this.inputNode.disconnect(this.wetFirstNode); } catch { /* already disconnected */ }
+        try { this.wetLastNode.disconnect(this.wetGain); } catch { /* already disconnected */ }
+      }
     }
   }
 
@@ -99,8 +113,9 @@ export abstract class BaseEffect {
    * the wet path: input -> [processing] -> wetGain
    */
   protected connectWetPath(firstNode: AudioNode, lastNode: AudioNode): void {
-    this.inputNode.connect(firstNode);
-    lastNode.connect(this.wetGain);
+    this.wetFirstNode = firstNode;
+    this.wetLastNode = lastNode;
+    // Don't connect yet — updateGains() will connect when enabled
   }
 
   /**

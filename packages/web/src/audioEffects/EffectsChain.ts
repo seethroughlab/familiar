@@ -86,7 +86,8 @@ export class EffectsChain {
 
     // Connect effects chain
     // EQ -> Compressor -> Saturation -> Filter -> Chorus -> Delay -> Reverb -> StereoWidth -> Tremolo -> Bitcrusher
-    this.inputNode.connect(this.eq.input);
+    // NOTE: inputNode → eq.input is NOT connected here — it's only connected when masterEnabled is true.
+    // This avoids running all 10 effects on the audio thread when they're disabled.
     this.eq.output.connect(this.compressor.input);
     this.compressor.output.connect(this.saturation.input);
     this.saturation.output.connect(this.filter.input);
@@ -137,11 +138,15 @@ export class EffectsChain {
     const smoothTime = 0.02;
 
     if (this._masterEnabled) {
+      // Connect input to effects chain so audio flows through it
+      try { this.inputNode.connect(this.eq.input); } catch { /* already connected */ }
       this.bypassNode.gain.setTargetAtTime(0, now, smoothTime);
       this.effectsNode.gain.setTargetAtTime(1, now, smoothTime);
     } else {
       this.bypassNode.gain.setTargetAtTime(1, now, smoothTime);
       this.effectsNode.gain.setTargetAtTime(0, now, smoothTime);
+      // Disconnect input from effects chain so the 10 effects don't process audio needlessly
+      try { this.inputNode.disconnect(this.eq.input); } catch { /* already disconnected */ }
     }
   }
 
