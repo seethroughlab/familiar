@@ -36,6 +36,7 @@ import { AlbumArtwork } from '../../AlbumArtwork';
 import { AlphabetBar, useAlphabetBar } from '../AlphabetBar';
 import type { Track } from '../../../types';
 import { resolveTrackRowIntent } from '../../shared/trackRowInteraction';
+import { useShuffleWeightStore } from '../../../stores/shuffleWeightStore';
 
 import { createLogger } from '../../../utils/logger';
 
@@ -502,8 +503,11 @@ export function TrackListBrowser({
           isLoadingAudio: true,
         });
         try {
+          const weightState = useShuffleWeightStore.getState();
+          const useWeighted = shuffle && weightState.enabled && weightState.activePreset;
           const response = await tracksApi.getIds({
-            shuffle: shuffle,
+            shuffle: shuffle && !useWeighted,
+            shuffle_preset: useWeighted ? weightState.activePreset! : undefined,
             start_with: track.id,
             ...queueFilters,
           });
@@ -581,8 +585,11 @@ export function TrackListBrowser({
     if (total >= LAZY_QUEUE_THRESHOLD) {
       setIsLoadingPlayAll(true);
       try {
+        const weightState = useShuffleWeightStore.getState();
+        const useWeighted = shuffle && weightState.enabled && weightState.activePreset;
         const response = await tracksApi.getIds({
-          shuffle: shuffle,
+          shuffle: shuffle && !useWeighted,
+          shuffle_preset: useWeighted ? weightState.activePreset! : undefined,
           ...queueFilters,
         });
         if (response.ids.length > 0) {

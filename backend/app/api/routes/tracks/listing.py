@@ -328,13 +328,16 @@ async def list_track_ids(
     elif sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
         if sort_by in SORT_FIELD_MAP:
             sort_col = SORT_FIELD_MAP[sort_by]
-            if sort_by != 'lastPlayed':
-                if sort_order == 'desc':
-                    query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number)
-                else:
-                    query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
+            if sort_by == 'lastPlayed' and profile:
+                query = query.outerjoin(
+                    ProfilePlayHistory,
+                    (ProfilePlayHistory.track_id == Track.id) &
+                    (ProfilePlayHistory.profile_id == profile.id),
+                )
+            if sort_order == 'desc':
+                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number)
             else:
-                query = query.order_by(Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
         else:
             if not has_feature_filter:
                 query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
@@ -577,6 +580,7 @@ async def list_tracks(
 @router.get("/{track_id}/index", response_model=TrackIndexResponse)
 async def get_track_index(
     db: DbSession,
+    profile: CurrentProfile,
     track_id: UUID,
     search: str | None = None,
     artist: str | None = None,
@@ -662,9 +666,15 @@ async def get_track_index(
 
     needs_analysis_join = False
     order_clauses: list[Any] = []
-    if sort_by and sort_by != 'lastPlayed' and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
+    if sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
         if sort_by in SORT_FIELD_MAP:
             sort_col = SORT_FIELD_MAP[sort_by]
+            if sort_by == 'lastPlayed' and profile:
+                base_query = base_query.outerjoin(
+                    ProfilePlayHistory,
+                    (ProfilePlayHistory.track_id == Track.id) &
+                    (ProfilePlayHistory.profile_id == profile.id),
+                )
             if sort_order == 'desc':
                 order_clauses = [nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number]
             else:
