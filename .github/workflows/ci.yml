@@ -8,6 +8,38 @@ on:
   workflow_dispatch:
 
 jobs:
+  macos-compose-check:
+    name: macOS Compose Check
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate macOS compose override merges cleanly
+        working-directory: docker
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml config > /dev/null
+
+      - name: Assert no journald in merged config
+        working-directory: docker
+        run: |
+          if docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml config | grep -q 'journald'; then
+            echo "::error::Merged macOS compose config still contains journald logging driver"
+            exit 1
+          fi
+          echo "No journald references found in merged config"
+
+      - name: Assert all prod services have macOS logging overrides
+        working-directory: docker
+        run: |
+          # Count services in prod that use journald
+          PROD_JOURNALD=$(docker compose -f docker-compose.prod.yml config | grep -c 'driver: journald' || true)
+          # Count services in merged config that use journald (should be 0)
+          MERGED_JOURNALD=$(docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml config | grep -c 'driver: journald' || true)
+          echo "Prod journald services: $PROD_JOURNALD, After macOS override: $MERGED_JOURNALD"
+          if [ "$MERGED_JOURNALD" -gt 0 ]; then
+            echo "::error::$MERGED_JOURNALD service(s) still using journald after macOS override — update docker-compose.macos.yml"
+            exit 1
+          fi
+
   migration-lint:
     name: Migration Lint
     runs-on: self-hosted
