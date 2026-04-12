@@ -149,7 +149,9 @@ docker compose -f docker-compose.prod.yml up -d
 
 Access at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
 
-See the **[Installation Guide](docs/INSTALLATION.md)** for detailed platform-specific instructions (OpenMediaVault, Synology NAS, development setup).
+**Running on macOS?** See the **[macOS Installation Guide](docs/MACOS.md)** — covers Docker Desktop setup, Apple Silicon, and music library paths.
+
+See the **[Installation Guide](docs/INSTALLATION.md)** for other platforms (OpenMediaVault, Synology NAS, development setup).
 
 ## Requirements
 
@@ -178,6 +180,7 @@ Press `?` anytime to see all shortcuts.
 ## Documentation
 
 - **[Installation Guide](docs/INSTALLATION.md)** - Docker, OpenMediaVault, Synology NAS, and development setup
+- **[macOS Guide](docs/MACOS.md)** - Docker Desktop setup, Apple Silicon, music library paths
 - **[Configuration](docs/CONFIGURATION.md)** - Environment variables, API keys, Tailscale HTTPS, cloud backup
 - **[Library Browser API](docs/LIBRARY_BROWSERS.md)** - Create custom 2D/3D library visualizations
 - **[REST API Reference](docs/REST-API.md)** - Backend REST API documentation

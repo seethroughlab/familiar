@@ -2,6 +2,8 @@
 
 Familiar runs as a Docker stack (app + PostgreSQL + Redis). Choose the guide for your platform below.
 
+> **macOS?** See the dedicated [macOS Installation Guide](MACOS.md) for Docker Desktop setup, Apple Silicon notes, and macOS-specific troubleshooting.
+
 ## Quick Start
 
 ```bash
@@ -11,6 +13,8 @@ cp .env.example .env
 # Edit .env: set MUSIC_LIBRARY_PATH and FRONTEND_URL
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+> **Note:** The production compose file uses the `journald` logging driver (Linux-only). On macOS, use the [macOS guide](MACOS.md) or add the override: `docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d`
 
 Access at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
 
