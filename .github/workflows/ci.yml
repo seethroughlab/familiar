@@ -47,6 +47,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Clean up previous containers and volumes
+        working-directory: docker
+        run: |
+          docker compose -f docker-compose.local.yml down -v 2>/dev/null || true
+          docker compose -f docker-compose.prod.yml down -v 2>/dev/null || true
+
       - name: Create .env for test
         working-directory: docker
         run: |
@@ -92,10 +98,10 @@ jobs:
         if: failure()
         run: docker compose -f docker-compose.local.yml logs --tail=50
 
-      - name: Stop stack
+      - name: Stop stack and clean up volumes
         working-directory: docker
         if: always()
-        run: docker compose -f docker-compose.local.yml down
+        run: docker compose -f docker-compose.local.yml down -v
 
   migration-lint:
     name: Migration Lint
