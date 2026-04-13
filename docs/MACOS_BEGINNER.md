@@ -114,7 +114,7 @@ This opens the file in TextEdit. Find the line that says:
 MUSIC_LIBRARY_PATH=
 ```
 
-If there's nothing after the `=`, type your music folder path from Step 5. For example, if your music is in the default Apple Music location, change it to:
+Type your music folder path from Step 5 after the `=`. For example, if your music is in the default Apple Music location, change it to:
 
 ```
 MUSIC_LIBRARY_PATH=~/Music/Music/Media.localized/Music
