@@ -61,7 +61,7 @@ Terminal is a built-in app that lets you type commands. Don't worry — we'll te
 1. In your browser, go to: **https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip**
    - This will download a ZIP file to your Downloads folder.
 2. Double-click the ZIP file in Finder to unzip it. You'll get a folder called `familiar-master`.
-3. Rename the folder to `familiar` (right-click > Rename), then drag it into your **home folder** (the one with the house icon in Finder's sidebar).
+3. Rename the folder to `familiar` (right-click > Rename), then drag it into your **home folder**. To find your home folder in Finder: click **Go** in the menu bar, then **Home** (or press **Shift + Command + H**).
 
 Now, in Terminal, type:
 
@@ -96,13 +96,13 @@ Not sure about your path? You can drag your music folder from Finder into the Te
 
 ## Step 6: Set Up Your Configuration
 
-Type this command:
+Type this command to create your configuration file (it copies a template):
 
 ```
 cp .env.example .env
 ```
 
-Now you need to edit the configuration file. Type:
+Now you need to edit it. Type:
 
 ```
 open -e .env
@@ -150,7 +150,9 @@ Back in Terminal, type:
 ./start.sh
 ```
 
-You'll see some progress messages. The script checks that everything is set up correctly and then starts Familiar. After about 30-60 seconds, you should see:
+The first time you run this, Docker will download Familiar's components (~4 GB). This may take several minutes depending on your internet speed — it only happens once.
+
+After the download finishes, the script checks that everything is set up correctly and starts Familiar. You should see:
 
 ```
 Familiar is running!
@@ -170,6 +172,8 @@ If you see an error instead, check the [Troubleshooting](#troubleshooting) secti
 1. Open **Safari** (or any browser you prefer).
 2. Go to: **http://localhost:4400**
 
+   (`localhost` means "this computer" — it's not on the internet, just running privately on your Mac.)
+
 You should see the Familiar interface.
 
 ---
@@ -177,9 +181,9 @@ You should see the Familiar interface.
 ## Step 9: Initial Setup
 
 1. Go to **http://localhost:4400/admin**
-2. Enter your **Anthropic API key** — this is required for AI-powered playlists.
-   - If you don't have one, you can get one at [console.anthropic.com](https://console.anthropic.com/). It requires creating an account and adding a payment method (usage is pay-as-you-go, typically a few cents per conversation).
-3. Optionally add your **Spotify** and **Last.fm** API keys for metadata enrichment.
+2. Enter your **Anthropic API key**. This is what lets Familiar use Claude (an AI assistant) to create playlists from natural language descriptions like "something upbeat for a road trip."
+   - If you don't have one, you can get one at [console.anthropic.com](https://console.anthropic.com/). You'll need to create an account and add a payment method. Usage is pay-as-you-go — typically a few cents per conversation.
+3. Optionally add **Spotify** and **Last.fm** API keys. These help Familiar find album artwork and additional information about your tracks, but aren't required.
 4. Go to **Settings > Library Management** and click **Scan Library**.
 
 The initial scan analyzes all your music files. This can take a while depending on your library size — a few minutes for a small collection, potentially an hour or more for thousands of tracks. You can use Familiar while it scans.
@@ -235,7 +239,7 @@ You can also just quit Docker Desktop, which stops everything.
 
 ## Updating Familiar
 
-Familiar runs from a Docker image that updates independently from the files you downloaded. When a new version is available, open Terminal and type these commands one at a time:
+When a new version is available, open Terminal and type these commands one at a time:
 
 ```
 cd ~/familiar/docker
@@ -243,6 +247,8 @@ docker pull ghcr.io/seethroughlab/familiar:latest
 ./stop.sh
 ./start.sh
 ```
+
+The `docker pull` command downloads the latest version (the long address is just Familiar's location on the internet — you don't need to remember it, just copy and paste).
 
 Your music library, settings, and API keys are preserved across updates.
 
@@ -285,7 +291,7 @@ Then restart: `./stop.sh` followed by `./start.sh`.
 
 If you want to uninstall everything:
 
-1. Stop Familiar: `cd ~/familiar/docker && ./stop.sh`
-2. Remove the downloaded files: `rm -rf ~/familiar`
-3. Clean up Docker's data: Open Docker Desktop > Settings > Resources > scroll down > **Purge data**
-4. Optionally uninstall Docker Desktop by dragging it from Applications to Trash
+1. Open Terminal and type: `cd ~/familiar/docker && ./stop.sh`
+2. In Finder, drag the `familiar` folder from your home folder to the Trash.
+3. Open Docker Desktop > Settings > scroll down to **Troubleshoot** > click **Clean / Purge data**. This removes Familiar's database and cached data.
+4. If you no longer need Docker for anything else, drag Docker Desktop from Applications to the Trash to uninstall it.
