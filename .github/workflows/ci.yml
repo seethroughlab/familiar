@@ -42,30 +42,13 @@ jobs:
 
   macos-compose-integration:
     name: macOS Compose Integration
-    # macos-13 (Intel) includes Docker Desktop pre-installed.
-    # macos-latest (ARM64) does not, and Colima VMs fail on GitHub runners.
-    runs-on: macos-13
+    runs-on: macos-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Start Docker Desktop
-        run: |
-          # Docker Desktop is pre-installed on macos-13 but may not be running
-          open -a Docker || true
-          echo "Waiting for Docker to start..."
-          for i in $(seq 1 30); do
-            if docker info &>/dev/null; then
-              echo "Docker is ready"
-              break
-            fi
-            if [ "$i" -eq 30 ]; then
-              echo "::error::Docker failed to start within 60 seconds"
-              exit 1
-            fi
-            sleep 2
-          done
-          docker info
+      - name: Set up Docker
+        uses: crazy-max/ghaction-setup-docker@v4
 
       - name: Create .env for test
         working-directory: docker
