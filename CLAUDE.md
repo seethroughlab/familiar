@@ -75,6 +75,8 @@ backend/
 | Discovery | `packages/frontend/src/components/Discovery/` |
 | Smart playlists UI | `packages/frontend/src/components/SmartPlaylists/` |
 | Settings | `packages/frontend/src/components/Settings/` |
+| Docker setup | `docker/Dockerfile`, `docker/docker-compose.prod.yml`, `docker/start.sh` |
+| CLAP smoke test | `backend/scripts/smoke_test_clap.py` |
 
 ## Frontend Architecture
 
@@ -213,6 +215,20 @@ pnpm test:watch             # vitest watch mode
 # Frontend E2E tests (requires backend + frontend running)
 cd packages/web && npx playwright test                # Playwright headless
 cd packages/web && npx playwright test --ui           # Playwright UI mode
+```
+
+### Docker / Smoke Tests
+
+```bash
+# macOS Docker stack (from docker/)
+./start.sh                   # Start with platform detection + health check
+./stop.sh                    # Stop
+
+# CLAP smoke test in Docker (downloads ~1.5GB model on first run)
+make smoke-test-docker
+
+# Heavy analysis tests with real CLAP (not run in normal CI)
+cd backend && FAMILIAR_HEAVY_TESTS=1 uv run pytest tests/test_analysis_heavy.py -v
 ```
 
 ### iOS Development
