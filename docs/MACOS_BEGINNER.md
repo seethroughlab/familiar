@@ -58,18 +58,15 @@ Terminal is a built-in app that lets you type commands. Don't worry — we'll te
 
 ## Step 4: Download Familiar
 
-Type (or copy and paste) this command into Terminal and press Enter:
+1. In your browser, go to: **https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip**
+   - This will download a ZIP file to your Downloads folder.
+2. Double-click the ZIP file in Finder to unzip it. You'll get a folder called `familiar-master`.
+3. Rename the folder to `familiar` (right-click > Rename), then drag it into your **home folder** (the one with the house icon in Finder's sidebar).
+
+Now, in Terminal, type:
 
 ```
-git clone https://github.com/seethroughlab/familiar.git
-```
-
-This downloads Familiar to your computer. It may take a minute.
-
-Then type:
-
-```
-cd familiar/docker
+cd ~/familiar/docker
 ```
 
 This moves you into Familiar's folder.
@@ -238,7 +235,7 @@ You can also just quit Docker Desktop, which stops everything.
 
 ## Updating Familiar
 
-When a new version is available, open Terminal and type these three commands one at a time:
+Familiar runs from a Docker image that updates independently from the files you downloaded. When a new version is available, open Terminal and type these commands one at a time:
 
 ```
 cd ~/familiar/docker
@@ -248,6 +245,8 @@ docker pull ghcr.io/seethroughlab/familiar:latest
 ```
 
 Your music library, settings, and API keys are preserved across updates.
+
+If an update requires new scripts (we'll let you know), download the latest ZIP from **https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip**, unzip it, and replace your `~/familiar` folder. Your data is stored inside Docker, not in this folder, so nothing is lost.
 
 ---
 
