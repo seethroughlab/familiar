@@ -20,7 +20,11 @@ pytestmark = pytest.mark.skipif(
 pytest.importorskip("torch")
 pytest.importorskip("librosa")
 
-from app.services.analysis import extract_embedding, extract_text_embedding, get_device
+from app.services.analysis import (  # noqa: E402
+    extract_embedding,
+    extract_text_embedding,
+    get_device,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "audio"
 
