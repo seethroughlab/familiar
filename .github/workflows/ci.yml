@@ -42,17 +42,29 @@ jobs:
 
   macos-compose-integration:
     name: macOS Compose Integration
-    runs-on: macos-latest
+    # macos-13 (Intel) includes Docker Desktop pre-installed.
+    # macos-latest (ARM64) does not, and Colima VMs fail on GitHub runners.
+    runs-on: macos-13
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install and start Docker via Colima
+      - name: Start Docker Desktop
         run: |
-          brew install docker docker-compose colima
-          # Start colima with enough resources for the stack
-          colima start --cpu 2 --memory 4 --disk 20
-          # Verify Docker is working
+          # Docker Desktop is pre-installed on macos-13 but may not be running
+          open -a Docker || true
+          echo "Waiting for Docker to start..."
+          for i in $(seq 1 30); do
+            if docker info &>/dev/null; then
+              echo "Docker is ready"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::Docker failed to start within 60 seconds"
+              exit 1
+            fi
+            sleep 2
+          done
           docker info
 
       - name: Create .env for test
@@ -103,10 +115,6 @@ jobs:
         working-directory: docker
         if: always()
         run: ./stop.sh
-
-      - name: Stop Colima
-        if: always()
-        run: colima stop || true
 
   migration-lint:
     name: Migration Lint
