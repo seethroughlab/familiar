@@ -42,13 +42,10 @@ jobs:
 
   macos-compose-integration:
     name: macOS Compose Integration
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS]
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Docker
-        uses: crazy-max/ghaction-setup-docker@v4
 
       - name: Create .env for test
         working-directory: docker
