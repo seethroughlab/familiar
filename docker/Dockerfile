@@ -90,6 +90,9 @@ COPY --from=python-deps /app/.venv /app/.venv
 # Copy backend application code
 COPY backend/app ./app
 
+# Copy smoke test script for post-build verification
+COPY backend/scripts/smoke_test_clap.py ./scripts/smoke_test_clap.py
+
 # Copy Alembic configuration
 # Note: migrations/ instead of alembic/ to avoid shadowing the alembic package
 COPY backend/alembic.ini ./

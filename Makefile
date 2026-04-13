@@ -1,7 +1,7 @@
 # Familiar - Development Makefile
 # For local development and quick deploys to NAS
 
-.PHONY: help dev dev-remote build deploy-dev deploy-frontend deploy-backend release-testflight deploy-device
+.PHONY: help dev dev-remote build deploy-dev deploy-frontend deploy-backend release-testflight deploy-device smoke-test-docker
 
 help:
 	@echo "Familiar Development Commands"
@@ -18,6 +18,9 @@ help:
 	@echo "iOS:"
 	@echo "  make deploy-device      - Build & install to connected iPhone (~2 min)"
 	@echo "  make release-testflight - Build & upload to TestFlight"
+	@echo ""
+	@echo "Testing:"
+	@echo "  make smoke-test-docker  - Run CLAP smoke test in Docker (~1.5GB model download on first run)"
 
 # Local development - runs frontend and backend locally
 dev:
@@ -54,3 +57,9 @@ release-testflight:
 # Build and install iOS app directly to connected device
 deploy-device:
 	cd packages/ios && ./scripts/deploy-device.sh
+
+# Run CLAP smoke test inside Docker (downloads ~1.5GB model on first run)
+smoke-test-docker:
+	docker build -t familiar-smoke-test -f docker/Dockerfile . && \
+	docker run --rm -v familiar-hf-cache:/root/.cache/huggingface \
+		familiar-smoke-test python /app/scripts/smoke_test_clap.py

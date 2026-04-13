@@ -40,6 +40,74 @@ jobs:
             exit 1
           fi
 
+  macos-compose-integration:
+    name: macOS Compose Integration
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install and start Docker via Colima
+        run: |
+          brew install docker docker-compose colima
+          # Start colima with enough resources for the stack
+          colima start --cpu 2 --memory 4 --disk 20
+          # Verify Docker is working
+          docker info
+
+      - name: Create .env for test
+        working-directory: docker
+        run: |
+          echo "MUSIC_LIBRARY_PATH=${{ github.workspace }}/backend/tests/fixtures/audio" > .env
+          echo "FRONTEND_URL=http://localhost:4400" >> .env
+
+      - name: Start stack via start.sh
+        working-directory: docker
+        run: ./start.sh
+
+      - name: Wait for API health check
+        run: |
+          echo "Waiting for API to be healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4400/api/v1/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "API is healthy"
+              curl -s http://localhost:4400/api/v1/health | python3 -m json.tool
+              exit 0
+            fi
+            echo "Attempt $i/30: HTTP $STATUS (waiting 5s...)"
+            sleep 5
+          done
+          echo "::error::API health check failed after 150 seconds"
+          docker compose -f docker/docker-compose.prod.yml -f docker/docker-compose.macos.yml logs
+          exit 1
+
+      - name: Verify containers are running
+        working-directory: docker
+        run: |
+          docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml ps
+          # All 3 containers should be running
+          RUNNING=$(docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml ps --status running -q | wc -l | tr -d ' ')
+          if [ "$RUNNING" -lt 3 ]; then
+            echo "::error::Expected 3 running containers, got $RUNNING"
+            docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml logs
+            exit 1
+          fi
+
+      - name: Dump logs on failure
+        working-directory: docker
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml logs --tail=50
+
+      - name: Stop stack via stop.sh
+        working-directory: docker
+        if: always()
+        run: ./stop.sh
+
+      - name: Stop Colima
+        if: always()
+        run: colima stop || true
+
   migration-lint:
     name: Migration Lint
     runs-on: self-hosted

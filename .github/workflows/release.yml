@@ -95,7 +95,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: true
-          platforms: linux/amd64  # TODO: re-enable arm64 once build issues resolved
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -103,10 +103,47 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  docker-smoke-test:
+    name: Smoke Test (${{ matrix.platform }})
+    needs: build-and-push
+    runs-on: [self-hosted, Linux]
+    permissions:
+      packages: read
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull built image
+        run: docker pull --platform ${{ matrix.platform }} ghcr.io/${{ github.repository }}:latest
+
+      - name: Smoke test (torch import only)
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            ghcr.io/${{ github.repository }}:latest \
+            python /app/scripts/smoke_test_clap.py --skip-model
+
+      - name: Smoke test (full CLAP)
+        timeout-minutes: 15
+        run: |
+          docker run --rm --platform ${{ matrix.platform }} \
+            -v familiar-hf-cache:/root/.cache/huggingface \
+            ghcr.io/${{ github.repository }}:latest \
+            python /app/scripts/smoke_test_clap.py
+
   create-release:
     name: Create GitHub Release
     runs-on: [self-hosted, Linux]
-    needs: build-and-push
+    needs: [build-and-push, docker-smoke-test]
     permissions:
       contents: write
     steps:

@@ -14,9 +14,9 @@ Before starting Familiar, adjust these Docker Desktop settings (gear icon → Re
 
 ### Memory
 
-Set memory to **at least 8GB**. The CLAP audio embedding model uses ~4GB at peak, and the compose file sets a 6GB container limit. PostgreSQL and Redis need additional headroom.
+> **8GB Mac?** Add `DISABLE_CLAP_EMBEDDINGS=true` to your `.env` file before starting. The CLAP audio embedding model uses ~4GB at peak, which won't fit alongside PostgreSQL and Redis on an 8GB machine. You'll still get BPM, key detection, energy, mood, and all other audio analysis — only semantic search embeddings are skipped.
 
-If your Mac has only 8GB of total RAM, add `DISABLE_CLAP_EMBEDDINGS=true` to your `.env` file instead. This skips CLAP embeddings (the heaviest analysis) while keeping BPM, key detection, and other audio features.
+For Macs with 16GB+ RAM, set Docker Desktop's memory to **at least 8GB** (Settings → Resources → Advanced). The compose file limits the app container to 6GB, and PostgreSQL and Redis need additional headroom.
 
 ### File Sharing
 
@@ -58,14 +58,41 @@ The default 64GB disk image is sufficient for most users. If you have a very lar
 
    > **Note:** If `~` doesn't expand correctly, use the full path: `/Users/yourname/Music`
 
+   The default `.env` is pre-configured for local use — `MUSIC_LIBRARY_PATH` is the only value you need to set. If you plan to access Familiar from other devices on your network, also update `FRONTEND_URL` to your Mac's IP address (e.g., `http://192.168.1.50:4400`).
+
 3. **Start the services:**
+   ```bash
+   ./start.sh
+   ```
+
+   This detects macOS automatically and applies the correct configuration. To follow logs on first startup, use `./start.sh --logs`.
+
+   <details>
+   <summary>Manual alternative (if you prefer not to use the script)</summary>
+
    ```bash
    docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d
    ```
 
-   The `docker-compose.macos.yml` override is required because the production compose file uses the `journald` logging driver, which is Linux-only. The override switches to Docker's default `json-file` driver.
+   The `-f docker-compose.macos.yml` override is required on macOS because the production compose file uses the `journald` logging driver (Linux-only). The override switches to Docker's default `json-file` driver.
+   </details>
 
-4. **Access the UI** at http://localhost:4400 and go to `/admin` to configure API keys and start a library scan.
+4. **Wait for the startup check to complete.** The script will show progress dots and then print a success message with the URL when ready (~30-60 seconds on first run).
+
+### Verify Installation
+
+Once `start.sh` reports success:
+
+1. Open **http://localhost:4400** in your browser — you should see the Familiar interface
+2. Go to **http://localhost:4400/admin** to add your Anthropic API key (required for AI playlists)
+3. In **Settings > Library Management**, verify your music library path is detected and start a scan
+
+**If nothing loads:** Check that Docker Desktop is still running and the containers are healthy:
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml ps
+```
+
+**If the page loads but scanning finds no music:** Double-check the `MUSIC_LIBRARY_PATH` in your `.env` file. The path must point to a folder containing audio files (MP3, M4A, FLAC, etc.), not the Apple Music app itself.
 
 ### Alternative: Build from Source
 
@@ -79,16 +106,7 @@ This takes 5-10 minutes for the initial build but doesn't need the macOS overrid
 
 ## Apple Silicon (M1/M2/M3/M4)
 
-The Docker image is currently built for `linux/amd64` only. Docker Desktop on Apple Silicon runs it automatically via Rosetta 2 emulation — no action needed on your part.
-
-**Performance:** Expect roughly 20-30% slower performance compared to Intel Macs or native Linux, most noticeable during audio analysis (CLAP model loading, librosa processing). Regular playback and browsing are unaffected.
-
-If analysis is too slow, add to your `.env`:
-```bash
-DISABLE_CLAP_EMBEDDINGS=true
-```
-
-This disables the heaviest analysis step (CLAP embeddings for semantic search) while keeping BPM, key detection, energy, and other audio features.
+The Docker image is built for both `linux/amd64` and `linux/arm64`. Docker Desktop on Apple Silicon will automatically pull the native ARM64 image — no emulation overhead.
 
 ## Music Library Notes
 
@@ -106,8 +124,8 @@ Pull the latest image and restart:
 
 ```bash
 docker pull ghcr.io/seethroughlab/familiar:latest
-docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml down
-docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d
+./stop.sh
+./start.sh
 ```
 
 Database migrations run automatically on startup.
@@ -115,7 +133,7 @@ Database migrations run automatically on startup.
 ## Troubleshooting
 
 **"journald logging driver not found":**
-You ran `docker-compose.prod.yml` without the macOS override. Use:
+You ran the production compose file without the macOS override. Use `./start.sh` which applies it automatically, or manually run:
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d
 ```
@@ -126,7 +144,7 @@ Docker Desktop memory is too low. Increase to at least 8GB in Docker Desktop →
 **Slow file scanning:**
 - Verify VirtioFS is enabled in Docker Desktop settings
 - Avoid scanning over network mounts for the initial library import
-- Apple Silicon Macs will be slower due to Rosetta emulation
+- Large libraries may be slow on initial scan regardless of architecture
 
 **"Cannot connect to the Docker daemon":**
 Docker Desktop is not running. Open the Docker Desktop application first, wait for it to finish starting, then retry.
