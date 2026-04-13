@@ -8,6 +8,10 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Bump this when scripts or compose files change in a way that
+# requires users to re-download. The value should match the release tag.
+SCRIPT_VERSION="2026.04.13"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -101,6 +105,17 @@ else
             echo ""
             echo "  First time? Go to ${BOLD}${API_URL}/admin${NC} to configure"
             echo "  API keys and start a library scan."
+
+            # Check if scripts are outdated compared to the Docker image
+            IMAGE_VERSION=$(docker exec familiar-api cat /app/VERSION 2>/dev/null || echo "")
+            if [ -n "$IMAGE_VERSION" ] && [ "$IMAGE_VERSION" != "dev" ] && [ "$IMAGE_VERSION" != "$SCRIPT_VERSION" ]; then
+                echo ""
+                echo -e "${YELLOW}Note:${NC} Your Docker image ($IMAGE_VERSION) is newer than these"
+                echo "scripts ($SCRIPT_VERSION). You can usually ignore this, but if you"
+                echo "run into issues, download the latest scripts from:"
+                echo "  https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip"
+            fi
+
             exit 0
         fi
         printf "."
