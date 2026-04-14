@@ -159,8 +159,8 @@ Familiar is running!
 
   Open http://localhost:4400 in your browser
 
-  First time? Go to http://localhost:4400/admin to configure
-  API keys and start a library scan.
+  First time? Set API keys in your .env file, then open
+  Settings (gear icon) to configure your library.
 ```
 
 If you see an error instead, check the [Troubleshooting](#troubleshooting) section below.
@@ -180,11 +180,13 @@ You should see the Familiar interface.
 
 ## Step 9: Initial Setup
 
-1. Go to **http://localhost:4400/admin**
-2. Enter your **Anthropic API key**. This is what lets Familiar use Claude (an AI assistant) to create playlists from natural language descriptions like "something upbeat for a road trip."
+1. Open your `.env` file (in the `docker` folder) with a text editor. If you followed the earlier steps, it should already exist.
+2. Add your **Anthropic API key**. This is what lets Familiar use Claude (an AI assistant) to create playlists from natural language descriptions like "something upbeat for a road trip."
+   - Find the line that says `ANTHROPIC_API_KEY=` and paste your key after the `=` sign (e.g., `ANTHROPIC_API_KEY=sk-ant-...`)
    - If you don't have one, you can get one at [console.anthropic.com](https://console.anthropic.com/). You'll need to create an account and add a payment method. Usage is pay-as-you-go — typically a few cents per conversation.
-3. Optionally add **Spotify** and **Last.fm** API keys. These help Familiar find album artwork and additional information about your tracks, but aren't required.
-4. Go to **Settings > Library Management** and click **Scan Library**.
+3. Optionally add **Last.fm** API keys (`LASTFM_API_KEY` and `LASTFM_API_SECRET`). These help with scrobbling and additional track information, but aren't required.
+4. Save the file, then restart Docker (run `./stop.sh` then `./start.sh` in Terminal).
+5. Open **http://localhost:4400**, click the **gear icon** to open Settings, go to **Library**, and click **Scan Library**.
 
 The initial scan analyzes all your music files. This can take a while depending on your library size — a few minutes for a small collection, potentially an hour or more for thousands of tracks. You can use Familiar while it scans.
 

@@ -103,8 +103,8 @@ else
             echo ""
             echo "  Open ${BOLD}${API_URL}${NC} in your browser"
             echo ""
-            echo "  First time? Go to ${BOLD}${API_URL}/admin${NC} to configure"
-            echo "  API keys and start a library scan."
+            echo "  First time? Set API keys in your .env file, then open"
+            echo "  ${BOLD}Settings${NC} (gear icon) to configure your library."
 
             # Check if scripts are outdated compared to the Docker image
             IMAGE_VERSION=$(docker exec familiar-api cat /app/VERSION 2>/dev/null || echo "")

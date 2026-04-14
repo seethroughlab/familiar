@@ -100,7 +100,7 @@ async def system_health_check(db: DbSession) -> SystemHealth:
     valid_path_count = 0
 
     if not library_paths:
-        warnings.insert(0, "No music library configured. Go to /admin to set up your music library path.")
+        warnings.insert(0, "No music library configured. Open Settings to set up your music library path.")
     else:
         for library_path in library_paths:
             if not library_path.exists():

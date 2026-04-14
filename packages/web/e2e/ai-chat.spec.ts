@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { ensureProfile, waitForAudioReady, isAudioPlaying } from './helpers';
 
-// These tests require ANTHROPIC_API_KEY environment variable
+// These tests require ANTHROPIC_API_KEY environment variable set on the backend.
 // Run with: ANTHROPIC_API_KEY=sk-ant-... npm run test:e2e -- e2e/ai-chat.spec.ts
 
 const API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -12,47 +12,7 @@ test.describe('AI Chat', () => {
   // They work locally but are too flaky for CI (timeout issues, non-deterministic responses).
   test.skip(!API_KEY || IS_CI, 'Requires ANTHROPIC_API_KEY (skipped in CI due to library sync issues)');
 
-  // Helper to ensure API key is configured
-  async function ensureApiKey(page: import('@playwright/test').Page) {
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
-
-    const apiKeyInput = page.locator('input[type="password"], input[placeholder*="key" i]').first();
-    await apiKeyInput.fill(API_KEY!);
-    await page.locator('button:has-text("Save")').first().click();
-    await page.locator('text=Configured, text=saved').first().waitFor({ timeout: 5000 }).catch(() => {});
-  }
-
-  test('add Anthropic API key in Admin panel', async ({ page }) => {
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
-
-    // Find the Claude API section heading
-    const claudeHeading = page.getByRole('heading', { name: /Claude API/i });
-    await expect(claudeHeading).toBeVisible({ timeout: 5000 });
-
-    // Find API key input and fill it
-    const apiKeyInput = page.locator('input[type="password"], input[placeholder*="key" i]').first();
-    await apiKeyInput.fill(API_KEY!);
-
-    // Click save button in the Claude section
-    const saveButton = page.locator('button:has-text("Save")').first();
-    await saveButton.click();
-
-    // Verify key was saved - should show "Configured" badge or success toast
-    const configuredBadge = page.locator('text=Configured');
-    const savedToast = page.locator('text=saved');
-
-    const isConfigured = await configuredBadge.isVisible({ timeout: 2000 }).catch(() => false);
-    const showedToast = await savedToast.isVisible({ timeout: 1000 }).catch(() => false);
-
-    expect(isConfigured || showedToast).toBe(true);
-  });
-
   test('send "Play something upbeat" and AI responds', async ({ page }) => {
-    await ensureApiKey(page);
-
-    // Go to main app
     await page.goto('/');
     await ensureProfile(page);
 
@@ -88,8 +48,6 @@ test.describe('AI Chat', () => {
   });
 
   test('AI creates playlist that starts playing automatically', async ({ page }) => {
-    await ensureApiKey(page);
-
     await page.goto('/');
     await ensureProfile(page);
 
@@ -123,31 +81,5 @@ test.describe('AI Chat', () => {
       // No response at all - fail
       expect(responded).toBe(true);
     }
-  });
-
-  test('chat shows disabled state when no API key configured', async ({ page }) => {
-    // Clear any existing API key
-    await page.goto('/admin');
-    await page.waitForLoadState('networkidle');
-
-    // Find and click "Remove API key" button if it exists
-    const removeButton = page.locator('button:has-text("Remove")');
-    if (await removeButton.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await removeButton.click();
-      await page.waitForLoadState('networkidle').catch(() => {});
-    }
-
-    // Go to main app
-    await page.goto('/');
-    await ensureProfile(page);
-
-    // The send button should be disabled when no API key is configured
-    const sendButton = page.locator('button[disabled]').filter({ has: page.locator('svg') });
-    const isDisabled = await sendButton.isVisible({ timeout: 3000 }).catch(() => false);
-
-    expect(isDisabled).toBe(true);
-
-    // Re-add API key for subsequent tests
-    await ensureApiKey(page);
   });
 });

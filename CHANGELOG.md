@@ -16,7 +16,7 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - **Local music library scanning** with metadata extraction (MP3, FLAC, M4A, OGG, AIFF)
 - **Multi-profile support** for household use (profile-based, no traditional auth)
 - **PWA support** with offline playback, IndexedDB track caching, download queue, and playlist cache
-- **Admin setup page** at `/admin` for API key and library configuration
+- **Settings panel** for library management and configuration (API keys set via environment variables)
 - **Version display** and **update checker** with configurable release channel (stable/beta/alpha/disabled)
 
 #### Audio Analysis

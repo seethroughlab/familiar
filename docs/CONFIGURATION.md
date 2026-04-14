@@ -28,7 +28,7 @@ cp .env.example .env
 FRONTEND_URL=http://myserver:4400
 ```
 
-All other settings (API keys, community cache) are configured via the Admin UI at `/admin`.
+API keys are configured via environment variables in your `.env` file (see below). Other settings (community cache, library paths) are in the **Settings** panel (gear icon).
 
 ## Getting API Keys
 
@@ -41,7 +41,7 @@ The Anthropic API powers the AI chat feature, allowing you to ask questions abou
 3. Navigate to **Settings** → **API Keys**
 4. Click **Create Key** and give it a name (e.g., "Familiar")
 5. Copy the key (starts with `sk-ant-...`)
-6. Add it in Familiar's Admin UI at `/admin`
+6. Add it to your `.env` file as `ANTHROPIC_API_KEY=sk-ant-...` and restart Docker
 
 **Pricing note:** Anthropic charges per token. Typical music library queries cost fractions of a cent. See [anthropic.com/pricing](https://www.anthropic.com/pricing) for current rates.
 
@@ -51,14 +51,14 @@ The Anthropic API powers the AI chat feature, allowing you to ask questions abou
 2. Create a new app
 3. Set redirect URI to `{FRONTEND_URL}/api/v1/spotify/callback` (e.g., `http://localhost:4400/api/v1/spotify/callback`)
 4. Copy Client ID and Client Secret
-5. Add them in Familiar's Admin UI at `/admin`
+5. Add them to your `.env` file as `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`, then restart Docker
 
 ### Last.fm
 
 1. Go to https://www.last.fm/api/account/create
 2. Create a new application
 3. Copy API Key and API Secret
-4. Add them in Familiar's Admin UI at `/admin`
+4. Add them to your `.env` file as `LASTFM_API_KEY` and `LASTFM_API_SECRET`, then restart Docker
 
 ## Tailscale HTTPS
 
@@ -112,7 +112,7 @@ Familiar includes an optional community cache that shares pre-computed audio ana
 - Popular tracks are analyzed once across the community
 - Your processing helps future users
 
-Configure in Admin (`/admin`) under Community Cache.
+Configure in **Settings** (gear icon) under **Library > Community Cache**.
 
 ## Cloud Backup
 

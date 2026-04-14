@@ -16,7 +16,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 > **Note:** The production compose file uses the `journald` logging driver (Linux-only). On macOS, use the [macOS guide](MACOS.md) or add the override: `docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d`
 
-Access at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
+Access at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
 
 **Music Library:** Set `MUSIC_LIBRARY_PATH` in `.env` to your music folder (e.g., `/srv/music`, `/volume1/music`, `~/Music`). It's mounted at `/music` inside the container.
 
@@ -64,7 +64,7 @@ Database migrations run automatically on startup.
    docker compose -f docker-compose.prod.yml up -d
    ```
 
-4. **Access the UI** at http://localhost:4400 and go to `/admin` to configure API keys.
+4. **Access the UI** at http://localhost:4400. API keys are set in your `.env` file — open **Settings** (gear icon) to start a library scan.
 
 ---
 
@@ -157,7 +157,7 @@ Familiar works great on OpenMediaVault NAS systems. Here's how to set it up.
 
 5. **Access Familiar:**
    - Open `http://your-omv-ip:4400` in a browser
-   - Go to `/admin` to configure API keys and start a scan
+   - Open **Settings** (gear icon) to start a library scan
 
 ### Optional: HTTPS Access via nginx Proxy
 
@@ -344,7 +344,7 @@ Familiar supports Synology NAS with Container Manager (DSM 7.2+) or Docker (olde
 
 6. **Access Familiar:**
    - Open `http://your-synology-ip:4400`
-   - Go to `/admin` to configure API keys and start a library scan
+   - Open **Settings** (gear icon) to start a library scan
 
 ### Updating on Synology
 

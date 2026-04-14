@@ -147,7 +147,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Access at http://localhost:4400, then go to `/admin` to configure API keys and start a library scan.
+Access at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
 
 **Running on macOS?** See the **[macOS Installation Guide](docs/MACOS.md)** — covers Docker Desktop setup, Apple Silicon, and music library paths.
 

@@ -150,14 +150,6 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
 }
 
 /**
- * Navigate to admin page
- */
-export async function navigateToAdmin(page: Page) {
-  await page.goto('/admin');
-  await page.waitForLoadState('networkidle');
-}
-
-/**
  * Get the audio element from the page
  */
 export async function getAudioElement(page: Page) {

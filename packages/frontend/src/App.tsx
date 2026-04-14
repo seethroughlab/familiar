@@ -274,8 +274,6 @@ function App() {
         <Routes>
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
-            {/* Legacy /admin redirect */}
-            <Route path="/admin" element={<Navigate to="/" replace />} />
             <Route path="/home" element={<HomeScreen />} />
             {/* Library browser views */}
             {BROWSER_ROUTES.map(({ path, browserId }) => (

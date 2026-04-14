@@ -84,7 +84,7 @@ The default 64GB disk image is sufficient for most users. If you have a very lar
 Once `start.sh` reports success:
 
 1. Open **http://localhost:4400** in your browser — you should see the Familiar interface
-2. Go to **http://localhost:4400/admin** to add your Anthropic API key (required for AI playlists)
+2. Ensure your **Anthropic API key** is set in your `.env` file (`ANTHROPIC_API_KEY=sk-ant-...`) — required for AI playlists
 3. In **Settings > Library Management**, verify your music library path is detected and start a scan
 
 **If nothing loads:** Check that Docker Desktop is still running and the containers are healthy:

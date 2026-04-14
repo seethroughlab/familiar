@@ -9,7 +9,7 @@ function decodeSegment(value: string): string {
 }
 
 export function classifyRecentDestination(pathname: string): Omit<RecentDestination, 'timestamp'> | null {
-  if (!pathname || pathname === '/' || pathname === '/home' || pathname === '/admin') {
+  if (!pathname || pathname === '/' || pathname === '/home') {
     return null;
   }
 
