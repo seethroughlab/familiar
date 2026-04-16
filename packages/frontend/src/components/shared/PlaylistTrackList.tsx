@@ -13,6 +13,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
 import { useLocalSort, useSortedTracks, buildGridColumns } from './PlaylistColumns';
 import { PlaylistColumnHeader } from './PlaylistColumnHeader';
+import { MobilePlaylistSortControl } from './MobilePlaylistSortControl';
 import { useClientAlphabetBar } from './useClientAlphabetBar';
 import { AlphabetBar } from '../Library/AlphabetBar';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
@@ -335,6 +336,15 @@ export function PlaylistTrackList<T>({
         toggleSort={toggleSort}
         clearSort={clearSort}
         trailingCount={trailingColumns.length}
+      />
+
+      {/* Mobile sort control */}
+      <MobilePlaylistSortControl
+        columns={columns}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        toggleSort={toggleSort}
+        clearSort={clearSort}
       />
 
       {/* Track rows (virtualized) — when using parent scroll, no inner scroll wrapper */}
