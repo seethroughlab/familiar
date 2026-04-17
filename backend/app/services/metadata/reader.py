@@ -127,14 +127,16 @@ def extract_metadata(file_path: Path) -> dict[str, Any]:
         "lyrics": None,
     }
 
+    # Always derive format from the extension first — even if mutagen fails
+    # to parse the file, we still want downstream code to know what kind of
+    # file this is.
+    suffix = file_path.suffix.lower()
+    metadata["format"] = suffix.lstrip(".")
+
     try:
         audio = mutagen.File(file_path, easy=True)  # type: ignore[attr-defined]
         if audio is None:
             return metadata
-
-        # Determine format
-        suffix = file_path.suffix.lower()
-        metadata["format"] = suffix.lstrip(".")
 
         # Get duration from audio info
         if hasattr(audio, "info") and audio.info:

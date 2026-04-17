@@ -352,6 +352,7 @@ class LibraryScanner:
             "recovered": 0,       # Previously missing, now found
             "relocated": 0,       # Found at different path
             "pending_review": 0,  # New tracks awaiting user review
+            "skipped_empty": 0,   # Zero-byte files rejected before insert
         }
 
         # Track IDs to queue for analysis after commit
@@ -363,6 +364,14 @@ class LibraryScanner:
         for file_path, file_stat in found_files_with_stats:
             path_str = str(file_path)
             processed += 1
+
+            # Reject zero-byte files before any DB work. mutagen.File() returns
+            # None on an empty file, leaving every metadata field (including format)
+            # null and producing a Track row that can never be analyzed.
+            if file_stat.st_size == 0:
+                logger.warning(f"SKIP (empty file, 0 bytes): {path_str}")
+                results["skipped_empty"] += 1
+                continue
 
             # Update progress state
             if self.scan_state and processed % 10 == 0:

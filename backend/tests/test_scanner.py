@@ -162,6 +162,23 @@ class TestMetadataExtraction:
         assert meta["artist"] == "Kevin MacLeod"
         assert meta["duration_seconds"] is not None
 
+    def test_extract_metadata_on_zero_byte_file_still_returns_format(self):
+        """Empty files make mutagen.File return None; format must still come from the extension."""
+        from app.services.metadata import extract_metadata
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            empty = Path(tmpdir) / "empty.flac"
+            empty.touch()
+            assert empty.stat().st_size == 0
+
+            meta = extract_metadata(empty)
+
+            assert meta["format"] == "flac"
+            assert meta["title"] is None
+            assert meta["artist"] is None
+            assert meta["album"] is None
+            assert meta["duration_seconds"] is None
+
 
 @pytest.mark.asyncio(loop_scope="function")
 class TestLibraryScanner:
@@ -486,6 +503,31 @@ class TestLibraryScanner:
             # Verify old paths are no longer in database
             for old_path in original_tracks.keys():
                 assert old_path not in new_paths, f"Old path {old_path} should not exist"
+
+    async def test_scan_rejects_zero_byte_files(self, clean_db):
+        """0-byte audio files must not create Track rows — they can never be analyzed
+        and leave NULL metadata behind. Regression test for track 336bbd9a:
+        a 0-byte placeholder FLAC produced a skipped Track row with all-NULL metadata.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            # One real track so the library isn't flagged as empty
+            shutil.copy(FIXTURES_DIR / "electronic_short.mp3", tmp_path / "real.mp3")
+            # One 0-byte placeholder that should be rejected
+            (tmp_path / "empty.flac").touch()
+
+            scanner = LibraryScanner(clean_db)
+            results = await scanner.scan(tmp_path)
+
+            assert results["total"] == 2
+            assert results["skipped_empty"] == 1
+            assert results["pending_review"] == 1
+
+            # Only the real track should exist in the DB
+            result = await clean_db.execute(select(Track))
+            tracks = list(result.scalars().all())
+            assert len(tracks) == 1
+            assert tracks[0].file_path.endswith("real.mp3")
 
     async def test_scan_discovers_all_nested_subfolders(self, clean_db):
         """Scanner should discover files in deeply nested subdirectory structures."""
