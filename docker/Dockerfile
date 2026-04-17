@@ -39,10 +39,13 @@ FROM python:3.11-slim AS python-base
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Set environment variables
+# UV_HTTP_TIMEOUT raised from default 30s to survive slow PyPI fetches on
+# self-hosted CI (safetensors/torch wheels are large and have timed out).
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=120
 
 WORKDIR /app
 
