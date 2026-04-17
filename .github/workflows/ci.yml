@@ -542,7 +542,7 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: [self-hosted, Linux]
-    timeout-minutes: 30
+    timeout-minutes: 60
     needs: [backend-lint, backend-test-contract, backend-test-core, backend-test-integration, frontend-lint, frontend-test]
     steps:
       - uses: actions/checkout@v4
@@ -557,7 +557,7 @@ jobs:
 
       - name: Build Docker image
         uses: docker/build-push-action@v6
-        timeout-minutes: 25
+        timeout-minutes: 55
         with:
           context: .
           file: docker/Dockerfile
