@@ -10,6 +10,13 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
+# Harden npm registry fetches against slow/flaky networks (self-hosted CI
+# has seen ETIMEDOUT downloading tarballs). Defaults: retries=2,
+# fetch-timeout=60s, fetch-retry-maxtimeout=60s.
+ENV NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
+    NPM_CONFIG_FETCH_TIMEOUT=600000
+
 # Copy workspace config and package files for dependency caching
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY packages/frontend/package.json packages/frontend/
