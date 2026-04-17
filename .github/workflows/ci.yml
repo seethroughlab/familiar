@@ -568,6 +568,19 @@ jobs:
           file: docker/Dockerfile
           push: false
           tags: familiar:test
+          # Persist buildx layer cache to a runner-local path so subsequent
+          # builds reuse pnpm install, apt-get, uv sync, torch wheels, etc.
+          # Without this, setup-buildx-action creates a new isolated builder
+          # every run and every layer is rebuilt from scratch.
+          cache-from: type=local,src=/tmp/familiar-buildx-cache
+          cache-to: type=local,dest=/tmp/familiar-buildx-cache-new,mode=max
+
+      - name: Rotate buildx cache
+        run: |
+          rm -rf /tmp/familiar-buildx-cache
+          if [ -d /tmp/familiar-buildx-cache-new ]; then
+            mv /tmp/familiar-buildx-cache-new /tmp/familiar-buildx-cache
+          fi
 
   e2e-test:
     name: E2E Tests (Playwright)
