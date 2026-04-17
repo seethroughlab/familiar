@@ -547,9 +547,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free up disk space
+      # Prune orphaned containers/networks/dangling images only — do NOT pass
+      # -a or --volumes, which would evict cached base images and the buildx
+      # layer cache. On the slow self-hosted Linux runner, a cold cache means
+      # a ~60m build (apt-get alone took 26m last run). Keeping cache warm is
+      # the difference between a 5m build and a timeout.
+      - name: Clean up dangling resources
         run: |
-          docker system prune -af --volumes || true
+          docker system prune -f || true
           df -h || true
 
       - name: Set up Docker Buildx
