@@ -157,7 +157,7 @@ jobs:
   backend-test-contract:
     name: Backend Test (Contract)
     runs-on: [self-hosted, Linux]
-    timeout-minutes: 8
+    timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
     defaults:
@@ -434,6 +434,10 @@ jobs:
   frontend-lint:
     name: Frontend Lint
     runs-on: self-hosted
+    env:
+      NPM_CONFIG_FETCH_RETRIES: '5'
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
+      NPM_CONFIG_FETCH_TIMEOUT: '600000'
     steps:
       - uses: actions/checkout@v4
 
@@ -463,6 +467,10 @@ jobs:
   frontend-test:
     name: Frontend Test
     runs-on: self-hosted
+    env:
+      NPM_CONFIG_FETCH_RETRIES: '5'
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
+      NPM_CONFIG_FETCH_TIMEOUT: '600000'
     steps:
       - uses: actions/checkout@v4
 
@@ -486,6 +494,10 @@ jobs:
   frontend-build:
     name: Frontend Build
     runs-on: self-hosted
+    env:
+      NPM_CONFIG_FETCH_RETRIES: '5'
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
+      NPM_CONFIG_FETCH_TIMEOUT: '600000'
     steps:
       - uses: actions/checkout@v4
 
@@ -558,6 +570,9 @@ jobs:
     needs: [docker-build]
     env:
       UV_HTTP_TIMEOUT: '120'
+      NPM_CONFIG_FETCH_RETRIES: '5'
+      NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
+      NPM_CONFIG_FETCH_TIMEOUT: '600000'
     services:
       postgres:
         image: pgvector/pgvector:pg16
