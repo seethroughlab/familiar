@@ -1,8 +1,22 @@
 /* @vitest-environment jsdom */
-import { act, renderHook } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { act, renderHook as rawRenderHook } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAudioEngine } from '../../player/useAudioEngine';
 import { usePlayerStore } from '../../player/playerStore';
+
+// useAudioEngine now calls useFavorites internally (for lock-screen heart sync),
+// so every render needs a QueryClientProvider.
+function renderHook<T>(callback: () => T) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  return rawRenderHook(callback, { wrapper });
+}
 
 type EngineEvent =
   | { type: 'ended' }
@@ -160,6 +174,21 @@ vi.mock('../../player/persistence', () => ({
   loadPlayerState: vi.fn(async () => null),
   fetchTracksBatched: vi.fn(async () => []),
   migrateOldPlayerState: vi.fn(async () => {}),
+}));
+
+// useAudioEngine reads favorites to sync the lock-screen heart. The real
+// useFavorites hook goes through React Query + offline status; mocking it
+// keeps these tests focused on player-store integration.
+vi.mock('../../hooks/useFavorites', () => ({
+  useFavorites: () => ({
+    favoriteIds: new Set<string>(),
+    isFavorite: () => false,
+    toggle: vi.fn(),
+    favorites: [],
+    total: 0,
+    isLoading: false,
+    usingCachedData: false,
+  }),
 }));
 
 describe('useAudioEngine + playerStore integration parity', () => {

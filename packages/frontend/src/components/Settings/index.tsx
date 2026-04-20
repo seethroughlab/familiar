@@ -18,6 +18,7 @@ import { S3BackupSettings } from './S3Backup';
 import { ServerSettings } from './ServerSettings';
 import { ShuffleWeightSettings } from './ShuffleWeightSettings';
 import { isNativeApp } from '../../utils/platform';
+import { areAudioEffectsAvailable } from '../../player/audio/engineInstance';
 
 export function SettingsPanel() {
   return (
@@ -94,7 +95,7 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <PlaybackSettings />
             <ShuffleWeightSettings />
-            <AudioEffectsSettings />
+            {areAudioEffectsAvailable() && <AudioEffectsSettings />}
           </div>
         </section>
 

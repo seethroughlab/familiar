@@ -1,22 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
 
-export interface AudioAnalysisMetricsPayload {
-  emittedAtMs: number;
-  cadenceHz: number;
-  binCount: number;
-  averageFrequency: number;
-  rms: number;
-  peak: number;
-  averageBinLevel: number;
-  variance: number;
-  strongestBinIndex: number;
-  strongestBinValue: number;
-  bass: number;
-  mid: number;
-  treble: number;
-}
-
 export interface FamiliarAudioPlugin {
   // Playback
   load(options: { url: string; trackId: string }): Promise<void>;
@@ -31,60 +15,21 @@ export interface FamiliarAudioPlugin {
   getDuration(): Promise<{ duration: number }>;
   getIsPlaying(): Promise<{ isPlaying: boolean }>;
 
-  // Effects
-  setEQ(options: {
-    lowGain: number;
-    midGain: number;
-    highGain: number;
-    lowFreq?: number;
-    midFreq?: number;
-    highFreq?: number;
-    enabled?: boolean;
-  }): Promise<void>;
-  setReverb(options: {
-    preset: string;
-    wetDryMix: number;
-    enabled: boolean;
-    preDelay?: number;
-  }): Promise<void>;
-  setDelay(options: {
-    time: number;
-    feedback: number;
-    wetDryMix: number;
-    enabled: boolean;
-    pingPong?: boolean;
-  }): Promise<void>;
-  setDistortion(options: {
-    preset: string;
-    wetDryMix: number;
-    enabled: boolean;
-    drive?: number;
-  }): Promise<void>;
-  setCompressor(options: {
-    threshold: number;
-    ratio: number;
-    attack: number;
-    release: number;
-    knee: number;
-    makeupGain: number;
-    enabled: boolean;
-  }): Promise<void>;
-  setFilter(options: {
-    highpassFreq: number;
-    lowpassFreq: number;
-    highpassQ: number;
-    lowpassQ: number;
-    enabled: boolean;
-  }): Promise<void>;
-  setMasterBypass(options: { bypassed: boolean }): Promise<void>;
-
   // Now Playing
   setNowPlayingInfo(options: {
     title: string;
     artist: string;
     album: string;
     artworkUrl?: string;
+    albumArtist?: string;
+    trackNumber?: number;
+    discNumber?: number;
+    year?: number;
+    isFavorite?: boolean;
   }): Promise<void>;
+
+  // Updates only the lock-screen favorite state without resetting full metadata
+  setFavoriteState(options: { trackId: string; isFavorite: boolean }): Promise<void>;
 
   // Crossfade
   preloadNext(options: { url: string; trackId: string }): Promise<{ success: boolean; state?: 'idle' | 'preloading' | 'ready' | 'failed'; reason?: string }>;
@@ -146,12 +91,8 @@ export interface FamiliarAudioPlugin {
     handler: (data: { time: number }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
-    event: 'audioAnalysis',
-    handler: (data: {
-      frequencyData: number[];
-      timeDomainData: number[];
-      metrics?: AudioAnalysisMetricsPayload;
-    }) => void,
+    event: 'favoriteToggled',
+    handler: (data: { trackId: string }) => void,
   ): Promise<PluginListenerHandle>;
   addListener(
     event: 'nativeAutoAdvanced',

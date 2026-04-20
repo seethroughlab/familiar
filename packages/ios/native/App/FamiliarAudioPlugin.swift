@@ -25,6 +25,7 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setFilter", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setMasterBypass", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setNowPlayingInfo", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setFavoriteState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPendingTrackInfo", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "preloadNext", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "preloadNextLocal", returnType: CAPPluginReturnPromise),
@@ -202,8 +203,32 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         let artist = call.getString("artist")
         let album = call.getString("album")
         let artworkUrl = call.getString("artworkUrl")
-        audioEngine.updateNowPlayingInfo(title: title, artist: artist, album: album)
+        let albumArtist = call.getString("albumArtist")
+        let trackNumber = call.getInt("trackNumber")
+        let discNumber = call.getInt("discNumber")
+        let year = call.getInt("year")
+        let isFavorite = call.getBool("isFavorite") ?? false
+        audioEngine.updateNowPlayingInfo(
+            title: title,
+            artist: artist,
+            album: album,
+            albumArtist: albumArtist,
+            trackNumber: trackNumber,
+            discNumber: discNumber,
+            year: year,
+            isFavorite: isFavorite
+        )
         audioEngine.updateNowPlayingArtwork(url: artworkUrl)
+        call.resolve()
+    }
+
+    @objc func setFavoriteState(_ call: CAPPluginCall) {
+        guard let trackId = call.getString("trackId") else {
+            call.reject("Missing trackId")
+            return
+        }
+        let isFavorite = call.getBool("isFavorite") ?? false
+        audioEngine.updateFavoriteState(trackId: trackId, isFavorite: isFavorite)
         call.resolve()
     }
 
@@ -354,6 +379,10 @@ extension FamiliarAudioPlugin: NativeAudioEngineDelegate {
 
     func audioEngineRemoteSeek(time: Double) {
         notifyListeners("remoteSeek", data: ["time": time])
+    }
+
+    func audioEngineFavoriteToggled(trackId: String) {
+        notifyListeners("favoriteToggled", data: ["trackId": trackId])
     }
 
     func audioEngineDidUpdateAnalysis(

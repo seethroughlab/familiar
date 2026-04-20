@@ -17,6 +17,7 @@ export type EngineEvent =
   | { type: 'remoteNext' }
   | { type: 'remotePrevious'; nativeAction?: 'restart' }
   | { type: 'remoteSeek'; time: number }
+  | { type: 'remoteFavoriteToggle'; trackId: string }
   | { type: 'nativeAutoAdvanced' };
 
 /**
@@ -67,7 +68,16 @@ export interface AudioEngine {
     artist: string;
     album: string;
     artworkUrl?: string;
+    albumArtist?: string;
+    trackNumber?: number;
+    discNumber?: number;
+    year?: number;
+    isFavorite?: boolean;
   }): void;
+
+  // Optional: Update the favorite state displayed on the lock screen without
+  // re-sending the full metadata (iOS only)
+  setFavoriteState?(trackId: string, isFavorite: boolean): void;
 
   // Optional: Pending track sync for lock screen (CapacitorEngine only)
   syncPendingTracks?(info: {
@@ -90,7 +100,7 @@ export interface AudioEngine {
   // Optional: Media session action availability (WebAudioEngine only)
   updateMediaSessionActions?(info: { canGoNext: boolean; canGoPrevious: boolean }): void;
 
-  // Optional: Visualizer (WebAudioEngine only)
+  // Optional: Visualizer + debug tooling (WebAudioEngine only)
   getAnalyser?(): AnalyserNode | null;
   getAudioContext?(): AudioContext | null;
   getMasterGainNode?(): GainNode | null;

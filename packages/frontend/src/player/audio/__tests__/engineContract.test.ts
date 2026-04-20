@@ -61,11 +61,6 @@ vi.mock('@familiar/frontend/src/services/offlineService', () => ({
   getOfflineTrackNativeUri: vi.fn(async () => null),
 }));
 
-vi.mock('@familiar/frontend/src/hooks/useAudioAnalyser', () => ({
-  setNativeAnalysisBuffers: vi.fn(),
-  clearNativeAnalysisBuffers: vi.fn(),
-}));
-
 vi.mock('@familiar/frontend/src/api', () => ({
   tracksApi: {
     getStreamUrl: (id: string) => `/api/v1/tracks/${id}/stream`,
@@ -73,7 +68,7 @@ vi.mock('@familiar/frontend/src/api', () => ({
 }));
 
 class WebLikeAdapter implements AudioEngine {
-  readonly capabilities = { crossfade: true, visualizer: true, effects: 'web' as const };
+  readonly capabilities = { crossfade: true };
   private loadedTrackId: string | null = null;
   private handlers = new Set<(event: EngineEvent) => void>();
   initialize(): boolean { return true; }

@@ -113,7 +113,6 @@
 
 ### Playback & Experience
 - **Synced lyrics** - Auto-scrolling lyrics display fetched from LRCLIB.net
-- **6 audio visualizers** - Cosmic Orb, Frequency Bars, Album Kaleidoscope, Rain Window, Lyrics, Music Video
 - **Music video playback** - Download and match music videos from YouTube
 - **Keyboard shortcuts** - Full keyboard control (press `?` for help)
 - **Multi-profile support** - Each household member gets their own favorites and history
@@ -191,9 +190,6 @@ Features planned for future releases:
 
 ### Listening Sessions (WebRTC) ([branch](https://github.com/seethroughlab/familiar/tree/feature/listening-sessions))
 Share what you're listening to with friends in real-time. Host a session, share a link, and guests hear synchronized audio - no account required. Requires public signaling server deployment.
-
-### Community Visualizer Plugins ([branch](https://github.com/seethroughlab/familiar/tree/feature/community-plugins))
-Open API for community-created visualizers. Install plugins like Lyric Pulse (BPM-synced lyrics) and Timeline (visual track position) or create your own.
 
 ### Multi-Room Audio
 Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.

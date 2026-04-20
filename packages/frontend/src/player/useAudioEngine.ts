@@ -8,6 +8,7 @@ import { showError } from '../stores/toastStore';
 import { getEngine } from './audio/engineInstance';
 import type { EngineEvent } from './audio/types';
 import { useActiveSessionStore } from '../stores/activeSessionStore';
+import { useFavorites } from '../hooks/useFavorites';
 import { log } from './audio/platform';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { prefetchService } from '../services/prefetchService';
@@ -60,6 +61,7 @@ function getAlbumKey(track: Track): string | null {
 export function useAudioEngine() {
   const [isInitialized, setIsInitialized] = useState(false);
   const engine = getEngine();
+  const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   const { currentTrack, isPlaying, volume, isLoadingAudio, crossfadeState, queueIndex, queueLength, historyLength } = usePlayerStore(
     useShallow((s) => ({
@@ -435,6 +437,10 @@ export function useAudioEngine() {
         case 'remoteSeek':
           setCurrentTime(event.time);
           break;
+
+        case 'remoteFavoriteToggle':
+          toggleFavorite(event.trackId);
+          break;
       }
     });
   }, [
@@ -449,6 +455,7 @@ export function useAudioEngine() {
     advanceToNextDownloadedTrack,
     stopForCircuitBreaker,
     setCrossfadeState,
+    toggleFavorite,
   ]);
 
   useEffect(() => {
@@ -512,8 +519,13 @@ export function useAudioEngine() {
       artist: currentTrack.artist || 'Unknown',
       album: currentTrack.album || 'Unknown',
       artworkUrl: currentTrack.id ? tracksApi.getArtworkUrl(currentTrack.id) : undefined,
+      albumArtist: currentTrack.album_artist ?? undefined,
+      trackNumber: currentTrack.track_number ?? undefined,
+      discNumber: currentTrack.disc_number ?? undefined,
+      year: currentTrack.year ?? undefined,
+      isFavorite: isFavorite(currentTrack.id),
     });
-  }, [currentTrack, engine]);
+  }, [currentTrack, engine, isFavorite]);
 
   // --------------------------------------------------------------------------
   // Effect: Sync media session action availability (Web only)

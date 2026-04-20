@@ -1,7 +1,6 @@
 /**
  * Library Browser types and registry.
  *
- * Follows the same pluggable pattern as the Visualizer API.
  * Browsers are registered at startup and can be selected by the user.
  */
 import type { ComponentType } from 'react';

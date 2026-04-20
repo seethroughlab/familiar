@@ -18,20 +18,19 @@ packages/
 │   └── src/
 │       ├── components/    # React components
 │       ├── hooks/         # Custom hooks (useFavorites, useAutoDownload, etc.)
-│       ├── stores/        # Zustand state stores (playerStore, downloadStore, audioEffectsStore)
+│       ├── stores/        # Zustand state stores (playerStore, downloadStore)
 │       ├── player/        # Audio engine abstraction, playback hooks
 │       ├── services/      # offlineService, playlistCache, syncService, profileService
 │       └── db/            # IndexedDB/Dexie storage
 ├── web/                   # Web entry point + Web Audio engine + PWA
 │   ├── src/
 │   │   ├── main.tsx       # Registers WebAudioEngine, sets up SW
-│   │   ├── WebAudioEngine.ts
-│   │   └── audioEffects/  # Web Audio effect processors (10 effects)
+│   │   └── WebAudioEngine.ts
 │   ├── e2e/               # Playwright E2E tests
 │   └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
 └── ios/                   # Capacitor + native Swift + iOS deploy
     ├── src/
-    │   ├── main.tsx       # Registers CapacitorEngine + native effects sync
+    │   ├── main.tsx       # Registers CapacitorEngine
     │   ├── CapacitorEngine.ts
     │   └── plugins/familiarAudio.ts
     ├── native/            # Xcode project + Swift code
@@ -63,14 +62,12 @@ backend/
 | Audio playback | `packages/frontend/src/player/useAudioEngine.ts` |
 | Web Audio engine | `packages/web/src/WebAudioEngine.ts` |
 | iOS Audio engine | `packages/ios/src/CapacitorEngine.ts` |
-| Audio effects (web) | `packages/web/src/audioEffects/` |
 | Player state | `packages/frontend/src/stores/playerStore.ts` |
 | Download queue | `packages/frontend/src/stores/downloadStore.ts` |
 | Offline storage | `packages/frontend/src/services/offlineService.ts` |
 | Playlist caching | `packages/frontend/src/services/playlistCache.ts` |
 | Favorites | `packages/frontend/src/hooks/useFavorites.ts` |
 | IndexedDB schema | `packages/frontend/src/db/index.ts` |
-| Visualizers | `packages/frontend/src/components/Visualizer/` |
 | Full player | `packages/frontend/src/components/FullPlayer/` |
 | Discovery | `packages/frontend/src/components/Discovery/` |
 | Smart playlists UI | `packages/frontend/src/components/SmartPlaylists/` |
@@ -83,7 +80,6 @@ backend/
 The frontend uses a **registration pattern** for platform-specific code. The shared `@familiar/frontend` package has zero `@capacitor` dependencies:
 
 - **`createEngine.ts`** — `registerEngineFactory(fn)` sets the audio engine constructor
-- **`audioEffectsStore.ts`** — `registerNativeEffectsSync(cb)` for iOS native effect sync
 - **`api/base.ts`** — `registerPreferencesProvider(p)` for Capacitor Preferences
 
 Each platform entry point (`packages/web/src/main.tsx`, `packages/ios/src/main.tsx`) registers its implementations before calling `renderApp()`.
@@ -136,7 +132,7 @@ Screenshots are saved to `screenshots/` directory. The script is in `packages/we
 To add new screenshots:
 1. Add a new test case to `screenshots.spec.ts`
 2. Use the `selectBrowser()` helper to switch library views
-3. Use `navigateToTab()` helper to switch between Library/Playlists/Settings/Visualizer
+3. Use `navigateToTab()` helper to switch between Library/Playlists/Settings
 4. Update README.md to include the new screenshot
 
 ## Configuration

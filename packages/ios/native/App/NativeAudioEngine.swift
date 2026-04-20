@@ -147,6 +147,7 @@ protocol NativeAudioEngineDelegate: AnyObject {
     func audioEngineRemoteNext(loadedTrackId: String?)
     func audioEngineRemotePrevious(nativeAction: String?, loadedTrackId: String?)
     func audioEngineRemoteSeek(time: Double)
+    func audioEngineFavoriteToggled(trackId: String)
 }
 
 struct NativeAudioAnalysisMetrics {
@@ -429,6 +430,11 @@ class NativeAudioEngine {
     private var nowPlayingTitle: String?
     private var nowPlayingArtist: String?
     private var nowPlayingAlbum: String?
+    private var nowPlayingAlbumArtist: String?
+    private var nowPlayingTrackNumber: Int?
+    private var nowPlayingDiscNumber: Int?
+    private var nowPlayingYear: Int?
+    private var nowPlayingIsFavorite: Bool = false
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var artworkDataTask: URLSessionDataTask?
     private var artworkFetchGeneration: UInt64 = 0
@@ -1489,6 +1495,18 @@ class NativeAudioEngine {
     /// auto-advances natively (works even when JS is suspended). Otherwise falls back
     /// to the delegate's `audioEngineDidFinishPlaying()` for JS-side handling.
     private func handleTrackEnd() {
+        // During an active crossfade the next player (B) is already scheduled
+        // and playing with a ramped-in volume; `finishCrossfade` promotes it
+        // to current and updates `currentTrackId`. If A's scheduleFile
+        // completion fires here (because A's file ran out during the
+        // crossfade), auto-advancing via `pendingNextUrl` would load B a
+        // second time into the active player and stomp the in-flight fade.
+        // Let the crossfade finish; it owns the transition.
+        if isCrossfadingFlag {
+            print("[FamiliarAudio] handleTrackEnd: ignored — crossfade in progress")
+            return
+        }
+
         if let url = pendingNextUrl, let trackId = pendingNextTrackId {
             let isLocal = url.hasPrefix("file://") || url.hasPrefix("capacitor://")
             print("[FamiliarAudio] handleTrackEnd: auto-advance to \(trackId) isLocal=\(isLocal)")
@@ -1636,13 +1654,69 @@ class NativeAudioEngine {
             return .success
         }
 
+        commandCenter.skipBackwardCommand.preferredIntervals = [15]
+        commandCenter.skipBackwardCommand.isEnabled = true
+        commandCenter.skipBackwardCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? 15
+            let target = max(0, self.getCurrentTime() - interval)
+            self.seek(time: target)
+            self.syncNowPlaying()
+            self.delegate?.audioEngineRemoteSeek(time: target)
+            return .success
+        }
+
+        commandCenter.skipForwardCommand.preferredIntervals = [15]
+        commandCenter.skipForwardCommand.isEnabled = true
+        commandCenter.skipForwardCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? 15
+            let duration = self.getDuration()
+            let target = duration > 0 ? min(duration, self.getCurrentTime() + interval) : self.getCurrentTime() + interval
+            self.seek(time: target)
+            self.syncNowPlaying()
+            self.delegate?.audioEngineRemoteSeek(time: target)
+            return .success
+        }
+
+        commandCenter.likeCommand.isEnabled = true
+        commandCenter.likeCommand.localizedTitle = "Favorite"
+        commandCenter.likeCommand.addTarget { [weak self] _ in
+            guard let self = self, let trackId = self.currentTrackId else { return .commandFailed }
+            // Optimistically flip local state so lock screen heart updates before JS round-trips
+            self.nowPlayingIsFavorite.toggle()
+            self.syncNowPlaying()
+            self.delegate?.audioEngineFavoriteToggled(trackId: trackId)
+            return .success
+        }
+
         updateRemoteCommandAvailability()
     }
 
-    func updateNowPlayingInfo(title: String?, artist: String?, album: String?) {
+    func updateNowPlayingInfo(
+        title: String?,
+        artist: String?,
+        album: String?,
+        albumArtist: String? = nil,
+        trackNumber: Int? = nil,
+        discNumber: Int? = nil,
+        year: Int? = nil,
+        isFavorite: Bool = false
+    ) {
         nowPlayingTitle = title
         nowPlayingArtist = artist
         nowPlayingAlbum = album
+        nowPlayingAlbumArtist = albumArtist
+        nowPlayingTrackNumber = trackNumber
+        nowPlayingDiscNumber = discNumber
+        nowPlayingYear = year
+        nowPlayingIsFavorite = isFavorite
+        syncNowPlaying()
+    }
+
+    func updateFavoriteState(trackId: String, isFavorite: Bool) {
+        guard currentTrackId == trackId else { return }
+        nowPlayingIsFavorite = isFavorite
         syncNowPlaying()
     }
 
@@ -1685,6 +1759,18 @@ class NativeAudioEngine {
         if let title = nowPlayingTitle { info[MPMediaItemPropertyTitle] = title }
         if let artist = nowPlayingArtist { info[MPMediaItemPropertyArtist] = artist }
         if let album = nowPlayingAlbum { info[MPMediaItemPropertyAlbumTitle] = album }
+        if let albumArtist = nowPlayingAlbumArtist { info[MPMediaItemPropertyAlbumArtist] = albumArtist }
+        if let trackNumber = nowPlayingTrackNumber { info[MPMediaItemPropertyAlbumTrackNumber] = trackNumber }
+        if let discNumber = nowPlayingDiscNumber { info[MPMediaItemPropertyDiscNumber] = discNumber }
+        if let year = nowPlayingYear {
+            var components = DateComponents()
+            components.year = year
+            components.month = 1
+            components.day = 1
+            if let date = Calendar(identifier: .gregorian).date(from: components) {
+                info[MPMediaItemPropertyReleaseDate] = date
+            }
+        }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = getCurrentTime()
         info[MPMediaItemPropertyPlaybackDuration] = getDuration()
         info[MPNowPlayingInfoPropertyPlaybackRate] = playerNode.isPlaying ? 1.0 : 0.0
@@ -1694,6 +1780,7 @@ class NativeAudioEngine {
         // nextTrackCommand/previousTrackCommand isEnabled flags.
         if let artwork = nowPlayingArtwork { info[MPMediaItemPropertyArtwork] = artwork }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPRemoteCommandCenter.shared().likeCommand.isActive = nowPlayingIsFavorite
         updateRemoteCommandAvailability()
     }
 

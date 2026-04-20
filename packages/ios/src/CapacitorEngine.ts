@@ -1,13 +1,5 @@
 import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familiar/frontend/src/player/audio/types';
-import {
-  FamiliarAudio,
-  type AudioAnalysisMetricsPayload,
-} from './plugins/familiarAudio';
-import { setNativeAnalysisBuffers, clearNativeAnalysisBuffers } from '@familiar/frontend/src/player/audio/nativeAnalysisBuffers';
-import {
-  recordBridgeAnalysisReceipt,
-  recordProducerAnalysisMetrics,
-} from '@familiar/frontend/src/player/audio/analysisDiagnostics';
+import { FamiliarAudio } from './plugins/familiarAudio';
 import { log } from '@familiar/frontend/src/player/audio/platform';
 import { tracksApi } from '@familiar/frontend/src/api';
 import { getOfflineTrackNativeUri } from '@familiar/frontend/src/services/offlineService';
@@ -24,8 +16,8 @@ type EngineDiagnostic = { ts: number; event: string; details?: Record<string, un
 export class CapacitorEngine implements AudioEngine {
   readonly capabilities: AudioEngineCapabilities = {
     crossfade: true,
-    visualizer: true,
-    effects: 'native',
+    visualizer: false,
+    effects: 'none',
   };
 
   // State
@@ -39,10 +31,6 @@ export class CapacitorEngine implements AudioEngine {
   private nextLoadedTrackId: string | null = null;
   private localPreloadingTrackId: string | null = null;
   private localIsCrossfading = false;
-
-  // Pre-allocated analysis buffers (reused each bridge event to avoid per-frame allocations)
-  private analysisFreqBuffer: Uint8Array | null = null;
-  private analysisTimeBuffer: Uint8Array | null = null;
 
   // Event subscribers
   private handlers: Set<EventHandler> = new Set();
@@ -63,9 +51,6 @@ export class CapacitorEngine implements AudioEngine {
   }
 
   dispose(): void {
-    clearNativeAnalysisBuffers();
-    this.analysisFreqBuffer = null;
-    this.analysisTimeBuffer = null;
     this.listenerCleanups.forEach(cleanup => cleanup());
     this.listenerCleanups = [];
     this.handlers.clear();
@@ -326,6 +311,11 @@ export class CapacitorEngine implements AudioEngine {
     artist: string;
     album: string;
     artworkUrl?: string;
+    albumArtist?: string;
+    trackNumber?: number;
+    discNumber?: number;
+    year?: number;
+    isFavorite?: boolean;
   }): void {
     try {
       FamiliarAudio.setNowPlayingInfo({
@@ -333,10 +323,21 @@ export class CapacitorEngine implements AudioEngine {
         artist: metadata.artist,
         album: metadata.album,
         artworkUrl: metadata.artworkUrl,
+        albumArtist: metadata.albumArtist,
+        trackNumber: metadata.trackNumber,
+        discNumber: metadata.discNumber,
+        year: metadata.year,
+        isFavorite: metadata.isFavorite,
       });
     } catch (e) {
       log.warn('Failed to set native now playing info', e);
     }
+  }
+
+  setFavoriteState(trackId: string, isFavorite: boolean): void {
+    FamiliarAudio.setFavoriteState({ trackId, isFavorite }).catch(e =>
+      log.warn('Failed to set favorite state on lock screen', e)
+    );
   }
 
   // ========================================================================
@@ -436,33 +437,10 @@ export class CapacitorEngine implements AudioEngine {
       this.emit({ type: 'remoteSeek', time: data.time });
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
-    // Audio analysis (native FFT data for visualizers)
-    FamiliarAudio.addListener('audioAnalysis', (data) => {
-      const freq: number[] = data.frequencyData;
-      const time: number[] = data.timeDomainData;
-      const metrics = data.metrics as AudioAnalysisMetricsPayload | undefined;
-      // Lazily allocate buffers, then reuse via element-wise copy
-      if (!this.analysisFreqBuffer || this.analysisFreqBuffer.length !== freq.length) {
-        this.analysisFreqBuffer = new Uint8Array(freq.length);
+    FamiliarAudio.addListener('favoriteToggled', (data) => {
+      if (data?.trackId) {
+        this.emit({ type: 'remoteFavoriteToggle', trackId: data.trackId });
       }
-      if (!this.analysisTimeBuffer || this.analysisTimeBuffer.length !== time.length) {
-        this.analysisTimeBuffer = new Uint8Array(time.length);
-      }
-      for (let i = 0; i < freq.length; i++) this.analysisFreqBuffer[i] = freq[i];
-      for (let i = 0; i < time.length; i++) this.analysisTimeBuffer[i] = time[i];
-      if (metrics) {
-        recordProducerAnalysisMetrics(metrics);
-      }
-      recordBridgeAnalysisReceipt(this.analysisFreqBuffer, this.analysisTimeBuffer);
-      this.recordDiagnostic('analysis-frame', {
-        binCount: this.analysisFreqBuffer.length,
-        strongestBinIndex: metrics?.strongestBinIndex,
-        strongestBinValue: metrics?.strongestBinValue,
-        bass: metrics?.bass,
-        mid: metrics?.mid,
-        treble: metrics?.treble,
-      });
-      setNativeAnalysisBuffers(this.analysisFreqBuffer, this.analysisTimeBuffer);
     }).then(h => this.listenerCleanups.push(() => h.remove()));
   }
 }

@@ -42,7 +42,8 @@ export function areAudioEffectsAvailable(): boolean {
 }
 
 export function isVisualizerAvailable(): boolean {
-  return true;
+  const e = getEngine();
+  return e.capabilities.visualizer;
 }
 
 export function getCurrentMode(): 'webaudio' | 'native' {

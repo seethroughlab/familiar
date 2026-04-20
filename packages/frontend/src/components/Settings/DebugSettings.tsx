@@ -246,7 +246,8 @@ export function DebugSettings() {
             </div>
           </div>
 
-          {/* Visualizer Debug */}
+          {/* Visualizer Debug — only meaningful where a visualizer exists (desktop) */}
+          {visualizerAvailable && (
           <div className="bg-zinc-900/50 rounded-lg p-3">
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -336,6 +337,7 @@ export function DebugSettings() {
               </div>
             )}
           </div>
+          )}
 
           {/* Download State */}
           <div className="bg-zinc-900/50 rounded-lg p-3">

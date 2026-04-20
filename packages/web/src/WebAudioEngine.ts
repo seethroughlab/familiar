@@ -348,6 +348,18 @@ export class WebAudioEngine implements AudioEngine {
           this.emit({ type: 'remoteSeek', time: details.seekTime });
         }
       });
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        const offset = details.seekOffset ?? 15;
+        const next = Math.max(0, this.getCurrentTime() - offset);
+        this.seek(next);
+        this.emit({ type: 'remoteSeek', time: next });
+      });
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        const offset = details.seekOffset ?? 15;
+        const next = Math.min(this.getDuration() || Number.MAX_SAFE_INTEGER, this.getCurrentTime() + offset);
+        this.seek(next);
+        this.emit({ type: 'remoteSeek', time: next });
+      });
     } catch (e) {
       log.warn('Failed to update media session', e);
     }
@@ -522,7 +534,7 @@ export class WebAudioEngine implements AudioEngine {
   }
 
   // ========================================================================
-  // Visualizer
+  // Visualizer + debug helpers
   // ========================================================================
 
   getAnalyser(): AnalyserNode | null {
