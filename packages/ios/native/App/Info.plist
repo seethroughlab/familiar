@@ -58,5 +58,13 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!--
+	NOTE: CarPlay scene manifest was tried here but broke the main window
+	(iOS enables scene-based lifecycle globally once UIApplicationSceneManifest
+	is present, which conflicts with the AppDelegate + UIMainStoryboardFile
+	setup). The Swift files (CarPlaySceneDelegate, RootTemplateBuilder) remain
+	in the target for a future re-enable, but need a companion MainSceneDelegate
+	before the manifest can ship. See eyes-off-04-carplay.md.
+	-->
 </dict>
 </plist>

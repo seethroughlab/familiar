@@ -24,6 +24,8 @@
 		FA001B022DB0000100000001 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA001B012DB0000100000001 /* ViewController.swift */; };
 		FA004A012DE7000100000001 /* AmbientSynthEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA004A022DE7000100000002 /* AmbientSynthEngine.swift */; };
 		FA004A032DE7000100000003 /* FamiliarAmbientSynthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA004A042DE7000100000004 /* FamiliarAmbientSynthPlugin.swift */; };
+		FA006A012DE8000100000001 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA006A022DE8000100000002 /* CarPlaySceneDelegate.swift */; };
+		FA006A032DE8000100000003 /* RootTemplateBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA006A042DE8000100000004 /* RootTemplateBuilder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +59,8 @@
 		FA001B012DB0000100000001 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		FA004A022DE7000100000002 /* AmbientSynthEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmbientSynthEngine.swift; sourceTree = "<group>"; };
 		FA004A042DE7000100000004 /* FamiliarAmbientSynthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FamiliarAmbientSynthPlugin.swift; sourceTree = "<group>"; };
+		FA006A022DE8000100000002 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		FA006A042DE8000100000004 /* RootTemplateBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTemplateBuilder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +110,14 @@
 			path = FamiliarAmbientSynth;
 			sourceTree = "<group>";
 		};
+		FA006A052DE8000100000005 /* CarPlay */ = {
+			isa = PBXGroup;
+			children = (
+				FA006A042DE8000100000004 /* RootTemplateBuilder.swift */,
+			);
+			path = CarPlay;
+			sourceTree = "<group>";
+		};
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -113,6 +125,8 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				FA001A012DB0000100000001 /* NativeAudioEngine.swift */,
 				FA001A032DB0000100000002 /* FamiliarAudioPlugin.swift */,
+				FA006A022DE8000100000002 /* CarPlaySceneDelegate.swift */,
+				FA006A052DE8000100000005 /* CarPlay */,
 				FA004A052DE7000100000005 /* FamiliarAmbientSynth */,
 				FA001B012DB0000100000001 /* ViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -253,6 +267,8 @@
 				FA001B022DB0000100000001 /* ViewController.swift in Sources */,
 				FA004A012DE7000100000001 /* AmbientSynthEngine.swift in Sources */,
 				FA004A032DE7000100000003 /* FamiliarAmbientSynthPlugin.swift in Sources */,
+				FA006A012DE8000100000001 /* CarPlaySceneDelegate.swift in Sources */,
+				FA006A032DE8000100000003 /* RootTemplateBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,7 +429,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 89;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -436,7 +452,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 89;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -457,7 +473,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 89;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = AppTests;
@@ -482,7 +498,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 88;
+				CURRENT_PROJECT_VERSION = 89;
 				DEVELOPMENT_TEAM = 7JL9RZ9C8P;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = AppTests;
