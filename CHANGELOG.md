@@ -5,6 +5,47 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha2] - 2026-04-17
+
+Second alpha — focused on first-run UX, Spotify workflow improvements, LLM discovery tools, and reliability hardening across audio playback, scanner, and CI/release infrastructure.
+
+### Added
+
+- **Home entry screen and onboarding prompts** for first-time users
+- **ARM64 native Docker support** — all dependencies including PyTorch now have arm64 wheels; release builds produce multi-arch manifest lists
+- **CLAP smoke tests** — standalone script and CI job verifying PyTorch + CLAP work on both amd64 and arm64
+- **New LLM tools** — new releases, discovery, and Spotify-unmatched track handling
+- **Spotify endpoints** — `GET /spotify/unmatched` and `GET /spotify/stats`
+- **Audio analysis diagnostics and metrics tracking** with iOS native analysis improvements
+- **Beginner-friendly macOS installation guide** with start.sh/stop.sh scripts, platform detection, pre-flight checks, 8GB RAM warnings, and post-start health check
+- **macOS Docker Compose override** switching journald logging to json-file (journald is Linux-only)
+- **Sortable track lists on mobile**
+- **Heavy pytest suite** (`FAMILIAR_HEAVY_TESTS=1`) for real CLAP inference
+- **macOS Docker Compose integration CI job** booting the full stack
+
+### Changed
+
+- **Unified Anthropic model selection** in backend
+- **Optimized Spotify sync** with artist pre-filtering and auto-favoriting
+- **FrequencyBars visualizer** — refined colors and intensity
+- **Release workflow fully moved to GitHub-hosted runners** with matrix-by-native-arch build (ubuntu-latest for amd64, ubuntu-24.04-arm for arm64), eliminating QEMU emulation
+- **iOS CI tests** now run on the self-hosted macOS runner
+- **CI hardened against transient network issues** — uv/pnpm caching, HTTP timeouts, fetch retries, persistent buildx cache, Dockerfile ENV for in-image package managers
+
+### Fixed
+
+- **0-byte audio files rejected in scanner** — no more stuck `skipped` tracks with NULL metadata
+- **Transcoding hardened** — per-track locking, error recovery, safer defaults; playback retries once before skipping on transcode/load errors
+- **Reduced audio clicking** by disconnecting idle effects from the audio graph
+- **Scroll-to-current-track** works correctly with lastPlayed sort and weighted shuffle
+- **Favorites listing** excludes non-active tracks
+- **Docs cleanup** — outdated `/admin` references replaced with current setup instructions; beginner guide uses ZIP download instead of `git clone`; `MUSIC_LIBRARY_PATH` documented in `.env.example`
+
+### Infrastructure
+
+- CI and release workflows follow a clear split: self-hosted runners for everyday CI, GitHub-hosted runners for cutting releases
+- Docker Build and E2E Tests in CI are advisory (`continue-on-error: true`) while the self-hosted NAS runner's upstream network is unreliable for long multi-stage builds
+
 ## [0.1.0-alpha1] - 2026-03-31
 
 First alpha release of Familiar — an LLM-powered local music player that combines library management with AI-powered discovery.
@@ -132,4 +173,5 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - Audio effects not available on iOS (require Web Audio routing which breaks background playback)
 
+[0.1.0-alpha2]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha2
 [0.1.0-alpha1]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha1
