@@ -5,6 +5,28 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha3] - 2026-04-22
+
+Third alpha — headline change is opt-in OpenAI-compatible LLM provider support alongside Anthropic, so installs can point at Groq, Together, OpenRouter, LocalAI, vLLM, llama.cpp, LM Studio, or Ollama's `/v1` endpoint. Also ships the public landing page at [familiar.seethroughlab.com](https://familiar.seethroughlab.com).
+
+### Added
+
+- **OpenAI-compatible LLM provider** — set `LLM_PROVIDER=openai` to route chat + playlist naming through any OpenAI-compatible server. Configurable `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional; defaults to api.openai.com), `OPENAI_CHAT_MODEL`, and `OPENAI_UTILITY_MODEL`
+- **Provider abstraction** for chat + utility LLM calls — service layer is no longer tied to the Anthropic SDK; each provider owns its own conversation-and-tool loop and yields a normalized event stream
+- **Tool-schema translation** — the 31 library tools are defined once and re-serialized to OpenAI function format at call time, with fallback for servers that reject `tool_choice="required"`
+- **LLM provider selection UI** — radio toggle in Settings > AI, OpenAI status row in the API Keys panel, provider-aware copy in the chat warning banner
+- **Diagnostics payload** now reports `llm_provider`, `has_openai_config`, and `active_provider_configured`
+- **Public landing page** at familiar.seethroughlab.com — restyled to match the app's visual identity, expanded install guidance, sticky Install CTA, GitHub Pages workflow
+
+### Changed
+
+- Chat readiness (`/chat/status`) and route guards now check the *selected* provider rather than assuming Anthropic, so selecting OpenAI mode without OpenAI credentials correctly reports `configured=false`
+- Exception sanitization recognizes both `anthropic.*Error` and `openai.*Error`, with auth-error copy that names the active provider
+
+### Compatibility
+
+- **Fully backward-compatible.** Default provider remains Anthropic; installs with only `ANTHROPIC_API_KEY` set see zero behavior change. No `settings.json` migration required — new fields default to null and fall back to env vars via existing precedence rules
+
 ## [0.1.0-alpha2] - 2026-04-17
 
 Second alpha — focused on first-run UX, Spotify workflow improvements, LLM discovery tools, and reliability hardening across audio playback, scanner, and CI/release infrastructure.
