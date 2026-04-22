@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Familiar — local music player that understands sound</title>
   <meta name="description" content="Self-hosted music player with AI-powered discovery. Describe what you want to hear and Familiar builds a playlist from your own collection.">
+  <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
   <link rel="stylesheet" href="./assets/site.css">
 </head>
 <body>
 <main>
 
-<div class="site-header">
-  <div class="site-header-accent"></div>
-  <div class="site-header-body">
-    <h1 class="site-title">familiar</h1>
-    <p class="site-tagline">A self-hosted music player that understands the <em>sound</em> of your music. Describe what you want to hear — get a playlist from your own collection.</p>
+<header class="hero">
+  <img src="./assets/icon.svg" alt="Familiar" class="hero-logo">
+  <div class="hero-body">
+    <h1 class="hero-title">Familiar</h1>
+    <p class="hero-tagline">A self-hosted music player that understands the <em>sound</em> of your music. Describe what you want to hear — get a playlist from your own collection.</p>
     <div class="nav-links">
       <a href="#install" class="primary">Install</a>
       <a href="#features">Features</a>
@@ -23,7 +24,7 @@
       <a href="https://github.com/seethroughlab/familiar/releases" target="_blank" rel="noopener">Releases</a>
     </div>
   </div>
-</div>
+</header>
 
 <section id="intro">
   <p><strong>Describe what you want to hear.</strong> Familiar understands the <em>sound</em> of your music, not just its metadata. Ask for "something that sounds like rain on a window" and it actually works.</p>
@@ -33,27 +34,29 @@
 
 <section id="comparison">
   <h2>How Familiar compares</h2>
-  <table>
-    <thead>
-      <tr><th></th><th>Familiar</th><th>Navidrome</th><th>Jellyfin</th><th>Plex</th></tr>
-    </thead>
-    <tbody>
-      <tr><td>AI chat + playlist creation</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-      <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-      <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td class="no">—</td><td>Basic</td><td>Basic</td></tr>
-      <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-      <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td></tr>
-      <tr><td>Music video playback</td><td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
-      <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="no">—</td><td class="yes">Yes</td></tr>
-      <tr><td>Mobile PWA</td><td class="yes">Yes</td><td>Web only</td><td>Web + apps</td><td>Apps</td></tr>
-    </tbody>
-  </table>
+  <div class="comparison">
+    <table>
+      <thead>
+        <tr><th></th><th>Familiar</th><th>Navidrome</th><th>Jellyfin</th><th>Plex</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>AI chat + playlist creation</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td class="no">—</td><td>Basic</td><td>Basic</td></tr>
+        <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td></tr>
+        <tr><td>Music video playback</td><td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+        <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="no">—</td><td class="yes">Yes</td></tr>
+        <tr><td>Mobile PWA</td><td class="yes">Yes</td><td>Web only</td><td>Web + apps</td><td>Apps</td></tr>
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section id="features">
   <h2>Features</h2>
 
-  <h3>Discovery &amp; Search</h3>
+  <p class="features-subhead">Discovery &amp; Search</p>
   <div class="features-grid">
     <div class="feature">
       <h3>Semantic audio search</h3>
@@ -81,7 +84,7 @@
     </div>
   </div>
 
-  <h3>Audio Analysis</h3>
+  <p class="features-subhead">Audio Analysis</p>
   <div class="features-grid">
     <div class="feature">
       <h3>CLAP embeddings</h3>
@@ -97,7 +100,7 @@
     </div>
   </div>
 
-  <h3>Playback &amp; Library</h3>
+  <p class="features-subhead">Playback &amp; Library</p>
   <div class="features-grid">
     <div class="feature">
       <h3>Offline PWA</h3>
@@ -123,21 +126,21 @@
 
   <p>Familiar runs as a Docker stack: FastAPI + PostgreSQL (pgvector) + Redis. Tested on macOS, Linux, OpenMediaVault, and Synology NAS.</p>
 
-  <div class="step">
-    <h3>1. Pull the stack</h3>
+  <div class="step" data-step="1">
+    <h3>Pull the stack</h3>
 <pre><code>git clone https://github.com/seethroughlab/familiar.git
 cd familiar/docker
 ./start.sh</code></pre>
     <p>The start script detects your platform, pulls images, and runs a health check.</p>
   </div>
 
-  <div class="step">
-    <h3>2. Open the UI</h3>
+  <div class="step" data-step="2">
+    <h3>Open the UI</h3>
     <p>Visit <code>http://localhost:4400</code>. The admin page walks you through API keys (Anthropic, Last.fm, AcoustID) and music library paths.</p>
   </div>
 
-  <div class="step">
-    <h3>3. Scan your library</h3>
+  <div class="step" data-step="3">
+    <h3>Scan your library</h3>
     <p>Point Familiar at a music folder in <strong>Settings → Library Management</strong>. It'll scan, fingerprint, and start extracting audio features in the background.</p>
   </div>
 
@@ -146,12 +149,12 @@ cd familiar/docker
   </div>
 
   <h3>Detailed guides</h3>
-  <ul>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a> — Docker, OpenMediaVault, Synology, development setup</li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/MACOS.md" target="_blank" rel="noopener">macOS Guide</a> — Docker Desktop, Apple Silicon, music library paths</li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/CONFIGURATION.md" target="_blank" rel="noopener">Configuration</a> — env vars, API keys, Tailscale HTTPS, cloud backup</li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a> — build custom 2D/3D library visualizations</li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/REST-API.md" target="_blank" rel="noopener">REST API</a> — backend API reference</li>
+  <ul class="doc-links">
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a><span class="desc">Docker, OpenMediaVault, Synology, dev setup</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/MACOS.md" target="_blank" rel="noopener">macOS Guide</a><span class="desc">Docker Desktop, Apple Silicon, library paths</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/CONFIGURATION.md" target="_blank" rel="noopener">Configuration</a><span class="desc">Env vars, API keys, Tailscale HTTPS, backup</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a><span class="desc">Build custom 2D/3D visualizations</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/REST-API.md" target="_blank" rel="noopener">REST API</a><span class="desc">Backend API reference</span></li>
   </ul>
 </section>
 
