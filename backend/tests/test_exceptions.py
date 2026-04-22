@@ -84,8 +84,9 @@ class TestSanitizeLLMErrors:
     """sanitize_error_for_client maps provider SDK errors to user-facing text."""
 
     def test_anthropic_auth_names_anthropic_when_anthropic_selected(self, monkeypatch):
-        import anthropic
         from unittest.mock import MagicMock
+
+        import anthropic
 
         from app.api.exceptions import sanitize_error_for_client
 
@@ -106,8 +107,9 @@ class TestSanitizeLLMErrors:
         assert "Anthropic" in msg
 
     def test_openai_auth_names_openai_when_openai_selected(self, monkeypatch):
-        import openai
         from unittest.mock import MagicMock
+
+        import openai
 
         from app.api.exceptions import sanitize_error_for_client
 
@@ -128,8 +130,9 @@ class TestSanitizeLLMErrors:
         assert "OpenAI" in msg
 
     def test_openai_rate_limit(self):
-        import openai
         from unittest.mock import MagicMock
+
+        import openai
 
         from app.api.exceptions import sanitize_error_for_client
 

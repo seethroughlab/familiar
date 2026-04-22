@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-
 # ---------- Anthropic fakes ----------
 
 class FakeTextBlock:
