@@ -410,6 +410,264 @@ footer {
 
 footer a { color: var(--text-secondary); }
 
+/* --- Version chip --- */
+
+.version-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding: 5px 12px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.version-chip:hover {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: var(--accent-green);
+  text-decoration: none;
+  color: var(--text-primary);
+}
+
+.version-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.8);
+}
+
+/* --- Section lede (used under section titles) --- */
+
+.section-lede {
+  color: var(--text-secondary);
+  font-size: 15px;
+  margin: -8px 0 20px;
+  max-width: 720px;
+}
+
+/* --- Requirements callout --- */
+
+.requirements {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent-green);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.requirements strong { color: var(--text-primary); }
+
+/* --- Ask Familiar prompt grid --- */
+
+.prompt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.prompt {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.prompt:hover {
+  border-color: var(--accent-purple);
+  transform: translateY(-1px);
+}
+
+.prompt-text {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.prompt-text::before {
+  content: "→ ";
+  color: var(--accent-purple);
+  font-style: normal;
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+.prompt-map {
+  display: block;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* --- Install alt details --- */
+
+.install-alt {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 12px 0;
+}
+
+.install-alt summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 14px;
+  list-style: none;
+  position: relative;
+  padding-left: 22px;
+}
+
+.install-alt summary::-webkit-details-marker { display: none; }
+
+.install-alt summary::before {
+  content: "+";
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-green);
+  font-weight: 700;
+  font-size: 16px;
+  transition: transform 0.15s;
+}
+
+.install-alt[open] summary::before { transform: rotate(45deg); }
+
+.install-alt p { margin: 10px 0 0; color: var(--text-secondary); font-size: 14px; }
+
+.install-alt pre { margin-top: 10px; }
+
+/* --- Remote access --- */
+
+.remote-panel {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent-green);
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin: 16px 0 20px;
+}
+
+.remote-panel h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+  color: var(--text-primary);
+}
+
+.remote-panel p {
+  margin: 10px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.remote-panel p:first-of-type { margin-top: 0; }
+
+.remote-why {
+  background: rgba(168, 85, 247, 0.06);
+  border: 1px solid rgba(168, 85, 247, 0.24);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 14px 0 !important;
+  font-size: 13px !important;
+}
+
+.remote-why strong { color: var(--accent-purple); }
+
+.remote-alts ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+.remote-alts li {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.remote-alts li strong { color: var(--text-primary); }
+
+/* --- FAQ --- */
+
+.faq { display: grid; gap: 8px; }
+
+.faq details {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px 18px;
+  transition: border-color 0.15s;
+}
+
+.faq details[open] { border-color: var(--text-muted); }
+
+.faq summary {
+  cursor: pointer;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 15px;
+  list-style: none;
+  position: relative;
+  padding-left: 26px;
+}
+
+.faq summary::-webkit-details-marker { display: none; }
+
+.faq summary::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid var(--accent-green);
+  border-bottom: 2px solid var(--accent-green);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.faq details[open] summary::before { transform: rotate(45deg); top: 5px; }
+
+.faq p {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* --- Responsive --- */
 
 @media (max-width: 700px) {
@@ -427,6 +685,8 @@ footer a { color: var(--text-secondary); }
 
   .step { padding-left: 60px; padding-right: 20px; }
   .step::before { left: 16px; width: 28px; height: 28px; font-size: 13px; }
+
+  .remote-panel { padding: 16px 18px; }
 
   h2 { font-size: 20px; }
 }

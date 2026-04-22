@@ -7,6 +7,17 @@
   <meta name="description" content="Self-hosted music player with AI-powered discovery. Describe what you want to hear and Familiar builds a playlist from your own collection.">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
   <link rel="stylesheet" href="./assets/site.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Familiar — local music player that understands sound">
+  <meta property="og:description" content="Self-hosted music player with AI-powered discovery. Describe what you want to hear and Familiar builds a playlist from your own collection.">
+  <meta property="og:image" content="https://familiar.seethroughlab.com/assets/og-image.png">
+  <meta property="og:url" content="https://familiar.seethroughlab.com/">
+  <meta property="og:site_name" content="Familiar">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Familiar — local music player that understands sound">
+  <meta name="twitter:description" content="Self-hosted music player with AI-powered discovery. Describe what you want to hear and Familiar builds a playlist from your own collection.">
+  <meta name="twitter:image" content="https://familiar.seethroughlab.com/assets/og-image.png">
 </head>
 <body>
 <main>
@@ -16,12 +27,16 @@
   <div class="hero-body">
     <h1 class="hero-title">Familiar</h1>
     <p class="hero-tagline">A self-hosted music player that understands the <em>sound</em> of your music. Describe what you want to hear — get a playlist from your own collection.</p>
+    <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/master/CHANGELOG.md" target="_blank" rel="noopener">
+      <span class="version-dot"></span> v0.1.0-alpha2 · 2026-04-17
+    </a>
     <div class="nav-links">
       <a href="#install" class="primary">Install</a>
       <a href="#features">Features</a>
-      <a href="#screenshots">Screenshots</a>
+      <a href="#ask">Ask Familiar</a>
+      <a href="#remote-access">Remote access</a>
+      <a href="#faq">FAQ</a>
       <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">GitHub</a>
-      <a href="https://github.com/seethroughlab/familiar/releases" target="_blank" rel="noopener">Releases</a>
     </div>
   </div>
 </header>
@@ -121,22 +136,64 @@
   </div>
 </section>
 
+<section id="ask">
+  <h2>Ask Familiar…</h2>
+  <p class="section-lede">Real prompts that map to real filters. The AI chat translates phrases like these into audio-feature queries across your library.</p>
+  <div class="prompt-grid">
+    <div class="prompt">
+      <p class="prompt-text">"Something chill for late-night coding"</p>
+      <code class="prompt-map">energy &lt; 0.4 · valence 0.3–0.6</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"Upbeat and danceable"</p>
+      <code class="prompt-map">energy &gt; 0.6 · valence &gt; 0.6 · danceability &gt; 0.5</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"Melancholy acoustic"</p>
+      <code class="prompt-map">valence &lt; 0.3 · acousticness &gt; 0.4</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"Dreamy / ambient"</p>
+      <code class="prompt-map">energy &lt; 0.3 · acousticness &gt; 0.4 · dynamic_range_min &lt; 10</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"Jazzy with a loose live feel"</p>
+      <code class="prompt-map">swing_min &gt; 0.3 · tempo_character = "breathing"</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"Beatmatch-safe house set"</p>
+      <code class="prompt-map">tempo_cv_max = 0.05</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"French lyrics only"</p>
+      <code class="prompt-map">lyrics_language = "fr"</code>
+    </div>
+    <div class="prompt">
+      <p class="prompt-text">"Aggressive and bright"</p>
+      <code class="prompt-map">energy &gt; 0.8 · brightness &gt; 0.6</code>
+    </div>
+  </div>
+</section>
+
 <section id="install">
   <h2>Install</h2>
 
-  <p>Familiar runs as a Docker stack: FastAPI + PostgreSQL (pgvector) + Redis. Tested on macOS, Linux, OpenMediaVault, and Synology NAS.</p>
+  <div class="requirements">
+    <strong>Requirements.</strong> Docker 24+, 2&nbsp;GB RAM minimum (4&nbsp;GB recommended), x86_64 or ARM64. Tested on macOS, Linux, OpenMediaVault, and Synology NAS. On 8&nbsp;GB Macs, set <code>DISABLE_CLAP_EMBEDDINGS=true</code>.
+  </div>
 
   <div class="step" data-step="1">
-    <h3>Pull the stack</h3>
-<pre><code>git clone https://github.com/seethroughlab/familiar.git
-cd familiar/docker
-./start.sh</code></pre>
-    <p>The start script detects your platform, pulls images, and runs a health check.</p>
+    <h3>Pull the prebuilt image and start the stack</h3>
+<pre><code>mkdir familiar &amp;&amp; cd familiar
+curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/master/docker/docker-compose.prod.yml
+curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/master/docker/init-pgvector.sql
+MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code></pre>
+    <p>Two files, one <code>compose up</code>. Uses the multi-arch image at <code>ghcr.io/seethroughlab/familiar:latest</code>.</p>
   </div>
 
   <div class="step" data-step="2">
     <h3>Open the UI</h3>
-    <p>Visit <code>http://localhost:4400</code>. The admin page walks you through API keys (Anthropic, Last.fm, AcoustID) and music library paths.</p>
+    <p>Visit <code>http://localhost:4400</code>. The admin page walks you through API keys (Anthropic for AI chat, optional Last.fm and AcoustID).</p>
   </div>
 
   <div class="step" data-step="3">
@@ -145,8 +202,23 @@ cd familiar/docker
   </div>
 
   <div class="note">
-    <strong>Analysis takes time.</strong> Expect roughly 1 second per track on modern hardware for the full analysis pipeline. A 20,000-track library is ~6 hours. The community cache short-circuits most of this.
+    <strong>Analysis takes time.</strong> Expect roughly 1 second per track on modern hardware. A 20,000-track library is ~6 hours. The community cache short-circuits most of this for music that's already been analyzed elsewhere.
   </div>
+
+  <details class="install-alt">
+    <summary>macOS? (journald swap + 8 GB RAM note)</summary>
+    <p>The production compose uses <code>journald</code> logging (Linux-only). On macOS, add the override:</p>
+<pre><code>docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d</code></pre>
+    <p>See the <a href="https://github.com/seethroughlab/familiar/blob/master/docs/MACOS.md" target="_blank" rel="noopener">macOS guide</a> for Apple Silicon notes and the <code>./start.sh</code> helper script.</p>
+  </details>
+
+  <details class="install-alt">
+    <summary>Build from source</summary>
+<pre><code>git clone https://github.com/seethroughlab/familiar.git
+cd familiar/docker
+./start.sh</code></pre>
+    <p>Builds the image locally with platform detection and a health check. Useful when you're developing against the backend.</p>
+  </details>
 
   <h3>Detailed guides</h3>
   <ul class="doc-links">
@@ -156,6 +228,64 @@ cd familiar/docker
     <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a><span class="desc">Build custom 2D/3D visualizations</span></li>
     <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/REST-API.md" target="_blank" rel="noopener">REST API</a><span class="desc">Backend API reference</span></li>
   </ul>
+</section>
+
+<section id="remote-access">
+  <h2>Listen from anywhere</h2>
+  <p class="section-lede">The goal is a private URL you can reach from your phone on cellular — not a public site. Don't port-forward <code>4400</code> to the open internet.</p>
+
+  <div class="remote-panel">
+    <h3>Recommended: Tailscale</h3>
+    <p>Install Tailscale on the server and each device you want to listen from, enable HTTPS certificates in the admin console, then run one command on the server:</p>
+<pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
+    <p>Visit <code>https://&lt;your-server&gt;.&lt;tailnet&gt;.ts.net</code> from any signed-in device — iPhone, laptop, TV. Tailscale provisions a Let's Encrypt cert automatically and renews it for you.</p>
+    <p class="remote-why"><strong>Why HTTPS matters:</strong> the iOS/Android PWA install prompt, service-worker caching, and "Add to Home Screen" only work over HTTPS. Plain <code>http://10.0.0.42:4400</code> does not.</p>
+    <p><a href="https://github.com/seethroughlab/familiar/blob/master/docs/CONFIGURATION.md#tailscale-https" target="_blank" rel="noopener">Full walkthrough in CONFIGURATION.md →</a></p>
+  </div>
+
+  <div class="remote-alts">
+    <p class="features-subhead">Also works with</p>
+    <ul>
+      <li><strong>Cloudflare Tunnel</strong> — if you want a stable public hostname routed through Cloudflare without opening a port.</li>
+      <li><strong>WireGuard</strong> — roll your own VPN; point your phone at the VPN and use the LAN URL.</li>
+      <li><strong>Reverse proxy</strong> (nginx, Caddy, Traefik) on a box with a real domain and cert.</li>
+      <li><strong>Any VPN you already run</strong> — anything that puts your phone on the same network as the server will do.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="faq">
+  <h2>FAQ</h2>
+  <div class="faq">
+    <details>
+      <summary>Do I need an API key?</summary>
+      <p>Yes for the AI chat — Familiar uses the Anthropic Claude API, and queries typically cost a fraction of a cent. Basic library browsing, playback, search, Mood Grid, Music Map, and 3D Explorer all work without an API key.</p>
+    </details>
+    <details>
+      <summary>What hardware do I need?</summary>
+      <p>See the <a href="#install">Requirements</a> callout above. A small NAS works — the author runs a 23k-track library on an OpenMediaVault box. Analysis is the heaviest workload; once a track is analyzed it doesn't need to be re-analyzed.</p>
+    </details>
+    <details>
+      <summary>Does my music or listening data leave my network?</summary>
+      <p>No. The opt-in community cache shares only one-way SHA-256 hashes of audio fingerprints — no track titles, artists, file paths, or listening history. You cannot reconstruct a library from the hashes. AI chat queries go to Anthropic (because that's where Claude runs); your audio files never leave your server.</p>
+    </details>
+    <details>
+      <summary>What happens if Claude is down?</summary>
+      <p>The chat panel is disabled until the API comes back. Everything else — browsing, searching, playback, similarity, smart playlists — is local and keeps working.</p>
+    </details>
+    <details>
+      <summary>How long does analysis take?</summary>
+      <p>Roughly 1 second per track on modern hardware, so a 20,000-track library is around 6 hours. The community cache short-circuits tracks that have been analyzed elsewhere, which can reduce a cold-start scan to minutes for popular music.</p>
+    </details>
+    <details>
+      <summary>Can I use the PWA on cellular / away from home?</summary>
+      <p>Yes — see <a href="#remote-access">Listen from anywhere</a>. Tailscale + HTTPS is the easiest path, and it's what unlocks "Add to Home Screen" on iOS and Android.</p>
+    </details>
+    <details>
+      <summary>Is there an iOS app?</summary>
+      <p>A Capacitor-based native build exists in <code>packages/ios/</code> with background audio, lock-screen controls, and CarPlay scaffolding. Public TestFlight isn't open yet — for now, the PWA over Tailscale is the shipping path.</p>
+    </details>
+  </div>
 </section>
 
 <section id="screenshots">
