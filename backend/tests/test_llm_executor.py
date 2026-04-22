@@ -10,7 +10,6 @@ from uuid import uuid4
 import pytest
 
 from app.services.llm.executor import ToolExecutor
-from app.services.llm.models import get_anthropic_model
 from app.services.llm.tools import MUSIC_TOOLS
 
 
@@ -136,30 +135,24 @@ class TestHelperMethods:
         assert len(result) == 5
 
     @pytest.mark.asyncio
-    async def test_generate_playlist_name_uses_shared_utility_model(self, executor):
-        """Playlist naming should use the centralized Anthropic model helper."""
-        message = MagicMock()
-        first_block = MagicMock()
-        first_block.text = "Midnight Drive"
-        message.content = [first_block]
+    async def test_generate_playlist_name_routes_through_provider(self, executor):
+        """Playlist naming should route through the active provider's utility call."""
+        mock_provider = MagicMock()
+        mock_provider.complete_utility = AsyncMock(return_value="Midnight Drive")
 
-        with patch("app.services.llm.executor.get_app_settings_service") as mock_settings:
-            settings = MagicMock()
-            settings.get_effective.return_value = "sk-test-key"
-            mock_settings.return_value = settings
-
-            with patch("app.services.llm.executor.anthropic.Anthropic") as mock_anthropic:
-                mock_client = MagicMock()
-                mock_client.messages.create.return_value = message
-                mock_anthropic.return_value = mock_client
-
-                name = await executor._generate_playlist_name_llm([
-                    {"artist": "Boards of Canada", "genre": "Ambient"},
-                    {"artist": "Autechre", "genre": "Electronic"},
-                ])
+        with patch(
+            "app.services.llm.providers.get_provider", return_value=mock_provider
+        ):
+            name = await executor._generate_playlist_name_llm([
+                {"artist": "Boards of Canada", "genre": "Ambient"},
+                {"artist": "Autechre", "genre": "Electronic"},
+            ])
 
         assert name == "Midnight Drive"
-        assert mock_client.messages.create.call_args.kwargs["model"] == get_anthropic_model("utility")
+        # Called with small max_tokens (short name) and a timeout appropriate for a utility call.
+        call_kwargs = mock_provider.complete_utility.call_args.kwargs
+        assert call_kwargs["max_tokens"] == 50
+        assert "prompt" in call_kwargs
 
 
 class TestQueuedTracksState:

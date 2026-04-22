@@ -78,3 +78,73 @@ def test_invalid_uuid_format(client: TestClient) -> None:
     """Test that invalid UUID format is rejected."""
     response = client.get("/api/v1/tracks/not-a-uuid")
     assert response.status_code == 422
+
+
+class TestSanitizeLLMErrors:
+    """sanitize_error_for_client maps provider SDK errors to user-facing text."""
+
+    def test_anthropic_auth_names_anthropic_when_anthropic_selected(self, monkeypatch):
+        import anthropic
+        from unittest.mock import MagicMock
+
+        from app.api.exceptions import sanitize_error_for_client
+
+        def fake_svc():
+            m = MagicMock()
+            m.get_active_provider.return_value = "anthropic"
+            return m
+
+        monkeypatch.setattr(
+            "app.services.app_settings.get_app_settings_service", fake_svc
+        )
+        err = anthropic.AuthenticationError(
+            message="bad",
+            response=MagicMock(status_code=401),
+            body={"error": {"message": "bad"}},
+        )
+        msg = sanitize_error_for_client(err)
+        assert "Anthropic" in msg
+
+    def test_openai_auth_names_openai_when_openai_selected(self, monkeypatch):
+        import openai
+        from unittest.mock import MagicMock
+
+        from app.api.exceptions import sanitize_error_for_client
+
+        def fake_svc():
+            m = MagicMock()
+            m.get_active_provider.return_value = "openai"
+            return m
+
+        monkeypatch.setattr(
+            "app.services.app_settings.get_app_settings_service", fake_svc
+        )
+        err = openai.AuthenticationError(
+            message="bad",
+            response=MagicMock(status_code=401),
+            body={"error": {"message": "bad"}},
+        )
+        msg = sanitize_error_for_client(err)
+        assert "OpenAI" in msg
+
+    def test_openai_rate_limit(self):
+        import openai
+        from unittest.mock import MagicMock
+
+        from app.api.exceptions import sanitize_error_for_client
+
+        err = openai.RateLimitError(
+            message="slow down",
+            response=MagicMock(status_code=429),
+            body={"error": {"message": "slow down"}},
+        )
+        assert "Rate limit" in sanitize_error_for_client(err)
+
+    def test_openai_connection_error(self):
+        import openai
+
+        from app.api.exceptions import sanitize_error_for_client
+
+        err = openai.APIConnectionError(request=None)  # type: ignore[arg-type]
+        msg = sanitize_error_for_client(err)
+        assert "connect" in msg.lower() or "connection" in msg.lower()

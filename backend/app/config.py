@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
 
+    # LLM provider selection and OpenAI-compatible endpoint config.
+    # Set LLM_PROVIDER=openai to route chat + utility calls through an OpenAI-compatible server
+    # (e.g. Groq, Together, OpenRouter, LocalAI, vLLM, llama.cpp, LM Studio, Ollama /v1).
+    # OPENAI_BASE_URL is optional — leave unset for api.openai.com. Model names are required.
+    llm_provider: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    openai_chat_model: str | None = None
+    openai_utility_model: str | None = None
+
     # S3 Backup
     s3_backup_access_key_id: str | None = None
     s3_backup_secret_access_key: str | None = None

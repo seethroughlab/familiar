@@ -1,217 +1,133 @@
 """Tests for the LLM service (llm/service.py).
 
-Tests cover Claude API integration, streaming chat flow, tool execution loop,
-error handling, and max_iterations cutoff.
+Service.py is provider-agnostic: it resolves a provider via get_provider(),
+delegates the conversation to it, and drains ToolExecutor state (queue /
+ephemeral playlist / playback) after the stream ends. Provider-specific loop
+behavior lives in test_llm_providers_*.py.
 """
 
+from collections.abc import AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
-from app.services.llm.models import get_anthropic_model
 from app.services.llm.service import LLMService
 
 
-class FakeTextBlock:
-    """Fake Claude text block."""
+class FakeProvider:
+    """Stand-in for an LLMProvider. Yields a caller-supplied list of events."""
 
-    def __init__(self, text: str):
-        self.type = "text"
-        self.text = text
-
-
-class FakeToolUseBlock:
-    """Fake Claude tool_use block."""
-
-    def __init__(self, name: str, tool_input: dict, tool_id: str | None = None):
-        self.type = "tool_use"
-        self.id = tool_id or f"tool_{uuid4().hex[:8]}"
+    def __init__(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        configured: bool = True,
+        name: str = "fake",
+    ):
+        self._events = events
+        self._configured = configured
         self.name = name
-        self.input = tool_input
+
+    def is_configured(self) -> bool:
+        return self._configured
+
+    async def chat(self, **_kwargs) -> AsyncIterator[dict[str, Any]]:
+        for e in self._events:
+            yield e
+
+    async def complete_utility(self, **_kwargs) -> str:
+        return ""
 
 
-class FakeResponse:
-    """Fake Claude API response."""
-
-    def __init__(self, content: list, stop_reason: str = "end_turn"):
-        self.content = content
-        self.stop_reason = stop_reason
-
-
-class TestLLMServiceInit:
-    """Tests for LLMService initialization."""
-
-    @patch("app.services.llm.service.get_app_settings_service")
-    @patch("app.services.llm.service.anthropic.Anthropic")
-    def test_init_loads_api_key(self, mock_anthropic, mock_settings):
-        """Service should load API key from settings on init."""
-        mock_settings_instance = MagicMock()
-        mock_settings_instance.get_effective.return_value = "sk-test-key"
-        mock_settings.return_value = mock_settings_instance
-
-        LLMService()
-
-        mock_settings_instance.get_effective.assert_called_once_with("anthropic_api_key")
-        mock_anthropic.assert_called_once()
-        call_kwargs = mock_anthropic.call_args.kwargs
-        assert call_kwargs["api_key"] == "sk-test-key"
-        # Should also have timeout configured
-        assert "timeout" in call_kwargs
-
-    @patch("app.services.llm.service.get_app_settings_service")
-    @patch("app.services.llm.service.anthropic.Anthropic")
-    def test_init_with_no_api_key(self, mock_anthropic, mock_settings):
-        """Service should still initialize with None API key."""
-        mock_settings_instance = MagicMock()
-        mock_settings_instance.get_effective.return_value = None
-        mock_settings.return_value = mock_settings_instance
-
-        LLMService()
-
-        mock_anthropic.assert_called_once()
-        call_kwargs = mock_anthropic.call_args.kwargs
-        assert call_kwargs["api_key"] is None
+def _make_service(events, *, configured=True):
+    """Build an LLMService with a fake provider and a stubbed executor."""
+    provider = FakeProvider(events, configured=configured)
+    with patch("app.services.llm.service.get_provider", return_value=provider):
+        service = LLMService()
+    return service
 
 
-class TestLLMServiceChat:
-    """Tests for the chat method and Claude API integration."""
-
-    @pytest.fixture
-    def mock_db(self):
-        """Create a mock database session."""
-        return AsyncMock()
-
-    @pytest.fixture
-    def mock_claude_client(self):
-        """Create a mock Claude client."""
-        return MagicMock()
-
-    @pytest.fixture
-    def service(self, mock_claude_client):
-        """Create LLMService with mocked Claude client."""
-        with patch("app.services.llm.service.get_app_settings_service") as mock_settings:
-            mock_settings_instance = MagicMock()
-            mock_settings_instance.get_effective.return_value = "sk-test-key"
-            mock_settings.return_value = mock_settings_instance
-
-            with patch("app.services.llm.service.anthropic.Anthropic") as mock_anthropic:
-                mock_anthropic.return_value = mock_claude_client
-                service = LLMService()
-                return service
-
+class TestServiceConfigurationGate:
     @pytest.mark.asyncio
-    async def test_chat_yields_error_when_no_client(self, mock_db):
-        """Should yield error event if claude_client is None."""
-        with patch("app.services.llm.service.get_app_settings_service") as mock_settings:
-            mock_settings_instance = MagicMock()
-            mock_settings_instance.get_effective.return_value = None
-            mock_settings.return_value = mock_settings_instance
+    async def test_yields_error_when_provider_not_configured(self):
+        mock_db = AsyncMock()
+        service = _make_service([], configured=False)
+        events = [e async for e in service.chat("hello", [], mock_db)]
+        assert len(events) == 1
+        assert events[0]["type"] == "error"
+        assert "not configured" in events[0]["content"]
 
-            with patch("app.services.llm.service.anthropic.Anthropic") as mock_anthropic:
-                mock_anthropic.return_value = None
-                service = LLMService()
-                service.claude_client = None
 
-                events = []
-                async for event in service.chat("hello", [], mock_db):
-                    events.append(event)
-
-                assert len(events) == 1
-                assert events[0]["type"] == "error"
-                assert "not configured" in events[0]["content"]
-
+class TestServiceEventPassthrough:
     @pytest.mark.asyncio
-    async def test_chat_simple_text_response(self, service, mock_claude_client, mock_db):
-        """Simple text response should yield text and done events."""
-        mock_claude_client.messages.create.return_value = FakeResponse(
-            content=[FakeTextBlock("Hello! How can I help you with music today?")],
-            stop_reason="end_turn",
-        )
-
-        events = []
-        async for event in service.chat("hello", [], mock_db):
-            events.append(event)
-
-        # Should have text event and done event
-        assert any(e["type"] == "text" for e in events)
-        assert events[-1]["type"] == "done"
-
-        text_event = next(e for e in events if e["type"] == "text")
-        assert "Hello" in text_event["content"]
-        assert mock_claude_client.messages.create.call_args.kwargs["model"] == get_anthropic_model("chat")
-
-    @pytest.mark.asyncio
-    async def test_chat_tool_use_flow(self, service, mock_claude_client, mock_db):
-        """Tool use should yield tool_call and tool_result events."""
-        # First response: tool use
-        tool_response = FakeResponse(
-            content=[FakeToolUseBlock("search_library", {"query": "jazz"})],
-            stop_reason="tool_use",
-        )
-        # Second response: final text
-        final_response = FakeResponse(
-            content=[FakeTextBlock("I found some jazz tracks for you!")],
-            stop_reason="end_turn",
-        )
-        mock_claude_client.messages.create.side_effect = [tool_response, final_response]
+    async def test_passes_through_provider_events(self):
+        mock_db = AsyncMock()
+        provider_events = [
+            {"type": "text", "content": "Hello!"},
+            {"type": "tool_call", "id": "t1", "name": "search_library", "input": {"query": "jazz"}},
+            {"type": "tool_result", "name": "search_library", "result": {"count": 1}},
+        ]
+        service = _make_service(provider_events)
 
         with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
             mock_executor = MagicMock()
-            # execute is async, so use AsyncMock for just that method
-            mock_executor.execute = AsyncMock(return_value={"tracks": [], "count": 0})
-            # These are sync methods
             mock_executor.get_queued_tracks.return_value = ([], True)
             mock_executor.get_auto_saved_playlist.return_value = None
             mock_executor.get_playback_action.return_value = None
-            mock_executor.get_navigate_hint.return_value = None
             mock_executor_class.return_value = mock_executor
 
-            events = []
-            async for event in service.chat("play some jazz", [], mock_db):
-                events.append(event)
+            out = [e async for e in service.chat("hi", [], mock_db)]
 
-            # Should have tool_call, tool_result, text, and done events
-            event_types = [e["type"] for e in events]
-            assert "tool_call" in event_types
-            assert "tool_result" in event_types
-            assert "text" in event_types
-            assert "done" in event_types
+        types = [e["type"] for e in out]
+        assert types[:3] == ["text", "tool_call", "tool_result"]
+        assert out[-1]["type"] == "done"
 
     @pytest.mark.asyncio
-    async def test_chat_queued_tracks_yield_queue_event(self, service, mock_claude_client, mock_db):
-        """When tool executor has queued tracks, should yield queue event."""
-        mock_claude_client.messages.create.return_value = FakeResponse(
-            content=[FakeTextBlock("Here's your music!")],
-            stop_reason="end_turn",
-        )
+    async def test_stops_drain_if_provider_emits_error(self):
+        """If the provider signals an error, skip the post-stream drain."""
+        mock_db = AsyncMock()
+        service = _make_service([{"type": "error", "content": "boom"}])
+
+        with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
+            mock_executor = MagicMock()
+            # These shouldn't be inspected (drain skipped), but stub anyway.
+            mock_executor.get_queued_tracks.return_value = ([{"id": "x"}], True)
+            mock_executor_class.return_value = mock_executor
+
+            out = [e async for e in service.chat("hi", [], mock_db)]
+
+        assert [e["type"] for e in out] == ["error"]
+
+
+class TestServicePostStreamDrain:
+    @pytest.mark.asyncio
+    async def test_emits_queue_event_when_tracks_queued(self):
+        mock_db = AsyncMock()
+        service = _make_service([{"type": "text", "content": "done"}])
 
         with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
             mock_executor = MagicMock()
             mock_executor.get_queued_tracks.return_value = (
-                [{"id": "track-1", "title": "Song"}],
+                [{"id": "t1", "title": "Song"}],
                 True,
             )
             mock_executor.get_auto_saved_playlist.return_value = None
             mock_executor.get_playback_action.return_value = None
             mock_executor_class.return_value = mock_executor
 
-            events = []
-            async for event in service.chat("play something", [], mock_db):
-                events.append(event)
+            out = [e async for e in service.chat("q", [], mock_db)]
 
-            queue_events = [e for e in events if e["type"] == "queue"]
-            assert len(queue_events) == 1
-            assert queue_events[0]["tracks"] == [{"id": "track-1", "title": "Song"}]
-            assert queue_events[0]["clear"] is True
+        queue = [e for e in out if e["type"] == "queue"]
+        assert len(queue) == 1
+        assert queue[0]["tracks"] == [{"id": "t1", "title": "Song"}]
+        assert queue[0]["clear"] is True
+        assert out[-1]["type"] == "done"
 
     @pytest.mark.asyncio
-    async def test_chat_ephemeral_playlist_created_yields_event(self, service, mock_claude_client, mock_db):
-        """When tool executor creates a playlist, should yield ephemeral_playlist_created event."""
-        mock_claude_client.messages.create.return_value = FakeResponse(
-            content=[FakeTextBlock("I created a playlist for you!")],
-            stop_reason="end_turn",
-        )
+    async def test_emits_ephemeral_playlist_event(self):
+        mock_db = AsyncMock()
+        service = _make_service([{"type": "text", "content": "done"}])
 
         with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
             mock_executor = MagicMock()
@@ -219,30 +135,24 @@ class TestLLMServiceChat:
             mock_executor.get_auto_saved_playlist.return_value = {
                 "ephemeral": True,
                 "name": "Jazz Mix",
-                "generation_prompt": "create a jazz playlist",
-                "track_ids": ["track-1", "track-2"],
-                "tracks": [{"id": "track-1"}, {"id": "track-2"}],
+                "generation_prompt": "jazz",
+                "track_ids": ["t1"],
+                "tracks": [{"id": "t1"}],
                 "suggested_tracks": [],
             }
             mock_executor.get_playback_action.return_value = None
             mock_executor_class.return_value = mock_executor
 
-            events = []
-            async for event in service.chat("create a jazz playlist", [], mock_db):
-                events.append(event)
+            out = [e async for e in service.chat("q", [], mock_db)]
 
-            playlist_events = [e for e in events if e["type"] == "ephemeral_playlist_created"]
-            assert len(playlist_events) == 1
-            assert playlist_events[0]["name"] == "Jazz Mix"
-            assert playlist_events[0]["track_ids"] == ["track-1", "track-2"]
+        pl = [e for e in out if e["type"] == "ephemeral_playlist_created"]
+        assert len(pl) == 1
+        assert pl[0]["name"] == "Jazz Mix"
 
     @pytest.mark.asyncio
-    async def test_chat_playback_action_yields_event(self, service, mock_claude_client, mock_db):
-        """When tool executor has playback action, should yield playback event."""
-        mock_claude_client.messages.create.return_value = FakeResponse(
-            content=[FakeTextBlock("Playing now!")],
-            stop_reason="end_turn",
-        )
+    async def test_emits_playback_action(self):
+        mock_db = AsyncMock()
+        service = _make_service([{"type": "text", "content": "done"}])
 
         with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
             mock_executor = MagicMock()
@@ -251,218 +161,8 @@ class TestLLMServiceChat:
             mock_executor.get_playback_action.return_value = "play"
             mock_executor_class.return_value = mock_executor
 
-            events = []
-            async for event in service.chat("play music", [], mock_db):
-                events.append(event)
+            out = [e async for e in service.chat("q", [], mock_db)]
 
-            playback_events = [e for e in events if e["type"] == "playback"]
-            assert len(playback_events) == 1
-            assert playback_events[0]["action"] == "play"
-
-
-class TestLLMServiceErrorHandling:
-    """Tests for error handling in the chat method."""
-
-    @pytest.fixture
-    def mock_db(self):
-        return AsyncMock()
-
-    @pytest.fixture
-    def service(self):
-        with patch("app.services.llm.service.get_app_settings_service") as mock_settings:
-            mock_settings_instance = MagicMock()
-            mock_settings_instance.get_effective.return_value = "sk-test-key"
-            mock_settings.return_value = mock_settings_instance
-
-            with patch("app.services.llm.service.anthropic.Anthropic"):
-                service = LLMService()
-                return service
-
-    @pytest.mark.asyncio
-    async def test_chat_handles_bad_request_error(self, service, mock_db):
-        """BadRequestError should yield error event with message."""
-        import anthropic
-
-        service.claude_client.messages.create.side_effect = anthropic.BadRequestError(
-            message="Invalid request",
-            response=MagicMock(status_code=400),
-            body={"error": {"message": "Invalid request"}},
-        )
-
-        events = []
-        async for event in service.chat("test", [], mock_db):
-            events.append(event)
-
-        assert len(events) == 1
-        assert events[0]["type"] == "error"
-        assert "API error" in events[0]["content"]
-
-    @pytest.mark.asyncio
-    async def test_chat_handles_auth_error(self, service, mock_db):
-        """AuthenticationError should yield error event about API key."""
-        import anthropic
-
-        service.claude_client.messages.create.side_effect = anthropic.AuthenticationError(
-            message="Invalid API key",
-            response=MagicMock(status_code=401),
-            body={"error": {"message": "Invalid API key"}},
-        )
-
-        events = []
-        async for event in service.chat("test", [], mock_db):
-            events.append(event)
-
-        assert len(events) == 1
-        assert events[0]["type"] == "error"
-        assert "Invalid API key" in events[0]["content"]
-
-    @pytest.mark.asyncio
-    async def test_chat_handles_generic_api_error(self, service, mock_db):
-        """Generic APIError should yield error event."""
-        import anthropic
-
-        service.claude_client.messages.create.side_effect = anthropic.APIError(
-            message="Rate limit exceeded",
-            request=MagicMock(),
-            body={"error": {"message": "Rate limit exceeded"}},
-        )
-
-        events = []
-        async for event in service.chat("test", [], mock_db):
-            events.append(event)
-
-        assert len(events) == 1
-        assert events[0]["type"] == "error"
-        assert "API error" in events[0]["content"]
-
-
-class TestLLMServiceMaxIterations:
-    """Tests for max_iterations cutoff to prevent infinite loops."""
-
-    @pytest.fixture
-    def mock_db(self):
-        return AsyncMock()
-
-    @pytest.fixture
-    def service(self):
-        with patch("app.services.llm.service.get_app_settings_service") as mock_settings:
-            mock_settings_instance = MagicMock()
-            mock_settings_instance.get_effective.return_value = "sk-test-key"
-            mock_settings.return_value = mock_settings_instance
-
-            with patch("app.services.llm.service.anthropic.Anthropic"):
-                service = LLMService()
-                return service
-
-    @pytest.mark.asyncio
-    async def test_chat_respects_max_iterations(self, service, mock_db):
-        """Should stop after max_iterations and yield any queued tracks."""
-        # Always return tool_use to force iteration
-        service.claude_client.messages.create.return_value = FakeResponse(
-            content=[FakeToolUseBlock("search_library", {"query": "test"})],
-            stop_reason="tool_use",
-        )
-
-        with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
-            mock_executor = MagicMock()
-            # execute is async
-            mock_executor.execute = AsyncMock(return_value={"tracks": [{"id": "t1"}], "count": 1})
-            # These are sync
-            mock_executor.get_queued_tracks.return_value = (
-                [{"id": "t1", "title": "Test"}],
-                True,
-            )
-            mock_executor.get_auto_saved_playlist.return_value = None
-            mock_executor.get_playback_action.return_value = None
-            mock_executor_class.return_value = mock_executor
-
-            events = []
-            async for event in service.chat("find all tracks", [], mock_db):
-                events.append(event)
-
-            # Should have hit max iterations (8)
-            call_count = service.claude_client.messages.create.call_count
-            assert call_count == 8
-
-            # Should end with queue event (if tracks found), text, and done
-            assert events[-1]["type"] == "done"
-            # Check for queue event before done
-            queue_events = [e for e in events if e["type"] == "queue"]
-            assert len(queue_events) > 0
-
-    @pytest.mark.asyncio
-    async def test_chat_yields_found_tracks_message_at_max_iterations(self, service, mock_db):
-        """At max iterations, should yield helpful message about found tracks."""
-        service.claude_client.messages.create.return_value = FakeResponse(
-            content=[FakeToolUseBlock("search_library", {"query": "test"})],
-            stop_reason="tool_use",
-        )
-
-        with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
-            mock_executor = MagicMock()
-            mock_executor.execute = AsyncMock(return_value={"tracks": [], "count": 0})
-            mock_executor.get_queued_tracks.return_value = (
-                [{"id": "t1", "title": "Test"}],
-                True,
-            )
-            mock_executor.get_auto_saved_playlist.return_value = None
-            mock_executor.get_playback_action.return_value = None
-            mock_executor_class.return_value = mock_executor
-
-            events = []
-            async for event in service.chat("find tracks", [], mock_db):
-                events.append(event)
-
-            # Should have text event with "found some tracks" message
-            text_events = [e for e in events if e["type"] == "text"]
-            found_message = any("found some tracks" in e["content"].lower() for e in text_events)
-            assert found_message
-
-
-class TestLLMServiceNavigationHint:
-    """Tests for navigation hint handling from tool results."""
-
-    @pytest.fixture
-    def mock_db(self):
-        return AsyncMock()
-
-    @pytest.fixture
-    def service(self):
-        with patch("app.services.llm.service.get_app_settings_service") as mock_settings:
-            mock_settings_instance = MagicMock()
-            mock_settings_instance.get_effective.return_value = "sk-test-key"
-            mock_settings.return_value = mock_settings_instance
-
-            with patch("app.services.llm.service.anthropic.Anthropic"):
-                service = LLMService()
-                return service
-
-    @pytest.mark.asyncio
-    async def test_chat_yields_navigate_event_from_tool_result(self, service, mock_db):
-        """Tool result with _navigate key should yield navigate event."""
-        service.claude_client.messages.create.side_effect = [
-            FakeResponse(
-                content=[FakeToolUseBlock("show_settings", {})],
-                stop_reason="tool_use",
-            ),
-            FakeResponse(
-                content=[FakeTextBlock("Opening settings.")],
-                stop_reason="end_turn",
-            ),
-        ]
-
-        with patch("app.services.llm.service.ToolExecutor") as mock_executor_class:
-            mock_executor = MagicMock()
-            mock_executor.execute = AsyncMock(return_value={"_navigate": "settings", "status": "ok"})
-            mock_executor.get_queued_tracks.return_value = ([], True)
-            mock_executor.get_auto_saved_playlist.return_value = None
-            mock_executor.get_playback_action.return_value = None
-            mock_executor_class.return_value = mock_executor
-
-            events = []
-            async for event in service.chat("open settings", [], mock_db):
-                events.append(event)
-
-            navigate_events = [e for e in events if e["type"] == "navigate"]
-            assert len(navigate_events) == 1
-            assert navigate_events[0]["view"] == "settings"
+        pb = [e for e in out if e["type"] == "playback"]
+        assert len(pb) == 1
+        assert pb[0]["action"] == "play"

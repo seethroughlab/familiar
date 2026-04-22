@@ -44,20 +44,14 @@ class TestAnthropicModelSelection:
 
 
 @pytest.mark.asyncio
-async def test_curated_prompts_uses_shared_utility_model() -> None:
+async def test_curated_prompts_routes_through_provider_utility() -> None:
+    """Curated prompts should route through the active provider's utility call."""
     db = AsyncMock()
     db.execute.side_effect = [
         _fake_execute_result([SimpleNamespace(genre="Ambient"), SimpleNamespace(genre="Electronic")]),
         _fake_execute_result([SimpleNamespace(artist="Boards of Canada"), SimpleNamespace(artist="Autechre")]),
     ]
     db.scalar.side_effect = [2400, 48]
-
-    message = MagicMock()
-    first_block = MagicMock()
-    first_block.text = (
-        '[{"prompt":"Help me rediscover my library.","context":"A familiar way back in.","icon":"music"}]'
-    )
-    message.content = [first_block]
 
     with patch("app.api.routes.library_discover.get_redis") as mock_redis:
         cache = MagicMock()
@@ -66,13 +60,18 @@ async def test_curated_prompts_uses_shared_utility_model() -> None:
 
         with patch("app.api.routes.library_discover.get_app_settings_service") as mock_settings:
             settings = MagicMock()
-            settings.get_effective.return_value = "sk-test-key"
+            settings.is_active_provider_configured.return_value = True
             mock_settings.return_value = settings
 
-            with patch("app.api.routes.library_discover.anthropic.Anthropic") as mock_anthropic:
-                mock_client = MagicMock()
-                mock_client.messages.create.return_value = message
-                mock_anthropic.return_value = mock_client
+            with patch("app.api.routes.library_discover.get_provider") as mock_get_provider:
+                mock_provider = MagicMock()
+                mock_provider.complete_utility = AsyncMock(
+                    return_value=(
+                        '[{"prompt":"Help me rediscover my library.",'
+                        '"context":"A familiar way back in.","icon":"music"}]'
+                    )
+                )
+                mock_get_provider.return_value = mock_provider
 
                 response = await get_curated_prompts(
                     db=db,
@@ -81,4 +80,5 @@ async def test_curated_prompts_uses_shared_utility_model() -> None:
                 )
 
     assert response.prompts[0].prompt == "Help me rediscover my library."
-    assert mock_client.messages.create.call_args.kwargs["model"] == get_anthropic_model("utility")
+    mock_provider.complete_utility.assert_called_once()
+    assert mock_provider.complete_utility.call_args.kwargs["max_tokens"] == 600

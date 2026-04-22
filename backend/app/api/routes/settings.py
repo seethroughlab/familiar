@@ -44,6 +44,13 @@ class SettingsResponse(BaseModel):
     anthropic_api_key: str | None
     acoustid_api_key: str | None
 
+    # LLM provider (non-secret; user-selectable)
+    llm_provider: str  # resolved: "anthropic" | "openai"
+    openai_api_key: str | None
+    openai_base_url: str | None
+    openai_chat_model: str | None
+    openai_utility_model: str | None
+
     # Analysis settings
     clap_embeddings_enabled: bool | None  # None = auto-detect
     clap_status: ClapStatus
@@ -72,6 +79,7 @@ class SettingsResponse(BaseModel):
     # Computed status fields
     lastfm_configured: bool
     anthropic_configured: bool
+    openai_configured: bool
     acoustid_configured: bool
     s3_backup_configured: bool
     music_library_configured: bool
@@ -85,6 +93,13 @@ class SettingsUpdateRequest(BaseModel):
     lastfm_api_secret: str | None = None
     anthropic_api_key: str | None = None
     acoustid_api_key: str | None = None
+
+    # LLM provider
+    llm_provider: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    openai_chat_model: str | None = None
+    openai_utility_model: str | None = None
 
     # Analysis settings
     clap_embeddings_enabled: bool | None = None
@@ -163,6 +178,14 @@ async def get_settings() -> SettingsResponse:
     masked["s3_backup_region"] = service.get_effective("s3_backup_region") or "us-east-1"
     masked["s3_backup_prefix"] = service.get_effective("s3_backup_prefix") or ""
 
+    # LLM provider: resolve via helper so a null settings.json value picks up env/default.
+    # OpenAI base_url + model names: show the effective value (env fallback) so the UI
+    # reflects what will actually be used. api_key stays masked (already in `masked`).
+    masked["llm_provider"] = service.get_active_provider()
+    masked["openai_base_url"] = service.get_effective("openai_base_url")
+    masked["openai_chat_model"] = service.get_effective("openai_chat_model")
+    masked["openai_utility_model"] = service.get_effective("openai_utility_model")
+
     # Get CLAP status
     clap_status_data = service.get_clap_status()
 
@@ -172,6 +195,7 @@ async def get_settings() -> SettingsResponse:
         clap_status=ClapStatus(**clap_status_data),
         lastfm_configured=service.has_lastfm_credentials(),
         anthropic_configured=service.has_anthropic_key(),
+        openai_configured=service.has_openai_config(),
         acoustid_configured=service.has_acoustid_key(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),
@@ -215,6 +239,14 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
     masked["s3_backup_region"] = service.get_effective("s3_backup_region") or "us-east-1"
     masked["s3_backup_prefix"] = service.get_effective("s3_backup_prefix") or ""
 
+    # LLM provider: resolve via helper so a null settings.json value picks up env/default.
+    # OpenAI base_url + model names: show the effective value (env fallback) so the UI
+    # reflects what will actually be used. api_key stays masked (already in `masked`).
+    masked["llm_provider"] = service.get_active_provider()
+    masked["openai_base_url"] = service.get_effective("openai_base_url")
+    masked["openai_chat_model"] = service.get_effective("openai_chat_model")
+    masked["openai_utility_model"] = service.get_effective("openai_utility_model")
+
     # Get CLAP status
     clap_status_data = service.get_clap_status()
 
@@ -224,6 +256,7 @@ async def update_settings(request: SettingsUpdateRequest) -> SettingsResponse:
         clap_status=ClapStatus(**clap_status_data),
         lastfm_configured=service.has_lastfm_credentials(),
         anthropic_configured=service.has_anthropic_key(),
+        openai_configured=service.has_openai_config(),
         acoustid_configured=service.has_acoustid_key(),
         s3_backup_configured=service.has_s3_credentials(),
         music_library_configured=service.has_music_library_configured(),

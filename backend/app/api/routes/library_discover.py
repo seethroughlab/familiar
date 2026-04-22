@@ -4,7 +4,6 @@ import json
 import logging
 from datetime import datetime
 
-import anthropic
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -12,7 +11,7 @@ from sqlalchemy import func, select
 from app.api.deps import DbSession, RequiredProfile
 from app.db.models import Track, TrackStatus
 from app.services.app_settings import get_app_settings_service
-from app.services.llm.models import get_anthropic_model
+from app.services.llm.providers import get_provider
 from app.services.redis_client import get_redis
 from app.utils.time import utcnow
 
@@ -180,22 +179,13 @@ Respond with ONLY a JSON array, no other text:
 [{{"prompt": "...", "context": "...", "icon": "..."}}]"""
 
     try:
-        api_key = get_app_settings_service().get_effective("anthropic_api_key")
-        if not api_key:
+        settings_service = get_app_settings_service()
+        if not settings_service.is_active_provider_configured():
             return CuratedPromptsResponse(prompts=[])
 
-        client = anthropic.Anthropic(api_key=api_key, timeout=15.0)
-        message = client.messages.create(
-            model=get_anthropic_model("utility"),
-            max_tokens=600,
-            messages=[{"role": "user", "content": llm_prompt}],
+        text = await get_provider().complete_utility(
+            prompt=llm_prompt, max_tokens=600, timeout_seconds=15.0
         )
-
-        text = ""
-        if message.content:
-            first_block = message.content[0]
-            if hasattr(first_block, "text"):
-                text = first_block.text.strip()
 
         # Parse JSON from response (handle markdown code blocks)
         if text.startswith("```"):

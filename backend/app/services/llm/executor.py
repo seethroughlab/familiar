@@ -6,12 +6,9 @@ import re
 from typing import Any
 from uuid import UUID
 
-import anthropic
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track
-from app.services.app_settings import get_app_settings_service
 
 from .handlers import (
     AnalysisHandlersMixin,
@@ -22,10 +19,6 @@ from .handlers import (
     PlaylistHandlersMixin,
     SearchHandlersMixin,
 )
-from .models import get_anthropic_model
-
-# Timeout for LLM calls (shorter for playlist name generation)
-_PLAYLIST_NAME_TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)
 
 logger = logging.getLogger(__name__)
 
@@ -175,28 +168,19 @@ Rules:
 Respond with ONLY the playlist name, nothing else."""
 
         try:
-            api_key = get_app_settings_service().get_effective("anthropic_api_key")
-            if not api_key:
-                raise ValueError("No API key")
+            from .providers import get_provider
 
-            anthropic_client = anthropic.Anthropic(api_key=api_key, timeout=_PLAYLIST_NAME_TIMEOUT)
-            message = anthropic_client.messages.create(
-                model=get_anthropic_model("utility"),
-                max_tokens=50,
-                messages=[{"role": "user", "content": prompt}],
+            name = await get_provider().complete_utility(
+                prompt=prompt, max_tokens=50, timeout_seconds=30.0
             )
-            name = ""
-            if message.content:
-                first_block = message.content[0]
-                if hasattr(first_block, "text"):
-                    name = first_block.text.strip()
-
             name = name.strip('"\'').strip()
             logger.info(f"LLM generated playlist name: '{name}'")
             if name and len(name) <= 50 and not any(c in name for c in [":", "\n", '"']):
                 return name
             else:
-                logger.warning(f"Generated name rejected (empty, too long, or invalid chars): '{name}'")
+                logger.warning(
+                    f"Generated name rejected (empty, too long, or invalid chars): '{name}'"
+                )
 
         except Exception as e:
             logger.warning(f"LLM playlist name generation failed: {e}")

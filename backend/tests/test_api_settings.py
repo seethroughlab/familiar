@@ -161,3 +161,60 @@ def test_partial_update(
 
     assert data["anthropic_api_key"] is not None  # Still set
     assert data["community_cache_enabled"] is False  # Updated
+
+
+def test_llm_provider_defaults_to_anthropic(
+    client: TestClient,
+    mock_settings_service: AppSettingsService,
+) -> None:
+    """When nothing is set, the settings response should report 'anthropic'."""
+    response = client.get("/api/v1/settings")
+    data = response.json()
+    assert data["llm_provider"] == "anthropic"
+    assert data["openai_configured"] is False
+    assert data["openai_api_key"] is None
+
+
+def test_llm_provider_round_trip(
+    client: TestClient,
+    mock_settings_service: AppSettingsService,
+) -> None:
+    """The openai_* fields should round-trip through PUT/GET (key masked)."""
+    response = client.put(
+        "/api/v1/settings",
+        json={
+            "llm_provider": "openai",
+            "openai_api_key": "sk-oa-test123456789",
+            "openai_base_url": "https://api.groq.com/openai/v1",
+            "openai_chat_model": "llama-3.3-70b-versatile",
+            "openai_utility_model": "llama-3.1-8b-instant",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["llm_provider"] == "openai"
+    assert data["openai_base_url"] == "https://api.groq.com/openai/v1"
+    assert data["openai_chat_model"] == "llama-3.3-70b-versatile"
+    assert data["openai_utility_model"] == "llama-3.1-8b-instant"
+    # Key must be masked (matches anthropic_api_key convention)
+    assert data["openai_api_key"].startswith("sk-o")
+    assert "•" in data["openai_api_key"]
+    assert data["openai_configured"] is True
+
+
+def test_openai_configured_requires_model_names(
+    client: TestClient,
+    mock_settings_service: AppSettingsService,
+) -> None:
+    """base_url is optional, but model names must be set to count as configured."""
+    response = client.put(
+        "/api/v1/settings",
+        json={
+            "llm_provider": "openai",
+            "openai_api_key": "sk-oa-test",
+            # chat/utility models omitted
+        },
+    )
+    data = response.json()
+    assert data["openai_configured"] is False

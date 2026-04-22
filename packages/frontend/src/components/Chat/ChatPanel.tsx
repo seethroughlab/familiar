@@ -514,9 +514,14 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
             <div className="p-3 bg-amber-900/20 border border-amber-800 rounded-lg flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm text-amber-400">AI assistant not configured</p>
+                <p className="text-sm text-amber-400">
+                  AI assistant not configured
+                  {llmStatus.provider ? ` (${llmStatus.provider})` : ''}
+                </p>
                 <p className="text-xs text-zinc-500 mt-1">
-                  Configure your API key in the Admin panel to enable the chat.
+                  {llmStatus.provider === 'openai'
+                    ? 'Set OPENAI_API_KEY, OPENAI_CHAT_MODEL, and OPENAI_UTILITY_MODEL in docker-compose to enable the chat.'
+                    : 'Set ANTHROPIC_API_KEY in docker-compose to enable the chat.'}
                 </p>
               </div>
             </div>

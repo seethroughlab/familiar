@@ -17,7 +17,9 @@ Settings by Source
 - music_library_paths
 
 **Admin UI with env fallback**:
-- anthropic_api_key, spotify_client_id, spotify_client_secret
+- llm_provider, anthropic_api_key
+- openai_api_key, openai_base_url, openai_chat_model, openai_utility_model
+- spotify_client_id, spotify_client_secret
 - lastfm_api_key, lastfm_api_secret, acoustid_api_key
 - s3_backup_access_key_id, s3_backup_secret_access_key
 - s3_backup_bucket, s3_backup_region, s3_backup_prefix
@@ -49,7 +51,14 @@ class AppSettings(BaseModel):
     lastfm_api_secret: str | None = None
 
     # LLM Settings
+    # Provider selector: None means "use env var or default to anthropic" (see get_active_provider).
+    # Do NOT set a default value here — it would beat env-var precedence in get_effective().
+    llm_provider: str | None = None  # "anthropic" | "openai"
     anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None  # None => api.openai.com
+    openai_chat_model: str | None = None
+    openai_utility_model: str | None = None
 
     # Audio fingerprinting
     acoustid_api_key: str | None = None  # Get free key at https://acoustid.org/new-application
@@ -158,7 +167,7 @@ class AppSettingsService:
         # Keys that contain secrets and should be masked
         secret_keys = {
             "lastfm_api_key", "lastfm_api_secret",
-            "anthropic_api_key", "acoustid_api_key",
+            "anthropic_api_key", "openai_api_key", "acoustid_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
         }
 
@@ -183,6 +192,33 @@ class AppSettingsService:
     def has_anthropic_key(self) -> bool:
         """Check if Anthropic API key is configured (from settings.json or env vars)."""
         return bool(self.get_effective("anthropic_api_key"))
+
+    def get_active_provider(self) -> str:
+        """Return the active LLM provider name.
+
+        Defaults to 'anthropic' when unset. The resolution happens here (not as a
+        Pydantic default) so env-var precedence in get_effective() works correctly.
+        """
+        return self.get_effective("llm_provider") or "anthropic"
+
+    def has_openai_config(self) -> bool:
+        """Check if OpenAI-compatible provider is fully configured.
+
+        Requires api key, chat model, and utility model. base_url is optional
+        (empty means api.openai.com).
+        """
+        return bool(
+            self.get_effective("openai_api_key")
+            and self.get_effective("openai_chat_model")
+            and self.get_effective("openai_utility_model")
+        )
+
+    def is_active_provider_configured(self) -> bool:
+        """Check if the selected provider (not any provider) has what it needs."""
+        provider = self.get_active_provider()
+        if provider == "openai":
+            return self.has_openai_config()
+        return self.has_anthropic_key()
 
     def has_acoustid_key(self) -> bool:
         """Check if AcoustID API key is configured (from settings.json or env vars)."""
@@ -239,7 +275,12 @@ class AppSettingsService:
 
         # Settings that can come from either source
         dual_source_keys = [
+            "llm_provider",
             "anthropic_api_key",
+            "openai_api_key",
+            "openai_base_url",
+            "openai_chat_model",
+            "openai_utility_model",
             "lastfm_api_key",
             "lastfm_api_secret",
             "acoustid_api_key",

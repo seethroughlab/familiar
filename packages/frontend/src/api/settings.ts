@@ -13,8 +13,15 @@ export interface AppSettingsResponse {
   lastfm_api_key: string | null;
   lastfm_api_secret: string | null;
   anthropic_api_key: string | null;
+  // LLM provider
+  llm_provider: string; // "anthropic" | "openai"
+  openai_api_key: string | null;
+  openai_base_url: string | null;
+  openai_chat_model: string | null;
+  openai_utility_model: string | null;
   lastfm_configured: boolean;
   anthropic_configured: boolean;
+  openai_configured: boolean;
   acoustid_configured: boolean;
   // Community cache
   community_cache_enabled: boolean;
@@ -39,6 +46,12 @@ export interface AppSettingsUpdate {
   lastfm_api_key?: string;
   lastfm_api_secret?: string;
   anthropic_api_key?: string;
+  // LLM provider
+  llm_provider?: string;
+  openai_api_key?: string;
+  openai_base_url?: string;
+  openai_chat_model?: string;
+  openai_utility_model?: string;
   // Community cache
   community_cache_enabled?: boolean;
   community_cache_contribute?: boolean;

@@ -222,14 +222,27 @@ def sanitize_error_for_client(
         A user-friendly error message safe for client display
     """
     import anthropic
+    import openai
+
+    from app.services.app_settings import get_app_settings_service
 
     # Handle our custom exceptions - use their message
     if isinstance(exception, FamiliarError):
         return exception.message
 
+    # Name the active provider in auth-error copy so users fix the right key.
+    try:
+        provider_label = (
+            "OpenAI"
+            if get_app_settings_service().get_active_provider() == "openai"
+            else "Anthropic"
+        )
+    except Exception:
+        provider_label = "Anthropic"
+
     # Handle Anthropic API errors with user-friendly messages
     if isinstance(exception, anthropic.AuthenticationError):
-        return "Invalid API key. Check your Anthropic API key in Settings."
+        return f"Invalid API key. Check your {provider_label} API key in Settings."
 
     if isinstance(exception, anthropic.RateLimitError):
         return "Rate limit exceeded. Please wait a moment and try again."
@@ -247,6 +260,28 @@ def sanitize_error_for_client(
         return "The AI request timed out. Please try again."
 
     if isinstance(exception, anthropic.APIError):
+        return "An error occurred with the AI service. Please try again."
+
+    # Handle OpenAI API errors (covers any OpenAI-compatible endpoint).
+    if isinstance(exception, openai.AuthenticationError):
+        return f"Invalid API key. Check your {provider_label} API key in Settings."
+
+    if isinstance(exception, openai.RateLimitError):
+        return "Rate limit exceeded. Please wait a moment and try again."
+
+    if isinstance(exception, openai.BadRequestError):
+        return "The request could not be processed. Please try rephrasing."
+
+    if isinstance(exception, openai.APIConnectionError):
+        return "Could not connect to the AI service. Check your base URL and network."
+
+    if isinstance(exception, openai.APITimeoutError):
+        return "The AI request timed out. Please try again."
+
+    if isinstance(exception, openai.APIStatusError):
+        return "The AI service is temporarily unavailable. Please try again later."
+
+    if isinstance(exception, openai.APIError):
         return "An error occurred with the AI service. Please try again."
 
     # Handle common Python exceptions

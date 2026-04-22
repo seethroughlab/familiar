@@ -1,4 +1,4 @@
-import { Sparkles, Library, Music2 } from 'lucide-react';
+import { Sparkles, Library, Music2, Cloud, Server } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { appSettingsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
@@ -23,9 +23,16 @@ export function AISettings() {
   });
 
   const discoveryMode = settings?.playlist_discovery_mode ?? 'suggest_missing';
+  const llmProvider = settings?.llm_provider ?? 'anthropic';
+  const activeProviderConfigured =
+    llmProvider === 'openai' ? settings?.openai_configured : settings?.anthropic_configured;
 
   const handleModeChange = (mode: string) => {
     updateMutation.mutate({ playlist_discovery_mode: mode });
+  };
+
+  const handleProviderChange = (provider: string) => {
+    updateMutation.mutate({ llm_provider: provider });
   };
 
   if (isLoading) {
@@ -37,6 +44,94 @@ export function AISettings() {
   }
 
   return (
+    <div className="space-y-4">
+    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-4">
+      {/* LLM provider header */}
+      <div className="flex items-center gap-3">
+        <Sparkles className="w-5 h-5 text-purple-400" />
+        <div>
+          <h4 className="font-medium text-white dark:text-white light:text-zinc-900">
+            LLM Provider
+          </h4>
+          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+            Where chat and playlist naming calls are routed
+          </p>
+        </div>
+      </div>
+
+      {/* Provider selection */}
+      <div className="space-y-2">
+        <label
+          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+            llmProvider === 'anthropic'
+              ? 'bg-purple-900/30 border border-purple-500/50'
+              : 'bg-zinc-700/30 dark:bg-zinc-700/30 light:bg-zinc-200/50 border border-transparent hover:border-zinc-600'
+          }`}
+        >
+          <input
+            type="radio"
+            name="llm_provider"
+            value="anthropic"
+            checked={llmProvider === 'anthropic'}
+            onChange={() => handleProviderChange('anthropic')}
+            disabled={updateMutation.isPending}
+            className="mt-1 accent-purple-500"
+          />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <Cloud className="w-4 h-4 text-purple-400" />
+              <span className="font-medium text-white dark:text-white light:text-zinc-900">
+                Claude (Anthropic)
+              </span>
+            </div>
+            <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 mt-1">
+              Uses the Anthropic API. Configure <code>ANTHROPIC_API_KEY</code> via docker-compose.
+            </p>
+          </div>
+        </label>
+
+        <label
+          className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+            llmProvider === 'openai'
+              ? 'bg-purple-900/30 border border-purple-500/50'
+              : 'bg-zinc-700/30 dark:bg-zinc-700/30 light:bg-zinc-200/50 border border-transparent hover:border-zinc-600'
+          }`}
+        >
+          <input
+            type="radio"
+            name="llm_provider"
+            value="openai"
+            checked={llmProvider === 'openai'}
+            onChange={() => handleProviderChange('openai')}
+            disabled={updateMutation.isPending}
+            className="mt-1 accent-purple-500"
+          />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <Server className="w-4 h-4 text-blue-400" />
+              <span className="font-medium text-white dark:text-white light:text-zinc-900">
+                OpenAI-compatible
+              </span>
+            </div>
+            <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 mt-1">
+              Any OpenAI-compatible endpoint: OpenAI, Groq, Together, OpenRouter, LocalAI,
+              vLLM, llama.cpp, LM Studio, Ollama (<code>/v1</code>). Configure{' '}
+              <code>OPENAI_API_KEY</code>, <code>OPENAI_BASE_URL</code> (optional),{' '}
+              <code>OPENAI_CHAT_MODEL</code>, and <code>OPENAI_UTILITY_MODEL</code> via
+              docker-compose. Model names are required.
+            </p>
+          </div>
+        </label>
+
+        {!activeProviderConfigured && (
+          <p className="text-xs text-amber-400 dark:text-amber-400 light:text-amber-600">
+            The selected provider is not fully configured. AI chat will be unavailable until
+            you set the required environment variables and restart the backend.
+          </p>
+        )}
+      </div>
+    </div>
+
     <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -125,6 +220,7 @@ export function AISettings() {
         you don't own yet. These appear as "missing tracks" with preview playback and
         links to purchase on Bandcamp.
       </p>
+    </div>
     </div>
   );
 }

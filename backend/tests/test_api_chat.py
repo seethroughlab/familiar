@@ -114,3 +114,32 @@ def test_chat_status_endpoint(client: TestClient) -> None:
     assert "configured" in data
     assert "provider" in data
     assert isinstance(data["configured"], bool)
+
+
+def test_chat_status_reflects_selected_provider(client: TestClient) -> None:
+    """Trap 2 regression: selecting openai without openai credentials must
+    report configured=False even if ANTHROPIC_API_KEY is set.
+
+    We exercise the service helpers directly so this test doesn't depend on
+    how the TestClient wires settings storage.
+    """
+    import tempfile
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from app.services.app_settings import AppSettingsService
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        svc = AppSettingsService(settings_path=Path(tmpdir) / "settings.json")
+        # Select openai but only set anthropic key.
+        svc.update(llm_provider="openai", anthropic_api_key="sk-ant-xxx")
+
+        with patch(
+            "app.api.routes.chat.get_app_settings_service", return_value=svc
+        ):
+            response = client.get("/api/v1/chat/status")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["provider"] == "openai"
+    assert data["configured"] is False

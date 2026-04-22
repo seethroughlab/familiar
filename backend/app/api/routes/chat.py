@@ -39,14 +39,14 @@ async def get_chat_status() -> ChatStatusResponse:
     """Check if LLM is configured and available.
 
     Returns configuration status so the frontend can show
-    appropriate warnings before the user tries to chat.
+    appropriate warnings before the user tries to chat. Reports the *active*
+    provider — selecting "openai" without openai credentials returns
+    configured=False even if ANTHROPIC_API_KEY is set.
     """
     settings_service = get_app_settings_service()
-    configured = bool(settings_service.get_effective("anthropic_api_key"))
-
     return ChatStatusResponse(
-        configured=configured,
-        provider="claude",
+        configured=settings_service.is_active_provider_configured(),
+        provider=settings_service.get_active_provider(),
     )
 
 
@@ -127,11 +127,8 @@ async def chat_stream(
     - done: Stream complete
     - error: Error occurred
     """
-    # Check for API key with proper precedence
     settings_service = get_app_settings_service()
-    has_api_key = bool(settings_service.get_effective("anthropic_api_key"))
-
-    if not has_api_key:
+    if not settings_service.is_active_provider_configured():
         raise LLMNotConfiguredError()
 
     # Convert history to format expected by LLM service
@@ -169,11 +166,8 @@ async def chat(
     Returns the complete response after all tool calls are processed.
     Useful for simpler integrations that don't need streaming.
     """
-    # Check for API key with proper precedence
     settings_service = get_app_settings_service()
-    has_api_key = bool(settings_service.get_effective("anthropic_api_key"))
-
-    if not has_api_key:
+    if not settings_service.is_active_provider_configured():
         raise LLMNotConfiguredError()
 
     llm_service = LLMService()  # type: ignore[no-untyped-call]
