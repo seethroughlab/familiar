@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Familiar — local music player that understands sound</title>
+  <meta name="description" content="Self-hosted music player with AI-powered discovery. Describe what you want to hear and Familiar builds a playlist from your own collection.">
+  <link rel="stylesheet" href="./assets/site.css">
+</head>
+<body>
+<main>
+
+<div class="site-header">
+  <div class="site-header-accent"></div>
+  <div class="site-header-body">
+    <h1 class="site-title">familiar</h1>
+    <p class="site-tagline">A self-hosted music player that understands the <em>sound</em> of your music. Describe what you want to hear — get a playlist from your own collection.</p>
+    <div class="nav-links">
+      <a href="#install" class="primary">Install</a>
+      <a href="#features">Features</a>
+      <a href="#screenshots">Screenshots</a>
+      <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/seethroughlab/familiar/releases" target="_blank" rel="noopener">Releases</a>
+    </div>
+  </div>
+</div>
+
+<section id="intro">
+  <p><strong>Describe what you want to hear.</strong> Familiar understands the <em>sound</em> of your music, not just its metadata. Ask for "something that sounds like rain on a window" and it actually works.</p>
+  <p><strong>Your music, your server, your data.</strong> Runs entirely on your hardware — no cloud dependency, no subscriptions, no data leaving your network.</p>
+  <p><strong>Community-powered analysis.</strong> Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.</p>
+</section>
+
+<section id="comparison">
+  <h2>How Familiar compares</h2>
+  <table>
+    <thead>
+      <tr><th></th><th>Familiar</th><th>Navidrome</th><th>Jellyfin</th><th>Plex</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>AI chat + playlist creation</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td class="no">—</td><td>Basic</td><td>Basic</td></tr>
+      <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+      <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td></tr>
+      <tr><td>Music video playback</td><td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+      <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="no">—</td><td class="yes">Yes</td></tr>
+      <tr><td>Mobile PWA</td><td class="yes">Yes</td><td>Web only</td><td>Web + apps</td><td>Apps</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="features">
+  <h2>Features</h2>
+
+  <h3>Discovery &amp; Search</h3>
+  <div class="features-grid">
+    <div class="feature">
+      <h3>Semantic audio search</h3>
+      <p>Describe the sound: "upbeat with synths", "acoustic and melancholy". Matches on CLAP audio embeddings, not tags.</p>
+    </div>
+    <div class="feature">
+      <h3>AI chat assistant</h3>
+      <p>Claude with 27 tools for search, playback, metadata correction, and playlist creation.</p>
+    </div>
+    <div class="feature">
+      <h3>Find similar</h3>
+      <p>Click any track to surface sonically similar music from your library via vector similarity.</p>
+    </div>
+    <div class="feature">
+      <h3>Mood Grid</h3>
+      <p>2D scatter of your library by energy and valence — happy/sad × calm/energetic.</p>
+    </div>
+    <div class="feature">
+      <h3>Music Map</h3>
+      <p>Ego-centric similarity map. Click any artist to re-center the view.</p>
+    </div>
+    <div class="feature">
+      <h3>3D Explorer</h3>
+      <p>Navigate a 3D space of artists with hover-to-preview audio.</p>
+    </div>
+  </div>
+
+  <h3>Audio Analysis</h3>
+  <div class="features-grid">
+    <div class="feature">
+      <h3>CLAP embeddings</h3>
+      <p>512-dim audio embeddings from LAION's CLAP model. Powers semantic search and similarity.</p>
+    </div>
+    <div class="feature">
+      <h3>Musical features</h3>
+      <p>BPM, key, energy, valence, danceability, acousticness, instrumentalness — extracted via librosa.</p>
+    </div>
+    <div class="feature">
+      <h3>Community cache</h3>
+      <p>Opt-in sharing of analysis fingerprints. New libraries skip hours of extraction.</p>
+    </div>
+  </div>
+
+  <h3>Playback &amp; Library</h3>
+  <div class="features-grid">
+    <div class="feature">
+      <h3>Offline PWA</h3>
+      <p>Web app installs to home screen. IndexedDB track cache for offline listening.</p>
+    </div>
+    <div class="feature">
+      <h3>iOS TestFlight build</h3>
+      <p>Native Capacitor wrapper with background audio, lock-screen controls, and CarPlay scaffolding.</p>
+    </div>
+    <div class="feature">
+      <h3>Smart playlists</h3>
+      <p>Rules-based auto-updating playlists. Combine tags, features, and listening history.</p>
+    </div>
+    <div class="feature">
+      <h3>Music videos</h3>
+      <p>Attach video files to tracks and play them back in the full player.</p>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <h2>Install</h2>
+
+  <p>Familiar runs as a Docker stack: FastAPI + PostgreSQL (pgvector) + Redis. Tested on macOS, Linux, OpenMediaVault, and Synology NAS.</p>
+
+  <div class="step">
+    <h3>1. Pull the stack</h3>
+<pre><code>git clone https://github.com/seethroughlab/familiar.git
+cd familiar/docker
+./start.sh</code></pre>
+    <p>The start script detects your platform, pulls images, and runs a health check.</p>
+  </div>
+
+  <div class="step">
+    <h3>2. Open the UI</h3>
+    <p>Visit <code>http://localhost:4400</code>. The admin page walks you through API keys (Anthropic, Last.fm, AcoustID) and music library paths.</p>
+  </div>
+
+  <div class="step">
+    <h3>3. Scan your library</h3>
+    <p>Point Familiar at a music folder in <strong>Settings → Library Management</strong>. It'll scan, fingerprint, and start extracting audio features in the background.</p>
+  </div>
+
+  <div class="note">
+    <strong>Analysis takes time.</strong> Expect roughly 1 second per track on modern hardware for the full analysis pipeline. A 20,000-track library is ~6 hours. The community cache short-circuits most of this.
+  </div>
+
+  <h3>Detailed guides</h3>
+  <ul>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a> — Docker, OpenMediaVault, Synology, development setup</li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/MACOS.md" target="_blank" rel="noopener">macOS Guide</a> — Docker Desktop, Apple Silicon, music library paths</li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/CONFIGURATION.md" target="_blank" rel="noopener">Configuration</a> — env vars, API keys, Tailscale HTTPS, cloud backup</li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a> — build custom 2D/3D library visualizations</li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/REST-API.md" target="_blank" rel="noopener">REST API</a> — backend API reference</li>
+  </ul>
+</section>
+
+<section id="screenshots">
+  <h2>Screenshots</h2>
+  <div class="screenshot-grid">
+    <figure class="shot"><a href="./screenshots/01-library-tracks.png" target="_blank" rel="noopener"><img src="./screenshots/01-library-tracks.png" alt="Library — tracks" loading="lazy"></a><figcaption>Library — tracks</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/08-chat-panel.png" target="_blank" rel="noopener"><img src="./screenshots/08-chat-panel.png" alt="AI chat panel" loading="lazy"></a><figcaption>AI chat panel</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/04-library-mood-grid.png" target="_blank" rel="noopener"><img src="./screenshots/04-library-mood-grid.png" alt="Mood grid" loading="lazy"></a><figcaption>Mood grid</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/05-library-music-map.png" target="_blank" rel="noopener"><img src="./screenshots/05-library-music-map.png" alt="Music map" loading="lazy"></a><figcaption>Music map</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/06-library-explorer.png" target="_blank" rel="noopener"><img src="./screenshots/06-library-explorer.png" alt="3D explorer" loading="lazy"></a><figcaption>3D explorer</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/07-library-discover.png" target="_blank" rel="noopener"><img src="./screenshots/07-library-discover.png" alt="Discover" loading="lazy"></a><figcaption>Discover</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/02-library-artists.png" target="_blank" rel="noopener"><img src="./screenshots/02-library-artists.png" alt="Library — artists" loading="lazy"></a><figcaption>Library — artists</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/03-library-albums.png" target="_blank" rel="noopener"><img src="./screenshots/03-library-albums.png" alt="Library — albums" loading="lazy"></a><figcaption>Library — albums</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/09-playlist-detail.png" target="_blank" rel="noopener"><img src="./screenshots/09-playlist-detail.png" alt="Playlist detail" loading="lazy"></a><figcaption>Playlist detail</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/10-full-player.png" target="_blank" rel="noopener"><img src="./screenshots/10-full-player.png" alt="Full player" loading="lazy"></a><figcaption>Full player</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/12-settings.png" target="_blank" rel="noopener"><img src="./screenshots/12-settings.png" alt="Settings" loading="lazy"></a><figcaption>Settings</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/13-admin-setup.png" target="_blank" rel="noopener"><img src="./screenshots/13-admin-setup.png" alt="Admin setup" loading="lazy"></a><figcaption>Admin setup</figcaption></figure>
+  </div>
+
+  <h3>Mobile</h3>
+  <div class="screenshot-grid mobile">
+    <figure class="shot"><a href="./screenshots/14-mobile-library.png" target="_blank" rel="noopener"><img src="./screenshots/14-mobile-library.png" alt="Mobile library" loading="lazy"></a><figcaption>Library</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/15-mobile-full-player.png" target="_blank" rel="noopener"><img src="./screenshots/15-mobile-full-player.png" alt="Mobile full player" loading="lazy"></a><figcaption>Full player</figcaption></figure>
+  </div>
+</section>
+
+<section id="feedback">
+  <h2>Beta feedback</h2>
+  <p>Familiar is in active development. Bug reports, feature requests, performance notes, and UI/UX suggestions are all welcome.</p>
+  <p><a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Open an issue on GitHub →</a></p>
+</section>
+
+<footer>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a></p>
+</footer>
+
+</main>
+</body>
+</html>
