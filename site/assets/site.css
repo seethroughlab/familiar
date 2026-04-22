@@ -35,6 +35,84 @@ main {
   padding: 32px 20px 64px;
 }
 
+/* --- Sticky top nav --- */
+
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  background: rgba(10, 10, 10, 0.78);
+  backdrop-filter: saturate(180%) blur(12px);
+  -webkit-backdrop-filter: saturate(180%) blur(12px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.topnav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.topnav-brand:hover { text-decoration: none; opacity: 0.9; }
+
+.topnav-brand img {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.topnav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topnav-links a {
+  padding: 7px 12px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.15s, background 0.15s;
+}
+
+.topnav-links a:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  text-decoration: none;
+}
+
+.topnav-install {
+  background: var(--accent-green);
+  color: #052e14 !important;
+  font-weight: 600 !important;
+  padding: 7px 14px !important;
+}
+
+.topnav-install:hover {
+  background: var(--accent-green-hover) !important;
+  color: #052e14 !important;
+}
+
+html { scroll-padding-top: 64px; }
+
+@media (max-width: 560px) {
+  .topnav { padding: 8px 12px; gap: 8px; }
+  .topnav-brand span { display: none; }
+  .topnav-links { gap: 2px; }
+  .topnav-links a { padding: 6px 9px; font-size: 12px; }
+  .topnav-github { display: none; }
+}
+
 a {
   color: var(--accent-green);
   text-decoration: none;
