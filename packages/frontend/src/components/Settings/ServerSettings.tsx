@@ -33,8 +33,10 @@ export function ServerSettings({ onConnected }: ServerSettingsProps = {}) {
 
     try {
       // eslint-disable-next-line no-restricted-globals -- Connection test with custom URL and timeout
+      // 20s timeout — covers cold-booting hosts (e.g. Fly machines scaled to
+      // zero) without making a truly-dead server feel infinite.
       const res = await fetch(`${trimmed}/api/v1/health`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(20000),
       });
       if (res.ok) {
         setStatus('success');
