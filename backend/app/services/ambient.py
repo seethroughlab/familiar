@@ -392,14 +392,20 @@ async def pick_surprise_seed(
 ) -> AmbientDescriptor | None:
     """Pick a random ambient-friendly seed track.
 
-    Samples 20 candidates with instrumentalness >= 0.5, energy <= 0.5,
+    Samples 20 candidates with instrumentalness >= 0.5, energy <= 0.7,
     speechiness <= 0.5, duration >= 60s, then picks the one with highest
     ambient fitness (preferring downtempo, quiet tracks).
+
+    Note: we use 0.7 (not the "obvious" 0.5) because librosa's energy
+    metric biases high for well-mastered full-band acoustic recordings —
+    known-calm piano pieces routinely score 0.6-0.8. The ambient-fitness
+    score inside this function still prefers the lowest-energy candidate
+    from the pool, so the final seed is as quiet as the library allows.
     """
     base_conditions = [
         TrackAnalysis.instrumentalness >= 0.5,
         TrackAnalysis.speechiness <= 0.5,
-        TrackAnalysis.energy <= 0.5,
+        TrackAnalysis.energy <= 0.7,
         Track.duration_seconds >= 60,
         TrackAnalysis.energy.isnot(None),
     ]
