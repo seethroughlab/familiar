@@ -204,6 +204,26 @@ a:hover { text-decoration: underline; }
   border-color: var(--accent-green-hover);
 }
 
+.nav-links a.app-store-link {
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  transition: opacity 0.15s;
+}
+
+.nav-links a.app-store-link:hover {
+  background: transparent;
+  border: none;
+  opacity: 0.85;
+}
+
+.nav-links a.app-store-link img {
+  display: block;
+  height: 40px;
+  width: auto;
+}
+
 /* --- Sections --- */
 
 section { margin-bottom: 48px; }
