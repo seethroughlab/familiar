@@ -110,6 +110,24 @@ export async function setApiOrigin(url: string): Promise<void> {
   }
 }
 
+/**
+ * Forget the stored backend URL. Used by the "Change Server" action so the
+ * app drops back to the Connect-to-Server screen. Does NOT touch IndexedDB —
+ * downloaded tracks remain on disk (but orphan relative to a new backend).
+ */
+export async function clearApiOrigin(): Promise<void> {
+  _apiOrigin = '';
+  localStorage.removeItem(BACKEND_URL_KEY);
+
+  if (isNativeApp() && _preferencesProvider) {
+    try {
+      await _preferencesProvider.set(BACKEND_URL_KEY, '');
+    } catch {
+      // localStorage removal is sufficient as fallback
+    }
+  }
+}
+
 /** Base origin for non-axios URLs (stream, artwork, etc). Empty string for same-origin. */
 export function getApiOrigin(): string {
   return _apiOrigin;

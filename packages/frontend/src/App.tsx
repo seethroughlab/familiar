@@ -212,6 +212,17 @@ function App() {
     return () => window.removeEventListener('profile-invalidated', handleInvalidated);
   }, [checkProfile, serverConfigured]);
 
+  // "Change Server" in Settings dispatches this — drop back to the
+  // Connect-to-Server screen without needing to restart the app.
+  useEffect(() => {
+    const handleReset = () => {
+      setProfile(null);
+      setServerConfigured(false);
+    };
+    window.addEventListener('server-reset', handleReset);
+    return () => window.removeEventListener('server-reset', handleReset);
+  }, []);
+
   useUpdateNotification();
 
   if (showMobileRedirect && !mobileRedirectDismissed) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Server, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { getApiOrigin, getDefaultApiOrigin, setApiOrigin } from '../../api/base';
+import { clearApiOrigin, getApiOrigin, getDefaultApiOrigin, setApiOrigin } from '../../api/base';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -12,6 +12,7 @@ export function ServerSettings({ onConnected }: ServerSettingsProps = {}) {
   const [url, setUrl] = useState(() => getApiOrigin() || getDefaultApiOrigin() || '');
   const [status, setStatus] = useState<TestStatus>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [confirmingChange, setConfirmingChange] = useState(false);
 
   // Sync from stored value on mount; fall back to the baked default so the
   // user sees a pre-filled URL on first launch of a release build but still
@@ -52,6 +53,16 @@ export function ServerSettings({ onConnected }: ServerSettingsProps = {}) {
       setErrorMsg(e instanceof Error ? e.message : 'Connection failed');
     }
   };
+
+  const changeServer = async () => {
+    await clearApiOrigin();
+    setConfirmingChange(false);
+    window.dispatchEvent(new CustomEvent('server-reset'));
+  };
+
+  // Only expose the Change Server affordance after a URL has been saved —
+  // there's nothing to change until then.
+  const hasStoredUrl = !!getApiOrigin();
 
   return (
     <div className="bg-zinc-800/50 rounded-lg p-4">
@@ -97,6 +108,40 @@ export function ServerSettings({ onConnected }: ServerSettingsProps = {}) {
       )}
       {status === 'error' && errorMsg && (
         <p className="mt-2 text-sm text-red-400">{errorMsg}</p>
+      )}
+
+      {hasStoredUrl && !confirmingChange && (
+        <button
+          onClick={() => setConfirmingChange(true)}
+          className="mt-4 text-sm text-zinc-400 hover:text-white underline underline-offset-2 transition-colors"
+        >
+          Change server
+        </button>
+      )}
+
+      {confirmingChange && (
+        <div className="mt-4 p-3 bg-zinc-900/60 border border-zinc-700 rounded-lg">
+          <p className="text-sm text-white font-medium mb-1">Change server?</p>
+          <p className="text-sm text-zinc-400 mb-3">
+            Your downloaded tracks and cached library will stay on this device
+            but won't be visible on a different Familiar server. Your account
+            on this server isn't affected.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmingChange(false)}
+              className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={changeServer}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-sm rounded-lg transition-colors"
+            >
+              Change server
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
