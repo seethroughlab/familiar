@@ -257,5 +257,14 @@ fi
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 
+# Restore the two capacitor.config.json files — cap copy regenerates them on
+# every run, and even after the re-add + sync above they can end up diff'd
+# against git in ways that leave the working tree dirty. The canonical
+# contents live in git; the values used at build time already made it onto
+# the device.
+git -C "$PROJECT_ROOT" checkout -- \
+    "packages/ios/native/App/App/capacitor.config.json" \
+    "packages/ios/native/App/capacitor.config.json" 2>/dev/null || true
+
 echo ""
 bold "Build $BUILD_NUMBER installed on device."
