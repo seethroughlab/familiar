@@ -90,3 +90,8 @@ TODO.md
 dev
 *accessKeys.csv
 AuthKey*.p8
+
+# Local-only demo artifacts (populated by scripts/fetch-demo-library.sh
+# and scripts/analyze-demo-library.sh; not for git).
+demo-library/
+.demo-analysis/
