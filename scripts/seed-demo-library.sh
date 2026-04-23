@@ -79,20 +79,29 @@ psql "$NEON_URL" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vector;'
 echo "→ Loading seed into Neon…"
 psql "$NEON_URL" -v ON_ERROR_STOP=1 -f "$DUMP_FILE"
 
+echo "→ Waking Fly machine (scaled to zero when idle)…"
+# fly ssh sftp needs a running VM. A health-check poke boots it via
+# auto_start_machines. 60s is generous for a cold start.
+curl -fsS --max-time 60 "https://${FLY_APP}.fly.dev/api/v1/health" >/dev/null || {
+    echo "   (warning: couldn't reach /health; continuing anyway)" >&2
+}
+
 echo "→ Uploading audio files to Fly volume /data/music/ on ${FLY_APP}…"
-# Build a single SFTP batch command to minimize ssh round-trips
+# Build a single SFTP batch command to minimize ssh round-trips.
+# Note: paths are unquoted because Fly's sftp shell doesn't dequote — the
+# fetch script keeps basenames slug-safe (letters/digits/dashes) so this
+# is fine.
 SFTP_BATCH="$(mktemp -t fly-sftp.XXXXXX.txt)"
 trap 'rm -f "$DUMP_FILE" "$SFTP_BATCH"' EXIT
-{
-    echo "-mkdir /data/music"
-    for f in "$DEMO_LIBRARY_PATH"/*.mp3; do
-        [ -f "$f" ] || continue
-        echo "put \"$f\" /data/music/$(basename "$f")"
-    done
-} > "$SFTP_BATCH"
+for f in "$DEMO_LIBRARY_PATH"/*.mp3; do
+    [ -f "$f" ] || continue
+    echo "put $f /data/music/$(basename "$f")"
+done > "$SFTP_BATCH"
 
 UPLOAD_COUNT=$(grep -c '^put ' "$SFTP_BATCH" || true)
 echo "   uploading $UPLOAD_COUNT files…"
+# Ensure /data/music exists (sftp's -mkdir is not supported by Fly's shell).
+flyctl ssh console -a "${FLY_APP}" -C 'bash -c "mkdir -p /data/music"' >/dev/null 2>&1 || true
 flyctl ssh sftp shell -a "${FLY_APP}" < "$SFTP_BATCH"
 
 echo ""
