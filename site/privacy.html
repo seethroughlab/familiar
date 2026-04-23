@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy — Familiar</title>
+  <meta name="description" content="How Familiar handles your data. Short version: it doesn't, really.">
+  <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
+  <link rel="stylesheet" href="./assets/site.css">
+</head>
+<body>
+
+<nav class="topnav" aria-label="Primary">
+  <a class="topnav-brand" href="./">
+    <img src="./assets/icon.svg" alt="" aria-hidden="true">
+    <span>Familiar</span>
+  </a>
+  <div class="topnav-links">
+    <a href="./#features">Features</a>
+    <a href="./#ask">Ask</a>
+    <a href="./#faq">FAQ</a>
+    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
+    <a href="./#install" class="topnav-install">Install</a>
+  </div>
+</nav>
+
+<main id="top">
+
+<header class="hero" style="padding-bottom: 24px;">
+  <div class="hero-body">
+    <h1 class="hero-title">Privacy</h1>
+    <p class="hero-tagline">Last updated: 2026-04-22</p>
+  </div>
+</header>
+
+<section>
+  <p>Familiar is a self-hosted music player. You install the app on your device and point it at a backend you control — your own machine, a home server, or (for App Store review) a shared demo server at <code>familiar-demo.fly.dev</code>. This page describes what data Familiar handles and where it goes.</p>
+</section>
+
+<section>
+  <h2>What stays on your device and your server</h2>
+  <ul>
+    <li><strong>Your music files.</strong> Audio is never uploaded off your device or backend.</li>
+    <li><strong>Profile name, color, favorites, and play history.</strong> Stored on the backend you choose.</li>
+    <li><strong>Offline-cached tracks and playlists.</strong> Held in the app's local storage; removed when you uninstall.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Data sent to third parties (only when you opt in)</h2>
+  <ul>
+    <li><strong>Anthropic (Claude API)</strong> — when you use the AI chat feature, your prompt and conversation context are sent to Anthropic for processing. Subject to <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic's privacy policy</a>. Familiar does not retain these messages beyond what the backend you control stores.</li>
+    <li><strong>Last.fm</strong> — if you connect a Last.fm account, Familiar scrobbles now-playing metadata (artist, title, duration) to <code>ws.audioscrobbler.com</code>.</li>
+    <li><strong>LRCLIB</strong> — synced lyrics are fetched from <code>lrclib.net</code> by track title / artist / album / duration.</li>
+    <li><strong>MusicBrainz and Cover Art Archive</strong> — used for metadata and artwork lookups; only the fields named are sent.</li>
+    <li><strong>AcoustID</strong> — optional audio fingerprint lookup for unknown tracks.</li>
+    <li><strong>Community cache</strong> (<code>familiar-cache.fly.dev</code>) — if you opt in, SHA-256-hashed audio fingerprints and precomputed features or embeddings are shared so other users can skip analysis. No filename, metadata, or personal information is transmitted.</li>
+    <li><strong>Bandcamp, iTunes, Qobuz, Discogs, 7Digital, Amazon Music, YouTube</strong> — user-initiated search and discovery links that open in your browser or stream video on demand.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>What we don't do</h2>
+  <ul>
+    <li>No analytics SDKs (no Google Analytics, Mixpanel, Sentry, etc.).</li>
+    <li>No advertising identifiers, no ad tracking, no ads.</li>
+    <li>No location, contacts, photos, health, or financial data.</li>
+    <li>No sharing or selling of personal data to third parties.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Retention and deletion</h2>
+  <p>All personal data lives on the backend you control. Delete a profile from the app to remove its data from the backend. Uninstall the app to remove any local cache from your device.</p>
+</section>
+
+<section>
+  <h2>Contact</h2>
+  <p>Questions about privacy: <a href="mailto:jeff@seethroughlab.com">jeff@seethroughlab.com</a>.</p>
+</section>
+
+</main>
+
+</body>
+</html>
