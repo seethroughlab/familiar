@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Server, CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { getApiOrigin, setApiOrigin } from '../../api/base';
+import { getApiOrigin, getDefaultApiOrigin, setApiOrigin } from '../../api/base';
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
@@ -9,13 +9,15 @@ interface ServerSettingsProps {
 }
 
 export function ServerSettings({ onConnected }: ServerSettingsProps = {}) {
-  const [url, setUrl] = useState(() => getApiOrigin() || '');
+  const [url, setUrl] = useState(() => getApiOrigin() || getDefaultApiOrigin() || '');
   const [status, setStatus] = useState<TestStatus>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Sync from stored value on mount
+  // Sync from stored value on mount; fall back to the baked default so the
+  // user sees a pre-filled URL on first launch of a release build but still
+  // has to tap "Test" to confirm + persist.
   useEffect(() => {
-    setUrl(getApiOrigin() || '');
+    setUrl(getApiOrigin() || getDefaultApiOrigin() || '');
   }, []);
 
   const testConnection = async () => {

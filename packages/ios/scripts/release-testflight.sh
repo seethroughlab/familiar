@@ -111,6 +111,13 @@ green "Build number → $BUILD_NUMBER"
 
 step "Building frontend"
 
+# TestFlight/App Store builds ship with a public demo backend baked in so
+# App Review doesn't have to type a server URL. Override by exporting
+# VITE_DEFAULT_BACKEND_URL before running this script.
+: "${VITE_DEFAULT_BACKEND_URL:=https://familiar-demo.fly.dev}"
+export VITE_DEFAULT_BACKEND_URL
+green "Default backend URL: $VITE_DEFAULT_BACKEND_URL"
+
 cd "$PROJECT_ROOT"
 pnpm --filter @familiar/ios run build:cap
 green "Frontend build complete"

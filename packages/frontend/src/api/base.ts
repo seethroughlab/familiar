@@ -83,6 +83,17 @@ export async function initApiOrigin(): Promise<void> {
 }
 
 /**
+ * Compile-time default backend URL baked into release builds via
+ * VITE_DEFAULT_BACKEND_URL. Returned as a *suggestion* for the server-
+ * connect screen — the user still has to confirm before it's persisted.
+ * Returns empty string in dev builds (no default baked in).
+ */
+export function getDefaultApiOrigin(): string {
+  const baked = import.meta.env.VITE_DEFAULT_BACKEND_URL as string | undefined;
+  return baked ? baked.replace(/\/+$/, '') : '';
+}
+
+/**
  * Save a backend URL (called from ServerSettings).
  * Persists to both localStorage and the registered preferences provider.
  */
