@@ -27,6 +27,7 @@
     <span>Familiar</span>
   </a>
   <div class="topnav-links">
+    <a href="#use-case">Who it's for</a>
     <a href="#features">Features</a>
     <a href="#ask">Ask</a>
     <a href="#remote-access">Remote</a>
@@ -42,7 +43,7 @@
   <img src="./assets/icon.svg" alt="Familiar" class="hero-logo">
   <div class="hero-body">
     <h1 class="hero-title">Familiar</h1>
-    <p class="hero-tagline">A self-hosted music player that understands the <em>sound</em> of your music. Describe what you want to hear — get a playlist from your own collection.</p>
+    <p class="hero-tagline">A self-hosted music player that understands the <em>sound</em> of every track in your library. Describe what you want to hear — get a playlist from your own collection.</p>
     <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/master/CHANGELOG.md" target="_blank" rel="noopener">
       <span class="version-dot"></span> v0.1.0-alpha2 · 2026-04-17
     </a>
@@ -51,6 +52,7 @@
         <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
       </a>
       <a href="#install" class="primary">Install server</a>
+      <a href="#use-case">Who it's for</a>
       <a href="#features">Features</a>
       <a href="#ask">Ask Familiar</a>
       <a href="#remote-access">Remote access</a>
@@ -61,9 +63,15 @@
 </header>
 
 <section id="intro">
-  <p><strong>Describe what you want to hear.</strong> Familiar understands the <em>sound</em> of your music, not just its metadata. Ask for "something that sounds like rain on a window" and it actually works.</p>
+  <p><strong>Describe what you want to hear.</strong> Familiar listens to every track in your library and understands how it actually <em>sounds</em> — not just the tags or genre. Ask for "something that sounds like rain on a window" and it actually works.</p>
   <p><strong>Your music, your server, your data.</strong> Runs entirely on your hardware — no cloud dependency, no subscriptions, no data leaving your network.</p>
   <p><strong>Community-powered analysis.</strong> Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.</p>
+</section>
+
+<section id="use-case">
+  <h2>Who Familiar is for</h2>
+  <p><strong>You own your music.</strong> A folder of MP3s and FLACs collected over years — CDs you ripped, albums bought on Bandcamp, live sets, mixtapes, exports from old iPods. Streaming services either won't play your files or quietly replace them with their own catalog versions (sometimes the wrong remaster, sometimes DRM-locked, occasionally just gone).</p>
+  <p><strong>You want to actually find stuff in it.</strong> Semantic search — "something that sounds like rain on a window", "upbeat with synths", "melancholy acoustic" — on the tracks <em>you already own</em>, reachable from your phone on cellular. No re-buying, no re-uploading to a streaming locker, no algorithm steering you back toward a catalog. Point Familiar at your library, wait for analysis to finish, and ask Claude for a playlist.</p>
 </section>
 
 <section id="comparison">
@@ -71,17 +79,18 @@
   <div class="comparison">
     <table>
       <thead>
-        <tr><th></th><th>Familiar</th><th>Navidrome</th><th>Jellyfin</th><th>Plex</th></tr>
+        <tr><th></th><th>Familiar</th><th>Navidrome</th><th>Jellyfin</th><th>Plex</th><th>Apple Music</th><th>Spotify</th></tr>
       </thead>
       <tbody>
-        <tr><td>AI chat + playlist creation</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td class="no">—</td><td>Basic</td><td>Basic</td></tr>
-        <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td></tr>
-        <tr><td>Music video playback</td><td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
-        <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="no">—</td><td class="yes">Yes</td></tr>
-        <tr><td>Mobile PWA</td><td class="yes">Yes</td><td>Web only</td><td>Web + apps</td><td>Apps</td></tr>
+        <tr><td>Plays your existing MP3 / FLAC files</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>iCloud Match (replaces files)</td><td class="no">—</td></tr>
+        <tr><td>AI chat + playlist creation</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td class="no">—</td><td>Basic</td><td>Basic</td><td>Catalog-only</td><td>Catalog-only</td></tr>
+        <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Music video playback</td><td class="yes">Yes</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Catalog-only</td><td class="no">—</td></tr>
+        <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td></tr>
+        <tr><td>Mobile PWA</td><td class="yes">Yes</td><td>Web only</td><td>Web + apps</td><td>Apps</td><td>Native app</td><td>Native app</td></tr>
       </tbody>
     </table>
   </div>
@@ -276,6 +285,10 @@ cd familiar/docker
 <section id="faq">
   <h2>FAQ</h2>
   <div class="faq">
+    <details>
+      <summary>Why not just use Apple Music or Spotify for this?</summary>
+      <p>Familiar isn't a streaming service — it plays the files you already own. If you've got a folder of MP3s/FLACs going back to 2002, Apple Music either won't accept them or will iCloud-Match them to its own catalog versions (sometimes the wrong remaster, occasionally DRM-locked, occasionally just gone). Spotify only plays its own catalog; its Local Files feature syncs from a desktop to a phone on the same network, not remotely. Neither runs semantic search or AI playlists across <em>your</em> library — only theirs. Familiar runs on your hardware, leaves your files alone, and points its AI at your collection.</p>
+    </details>
     <details>
       <summary>Do I need an API key?</summary>
       <p>Yes for the AI chat — Familiar uses the Anthropic Claude API, and queries typically cost a fraction of a cent. Basic library browsing, playback, search, Mood Grid, Music Map, and 3D Explorer all work without an API key.</p>
