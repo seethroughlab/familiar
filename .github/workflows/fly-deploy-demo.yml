@@ -2,13 +2,15 @@ name: Fly Deploy (demo)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-    paths:
-      - 'backend/**'
-      - 'deploy/fly/**'
-      - '.github/workflows/fly-deploy-demo.yml'
+  # Auto-deploy on push disabled while demo is offline.
+  # To re-enable: uncomment the `push:` block below.
+  # push:
+  #   branches:
+  #     - master
+  #   paths:
+  #     - 'backend/**'
+  #     - 'deploy/fly/**'
+  #     - '.github/workflows/fly-deploy-demo.yml'
 
 jobs:
   deploy:
