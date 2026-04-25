@@ -3,6 +3,9 @@ import { Copy, Check, Crown, Loader2, Send, UserMinus, Share2, Lock } from 'luci
 import type { SessionInfo, ChatMessage, IceServer } from '../../hooks/useListeningSession';
 import { buildShareLink } from '../../hooks/useListeningSession';
 import { IceDiagnostics } from './IceDiagnostics';
+import { showError } from '../../stores/toastStore';
+
+const CHAT_MESSAGE_MAX_LENGTH = 500;
 
 interface SessionPanelProps {
   session: SessionInfo | null;
@@ -44,16 +47,24 @@ export function SessionPanel({
 
   const handleCopyCode = async () => {
     if (!session) return;
-    await navigator.clipboard.writeText(session.code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(session.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      showError("Couldn't copy code", { description: 'Select and copy it manually.' });
+    }
   };
 
   const handleCopyShareLink = async () => {
     if (!session) return;
-    await navigator.clipboard.writeText(buildShareLink(session.code));
-    setShareCopied(true);
-    setTimeout(() => setShareCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(buildShareLink(session.code));
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      showError("Couldn't copy link", { description: 'Select and copy it manually.' });
+    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -153,6 +164,7 @@ export function SessionPanel({
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Send a message..."
+                maxLength={CHAT_MESSAGE_MAX_LENGTH}
                 className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-sm placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500"
               />
               <button

@@ -184,6 +184,24 @@ export function useWebRTCStreaming({
     async (sdp: RTCSessionDescriptionInit) => {
       if (isHost) return;
 
+      // Renegotiation: tear down the previous PC + audio element so we don't leak
+      // them or end up with two streams playing in parallel.
+      if (guestConnectionRef.current) {
+        try {
+          guestConnectionRef.current.close();
+        } catch (err) {
+          log.warn('Failed to close prior guest PC during renegotiation', err);
+        }
+        guestConnectionRef.current = null;
+      }
+      setGuestAudio((prev) => {
+        if (prev) {
+          prev.pause();
+          prev.srcObject = null;
+        }
+        return null;
+      });
+
       const pc = new RTCPeerConnection(rtcConfig);
       guestConnectionRef.current = pc;
 
@@ -279,23 +297,33 @@ export function useWebRTCStreaming({
     }
   }, []);
 
+  // Tear down on session change and on unmount. Walks the live peersRef rather
+  // than a snapshot so peers added between effect-run and cleanup are also closed.
   useEffect(() => {
-    const currentPeers = peersRef.current;
     return () => {
-      currentPeers.forEach((peer) => peer.connection.close());
-      currentPeers.clear();
+      peersRef.current.forEach((peer) => {
+        try {
+          peer.connection.close();
+        } catch {
+          /* already closed */
+        }
+      });
+      peersRef.current.clear();
       setPeers(new Map());
       if (guestConnectionRef.current) {
         guestConnectionRef.current.close();
         guestConnectionRef.current = null;
       }
-      if (guestAudio) {
-        guestAudio.pause();
-        guestAudio.srcObject = null;
-      }
+      setGuestAudio((prev) => {
+        if (prev) {
+          prev.pause();
+          prev.srcObject = null;
+        }
+        return null;
+      });
       setIsStreaming(false);
     };
-  }, [sessionId, guestAudio]);
+  }, [sessionId]);
 
   const setGuestVolume = useCallback(
     (volume: number) => {
@@ -306,10 +334,16 @@ export function useWebRTCStreaming({
     [guestAudio],
   );
 
+  const peerList = useMemo(() => Array.from(peers.values()), [peers]);
+  const connectedGuestCount = useMemo(
+    () => peerList.filter((p) => p.connected).length,
+    [peerList],
+  );
+
   return {
     isStreaming,
-    peers: Array.from(peers.values()),
-    connectedGuestCount: Array.from(peers.values()).filter((p) => p.connected).length,
+    peers: peerList,
+    connectedGuestCount,
     handleSignalingMessage,
     requestStream,
     removePeer,

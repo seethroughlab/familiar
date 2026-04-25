@@ -1,14 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
 import { useAudioControls } from './useAudioControls';
 import { useWebRTCStreaming } from './useWebRTCStreaming';
 import { getProfile, getSelectedProfileId } from '../services/profileService';
 import { createLogger } from '../utils/logger';
+import { showError } from '../stores/toastStore';
 
 const log = createLogger('ListeningSession');
 
 const PLAYBACK_BROADCAST_INTERVAL_MS = 1000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+const PENDING_SEND_TIMEOUT_MS = 5000;
+const PENDING_SEND_TICK_MS = 100;
+const HANDSHAKE_TIMEOUT_MS = 12000;
 
 /**
  * Public WebRTC signaling relay URL (familiar-sessions service).
@@ -61,6 +66,10 @@ interface UseListeningSessionOptions {
   username?: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 function buildWsUrl(): string {
   let base: string;
   if (RELAY_URL) {
@@ -74,10 +83,11 @@ function buildWsUrl(): string {
 
 /** Public guest URL the host can share. */
 export function buildShareLink(code: string): string {
+  const safe = encodeURIComponent(code);
   if (RELAY_URL) {
-    return `${RELAY_URL.replace(/\/$/, '')}/listen/${code}`;
+    return `${RELAY_URL.replace(/\/$/, '')}/listen/${safe}`;
   }
-  return `${window.location.origin}/listen/${code}`;
+  return `${window.location.origin}/listen/${safe}`;
 }
 
 export function useListeningSession({ username }: UseListeningSessionOptions = {}) {
@@ -92,12 +102,18 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
   const reconnectAttemptsRef = useRef<number>(0);
+  const handshakeTimeoutRef = useRef<number | null>(null);
+  const pendingSendTimeoutRef = useRef<number | null>(null);
   const lastBroadcastRef = useRef<number>(0);
 
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const currentTime = usePlayerStore((s) => s.currentTime);
-  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const { currentTrack, isPlaying, currentTime, setIsPlaying } = usePlayerStore(
+    useShallow((s) => ({
+      currentTrack: s.currentTrack,
+      isPlaying: s.isPlaying,
+      currentTime: s.currentTime,
+      setIsPlaying: s.setIsPlaying,
+    })),
+  );
   const audioEngine = useAudioControls();
 
   // Resolve a display name from the local Familiar profile so listeners see something useful.
@@ -137,98 +153,164 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
     onSendMessage: send,
   });
 
-  const webrtcHandlerRef = useRef(webrtc.handleSignalingMessage);
-  webrtcHandlerRef.current = webrtc.handleSignalingMessage;
+  // Indirect refs so handleMessage isn't recreated every render (which would
+  // cascade into a fresh `connect` callback and a fresh ws.onmessage closure).
+  const webrtcRef = useRef(webrtc);
+  webrtcRef.current = webrtc;
+  const audioEngineRef = useRef(audioEngine);
+  audioEngineRef.current = audioEngine;
 
   const handleMessage = useCallback(
     (event: MessageEvent) => {
-      const data = JSON.parse(event.data);
+      let data: unknown;
+      try {
+        data = JSON.parse(typeof event.data === 'string' ? event.data : '');
+      } catch (err) {
+        log.warn('Dropping malformed WS message', err);
+        return;
+      }
+      if (!isRecord(data) || typeof data.type !== 'string') {
+        log.warn('Dropping WS message with no type');
+        return;
+      }
       switch (data.type) {
         case 'session_created':
-          setSession(data.session);
-          if (data.your_user_id) setMyUserId(data.your_user_id);
-          if (data.ice_servers) setIceServers(data.ice_servers);
+        case 'session_joined': {
+          if (!isRecord(data.session)) {
+            log.warn(`Dropping ${data.type} with missing session`);
+            return;
+          }
+          setSession(data.session as unknown as SessionInfo);
+          if (typeof data.your_user_id === 'string') setMyUserId(data.your_user_id);
+          if (Array.isArray(data.ice_servers)) setIceServers(data.ice_servers as IceServer[]);
           setError(null);
           break;
-        case 'session_joined':
-          setSession(data.session);
-          if (data.your_user_id) setMyUserId(data.your_user_id);
-          if (data.ice_servers) setIceServers(data.ice_servers);
-          setError(null);
-          break;
-        case 'user_joined':
+        }
+        case 'user_joined': {
+          if (!isRecord(data.user) || typeof data.participant_count !== 'number') return;
+          const newUser = data.user as unknown as SessionParticipant;
+          const count = data.participant_count;
           setSession((prev) =>
             prev
               ? {
                   ...prev,
-                  participant_count: data.participant_count,
-                  participants: [...prev.participants, data.user],
+                  participant_count: count,
+                  participants: [...prev.participants, newUser],
                 }
               : prev,
           );
           break;
-        case 'user_left':
+        }
+        case 'user_left': {
+          if (typeof data.user_id !== 'string' || typeof data.participant_count !== 'number') return;
+          const leftUserId = data.user_id;
+          const count = data.participant_count;
           setSession((prev) =>
             prev
               ? {
                   ...prev,
-                  participant_count: data.participant_count,
-                  participants: prev.participants.filter((p) => p.user_id !== data.user_id),
+                  participant_count: count,
+                  participants: prev.participants.filter((p) => p.user_id !== leftUserId),
                 }
               : prev,
           );
-          webrtc.removePeer(data.user_id);
+          webrtcRef.current.removePeer(leftUserId);
           break;
+        }
         case 'playback_update':
-          if (data.is_playing !== undefined) setIsPlaying(data.is_playing);
-          if (data.position_ms !== undefined) audioEngine.seek(data.position_ms / 1000);
+        case 'sync_response': {
+          if (typeof data.is_playing === 'boolean') setIsPlaying(data.is_playing);
+          if (typeof data.position_ms === 'number') {
+            audioEngineRef.current.seek(data.position_ms / 1000);
+          }
           break;
-        case 'sync_response':
-          if (data.is_playing !== undefined) setIsPlaying(data.is_playing);
-          if (data.position_ms !== undefined) audioEngine.seek(data.position_ms / 1000);
+        }
+        case 'chat': {
+          if (
+            typeof data.user_id !== 'string' ||
+            typeof data.username !== 'string' ||
+            typeof data.message !== 'string'
+          ) {
+            return;
+          }
+          const msg: ChatMessage = {
+            user_id: data.user_id,
+            username: data.username,
+            message: data.message,
+            timestamp: new Date(),
+          };
+          setChatMessages((prev) => [...prev, msg]);
           break;
-        case 'chat':
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              user_id: data.user_id,
-              username: data.username,
-              message: data.message,
-              timestamp: new Date(),
-            },
-          ]);
-          break;
+        }
         case 'left':
           setSession(null);
           setChatMessages([]);
           break;
         case 'user_kicked':
           setError('You were removed from the session');
+          showError('Removed from session', { description: 'The host removed you.' });
           setSession(null);
           break;
-        case 'error':
-          setError(data.message);
+        case 'error': {
+          const message = typeof data.message === 'string' ? data.message : 'Session error';
+          setError(message);
+          showError('Session error', { description: message });
           break;
+        }
         case 'guest_joined':
         case 'webrtc_create_offer':
         case 'webrtc_offer':
         case 'webrtc_answer':
         case 'webrtc_ice':
         case 'webrtc_state_changed':
-          webrtcHandlerRef.current(data);
+          webrtcRef.current.handleSignalingMessage(
+            data as unknown as Parameters<typeof webrtc.handleSignalingMessage>[0],
+          );
           break;
       }
     },
-    [setIsPlaying, audioEngine, webrtc],
+    // setIsPlaying is stable (zustand setter); webrtc/audioEngine accessed via refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [setIsPlaying],
   );
 
+  const clearHandshakeTimeout = useCallback(() => {
+    if (handshakeTimeoutRef.current !== null) {
+      clearTimeout(handshakeTimeoutRef.current);
+      handshakeTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearPendingSend = useCallback(() => {
+    if (pendingSendTimeoutRef.current !== null) {
+      clearTimeout(pendingSendTimeoutRef.current);
+      pendingSendTimeoutRef.current = null;
+    }
+  }, []);
+
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    const existing = wsRef.current;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     setIsConnecting(true);
 
     const ws = new WebSocket(buildWsUrl());
 
+    handshakeTimeoutRef.current = window.setTimeout(() => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        log.warn('WS handshake timed out');
+        ws.close();
+        setIsConnecting(false);
+        setError('Could not reach the session relay.');
+        showError('Could not reach the session relay', {
+          description: 'Check your connection and try again.',
+        });
+      }
+    }, HANDSHAKE_TIMEOUT_MS);
+
     ws.onopen = () => {
+      clearHandshakeTimeout();
       setIsConnecting(false);
       setError(null);
       reconnectAttemptsRef.current = 0;
@@ -238,10 +320,12 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
 
     ws.onerror = () => {
       setError('Connection error');
+      showError('Session connection error');
       setIsConnecting(false);
     };
 
     ws.onclose = () => {
+      clearHandshakeTimeout();
       setIsConnecting(false);
       wsRef.current = null;
 
@@ -249,6 +333,9 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
         reconnectAttemptsRef.current += 1;
         if (reconnectAttemptsRef.current > MAX_RECONNECT_ATTEMPTS) {
           setError('Connection lost. Please try rejoining the session.');
+          showError('Lost connection to the session', {
+            description: 'Please rejoin to continue.',
+          });
           return;
         }
         const delay = Math.min(3000 * 2 ** (reconnectAttemptsRef.current - 1), 60000);
@@ -260,20 +347,32 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
     };
 
     wsRef.current = ws;
-  }, [handleMessage, session]);
+  }, [handleMessage, session, clearHandshakeTimeout]);
 
   const sendOnceConnected = useCallback(
     (message: object) => {
+      clearPendingSend();
+      const startedAt = Date.now();
       const tick = () => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
+          pendingSendTimeoutRef.current = null;
           send(message);
-        } else {
-          setTimeout(tick, 100);
+          return;
         }
+        if (Date.now() - startedAt >= PENDING_SEND_TIMEOUT_MS) {
+          pendingSendTimeoutRef.current = null;
+          log.warn('Timed out waiting for WS to open before sending', message);
+          setError('Could not reach the session relay.');
+          showError('Could not reach the session relay', {
+            description: 'Check your connection and try again.',
+          });
+          return;
+        }
+        pendingSendTimeoutRef.current = window.setTimeout(tick, PENDING_SEND_TICK_MS);
       };
       tick();
     },
-    [send],
+    [send, clearPendingSend],
   );
 
   const createSession = useCallback(
@@ -293,12 +392,17 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
   );
 
   const leaveSession = useCallback(() => {
+    clearPendingSend();
+    if (reconnectTimeoutRef.current !== null) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
     send({ type: 'leave' });
     wsRef.current?.close();
     wsRef.current = null;
     setSession(null);
     setChatMessages([]);
-  }, [send]);
+  }, [send, clearPendingSend]);
 
   const kick = useCallback(
     (targetUserId: string) => {
@@ -342,10 +446,21 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
 
   useEffect(() => {
     return () => {
+      clearHandshakeTimeout();
+      clearPendingSend();
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      // Best-effort polite exit so the relay updates participant counts immediately;
+      // close() alone leaves the relay to time us out.
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({ type: 'leave' }));
+        } catch {
+          // socket might be in the middle of closing — ignore
+        }
+      }
       wsRef.current?.close();
     };
-  }, []);
+  }, [clearHandshakeTimeout, clearPendingSend]);
 
   // Throttled auto-broadcast (1 Hz). Backend additionally heartbeats at 5s.
   useEffect(() => {

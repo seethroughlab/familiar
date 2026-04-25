@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 interface IceServer {
@@ -19,6 +19,17 @@ interface Result {
 export function IceDiagnostics({ iceServers }: IceDiagnosticsProps) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  const mountedRef = useRef(true);
+  const activePcRef = useRef<RTCPeerConnection | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      activePcRef.current?.close();
+      activePcRef.current = null;
+    };
+  }, []);
 
   const run = async () => {
     setRunning(true);
@@ -27,6 +38,7 @@ export function IceDiagnostics({ iceServers }: IceDiagnosticsProps) {
     let pc: RTCPeerConnection | null = null;
     try {
       pc = new RTCPeerConnection({ iceServers });
+      activePcRef.current = pc;
       pc.createDataChannel('probe');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -44,6 +56,8 @@ export function IceDiagnostics({ iceServers }: IceDiagnosticsProps) {
       });
       await done;
 
+      if (!mountedRef.current) return;
+
       const types = new Set(candidates.map((c) => c.type ?? '').filter(Boolean));
       if (types.has('relay')) {
         setResult({ ok: true, message: `TURN works (${candidates.length} candidates, relay confirmed)` });
@@ -59,10 +73,13 @@ export function IceDiagnostics({ iceServers }: IceDiagnosticsProps) {
         setResult({ ok: false, message: `Only host-typed candidates (${candidates.length}). TURN/STUN unreachable.` });
       }
     } catch (err) {
-      setResult({ ok: false, message: `Probe failed: ${(err as Error).message}` });
+      if (mountedRef.current) {
+        setResult({ ok: false, message: `Probe failed: ${(err as Error).message}` });
+      }
     } finally {
       pc?.close();
-      setRunning(false);
+      if (activePcRef.current === pc) activePcRef.current = null;
+      if (mountedRef.current) setRunning(false);
     }
   };
 
