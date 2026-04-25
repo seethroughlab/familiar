@@ -5,6 +5,19 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Listening sessions** — host streams the audio you're playing over WebRTC to friends in real time. Open the Radio panel to create a session, share the code or link, and friends can join from any browser without being on your network. Participant list with kick, in-session chat, optional password, and live ICE/TURN diagnostics
+- **`VITE_SESSIONS_RELAY_URL`** build-time env var pointing at the public signaling relay (`familiar-sessions`); falls back to same-origin for local dev
+- **`AudioEngine.getOutputStream()`** capability — Web Audio engine exposes a `MediaStream` from a lazy `MediaStreamAudioDestinationNode` off masterGain, used for WebRTC streaming
+- **Hook test coverage** for the new session machinery — 20 vitest cases across `useListeningSession` (connect lifecycle, message dispatch, malformed-payload safety, leave/unmount cleanup) and `useWebRTCStreaming` (peer add/remove, guest renegotiation cleanup, host-disabled fallback)
+
+### Compatibility
+
+- iOS host is intentionally deferred — `CapacitorEngine` doesn't implement `getOutputStream()`. Listeners on iOS still join other people's sessions, and the panel surfaces a clear "host from a desktop browser" notice if you try to host on iOS
+
 ## [0.1.0-alpha3] - 2026-04-22
 
 Third alpha — headline change is opt-in OpenAI-compatible LLM provider support alongside Anthropic, so installs can point at Groq, Together, OpenRouter, LocalAI, vLLM, llama.cpp, LM Studio, or Ollama's `/v1` endpoint. Also ships the public landing page at [familiar.seethroughlab.com](https://familiar.seethroughlab.com).

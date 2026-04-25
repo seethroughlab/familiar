@@ -36,6 +36,15 @@ export function getGlobalMasterGain(): GainNode | null {
   return e.getMasterGainNode?.() ?? null;
 }
 
+/**
+ * MediaStream branched off the engine's master output, for WebRTC streaming.
+ * Returns null when the engine has no implementation (iOS) or audio isn't running yet.
+ */
+export function getEngineOutputStream(): MediaStream | null {
+  const e = getEngine();
+  return e.getOutputStream?.() ?? null;
+}
+
 export function areAudioEffectsAvailable(): boolean {
   const e = getEngine();
   return e.capabilities.effects !== 'none';

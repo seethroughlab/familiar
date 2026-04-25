@@ -104,4 +104,8 @@ export interface AudioEngine {
   getAnalyser?(): AnalyserNode | null;
   getAudioContext?(): AudioContext | null;
   getMasterGainNode?(): GainNode | null;
+
+  // Optional: A MediaStream branched off master output for WebRTC streaming (web only).
+  // Returns null if the engine isn't ready to source audio (e.g. AudioContext suspended).
+  getOutputStream?(): MediaStream | null;
 }
