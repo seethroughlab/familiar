@@ -64,7 +64,7 @@
 
 ### Discovery & Search
 - **Semantic audio search** - Describe the sound you want: "upbeat with synths", "acoustic and melancholy"
-- **AI chat assistant** - 27 tools for search, playback, metadata correction, and playlist creation
+- **AI chat assistant** - 27 tools for search, playback, metadata correction, and playlist creation. Pick Anthropic (Claude) or any OpenAI-compatible endpoint (OpenAI, Groq, OpenRouter, LocalAI, vLLM, LM Studio, Ollama `/v1`)
 - **Find similar tracks** - Click any track to find sonically similar music via CLAP embeddings
 - **Mood Grid** - 2D scatter plot by energy and valence (happy/sad × calm/energetic)
 - **Music Map** - Ego-centric similarity map. Click any artist to center the view
@@ -132,6 +132,9 @@
 - **Lock screen controls** - Media notifications and controls
 - **Works over Tailscale** - Access your library anywhere with HTTPS
 
+### Sharing
+- **Listening sessions** - Stream what you're playing to friends in real time over WebRTC. Open the Radio panel to host, share the code or link, friends join from any browser - no account, no shared network. Participant list with kick, in-session chat, optional password. *Host from a desktop browser; iOS clients can join sessions but cannot host yet.*
+
 ### Integrations
 - **Last.fm scrobbling** - Automatic scrobbling, love/unlove tracks
 - **Bandcamp discovery** - Search and get purchase recommendations
@@ -188,14 +191,11 @@ Press `?` anytime to see all shortcuts.
 
 Features planned for future releases:
 
-### Listening Sessions (WebRTC) ([branch](https://github.com/seethroughlab/familiar/tree/feature/listening-sessions))
-Share what you're listening to with friends in real-time. Host a session, share a link, and guests hear synchronized audio - no account required. Requires public signaling server deployment.
-
 ### Multi-Room Audio
 Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
 
-### Additional LLM Providers
-Support for more AI providers beyond Claude and Ollama, including OpenAI (ChatGPT), Google Gemini, and other compatible APIs.
+### Native Google Gemini provider
+Familiar already supports Anthropic and any OpenAI-compatible endpoint. A native Gemini provider would add Google's models without going through an OpenAI-compat shim - see [docs/OTHER_LLMS.md](docs/OTHER_LLMS.md).
 
 ## Beta Feedback
 
