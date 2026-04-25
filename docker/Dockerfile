@@ -25,7 +25,12 @@ COPY packages/web/package.json packages/web/
 # Install dependencies (only what @familiar/web needs)
 RUN pnpm install --frozen-lockfile --filter @familiar/web...
 
-# Copy source and build
+# Copy source and build.
+# VITE_SESSIONS_RELAY_URL is baked in at build time; defaults to the public
+# Fly.io relay. Override with --build-arg VITE_SESSIONS_RELAY_URL=... if you
+# self-host familiar-sessions.
+ARG VITE_SESSIONS_RELAY_URL=https://familiar-sessions.fly.dev
+ENV VITE_SESSIONS_RELAY_URL=${VITE_SESSIONS_RELAY_URL}
 COPY packages/frontend/ packages/frontend/
 COPY packages/web/ packages/web/
 RUN pnpm --filter @familiar/web run build

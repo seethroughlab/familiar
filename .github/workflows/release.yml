@@ -117,6 +117,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
+            VITE_SESSIONS_RELAY_URL=https://familiar-sessions.fly.dev
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ steps.prep.outputs.pair }}
           cache-to: type=gha,mode=max,scope=${{ steps.prep.outputs.pair }}
