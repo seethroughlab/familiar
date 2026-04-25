@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 interface UIState {
-  /** Which right panel is open, if any. Queue and Chat are mutually exclusive. */
-  rightPanel: 'queue' | 'chat' | null;
+  /** Which right panel is open, if any. Queue / Chat / Session are mutually exclusive. */
+  rightPanel: 'queue' | 'chat' | 'session' | null;
   /** Whether the settings modal is showing */
   showSettings: boolean;
   /** Whether the sidebar is collapsed to icon-only mode */
@@ -18,7 +18,7 @@ interface UIState {
   showAmbientScreen: boolean;
 
   // Actions
-  toggleRightPanel: (panel: 'queue' | 'chat') => void;
+  toggleRightPanel: (panel: 'queue' | 'chat' | 'session') => void;
   closeRightPanel: () => void;
   setShowSettings: (show: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;

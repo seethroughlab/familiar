@@ -26,6 +26,7 @@ import { TrackEditModal } from './TrackEdit';
 import { MobileBottomNav } from './MobileNav';
 import { PlaylistPickerModal } from './Playlists/PlaylistPickerModal';
 import { HomeRouteTracker } from './Home';
+import { useListeningSession } from '../hooks/useListeningSession';
 
 // Lazy-loaded components
 const FullPlayer = lazy(() => import('./FullPlayer').then(m => ({ default: m.FullPlayer })));
@@ -33,6 +34,7 @@ const SettingsPanel = lazy(() => import('./Settings').then(m => ({ default: m.Se
 const QueueView = lazy(() => import('./Queue').then(m => ({ default: m.QueueView })));
 const ChatPanel = lazy(() => import('./Chat').then(m => ({ default: m.ChatPanel })));
 const AmbientScreen = lazy(() => import('./Ambient').then(m => ({ default: m.AmbientScreen })));
+const SessionPanel = lazy(() => import('./Sessions/SessionPanel').then(m => ({ default: m.SessionPanel })));
 
 function LazyLoadSpinner() {
   return (
@@ -99,6 +101,9 @@ export function AppShell() {
   const pendingChatMessage = useUIStore((s) => s.pendingChatMessage);
   const playlistPickerTrackIds = useUIStore((s) => s.playlistPickerTrackIds);
 
+  // Listening session — single hook owns the WS connection for the whole app shell
+  const listeningSession = useListeningSession();
+
   return (
       <div className={`h-dynamic-screen flex flex-col select-none ${resolvedTheme === 'light' ? 'bg-white text-zinc-900' : 'bg-black text-white'}`}>
         <HomeRouteTracker />
@@ -123,7 +128,9 @@ export function AppShell() {
           {rightPanel && (
             <div className={`hidden md:flex w-80 border-l flex-col ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'}`}>
               <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
-                <h2 className="font-semibold">{rightPanel === 'queue' ? 'Queue' : 'AI Assistant'}</h2>
+                <h2 className="font-semibold">
+                  {rightPanel === 'queue' ? 'Queue' : rightPanel === 'session' ? 'Listening Session' : 'AI Assistant'}
+                </h2>
                 <button
                   onClick={closeRightPanel}
                   className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
@@ -141,6 +148,22 @@ export function AppShell() {
                       onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
                     />
                   )}
+                  {rightPanel === 'session' && (
+                    <SessionPanel
+                      session={listeningSession.session}
+                      isHost={listeningSession.isHost}
+                      isConnecting={listeningSession.isConnecting}
+                      error={listeningSession.error}
+                      hostDisabled={listeningSession.webrtc.hostDisabled}
+                      iceServers={listeningSession.iceServers}
+                      chatMessages={listeningSession.chatMessages}
+                      onCreateSession={listeningSession.createSession}
+                      onJoinSession={listeningSession.joinSession}
+                      onLeaveSession={listeningSession.leaveSession}
+                      onSendMessage={listeningSession.sendChatMessage}
+                      onKick={listeningSession.kick}
+                    />
+                  )}
                 </Suspense>
               </div>
             </div>
@@ -155,6 +178,8 @@ export function AppShell() {
             isQueueOpen={rightPanel === 'queue'}
             onChatToggle={() => toggleRightPanel('chat')}
             isChatOpen={rightPanel === 'chat'}
+            onSessionToggle={() => toggleRightPanel('session')}
+            isSessionOpen={rightPanel === 'session'}
           />
         </ErrorBoundary>
 
@@ -223,6 +248,39 @@ export function AppShell() {
                   onClose={closeRightPanel}
                 />
               </Suspense>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile session overlay */}
+        {rightPanel === 'session' && (
+          <div className="md:hidden fixed inset-0 z-50 flex flex-col">
+            <div className="absolute inset-0 bg-black/50" onClick={closeRightPanel} />
+            <div className={`relative flex-1 mt-12 ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} rounded-t-xl flex flex-col pb-safe`}>
+              <div className="flex items-center justify-between p-4">
+                <h2 className="font-semibold">Listening Session</h2>
+                <button onClick={closeRightPanel} className="p-1.5 hover:bg-zinc-800 rounded-lg" aria-label="Close session panel">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0">
+                <Suspense fallback={<LazyLoadSpinner />}>
+                  <SessionPanel
+                    session={listeningSession.session}
+                    isHost={listeningSession.isHost}
+                    isConnecting={listeningSession.isConnecting}
+                    error={listeningSession.error}
+                    hostDisabled={listeningSession.webrtc.hostDisabled}
+                    iceServers={listeningSession.iceServers}
+                    chatMessages={listeningSession.chatMessages}
+                    onCreateSession={listeningSession.createSession}
+                    onJoinSession={listeningSession.joinSession}
+                    onLeaveSession={listeningSession.leaveSession}
+                    onSendMessage={listeningSession.sendChatMessage}
+                    onKick={listeningSession.kick}
+                  />
+                </Suspense>
+              </div>
             </div>
           </div>
         )}

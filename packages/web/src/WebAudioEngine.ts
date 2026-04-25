@@ -33,6 +33,7 @@ export class WebAudioEngine implements AudioEngine {
   private analyser: AnalyserNode | null = null;
   private masterGain: GainNode | null = null;
   private effectsChain: EffectsChain | null = null;
+  private outputStreamDestination: MediaStreamAudioDestinationNode | null = null;
 
   // Elements A/B for crossfade
   private elementA: HTMLAudioElement | null = null;
@@ -547,6 +548,21 @@ export class WebAudioEngine implements AudioEngine {
 
   getMasterGainNode(): GainNode | null {
     return this.masterGain;
+  }
+
+  /**
+   * Get a MediaStream branched off master output for WebRTC streaming.
+   * Lazily wires `masterGain → MediaStreamAudioDestinationNode` once.
+   * Returns null until the AudioContext has a resumed graph (load() has run).
+   */
+  getOutputStream(): MediaStream | null {
+    if (!this.audioContext || !this.masterGain) return null;
+    if (this.audioContext.state !== 'running') return null;
+    if (!this.outputStreamDestination) {
+      this.outputStreamDestination = this.audioContext.createMediaStreamDestination();
+      this.masterGain.connect(this.outputStreamDestination);
+    }
+    return this.outputStreamDestination.stream;
   }
 
   // ========================================================================

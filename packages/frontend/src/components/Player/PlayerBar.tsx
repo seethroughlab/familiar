@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, ListX, ListMusic, MessageSquare } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, ListX, ListMusic, MessageSquare, Radio } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -21,6 +21,8 @@ interface PlayerBarProps {
   isQueueOpen?: boolean;
   onChatToggle?: () => void;
   isChatOpen?: boolean;
+  onSessionToggle?: () => void;
+  isSessionOpen?: boolean;
 }
 
 function formatTime(seconds: number): string {
@@ -62,6 +64,8 @@ export function PlayerBar({
   isQueueOpen = false,
   onChatToggle,
   isChatOpen = false,
+  onSessionToggle,
+  isSessionOpen = false,
 }: PlayerBarProps) {
   const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume } = usePlayerStore(
     useShallow((s) => ({
@@ -451,6 +455,20 @@ export function PlayerBar({
             title="AI Assistant"
           >
             <MessageSquare className="w-5 h-5" />
+          </button>
+        )}
+
+        {/* Listening session toggle */}
+        {onSessionToggle && (
+          <button
+            onClick={onSessionToggle}
+            className={`p-2 rounded-full transition-colors ${
+              isSessionOpen ? 'text-green-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+            }`}
+            aria-label={isSessionOpen ? 'Close session' : 'Open session'}
+            title="Listening Session"
+          >
+            <Radio className="w-5 h-5" />
           </button>
         )}
       </div>
