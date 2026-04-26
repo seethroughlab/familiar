@@ -14,7 +14,6 @@ from typing import Literal
 import numpy as np
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.services.normalize import normalize_for_matching
@@ -409,20 +408,22 @@ class EmbeddingMapService:
         """
         from app.config import FEATURES_VERSION
 
-        # Fetch all tracks with embeddings
+        # Project only the columns we need. The previous implementation loaded
+        # full Track ORM rows + selectinload-ed every TrackAnalysis (with all its
+        # JSONB blobs and 30+ feature columns), pulling hundreds of MB into
+        # memory for a 23K-track library and OOM-killing the container.
         query = (
-            select(Track)
+            select(Track.id, Track.artist, TrackAnalysis.embedding)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            .options(selectinload(Track.analyses))
             .where(
                 Track.status == TrackStatus.ACTIVE,
                 Track.artist.isnot(None),
                 Track.artist != "",
+                TrackAnalysis.embedding.isnot(None),
                 TrackAnalysis.features_version >= FEATURES_VERSION,
             )
+            .execution_options(yield_per=2000)
         )
-        result = await db.execute(query)
-        tracks = result.scalars().all()
 
         # Group by artist - store both embeddings and track IDs
         artist_embeddings: dict[str, dict] = defaultdict(
@@ -434,16 +435,9 @@ class EmbeddingMapService:
             }
         )
 
-        for track in tracks:
-            if not track.analyses:
-                continue
-
-            # Get latest analysis with embedding
-            latest = track.analyses[0]
-            if latest.embedding is None:
-                continue
-
-            display_name = track.artist.strip()
+        result = await db.stream(query)
+        async for track_id, artist, embedding in result:
+            display_name = artist.strip()
             if not display_name:
                 continue
 
@@ -451,13 +445,13 @@ class EmbeddingMapService:
             if not key:
                 continue
 
-            embedding = np.array(latest.embedding)
+            track_id_str = str(track_id)
             artist_data = artist_embeddings[key]
-            artist_data["embeddings"].append(embedding)
-            artist_data["track_ids"].append(str(track.id))
+            artist_data["embeddings"].append(np.asarray(embedding, dtype=np.float32))
+            artist_data["track_ids"].append(track_id_str)
             artist_data["track_count"] += 1
             if artist_data["first_track_id"] is None:
-                artist_data["first_track_id"] = str(track.id)
+                artist_data["first_track_id"] = track_id_str
                 artist_data["display_name"] = display_name
 
         # Compute mean embeddings and find representative track
@@ -500,44 +494,36 @@ class EmbeddingMapService:
         from app.config import FEATURES_VERSION
 
         query = (
-            select(Track)
+            select(Track.id, Track.artist, Track.album, TrackAnalysis.embedding)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            .options(selectinload(Track.analyses))
             .where(
                 Track.status == TrackStatus.ACTIVE,
                 Track.album.isnot(None),
                 Track.album != "",
+                TrackAnalysis.embedding.isnot(None),
                 TrackAnalysis.features_version >= FEATURES_VERSION,
             )
+            .execution_options(yield_per=2000)
         )
-        result = await db.execute(query)
-        tracks = result.scalars().all()
 
         # Group by artist-album
         album_embeddings: dict[str, dict] = defaultdict(
             lambda: {"embeddings": [], "track_count": 0, "first_track_id": None}
         )
 
-        for track in tracks:
-            if not track.analyses:
+        result = await db.stream(query)
+        async for track_id, artist, album, embedding in result:
+            artist_str = (artist or "Unknown Artist").strip()
+            album_str = album.strip()
+            if not album_str:
                 continue
 
-            latest = track.analyses[0]
-            if latest.embedding is None:
-                continue
-
-            artist = (track.artist or "Unknown Artist").strip()
-            album = track.album.strip()
-            if not album:
-                continue
-
-            key = f"{artist} - {album}"
-            embedding = np.array(latest.embedding)
+            key = f"{artist_str} - {album_str}"
             album_data = album_embeddings[key]
-            album_data["embeddings"].append(embedding)
+            album_data["embeddings"].append(np.asarray(embedding, dtype=np.float32))
             album_data["track_count"] += 1
             if album_data["first_track_id"] is None:
-                album_data["first_track_id"] = str(track.id)
+                album_data["first_track_id"] = str(track_id)
 
         # Compute mean embeddings
         result_dict = {}

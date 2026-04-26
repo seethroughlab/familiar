@@ -15,7 +15,6 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.services.normalize import normalize_for_matching
@@ -144,36 +143,31 @@ class EgoMapService:
         """
         from app.config import FEATURES_VERSION
 
-        # Fetch all tracks with embeddings
+        # Project only the columns we need + filter null embeddings at SQL level.
+        # Loading full Track ORM rows + selectinload of TrackAnalysis pulled
+        # hundreds of MB into memory for large libraries and OOM-killed the
+        # container.
         query = (
-            select(Track)
+            select(Track.id, Track.artist, TrackAnalysis.embedding)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            .options(selectinload(Track.analyses))
             .where(
                 Track.status == TrackStatus.ACTIVE,
                 Track.artist.isnot(None),
                 Track.artist != "",
+                TrackAnalysis.embedding.isnot(None),
                 TrackAnalysis.features_version >= FEATURES_VERSION,
             )
+            .execution_options(yield_per=2000)
         )
-        result = await db.execute(query)
-        tracks = result.scalars().all()
 
         # Group by artist
         artist_embeddings: dict[str, dict] = defaultdict(
             lambda: {"embeddings": [], "track_count": 0, "first_track_id": None}
         )
 
-        for track in tracks:
-            if not track.analyses:
-                continue
-
-            # Get latest analysis with embedding
-            latest = track.analyses[0]
-            if latest.embedding is None:
-                continue
-
-            display_name = track.artist.strip()
+        result = await db.stream(query)
+        async for track_id, artist, embedding in result:
+            display_name = artist.strip()
             if not display_name:
                 continue
 
@@ -181,12 +175,11 @@ class EgoMapService:
             if not key:
                 continue
 
-            embedding = np.array(latest.embedding)
             artist_data = artist_embeddings[key]
-            artist_data["embeddings"].append(embedding)
+            artist_data["embeddings"].append(np.asarray(embedding, dtype=np.float32))
             artist_data["track_count"] += 1
             if artist_data["first_track_id"] is None:
-                artist_data["first_track_id"] = str(track.id)
+                artist_data["first_track_id"] = str(track_id)
                 artist_data["display_name"] = display_name
 
         # Compute mean embeddings

@@ -20,6 +20,16 @@ from app.services.embedding_map import (
 )
 
 
+def _stream_rows(rows):
+    """Build an async-iterable that mimics ``await db.stream(query)``."""
+
+    async def _gen():
+        for row in rows:
+            yield row
+
+    return _gen()
+
+
 class TestEmbeddingMapServiceInit:
     """Tests for EmbeddingMapService initialization."""
 
@@ -246,24 +256,12 @@ class TestAggregation:
     @pytest.mark.asyncio
     async def test_aggregate_by_artist_groups_tracks(self, service, mock_db):
         """Should group tracks by artist and average embeddings."""
-        # Create mock tracks with analyses
-        track1 = MagicMock()
-        track1.id = uuid4()
-        track1.artist = "Test Artist"
-        track1.analyses = [MagicMock(features_version=1, embedding=list(np.ones(512)))]
-
-        track2 = MagicMock()
-        track2.id = uuid4()
-        track2.artist = "Test Artist"
-        track2.analyses = [MagicMock(features_version=1, embedding=list(np.ones(512) * 2))]
-
-        track3 = MagicMock()
-        track3.id = uuid4()
-        track3.artist = "Other Artist"
-        track3.analyses = [MagicMock(features_version=1, embedding=list(np.zeros(512)))]
-
-        mock_db.execute.return_value = MagicMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [track1, track2, track3]
+        rows = [
+            (uuid4(), "Test Artist", list(np.ones(512))),
+            (uuid4(), "Test Artist", list(np.ones(512) * 2)),
+            (uuid4(), "Other Artist", list(np.zeros(512))),
+        ]
+        mock_db.stream = AsyncMock(return_value=_stream_rows(rows))
 
         with patch("app.config.FEATURES_VERSION", 1):
             result = await service._aggregate_by_artist(mock_db)
@@ -276,29 +274,19 @@ class TestAggregation:
         assert result["Test Artist"]["mean_embedding"][0] == pytest.approx(1.5)
 
     @pytest.mark.asyncio
-    async def test_aggregate_skips_tracks_without_embeddings(self, service, mock_db):
-        """Should skip tracks without embeddings."""
-        track1 = MagicMock()
-        track1.artist = "Artist With Embedding"
-        track1.analyses = [MagicMock(features_version=1, embedding=list(np.ones(512)))]
-
-        track2 = MagicMock()
-        track2.artist = "Artist Without Embedding"
-        track2.analyses = [MagicMock(features_version=1, embedding=None)]
-
-        track3 = MagicMock()
-        track3.artist = "Artist No Analysis"
-        track3.analyses = []
-
-        mock_db.execute.return_value = MagicMock()
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [track1, track2, track3]
+    async def test_aggregate_skips_blank_artists(self, service, mock_db):
+        """Should skip rows with whitespace-only artist names."""
+        rows = [
+            (uuid4(), "Artist With Embedding", list(np.ones(512))),
+            (uuid4(), "   ", list(np.ones(512))),
+        ]
+        mock_db.stream = AsyncMock(return_value=_stream_rows(rows))
 
         with patch("app.config.FEATURES_VERSION", 1):
             result = await service._aggregate_by_artist(mock_db)
 
         assert "Artist With Embedding" in result
-        assert "Artist Without Embedding" not in result
-        assert "Artist No Analysis" not in result
+        assert len(result) == 1
 
 
 class TestCaching:
