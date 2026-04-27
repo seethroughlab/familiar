@@ -14,6 +14,7 @@ export const BROWSER_ROUTES = [
   { path: 'music-map', browserId: 'ego-music-map' },
   { path: 'explorer', browserId: 'umap-explorer' },
   { path: 'discover', browserId: 'discover' },
+  { path: 'discover/new-releases', browserId: 'new-releases-detail' },
   { path: 'proposed-changes', browserId: 'proposed-changes' },
   { path: 'pending-review', browserId: 'pending-review' },
   { path: 'spotify', browserId: 'spotify' },

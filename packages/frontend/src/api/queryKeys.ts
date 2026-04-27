@@ -94,6 +94,21 @@ export const queryKeys = {
   curatedPrompts: {
     all: ['curated-prompts'] as const,
   },
+  newReleases: {
+    all: ['new-releases'] as const,
+    list: (params: { limit: number; offset: number; include_dismissed: boolean; include_owned: boolean }) =>
+      ['new-releases', 'list', params] as const,
+    status: ['new-releases', 'status'] as const,
+  },
+  listeningProfileAlbums: {
+    all: ['listening-profile-albums'] as const,
+    list: (params: { limit: number }) =>
+      ['listening-profile-albums', 'list', params] as const,
+  },
+  playlistExternalAlbums: {
+    all: ['playlist-external-albums'] as const,
+    forPlaylist: (playlistId: string) => ['playlist-external-albums', playlistId] as const,
+  },
   libraryMoodDistribution: {
     detail: (xAxis: string, yAxis: string) => ['library-mood-distribution', xAxis, yAxis] as const,
   },

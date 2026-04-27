@@ -8,6 +8,7 @@ Owns background job orchestration: library sync, analysis pipeline.
 - **library_sync_progress**: `SyncProgressReporter`, `get_sync_progress`, `clear_sync_progress`
 - **analysis_pipeline**: `run_track_features`, `run_track_embedding`, `run_track_analysis`
 - **analysis_queue**: `queue_tracks_for_*`, `queue_unanalyzed_tracks`
+- **new_releases**: `run_new_releases_check`, `run_prioritized_new_releases_check`, `NewReleasesProgressReporter`, `get_new_releases_progress`, `clear_new_releases_progress`
 - **common**: `get_redis`, failure tracking, memory logging
 
 ## Does NOT handle

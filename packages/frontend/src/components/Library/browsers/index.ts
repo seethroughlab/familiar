@@ -15,6 +15,7 @@ import './UMAPExplorer';
 import './ProposedChangesBrowser';
 import './PendingReviewBrowser';
 import './DiscoverBrowser';
+import './NewReleasesDetail';
 import './SpotifyBrowser';
 
 // Phase 6 browsers:

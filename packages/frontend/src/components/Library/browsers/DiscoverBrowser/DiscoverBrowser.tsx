@@ -1,10 +1,13 @@
 /**
  * DiscoverBrowser - Music discovery dashboard.
  *
- * Shows three sections:
- * - Unheard tracks by your top artists
- * - Deep cuts (least-played tracks by favorites)
- * - External artists to explore
+ * Sections (top to bottom):
+ * - Curated prompts (LLM)
+ * - New releases from your artists (#3)
+ * - Albums you might want (listening-profile #2)
+ * - Unheard tracks by your top artists (existing)
+ * - Deep cuts (existing)
+ * - External artists to explore (existing)
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -20,10 +23,11 @@ import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
-  DiscoveryEmpty,
   CuratedPrompts,
   type DiscoveryItem,
 } from '../../../Discovery';
+import { NewReleasesSection } from './NewReleasesSection';
+import { ListeningProfileSection } from './ListeningProfileSection';
 
 
 export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
@@ -48,7 +52,7 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
     staleTime: STALE_TIME.STATIC, // 30 min client-side; server caches 4h
   });
 
-  const { sections, hasDiscovery } = useLibraryDiscovery({ data });
+  const { sections } = useLibraryDiscovery({ data });
 
   if (isOffline) {
     return (
@@ -111,17 +115,6 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
     }
   };
 
-  // Empty state
-  if (!hasDiscovery) {
-    return (
-      <div className="h-full overflow-y-auto p-4">
-        <DiscoveryEmpty
-          message="No discoveries yet. Play some music to get personalized recommendations."
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="h-full overflow-y-auto p-4 space-y-8">
       {/* AI-generated listening suggestions */}
@@ -137,6 +130,12 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
         }}
       />
 
+      {/* External-album sections (Pass 3) — placed above existing sections
+          since "what's new" / "what to acquire" are more actionable than
+          "deep cuts in your library". */}
+      <NewReleasesSection />
+      <ListeningProfileSection />
+
       {/* Stats banner */}
       {recently_added_count > 0 && (
         <div className="flex gap-4 text-sm text-zinc-400">
@@ -147,7 +146,7 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
         </div>
       )}
 
-      {/* Discovery sections */}
+      {/* Existing in-library Discovery sections */}
       {sections.map((section) => (
         <section key={section.id}>
           <DiscoverySectionView

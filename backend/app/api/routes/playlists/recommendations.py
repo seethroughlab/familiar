@@ -7,6 +7,10 @@ from pydantic import BaseModel
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import PlaylistNotFoundError, ValidationError
+from app.api.routes._external_albums_schemas import (
+    ExternalAlbumResponse,
+    ExternalAlbumsResponse,
+)
 from app.db.models import Playlist
 from app.services.recommendations import RecommendationsService
 
@@ -96,6 +100,41 @@ async def get_playlist_recommendations(
                 for t in recs.tracks
             ],
             sources_used=recs.sources_used,
+        )
+    finally:
+        await service.close()
+
+
+@router.get(
+    "/{playlist_id}/recommendations/external-albums",
+    response_model=ExternalAlbumsResponse,
+)
+async def get_playlist_external_albums(
+    playlist_id: UUID,
+    db: DbSession,
+    profile: RequiredProfile,
+    limit: int = Query(12, ge=1, le=50),
+    refresh: bool = Query(False),
+) -> ExternalAlbumsResponse:
+    """External album recommendations (not in library) seeded by this playlist's tracks.
+
+    Available for any playlist (manual, smart, or AI-generated) — unlike the
+    sibling ``/recommendations`` endpoint which is AI-only. Recompute is lazy
+    with a 24h TTL; pass ``refresh=true`` to force.
+    """
+    playlist = await db.get(Playlist, playlist_id)
+
+    if not playlist or playlist.profile_id != profile.id:
+        raise PlaylistNotFoundError()
+
+    service = RecommendationsService(db)
+    try:
+        rows = await service.get_playlist_external_albums(
+            playlist_id, limit=limit, refresh=refresh
+        )
+        await db.commit()
+        return ExternalAlbumsResponse(
+            albums=[ExternalAlbumResponse(**row) for row in rows]
         )
     finally:
         await service.close()

@@ -37,10 +37,12 @@ from app.api.routes import (
     diagnostics,
     download,
     export_import,
+    external_albums,
     favorites,
     health,
     lastfm,
     library,
+    new_releases,
     organizer,
     outputs,
     pending_review,
@@ -398,6 +400,8 @@ app.include_router(download.router, prefix="/api/v1")
 app.include_router(updates.router, prefix="/api/v1")
 app.include_router(spotify_import.router, prefix="/api/v1")
 app.include_router(ambient.router, prefix="/api/v1")
+app.include_router(external_albums.router, prefix="/api/v1")
+app.include_router(new_releases.router, prefix="/api/v1")
 app.include_router(pending_review.group_router, prefix="/api/v1")
 app.include_router(pending_review.bulk_router, prefix="/api/v1")
 app.include_router(pending_review.router, prefix="/api/v1")
