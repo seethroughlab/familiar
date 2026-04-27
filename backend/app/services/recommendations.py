@@ -16,6 +16,7 @@ from app.db.models import (
     ExternalAlbumCache,
     Playlist,
     PlaylistTrack,
+    ProfilePlayHistory,
     Track,
 )
 from app.services.bandcamp import BandcampService
@@ -30,10 +31,11 @@ from app.utils.time import utcnow
 logger = logging.getLogger(__name__)
 
 PLAYLIST_REC_CONTEXT = "playlist_recommendation"
+LISTENING_PROFILE_CONTEXT = "listening_profile_recommendation"
 PLAYLIST_REC_TTL_HOURS = 24
 PLAYLIST_REC_MB_RELEASE_TYPES = ["album", "ep"]
 PLAYLIST_REC_MB_DAYS_BACK = 3650  # 10-year window — effectively "all releases"
-PLAYLIST_REC_SEED_LIMIT = 5  # how many playlist artists to seed similarity from
+PLAYLIST_REC_SEED_LIMIT = 5  # how many seed artists to feed into similarity
 PLAYLIST_REC_SIMILAR_PER_SEED = 5  # similar artists per seed
 PLAYLIST_REC_RELEASES_PER_ARTIST = 2  # albums to take per similar artist
 
@@ -370,8 +372,12 @@ class RecommendationsService:
         if not playlist:
             return []
 
-        if not refresh and not await self._needs_recompute(playlist_id):
-            return await self._read_external_albums(playlist_id, limit=limit)
+        if not refresh and not await self._needs_recompute(
+            PLAYLIST_REC_CONTEXT, source_playlist_id=playlist_id
+        ):
+            return await self._read_external_albums(
+                PLAYLIST_REC_CONTEXT, source_playlist_id=playlist_id, limit=limit
+            )
 
         if not self.lastfm.is_configured():
             logger.info(
@@ -383,15 +389,88 @@ class RecommendationsService:
         if not seed_artists:
             return []
 
-        await self._compute_external_albums(playlist_id, seed_artists)
-        return await self._read_external_albums(playlist_id, limit=limit)
+        await self._compute_external_albums_from_seeds(
+            seed_artists,
+            discovery_context=PLAYLIST_REC_CONTEXT,
+            source_playlist_id=playlist_id,
+        )
+        return await self._read_external_albums(
+            PLAYLIST_REC_CONTEXT, source_playlist_id=playlist_id, limit=limit
+        )
 
-    async def _needs_recompute(self, playlist_id: UUID) -> bool:
+    async def get_listening_profile_external_albums(
+        self,
+        profile_id: UUID,
+        *,
+        limit: int = 12,
+        refresh: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return external album recommendations seeded by the user's top-played artists.
+
+        Profile-wide (no specific playlist). Persists rows with
+        ``discovery_context='listening_profile_recommendation'`` and
+        ``source_playlist_id IS NULL``. 24h TTL.
+        """
+        if not refresh and not await self._needs_recompute(
+            LISTENING_PROFILE_CONTEXT, source_playlist_id=None
+        ):
+            return await self._read_external_albums(
+                LISTENING_PROFILE_CONTEXT, source_playlist_id=None, limit=limit
+            )
+
+        if not self.lastfm.is_configured():
+            logger.info(
+                "Last.fm not configured; cannot compute listening-profile recommendations"
+            )
+            return []
+
+        seed_artists = await self._get_top_played_artists(profile_id)
+        if not seed_artists:
+            return []
+
+        await self._compute_external_albums_from_seeds(
+            seed_artists,
+            discovery_context=LISTENING_PROFILE_CONTEXT,
+            source_playlist_id=None,
+        )
+        return await self._read_external_albums(
+            LISTENING_PROFILE_CONTEXT, source_playlist_id=None, limit=limit
+        )
+
+    async def _get_top_played_artists(
+        self, profile_id: UUID, limit: int = PLAYLIST_REC_SEED_LIMIT
+    ) -> list[str]:
+        """Top distinct artists from the profile's play history, by play count."""
+        result = await self.db.execute(
+            select(
+                Track.artist,
+                func.sum(ProfilePlayHistory.play_count).label("plays"),
+            )
+            .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
+            .where(
+                ProfilePlayHistory.profile_id == profile_id,
+                Track.artist.isnot(None),
+            )
+            .group_by(Track.artist)
+            .order_by(func.sum(ProfilePlayHistory.play_count).desc())
+            .limit(limit)
+        )
+        return [row[0] for row in result.all() if row[0]]
+
+    async def _needs_recompute(
+        self,
+        discovery_context: str,
+        *,
+        source_playlist_id: UUID | None,
+    ) -> bool:
         """True if cache is empty or all rows are older than the TTL."""
+        scope = ExternalAlbumCache.source_playlist_id == source_playlist_id
+        if source_playlist_id is None:
+            scope = ExternalAlbumCache.source_playlist_id.is_(None)
         result = await self.db.execute(
             select(func.max(ExternalAlbumCache.discovered_at)).where(
-                ExternalAlbumCache.source_playlist_id == playlist_id,
-                ExternalAlbumCache.discovery_context == PLAYLIST_REC_CONTEXT,
+                scope,
+                ExternalAlbumCache.discovery_context == discovery_context,
             )
         )
         last = result.scalar()
@@ -399,19 +478,24 @@ class RecommendationsService:
             return True
         return last < utcnow() - timedelta(hours=PLAYLIST_REC_TTL_HOURS)
 
-    async def _compute_external_albums(
+    async def _compute_external_albums_from_seeds(
         self,
-        playlist_id: UUID,
         seed_artists: list[str],
+        *,
+        discovery_context: str,
+        source_playlist_id: UUID | None,
     ) -> None:
-        """Discover and persist external album recommendations for a playlist."""
+        """Discover and persist external album recommendations from a seed list.
+
+        Shared between #2 (playlist-context) and listening-profile #2.
+        Differs only in ``discovery_context`` and ``source_playlist_id``.
+        """
         from app.services.metadata.musicbrainz import (
             get_artist_releases_recent,
             search_artist,
         )
 
         # Step 1: collect candidate similar artists from Last.fm.
-        # Map: normalized name -> {"name": display_name, "match_score": float}
         candidates: dict[str, dict[str, Any]] = {}
         for artist in seed_artists[:PLAYLIST_REC_SEED_LIMIT]:
             try:
@@ -463,7 +547,7 @@ class RecommendationsService:
                         await self._upsert_artist_cache(cand["normalized"], mb_id)
             cand["mb_id"] = mb_id
 
-        # Step 3: fetch releases per resolved artist.
+        # Step 3: fetch releases per resolved artist and persist.
         for cand in candidates.values():
             mb_id = cand.get("mb_id")
             if not mb_id:
@@ -482,8 +566,9 @@ class RecommendationsService:
                 continue
 
             for release in releases[:PLAYLIST_REC_RELEASES_PER_ARTIST]:
-                await self._save_playlist_recommendation(
-                    playlist_id=playlist_id,
+                await self._save_external_album(
+                    discovery_context=discovery_context,
+                    source_playlist_id=source_playlist_id,
                     artist_name=cand["name"],
                     artist_normalized=cand["normalized"],
                     musicbrainz_artist_id=mb_id,
@@ -523,10 +608,11 @@ class RecommendationsService:
             )
         await self.db.flush()
 
-    async def _save_playlist_recommendation(
+    async def _save_external_album(
         self,
         *,
-        playlist_id: UUID,
+        discovery_context: str,
+        source_playlist_id: UUID | None,
         artist_name: str,
         artist_normalized: str,
         musicbrainz_artist_id: str | None,
@@ -534,8 +620,12 @@ class RecommendationsService:
         seed_artist: str,
         release: dict[str, Any],
     ) -> None:
-        """Idempotent upsert keyed on the partial unique index
-        ``(release_id, source_playlist_id) WHERE discovery_context='playlist_recommendation'``."""
+        """Idempotent upsert against the appropriate partial unique index.
+
+        For ``playlist_recommendation``: keyed on (release_id, source_playlist_id).
+        For ``listening_profile_recommendation``: keyed on (release_id) — single
+        listening profile per Familiar profile, source_playlist_id is NULL.
+        """
         release_id = release.get("musicbrainz_release_group_id")
         release_name = release.get("title")
         if not release_id or not release_name:
@@ -553,12 +643,17 @@ class RecommendationsService:
 
         local_match = await check_user_has_release(self.db, artist_name, release_name)
 
+        if discovery_context == PLAYLIST_REC_CONTEXT:
+            conflict_elements = ["release_id", "source_playlist_id"]
+        else:
+            conflict_elements = ["release_id"]
+
         stmt = (
             pg_insert(ExternalAlbumCache)
             .values(
                 release_id=release_id,
-                discovery_context=PLAYLIST_REC_CONTEXT,
-                source_playlist_id=playlist_id,
+                discovery_context=discovery_context,
+                source_playlist_id=source_playlist_id,
                 artist_name=artist_name,
                 artist_name_normalized=artist_normalized,
                 musicbrainz_artist_id=musicbrainz_artist_id,
@@ -574,24 +669,31 @@ class RecommendationsService:
                 local_album_match=local_match,
             )
             .on_conflict_do_nothing(
-                index_elements=["release_id", "source_playlist_id"],
-                index_where=ExternalAlbumCache.discovery_context == PLAYLIST_REC_CONTEXT,
+                index_elements=conflict_elements,
+                index_where=ExternalAlbumCache.discovery_context == discovery_context,
             )
         )
         await self.db.execute(stmt)
 
     async def _read_external_albums(
-        self, playlist_id: UUID, *, limit: int
+        self,
+        discovery_context: str,
+        *,
+        source_playlist_id: UUID | None,
+        limit: int,
     ) -> list[dict[str, Any]]:
         score_expr = func.coalesce(
             ExternalAlbumCache.extra_data["match_score"].astext.cast(Float()),
             0.0,
         )
+        scope = ExternalAlbumCache.source_playlist_id == source_playlist_id
+        if source_playlist_id is None:
+            scope = ExternalAlbumCache.source_playlist_id.is_(None)
         result = await self.db.execute(
             select(ExternalAlbumCache)
             .where(
-                ExternalAlbumCache.source_playlist_id == playlist_id,
-                ExternalAlbumCache.discovery_context == PLAYLIST_REC_CONTEXT,
+                scope,
+                ExternalAlbumCache.discovery_context == discovery_context,
                 ExternalAlbumCache.dismissed.is_(False),
                 ExternalAlbumCache.local_album_match.is_(False),
             )

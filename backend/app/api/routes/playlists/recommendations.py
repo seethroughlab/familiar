@@ -1,6 +1,5 @@
 """Playlist recommendation endpoints."""
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -8,6 +7,10 @@ from pydantic import BaseModel
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import PlaylistNotFoundError, ValidationError
+from app.api.routes._external_albums_schemas import (
+    ExternalAlbumResponse,
+    ExternalAlbumsResponse,
+)
 from app.db.models import Playlist
 from app.services.recommendations import RecommendationsService
 
@@ -100,31 +103,6 @@ async def get_playlist_recommendations(
         )
     finally:
         await service.close()
-
-
-class ExternalAlbumResponse(BaseModel):
-    """An external (not-in-library) album recommendation."""
-
-    id: str
-    artist_name: str
-    release_name: str
-    release_type: str | None
-    release_date: str | None
-    artwork_url: str
-    external_url: str | None
-    track_count: int | None
-    match_score: float
-    seed_artist: str | None
-    local_album_match: bool
-    dismissed: bool
-    discovered_at: str
-    purchase_links: dict[str, Any]
-
-
-class ExternalAlbumsResponse(BaseModel):
-    """List of external album recommendations."""
-
-    albums: list[ExternalAlbumResponse]
 
 
 @router.get(

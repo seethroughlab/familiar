@@ -9,9 +9,14 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
+from app.api.routes._external_albums_schemas import (
+    ExternalAlbumResponse,
+    ExternalAlbumsResponse,
+)
 from app.db.models import Track, TrackStatus
 from app.services.app_settings import get_app_settings_service
 from app.services.llm.providers import get_provider
+from app.services.recommendations import RecommendationsService
 from app.services.redis_client import get_redis
 from app.utils.time import utcnow
 
@@ -471,3 +476,32 @@ async def get_discover_dashboard(
         recommended_artists=recommended_artists,
         recently_added_count=recently_added_count,
     )
+
+
+@router.get(
+    "/discover/external-albums",
+    response_model=ExternalAlbumsResponse,
+)
+async def get_listening_profile_external_albums(
+    db: DbSession,
+    profile: RequiredProfile,
+    limit: int = Query(12, ge=1, le=50),
+    refresh: bool = Query(False),
+) -> ExternalAlbumsResponse:
+    """External album recommendations seeded by the user's top-played artists.
+
+    Profile-wide (no specific playlist). Persists rows with
+    ``discovery_context='listening_profile_recommendation'``. 24h TTL —
+    pass ``refresh=true`` to force a recompute.
+    """
+    service = RecommendationsService(db)
+    try:
+        rows = await service.get_listening_profile_external_albums(
+            profile.id, limit=limit, refresh=refresh
+        )
+        await db.commit()
+        return ExternalAlbumsResponse(
+            albums=[ExternalAlbumResponse(**row) for row in rows]
+        )
+    finally:
+        await service.close()

@@ -93,8 +93,8 @@ class ExternalAlbumCache(Base):
 
     __tablename__ = "external_album_cache"
     __table_args__ = (
-        # Partial unique indexes: same release can appear once per #3,
-        # and once per (#2, playlist).
+        # Partial unique indexes: same release_id can appear once per #3,
+        # once per (#2, playlist), and once per listening-profile #2.
         Index(
             "ix_eac_artist_new_release_unique",
             "release_id",
@@ -107,6 +107,14 @@ class ExternalAlbumCache(Base):
             "source_playlist_id",
             unique=True,
             postgresql_where=Text("discovery_context = 'playlist_recommendation'"),
+        ),
+        Index(
+            "ix_eac_listening_profile_unique",
+            "release_id",
+            unique=True,
+            postgresql_where=Text(
+                "discovery_context = 'listening_profile_recommendation'"
+            ),
         ),
         # Compound index for the per-playlist listing query.
         Index(
