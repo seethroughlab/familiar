@@ -44,6 +44,15 @@ from app.services.tasks.library_sync_progress import (
     get_sync_progress,
 )
 
+# new_releases.py
+from app.services.tasks.new_releases import (
+    NewReleasesProgressReporter,
+    clear_new_releases_progress,
+    get_new_releases_progress,
+    run_new_releases_check,
+    run_prioritized_new_releases_check,
+)
+
 __all__ = [
     # common
     "get_memory_mb",
@@ -71,4 +80,10 @@ __all__ = [
     "queue_tracks_for_melodic",
     "queue_tracks_for_backfill",
     "queue_unanalyzed_tracks",
+    # new_releases
+    "NewReleasesProgressReporter",
+    "clear_new_releases_progress",
+    "get_new_releases_progress",
+    "run_new_releases_check",
+    "run_prioritized_new_releases_check",
 ]

@@ -1,5 +1,6 @@
 """Playlist recommendation endpoints."""
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -96,6 +97,66 @@ async def get_playlist_recommendations(
                 for t in recs.tracks
             ],
             sources_used=recs.sources_used,
+        )
+    finally:
+        await service.close()
+
+
+class ExternalAlbumResponse(BaseModel):
+    """An external (not-in-library) album recommendation."""
+
+    id: str
+    artist_name: str
+    release_name: str
+    release_type: str | None
+    release_date: str | None
+    artwork_url: str
+    external_url: str | None
+    track_count: int | None
+    match_score: float
+    seed_artist: str | None
+    local_album_match: bool
+    dismissed: bool
+    discovered_at: str
+    purchase_links: dict[str, Any]
+
+
+class ExternalAlbumsResponse(BaseModel):
+    """List of external album recommendations."""
+
+    albums: list[ExternalAlbumResponse]
+
+
+@router.get(
+    "/{playlist_id}/recommendations/external-albums",
+    response_model=ExternalAlbumsResponse,
+)
+async def get_playlist_external_albums(
+    playlist_id: UUID,
+    db: DbSession,
+    profile: RequiredProfile,
+    limit: int = Query(12, ge=1, le=50),
+    refresh: bool = Query(False),
+) -> ExternalAlbumsResponse:
+    """External album recommendations (not in library) seeded by this playlist's tracks.
+
+    Available for any playlist (manual, smart, or AI-generated) — unlike the
+    sibling ``/recommendations`` endpoint which is AI-only. Recompute is lazy
+    with a 24h TTL; pass ``refresh=true`` to force.
+    """
+    playlist = await db.get(Playlist, playlist_id)
+
+    if not playlist or playlist.profile_id != profile.id:
+        raise PlaylistNotFoundError()
+
+    service = RecommendationsService(db)
+    try:
+        rows = await service.get_playlist_external_albums(
+            playlist_id, limit=limit, refresh=refresh
+        )
+        await db.commit()
+        return ExternalAlbumsResponse(
+            albums=[ExternalAlbumResponse(**row) for row in rows]
         )
     finally:
         await service.close()

@@ -105,6 +105,14 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
+            # Daily new-releases check (prioritized batch) at 3:00 AM
+            self._scheduler.add_job(
+                self._daily_new_releases_check,
+                CronTrigger(hour=3, minute=0),
+                id="daily_new_releases",
+                replace_existing=True,
+            )
+
             # Periodic metrics summary every 5 minutes
             self._scheduler.add_job(
                 self._log_metrics_summary,

@@ -320,6 +320,72 @@ class SyncMixin(_SyncBase):
 
         return {"status": progress["status"], "task_id": task_id}
 
+    async def run_new_releases_check(
+        self,
+        profile_id: str | None = None,
+        days_back: int = 90,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Kick off a full new-releases check (every library artist, MB only)."""
+        from app.services.tasks import run_new_releases_check
+
+        try:
+            return await run_new_releases_check(
+                profile_id=profile_id, days_back=days_back, force=force
+            )
+        except Exception as e:
+            logger.error(f"new_releases check failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    async def run_prioritized_new_releases_check(
+        self,
+        profile_id: str,
+        batch_size: int = 75,
+        days_back: int = 90,
+    ) -> dict[str, Any]:
+        """Kick off a prioritized batch new-releases check."""
+        from app.services.tasks import run_prioritized_new_releases_check
+
+        try:
+            return await run_prioritized_new_releases_check(
+                profile_id=profile_id, batch_size=batch_size, days_back=days_back
+            )
+        except Exception as e:
+            logger.error(f"prioritized new_releases check failed: {e}", exc_info=True)
+            return {"status": "error", "error": str(e)}
+
+    async def _daily_new_releases_check(self) -> None:
+        """APScheduler entry: pick the first profile and run a prioritized batch."""
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import (
+            AsyncSession,
+            async_sessionmaker,
+            create_async_engine,
+        )
+
+        from app.config import settings
+        from app.db.models import Profile
+
+        try:
+            engine = create_async_engine(settings.database_url)
+            async_session = async_sessionmaker(engine, class_=AsyncSession)
+            try:
+                async with async_session() as db:
+                    result = await db.execute(select(Profile.id).limit(1))
+                    profile_row = result.first()
+                    if not profile_row:
+                        logger.info(
+                            "Daily new releases check: no profiles, skipping"
+                        )
+                        return
+                    profile_id = str(profile_row[0])
+            finally:
+                await engine.dispose()
+
+            await self.run_prioritized_new_releases_check(profile_id=profile_id)
+        except Exception as e:
+            logger.warning(f"Daily new releases check failed: {e}")
+
     async def _cleanup_frontend_logs(self) -> None:
         """Delete frontend_logs older than 7 days."""
         from datetime import timedelta
