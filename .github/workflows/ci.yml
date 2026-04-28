@@ -51,6 +51,10 @@ jobs:
     # builds + anonymous Docker Hub pulls don't need credentials.
     env:
       DOCKER_CONFIG: /tmp/familiar-ci-docker-config
+      # Explicit empty credsStore overrides Docker Desktop's default
+      # osxkeychain helper, which the buildkit metadata fetcher would
+      # otherwise consult and crash on (locked keychain in launchd session).
+      DOCKER_BUILDKIT: '0'
     steps:
       - uses: actions/checkout@v4
 
@@ -58,7 +62,8 @@ jobs:
         run: |
           rm -rf "$DOCKER_CONFIG"
           mkdir -p "$DOCKER_CONFIG"
-          echo '{}' > "$DOCKER_CONFIG/config.json"
+          # `credsStore: ""` tells Docker to skip credential helpers entirely.
+          echo '{"credsStore":"","credHelpers":{},"auths":{}}' > "$DOCKER_CONFIG/config.json"
           # Docker looks up CLI plugins (compose, buildx) under
           # $DOCKER_CONFIG/cli-plugins. Without this symlink, `docker compose`
           # is unrecognized and -f is interpreted as a flag to plain docker.
