@@ -1,6 +1,5 @@
 """Route-level tests for the playlist external-albums GET + generic dismiss."""
 
-from typing import Any
 from uuid import uuid4
 
 import pytest

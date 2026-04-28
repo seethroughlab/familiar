@@ -13,14 +13,14 @@ with each zone potentially using a different output type.
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
 logger = logging.getLogger(__name__)
 
 
-class OutputType(str, Enum):
+class OutputType(StrEnum):
     """Types of audio outputs."""
 
     BROWSER = "browser"
@@ -29,7 +29,7 @@ class OutputType(str, Enum):
     CHROMECAST = "chromecast"
 
 
-class OutputState(str, Enum):
+class OutputState(StrEnum):
     """State of an audio output."""
 
     IDLE = "idle"

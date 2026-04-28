@@ -1,6 +1,5 @@
 """Service-level tests for the playlist external-albums lane (#2)."""
 
-from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -18,7 +17,6 @@ from tests.factories import (
     insert_test_profile,
     insert_test_track,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
