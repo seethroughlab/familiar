@@ -8,8 +8,8 @@ from .artists import (
     Artist,
     ArtistAlias,
     ArtistCheckCache,
-    ArtistInfo,
     ExternalAlbumCache,
+    ExternalArtistImageCache,
 )
 from .base import (
     AlbumType,
@@ -44,8 +44,8 @@ __all__ = [
     "Artist",
     "ArtistAlias",
     "ArtistCheckCache",
-    "ArtistInfo",
     "ExternalAlbumCache",
+    "ExternalArtistImageCache",
     "FrontendLog",
     "LastfmProfile",
     "Playlist",

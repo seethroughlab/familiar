@@ -49,7 +49,7 @@ async def test_curated_prompts_routes_through_provider_utility() -> None:
     db = AsyncMock()
     db.execute.side_effect = [
         _fake_execute_result([SimpleNamespace(genre="Ambient"), SimpleNamespace(genre="Electronic")]),
-        _fake_execute_result([SimpleNamespace(artist="Boards of Canada"), SimpleNamespace(artist="Autechre")]),
+        _fake_execute_result([SimpleNamespace(name="Boards of Canada"), SimpleNamespace(name="Autechre")]),
     ]
     db.scalar.side_effect = [2400, 48]
 

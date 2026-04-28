@@ -13,7 +13,8 @@ from app.api.routes._external_albums_schemas import (
     ExternalAlbumResponse,
     ExternalAlbumsResponse,
 )
-from app.db.models import Track, TrackStatus
+from app.db.models import Artist, ArtistAlias, Track, TrackStatus
+from app.services.external_albums_helpers import normalize_artist_name
 from app.services.app_settings import get_app_settings_service
 from app.services.llm.providers import get_provider
 from app.services.recommendations import RecommendationsService
@@ -87,7 +88,10 @@ async def get_curated_prompts(
     """Generate AI-powered listening suggestions based on the user's library."""
     from app.db.models import ProfilePlayHistory
 
-    cache_key = f"curated_prompts:{profile.id}"
+    # Cache key bumped to v2 so the Pass 2 deploy serves freshly-generated
+    # prompts that reference deduped canonical artist names instead of
+    # whatever string-grouped version was cached pre-cutover.
+    cache_key = f"curated_prompts:v2:{profile.id}"
 
     # Check Redis cache (unless refresh requested)
     if not refresh:
@@ -112,20 +116,21 @@ async def get_curated_prompts(
         genre_result = await db.execute(genre_query)
         top_genres = [row.genre for row in genre_result.fetchall() if row.genre]
 
-        # Top 5 artists by play count
+        # Top 5 canonical artists by play count.
         artist_query = (
-            select(Track.artist, func.sum(ProfilePlayHistory.play_count).label("plays"))
-            .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .where(
-                Track.artist.isnot(None),
-                ProfilePlayHistory.profile_id == profile.id,
+            select(
+                Artist.name,
+                func.sum(ProfilePlayHistory.play_count).label("plays"),
             )
-            .group_by(Track.artist)
+            .join(Track, ProfilePlayHistory.track_id == Track.id)
+            .join(Artist, Artist.id == Track.canonical_artist_id)
+            .where(ProfilePlayHistory.profile_id == profile.id)
+            .group_by(Artist.id, Artist.name)
             .order_by(func.sum(ProfilePlayHistory.play_count).desc())
             .limit(5)
         )
         artist_result = await db.execute(artist_query)
-        top_artists = [row.artist for row in artist_result.fetchall() if row.artist]
+        top_artists = [row.name for row in artist_result.fetchall() if row.name]
 
         # Total track count
         total_tracks = await db.scalar(
@@ -245,56 +250,50 @@ async def get_discover_dashboard(
     """
     from datetime import timedelta
 
-    from app.db.models import ArtistInfo, ProfilePlayHistory
+    from app.db.models import ProfilePlayHistory
     from app.services.lastfm import get_lastfm_service
     from app.services.search_links import generate_artist_search_url
 
-    # 1. Get recommended artists based on top-played artists
+    # 1. Recommended artists, seeded by canonical top-played artists.
     recommended_artists: list[DiscoverRecommendedArtist] = []
 
-    # Get top-played artists (filtered by profile)
     play_history_query = (
         select(
-            func.lower(func.trim(Track.artist)).label("artist_normalized"),
-            Track.artist,
+            Artist.id.label("artist_id"),
+            Artist.name.label("artist_name"),
+            Artist.similar_artists.label("similar_cached"),
             func.sum(ProfilePlayHistory.play_count).label("total_plays"),
         )
         .join(Track, ProfilePlayHistory.track_id == Track.id)
-        .where(
-            Track.artist.isnot(None),
-            ProfilePlayHistory.profile_id == profile.id,
-        )
-        .group_by(func.lower(func.trim(Track.artist)), Track.artist)
+        .join(Artist, Artist.id == Track.canonical_artist_id)
+        .where(ProfilePlayHistory.profile_id == profile.id)
+        .group_by(Artist.id, Artist.name, Artist.similar_artists)
         .order_by(func.sum(ProfilePlayHistory.play_count).desc())
         .limit(seed_artists)
     )
     play_result = await db.execute(play_history_query)
     top_artists = play_result.fetchall()
+    top_artist_ids = [row.artist_id for row in top_artists]
 
     seen_recommendations: set[str] = set()
     similar_candidates: list[tuple[str, str, dict, str]] = []  # (name, normalized, similar_data, based_on)
 
     for row in top_artists:
-        artist_name = row.artist
+        artist_name = row.artist_name
         if not artist_name:
             continue
 
-        artist_normalized = artist_name.lower().strip()
-
-        # Check cached artist info for similar artists
-        cached_info = await db.get(ArtistInfo, artist_normalized)
-        if cached_info and cached_info.similar_artists:
-            raw_similar = cached_info.similar_artists
+        # Use Artist.similar_artists if cached, else fetch from Last.fm.
+        if row.similar_cached:
+            raw_similar = row.similar_cached
         else:
-            # Try fetching from Last.fm
             lastfm_service = get_lastfm_service()
             if lastfm_service.is_configured():
                 try:
                     info = await lastfm_service.get_artist_info(artist_name)
-                    if info:
-                        raw_similar = info.get("similar", {}).get("artist", [])
-                    else:
-                        raw_similar = []
+                    raw_similar = (
+                        info.get("similar", {}).get("artist", []) if info else []
+                    )
                 except Exception:
                     raw_similar = []
             else:
@@ -310,29 +309,32 @@ async def get_discover_dashboard(
                 score = 0.0
             if score < min_match_score:
                 continue
-            normalized = name.lower().strip()
+            normalized = normalize_artist_name(name)
             if normalized in seen_recommendations:
                 continue
             seen_recommendations.add(normalized)
             similar_candidates.append((name, normalized, similar, artist_name))
 
-    # Single GROUP BY query to check library counts for all candidate artists at once
+    # Library presence check for similar artists — alias-keyed so spelling
+    # variants of the same canonical artist count as in-library.
     all_normalized_names = [c[1] for c in similar_candidates]
     lib_counts: dict[str, int] = {}
     if all_normalized_names:
         lib_result = await db.execute(
             select(
-                func.lower(func.trim(Track.artist)).label("artist_norm"),
+                ArtistAlias.alias_normalized.label("alias_norm"),
                 func.count(Track.id).label("cnt"),
             )
+            .join(Artist, Artist.id == ArtistAlias.artist_id)
+            .join(Track, Track.canonical_artist_id == Artist.id)
             .where(
-                func.lower(func.trim(Track.artist)).in_(all_normalized_names),
+                ArtistAlias.alias_normalized.in_(all_normalized_names),
                 Track.status == TrackStatus.ACTIVE,
             )
-            .group_by(func.lower(func.trim(Track.artist)))
+            .group_by(ArtistAlias.alias_normalized)
         )
         for lib_row in lib_result.all():
-            lib_counts[lib_row.artist_norm] = lib_row.cnt
+            lib_counts[lib_row.alias_norm] = lib_row.cnt
 
     # Build recommended artists list using the pre-fetched counts
     for name, normalized, similar, based_on_artist in similar_candidates:
@@ -401,20 +403,18 @@ async def get_discover_dashboard(
     ]
     schedule_background_resolve(unresolved)
 
-    # 2. Track-based discovery using top artist names
+    # 2. Track-based discovery using top canonical artist ids.
     unheard_tracks: list[DiscoverTrack] = []
     deep_cuts: list[DiscoverTrack] = []
 
-    top_artist_names = [row.artist_normalized for row in top_artists if row.artist_normalized]
-
-    if top_artist_names:
-        # Subquery: track IDs this profile has played
+    if top_artist_ids:
+        # Subquery: track IDs this profile has played.
         played_track_ids = (
             select(ProfilePlayHistory.track_id)
             .where(ProfilePlayHistory.profile_id == profile.id)
         )
 
-        # Unheard tracks: by top artists, never played by this profile
+        # Unheard tracks: by top canonical artists, never played by this profile.
         unheard_query = (
             select(
                 Track.id,
@@ -424,7 +424,7 @@ async def get_discover_dashboard(
                 Track.duration_seconds,
             )
             .where(
-                func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                Track.canonical_artist_id.in_(top_artist_ids),
                 Track.status == TrackStatus.ACTIVE,
                 Track.id.notin_(played_track_ids),
             )
@@ -448,7 +448,7 @@ async def get_discover_dashboard(
                 )
             )
 
-        # Deep cuts: by top artists, played but low play count
+        # Deep cuts: by top canonical artists, played but low play count.
         deep_cuts_query = (
             select(
                 Track.id,
@@ -460,7 +460,7 @@ async def get_discover_dashboard(
             )
             .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
             .where(
-                func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                Track.canonical_artist_id.in_(top_artist_ids),
                 Track.status == TrackStatus.ACTIVE,
                 ProfilePlayHistory.profile_id == profile.id,
                 ProfilePlayHistory.play_count > 0,

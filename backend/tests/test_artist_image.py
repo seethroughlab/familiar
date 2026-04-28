@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 
-from app.db.models import ArtistInfo
+from app.db.models import ExternalArtistImageCache
 from app.services import artist_image as ai
 
 
@@ -106,11 +106,63 @@ async def test_resolve_caches_positive_hit(async_db, stub_wiki_direct):
     assert url == "https://upload.wikimedia.org/Cocteau_Twins.jpg"
     row = (
         await async_db.execute(
-            select(ArtistInfo).where(ArtistInfo.artist_name_normalized == "cocteau twins")
+            select(ExternalArtistImageCache).where(ExternalArtistImageCache.name_normalized == "cocteau twins")
         )
     ).scalar_one()
     assert row.image_url == "https://upload.wikimedia.org/Cocteau_Twins.jpg"
     assert row.image_checked_at is not None
+
+
+@pytest.mark.asyncio
+async def test_resolve_writes_through_to_artist_when_alias_exists(
+    async_db, stub_wiki_direct
+):
+    """Pass 4: a successful resolution mirrors onto Artist.image_url
+    when an alias for the queried name is registered."""
+    from app.db.models import Artist, ArtistAlias
+    from app.services import artist_resolver
+
+    artist = await artist_resolver.resolve_canonical_artist(
+        async_db, "Cocteau Twins", do_mb_lookup=False
+    )
+    await async_db.commit()
+    # Artist.image_url is initially NULL.
+    assert artist.image_url is None
+
+    url = await ai.resolve_artist_image(async_db, "Cocteau Twins")
+    await async_db.commit()
+
+    refreshed = await async_db.get(Artist, artist.id)
+    assert refreshed.image_url == url
+    assert refreshed.image_checked_at is not None
+
+
+@pytest.mark.asyncio
+async def test_negative_cache_does_not_overwrite_artist_image_url(
+    async_db, stub_wiki_direct_miss, monkeypatch
+):
+    """Pass 4: a negative-cache result must not blank an
+    Artist.image_url that was previously resolved positive."""
+    monkeypatch.setattr(ai.musicbrainz, "search_artist", lambda name: None)
+    monkeypatch.setattr(ai, "strict_mb_artist_lookup", lambda name: None)
+
+    from app.db.models import Artist
+    from app.services import artist_resolver
+
+    artist = await artist_resolver.resolve_canonical_artist(
+        async_db, "Some Obscure Artist", do_mb_lookup=False
+    )
+    artist.image_url = "https://existing.example/already.jpg"
+    await async_db.commit()
+
+    # Resolve runs, resolver chain returns None → negative cache.
+    url = await ai.resolve_artist_image(async_db, "Some Obscure Artist")
+    await async_db.commit()
+    assert url is None
+
+    refreshed = await async_db.get(Artist, artist.id)
+    # Pre-existing positive value is preserved (no overwrite).
+    assert refreshed.image_url == "https://existing.example/already.jpg"
 
 
 @pytest.mark.asyncio
@@ -144,8 +196,8 @@ async def test_resolve_caches_negative_hit(async_db, stub_wiki_direct_miss, monk
 
     row = (
         await async_db.execute(
-            select(ArtistInfo).where(
-                ArtistInfo.artist_name_normalized == "nonexistent artist"
+            select(ExternalArtistImageCache).where(
+                ExternalArtistImageCache.name_normalized == "nonexistent artist"
             )
         )
     ).scalar_one()
@@ -203,8 +255,8 @@ async def test_resolve_many_does_not_negative_cache_misses_inline(
 
     row = (
         await async_db.execute(
-            select(ArtistInfo).where(
-                ArtistInfo.artist_name_normalized == "some obscure artist"
+            select(ExternalArtistImageCache).where(
+                ExternalArtistImageCache.name_normalized == "some obscure artist"
             )
         )
     ).scalar_one_or_none()

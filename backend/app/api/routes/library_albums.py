@@ -209,7 +209,8 @@ async def get_album_detail(
     from sqlalchemy import cast
     from sqlalchemy.dialects.postgresql import TEXT
 
-    from app.db.models import ArtistInfo
+    from app.db.models import Artist, ArtistAlias
+    from app.services.external_albums_helpers import normalize_artist_name
     from app.services.search_links import generate_artist_search_url
 
     # URL decode the names
@@ -311,8 +312,15 @@ async def get_album_detail(
         ]
 
     async def fetch_artist_info() -> list[dict]:
-        cached_artist = await db.get(ArtistInfo, artist_normalized)
-        return cached_artist.similar_artists if cached_artist else []
+        # Pass 3 cutover: read similar_artists off the canonical Artist
+        # row (migrated from ArtistInfo in Pass 1's backfill, kept fresh
+        # by Pass 2's get_artist_detail Last.fm refresh). Falls back to
+        # an empty list when the artist isn't in the canonical table.
+        alias = await db.get(ArtistAlias, normalize_artist_name(artist_name))
+        if alias is None:
+            return []
+        artist_row = await db.get(Artist, alias.artist_id)
+        return artist_row.similar_artists if artist_row else []
 
     other_albums_by_artist, raw_similar_artists = await asyncio.gather(
         fetch_other_albums(), fetch_artist_info()

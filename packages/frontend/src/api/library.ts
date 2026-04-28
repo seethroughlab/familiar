@@ -56,6 +56,8 @@ export interface SyncStatus {
 
 // Library Browser Types
 export interface ArtistSummary {
+  /** Canonical Artist.id (UUID) — present after Pass 2 read cutover. */
+  id?: string | null;
   name: string;
   track_count: number;
   album_count: number;
@@ -89,6 +91,8 @@ export interface ArtistTrack {
 }
 
 export interface ArtistDetailResponse {
+  /** Canonical Artist.id (UUID) — present after Pass 2 read cutover. */
+  id?: string | null;
   name: string;
   track_count: number;
   album_count: number;

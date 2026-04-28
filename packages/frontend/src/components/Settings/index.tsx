@@ -15,6 +15,7 @@ import { DataManagement } from './DataManagement';
 import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { S3BackupSettings } from './S3Backup';
+import { ArtistMergePanel } from './ArtistMerge';
 import { ServerSettings } from './ServerSettings';
 import { ShuffleWeightSettings } from './ShuffleWeightSettings';
 import { isNativeApp } from '../../utils/platform';
@@ -48,6 +49,7 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <LibrarySync />
             <AnalysisSettings />
+            <ArtistMergePanel />
             <CommunityCache />
           </div>
         </section>

@@ -12,12 +12,10 @@ from app.cli import backfill_artists as bf
 from app.db.models import (
     Artist,
     ArtistAlias,
-    ArtistInfo,
     Track,
     TrackStatus,
 )
 from app.services import artist_resolver as ar
-from app.utils.time import utcnow
 
 
 @pytest.fixture(autouse=True)
@@ -25,12 +23,10 @@ async def _cleanup_artists(async_db):
     """Wipe canonical-artist tables before/after each backfill test."""
     await async_db.execute(delete(ArtistAlias))
     await async_db.execute(delete(Artist))
-    await async_db.execute(delete(ArtistInfo))
     await async_db.commit()
     yield
     await async_db.execute(delete(ArtistAlias))
     await async_db.execute(delete(Artist))
-    await async_db.execute(delete(ArtistInfo))
     await async_db.commit()
 
 
@@ -131,86 +127,26 @@ async def test_backfill_sets_canonical_artist_id_on_tracks(async_db, monkeypatch
     assert all(v is not None for v in by_artist.values())
 
 
-@pytest.mark.asyncio
-async def test_artist_info_migrated_onto_canonical(async_db, monkeypatch):
-    """ArtistInfo cached image/bio gets copied onto the matching Artist."""
-    await _seed(
-        async_db,
-        [_seed_track(file_name="t1", artist="Cocteau Twins")],
-    )
-    async_db.add(
-        ArtistInfo(
-            artist_name_normalized="cocteau twins",
-            artist_name="Cocteau Twins",
-            image_url="https://example.test/cocteau.jpg",
-            image_checked_at=utcnow(),
-            bio_summary="Scottish dream pop band.",
-            similar_artists=[{"name": "Slowdive"}],
-            tags=["dream-pop"],
-        )
-    )
-    await async_db.commit()
-    _patch_mb(monkeypatch, name_to_mbid={})
-
-    for tag, mbid in await bf._distinct_artist_strings(async_db):
-        await ar.resolve_canonical_artist(
-            async_db, tag, musicbrainz_artist_id=mbid, do_mb_lookup=False
-        )
-    await async_db.commit()
-
-    matched, skipped = await bf._migrate_artist_info(async_db)
-    await async_db.commit()
-    assert matched == 1
-    assert skipped == 0
-
-    artist = (
-        await async_db.execute(
-            select(Artist).where(Artist.name == "Cocteau Twins")
-        )
-    ).scalar_one()
-    assert artist.image_url == "https://example.test/cocteau.jpg"
-    assert artist.bio_summary == "Scottish dream pop band."
-    assert artist.similar_artists == [{"name": "Slowdive"}]
-    assert artist.tags == ["dream-pop"]
+# Pass-1 ArtistInfo→Artist migration tests retired in Pass 4 along with
+# the ArtistInfo table itself. The migration ran once on the live DB
+# (via the Pass 1 backfill); subsequent test runs no longer exercise
+# that code path.
 
 
 @pytest.mark.asyncio
-async def test_artist_info_migration_handles_shared_mbid_across_rows(
-    async_db, monkeypatch
-):
-    """Two ArtistInfo rows carrying the same MBID for different name spellings
-    must not blow up the migration with a unique-constraint violation.
-
-    Real-world example: 'Kahimi Karie' and 'カヒミ・カリィ' both have the same
-    MB artist id stored in their respective ArtistInfo rows, but they
-    resolve to two distinct canonical Artist rows because no track tag
-    carried the MBID for the resolver to merge them.
-    """
+async def test_set_canonical_handles_diacritic_tags(async_db, monkeypatch):
+    """Tags with diacritics (Björk, Sigur Rós) must get canonical_artist_id
+    even though their lower-trim form differs from the NFKD-stripped
+    alias_normalized that the resolver registers. The bulk SQL UPDATE
+    misses these (no unaccent in pg); the Python pass-2 catches them."""
     await _seed(
         async_db,
         [
-            _seed_track(file_name="t1", artist="Kahimi Karie"),
-            _seed_track(file_name="t2", artist="カヒミ・カリィ"),
+            _seed_track(file_name="t1", artist="Björk"),
+            _seed_track(file_name="t2", artist="Sigur Rós"),
+            _seed_track(file_name="t3", artist="Plain Artist"),
         ],
     )
-    shared_mbid = "938802a8-fc8d-43a3-bc2b-68180f748055"
-    async_db.add(
-        ArtistInfo(
-            artist_name_normalized="kahimi karie",
-            artist_name="Kahimi Karie",
-            musicbrainz_id=shared_mbid,
-            bio_summary="English bio",
-        )
-    )
-    async_db.add(
-        ArtistInfo(
-            artist_name_normalized="カヒミ・カリィ",
-            artist_name="カヒミ・カリィ",
-            musicbrainz_id=shared_mbid,
-            bio_summary="Japanese bio",
-        )
-    )
-    await async_db.commit()
     _patch_mb(monkeypatch, name_to_mbid={})
 
     for tag, mbid in await bf._distinct_artist_strings(async_db):
@@ -219,17 +155,99 @@ async def test_artist_info_migration_handles_shared_mbid_across_rows(
         )
     await async_db.commit()
 
-    matched, skipped = await bf._migrate_artist_info(async_db)
+    rows_updated = await bf._set_canonical_artist_ids(async_db)
     await async_db.commit()
-    assert matched == 2
+    assert rows_updated == 3
 
-    # Both Artist rows got their bio, neither carries the conflicting MBID.
-    artists = (
-        await async_db.execute(select(Artist).order_by(Artist.name))
+    leftover = (
+        await async_db.execute(
+            select(Track).where(Track.canonical_artist_id.is_(None))
+        )
     ).scalars().all()
-    assert len(artists) == 2
-    assert all(a.bio_summary is not None for a in artists)
-    assert all(a.musicbrainz_id is None for a in artists)
+    assert leftover == []
+
+
+@pytest.mark.asyncio
+async def test_backfill_populates_canonical_album_artist_id(async_db, monkeypatch):
+    """Pass 3: backfill sets canonical_album_artist_id from album_artist tags.
+
+    Three cases:
+      - track tagged with both artist + album_artist (different) →
+        both FKs populated, pointing at different Artist rows
+      - track tagged with album_artist only on a diacritic name (Björk) →
+        Python pass-2 catches the diacritic mismatch
+      - track with no album_artist → canonical_album_artist_id stays NULL
+    """
+    track1 = Track(
+        id=uuid4(),
+        file_path="/music/t1.mp3",
+        file_hash="hash-t1",
+        title="Imagine",
+        artist="John Lennon",
+        album="Imagine",
+        album_artist="The Beatles",
+        status=TrackStatus.ACTIVE,
+    )
+    track2 = Track(
+        id=uuid4(),
+        file_path="/music/t2.mp3",
+        file_hash="hash-t2",
+        title="Hyperballad",
+        artist="Björk",
+        album="Post",
+        album_artist="Björk",
+        status=TrackStatus.ACTIVE,
+    )
+    track3 = Track(
+        id=uuid4(),
+        file_path="/music/t3.mp3",
+        file_hash="hash-t3",
+        title="Single",
+        artist="Solo Artist",
+        album="Solo",
+        album_artist=None,
+        status=TrackStatus.ACTIVE,
+    )
+    await _seed(async_db, [track1, track2, track3])
+    _patch_mb(monkeypatch, name_to_mbid={})
+
+    # Resolver loop for artist + album_artist strings.
+    for tag, mbid in await bf._distinct_artist_strings(async_db):
+        await ar.resolve_canonical_artist(
+            async_db, tag, musicbrainz_artist_id=mbid, do_mb_lookup=False
+        )
+    for tag in await bf._distinct_album_artist_strings(async_db):
+        await ar.resolve_canonical_artist(
+            async_db, tag, do_mb_lookup=False
+        )
+    await async_db.commit()
+
+    # Bulk-set both FK columns.
+    await bf._set_canonical_artist_ids(async_db)
+    rows = await bf._set_canonical_album_artist_ids(async_db)
+    await async_db.commit()
+    assert rows == 2  # only t1 and t2 have non-empty album_artist
+
+    # Refresh and assert.
+    refreshed = (await async_db.execute(select(Track))).scalars().all()
+    by_title = {t.title: t for t in refreshed}
+
+    # t1: artist='John Lennon' (canonical), album_artist='The Beatles' (different canonical).
+    t1 = by_title["Imagine"]
+    assert t1.canonical_artist_id is not None
+    assert t1.canonical_album_artist_id is not None
+    assert t1.canonical_artist_id != t1.canonical_album_artist_id
+
+    # t2: diacritic case — both FKs point to the same Björk Artist row.
+    t2 = by_title["Hyperballad"]
+    assert t2.canonical_artist_id is not None
+    assert t2.canonical_album_artist_id is not None
+    assert t2.canonical_artist_id == t2.canonical_album_artist_id
+
+    # t3: no album_artist → canonical_album_artist_id stays NULL.
+    t3 = by_title["Single"]
+    assert t3.canonical_artist_id is not None
+    assert t3.canonical_album_artist_id is None
 
 
 @pytest.mark.asyncio

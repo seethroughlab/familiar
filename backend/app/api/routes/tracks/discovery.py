@@ -173,7 +173,8 @@ async def get_track_discover(
     - External purchase/discovery links
     """
 
-    from app.db.models import ArtistInfo, TrackStatus
+    from app.db.models import Artist, ArtistAlias, TrackStatus
+    from app.services.external_albums_helpers import normalize_artist_name
     from app.services.lastfm import get_lastfm_service
     from app.services.search_links import generate_artist_search_url, generate_search_url
 
@@ -210,11 +211,17 @@ async def get_track_discover(
     similar_artists: list[SimilarArtistInfo] = []
 
     if track.artist:
-        artist_normalized = track.artist.lower().strip()
-
-        # Check for cached artist info
-        cached = await db.get(ArtistInfo, artist_normalized)
-        raw_similar = cached.similar_artists if cached and cached.similar_artists else []
+        # Pass 3 cutover: read similar_artists off the canonical Artist
+        # row (migrated from ArtistInfo in Pass 1's backfill).
+        alias = await db.get(ArtistAlias, normalize_artist_name(track.artist))
+        artist_row = (
+            await db.get(Artist, alias.artist_id) if alias else None
+        )
+        raw_similar = (
+            artist_row.similar_artists
+            if artist_row and artist_row.similar_artists
+            else []
+        )
 
         # If not cached or stale, try to fetch from Last.fm
         if not raw_similar:
@@ -227,23 +234,25 @@ async def get_track_discover(
                 except Exception:
                     pass  # Ignore Last.fm errors
 
-        # Enrich similar artists with library status
+        # Enrich similar artists with library status — alias-keyed so
+        # spelling variants of the same canonical artist count as in-library.
         if raw_similar:
             similar_names = [s.get("name", "") for s in raw_similar if s.get("name")]
-            similar_normalized = [n.lower().strip() for n in similar_names]
+            similar_normalized = [normalize_artist_name(n) for n in similar_names if n]
 
-            # Batch query to check library status
             if similar_normalized:
                 library_query = (
                     select(
-                        func.lower(func.trim(Track.artist)).label("artist_normalized"),
+                        ArtistAlias.alias_normalized.label("artist_normalized"),
                         func.count(Track.id).label("track_count"),
                     )
+                    .join(Artist, Artist.id == ArtistAlias.artist_id)
+                    .join(Track, Track.canonical_artist_id == Artist.id)
                     .where(
-                        func.lower(func.trim(Track.artist)).in_(similar_normalized),
+                        ArtistAlias.alias_normalized.in_(similar_normalized),
                         Track.status == TrackStatus.ACTIVE,
                     )
-                    .group_by(func.lower(func.trim(Track.artist)))
+                    .group_by(ArtistAlias.alias_normalized)
                 )
                 lib_result = await db.execute(library_query)
                 library_map: dict[Any, int] = {row.artist_normalized: row.track_count for row in lib_result.all()}
@@ -255,7 +264,7 @@ async def get_track_discover(
                 if not name:
                     continue
 
-                normalized = name.lower().strip()
+                normalized = normalize_artist_name(name)
                 in_library = normalized in library_map
                 track_count = library_map.get(normalized)
 

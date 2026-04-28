@@ -63,9 +63,15 @@ class Track(Base):
     isrc: Mapped[str | None] = mapped_column(String(12))
 
     # Canonical artist FK — populated by scanner dual-write and backfill.
-    # Read endpoints still GROUP BY artist string in Pass 1; Pass 2 will
-    # cut them over to use this column.
     canonical_artist_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Canonical album_artist FK — separate from canonical_artist_id so a
+    # track tagged ``artist="John Lennon" album_artist="The Beatles"``
+    # surfaces under both. Populated by the same scanner+backfill paths.
+    canonical_album_artist_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("artists.id", ondelete="SET NULL"),
         nullable=True,
         index=True,

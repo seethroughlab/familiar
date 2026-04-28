@@ -4,16 +4,20 @@ Tests the Last.fm similar-artists match-score flow:
 - get_similar_artists (dedicated API) provides proper match scores
 - Fallback to get_artist_info similar data when get_similar_artists fails
 - Cache staleness detection when cached entries lack the 'match' key
+
+After Pass 2, the Last.fm cache lives on the canonical ``Artist`` row,
+not on the legacy ``ArtistInfo`` table. ``insert_test_track`` registers
+an alias automatically.
 """
 
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import select
 
 from app.api.routes.library_artists import get_artist_detail
-from app.db.models import ArtistInfo
+from app.db.models import Artist
 from app.utils.time import utcnow
 from tests.factories import insert_test_track
 
@@ -46,13 +50,14 @@ def mock_lastfm():
 
 
 @pytest.fixture(autouse=True)
-async def cleanup_artist_info(async_db):
-    """Clean ArtistInfo before and after each test (not in conftest cleanup list)."""
-    await async_db.execute(delete(ArtistInfo))
-    await async_db.commit()
+async def _autouse_async_db(async_db):
+    """Make sure the Artist/ArtistAlias tables are clean for each test.
+
+    The shared ``async_db`` fixture cleans them in conftest's
+    ``_CLEANUP_TABLES``; this autouse hook just keeps the fixture
+    in scope for tests that don't take it explicitly.
+    """
     yield
-    await async_db.execute(delete(ArtistInfo))
-    await async_db.commit()
 
 
 class TestSimilarArtistsMatchScores:
@@ -100,21 +105,22 @@ class TestCacheStaleness:
     async def test_cache_staleness_detects_missing_match_key(self, async_db, mock_lastfm):
         await insert_test_track(async_db, artist="Test Artist")
 
-        # Pre-populate stale cache (no 'match' key in similar_artists)
-        stale_cache = ArtistInfo(
-            artist_name_normalized="test artist",
-            artist_name="Test Artist",
-            similar_artists=[{"name": "Stale Artist"}],
-            tags=["rock"],
-            fetched_at=utcnow() - timedelta(days=1),
-        )
-        async_db.add(stale_cache)
+        # Pre-populate stale cache on the Artist row directly (Pass 2
+        # reads/writes here instead of ArtistInfo).
+        artist = (
+            await async_db.execute(
+                select(Artist).where(Artist.name == "Test Artist")
+            )
+        ).scalar_one()
+        artist.similar_artists = [{"name": "Stale Artist"}]
+        artist.tags = ["rock"]
+        artist.fetched_at = utcnow() - timedelta(days=1)
         await async_db.commit()
 
         with patch("app.services.lastfm.get_lastfm_service", return_value=mock_lastfm):
             result = await get_artist_detail(db=async_db, artist_name="Test Artist")
 
-        # Cache was bypassed — fresh data fetched with real match scores
+        # Cache was bypassed — fresh data fetched with real match scores.
         mock_lastfm.get_artist_info.assert_awaited_once()
         mock_lastfm.get_similar_artists.assert_awaited_once()
         assert len(result.similar_artists) == 2

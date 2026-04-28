@@ -673,13 +673,19 @@ class LibraryScanner:
             _file_executor, _extract_metadata_sync, file_path
         )
 
-        # Resolve canonical artist (Pass 1 dual-write — read paths still
-        # group by Track.artist string). MB lookup gated off by default;
-        # unknown tags become standalone Artist rows for now and reconcile
-        # via the next backfill run.
+        # Resolve canonical artist (Pass 1+ dual-write). MB lookup gated
+        # off by default; unknown tags become standalone Artist rows and
+        # reconcile via the next backfill run. Pass 3 also resolves the
+        # ``album_artist`` tag — distinct FK so a track tagged
+        # ``artist="John Lennon" album_artist="The Beatles"`` surfaces
+        # under both canonical artists in get_artist_detail.
         canonical_artist_id = await self._resolve_canonical_artist_id(
             metadata.get("artist"),
             metadata.get("musicbrainz_artist_id"),
+        )
+        canonical_album_artist_id = await self._resolve_canonical_artist_id(
+            metadata.get("album_artist"),
+            None,  # album_artist tag rarely carries a per-artist MBID
         )
 
         values = {
@@ -705,6 +711,7 @@ class LibraryScanner:
             "needs_transcode": metadata.get("needs_transcode", False),
             "lyrics_language": metadata.get("lyrics_language"),
             "canonical_artist_id": canonical_artist_id,
+            "canonical_album_artist_id": canonical_album_artist_id,
         }
 
         # Use upsert to handle race conditions (another process may have inserted this track)
@@ -733,6 +740,7 @@ class LibraryScanner:
                 "needs_transcode": insert_stmt.excluded.needs_transcode,
                 "lyrics_language": insert_stmt.excluded.lyrics_language,
                 "canonical_artist_id": insert_stmt.excluded.canonical_artist_id,
+                "canonical_album_artist_id": insert_stmt.excluded.canonical_album_artist_id,
             },
         ).returning(Track)
 
@@ -858,6 +866,10 @@ class LibraryScanner:
         track.canonical_artist_id = await self._resolve_canonical_artist_id(
             metadata.get("artist"),
             metadata.get("musicbrainz_artist_id"),
+        )
+        track.canonical_album_artist_id = await self._resolve_canonical_artist_id(
+            metadata.get("album_artist"),
+            None,
         )
 
         # Only reset analysis status if requested (when file content changed)

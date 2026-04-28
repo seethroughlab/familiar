@@ -72,8 +72,22 @@ async def test_get_library_artists_dedupes_and_prefers_album_artist(async_db):
 
 @pytest.mark.asyncio
 async def test_get_library_artists_propagates_musicbrainz_id(async_db):
+    """After Pass 2, the MBID on the canonical ``Artist`` row is the
+    authoritative source — the resolver writes it during scan/backfill
+    when the tag MBID's MB-canonical name plausibly matches the tag. We
+    set both the track tag MBID and the Artist row MBID here to mimic
+    that post-resolver state."""
+    from app.db.models import Artist
+    from sqlalchemy import select
+
     track = await insert_test_track(async_db, artist="Aphex Twin")
     track.musicbrainz_artist_id = "f22942a1-6f70-4f48-866e-238cb2308fbd"
+    aphex_artist = (
+        await async_db.execute(
+            select(Artist).where(Artist.name == "Aphex Twin")
+        )
+    ).scalar_one()
+    aphex_artist.musicbrainz_id = "f22942a1-6f70-4f48-866e-238cb2308fbd"
     await async_db.commit()
 
     service = NewReleasesService(async_db)

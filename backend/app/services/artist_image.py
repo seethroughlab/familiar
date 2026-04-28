@@ -4,9 +4,16 @@ Last.fm's similar-artist API returns a placeholder image URL for every artist,
 so we route through MusicBrainz (which keeps relationships to Wikipedia) and
 fetch the real thumbnail from the Wikipedia REST summary endpoint.
 
-Results are cached in ``ArtistInfo.image_url`` keyed by normalized artist name.
-A NULL ``image_url`` with a recent ``image_checked_at`` is a negative cache
-(artist has no Wikipedia page or no thumbnail) and is retried after 30 days.
+Results are cached in ``ExternalArtistImageCache`` keyed by normalized
+artist name. A NULL ``image_url`` with a recent ``image_checked_at`` is
+a negative cache (artist has no Wikipedia page or no thumbnail) and is
+retried after the negative-cache TTL.
+
+For library artists, ``Artist.image_url`` is the authoritative read
+source. The resolver writes through to ``Artist.image_url`` whenever a
+positive resolution lands and an ``ArtistAlias`` exists for the queried
+name — so the next read hits the canonical row directly without
+bouncing through the cache table.
 """
 
 from __future__ import annotations
@@ -21,7 +28,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ArtistInfo
+from app.db.models import Artist, ArtistAlias, ExternalArtistImageCache
 from app.services.external_albums_helpers import normalize_artist_name
 from app.services.metadata import musicbrainz
 from app.utils.time import utcnow
@@ -589,7 +596,7 @@ async def resolve_artist_image(
     On miss/expiry, runs the MB → Wikipedia chain and persists the result.
     """
     normalized = normalize_artist_name(artist_name)
-    cached = await db.get(ArtistInfo, normalized)
+    cached = await db.get(ExternalArtistImageCache, normalized)
 
     if cached and cached.image_checked_at is not None:
         ttl = POSITIVE_CACHE_TTL if cached.image_url else NEGATIVE_CACHE_TTL
@@ -605,9 +612,7 @@ async def resolve_artist_image(
         image_url = await _resolve_via_wikipedia(artist_name, client, hint=hint)
         if image_url is None:
             image_url = await _resolve_via_musicbrainz(
-                artist_name,
-                musicbrainz_artist_id or (cached.musicbrainz_id if cached else None),
-                client,
+                artist_name, musicbrainz_artist_id, client,
             )
     finally:
         if owns_client:
@@ -615,11 +620,9 @@ async def resolve_artist_image(
 
     now = utcnow()
     if cached is None:
-        cached = ArtistInfo(
-            artist_name_normalized=normalized,
+        cached = ExternalArtistImageCache(
+            name_normalized=normalized,
             artist_name=artist_name,
-            similar_artists=[],
-            tags=[],
             image_url=image_url,
             image_checked_at=now,
         )
@@ -627,6 +630,13 @@ async def resolve_artist_image(
     else:
         cached.image_url = image_url
         cached.image_checked_at = now
+
+    # Write-through to Artist.image_url for library artists (positive
+    # results only — a NULL image_url here is a negative-cache marker
+    # and must not overwrite a previously-resolved Artist.image_url).
+    if image_url is not None:
+        await _write_through_to_artist(db, normalized, image_url, now)
+
     try:
         await db.flush()
     except Exception as e:
@@ -635,27 +645,49 @@ async def resolve_artist_image(
     return image_url
 
 
+async def _write_through_to_artist(
+    db: AsyncSession,
+    normalized: str,
+    image_url: str,
+    checked_at,
+) -> None:
+    """Mirror a freshly-resolved image onto ``Artist.image_url`` when an
+    alias exists for the queried name. Library-artist endpoints read
+    from ``Artist.image_url`` first; this keeps that column current
+    without a second resolver pass."""
+    alias = await db.get(ArtistAlias, normalized)
+    if alias is None:
+        return
+    artist_row = await db.get(Artist, alias.artist_id)
+    if artist_row is None:
+        return
+    artist_row.image_url = image_url
+    artist_row.image_checked_at = checked_at
+
+
 async def _read_cached(
     db: AsyncSession, names: list[str]
-) -> tuple[dict[str, str | None], dict[str, ArtistInfo], dict[str, str]]:
+) -> tuple[dict[str, str | None], dict[str, ExternalArtistImageCache], dict[str, str]]:
     """Read cached images for ``names``. Returns (hits, rows_by_norm, norm→name)."""
     normalized_to_name = {normalize_artist_name(n): n for n in names}
     rows = (
         (
             await db.execute(
-                select(ArtistInfo).where(
-                    ArtistInfo.artist_name_normalized.in_(list(normalized_to_name))
+                select(ExternalArtistImageCache).where(
+                    ExternalArtistImageCache.name_normalized.in_(
+                        list(normalized_to_name)
+                    )
                 )
             )
         )
         .scalars()
         .all()
     )
-    cached_by_norm: dict[str, ArtistInfo] = {}
+    cached_by_norm: dict[str, ExternalArtistImageCache] = {}
     cached_image: dict[str, str | None] = {}
     now = utcnow()
     for row in rows:
-        norm = row.artist_name_normalized
+        norm = row.name_normalized
         cached_by_norm[norm] = row
         if row.image_checked_at is not None:
             ttl = POSITIVE_CACHE_TTL if row.image_url else NEGATIVE_CACHE_TTL
@@ -667,7 +699,7 @@ async def _read_cached(
 async def _persist_results(
     db: AsyncSession,
     fresh: dict[str, str | None],
-    cached_by_norm: dict[str, ArtistInfo],
+    cached_by_norm: dict[str, ExternalArtistImageCache],
 ) -> None:
     write_now = utcnow()
     for name, url in fresh.items():
@@ -675,11 +707,9 @@ async def _persist_results(
         existing = cached_by_norm.get(norm)
         if existing is None:
             db.add(
-                ArtistInfo(
-                    artist_name_normalized=norm,
+                ExternalArtistImageCache(
+                    name_normalized=norm,
                     artist_name=name,
-                    similar_artists=[],
-                    tags=[],
                     image_url=url,
                     image_checked_at=write_now,
                 )
@@ -687,6 +717,10 @@ async def _persist_results(
         else:
             existing.image_url = url
             existing.image_checked_at = write_now
+        # Write-through to Artist.image_url for library artists (positive
+        # only — see resolve_artist_image for the rationale).
+        if url is not None:
+            await _write_through_to_artist(db, norm, url, write_now)
     try:
         await db.flush()
     except Exception as e:

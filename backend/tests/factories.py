@@ -146,6 +146,7 @@ async def insert_test_track(
     title: str = "Test Track",
     artist: str = "Test Artist",
     album: str = "Test Album",
+    album_artist: str | None = None,
     genre: str | None = "Electronic",
     year: int | None = 2024,
     duration_seconds: float | None = 180.0,
@@ -153,14 +154,23 @@ async def insert_test_track(
     file_hash: str | None = None,
     isrc: str | None = None,
     format: str | None = "mp3",
+    resolve_canonical: bool = True,
 ) -> Track:
-    """Insert a Track into the database and return it (flushed, not committed)."""
+    """Insert a Track into the database and return it (flushed, not committed).
+
+    By default also resolves the artist tag to a canonical ``Artist`` row
+    via the same resolver the scanner uses, registers an ``ArtistAlias``,
+    and sets ``track.canonical_artist_id``. When ``album_artist`` is
+    passed, ``canonical_album_artist_id`` is populated the same way
+    (Pass 3 dual-write).
+    """
     track = Track(
         file_path=file_path or f"/test/music/{uuid4().hex[:12]}.mp3",
         file_hash=file_hash or uuid4().hex,
         title=title,
         artist=artist,
         album=album,
+        album_artist=album_artist,
         genre=genre,
         year=year,
         duration_seconds=duration_seconds,
@@ -169,6 +179,24 @@ async def insert_test_track(
     )
     db.add(track)
     await db.flush()
+
+    if resolve_canonical:
+        from app.services.artist_resolver import resolve_canonical_artist
+
+        if artist:
+            canonical = await resolve_canonical_artist(
+                db, artist, do_mb_lookup=False, create_if_missing=True
+            )
+            if canonical is not None:
+                track.canonical_artist_id = canonical.id
+        if album_artist:
+            album_canonical = await resolve_canonical_artist(
+                db, album_artist, do_mb_lookup=False, create_if_missing=True
+            )
+            if album_canonical is not None:
+                track.canonical_album_artist_id = album_canonical.id
+        await db.flush()
+
     return track
 
 

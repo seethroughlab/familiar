@@ -95,53 +95,28 @@ class ArtistAlias(Base):
     )
 
 
-class ArtistInfo(Base):
-    """Cached artist information from Last.fm API.
+class ExternalArtistImageCache(Base):
+    """Cache of resolved artist images for any queried artist name.
 
-    Stores bio, images, and metadata to avoid repeated API calls.
-    Cache expires after 30 days.
+    Used by ``services/artist_image.py`` as a name-keyed cache for the
+    Wikipedia → Wikidata → Spotify resolver chain. For library artists,
+    ``Artist.image_url`` is the authoritative read source — the
+    resolver also writes through to that column when an alias for the
+    name exists. This table is the fallback for non-library artists
+    (similar-artist photos in detail panels) and the negative cache
+    (``image_checked_at`` set, ``image_url`` NULL, refresh after TTL).
+
+    Replaced ``ArtistInfo`` in Pass 4. The legacy table held bio /
+    listeners / similar / tags columns that Pass 1 migrated onto
+    ``Artist`` and Pass 2/3 cut all read paths to source from there.
     """
 
-    __tablename__ = "artist_info"
+    __tablename__ = "external_artist_image_cache"
 
-    # Primary key is normalized artist name (lowercase, stripped)
-    artist_name_normalized: Mapped[str] = mapped_column(String(500), primary_key=True)
-
-    # Display name (original casing from Last.fm)
-    artist_name: Mapped[str] = mapped_column(String(500), nullable=False)
-
-    # External IDs
-    musicbrainz_id: Mapped[str | None] = mapped_column(String(36))
-    lastfm_url: Mapped[str | None] = mapped_column(String(500))
-
-    # Bio content
-    bio_summary: Mapped[str | None] = mapped_column(Text)  # Short bio
-    bio_content: Mapped[str | None] = mapped_column(Text)  # Full bio
-
-    # Images (store URLs - Last.fm provides multiple sizes)
-    image_small: Mapped[str | None] = mapped_column(String(500))
-    image_medium: Mapped[str | None] = mapped_column(String(500))
-    image_large: Mapped[str | None] = mapped_column(String(500))
-    image_extralarge: Mapped[str | None] = mapped_column(String(500))
-
-    # Stats from Last.fm
-    listeners: Mapped[int | None] = mapped_column(Integer)
-    playcount: Mapped[int | None] = mapped_column(BigInteger)
-
-    # Similar artists (stored as JSONB list)
-    similar_artists: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-
-    # Tags (stored as JSONB list)
-    tags: Mapped[list[str]] = mapped_column(JSONB, default=list)
-
-    # Cache management
-    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    fetch_error: Mapped[str | None] = mapped_column(String(500))  # Store error if fetch failed
-
-    # Resolved artist photo (Wikipedia thumbnail via MB url-rels). NULL with a
-    # recent ``image_checked_at`` is a negative cache; refresh after 30 days.
+    name_normalized: Mapped[str] = mapped_column(Text, primary_key=True)
+    artist_name: Mapped[str] = mapped_column(Text, nullable=False)
     image_url: Mapped[str | None] = mapped_column(Text)
-    image_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    image_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class ArtistCheckCache(Base):

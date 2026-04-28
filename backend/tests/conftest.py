@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.db.models import (
+    Artist,
+    ArtistAlias,
     ArtistCheckCache,
-    ArtistInfo,
     ExternalAlbumCache,
+    ExternalArtistImageCache,
     Playlist,
     PlaylistTrack,
     ProfilePlayHistory,
@@ -90,7 +92,9 @@ def make_profile_headers(profile: dict) -> dict[str, str]:
 # Shared async DB fixture for integration tests
 # ---------------------------------------------------------------------------
 
-# Tables to clean in correct FK order (children before parents)
+# Tables to clean in correct FK order (children before parents).
+# ArtistAlias FKs to Artist with CASCADE; Track.canonical_artist_id FKs
+# to Artist with SET NULL — so deleting tracks first then artists is safe.
 _CLEANUP_TABLES = [
     PlaylistTrack,
     Playlist,
@@ -99,9 +103,11 @@ _CLEANUP_TABLES = [
     ProfilePlayHistory,
     ExternalAlbumCache,
     ArtistCheckCache,
-    ArtistInfo,
+    ExternalArtistImageCache,
     TrackAnalysis,
     Track,
+    ArtistAlias,
+    Artist,
 ]
 
 

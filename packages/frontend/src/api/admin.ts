@@ -138,6 +138,69 @@ export const backgroundApi = {
   },
 };
 
+// Admin: canonical artist merge
+export interface MergeCandidate {
+  id: string;
+  name: string;
+  sort_name: string;
+  track_count: number;
+  musicbrainz_id: string | null;
+}
+
+export interface MergeSuggestion {
+  canonical_form: string;
+  suggested_keep_id: string;
+  candidates: MergeCandidate[];
+}
+
+export interface MergeSuggestionsResponse {
+  suggestions: MergeSuggestion[];
+}
+
+export interface MergeArtistsRequest {
+  keep_id: string;
+  merge_ids: string[];
+}
+
+export interface MergeArtistsResponse {
+  kept_artist_id: string;
+  aliases_moved: number;
+  aliases_dropped_as_duplicates: number;
+  tracks_repointed: number;
+  artists_deleted: number;
+}
+
+export interface ArtistSearchResult {
+  id: string;
+  name: string;
+  sort_name: string;
+  track_count: number;
+  musicbrainz_id: string | null;
+}
+
+export interface ArtistSearchResponse {
+  results: ArtistSearchResult[];
+}
+
+export const adminArtistsApi = {
+  getMergeSuggestions: async (limit = 100): Promise<MergeSuggestionsResponse> => {
+    const { data } = await api.get('/admin/artists/merge-suggestions', {
+      params: { limit },
+    });
+    return data;
+  },
+
+  mergeArtists: async (request: MergeArtistsRequest): Promise<MergeArtistsResponse> => {
+    const { data } = await api.post('/admin/artists/merge', request);
+    return data;
+  },
+
+  searchArtists: async (q: string, limit = 20): Promise<ArtistSearchResponse> => {
+    const { data } = await api.get('/admin/artists/search', { params: { q, limit } });
+    return data;
+  },
+};
+
 // Update Notifications API
 export interface UpdateStatus {
   update_available: boolean;

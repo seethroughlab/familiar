@@ -1,0 +1,1 @@
+export { ArtistMergePanel } from './ArtistMergePanel';

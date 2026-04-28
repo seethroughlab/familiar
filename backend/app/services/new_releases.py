@@ -15,10 +15,12 @@ from sqlalchemy import Float, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    Artist,
     ArtistCheckCache,
     ExternalAlbumCache,
     ProfilePlayHistory,
     Track,
+    TrackStatus,
 )
 from app.services.external_albums_helpers import (
     check_user_has_release,
@@ -42,36 +44,35 @@ class NewReleasesService:
         self.db = db
 
     async def get_library_artists(self) -> list[dict[str, Any]]:
-        """Return unique library artists with name + MB id."""
+        """Return one entry per canonical library artist with name + MB id.
+
+        Reads from the canonical ``artists`` table (joined to active
+        tracks) so spelling variants of the same artist collapse into
+        one entry. ``ArtistCheckCache`` is keyed by the normalized
+        canonical name (Python-side ``normalize_artist_name``), not by
+        ``Artist.id`` — the cache table is legacy string-keyed and
+        stays that way until a Pass-3 cleanup.
+        """
         result = await self.db.execute(
             select(
-                Track.artist,
-                Track.album_artist,
-                Track.musicbrainz_artist_id,
+                Artist.id,
+                Artist.name,
+                Artist.musicbrainz_id,
             )
-            .where(Track.artist.isnot(None))
-            .distinct()
+            .join(Track, Track.canonical_artist_id == Artist.id)
+            .where(Track.status == TrackStatus.ACTIVE)
+            .group_by(Artist.id, Artist.name, Artist.musicbrainz_id)
         )
         rows = result.fetchall()
 
-        artists: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            artist_name = row.album_artist or row.artist
-            if not artist_name:
-                continue
-            normalized = normalize_artist_name(artist_name)
-            if not normalized:
-                continue
-            if normalized not in artists:
-                artists[normalized] = {
-                    "name": artist_name,
-                    "normalized_name": normalized,
-                    "musicbrainz_artist_id": row.musicbrainz_artist_id,
-                }
-            elif row.musicbrainz_artist_id and not artists[normalized].get("musicbrainz_artist_id"):
-                artists[normalized]["musicbrainz_artist_id"] = row.musicbrainz_artist_id
-
-        return list(artists.values())
+        return [
+            {
+                "name": row.name,
+                "normalized_name": normalize_artist_name(row.name),
+                "musicbrainz_artist_id": row.musicbrainz_id,
+            }
+            for row in rows
+        ]
 
     async def get_artist_check_cache(self, artist_normalized: str) -> ArtistCheckCache | None:
         result = await self.db.execute(
@@ -251,25 +252,32 @@ class NewReleasesService:
         batch_size: int = 75,
         min_days_since_check: int = 7,
     ) -> list[dict[str, Any]]:
-        """Return artists prioritized by listening recency (60%) + frequency (40%)."""
+        """Return artists prioritized by listening recency (60%) + frequency (40%).
+
+        Groups by canonical ``Artist.id`` so spelling variants share one
+        priority score. ``ArtistCheckCache`` is joined on a Python-side
+        normalized form of ``Artist.name`` — the cache table is legacy
+        string-keyed and stays that way; the join condition uses the same
+        ``lower(trim(Artist.name))`` normalization the resolver wrote
+        with.
+        """
         artist_stats = (
             select(
-                func.lower(func.trim(Track.artist)).label("artist_normalized"),
-                Track.artist.label("artist_name"),
-                Track.musicbrainz_artist_id,
+                Artist.id.label("artist_id"),
+                Artist.name.label("artist_name"),
+                Artist.musicbrainz_id.label("musicbrainz_artist_id"),
+                func.lower(func.trim(Artist.name)).label("artist_normalized"),
                 func.max(ProfilePlayHistory.last_played_at).label("last_played"),
                 func.sum(ProfilePlayHistory.play_count).label("total_plays"),
             )
             .select_from(ProfilePlayHistory)
             .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .where(
-                ProfilePlayHistory.profile_id == profile_id,
-                Track.artist.isnot(None),
-            )
+            .join(Artist, Artist.id == Track.canonical_artist_id)
+            .where(ProfilePlayHistory.profile_id == profile_id)
             .group_by(
-                func.lower(func.trim(Track.artist)),
-                Track.artist,
-                Track.musicbrainz_artist_id,
+                Artist.id,
+                Artist.name,
+                Artist.musicbrainz_id,
             )
         ).subquery("artist_stats")
 
@@ -334,12 +342,12 @@ class NewReleasesService:
 
     async def get_rotation_status(self, profile_id: UUID) -> dict[str, Any]:
         total_in_rotation_result = await self.db.execute(
-            select(func.count(func.distinct(func.lower(func.trim(Track.artist)))))
+            select(func.count(func.distinct(Track.canonical_artist_id)))
             .select_from(ProfilePlayHistory)
             .join(Track, ProfilePlayHistory.track_id == Track.id)
             .where(
                 ProfilePlayHistory.profile_id == profile_id,
-                Track.artist.isnot(None),
+                Track.canonical_artist_id.isnot(None),
             )
         )
         total_in_rotation = total_in_rotation_result.scalar() or 0

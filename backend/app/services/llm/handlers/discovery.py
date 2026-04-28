@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from app.db.models import Track, TrackStatus
+from app.db.models import Artist, ArtistAlias, Track, TrackStatus
+from app.services.external_albums_helpers import normalize_artist_name
 
 if TYPE_CHECKING:
     from app.services.llm.executor import ToolExecutor
@@ -66,11 +67,12 @@ class DiscoveryHandlersMixin:
 
         from app.services.bandcamp import BandcampService
 
-        # Get top artists by track count
+        # Top canonical artists by track count.
         result = await self.db.execute(
-            select(Track.artist, func.count(Track.id).label("count"))
-            .where(Track.active_filter(), Track.artist.isnot(None))
-            .group_by(Track.artist)
+            select(Artist.name, func.count(Track.id).label("count"))
+            .join(Track, Track.canonical_artist_id == Artist.id)
+            .where(Track.active_filter())
+            .group_by(Artist.id, Artist.name)
             .order_by(func.count(Track.id).desc())
             .limit(limit * 2)
         )
@@ -195,7 +197,7 @@ class DiscoveryHandlersMixin:
         limit: int = 20,
     ) -> dict[str, Any]:
         """Find recent releases by the user's most-played artists via MusicBrainz."""
-        from app.db.models import ArtistInfo, ProfilePlayHistory
+        from app.db.models import ProfilePlayHistory
         from app.services.metadata.musicbrainz import get_artist_releases_recent
 
         if not self.profile_id:
@@ -207,19 +209,19 @@ class DiscoveryHandlersMixin:
         except (ValueError, TypeError):
             days_back, limit = 90, 20
 
-        # Get top 15 artists by play count
+        # Top 15 canonical artists by play count, with MBID directly off
+        # the canonical row (Pass 1's strict-match resolver wrote it).
         play_query = (
             select(
-                func.lower(func.trim(Track.artist)).label("artist_normalized"),
-                Track.artist,
+                Artist.id.label("artist_id"),
+                Artist.name.label("artist_name"),
+                Artist.musicbrainz_id.label("musicbrainz_id"),
                 func.sum(ProfilePlayHistory.play_count).label("total_plays"),
             )
             .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .where(
-                Track.artist.isnot(None),
-                ProfilePlayHistory.profile_id == self.profile_id,
-            )
-            .group_by(func.lower(func.trim(Track.artist)), Track.artist)
+            .join(Artist, Artist.id == Track.canonical_artist_id)
+            .where(ProfilePlayHistory.profile_id == self.profile_id)
+            .group_by(Artist.id, Artist.name, Artist.musicbrainz_id)
             .order_by(func.sum(ProfilePlayHistory.play_count).desc())
             .limit(15)
         )
@@ -234,43 +236,45 @@ class DiscoveryHandlersMixin:
         artists_skipped = 0
 
         for row in top_artists:
-            cached = await self.db.get(ArtistInfo, row.artist_normalized)
-            if not cached or not cached.musicbrainz_id:
+            if not row.musicbrainz_id:
                 artists_skipped += 1
                 continue
 
             artists_checked += 1
             releases = await asyncio.to_thread(
                 get_artist_releases_recent,
-                cached.musicbrainz_id,
+                row.musicbrainz_id,
                 days_back,
             )
 
             for r in releases:
                 all_releases.append({
-                    "artist": row.artist,
+                    "artist": row.artist_name,
                     "title": r["title"],
                     "type": r.get("release_type"),
                     "date": r["release_date"],
                     "in_library": False,
                 })
 
-        # Cross-reference with library
+        # Cross-reference with the library by canonical artist + album.
         if all_releases:
             album_pairs_query = (
                 select(
-                    func.lower(func.trim(Track.artist)),
-                    func.lower(func.trim(Track.album)),
+                    Artist.name.label("artist_name"),
+                    func.lower(func.trim(Track.album)).label("album_lower"),
                 )
+                .join(Track, Track.canonical_artist_id == Artist.id)
                 .where(
-                    Track.artist.isnot(None),
                     Track.album.isnot(None),
                     Track.status == TrackStatus.ACTIVE,
                 )
                 .distinct()
             )
             album_result = await self.db.execute(album_pairs_query)
-            library_albums = {(a, b) for a, b in album_result.fetchall()}
+            library_albums = {
+                (row.artist_name.lower().strip(), row.album_lower)
+                for row in album_result.all()
+            }
 
             for release in all_releases:
                 key = (release["artist"].lower().strip(), release["title"].lower().strip())
@@ -299,7 +303,7 @@ class DiscoveryHandlersMixin:
         limit: int = 8,
     ) -> dict[str, Any]:
         """Get recommended artists based on top-played artists, plus unheard tracks and deep cuts."""
-        from app.db.models import ArtistInfo, ProfilePlayHistory
+        from app.db.models import ProfilePlayHistory
         from app.services.lastfm import get_lastfm_service
         from app.services.search_links import generate_artist_search_url
 
@@ -312,39 +316,37 @@ class DiscoveryHandlersMixin:
         except (ValueError, TypeError):
             seed_artists, limit = 5, 8
 
-        # Get top-played artists
+        # Top-played canonical artists.
         play_query = (
             select(
-                func.lower(func.trim(Track.artist)).label("artist_normalized"),
-                Track.artist,
+                Artist.id.label("artist_id"),
+                Artist.name.label("artist_name"),
+                Artist.similar_artists.label("similar_cached"),
                 func.sum(ProfilePlayHistory.play_count).label("total_plays"),
             )
             .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .where(
-                Track.artist.isnot(None),
-                ProfilePlayHistory.profile_id == self.profile_id,
-            )
-            .group_by(func.lower(func.trim(Track.artist)), Track.artist)
+            .join(Artist, Artist.id == Track.canonical_artist_id)
+            .where(ProfilePlayHistory.profile_id == self.profile_id)
+            .group_by(Artist.id, Artist.name, Artist.similar_artists)
             .order_by(func.sum(ProfilePlayHistory.play_count).desc())
             .limit(seed_artists)
         )
         play_result = await self.db.execute(play_query)
         top_artists = play_result.fetchall()
+        top_artist_ids = [row.artist_id for row in top_artists]
 
         if not top_artists:
             return {"recommended_artists": [], "unheard_tracks": [], "deep_cuts": [], "note": "No play history found."}
 
-        # Collect similar artist candidates
+        # Similar-artist candidates from the canonical artists' cached data.
         seen: set[str] = set()
         candidates: list[tuple[str, dict, str]] = []  # (normalized, similar_data, based_on)
 
         for row in top_artists:
-            artist_name = row.artist
-            artist_normalized = row.artist_normalized
+            artist_name = row.artist_name
 
-            cached_info = await self.db.get(ArtistInfo, artist_normalized)
-            if cached_info and cached_info.similar_artists:
-                raw_similar = cached_info.similar_artists
+            if row.similar_cached:
+                raw_similar = row.similar_cached
             else:
                 lastfm = get_lastfm_service()
                 if lastfm.is_configured():
@@ -360,26 +362,28 @@ class DiscoveryHandlersMixin:
                 name = similar.get("name", "")
                 if not name:
                     continue
-                normalized = name.lower().strip()
+                normalized = normalize_artist_name(name)
                 if normalized in seen:
                     continue
                 seen.add(normalized)
                 candidates.append((normalized, similar, artist_name))
 
-        # Batch check library counts
+        # Library presence — alias-keyed so spelling variants count.
         all_normalized = [c[0] for c in candidates]
         lib_counts: dict[str, int] = {}
         if all_normalized:
             lib_result = await self.db.execute(
                 select(
-                    func.lower(func.trim(Track.artist)).label("n"),
+                    ArtistAlias.alias_normalized.label("n"),
                     func.count(Track.id).label("cnt"),
                 )
+                .join(Artist, Artist.id == ArtistAlias.artist_id)
+                .join(Track, Track.canonical_artist_id == Artist.id)
                 .where(
-                    func.lower(func.trim(Track.artist)).in_(all_normalized),
+                    ArtistAlias.alias_normalized.in_(all_normalized),
                     Track.status == TrackStatus.ACTIVE,
                 )
-                .group_by(func.lower(func.trim(Track.artist)))
+                .group_by(ArtistAlias.alias_normalized)
             )
             for r in lib_result.all():
                 lib_counts[r.n] = r.cnt
@@ -408,12 +412,11 @@ class DiscoveryHandlersMixin:
         recommended.sort(key=lambda a: a["match_score"], reverse=True)
         recommended = recommended[:limit]
 
-        # Unheard tracks from top artists
-        top_artist_names = [row.artist_normalized for row in top_artists if row.artist_normalized]
+        # Unheard tracks + deep cuts from the top canonical artists.
         unheard_tracks: list[dict[str, Any]] = []
         deep_cuts: list[dict[str, Any]] = []
 
-        if top_artist_names:
+        if top_artist_ids:
             played_ids = (
                 select(ProfilePlayHistory.track_id)
                 .where(ProfilePlayHistory.profile_id == self.profile_id)
@@ -422,7 +425,7 @@ class DiscoveryHandlersMixin:
             unheard_result = await self.db.execute(
                 select(Track.id, Track.title, Track.artist, Track.album)
                 .where(
-                    func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                    Track.canonical_artist_id.in_(top_artist_ids),
                     Track.status == TrackStatus.ACTIVE,
                     Track.id.notin_(played_ids),
                 )
@@ -443,7 +446,7 @@ class DiscoveryHandlersMixin:
                 select(Track.id, Track.title, Track.artist, Track.album, ProfilePlayHistory.play_count)
                 .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
                 .where(
-                    func.lower(func.trim(Track.artist)).in_(top_artist_names),
+                    Track.canonical_artist_id.in_(top_artist_ids),
                     Track.status == TrackStatus.ACTIVE,
                     ProfilePlayHistory.profile_id == self.profile_id,
                     ProfilePlayHistory.play_count > 0,

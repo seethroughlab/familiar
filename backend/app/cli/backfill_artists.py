@@ -38,7 +38,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.db.models import Artist, ArtistAlias, ArtistInfo, Track, TrackStatus
+from app.db.models import Artist, ArtistAlias, Track, TrackStatus
 from app.services.artist_resolver import resolve_canonical_artist
 from app.services.external_albums_helpers import normalize_artist_name
 
@@ -65,66 +65,108 @@ async def _distinct_artist_strings(
     return [(row.display, row.mbid) for row in rows]
 
 
-async def _migrate_artist_info(db: AsyncSession) -> tuple[int, int]:
-    """Copy cached fields from ``artist_info`` onto matching ``Artist`` rows.
-
-    Returns ``(matched, skipped)``. A row is matched when its normalized
-    name exists in ``artist_aliases``; skipped rows have no canonical
-    artist yet (e.g. the artist_info row was created for an alias that
-    never appeared as a track tag).
-    """
-    matched = 0
-    skipped = 0
-    info_rows = (await db.execute(select(ArtistInfo))).scalars().all()
-    for info in info_rows:
-        alias = await db.get(ArtistAlias, info.artist_name_normalized)
-        if alias is None:
-            skipped += 1
-            continue
-        artist = await db.get(Artist, alias.artist_id)
-        if artist is None:
-            skipped += 1
-            continue
-
-        # Image + Last.fm fields were null on Artist until now; copy
-        # them straight across. Don't copy musicbrainz_id from
-        # artist_info — the resolver already attached the authoritative
-        # MBID via strict-match MB lookup, and Last.fm's stored MBID can
-        # collide across name variants (e.g. Kahimi Karie carries the
-        # same MBID under both Japanese and English info rows, but each
-        # resolves to its own canonical Artist row).
-        artist.image_url = info.image_url
-        artist.image_checked_at = info.image_checked_at
-        artist.bio_summary = info.bio_summary
-        artist.bio_content = info.bio_content
-        artist.lastfm_url = info.lastfm_url
-        artist.listeners = info.listeners
-        artist.playcount = info.playcount
-        if info.similar_artists:
-            artist.similar_artists = info.similar_artists
-        if info.tags:
-            artist.tags = info.tags
-        artist.fetched_at = info.fetched_at
-        artist.fetch_error = info.fetch_error
-        matched += 1
-    await db.flush()
-    return matched, skipped
+async def _distinct_album_artist_strings(db: AsyncSession) -> list[str]:
+    """Return distinct ``Track.album_artist`` strings (Pass 3 alias source)."""
+    stmt = (
+        select(func.max(Track.album_artist).label("display"))
+        .where(
+            Track.album_artist.isnot(None),
+            Track.album_artist != "",
+            Track.status == TrackStatus.ACTIVE,
+        )
+        .group_by(func.lower(func.trim(Track.album_artist)))
+    )
+    return [row.display for row in (await db.execute(stmt)).all() if row.display]
 
 
 async def _set_canonical_artist_ids(db: AsyncSession) -> int:
-    """Bulk-update ``tracks.canonical_artist_id`` from ``artist_aliases``."""
-    stmt = text(
-        """
+    """Set ``tracks.canonical_artist_id`` for every track via its alias.
+
+    Two passes:
+      1. Bulk SQL UPDATE keyed off ``lower(trim(artist)) =
+         alias_normalized`` — fast, covers tags whose normalize form
+         is identical to lower-trim (the vast majority).
+      2. Python pass for the remainder — tracks whose tag has
+         diacritics (Björk, Sigur Rós, Röyksopp, etc.). Their
+         ``alias_normalized`` is NFKD-stripped (per
+         ``normalize_artist_name``) but the SQL JOIN compares
+         lower-trim form. Postgres can't strip combining marks
+         without the ``unaccent`` extension, so we resolve these in
+         Python — N is small, ~600 on a 23k-track library.
+    """
+    return await _set_canonical_fk(
+        db,
+        column_name="canonical_artist_id",
+        source_attr="artist",
+        source_col="t.artist",
+    )
+
+
+async def _set_canonical_album_artist_ids(db: AsyncSession) -> int:
+    """Mirror of ``_set_canonical_artist_ids`` for ``canonical_album_artist_id``.
+
+    Pass 3 introduces this so a track tagged ``artist="John Lennon"
+    album_artist="The Beatles"`` surfaces under both canonical artists
+    in ``get_artist_detail``.
+    """
+    return await _set_canonical_fk(
+        db,
+        column_name="canonical_album_artist_id",
+        source_attr="album_artist",
+        source_col="t.album_artist",
+    )
+
+
+async def _set_canonical_fk(
+    db: AsyncSession,
+    *,
+    column_name: str,
+    source_attr: str,
+    source_col: str,
+) -> int:
+    """Shared two-pass updater for both canonical FK columns."""
+    bulk_sql = text(
+        f"""
         UPDATE tracks AS t
-        SET canonical_artist_id = aa.artist_id
+        SET {column_name} = aa.artist_id
         FROM artist_aliases aa
-        WHERE aa.alias_normalized = lower(trim(t.artist))
-          AND t.canonical_artist_id IS NULL
-          AND t.artist IS NOT NULL
+        WHERE aa.alias_normalized = lower(trim({source_col}))
+          AND t.{column_name} IS NULL
+          AND {source_col} IS NOT NULL
+          AND {source_col} <> ''
         """
     )
-    result = await db.execute(stmt)
-    return result.rowcount or 0  # type: ignore[attr-defined]
+    bulk_updated = (await db.execute(bulk_sql)).rowcount or 0  # type: ignore[attr-defined]
+
+    column = getattr(Track, column_name)
+    source = getattr(Track, source_attr)
+    leftover_q = (
+        select(Track.id, source)
+        .where(
+            column.is_(None),
+            source.isnot(None),
+            source != "",
+            Track.status == TrackStatus.ACTIVE,
+        )
+    )
+    leftover = (await db.execute(leftover_q)).all()
+    py_updated = 0
+    for track_id, source_value in leftover:
+        normalized = normalize_artist_name(source_value)
+        if not normalized:
+            continue
+        alias = await db.get(ArtistAlias, normalized)
+        if alias is None:
+            continue
+        await db.execute(
+            text(
+                f"UPDATE tracks SET {column_name} = :aid "
+                f"WHERE id = :tid AND {column_name} IS NULL"
+            ),
+            {"aid": alias.artist_id, "tid": track_id},
+        )
+        py_updated += 1
+    return bulk_updated + py_updated
 
 
 async def run_backfill(
@@ -143,11 +185,11 @@ async def run_backfill(
 
     counts = {
         "distinct_artists_input": 0,
+        "distinct_album_artists_input": 0,
         "artists_created": 0,
         "aliases_registered": 0,
-        "info_rows_migrated": 0,
-        "info_rows_skipped": 0,
         "tracks_updated": 0,
+        "tracks_album_artist_updated": 0,
         "mb_lookups": 0,
         "resolve_failures": 0,
     }
@@ -231,17 +273,42 @@ async def run_backfill(
                 aliases_before or 0
             )
 
-            # Step 3: migrate ArtistInfo rows.
+            # Step 2b: Pass 3 — register album_artist as alias source so
+            # compilation/diacritic tracks can be linked back to the right
+            # canonical artist via the OR clause in get_artist_detail.
+            album_artist_strings = await _distinct_album_artist_strings(db)
+            counts["distinct_album_artists_input"] = len(album_artist_strings)
+            for tag in album_artist_strings:
+                normalized = normalize_artist_name(tag)
+                if not normalized:
+                    continue
+                if await db.get(ArtistAlias, normalized) is not None:
+                    continue
+                try:
+                    await resolve_canonical_artist(
+                        db,
+                        tag,
+                        musicbrainz_artist_id=None,
+                        do_mb_lookup=do_mb_lookup,
+                        create_if_missing=not dry_run,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"album_artist resolve failed for tag={tag!r}: {e}"
+                    )
+                    counts["resolve_failures"] += 1
             if not dry_run:
-                matched, skipped = await _migrate_artist_info(db)
-                counts["info_rows_migrated"] = matched
-                counts["info_rows_skipped"] = skipped
                 await db.commit()
 
-            # Step 4: bulk-set canonical_artist_id on tracks.
+            # Step 3 (Pass 1's ArtistInfo→Artist migration) shipped on
+            # the live DB and the table is now dropped (Pass 4). The
+            # function and its tests have been retired.
+
+            # Step 4: bulk-set both canonical FK columns on tracks.
             if not dry_run:
-                counts["tracks_updated"] = await _set_canonical_artist_ids(
-                    db
+                counts["tracks_updated"] = await _set_canonical_artist_ids(db)
+                counts["tracks_album_artist_updated"] = (
+                    await _set_canonical_album_artist_ids(db)
                 )
                 await db.commit()
     finally:

@@ -247,6 +247,14 @@ class TestLibraryScanner:
             assert alias is not None
             assert alias.artist_id == artist.id
 
+            # Pass 3 dual-write: when album_artist is set on the file
+            # tags it gets resolved + populated the same way. The fixture
+            # tracks happen to have album_artist == artist, so both FKs
+            # point to the same canonical row. (When the tags differ, the
+            # scanner would create two different Artist rows here.)
+            if track.album_artist:
+                assert track.canonical_album_artist_id is not None
+
     async def test_rescan_detects_unchanged_files(self, clean_db):
         """Rescanning unchanged files should report them as unchanged."""
         with tempfile.TemporaryDirectory() as tmpdir:
