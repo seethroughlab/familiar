@@ -143,7 +143,7 @@ async def list_artists(
         await db.commit()
         for a in items:
             a.image_url = resolved.get(a.name)
-        unresolved = [
+        unresolved: list[tuple[str, str | None]] = [
             (a.name, None) for a in items if resolved.get(a.name) is None
         ]
         schedule_background_resolve(unresolved)
@@ -661,7 +661,8 @@ async def get_artist_detail(
             return None
         return url
 
-    resolved = await resolve_many_artist_images(db, [(artist_name, None)])
+    detail_hints: list[tuple[str, str | None]] = [(artist_name, None)]
+    resolved = await resolve_many_artist_images(db, detail_hints)
     await db.commit()
     image_url = resolved.get(artist_name)
     if image_url is None and lastfm_data:
@@ -672,7 +673,7 @@ async def get_artist_detail(
     if image_url is None:
         # Sync miss — schedule the slow MB+Spotify chain in the background;
         # next detail-page load picks up the cached result.
-        schedule_background_resolve([(artist_name, None)])
+        schedule_background_resolve(detail_hints)
 
     return ArtistDetailResponse(
         name=artist_name,
