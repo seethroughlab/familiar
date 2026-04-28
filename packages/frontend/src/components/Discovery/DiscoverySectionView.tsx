@@ -19,11 +19,11 @@ interface DiscoverySectionViewProps {
 function getTypeIcon(entityType: 'album' | 'artist' | 'track') {
   switch (entityType) {
     case 'artist':
-      return <User className="w-4 h-4 text-purple-400" />;
+      return <User className="w-5 h-5 text-zinc-400" />;
     case 'track':
-      return <Disc3 className="w-4 h-4 text-purple-400" />;
+      return <Disc3 className="w-5 h-5 text-zinc-400" />;
     default:
-      return <Disc className="w-4 h-4 text-purple-400" />;
+      return <Disc className="w-5 h-5 text-zinc-400" />;
   }
 }
 
@@ -50,11 +50,13 @@ export function DiscoverySectionView({
         <div className="mb-3">
           <div className="flex items-center gap-2">
             {section.icon || getTypeIcon(section.entityType)}
-            <h3 className="font-medium text-sm">{section.title}</h3>
-            <span className="text-xs text-zinc-500">({section.items.length})</span>
+            <h2 className="text-lg font-semibold text-zinc-100">{section.title}</h2>
+            <span className="px-2 py-0.5 text-xs rounded-full bg-zinc-800 text-zinc-400">
+              {section.items.length}
+            </span>
           </div>
           {section.description && (
-            <p className="text-xs text-zinc-500 mt-1 ml-6">{section.description}</p>
+            <p className="text-xs text-zinc-500 mt-1 ml-7">{section.description}</p>
           )}
         </div>
       )}

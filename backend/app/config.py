@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # Analysis worker pool size (default 1 for memory safety; increase with CPU headroom)
     max_analysis_workers: int = 1
 
+    # When True, the scanner runs a strict MusicBrainz artist lookup at scan
+    # time for unknown tags so it can attach a canonical MBID immediately.
+    # Off by default — MB is rate-limited at 1 RPS and would dominate scan
+    # latency. The backfill CLI flips this on for its one-shot pass.
+    scanner_mb_artist_lookup: bool = False
+
     @property
     def sync_database_url(self) -> str:
         """Synchronous database URL for Alembic or sync operations."""

@@ -34,7 +34,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from app.db.models import Track, TrackStatus
+from app.db.models import Artist, ArtistAlias, Track, TrackStatus
 from app.services.scanner import LibraryScanner, compute_file_hash, compute_full_hash
 from app.utils.time import utcnow
 
@@ -66,14 +66,20 @@ async def clean_db():
     )
 
     async with session_maker() as session:
-        # Clean up before test
+        # Clean up before test (tracks first — FK is ON DELETE SET NULL,
+        # so Artist rows can outlive Track deletion; ArtistAlias cascades
+        # when its parent Artist is deleted).
         await session.execute(delete(Track))
+        await session.execute(delete(ArtistAlias))
+        await session.execute(delete(Artist))
         await session.commit()
 
         yield session
 
         # Clean up after test
         await session.execute(delete(Track))
+        await session.execute(delete(ArtistAlias))
+        await session.execute(delete(Artist))
         await session.commit()
 
     # Dispose the engine to clean up connections
@@ -230,6 +236,16 @@ class TestLibraryScanner:
             # Path should include subdirectory structure
             assert "artist2" in track.file_path
             assert "album1" in track.file_path
+
+            # Pass 1 dual-write: scanner sets canonical_artist_id and
+            # creates a matching Artist + alias row.
+            assert track.canonical_artist_id is not None
+            artist = await clean_db.get(Artist, track.canonical_artist_id)
+            assert artist is not None
+            assert artist.name == "Alexander Nakarada"
+            alias = await clean_db.get(ArtistAlias, "alexander nakarada")
+            assert alias is not None
+            assert alias.artist_id == artist.id
 
     async def test_rescan_detects_unchanged_files(self, clean_db):
         """Rescanning unchanged files should report them as unchanged."""

@@ -40,6 +40,8 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
     queryFn: () =>
       libraryApi.getDiscover({
         recommendations_limit: 12,
+        seed_artists: 10,
+        similar_per_artist: 8,
       }),
     enabled: !isOffline,
     staleTime: STALE_TIME.LONG,

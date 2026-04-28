@@ -13,8 +13,9 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import AUDIO_EXTENSIONS
+from app.config import AUDIO_EXTENSIONS, settings
 from app.db.models import Track, TrackAnalysis, TrackStatus
+from app.services.artist_resolver import resolve_canonical_artist
 
 
 class LibraryValidationError(Exception):
@@ -634,6 +635,31 @@ class LibraryScanner:
         result = await self.db.execute(select(Track))
         return list(result.scalars().all())
 
+    async def _resolve_canonical_artist_id(
+        self, artist_tag: str | None, mbid: str | None
+    ) -> Any | None:
+        """Resolve a track's artist tag to ``Artist.id`` (Pass 1 dual-write).
+
+        Failures don't abort the scan — the track is inserted with a NULL
+        ``canonical_artist_id`` and the next backfill run reconciles it.
+        """
+        if not artist_tag or not artist_tag.strip():
+            return None
+        try:
+            artist = await resolve_canonical_artist(
+                self.db,
+                artist_tag,
+                musicbrainz_artist_id=mbid,
+                do_mb_lookup=settings.scanner_mb_artist_lookup,
+                create_if_missing=True,
+            )
+        except Exception as e:
+            logger.warning(
+                f"canonical artist resolve failed for {artist_tag!r}: {e}"
+            )
+            return None
+        return artist.id if artist else None
+
     async def _create_track(
         self, file_path: Path, file_hash: str, file_mtime: datetime, file_size: int | None = None
     ) -> Track:
@@ -645,6 +671,15 @@ class LibraryScanner:
         # Extract metadata from file (in thread pool)
         metadata = await loop.run_in_executor(
             _file_executor, _extract_metadata_sync, file_path
+        )
+
+        # Resolve canonical artist (Pass 1 dual-write — read paths still
+        # group by Track.artist string). MB lookup gated off by default;
+        # unknown tags become standalone Artist rows for now and reconcile
+        # via the next backfill run.
+        canonical_artist_id = await self._resolve_canonical_artist_id(
+            metadata.get("artist"),
+            metadata.get("musicbrainz_artist_id"),
         )
 
         values = {
@@ -669,6 +704,7 @@ class LibraryScanner:
             "codec": metadata.get("codec"),
             "needs_transcode": metadata.get("needs_transcode", False),
             "lyrics_language": metadata.get("lyrics_language"),
+            "canonical_artist_id": canonical_artist_id,
         }
 
         # Use upsert to handle race conditions (another process may have inserted this track)
@@ -696,6 +732,7 @@ class LibraryScanner:
                 "codec": insert_stmt.excluded.codec,
                 "needs_transcode": insert_stmt.excluded.needs_transcode,
                 "lyrics_language": insert_stmt.excluded.lyrics_language,
+                "canonical_artist_id": insert_stmt.excluded.canonical_artist_id,
             },
         ).returning(Track)
 
@@ -818,6 +855,10 @@ class LibraryScanner:
         track.codec = metadata.get("codec")
         track.needs_transcode = metadata.get("needs_transcode", False)
         track.lyrics_language = metadata.get("lyrics_language")
+        track.canonical_artist_id = await self._resolve_canonical_artist_id(
+            metadata.get("artist"),
+            metadata.get("musicbrainz_artist_id"),
+        )
 
         # Only reset analysis status if requested (when file content changed)
         if reset_analysis:

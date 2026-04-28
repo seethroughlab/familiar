@@ -2,7 +2,28 @@ import { Play, Pause, Disc, Disc3, User } from 'lucide-react';
 import type { DiscoveryItem, LayoutType } from './types';
 import { MatchScoreBadge } from './MatchScoreBadge';
 import { ExternalLinkPills } from './ExternalLinkPills';
+import { FindDropdown, type FindLink } from './FindDropdown';
 import { AlbumArtwork } from '../AlbumArtwork';
+
+const FIND_LABELS: Record<string, string> = {
+  bandcamp: 'Bandcamp',
+  lastfm: 'Last.fm',
+  amazon: 'Amazon Music',
+  apple: 'Apple Music',
+};
+
+function externalLinksToFindLinks(
+  links: DiscoveryItem['externalLinks'] | undefined,
+): FindLink[] {
+  if (!links) return [];
+  const out: FindLink[] = [];
+  for (const [key, url] of Object.entries(links)) {
+    if (typeof url === 'string' && url) {
+      out.push({ name: FIND_LABELS[key] ?? key, url });
+    }
+  }
+  return out;
+}
 
 interface DiscoveryCardProps {
   item: DiscoveryItem;
@@ -17,6 +38,41 @@ interface DiscoveryCardProps {
  */
 function isLastFmPlaceholder(url: string | undefined): boolean {
   return url?.includes('2a96cbd8b46e442fc41c2b86b821562f') ?? false;
+}
+
+function hueFromName(name: string): number {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return hash % 360;
+}
+
+function ArtistAvatar({
+  name,
+  sizeClasses,
+  textSize,
+}: {
+  name: string;
+  sizeClasses: string;
+  textSize: string;
+}) {
+  const h = hueFromName(name);
+  const initial = (name.trim()[0] ?? '?').toUpperCase();
+  const style = {
+    backgroundImage: `linear-gradient(135deg, hsl(${h} 55% 38%), hsl(${(h + 35) % 360} 60% 22%))`,
+  } as const;
+  return (
+    <div
+      className={`${sizeClasses} rounded-full flex items-center justify-center select-none`}
+      style={style}
+      aria-hidden
+    >
+      <span className={`${textSize} font-semibold text-white/95 drop-shadow-sm`}>
+        {initial}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -81,11 +137,15 @@ export function DiscoveryCard({
               )}
             </div>
           </div>
+        ) : isArtist ? (
+          <ArtistAvatar
+            name={item.name}
+            sizeClasses={sizeClasses}
+            textSize={size === 'small' ? 'text-base' : 'text-3xl'}
+          />
         ) : (
           <div className={`${sizeClasses} bg-zinc-700 flex items-center justify-center ${roundedClass}`}>
-            {isArtist ? (
-              <User className={`${iconSize} text-zinc-400`} />
-            ) : item.entityType === 'track' ? (
+            {item.entityType === 'track' ? (
               <Disc3 className={`${iconSize} text-zinc-400`} />
             ) : (
               <Disc className={`${iconSize} text-zinc-400`} />
@@ -123,14 +183,26 @@ export function DiscoveryCard({
       >
         {renderArtwork('large')}
 
-        {/* Text overlay at bottom */}
+        {/* Text overlay at bottom — title/subtitle left, Find dropdown right */}
         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
-          <div className={`font-medium text-sm truncate ${isPlaying ? 'text-green-500' : ''}`}>
-            {item.name}
+          <div className="flex items-end justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className={`font-medium text-sm truncate ${isPlaying ? 'text-green-500' : ''}`}>
+                {item.name}
+              </div>
+              {item.subtitle && (
+                <div className="text-xs text-zinc-400 truncate">{item.subtitle}</div>
+              )}
+            </div>
+            {!item.inLibrary && item.externalLinks && (
+              <div className="flex-shrink-0">
+                <FindDropdown
+                  links={externalLinksToFindLinks(item.externalLinks)}
+                  ariaLabel={`Find ${item.name}`}
+                />
+              </div>
+            )}
           </div>
-          {item.subtitle && (
-            <div className="text-xs text-zinc-400 truncate">{item.subtitle}</div>
-          )}
         </div>
 
         {/* Match score badge in top-right */}
@@ -139,14 +211,6 @@ export function DiscoveryCard({
             <MatchScoreBadge score={item.matchScore} inLibrary={item.inLibrary} />
           </div>
         )}
-
-        {/* External links for non-library items */}
-        {!item.inLibrary && item.externalLinks && (
-          <div className="absolute bottom-12 right-2">
-            <ExternalLinkPills links={item.externalLinks} />
-          </div>
-        )}
-
       </div>
     );
   }

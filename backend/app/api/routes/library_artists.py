@@ -27,6 +27,7 @@ class ArtistSummary(BaseModel):
     album_count: int
     first_track_id: str  # For artwork lookup
     first_album: str | None = None
+    image_url: str | None = None  # Resolved Wikipedia/Wikidata/Spotify thumbnail
 
 
 class ArtistListResponse(BaseModel):
@@ -123,6 +124,29 @@ async def list_artists(
         )
         for row in rows
     ]
+
+    # Resolve real artist photos (Wikipedia/Wikidata/Spotify) for the page
+    # we're returning. Cache-first via ``ArtistInfo.image_url``; cold load
+    # tries Wikipedia direct in parallel under a short budget. Anything
+    # unresolved is fired off to a background task and shows up on the next
+    # page load. Frontend falls back to album artwork for null entries.
+    if items:
+        from app.services.artist_image import (
+            resolve_many_artist_images,
+            schedule_background_resolve,
+        )
+
+        names_with_hints: list[tuple[str, str | None]] = [
+            (a.name, None) for a in items
+        ]
+        resolved = await resolve_many_artist_images(db, names_with_hints)
+        await db.commit()
+        for a in items:
+            a.image_url = resolved.get(a.name)
+        unresolved = [
+            (a.name, None) for a in items if resolved.get(a.name) is None
+        ]
+        schedule_background_resolve(unresolved)
 
     return ArtistListResponse(
         items=items,
@@ -621,16 +645,34 @@ async def get_artist_detail(
                 )
             )
 
-    # Build response
-    # Filter out Last.fm's placeholder star image from cached data
+    # Resolve a real artist photo via the unified chain (Wikipedia direct →
+    # opensearch → MB url-rels → Wikidata P18 → Spotify oembed). Cache-first
+    # in ``ArtistInfo.image_url``. The resolver inherently rejects Last.fm's
+    # placeholder hash, so this supersedes the prior _filter_placeholder
+    # logic for in-library artists too. Falls back to Last.fm's image_large
+    # (also placeholder-filtered) and finally None.
+    from app.services.artist_image import (
+        resolve_many_artist_images,
+        schedule_background_resolve,
+    )
+
     def _filter_placeholder(url: str | None) -> str | None:
         if url and "2a96cbd8b46e442fc41c2b86b821562f" in url:
             return None
         return url
 
-    image_url = None
-    if lastfm_data:
-        image_url = _filter_placeholder(lastfm_data.image_extralarge) or _filter_placeholder(lastfm_data.image_large)
+    resolved = await resolve_many_artist_images(db, [(artist_name, None)])
+    await db.commit()
+    image_url = resolved.get(artist_name)
+    if image_url is None and lastfm_data:
+        # Backstop: Last.fm extra-large/large image, with placeholder filter.
+        image_url = _filter_placeholder(
+            lastfm_data.image_extralarge
+        ) or _filter_placeholder(lastfm_data.image_large)
+    if image_url is None:
+        # Sync miss — schedule the slow MB+Spotify chain in the background;
+        # next detail-page load picks up the cached result.
+        schedule_background_resolve([(artist_name, None)])
 
     return ArtistDetailResponse(
         name=artist_name,

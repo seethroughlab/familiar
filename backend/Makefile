@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint format
+.PHONY: install dev run reset-db migrate test test-contract lint format backfill-artists
 
 # Install dependencies
 install:
@@ -38,3 +38,8 @@ lint:
 format:
 	uv run ruff format .
 	uv run ruff check --fix .
+
+# One-shot backfill: populate canonical artists/aliases from existing tracks.
+# Pass ARGS="--dry-run" or ARGS="--no-mb --limit 50" for variants.
+backfill-artists:
+	uv run python -m app.cli.backfill_artists $(ARGS)

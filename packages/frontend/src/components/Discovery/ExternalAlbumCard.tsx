@@ -10,11 +10,10 @@
  * Visually mirrors DiscoveryCard's grid look, but adds external-album-specific
  * affordances: dismiss button, context label, release type/date, purchase links.
  */
-import { useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { X, ShoppingBag, ExternalLink, Check } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import type { ExternalAlbum } from '../../api/discovery';
 import { AlbumArtwork } from '../AlbumArtwork';
+import { FindDropdown, type FindLink } from './FindDropdown';
 
 export interface ExternalAlbumCardProps {
   album: ExternalAlbum;
@@ -42,97 +41,10 @@ function formatReleaseLabel(album: ExternalAlbum): string | null {
   }
 }
 
-function PurchaseLinksDropdown({
-  links,
-  onOpenExternal,
-}: {
-  links: ExternalAlbum['purchase_links'];
-  onOpenExternal?: (url: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const entries = Object.entries(links ?? {}) as [string, { name: string; url: string }][];
-
-  // Anchor the portaled menu just below the trigger and right-align it.
-  // Recompute on open + on scroll/resize while open.
-  useLayoutEffect(() => {
-    if (!open || !buttonRef.current) {
-      setPos(null);
-      return;
-    }
-    const compute = () => {
-      const rect = buttonRef.current!.getBoundingClientRect();
-      const MENU_WIDTH = 176; // matches w-44 (11rem)
-      setPos({
-        top: rect.bottom + 4,
-        left: rect.right - MENU_WIDTH,
-      });
-    };
-    compute();
-    window.addEventListener('scroll', compute, true);
-    window.addEventListener('resize', compute);
-    return () => {
-      window.removeEventListener('scroll', compute, true);
-      window.removeEventListener('resize', compute);
-    };
-  }, [open]);
-
-  if (entries.length === 0) return null;
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="flex items-center gap-1 px-2 py-1 rounded-md bg-zinc-900/80 backdrop-blur-sm text-xs text-zinc-200 hover:bg-zinc-800 transition-colors"
-        aria-label="Find this album"
-      >
-        <ShoppingBag className="w-3.5 h-3.5" />
-        Find
-      </button>
-      {open && pos &&
-        createPortal(
-          <>
-            <div
-              className="fixed inset-0 z-[60]"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpen(false);
-              }}
-            />
-            <div
-              className="fixed w-44 z-[70] rounded-md border border-zinc-700 bg-zinc-900 shadow-lg overflow-hidden"
-              style={{ top: pos.top, left: pos.left }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {entries.map(([key, link]) => (
-                <a
-                  key={key}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenExternal?.(link.url);
-                    setOpen(false);
-                  }}
-                  className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-800 transition-colors"
-                >
-                  <span>{link.name}</span>
-                  <ExternalLink className="w-3 h-3 text-zinc-400" />
-                </a>
-              ))}
-            </div>
-          </>,
-          document.body,
-        )}
-    </>
-  );
+function purchaseLinksToFindLinks(
+  links: ExternalAlbum['purchase_links'],
+): FindLink[] {
+  return Object.values(links ?? {}) as FindLink[];
 }
 
 export function ExternalAlbumCard({
@@ -170,7 +82,10 @@ export function ExternalAlbumCard({
             In library
           </span>
         )}
-        <PurchaseLinksDropdown links={album.purchase_links} />
+        <FindDropdown
+          links={purchaseLinksToFindLinks(album.purchase_links)}
+          ariaLabel="Find this album"
+        />
         {onDismiss && (
           <button
             type="button"
@@ -240,7 +155,10 @@ export function ExternalAlbumCard({
             )}
           </div>
           <div className="flex-shrink-0">
-            <PurchaseLinksDropdown links={album.purchase_links} />
+            <FindDropdown
+              links={purchaseLinksToFindLinks(album.purchase_links)}
+              ariaLabel="Find this album"
+            />
           </div>
         </div>
       </div>

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.config import settings
 from app.db.models import (
     ArtistCheckCache,
+    ArtistInfo,
     ExternalAlbumCache,
     Playlist,
     PlaylistTrack,
@@ -98,6 +99,7 @@ _CLEANUP_TABLES = [
     ProfilePlayHistory,
     ExternalAlbumCache,
     ArtistCheckCache,
+    ArtistInfo,
     TrackAnalysis,
     Track,
 ]

@@ -469,6 +469,7 @@ interface ArtistCardProps {
     album_count: number;
     first_track_id: string;
     first_album: string | null;
+    image_url?: string | null;
   };
   index: number;
   onClick: () => void;
@@ -476,6 +477,7 @@ interface ArtistCardProps {
 
 function ArtistCard({ artist, index, onClick }: ArtistCardProps) {
   const [imageError, setImageError] = useState(false);
+  const resolved = artist.image_url ?? null;
 
   return (
     <button
@@ -485,9 +487,9 @@ function ArtistCard({ artist, index, onClick }: ArtistCardProps) {
     >
       {/* Artist artwork - square aspect ratio */}
       <div className="aspect-square bg-zinc-700 relative overflow-hidden">
-        {!imageError ? (
+        {resolved && !imageError ? (
           <img
-            src={libraryApi.getArtistImageUrl(artist.name, 'large')}
+            src={resolved}
             alt={artist.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={() => setImageError(true)}

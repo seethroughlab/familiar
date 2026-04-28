@@ -61,6 +61,7 @@ export interface ArtistSummary {
   album_count: number;
   first_track_id: string;
   first_album: string | null;
+  image_url?: string | null;
 }
 
 export interface ArtistListResponse {
@@ -460,6 +461,9 @@ export const libraryApi = {
 
   getDiscover: async (params?: {
     recommendations_limit?: number;
+    seed_artists?: number;
+    similar_per_artist?: number;
+    min_match_score?: number;
   }): Promise<LibraryDiscoverResponse> => {
     const { data } = await api.get('/library/discover', { params });
     return data;

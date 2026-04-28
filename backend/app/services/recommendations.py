@@ -7,9 +7,10 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, func, select
+from sqlalchemy import Float, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import TextClause
 
 from app.db.models import (
     ArtistCheckCache,
@@ -32,6 +33,19 @@ logger = logging.getLogger(__name__)
 
 PLAYLIST_REC_CONTEXT = "playlist_recommendation"
 LISTENING_PROFILE_CONTEXT = "listening_profile_recommendation"
+
+# Literal predicates that exactly mirror the partial-unique-index `postgresql_where`
+# clauses on ExternalAlbumCache (see `app/db/models/artists.py`). PostgreSQL needs
+# the ON CONFLICT inference predicate to imply the partial index predicate at plan
+# time; a parameterized comparison (`discovery_context = $param`) breaks inference,
+# so each context maps to a fixed text clause that matches the index definition.
+_INDEX_WHERE_BY_CONTEXT: dict[str, TextClause] = {
+    PLAYLIST_REC_CONTEXT: text("discovery_context = 'playlist_recommendation'"),
+    LISTENING_PROFILE_CONTEXT: text(
+        "discovery_context = 'listening_profile_recommendation'"
+    ),
+}
+
 PLAYLIST_REC_TTL_HOURS = 24
 PLAYLIST_REC_MB_RELEASE_TYPES = ["album", "ep"]
 PLAYLIST_REC_MB_DAYS_BACK = 3650  # 10-year window — effectively "all releases"
@@ -670,7 +684,7 @@ class RecommendationsService:
             )
             .on_conflict_do_nothing(
                 index_elements=conflict_elements,
-                index_where=ExternalAlbumCache.discovery_context == discovery_context,
+                index_where=_INDEX_WHERE_BY_CONTEXT[discovery_context],
             )
         )
         await self.db.execute(stmt)

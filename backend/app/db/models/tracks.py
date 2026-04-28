@@ -62,6 +62,15 @@ class Track(Base):
     musicbrainz_album_id: Mapped[str | None] = mapped_column(String(36))
     isrc: Mapped[str | None] = mapped_column(String(12))
 
+    # Canonical artist FK — populated by scanner dual-write and backfill.
+    # Read endpoints still GROUP BY artist string in Pass 1; Pass 2 will
+    # cut them over to use this column.
+    canonical_artist_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("artists.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Extended metadata (for editing)
     composer: Mapped[str | None] = mapped_column(String(500))
     conductor: Mapped[str | None] = mapped_column(String(500))

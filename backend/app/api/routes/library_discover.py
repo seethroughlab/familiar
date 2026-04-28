@@ -374,6 +374,33 @@ async def get_discover_dashboard(
     recommended_artists.sort(key=lambda a: a.match_score, reverse=True)
     recommended_artists = recommended_artists[:recommendations_limit]
 
+    # Replace Last.fm placeholder image_urls. Synchronous path is cache + a
+    # short Wikipedia probe (direct + opensearch). Anything still missing is
+    # fired off to a background task (MB + Wikidata, no time pressure) so
+    # subsequent dashboard loads pick up real images. UI shows gradient
+    # initial avatars for whatever isn't resolved yet. The seed artist
+    # (``based_on_artist``) is passed as a disambiguation hint — picks the
+    # right page when multiple Wikipedia musicians share a name.
+    from app.services.artist_image import (
+        resolve_many_artist_images,
+        schedule_background_resolve,
+    )
+
+    items: list[tuple[str, str | None]] = [
+        (a.name, a.based_on_artist) for a in recommended_artists
+    ]
+    resolved_images = await resolve_many_artist_images(db, items)
+    await db.commit()
+    for a in recommended_artists:
+        a.image_url = resolved_images.get(a.name)
+
+    unresolved = [
+        (a.name, a.based_on_artist)
+        for a in recommended_artists
+        if resolved_images.get(a.name) is None
+    ]
+    schedule_background_resolve(unresolved)
+
     # 2. Track-based discovery using top artist names
     unheard_tracks: list[DiscoverTrack] = []
     deep_cuts: list[DiscoverTrack] = []
