@@ -59,6 +59,16 @@ jobs:
           rm -rf "$DOCKER_CONFIG"
           mkdir -p "$DOCKER_CONFIG"
           echo '{}' > "$DOCKER_CONFIG/config.json"
+          # Docker looks up CLI plugins (compose, buildx) under
+          # $DOCKER_CONFIG/cli-plugins. Without this symlink, `docker compose`
+          # is unrecognized and -f is interpreted as a flag to plain docker.
+          for src in "$HOME/.docker/cli-plugins" /usr/local/lib/docker/cli-plugins /opt/homebrew/lib/docker/cli-plugins; do
+            if [ -d "$src" ]; then
+              ln -s "$src" "$DOCKER_CONFIG/cli-plugins"
+              break
+            fi
+          done
+          docker compose version
 
       - name: Clean up previous containers and volumes
         working-directory: docker
