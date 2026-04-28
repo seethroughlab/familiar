@@ -614,8 +614,7 @@ footer a { color: var(--text-secondary); }
   border-radius: 6px;
   color: var(--text-muted);
   font-size: 12px;
-  overflow-x: auto;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* --- Install alt details --- */
