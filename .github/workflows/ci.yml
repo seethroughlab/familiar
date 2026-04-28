@@ -44,8 +44,20 @@ jobs:
     name: macOS Compose Integration
     runs-on: [self-hosted, macOS]
     timeout-minutes: 15
+    # The runner runs as a launchd service with no interactive session, so
+    # the macOS login keychain stays locked and Docker's osxkeychain creds
+    # helper fails on every `docker` invocation. Point DOCKER_CONFIG at a
+    # job-scoped empty config so the CLI skips the keychain entirely. Local
+    # builds + anonymous Docker Hub pulls don't need credentials.
+    env:
+      DOCKER_CONFIG: ${{ runner.temp }}/docker-config
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare keychain-free Docker config
+        run: |
+          mkdir -p "$DOCKER_CONFIG"
+          echo '{}' > "$DOCKER_CONFIG/config.json"
 
       - name: Clean up previous containers and volumes
         working-directory: docker
