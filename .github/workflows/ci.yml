@@ -50,12 +50,13 @@ jobs:
     # job-scoped empty config so the CLI skips the keychain entirely. Local
     # builds + anonymous Docker Hub pulls don't need credentials.
     env:
-      DOCKER_CONFIG: ${{ runner.temp }}/docker-config
+      DOCKER_CONFIG: /tmp/familiar-ci-docker-config
     steps:
       - uses: actions/checkout@v4
 
       - name: Prepare keychain-free Docker config
         run: |
+          rm -rf "$DOCKER_CONFIG"
           mkdir -p "$DOCKER_CONFIG"
           echo '{}' > "$DOCKER_CONFIG/config.json"
 
