@@ -12,7 +12,7 @@ import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
   Heart, Download, Disc3, Inbox,
   Settings, PanelLeftClose, PanelLeft,
-  ListMusic, Clock, ChevronDown, ChevronUp, Plus,
+  ListMusic, Clock, ChevronDown, ChevronUp, Plus, CassetteTape,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -34,6 +34,7 @@ import { PlaylistEditModal } from './PlaylistEditModal';
 import { CollectionContextMenu } from './CollectionContextMenu';
 import { LibraryItemContextMenu } from './LibraryItemContextMenu';
 import { SmartPlaylistBuilder } from '../SmartPlaylists';
+import { ExportMixTapeModal } from '../MixTape';
 
 import { HOME_ROUTE, LIBRARY_ITEMS as LIBRARY_ITEM_DEFS } from '../../routes';
 
@@ -84,6 +85,11 @@ export function Sidebar() {
   // Smart playlist builder
   const [showSmartPlaylistBuilder, setShowSmartPlaylistBuilder] = useState(false);
   const [editingSmartPlaylist, setEditingSmartPlaylist] = useState<SmartPlaylist | undefined>();
+  const [mixtapeSource, setMixtapeSource] = useState<
+    | { kind: 'playlist'; id: string; defaultName: string }
+    | { kind: 'smart_playlist'; id: string; defaultName: string }
+    | null
+  >(null);
 
   // Collection counts
   const { total: favoritesCount } = useFavorites();
@@ -441,6 +447,20 @@ export function Sidebar() {
             )}
           </nav>
         )}
+
+        {/* Mix Tapes — single sidebar entry; list view shows the items. */}
+        <div className={`mx-4 my-3 border-t ${dividerClass}`} />
+        <div className="px-2">
+          <Link
+            to="/mixtapes"
+            className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
+              location.pathname === '/mixtapes' ? activeClass : `${textClass} ${hoverClass}`
+            }`}
+          >
+            <CassetteTape className="w-4 h-4 flex-shrink-0 text-orange-400" />
+            <span>Mix Tapes</span>
+          </Link>
+        </div>
       </div>
 
       {/* Footer */}
@@ -473,6 +493,11 @@ export function Sidebar() {
             const pl = playlistMenu.state.item!;
             setEditModal({ id: pl.id, name: pl.name, description: pl.description || '' });
           }}
+          onMakeMixTape={() => {
+            const pl = playlistMenu.state.item!;
+            setMixtapeSource({ kind: 'playlist', id: pl.id, defaultName: pl.name });
+            playlistMenu.close();
+          }}
         />
       )}
       {smartPlaylistMenu.state.isOpen && smartPlaylistMenu.state.item && (
@@ -485,6 +510,18 @@ export function Sidebar() {
             setShowSmartPlaylistBuilder(true);
             smartPlaylistMenu.close();
           }}
+          onMakeMixTape={() => {
+            const sp = smartPlaylistMenu.state.item!;
+            setMixtapeSource({ kind: 'smart_playlist', id: sp.id, defaultName: sp.name });
+            smartPlaylistMenu.close();
+          }}
+        />
+      )}
+      {mixtapeSource && (
+        <ExportMixTapeModal
+          isOpen={true}
+          onClose={() => setMixtapeSource(null)}
+          source={mixtapeSource}
         />
       )}
       {ephemeralMenu.state.isOpen && ephemeralMenu.state.item && (

@@ -12,6 +12,7 @@ export * from './download';
 export * from './analysis';
 export * from './chat';
 export * from './missingTracks';
+export * from './mixtapes';
 export * from './importSession';
 export * from './diagnosticsLogs';
 export * from './mapStream';

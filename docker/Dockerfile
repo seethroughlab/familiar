@@ -123,7 +123,7 @@ RUN mkdir -p /app/data/models \
 
 # Create non-root user and directories
 RUN useradd --create-home --shell /bin/bash familiar \
-    && mkdir -p /data/music /data/art /data/videos /app/data \
+    && mkdir -p /data/music /data/art /data/videos /data/mixtapes /app/data \
     && chown -R familiar:familiar /app /data
 
 # Copy entrypoint script
@@ -140,7 +140,8 @@ ENV DATABASE_URL=postgresql+asyncpg://familiar:familiar@postgres:5432/familiar \
     REDIS_URL=redis://redis:6379/0 \
     MUSIC_LIBRARY_PATH=/music \
     ART_PATH=/data/art \
-    VIDEOS_PATH=/data/videos
+    VIDEOS_PATH=/data/videos \
+    MIXTAPES_PATH=/data/mixtapes
 
 # Expose API port
 EXPOSE 8000

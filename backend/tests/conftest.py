@@ -21,6 +21,7 @@ from app.db.models import (
     ArtistCheckCache,
     ExternalAlbumCache,
     ExternalArtistImageCache,
+    MixTape,
     Playlist,
     PlaylistTrack,
     ProfilePlayHistory,
@@ -96,6 +97,7 @@ def make_profile_headers(profile: dict) -> dict[str, str]:
 # ArtistAlias FKs to Artist with CASCADE; Track.canonical_artist_id FKs
 # to Artist with SET NULL — so deleting tracks first then artists is safe.
 _CLEANUP_TABLES = [
+    MixTape,
     PlaylistTrack,
     Playlist,
     SmartPlaylist,

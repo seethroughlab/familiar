@@ -29,6 +29,9 @@ const EphemeralPlaylistDetail = lazy(() => import('./components/Playlists/Epheme
 const FavoritesDetail = lazy(() => import('./components/Playlists/FavoritesDetail').then(m => ({ default: m.FavoritesDetail })));
 const DownloadsDetail = lazy(() => import('./components/Playlists/DownloadsDetail').then(m => ({ default: m.DownloadsDetail })));
 const SmartPlaylistDetail = lazy(() => import('./components/SmartPlaylists/SmartPlaylistDetail').then(m => ({ default: m.SmartPlaylistDetail })));
+const MixTapesList = lazy(() => import('./components/MixTape').then(m => ({ default: m.MixTapesList })));
+
+import { MixTapeProgressWatcher } from './components/MixTape';
 
 function LazyLoadSpinner() {
   return (
@@ -282,6 +285,8 @@ function App() {
       <QueryClientProvider client={queryClient}>
         {/* Legacy URL redirect handler */}
         <LegacyRedirect />
+        {/* Watches in-flight mix tape renders and toasts on terminal state */}
+        <MixTapeProgressWatcher />
         <Routes>
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
@@ -333,6 +338,13 @@ function App() {
             <Route path="/ephemeral/:id" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <EphemeralPlaylistDetail />
+              </Suspense>
+            } />
+
+            {/* Mix Tapes */}
+            <Route path="/mixtapes" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <MixTapesList />
               </Suspense>
             } />
 

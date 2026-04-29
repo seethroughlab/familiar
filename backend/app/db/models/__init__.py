@@ -21,6 +21,7 @@ from .base import (
 )
 from .frontend_log import FrontendLog
 from .metadata import ProposedChange
+from .mixtapes import MixTape
 from .playlists import Playlist, PlaylistTrack, SmartPlaylist
 from .profiles import (
     LastfmProfile,
@@ -48,6 +49,7 @@ __all__ = [
     "ExternalArtistImageCache",
     "FrontendLog",
     "LastfmProfile",
+    "MixTape",
     "Playlist",
     "PlaylistTrack",
     "Profile",

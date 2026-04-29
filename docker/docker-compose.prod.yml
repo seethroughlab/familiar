@@ -85,12 +85,14 @@ services:
       - app_data:/app/data  # Persists settings.json
       - art_data:/data/art
       - videos_data:/data/videos
+      - mixtapes_data:/data/mixtapes
     environment:
       - DATABASE_URL=postgresql+asyncpg://familiar:${POSTGRES_PASSWORD:-familiar}@postgres:5432/familiar
       - REDIS_URL=redis://redis:6379/0
       - MUSIC_LIBRARY_PATH=/music
       - ART_PATH=/data/art
       - VIDEOS_PATH=/data/videos
+      - MIXTAPES_PATH=/data/mixtapes
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
@@ -129,6 +131,7 @@ volumes:
   app_data:      # Settings and configuration
   art_data:
   videos_data:
+  mixtapes_data:
 
 networks:
   familiar-network:

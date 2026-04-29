@@ -12,6 +12,7 @@ import {
   Settings2,
   Trash2,
   Loader2,
+  CassetteTape,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -28,9 +29,10 @@ interface Props {
   position: { x: number; y: number };
   onClose: () => void;
   onEditRules: () => void;
+  onMakeMixTape: () => void;
 }
 
-export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRules }: Props) {
+export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRules, onMakeMixTape }: Props) {
   const [downloading, setDownloading] = useState(false);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -210,6 +212,13 @@ export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRu
         icon={<FileDown className="w-4 h-4" />}
         label="Export .familiar"
         onClick={handleExport}
+      />
+      {/* Smart playlists with >15 matched tracks are allowed — backend truncates. */}
+      <MenuItem
+        icon={<CassetteTape className="w-4 h-4 text-orange-400" />}
+        label="Make Mix Tape…"
+        onClick={() => handleAction(onMakeMixTape)}
+        disabled={playlist.cached_track_count < 2}
       />
 
       <MenuDivider />

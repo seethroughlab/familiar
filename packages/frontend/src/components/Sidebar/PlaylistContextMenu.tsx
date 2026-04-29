@@ -11,6 +11,7 @@ import {
   Edit3,
   Trash2,
   Loader2,
+  CassetteTape,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ContextMenuContainer, MenuItem, MenuDivider, MenuHeader } from '../ui/ContextMenu';
@@ -26,9 +27,10 @@ interface Props {
   position: { x: number; y: number };
   onClose: () => void;
   onRename: () => void;
+  onMakeMixTape: () => void;
 }
 
-export function PlaylistContextMenu({ playlist, position, onClose, onRename }: Props) {
+export function PlaylistContextMenu({ playlist, position, onClose, onRename, onMakeMixTape }: Props) {
   const [downloading, setDownloading] = useState(false);
   const queryClient = useQueryClient();
   const setQueue = usePlayerStore((s) => s.setQueue);
@@ -156,6 +158,13 @@ export function PlaylistContextMenu({ playlist, position, onClose, onRename }: P
         label="Download as ZIP"
         onClick={handleDownloadZip}
         disabled={downloading}
+      />
+      {/* Mixtapes are capped at 15 source tracks; fewer than 2 isn't a mixtape. */}
+      <MenuItem
+        icon={<CassetteTape className="w-4 h-4 text-orange-400" />}
+        label="Make Mix Tape…"
+        onClick={() => handleAction(onMakeMixTape)}
+        disabled={playlist.track_count < 2 || playlist.track_count > 15}
       />
 
       <MenuDivider />

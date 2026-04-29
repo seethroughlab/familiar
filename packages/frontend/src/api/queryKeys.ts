@@ -73,6 +73,12 @@ export const queryKeys = {
     detail: (id: string) => ['smart-playlist-tracks', id] as const,
   },
 
+  // ── Mix Tapes ─────────────────────────────────────────────────────────
+  mixtapes: {
+    all: ['mixtapes'] as const,
+    detail: (id: string) => ['mixtape', id] as const,
+  },
+
   // ── Favorites ─────────────────────────────────────────────────────────
   favorites: {
     all: ['favorites'] as const,

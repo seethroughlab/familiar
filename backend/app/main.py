@@ -43,6 +43,7 @@ from app.api.routes import (
     health,
     lastfm,
     library,
+    mixtapes,
     new_releases,
     organizer,
     outputs,
@@ -385,6 +386,7 @@ app.include_router(lastfm.router, prefix="/api/v1")
 app.include_router(settings_routes.router, prefix="/api/v1")
 app.include_router(smart_playlists.router, prefix="/api/v1")
 app.include_router(playlists.router, prefix="/api/v1")
+app.include_router(mixtapes.router, prefix="/api/v1")
 app.include_router(profiles.router, prefix="/api/v1")
 app.include_router(favorites.router, prefix="/api/v1")
 app.include_router(organizer.router, prefix="/api/v1")
