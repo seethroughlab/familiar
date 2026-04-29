@@ -14,8 +14,8 @@ from app.api.routes._external_albums_schemas import (
     ExternalAlbumsResponse,
 )
 from app.db.models import Artist, ArtistAlias, Track, TrackStatus
-from app.services.external_albums_helpers import normalize_artist_name
 from app.services.app_settings import get_app_settings_service
+from app.services.external_albums_helpers import normalize_artist_name
 from app.services.llm.providers import get_provider
 from app.services.recommendations import RecommendationsService
 from app.services.redis_client import get_redis

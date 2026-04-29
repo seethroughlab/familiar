@@ -23,7 +23,7 @@ from sqlalchemy import delete, func, select, text, update
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError
-from app.db.models import Artist, ArtistAlias, Track
+from app.db.models import Artist, Track
 from app.services.artist_resolver import _canonicalize_for_match
 
 logger = logging.getLogger(__name__)

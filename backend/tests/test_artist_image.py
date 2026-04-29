@@ -119,7 +119,7 @@ async def test_resolve_writes_through_to_artist_when_alias_exists(
 ):
     """Pass 4: a successful resolution mirrors onto Artist.image_url
     when an alias for the queried name is registered."""
-    from app.db.models import Artist, ArtistAlias
+    from app.db.models import Artist
     from app.services import artist_resolver
 
     artist = await artist_resolver.resolve_canonical_artist(

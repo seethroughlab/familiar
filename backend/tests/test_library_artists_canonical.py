@@ -11,7 +11,7 @@ from app.api.routes.library_artists import (
     get_artist_detail,
     list_artists,
 )
-from app.db.models import Artist, ArtistAlias, Track, TrackStatus
+from app.db.models import ArtistAlias, Track, TrackStatus
 from app.services import artist_resolver as ar
 
 

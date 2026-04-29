@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from app.api.routes.admin_artists import merge_artists, MergeArtistsRequest
+from app.api.routes.admin_artists import MergeArtistsRequest, merge_artists
 from app.db.models import Artist, ArtistAlias, Track, TrackStatus
 from app.services import artist_resolver as ar
 
