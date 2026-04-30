@@ -155,13 +155,36 @@ async def list_mixtapes(
     db: DbSession,
     profile: RequiredProfile,
 ) -> list[MixTapeResponse]:
-    """List the current profile's mixtapes, newest first."""
+    """List the current profile's mixtapes, newest first.
+
+    For rows that are still pending/rendering, merges live phase + progress
+    from Redis so the header indicator can render phase labels without
+    polling each id individually.
+    """
     result = await db.execute(
         select(MixTape)
         .where(MixTape.profile_id == profile.id)
         .order_by(MixTape.created_at.desc())
     )
-    return [_serialize(mt) for mt in result.scalars().all()]
+    rows = list(result.scalars().all())
+
+    in_flight_ids = [mt.id for mt in rows if mt.status in ("pending", "rendering")]
+    progress_by_id: dict[UUID, dict[str, Any]] = {}
+    if in_flight_ids:
+        from app.services.background import get_background_manager
+        bg = get_background_manager()
+        for mt_id in in_flight_ids:
+            raw = bg.redis.get(_redis_key(mt_id))
+            if not raw:
+                continue
+            try:
+                progress_by_id[mt_id] = json.loads(
+                    raw.decode() if isinstance(raw, bytes) else raw
+                )
+            except json.JSONDecodeError:
+                continue
+
+    return [_serialize(mt, progress=progress_by_id.get(mt.id)) for mt in rows]
 
 
 @router.get("/{mixtape_id}")
