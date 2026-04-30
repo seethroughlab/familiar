@@ -12,7 +12,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { mixtapesApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { showSuccess, showError } from '../../stores/toastStore';
-import { trackMixTape } from '../../stores/mixtapesStore';
 
 export interface ExportMixTapeModalProps {
   isOpen: boolean;
@@ -60,9 +59,8 @@ export function ExportMixTapeModal({ isOpen, onClose, source }: ExportMixTapeMod
           ? { source_playlist_id: source.id }
           : { source_smart_playlist_id: source.id }),
       };
-      const created = await mixtapesApi.create(payload);
+      await mixtapesApi.create(payload);
       queryClient.invalidateQueries({ queryKey: queryKeys.mixtapes.all });
-      trackMixTape(created.id);
       showSuccess('Mix tape rendering — we\'ll let you know when it\'s ready');
       onClose();
     } catch (err: unknown) {

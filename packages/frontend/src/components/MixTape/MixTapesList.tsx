@@ -5,11 +5,12 @@
  * embedded MP3 cover via the cover_path on the server), name, source
  * playlist, status, and Download / Delete actions.
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { CassetteTape, Download, Loader2, Trash2 } from 'lucide-react';
 import { mixtapesApi, type MixTape } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { showError, showSuccess } from '../../stores/toastStore';
+import { useMixtapesList } from '../../hooks/useMixtapes';
 
 function StatusBadge({ status }: { status: MixTape['status'] }) {
   const styles: Record<MixTape['status'], string> = {
@@ -41,20 +42,7 @@ function formatDuration(seconds: number | null): string {
 export function MixTapesList() {
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.mixtapes.all,
-    queryFn: () => mixtapesApi.list(),
-    // Re-fetch a touch more often so an in-flight render flips to ready
-    // without the user manually refreshing.
-    refetchInterval: (query) => {
-      const items = query.state.data as MixTape[] | undefined;
-      if (!items) return false;
-      const hasInflight = items.some(
-        (m) => m.status === 'pending' || m.status === 'rendering'
-      );
-      return hasInflight ? 3000 : false;
-    },
-  });
+  const { data, isLoading, error } = useMixtapesList();
 
   const handleDownload = async (mt: MixTape) => {
     try {

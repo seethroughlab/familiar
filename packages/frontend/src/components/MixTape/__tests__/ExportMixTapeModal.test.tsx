@@ -19,12 +19,7 @@ vi.mock('../../../stores/toastStore', () => ({
   showError: vi.fn(),
 }));
 
-vi.mock('../../../stores/mixtapesStore', () => ({
-  trackMixTape: vi.fn(),
-}));
-
 import { mixtapesApi } from '../../../api';
-import { trackMixTape } from '../../../stores/mixtapesStore';
 
 function renderModal(extraProps: Partial<Parameters<typeof ExportMixTapeModal>[0]> = {}) {
   const onClose = vi.fn();
@@ -88,7 +83,6 @@ describe('ExportMixTapeModal', () => {
       });
     });
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    expect(trackMixTape).toHaveBeenCalledWith('mt-1');
   });
 
   it('renders an optional byline input', () => {
