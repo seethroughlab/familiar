@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, RotateCw, CassetteTape } from 'lucide-react';
+import { ArrowLeft, Play, Loader2, Zap, Clock, Download, Check, RefreshCw, CloudOff, RotateCw } from 'lucide-react';
 import { smartPlaylistsApi, tracksApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
@@ -16,7 +16,7 @@ import * as playlistCache from '../../services/playlistCache';
 import type { Track } from '../../types';
 import { DiscoveryPanel, useTrackDiscovery, type DiscoveryItem } from '../Discovery';
 import { PlaylistTrackList } from '../shared/PlaylistTrackList';
-import { ExportMixTapeModal } from '../MixTape';
+import { MixTapeButton } from '../MixTape';
 
 // Discovery section component
 function SmartPlaylistDiscoverySection({
@@ -98,7 +98,6 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
   const [searchParams] = useSearchParams();
   const search = searchParams.get('search') || '';
   const [usingCachedData, setUsingCachedData] = useState(false);
-  const [mixtapeModalOpen, setMixtapeModalOpen] = useState(false);
 
   const getTrackFromItem = useCallback(
     (t: SmartPlaylistTracksResponse['tracks'][0]): Track => ({
@@ -468,34 +467,14 @@ export function SmartPlaylistDetail({ playlist: playlistProp, onBack: onBackProp
             </button>
           )}
 
-          {/* Export Mix Tape — needs >=2 matched tracks; smart playlists can have more than 15
-              and we'll truncate at render time. */}
-          {(() => {
-            const trackCount = allTracks.length;
-            const inRange = trackCount >= 2;
-            return (
-              <button
-                onClick={() => setMixtapeModalOpen(true)}
-                disabled={!inRange}
-                title={
-                  inRange
-                    ? 'Render as a mix tape (uses first 15 tracks)'
-                    : 'Mix tape needs at least 2 tracks'
-                }
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:hover:bg-zinc-700 rounded-full transition-colors"
-              >
-                <CassetteTape className="w-4 h-4 text-orange-400" />
-                <span className="text-sm">Export Mix Tape</span>
-              </button>
-            );
-          })()}
+          {/* Mix tape button — flips between Export / Rendering / Download
+              based on the most recent mixtape for this smart playlist. */}
+          <MixTapeButton
+            source={{ kind: 'smart_playlist', id: playlist.id, defaultName: playlist.name }}
+            trackCount={allTracks.length}
+          />
         </div>
       </div>
-      <ExportMixTapeModal
-        isOpen={mixtapeModalOpen}
-        onClose={() => setMixtapeModalOpen(false)}
-        source={{ kind: 'smart_playlist', id: playlist.id, defaultName: playlist.name }}
-      />
 
       {/* Track list */}
       <PlaylistTrackList

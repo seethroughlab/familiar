@@ -12,6 +12,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { HealthIndicator } from './HealthIndicator';
 import { BackgroundJobsIndicator } from './BackgroundJobsIndicator';
 import { DownloadIndicator } from './DownloadIndicator';
+import { MixTapeRenderIndicator } from './MixTape';
 import { ProposedChangesIndicator } from './ProposedChangesIndicator';
 
 export function ContentToolbar() {
@@ -47,6 +48,7 @@ export function ContentToolbar() {
       <DownloadIndicator />
       <ProposedChangesIndicator />
       <BackgroundJobsIndicator />
+      <MixTapeRenderIndicator />
       <HealthIndicator />
     </div>
   );
