@@ -152,15 +152,20 @@ export function AppShell() {
                     <SessionPanel
                       session={listeningSession.session}
                       isHost={listeningSession.isHost}
+                      myUserId={listeningSession.myUserId}
                       isConnecting={listeningSession.isConnecting}
                       error={listeningSession.error}
                       hostDisabled={listeningSession.webrtc.hostDisabled}
                       iceServers={listeningSession.iceServers}
                       chatMessages={listeningSession.chatMessages}
+                      reactions={listeningSession.reactions}
+                      myFamiliar={listeningSession.myFamiliar}
                       onCreateSession={listeningSession.createSession}
                       onJoinSession={listeningSession.joinSession}
                       onLeaveSession={listeningSession.leaveSession}
                       onSendMessage={listeningSession.sendChatMessage}
+                      onReact={listeningSession.sendReaction}
+                      onFamiliarChange={listeningSession.updateMySessionFamiliar}
                       onKick={listeningSession.kick}
                     />
                   )}
@@ -268,15 +273,20 @@ export function AppShell() {
                   <SessionPanel
                     session={listeningSession.session}
                     isHost={listeningSession.isHost}
+                    myUserId={listeningSession.myUserId}
                     isConnecting={listeningSession.isConnecting}
                     error={listeningSession.error}
                     hostDisabled={listeningSession.webrtc.hostDisabled}
                     iceServers={listeningSession.iceServers}
                     chatMessages={listeningSession.chatMessages}
+                    reactions={listeningSession.reactions}
+                    myFamiliar={listeningSession.myFamiliar}
                     onCreateSession={listeningSession.createSession}
                     onJoinSession={listeningSession.joinSession}
                     onLeaveSession={listeningSession.leaveSession}
                     onSendMessage={listeningSession.sendChatMessage}
+                    onReact={listeningSession.sendReaction}
+                    onFamiliarChange={listeningSession.updateMySessionFamiliar}
                     onKick={listeningSession.kick}
                   />
                 </Suspense>

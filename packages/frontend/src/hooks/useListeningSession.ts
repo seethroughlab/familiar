@@ -4,6 +4,15 @@ import { usePlayerStore } from '../stores/playerStore';
 import { useAudioControls } from './useAudioControls';
 import { useWebRTCStreaming } from './useWebRTCStreaming';
 import { getProfile, getSelectedProfileId } from '../services/profileService';
+import {
+  createGeneratedFamiliar,
+  loadStoredFamiliar,
+  saveStoredFamiliar,
+  sanitizeFamiliar,
+  type FamiliarConfig,
+  type SessionReaction,
+  type SessionReactionKind,
+} from '../services/listeningSessionFamiliars';
 import { createLogger } from '../utils/logger';
 import { showError } from '../stores/toastStore';
 
@@ -14,6 +23,7 @@ const MAX_RECONNECT_ATTEMPTS = 10;
 const PENDING_SEND_TIMEOUT_MS = 5000;
 const PENDING_SEND_TICK_MS = 100;
 const HANDSHAKE_TIMEOUT_MS = 12000;
+const REACTION_RETENTION_MS = 4000;
 
 /**
  * Public WebRTC signaling relay URL (familiar-sessions service).
@@ -28,6 +38,7 @@ export interface SessionParticipant {
   user_id: string;
   username: string;
   role: 'host' | 'listener' | 'guest';
+  familiar: FamiliarConfig;
   joined_at: string;
   webrtc_connected?: boolean;
 }
@@ -70,6 +81,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function normalizeParticipant(value: SessionParticipant): SessionParticipant {
+  return {
+    ...value,
+    familiar: sanitizeFamiliar(value.familiar, value.username),
+  };
+}
+
+function normalizeSession(value: SessionInfo): SessionInfo {
+  return {
+    ...value,
+    participants: Array.isArray(value.participants)
+      ? value.participants.map((participant) => normalizeParticipant(participant))
+      : [],
+  };
+}
+
 function buildWsUrl(): string {
   let base: string;
   if (RELAY_URL) {
@@ -95,9 +122,14 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [reactions, setReactions] = useState<SessionReaction[]>([]);
   const [iceServers, setIceServers] = useState<IceServer[]>([]);
   const [myUserId, setMyUserId] = useState<string | null>(null);
   const [resolvedUsername, setResolvedUsername] = useState<string>(username ?? 'Anonymous');
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [myFamiliar, setMyFamiliar] = useState<FamiliarConfig>(() =>
+    createGeneratedFamiliar(username ?? 'Anonymous'),
+  );
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -121,15 +153,22 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
   useEffect(() => {
     if (username) {
       setResolvedUsername(username);
+      setMyFamiliar((prev) => sanitizeFamiliar(prev, username));
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
         const id = await getSelectedProfileId();
-        if (cancelled || !id) return;
+        if (cancelled) return;
+        setProfileId(id ?? null);
+        if (!id) return;
         const profile = await getProfile(id, { allowCache: true });
-        if (!cancelled && profile?.name) setResolvedUsername(profile.name);
+        if (cancelled || !profile) return;
+        const nextName = profile.name || 'Anonymous';
+        const storedFamiliar = loadStoredFamiliar(id);
+        setResolvedUsername(nextName);
+        setMyFamiliar(sanitizeFamiliar(storedFamiliar, nextName, profile.color));
       } catch {
         // fall back to default name
       }
@@ -138,6 +177,17 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
       cancelled = true;
     };
   }, [username]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setReactions((prev) =>
+        prev.filter((reaction) => Date.now() - reaction.timestamp.getTime() < REACTION_RETENTION_MS),
+      );
+    }, 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
 
   const send = useCallback((message: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -180,7 +230,7 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
             log.warn(`Dropping ${data.type} with missing session`);
             return;
           }
-          setSession(data.session as unknown as SessionInfo);
+          setSession(normalizeSession(data.session as unknown as SessionInfo));
           if (typeof data.your_user_id === 'string') setMyUserId(data.your_user_id);
           if (Array.isArray(data.ice_servers)) setIceServers(data.ice_servers as IceServer[]);
           setError(null);
@@ -188,7 +238,7 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
         }
         case 'user_joined': {
           if (!isRecord(data.user) || typeof data.participant_count !== 'number') return;
-          const newUser = data.user as unknown as SessionParticipant;
+          const newUser = normalizeParticipant(data.user as unknown as SessionParticipant);
           const count = data.participant_count;
           setSession((prev) =>
             prev
@@ -196,6 +246,21 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
                   ...prev,
                   participant_count: count,
                   participants: [...prev.participants, newUser],
+                }
+              : prev,
+          );
+          break;
+        }
+        case 'user_updated': {
+          if (!isRecord(data.user) || typeof data.user.user_id !== 'string') return;
+          const updatedUser = normalizeParticipant(data.user as unknown as SessionParticipant);
+          setSession((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  participants: prev.participants.map((participant) =>
+                    participant.user_id === updatedUser.user_id ? updatedUser : participant,
+                  ),
                 }
               : prev,
           );
@@ -245,16 +310,38 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
         case 'left':
           setSession(null);
           setChatMessages([]);
+          setReactions([]);
           break;
         case 'user_kicked':
           setError('You were removed from the session');
           showError('Removed from session', { description: 'The host removed you.' });
           setSession(null);
+          setReactions([]);
           break;
         case 'error': {
           const message = typeof data.message === 'string' ? data.message : 'Session error';
           setError(message);
           showError('Session error', { description: message });
+          break;
+        }
+        case 'user_reaction': {
+          if (
+            typeof data.user_id !== 'string' ||
+            typeof data.kind !== 'string' ||
+            !['cheer', 'pulse', 'wave', 'spark'].includes(data.kind)
+          ) {
+            return;
+          }
+          const reactionUserId = data.user_id;
+          setReactions((prev) => [
+            ...prev,
+            {
+              user_id: reactionUserId,
+              username: typeof data.username === 'string' ? data.username : undefined,
+              kind: data.kind as SessionReactionKind,
+              timestamp: new Date(),
+            },
+          ].slice(-24));
           break;
         }
         case 'guest_joined':
@@ -378,17 +465,17 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
   const createSession = useCallback(
     (name: string = 'Listening Session', password?: string) => {
       connect();
-      sendOnceConnected({ type: 'create', name, username: resolvedUsername, password });
+      sendOnceConnected({ type: 'create', name, username: resolvedUsername, password, familiar: myFamiliar });
     },
-    [connect, sendOnceConnected, resolvedUsername],
+    [connect, sendOnceConnected, resolvedUsername, myFamiliar],
   );
 
   const joinSession = useCallback(
     (code: string, password?: string) => {
       connect();
-      sendOnceConnected({ type: 'join', code, username: resolvedUsername, password });
+      sendOnceConnected({ type: 'join', code, username: resolvedUsername, password, familiar: myFamiliar });
     },
-    [connect, sendOnceConnected, resolvedUsername],
+    [connect, sendOnceConnected, resolvedUsername, myFamiliar],
   );
 
   const leaveSession = useCallback(() => {
@@ -402,6 +489,7 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
     wsRef.current = null;
     setSession(null);
     setChatMessages([]);
+    setReactions([]);
   }, [send, clearPendingSend]);
 
   const kick = useCallback(
@@ -438,6 +526,39 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
       send({ type: 'chat', message });
     },
     [send],
+  );
+
+  const sendReaction = useCallback(
+    (kind: SessionReactionKind) => {
+      send({ type: 'reaction', kind });
+    },
+    [send],
+  );
+
+  const updateMySessionFamiliar = useCallback(
+    (next: FamiliarConfig) => {
+      const normalized = sanitizeFamiliar(next, resolvedUsername);
+      setMyFamiliar(normalized);
+      saveStoredFamiliar(profileId, normalized);
+      if (myUserId) {
+        setSession((prev) =>
+          prev
+            ? {
+                ...prev,
+                participants: prev.participants.map((participant) =>
+                  participant.user_id === myUserId
+                    ? { ...participant, familiar: normalized }
+                    : participant,
+                ),
+              }
+            : prev,
+        );
+      }
+      if (session) {
+        send({ type: 'update_familiar', familiar: normalized });
+      }
+    },
+    [myUserId, profileId, resolvedUsername, send, session],
   );
 
   const requestSync = useCallback(() => {
@@ -487,15 +608,19 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
     isConnecting,
     error,
     chatMessages,
+    reactions,
     iceServers,
     isHost,
     myUserId,
+    myFamiliar,
     createSession,
     joinSession,
     leaveSession,
     kick,
     sendPlaybackUpdate,
     sendChatMessage,
+    sendReaction,
+    updateMySessionFamiliar,
     requestSync,
     webrtc: {
       isStreaming: webrtc.isStreaming,

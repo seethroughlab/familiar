@@ -48,6 +48,7 @@ const realWebSocket = globalThis.WebSocket;
 beforeEach(() => {
   FakeWebSocket.instances = [];
   (globalThis as unknown as { WebSocket: typeof FakeWebSocket }).WebSocket = FakeWebSocket;
+  window.localStorage.clear();
 });
 afterEach(() => {
   (globalThis as unknown as { WebSocket: unknown }).WebSocket = realWebSocket;
@@ -79,7 +80,7 @@ vi.mock('../useAudioControls', () => ({
 
 vi.mock('../../services/profileService', () => ({
   getSelectedProfileId: vi.fn(() => Promise.resolve('profile-1')),
-  getProfile: vi.fn(() => Promise.resolve({ id: 'profile-1', name: 'Tester' })),
+  getProfile: vi.fn(() => Promise.resolve({ id: 'profile-1', name: 'Tester', color: '#89b4fa' })),
 }));
 
 const showErrorMock = vi.fn();
@@ -100,6 +101,12 @@ const SESSION = {
       user_id: 'user-host',
       username: 'Host',
       role: 'host' as const,
+      familiar: {
+        variant: 'halo' as const,
+        color: '#89b4fa',
+        accent: 'drift' as const,
+        seed: 1,
+      },
       joined_at: '2026-01-01T00:00:00Z',
     },
   ],
@@ -137,6 +144,7 @@ describe('useListeningSession — connect lifecycle', () => {
     expect(ws.sent).toHaveLength(1);
     const payload = JSON.parse(ws.sent[0]);
     expect(payload).toMatchObject({ type: 'create', name: 'My Session', password: 'sekret' });
+    expect(payload.familiar).toMatchObject({ variant: 'halo' });
     vi.useRealTimers();
   });
 
@@ -220,6 +228,7 @@ describe('useListeningSession — message dispatch', () => {
     expect(result.current.session?.code).toBe('ABCDEF12');
     expect(result.current.isHost).toBe(true);
     expect(result.current.iceServers).toHaveLength(1);
+    expect(result.current.session?.participants[0].familiar.variant).toBe('halo');
   });
 
   it('appends a participant on user_joined and removes on user_left', () => {
@@ -241,6 +250,12 @@ describe('useListeningSession — message dispatch', () => {
           user_id: 'guest-1',
           username: 'Guest',
           role: 'guest',
+          familiar: {
+            variant: 'ember',
+            color: '#f9a8d4',
+            accent: 'orbit',
+            seed: 3,
+          },
           joined_at: '2026-01-01T00:00:01Z',
         },
         participant_count: 2,
@@ -269,6 +284,68 @@ describe('useListeningSession — message dispatch', () => {
     act(() => ws.emit({ type: 'chat', user_id: 'g' /* no username/message */ }));
     expect(result.current.chatMessages).toHaveLength(1);
     expect(result.current.chatMessages[0].message).toBe('hi');
+  });
+
+  it('updates familiar state from profile defaults and persists manual edits', async () => {
+    const { result } = renderHook(() => useListeningSession());
+    await waitFor(() => expect(result.current.myFamiliar.color).toBe('#89b4fa'));
+
+    act(() =>
+      result.current.updateMySessionFamiliar({
+        variant: 'prism',
+        color: '#fcd34d',
+        accent: 'ripple',
+        seed: 9,
+      }),
+    );
+
+    expect(result.current.myFamiliar.variant).toBe('prism');
+    expect(window.localStorage.getItem('familiar:listening-session:familiar:profile-1')).toContain(
+      '"variant":"prism"',
+    );
+  });
+
+  it('applies user_updated familiar changes and tracks ephemeral reactions', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useListeningSession({ username: 'T' }));
+    act(() => result.current.createSession('S'));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.triggerOpen());
+    act(() =>
+      ws.emit({
+        type: 'session_created',
+        session: SESSION,
+        your_user_id: 'user-host',
+      }),
+    );
+    act(() =>
+      ws.emit({
+        type: 'user_updated',
+        user: {
+          user_id: 'user-host',
+          username: 'Host',
+          role: 'host',
+          familiar: {
+            variant: 'ember',
+            color: '#fcd34d',
+            accent: 'orbit',
+            seed: 11,
+          },
+          joined_at: '2026-01-01T00:00:00Z',
+        },
+      }),
+    );
+    expect(result.current.session?.participants[0].familiar.variant).toBe('ember');
+
+    act(() => ws.emit({ type: 'user_reaction', user_id: 'user-host', kind: 'spark' }));
+    expect(result.current.reactions).toHaveLength(1);
+    expect(result.current.reactions[0].kind).toBe('spark');
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(result.current.reactions).toHaveLength(0);
+    vi.useRealTimers();
   });
 
   it('routes server errors to setError and showError', () => {
