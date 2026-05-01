@@ -1,37 +1,55 @@
 import CarPlay
 import UIKit
 
-/// Builds the root `CPTabBarTemplate` shown when the user connects CarPlay.
+/// Builds the root `CPTabBarTemplate` and handles navigation for CarPlay.
 ///
-/// Pass 1 scaffolding: each tab renders a placeholder `CPListTemplate` with a
-/// single "Loading…" item. Pass 2 will wire these tabs to a JS data bridge
-/// (see `CarPlayDataBridge.swift`) that fetches library / playlists / favorites
-/// from the existing frontend APIs.
+/// Phase 3 implementation: Uses tracks provided by `CarPlayDataBridge` to render
+/// real list templates instead of placeholders.
 enum RootTemplateBuilder {
-    static func buildRootTemplate() -> CPTabBarTemplate {
-        let libraryTab = makePlaceholderListTemplate(
+    static func buildRootTemplate(library: [CarPlayTrack], collections: [CarPlayCollection]) -> CPTabBarTemplate {
+        let libraryTab = makeListTemplate(
             title: "Library",
             tabImage: UIImage(systemName: "music.note.list"),
-            message: "Browsing your library here — data bridge pending."
+            items: library.map { track in
+                CPListItem(text: track.title, detailText: track.subtitle)
+            }
         )
-        let playlistsTab = makePlaceholderListTemplate(
+        
+        let playlistsTab = makeListTemplate(
             title: "Playlists",
             tabImage: UIImage(systemName: "music.note"),
-            message: "Your playlists — data bridge pending."
+            items: collections.map { collection in
+                CPListItem(text: collection.title, detailText: collection.subtitle)
+            }
         )
+        
         let favoritesTab = makePlaceholderListTemplate(
             title: "Favorites",
             tabImage: UIImage(systemName: "heart.fill"),
-            message: "Your favorites — data bridge pending."
-        )
-        let claudeTab = makePlaceholderListTemplate(
-            title: "Claude",
-            tabImage: UIImage(systemName: "sparkles"),
-            message: "Ask Claude for music — data bridge pending."
+            message: "No favorites yet."
         )
 
-        let tabBar = CPTabBarTemplate(templates: [libraryTab, playlistsTab, favoritesTab, claudeTab])
+        let tabBar = CPTabBarTemplate(templates: [libraryTab, playlistsTab, favoritesTab])
         return tabBar
+    }
+
+    static func makeNowPlayingTemplate(for track: CarPlayTrack) -> CPNowPlayingTemplate {
+        let template = CPNowPlayingTemplate()
+        template.nowPlayingItem = CPNowPlayingItem(title: track.title, subtitle: track.subtitle ?? "")
+        // Artwork loading will be implemented in a subsequent task using URLSession
+        return template
+    }
+
+    private static func makeListTemplate(
+        title: String,
+        tabImage: UIImage?,
+        items: [CPListItem]
+    ) -> CPListTemplate {
+        let section = CPListSection(items: items)
+        let listTemplate = CPListTemplate(title: title, sections: [section])
+        listTemplate.tabTitle = title
+        listTemplate.tabImage = tabImage
+        return listTemplate
     }
 
     private static func makePlaceholderListTemplate(

@@ -60,6 +60,32 @@
 	</dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>configurationName</key>
+					<string>Default Configuration</string>
+					<key>delegateClass</key>
+					<string>MainSceneDelegate</string>
+				</dict>
+			</array>
+			<key>CPTemplateApplicationSceneSessionRole</key>
+			<array>
+				<dict>
+					<key>configurationName</key>
+					<string>CarPlay Configuration</string>
+					<key>delegateClass</key>
+					<string>CarPlaySceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<!--
 	NOTE: CarPlay scene manifest was tried here but broke the main window
 	(iOS enables scene-based lifecycle globally once UIApplicationSceneManifest

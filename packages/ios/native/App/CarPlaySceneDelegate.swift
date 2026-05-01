@@ -17,6 +17,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         didConnect interfaceController: CPInterfaceController
     ) {
         self.interfaceController = interfaceController
+        CarPlayDataBridge.shared.setInterfaceController(interfaceController)
         let root = RootTemplateBuilder.buildRootTemplate()
         interfaceController.setRootTemplate(root, animated: false, completion: nil)
     }
