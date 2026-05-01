@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import CarPlay
 import UIKit
 
 /// Represents a piece of metadata for a track displayed in CarPlay.

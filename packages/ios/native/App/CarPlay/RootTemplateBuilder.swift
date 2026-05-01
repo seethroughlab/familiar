@@ -6,7 +6,10 @@ import UIKit
 /// Phase 3 implementation: Uses tracks provided by `CarPlayDataBridge` to render
 /// real list templates instead of placeholders.
 enum RootTemplateBuilder {
-    static func buildRootTemplate(library: [CarPlayTrack], collections: [CarPlayCollection]) -> CPTabBarTemplate {
+    static func buildRootTemplate(
+        library: [CarPlayTrack] = [],
+        collections: [CarPlayCollection] = []
+    ) -> CPTabBarTemplate {
         let libraryTab = makeListTemplate(
             title: "Library",
             tabImage: UIImage(systemName: "music.note.list"),
@@ -34,10 +37,8 @@ enum RootTemplateBuilder {
     }
 
     static func makeNowPlayingTemplate(for track: CarPlayTrack) -> CPNowPlayingTemplate {
-        let template = CPNowPlayingTemplate()
-        template.nowPlayingItem = CPNowPlayingItem(title: track.title, subtitle: track.subtitle ?? "")
-        // Artwork loading will be implemented in a subsequent task using URLSession
-        return template
+        _ = track
+        return CPNowPlayingTemplate.shared
     }
 
     private static func makeListTemplate(

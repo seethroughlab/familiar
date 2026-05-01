@@ -72,7 +72,7 @@
 					<key>configurationName</key>
 					<string>Default Configuration</string>
 					<key>delegateClass</key>
-					<string>MainSceneDelegate</string>
+					<string>$(PRODUCT_MODULE_NAME).MainSceneDelegate</string>
 				</dict>
 			</array>
 			<key>CPTemplateApplicationSceneSessionRole</key>
@@ -81,7 +81,7 @@
 					<key>configurationName</key>
 					<string>CarPlay Configuration</string>
 					<key>delegateClass</key>
-					<string>CarPlaySceneDelegate</string>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
 				</dict>
 			</array>
 		</dict>
