@@ -51,6 +51,12 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<key>UIBrowsableContentSupportsSectionedBrowsing</key>
+	<true/>
+	<key>UISupportedExternalAccessoryProtocols</key>
+	<array>
+		<string>com.apple.carplay</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -63,36 +69,30 @@
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
+		<true/>
 		<key>UISceneConfigurations</key>
 		<dict>
 			<key>UIWindowSceneSessionRoleApplication</key>
 			<array>
 				<dict>
-					<key>configurationName</key>
+					<key>UISceneConfigurationName</key>
 					<string>Default Configuration</string>
-					<key>delegateClass</key>
+					<key>UISceneDelegateClassName</key>
 					<string>$(PRODUCT_MODULE_NAME).MainSceneDelegate</string>
 				</dict>
 			</array>
-			<key>CPTemplateApplicationSceneSessionRole</key>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
 			<array>
 				<dict>
-					<key>configurationName</key>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
 					<string>CarPlay Configuration</string>
-					<key>delegateClass</key>
+					<key>UISceneDelegateClassName</key>
 					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
 				</dict>
 			</array>
 		</dict>
 	</dict>
-	<!--
-	NOTE: CarPlay scene manifest was tried here but broke the main window
-	(iOS enables scene-based lifecycle globally once UIApplicationSceneManifest
-	is present, which conflicts with the AppDelegate + UIMainStoryboardFile
-	setup). The Swift files (CarPlaySceneDelegate, RootTemplateBuilder) remain
-	in the target for a future re-enable, but need a companion MainSceneDelegate
-	before the manifest can ship. See eyes-off-04-carplay.md.
-	-->
 </dict>
 </plist>

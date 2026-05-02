@@ -80,6 +80,10 @@ export async function initApiOrigin(): Promise<void> {
       log.warn('Could not load backend URL from preferences provider');
     }
   }
+
+  if (!_apiOrigin) {
+    log.warn('initApiOrigin: no cached or stored origin — API calls will fail until ServerSettings sets one');
+  }
 }
 
 /**

@@ -4,6 +4,7 @@ import { registerPreferencesProvider } from '@familiar/frontend/src/api/base';
 import { createLogger } from '@familiar/frontend/src/utils/logger';
 import { renderApp } from '@familiar/frontend/src/renderApp';
 import { CapacitorEngine } from './CapacitorEngine';
+import { startCarPlayCoordinator } from './CarPlayCoordinator';
 
 const log = createLogger('App');
 
@@ -63,4 +64,8 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 // Render the app
-renderApp();
+renderApp({
+  onReady: () => {
+    startCarPlayCoordinator();
+  },
+});

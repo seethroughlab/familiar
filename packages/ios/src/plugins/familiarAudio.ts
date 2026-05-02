@@ -1,5 +1,11 @@
 import { registerPlugin } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
+import type {
+  CarPlayFavoriteTrackSelectionEvent,
+  CarPlayLibrarySelectionEvent,
+  CarPlayPlaylistSelectionEvent,
+  CarPlayPlaylistTrackSelectionEvent,
+} from '../carplayTypes';
 
 export interface FamiliarAudioPlugin {
   // Playback
@@ -57,6 +63,13 @@ export interface FamiliarAudioPlugin {
     prevArtworkUrl?: string;
   }): Promise<void>;
 
+  // CarPlay
+  syncCarPlayFavorites(options: { snapshot: string }): Promise<void>;
+  syncCarPlayLibrary(options: { snapshot: string }): Promise<void>;
+  syncCarPlayPlaylists(options: { snapshot: string }): Promise<void>;
+  syncCarPlayNowPlaying(options: { snapshot?: string | null }): Promise<void>;
+  clearCarPlayState(): Promise<void>;
+
   // Events
   addListener(
     event: 'ended',
@@ -97,6 +110,26 @@ export interface FamiliarAudioPlugin {
   addListener(
     event: 'nativeAutoAdvanced',
     handler: (data: { loadedTrackId?: string }) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    event: 'carPlayConnected',
+    handler: () => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    event: 'carPlaySelectFavoriteTrack',
+    handler: (data: CarPlayFavoriteTrackSelectionEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    event: 'carPlaySelectLibraryItem',
+    handler: (data: CarPlayLibrarySelectionEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    event: 'carPlaySelectPlaylist',
+    handler: (data: CarPlayPlaylistSelectionEvent) => void,
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    event: 'carPlaySelectPlaylistTrack',
+    handler: (data: CarPlayPlaylistTrackSelectionEvent) => void,
   ): Promise<PluginListenerHandle>;
 }
 

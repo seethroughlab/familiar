@@ -60,6 +60,12 @@ export async function selectProfile(profileId: string): Promise<void> {
   } catch (error) {
     log.warn('Failed to persist profile to IndexedDB:', error);
   }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('profile-selected', {
+      detail: { profileId },
+    }));
+  }
 }
 
 /**
@@ -77,5 +83,9 @@ export async function clearSelectedProfile(): Promise<void> {
     await db.deviceProfile.delete('device-profile');
   } catch (error) {
     log.warn('Failed to clear profile from IndexedDB:', error);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('profile-cleared'));
   }
 }

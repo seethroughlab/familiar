@@ -35,6 +35,11 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "executeCrossfade", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancelCrossfade", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setNextNormalizationVolume", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "syncCarPlayFavorites", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "syncCarPlayLibrary", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "syncCarPlayPlaylists", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "syncCarPlayNowPlaying", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearCarPlayState", returnType: CAPPluginReturnPromise),
     ]
 
     private lazy var audioEngine: NativeAudioEngine = {
@@ -42,6 +47,14 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         engine.delegate = self
         return engine
     }()
+
+    public override func load() {
+        super.load()
+        NSLog("[CarPlay] plugin.load — wiring eventSink")
+        CarPlayDataBridge.shared.setEventSink { [weak self] event, data in
+            self?.notifyListeners(event, data: data)
+        }
+    }
 
     // MARK: - Playback
 
@@ -327,6 +340,76 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func setNextNormalizationVolume(_ call: CAPPluginCall) {
         let volume = call.getFloat("volume") ?? 1.0
         audioEngine.setNextNormalizationVolume(volume)
+        call.resolve()
+    }
+
+    // MARK: - CarPlay
+
+    @objc func syncCarPlayFavorites(_ call: CAPPluginCall) {
+        NSLog("[CarPlay] sync favorites called")
+        guard let snapshot = call.getString("snapshot") else {
+            NSLog("[CarPlay] sync favorites rejected: missing snapshot")
+            call.reject("Missing snapshot")
+            return
+        }
+
+        do {
+            try CarPlayDataBridge.shared.updateFavorites(from: snapshot)
+            call.resolve()
+        } catch {
+            NSLog("[CarPlay] sync favorites decode failed bytes=%d err=%@", snapshot.utf8.count, error.localizedDescription)
+            call.reject("Failed to decode CarPlay favorites snapshot: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func syncCarPlayLibrary(_ call: CAPPluginCall) {
+        NSLog("[CarPlay] sync library called")
+        guard let snapshot = call.getString("snapshot") else {
+            NSLog("[CarPlay] sync library rejected: missing snapshot")
+            call.reject("Missing snapshot")
+            return
+        }
+
+        do {
+            try CarPlayDataBridge.shared.updateLibrary(from: snapshot)
+            call.resolve()
+        } catch {
+            NSLog("[CarPlay] sync library decode failed bytes=%d err=%@", snapshot.utf8.count, error.localizedDescription)
+            call.reject("Failed to decode CarPlay library snapshot: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func syncCarPlayPlaylists(_ call: CAPPluginCall) {
+        NSLog("[CarPlay] sync playlists called")
+        guard let snapshot = call.getString("snapshot") else {
+            NSLog("[CarPlay] sync playlists rejected: missing snapshot")
+            call.reject("Missing snapshot")
+            return
+        }
+
+        do {
+            try CarPlayDataBridge.shared.updatePlaylists(from: snapshot)
+            call.resolve()
+        } catch {
+            NSLog("[CarPlay] sync playlists decode failed bytes=%d err=%@", snapshot.utf8.count, error.localizedDescription)
+            call.reject("Failed to decode CarPlay playlist snapshot: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func syncCarPlayNowPlaying(_ call: CAPPluginCall) {
+        let snapshot = call.getString("snapshot")
+
+        do {
+            try CarPlayDataBridge.shared.updateNowPlaying(from: snapshot)
+            call.resolve()
+        } catch {
+            NSLog("[CarPlay] sync now playing decode failed err=%@", error.localizedDescription)
+            call.reject("Failed to decode CarPlay now playing snapshot: \(error.localizedDescription)")
+        }
+    }
+
+    @objc func clearCarPlayState(_ call: CAPPluginCall) {
+        CarPlayDataBridge.shared.clearState()
         call.resolve()
     }
 }

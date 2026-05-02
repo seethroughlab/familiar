@@ -8,12 +8,13 @@ import { getSelectedProfileId, clearSelectedProfile } from './services/profileSe
  * Shared app renderer. Called by platform-specific entry points (web/main.tsx, ios/main.tsx)
  * after they've registered their platform services (engine factory, preferences, etc).
  */
-export function renderApp(): void {
+export function renderApp(options?: { onReady?: () => void }): void {
   // Register profile provider so api/base doesn't import from services/ directly
   registerProfileProvider({ getSelectedProfileId, clearSelectedProfile });
 
   // Initialize API origin (resolves backend URL for Capacitor, no-op on web)
   initApiOrigin().then(() => {
+    options?.onReady?.();
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
         <App />

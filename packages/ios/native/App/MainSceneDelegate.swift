@@ -7,18 +7,11 @@ class MainSceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = (scene as? UIWindowScene) else { return }
-
-        // In a standard Capacitor app using Storyboards, the window is often 
-    	// initialized via the storyboard. When moving to scene-based lifecycle,
-    	// we ensure the window is attached to this windowScene.
         let window = UIWindow(windowScene: windowScene)
-        
-        // If there's a main storyboard, we should use its initial view controller.
-        // But for simplicity in this bridge/scaffold phase, we can rely on 
-        // the existing setup or manually load from Main.storyboard.
-        
-        // For now, let's just ensure the window is set up.
+        let storyboard = UIStoryboard(name: "Main", bundle: nil)
+        window.rootViewController = storyboard.instantiateInitialViewController()
         self.window = window
+        window.makeKeyAndVisible()
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {

@@ -9,14 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CarPlay support** (iOS) — browse Favorites, Library (Recently Played, Artists, Albums), and Playlists from the car via native CarPlay templates. Tap any track to start playback; lock-screen now-playing metadata and favorite state stay in sync as the queue advances
 - **Listening sessions** — host streams the audio you're playing over WebRTC to friends in real time. Open the Radio panel to create a session, share the code or link, and friends can join from any browser without being on your network. Participant list with kick, in-session chat, optional password, and live ICE/TURN diagnostics
 - **`VITE_SESSIONS_RELAY_URL`** build-time env var pointing at the public signaling relay (`familiar-sessions`); falls back to same-origin for local dev
 - **`AudioEngine.getOutputStream()`** capability — Web Audio engine exposes a `MediaStream` from a lazy `MediaStreamAudioDestinationNode` off masterGain, used for WebRTC streaming
 - **Hook test coverage** for the new session machinery — 20 vitest cases across `useListeningSession` (connect lifecycle, message dispatch, malformed-payload safety, leave/unmount cleanup) and `useWebRTCStreaming` (peer add/remove, guest renegotiation cleanup, host-disabled fallback)
+- **CarPlayCoordinator vitest suite** — 8 cases covering startup snapshot sync, reconnect refresh, favorite/playlist track selection, cached-favorites fallback, and partial-builder-failure resilience
+
+### Changed
+
+- **CarPlay browse refresh is now partial-failure resilient** — coordinator uses `Promise.allSettled` with per-builder fallbacks, so a single failing backend call (e.g. flaky `playlistsApi.list`) no longer blanks every CarPlay tab. Coordinator also early-returns with a clear log when no API origin is configured, instead of silently hammering relative URLs
+- **Diagnostic instrumentation** for the CarPlay data flow — `[CarPlay]` NSLog lines in the Swift bridge/scene/plugin and matching `log.info` lines in the JS coordinator make a single simulator boot enough to pinpoint which gate fails (scene attach, listener registration, profile/origin checks, builder failures, sync calls)
 
 ### Compatibility
 
-- iOS host is intentionally deferred — `CapacitorEngine` doesn't implement `getOutputStream()`. Listeners on iOS still join other people's sessions, and the panel surfaces a clear "host from a desktop browser" notice if you try to host on iOS
+- iOS host (listening sessions) is intentionally deferred — `CapacitorEngine` doesn't implement `getOutputStream()`. Listeners on iOS still join other people's sessions, and the panel surfaces a clear "host from a desktop browser" notice if you try to host on iOS
+- CarPlay requires the iOS app installed via TestFlight and a CarPlay-compatible head unit (or the Xcode CarPlay simulator for development). The app must have at least one profile selected and a server URL configured before CarPlay tabs will populate
 
 ## [0.1.0-alpha3] - 2026-04-22
 

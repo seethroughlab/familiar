@@ -1,98 +1,213 @@
-import Foundation
-import Capacitor
 import CarPlay
-import UIKit
+import Foundation
 
-/// Represents a piece of metadata for a track displayed in CarPlay.
-struct CarPlayTrack: Codable {
+struct CarPlayTrackSnapshot: Codable {
     let id: String
     let title: String
     let subtitle: String?
+    let artist: String?
+    let album: String?
     let artworkUrl: String?
 }
 
-/// A collection of tracks, representing a Playlist or Album.
-struct CarPlayCollection: Codable {
+struct CarPlayCollectionSnapshot: Codable {
     let id: String
     let title: String
     let subtitle: String?
-    let items: [CarPlayTrack]
+    let tracks: [CarPlayTrackSnapshot]
 }
 
-/// The `CarPlayDataBridge` is the central communication hub between the CarPlay native templates
-/// and the Web/Capacitor layer. It listens for events from the `FamiliarAudioPlugin` (and other plugins)
-/// and updates the `CPInterfaceController` templates accordingly.
-class CarPlayDataBridge {
+struct CarPlayLibraryBucketSnapshot: Codable {
+    let id: String
+    let title: String
+    let tracks: [CarPlayTrackSnapshot]?
+    let collections: [CarPlayCollectionSnapshot]?
+}
+
+struct CarPlayPlaylistSnapshot: Codable {
+    let id: String
+    let title: String
+    let subtitle: String?
+    let tracks: [CarPlayTrackSnapshot]
+}
+
+struct CarPlayNowPlayingSnapshot: Codable {
+    let trackId: String
+    let title: String
+    let artist: String
+    let album: String
+    let artworkUrl: String?
+    let isPlaying: Bool
+    let isFavorite: Bool
+}
+
+struct CarPlayTemplateState {
+    let favorites: [CarPlayTrackSnapshot]
+    let libraryBuckets: [CarPlayLibraryBucketSnapshot]
+    let playlists: [CarPlayPlaylistSnapshot]
+    let nowPlaying: CarPlayNowPlayingSnapshot?
+}
+
+final class CarPlayDataBridge {
     static let shared = CarPlayDataBridge()
-    
+
     private init() {}
 
     private weak var interfaceController: CPInterfaceController?
+    private var eventSink: ((String, [String: Any]) -> Void)?
 
-    // MARK: - State
+    private(set) var favorites: [CarPlayTrackSnapshot] = []
+    private(set) var libraryBuckets: [CarPlayLibraryBucketSnapshot] = []
+    private(set) var playlists: [CarPlayPlaylistSnapshot] = []
+    private(set) var nowPlaying: CarPlayNowPlayingSnapshot?
 
-    private(set) var libraryTracks: [CarPlayTrack] = []
-    private(set) var collections: [CarPlayCollection] = []
-    private(set) var activeTrack: CarPlayTrack?
-
-    func setInterfaceController(_ controller: CPInterfaceController) {
-        self.interfaceController = controller
+    func setEventSink(_ sink: @escaping (String, [String: Any]) -> Void) {
+        eventSink = sink
     }
 
-    // MARK: - Data Ingestion
+    func attachInterfaceController(_ controller: CPInterfaceController) {
+        NSLog("[CarPlay] attach controller")
+        interfaceController = controller
+        refreshRootTemplate(animated: false)
+        NSLog("[CarPlay] initial empty root rendered")
+        eventSink?("carPlayConnected", [:])
+        NSLog("[CarPlay] sent carPlayConnected eventSink=%@", eventSink == nil ? "nil" : "set")
+    }
 
-    /// Updates the library tracks from a JSON string.
-    func updateLibrary(tracksJson: String) {
-        guard let data = tracksJson.data(using: .utf8) else { return }
-        do {
-            let newTracks = try JSONDecoder().decode([CarPlayTrack].self, from: data)
-            self.libraryTracks = newTracks
-            print("CarPlayDataBridge: Library updated with \(newTracks.count) tracks.")
-            refreshTemplates()
-        } catch {
-            print("CarPlayDataBridge: Failed to decode library tracks: \(error)")
+    func detachInterfaceController(_ controller: CPInterfaceController) {
+        NSLog("[CarPlay] detach controller")
+        if interfaceController === controller {
+            interfaceController = nil
         }
     }
 
-    /// Updates the collections from a
-    func updateCollections(collectionsJson: String) {
-        guard let data = collectionsJson.data(using: .utf8) else { return }
-        do {
-            let newCollections = try JSONDecoder().decode([CarPlayCollection].self, from: data)
-            self.collections = newCollections
-            print("CarPlayDataBridge: Collections updated with \(newCollections.count) collections.")
-            refreshTemplates()
-        } catch {
-            print("CarPlayDataBridge: Failed to decode collections: \(error)")
+    func updateLibrary(from json: String) throws {
+        NSLog("[CarPlay] updateLibrary bytes=%d", json.utf8.count)
+        let data = Data(json.utf8)
+        libraryBuckets = try JSONDecoder().decode([CarPlayLibraryBucketSnapshot].self, from: data)
+        NSLog("[CarPlay] updateLibrary decoded buckets=%d", libraryBuckets.count)
+        refreshRootTemplate()
+    }
+
+    func updateFavorites(from json: String) throws {
+        NSLog("[CarPlay] updateFavorites bytes=%d", json.utf8.count)
+        let data = Data(json.utf8)
+        favorites = try JSONDecoder().decode([CarPlayTrackSnapshot].self, from: data)
+        NSLog("[CarPlay] updateFavorites decoded count=%d", favorites.count)
+        refreshRootTemplate()
+    }
+
+    func updatePlaylists(from json: String) throws {
+        NSLog("[CarPlay] updatePlaylists bytes=%d", json.utf8.count)
+        let data = Data(json.utf8)
+        playlists = try JSONDecoder().decode([CarPlayPlaylistSnapshot].self, from: data)
+        NSLog("[CarPlay] updatePlaylists decoded count=%d", playlists.count)
+        refreshRootTemplate()
+    }
+
+    func updateNowPlaying(from json: String?) throws {
+        guard let json, !json.isEmpty else {
+            NSLog("[CarPlay] updateNowPlaying cleared")
+            nowPlaying = nil
+            return
         }
+
+        let data = Data(json.utf8)
+        nowPlaying = try JSONDecoder().decode(CarPlayNowPlayingSnapshot.self, from: data)
+        NSLog("[CarPlay] updateNowPlaying set trackId=%@", nowPlaying?.trackId ?? "nil")
     }
 
-    /// Sets the currently playing track.
-    func setActiveTrack(_ track: CarPlayTrack?) {
-        self.activeTrack = track
-        if let track = track {
-            // Present the Now Playing template if a track is active.
-            let nowPlayingTemplate = RootTemplateBuilder.makeNowPlayingTemplate(for: track)
-            interfaceController?.pushTemplate(nowPlayingTemplate, animated: true)
+    func clearState() {
+        NSLog("[CarPlay] clearState called")
+        favorites = []
+        libraryBuckets = []
+        playlists = []
+        nowPlaying = nil
+        refreshRootTemplate()
+    }
+
+    func showNowPlaying() {
+        interfaceController?.pushTemplate(CPNowPlayingTemplate.shared, animated: true, completion: nil)
+    }
+
+    private func refreshRootTemplate(animated: Bool = true) {
+        guard let controller = interfaceController else {
+            NSLog("[CarPlay] refreshRoot skipped: no controller")
+            return
         }
+
+        let actions = RootTemplateBuilder.Actions(
+            pushTemplate: { [weak self] template in
+                self?.interfaceController?.pushTemplate(template, animated: true, completion: nil)
+            },
+            showNowPlaying: { [weak self] in
+                self?.showNowPlaying()
+            },
+            onFavoriteTrackSelected: { [weak self] track in
+                self?.eventSink?("carPlaySelectFavoriteTrack", ["trackId": track.id])
+            },
+            onLibraryBucketSelected: { [weak self] bucket in
+                self?.emitLibrarySelection(
+                    bucketId: bucket.id,
+                    selectionType: "bucket",
+                    itemId: bucket.id,
+                    parentId: nil
+                )
+            },
+            onLibraryCollectionSelected: { [weak self] bucketId, collection in
+                self?.emitLibrarySelection(
+                    bucketId: bucketId,
+                    selectionType: "collection",
+                    itemId: collection.id,
+                    parentId: nil
+                )
+            },
+            onLibraryTrackSelected: { [weak self] bucketId, parentId, track in
+                self?.emitLibrarySelection(
+                    bucketId: bucketId,
+                    selectionType: "track",
+                    itemId: track.id,
+                    parentId: parentId
+                )
+            },
+            onPlaylistSelected: { [weak self] playlist in
+                self?.eventSink?("carPlaySelectPlaylist", ["playlistId": playlist.id])
+            },
+            onPlaylistTrackSelected: { [weak self] playlistId, track in
+                self?.eventSink?("carPlaySelectPlaylistTrack", [
+                    "playlistId": playlistId,
+                    "trackId": track.id,
+                ])
+            }
+        )
+
+        let root = RootTemplateBuilder.buildRootTemplate(
+            state: CarPlayTemplateState(
+                favorites: favorites,
+                libraryBuckets: libraryBuckets,
+                playlists: playlists,
+                nowPlaying: nowPlaying
+            ),
+            actions: actions
+        )
+        controller.setRootTemplate(root, animated: animated, completion: nil)
+        NSLog("[CarPlay] setRoot favs=%d buckets=%d playlists=%d", favorites.count, libraryBuckets.count, playlists.count)
     }
 
-    // MARK: - Template Management
-
-    /// Updates the root template with new data from the Web layer.
-    func refreshTemplates() {
-        guard let controller = interfaceController else { return }
-        let root = RootTemplateBuilder.buildRootTemplate(library: libraryTracks, collections: collections)
-        controller.setRootTemplate(root, animated: true, completion: nil)
-    }
-
-    /// Notifies the CarPlay UI that a track has changed.
-    func updateNowPlaying(title: String, artist: String, album: String, artworkUrl: String?) {
-        print("CarPlayDataBridge: Updating Now Playing -> \(title) by \(artist)")
-    }
-
-    /// Called when the Web layer triggers a playlist/library refresh.
-    func handleLibraryUpdate() {
-        refreshTemplates()
+    private func emitLibrarySelection(
+        bucketId: String,
+        selectionType: String,
+        itemId: String,
+        parentId: String?
+    ) {
+        var data: [String: Any] = [
+            "bucketId": bucketId,
+            "selectionType": selectionType,
+            "itemId": itemId,
+        ]
+        if let parentId {
+            data["parentId"] = parentId
+        }
+        eventSink?("carPlaySelectLibraryItem", data)
     }
 }
