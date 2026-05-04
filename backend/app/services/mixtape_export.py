@@ -280,14 +280,14 @@ def _load_track_tile(track: Track, tile_size: int) -> Image.Image:
             left = (w - edge) // 2
             top = (h - edge) // 2
             img = img.crop((left, top, left + edge, top + edge))
-            return img.resize((tile_size, tile_size), Image.LANCZOS)
+            return img.resize((tile_size, tile_size), Image.Resampling.LANCZOS)
         except Exception as e:  # pragma: no cover — defensive
             logger.warning("Failed to load artwork %s: %s", art_path, e)
     seed = f"{track.artist or ''}::{track.title or ''}::{track.id}"
     return _fallback_tile(seed, tile_size)
 
 
-def _resolve_font(size: int) -> ImageFont.ImageFont:
+def _resolve_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Find a usable font, falling back to default if none of the candidates load."""
     candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -334,13 +334,15 @@ def generate_cover(
     canvas.paste(band, (0, COVER_SIZE - band_h), band)
 
     draw = ImageDraw.Draw(canvas)
-    title_font = _resolve_font(72)
+    title_font_size = 72
+    title_font = _resolve_font(title_font_size)
     # Crude fit: shrink title font down if too wide.
     while True:
         bbox = draw.textbbox((0, 0), name, font=title_font)
-        if bbox[2] - bbox[0] <= COVER_SIZE - 80 or title_font.size <= 28:
+        if bbox[2] - bbox[0] <= COVER_SIZE - 80 or title_font_size <= 28:
             break
-        title_font = _resolve_font(title_font.size - 6)
+        title_font_size -= 6
+        title_font = _resolve_font(title_font_size)
     title_bbox = draw.textbbox((0, 0), name, font=title_font)
     title_w = title_bbox[2] - title_bbox[0]
     title_h = title_bbox[3] - title_bbox[1]
