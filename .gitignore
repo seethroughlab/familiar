@@ -69,6 +69,10 @@ frontend/.vite/
 packages/ios/native/App/App/public/
 packages/ios/native/App/public/
 
+# Xcode user-local IDE state (which file/scheme is selected, breakpoints, etc.)
+xcuserdata/
+*.xcuserstate
+
 # Logs
 *.log
 logs/
