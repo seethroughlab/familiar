@@ -1406,7 +1406,7 @@ class NativeAudioEngine {
         nextPlayerNode.volume = 1.0
         playerNode.volume = 1.0
         isCrossfadingFlag = false
-        nextCrossfadeToken()
+        _ = nextCrossfadeToken()
     }
 
     // MARK: - Time Update Timer
