@@ -160,6 +160,7 @@ export function AppShell() {
                       chatMessages={listeningSession.chatMessages}
                       reactions={listeningSession.reactions}
                       myFamiliar={listeningSession.myFamiliar}
+                      beatAnchor={listeningSession.beatAnchor}
                       onCreateSession={listeningSession.createSession}
                       onJoinSession={listeningSession.joinSession}
                       onLeaveSession={listeningSession.leaveSession}
@@ -281,6 +282,7 @@ export function AppShell() {
                     chatMessages={listeningSession.chatMessages}
                     reactions={listeningSession.reactions}
                     myFamiliar={listeningSession.myFamiliar}
+                    beatAnchor={listeningSession.beatAnchor}
                     onCreateSession={listeningSession.createSession}
                     onJoinSession={listeningSession.joinSession}
                     onLeaveSession={listeningSession.leaveSession}

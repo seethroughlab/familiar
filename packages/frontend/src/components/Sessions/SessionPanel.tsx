@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Copy, Check, Crown, Loader2, Send, UserMinus, Share2, Lock } from 'lucide-react';
 import type { SessionInfo, ChatMessage, IceServer } from '../../hooks/useListeningSession';
 import { buildShareLink } from '../../hooks/useListeningSession';
-import type { FamiliarConfig, SessionReaction, SessionReactionKind } from '../../services/listeningSessionFamiliars';
+import type { BeatAnchor, FamiliarConfig, SessionReaction, SessionReactionKind } from '../../services/listeningSessionFamiliars';
 import { IceDiagnostics } from './IceDiagnostics';
 import { FamiliarPicker, FamiliarRoom, ReactionBar } from './FamiliarRoom';
 import { showError } from '../../stores/toastStore';
@@ -21,6 +21,7 @@ interface SessionPanelProps {
   chatMessages: ChatMessage[];
   reactions: SessionReaction[];
   myFamiliar: FamiliarConfig;
+  beatAnchor: BeatAnchor | null;
   onCreateSession: (name: string, password?: string) => void;
   onJoinSession: (code: string, password?: string) => void;
   onLeaveSession: () => void;
@@ -41,6 +42,7 @@ export function SessionPanel({
   chatMessages,
   reactions,
   myFamiliar,
+  beatAnchor,
   onCreateSession,
   onJoinSession,
   onLeaveSession,
@@ -141,6 +143,7 @@ export function SessionPanel({
             reactions={reactions}
             myUserId={myUserId}
             isLight={isLight}
+            beatAnchor={beatAnchor}
           />
           <FamiliarPicker value={myFamiliar} onChange={onFamiliarChange} isLight={isLight} />
           <div>

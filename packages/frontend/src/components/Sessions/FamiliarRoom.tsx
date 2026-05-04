@@ -1,19 +1,69 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
+import { Crown } from 'lucide-react';
 import type { SessionParticipant } from '../../hooks/useListeningSession';
 import {
+  BOB_AMPLITUDE_CROWD_PX,
+  BOB_AMPLITUDE_HOST_PX,
   FAMILIAR_ACCENTS,
   FAMILIAR_VARIANTS,
   SESSION_REACTIONS,
+  computeBeatPhase,
+  computeRoomPosition,
+  type BeatAnchor,
   type FamiliarConfig,
   type SessionReaction,
   type SessionReactionKind,
 } from '../../services/listeningSessionFamiliars';
+
+const TRACK_GLOW_DURATION_MS = 1200;
 
 interface FamiliarRoomProps {
   participants: SessionParticipant[];
   reactions: SessionReaction[];
   myUserId?: string | null;
   isLight?: boolean;
+  beatAnchor?: BeatAnchor | null;
+}
+
+function useStageBeat(
+  anchor: BeatAnchor | null | undefined,
+  stageRef: React.RefObject<HTMLDivElement | null>,
+) {
+  const lastTrackIdRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    let raf = 0;
+    const loop = () => {
+      const now = Date.now();
+      const phase = computeBeatPhase(anchor ?? null, now);
+      const sinPhase = Math.sin(phase * 2 * Math.PI);
+      stage.style.setProperty('--bob-y', `${sinPhase * BOB_AMPLITUDE_CROWD_PX}px`);
+      stage.style.setProperty('--bob-y-host', `${sinPhase * BOB_AMPLITUDE_HOST_PX}px`);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [anchor, stageRef]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const trackId = anchor?.trackId ?? null;
+    const previous = lastTrackIdRef.current;
+    lastTrackIdRef.current = trackId;
+    if (previous === undefined) return; // first observation, no glow
+    if (previous === trackId) return;
+    if (!trackId) return; // don't glow when track clears
+    stage.classList.add('familiar-room-glowing');
+    const timer = window.setTimeout(() => {
+      stage.classList.remove('familiar-room-glowing');
+    }, TRACK_GLOW_DURATION_MS);
+    return () => {
+      window.clearTimeout(timer);
+      stage.classList.remove('familiar-room-glowing');
+    };
+  }, [anchor?.trackId, stageRef]);
 }
 
 interface FamiliarPickerProps {
@@ -112,77 +162,165 @@ export function FamiliarRoom({
   reactions,
   myUserId,
   isLight = false,
+  beatAnchor,
 }: FamiliarRoomProps) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  useStageBeat(beatAnchor, stageRef);
+
   const latestReactionByUser = new Map<string, SessionReaction>();
   for (const reaction of reactions) {
     latestReactionByUser.set(reaction.user_id, reaction);
   }
 
+  const host = participants.find((p) => p.role === 'host') ?? null;
+  const crowd = participants
+    .filter((p) => p.role !== 'host')
+    .slice()
+    .sort((a, b) => (a.user_id < b.user_id ? -1 : a.user_id > b.user_id ? 1 : 0));
+
+  const stageBg = isLight
+    ? 'bg-[radial-gradient(ellipse_at_top,_rgba(228,228,231,0.9),_rgba(255,255,255,0.98)_55%,_rgba(244,244,245,1))]'
+    : 'bg-[radial-gradient(ellipse_at_top,_rgba(39,39,42,0.95),_rgba(17,17,20,0.98)_55%,_rgba(9,9,11,1))]';
+  const floorLine = isLight ? 'bg-zinc-200/80' : 'bg-zinc-700/40';
+  const stageLabel = isLight ? 'text-zinc-500' : 'text-zinc-500';
+
   return (
     <div
-      className={`rounded-xl border p-4 ${
-        isLight
-          ? 'border-zinc-200 bg-[radial-gradient(circle_at_top,_rgba(244,244,245,0.9),_rgba(255,255,255,0.98))]'
-          : 'border-zinc-800 bg-[radial-gradient(circle_at_top,_rgba(39,39,42,0.92),_rgba(9,9,11,0.98))]'
+      className={`rounded-xl border overflow-hidden ${
+        isLight ? 'border-zinc-200' : 'border-zinc-800'
       }`}
     >
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className={`text-sm font-medium ${isLight ? 'text-zinc-800' : 'text-zinc-100'}`}>Mini Room</div>
-          <div className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>
-            Subtle familiars for everyone currently listening
-          </div>
-        </div>
-        <div className={`text-xs ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>
-          {participants.length} present
-        </div>
+      <div className="flex items-center justify-between px-3 pt-2 pb-1">
+        <div className={`text-[10px] uppercase tracking-[0.22em] ${stageLabel}`}>The Room</div>
+        <div className={`text-xs ${stageLabel}`}>{participants.length} present</div>
       </div>
+      <div ref={stageRef} className={`relative w-full aspect-[3/2] ${stageBg}`}>
+        <div
+          className={`absolute left-0 right-0 h-px ${floorLine}`}
+          style={{ top: '44%' }}
+          aria-hidden
+        />
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 text-[9px] uppercase tracking-[0.28em] ${stageLabel}`}
+          style={{ top: '4%' }}
+          aria-hidden
+        >
+          DJ Booth
+        </div>
 
-      <div className="flex flex-wrap justify-center gap-3">
-        {participants.map((participant) => {
-          const reaction = latestReactionByUser.get(participant.user_id);
-          const isSelf = participant.user_id === myUserId;
-          const isLive = participant.role === 'host' || participant.webrtc_connected;
-          return (
-            <div
-              key={participant.user_id}
-              className={`relative w-24 rounded-xl border px-2 py-3 text-center ${
-                isLight
-                  ? 'border-zinc-200 bg-white/70'
-                  : 'border-zinc-800 bg-black/20'
-              } ${isSelf ? 'ring-1 ring-emerald-500/40' : ''}`}
-            >
-              {reaction && (
-                <div
-                  className={`absolute -top-2 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] ${
-                    isLight ? 'bg-white text-zinc-700 border border-zinc-200' : 'bg-zinc-950 text-zinc-200 border border-zinc-700'
-                  }`}
-                >
-                  {reactionCopy[reaction.kind]}
-                </div>
-              )}
-              <div className="mb-2 flex justify-center">
-                <FamiliarGlyph familiar={participant.familiar} />
-              </div>
-              <div className={`truncate text-xs font-medium ${isLight ? 'text-zinc-800' : 'text-zinc-200'}`}>
-                {participant.username}
-              </div>
-              <div className={`mt-1 text-[10px] uppercase tracking-[0.18em] ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                {participant.role}
-              </div>
-              <div className="mt-2 flex items-center justify-center gap-1">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    isLive ? 'bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.7)]' : 'bg-zinc-500'
-                  }`}
-                />
-                <span className={`text-[10px] ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                  {isLive ? 'Live' : 'Idle'}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+        {host && (
+          <RoomAvatar
+            participant={host}
+            position={computeRoomPosition(host, 0, 0)}
+            isHost
+            isSelf={host.user_id === myUserId}
+            isLive
+            reaction={latestReactionByUser.get(host.user_id)}
+            isLight={isLight}
+          />
+        )}
+
+        {crowd.map((participant, index) => (
+          <RoomAvatar
+            key={participant.user_id}
+            participant={participant}
+            position={computeRoomPosition(participant, index, crowd.length)}
+            isHost={false}
+            isSelf={participant.user_id === myUserId}
+            isLive={participant.webrtc_connected ?? false}
+            reaction={latestReactionByUser.get(participant.user_id)}
+            isLight={isLight}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface RoomAvatarProps {
+  participant: SessionParticipant;
+  position: { xPct: number; yPct: number };
+  isHost: boolean;
+  isSelf: boolean;
+  isLive: boolean;
+  reaction?: SessionReaction;
+  isLight: boolean;
+}
+
+function RoomAvatar({
+  participant,
+  position,
+  isHost,
+  isSelf,
+  isLive,
+  reaction,
+  isLight,
+}: RoomAvatarProps) {
+  const bobVar = isHost ? 'var(--bob-y-host, 0px)' : 'var(--bob-y, 0px)';
+  const wrapperStyle: CSSProperties = {
+    left: `${position.xPct}%`,
+    top: `${position.yPct}%`,
+    transform: `translate(-50%, calc(-50% + ${bobVar}))`,
+  };
+  const reactionKey = reaction
+    ? `${reaction.user_id}-${reaction.kind}-${reaction.timestamp instanceof Date ? reaction.timestamp.getTime() : reaction.timestamp}`
+    : undefined;
+  const labelClass = isLight ? 'text-zinc-700' : 'text-zinc-300';
+  const subtleLabel = isLight ? 'text-zinc-500' : 'text-zinc-500';
+
+  return (
+    <div
+      className="absolute pointer-events-none"
+      style={wrapperStyle}
+    >
+      {reaction && (
+        <div
+          key={reactionKey}
+          className={`absolute left-1/2 -top-3 rounded-full px-1.5 py-px text-[9px] uppercase tracking-[0.18em] whitespace-nowrap border ${
+            isLight ? 'bg-white text-zinc-700 border-zinc-200' : 'bg-zinc-950 text-zinc-200 border-zinc-700'
+          }`}
+          style={{ animation: 'familiar-reaction-rise 4s ease-out forwards' }}
+          aria-hidden
+        >
+          {reactionCopy[reaction.kind]}
+        </div>
+      )}
+      {isHost && (
+        <div
+          className="absolute left-1/2 -translate-x-1/2 rounded-[50%]"
+          style={{
+            top: 'calc(100% - 8px)',
+            width: '64px',
+            height: '14px',
+            background: `radial-gradient(ellipse at center, ${withAlpha(participant.familiar.color, '55')}, transparent 70%)`,
+            filter: 'blur(2px)',
+          }}
+          aria-hidden
+        />
+      )}
+      <div
+        className={`relative ${isSelf ? 'ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-transparent rounded-full' : ''}`}
+      >
+        <FamiliarGlyph familiar={participant.familiar} size={isHost ? 'md' : 'sm'} />
+        {isHost && (
+          <Crown
+            className="absolute -top-3 left-1/2 -translate-x-1/2 w-3.5 h-3.5 text-yellow-400"
+            aria-hidden
+          />
+        )}
+        {!isLive && !isHost && (
+          <div
+            className="absolute inset-0 rounded-full bg-black/30"
+            aria-hidden
+          />
+        )}
+      </div>
+      <div
+        className={`absolute left-1/2 -translate-x-1/2 mt-1 text-[9px] font-medium truncate max-w-[64px] text-center ${labelClass}`}
+        style={{ top: '100%' }}
+      >
+        {participant.username}
+        {isSelf && <span className={`ml-1 ${subtleLabel}`}>(you)</span>}
       </div>
     </div>
   );

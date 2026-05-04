@@ -9,6 +9,7 @@ import {
   loadStoredFamiliar,
   saveStoredFamiliar,
   sanitizeFamiliar,
+  type BeatAnchor,
   type FamiliarConfig,
   type SessionReaction,
   type SessionReactionKind,
@@ -130,6 +131,7 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
   const [myFamiliar, setMyFamiliar] = useState<FamiliarConfig>(() =>
     createGeneratedFamiliar(username ?? 'Anonymous'),
   );
+  const [beatAnchor, setBeatAnchor] = useState<BeatAnchor | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
@@ -288,6 +290,18 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
           if (typeof data.position_ms === 'number') {
             audioEngineRef.current.seek(data.position_ms / 1000);
           }
+          const meta = isRecord(data.track_meta) ? data.track_meta : undefined;
+          const bpm =
+            meta && typeof meta.bpm === 'number' && Number.isFinite(meta.bpm)
+              ? meta.bpm
+              : null;
+          setBeatAnchor({
+            bpm,
+            positionMs: typeof data.position_ms === 'number' ? data.position_ms : 0,
+            receivedAt: Date.now(),
+            isPlaying: typeof data.is_playing === 'boolean' ? data.is_playing : false,
+            trackId: typeof data.track_id === 'string' ? data.track_id : null,
+          });
           break;
         }
         case 'chat': {
@@ -504,7 +518,7 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
       trackId: string | null,
       playing: boolean,
       positionMs: number,
-      meta?: { title?: string; artist?: string; album?: string },
+      meta?: { title?: string; artist?: string; album?: string; bpm?: number | null },
     ) => {
       if (!session || !isHost) return;
       const payload: Record<string, unknown> = {
@@ -513,8 +527,16 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
         is_playing: playing,
         position_ms: positionMs,
       };
-      if (meta && (meta.title || meta.artist || meta.album)) {
-        payload.track_meta = meta;
+      if (
+        meta &&
+        (meta.title || meta.artist || meta.album || (meta.bpm != null && Number.isFinite(meta.bpm)))
+      ) {
+        const cleaned: Record<string, unknown> = {};
+        if (meta.title) cleaned.title = meta.title;
+        if (meta.artist) cleaned.artist = meta.artist;
+        if (meta.album) cleaned.album = meta.album;
+        if (meta.bpm != null && Number.isFinite(meta.bpm)) cleaned.bpm = meta.bpm;
+        payload.track_meta = cleaned;
       }
       send(payload);
     },
@@ -589,18 +611,31 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
     const now = Date.now();
     if (now - lastBroadcastRef.current < PLAYBACK_BROADCAST_INTERVAL_MS) return;
     lastBroadcastRef.current = now;
+    const positionMs = Math.floor(currentTime * 1000);
+    const bpm =
+      typeof currentTrack?.features?.bpm === 'number' && Number.isFinite(currentTrack.features.bpm)
+        ? currentTrack.features.bpm
+        : null;
     sendPlaybackUpdate(
       currentTrack?.id ?? null,
       isPlaying,
-      Math.floor(currentTime * 1000),
+      positionMs,
       currentTrack
         ? {
             title: currentTrack.title ?? undefined,
             artist: currentTrack.artist ?? undefined,
             album: currentTrack.album ?? undefined,
+            bpm,
           }
         : undefined,
     );
+    setBeatAnchor({
+      bpm,
+      positionMs,
+      receivedAt: now,
+      isPlaying,
+      trackId: currentTrack?.id ?? null,
+    });
   }, [session, isHost, currentTrack, isPlaying, currentTime, sendPlaybackUpdate]);
 
   return {
@@ -613,6 +648,7 @@ export function useListeningSession({ username }: UseListeningSessionOptions = {
     isHost,
     myUserId,
     myFamiliar,
+    beatAnchor,
     createSession,
     joinSession,
     leaveSession,
