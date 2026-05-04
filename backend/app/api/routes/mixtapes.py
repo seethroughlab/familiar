@@ -21,7 +21,7 @@ from app.api.exceptions import (
     ValidationError,
 )
 from app.config import settings
-from app.db.models import MixTape, Playlist, PlaylistTrack, SmartPlaylist
+from app.db.models import MixTape, Playlist, PlaylistTrack
 from app.services.mixtape_export import (
     MAX_TRACKS,
     MIN_TRACKS,

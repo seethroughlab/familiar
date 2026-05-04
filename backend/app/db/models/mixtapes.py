@@ -52,7 +52,9 @@ class MixTape(Base):
     crossfade_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # 'pending' | 'rendering' | 'ready' | 'failed'
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", index=True
+    )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     audio_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)

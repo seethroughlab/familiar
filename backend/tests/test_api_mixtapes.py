@@ -14,7 +14,6 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from app.db.models import MixTape
-from tests.conftest import make_profile_headers
 from tests.factories import (
     insert_test_playlist,
     insert_test_playlist_track,

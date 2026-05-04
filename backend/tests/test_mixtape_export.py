@@ -7,6 +7,7 @@ and a real end-to-end render against synthesized inputs.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import zipfile
 from pathlib import Path
@@ -47,6 +48,8 @@ def _make_track(file_path: str, idx: int) -> SimpleNamespace:
 @pytest.fixture
 def synth_tracks(tmp_path: Path) -> list[SimpleNamespace]:
     """Three short MP3s synthesized via ffmpeg lavfi sine generators."""
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg not available on this runner")
     tracks = []
     freqs = [440, 523, 659]
     for i, freq in enumerate(freqs):

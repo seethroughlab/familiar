@@ -22,7 +22,6 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
-from PIL import Image, ImageDraw, ImageFont
 from mutagen.id3 import (
     APIC,
     CHAP,
@@ -38,7 +37,7 @@ from mutagen.id3 import (
     CTOCFlags,
 )
 from mutagen.id3._util import ID3NoHeaderError
-from mutagen.mp3 import MP3
+from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -48,7 +47,6 @@ from app.db.models import (
     MixTape,
     Playlist,
     PlaylistTrack,
-    SmartPlaylist,
     Track,
 )
 from app.services.artwork import compute_album_hash, get_artwork_path
