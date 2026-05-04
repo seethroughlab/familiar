@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha4] - 2026-05-03
+
+Fourth alpha — headline changes are CarPlay support, real-time listening sessions with a spatial 2D Room and beat-synced avatars, mixtape MP3 export with crossfades, and the canonical-artists model rolled out across the library and discovery surfaces.
+
 ### Added
 
 - **CarPlay support** (iOS) — browse Favorites, Library (Recently Played, Artists, Albums), and Playlists from the car via native CarPlay templates. Tap any track to start playback; lock-screen now-playing metadata and favorite state stay in sync as the queue advances
 - **Listening sessions** — host streams the audio you're playing over WebRTC to friends in real time. Open the Radio panel to create a session, share the code or link, and friends can join from any browser without being on your network. Participant list with kick, in-session chat, optional password, and live ICE/TURN diagnostics
+- **2D Room for listening sessions** — avatars now occupy a spatial stage in the session panel: host on a DJ booth at the back (with crown + plinth glow), listeners and guests arranged as a crowd in front. Positions are deterministic from `user_id` so every client sees the same room without any extra wire traffic
+- **Beat-synced avatar motion** — when something is playing, every avatar in the room bobs in unison to the host's track BPM (threaded through the 1Hz playback broadcast's `track_meta`). Falls back to a gentle 2.6s idle bob when paused or when no BPM is available; track changes pulse the room with a 1.2s glow
 - **`VITE_SESSIONS_RELAY_URL`** build-time env var pointing at the public signaling relay (`familiar-sessions`); falls back to same-origin for local dev
 - **`AudioEngine.getOutputStream()`** capability — Web Audio engine exposes a `MediaStream` from a lazy `MediaStreamAudioDestinationNode` off masterGain, used for WebRTC streaming
 - **Hook test coverage** for the new session machinery — 20 vitest cases across `useListeningSession` (connect lifecycle, message dispatch, malformed-payload safety, leave/unmount cleanup) and `useWebRTCStreaming` (peer add/remove, guest renegotiation cleanup, host-disabled fallback)
