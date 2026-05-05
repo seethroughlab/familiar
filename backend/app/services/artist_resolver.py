@@ -24,6 +24,7 @@ import asyncio
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Artist, ArtistAlias
@@ -97,22 +98,25 @@ async def _register_alias(
     first writer wins). Real cross-artist alias collisions surface during
     manual merges in Pass 2's admin UI; for backfill they're vanishingly
     rare and not worth a hard error.
+
+    Uses ON CONFLICT DO NOTHING so concurrent scan sessions racing on the
+    same alias_normalized PK don't raise IntegrityError and corrupt the
+    session transaction.
     """
     normalized = normalize_artist_name(tag)
     if not normalized:
         return
-    existing = await db.get(ArtistAlias, normalized)
-    if existing is not None:
-        return
-    db.add(
-        ArtistAlias(
+    stmt = (
+        pg_insert(ArtistAlias)
+        .values(
             alias_normalized=normalized,
             alias=tag.strip(),
             artist_id=artist.id,
             source=source,
         )
+        .on_conflict_do_nothing(index_elements=["alias_normalized"])
     )
-    await db.flush()
+    await db.execute(stmt)
 
 
 async def _create_artist_from_mb(
