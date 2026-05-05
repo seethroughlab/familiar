@@ -41,6 +41,12 @@ export function ContentToolbar() {
     setSearchParams(next, { replace: true });
   };
 
+  const searchPlaceholder = pathname.includes('/library/artists')
+    ? 'Search artists...'
+    : pathname.includes('/library/albums')
+    ? 'Search albums...'
+    : 'Search tracks...';
+
   const light = resolvedTheme === 'light';
 
   const indicators = (
@@ -73,7 +79,7 @@ export function ContentToolbar() {
               ref={searchInputRef}
               type="search"
               inputMode="search"
-              placeholder="Search tracks..."
+              placeholder={searchPlaceholder}
               value={searchValue}
               onChange={(e) => updateSearch(e.target.value)}
               onBlur={() => setTimeout(() => setMobileSearchExpanded(false), 150)}
@@ -110,7 +116,7 @@ export function ContentToolbar() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
               <input
                 type="search"
-                placeholder="Search tracks..."
+                placeholder={searchPlaceholder}
                 value={searchValue}
                 onChange={(e) => updateSearch(e.target.value)}
                 className={`w-full pl-9 pr-4 py-1.5 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-green-500 ${
