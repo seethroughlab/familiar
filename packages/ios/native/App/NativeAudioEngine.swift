@@ -1541,17 +1541,8 @@ class NativeAudioEngine {
 
     private func updateRemoteCommandAvailability() {
         let commandCenter = MPRemoteCommandCenter.shared()
-        commandCenter.nextTrackCommand.isEnabled = canGoNextForRemoteCommand()
-        commandCenter.previousTrackCommand.isEnabled = canGoPreviousForRemoteCommand()
-    }
-
-    func canGoNextForRemoteCommand() -> Bool {
-        return pendingNextTrackId != nil
-    }
-
-    func canGoPreviousForRemoteCommand(at currentTime: Double? = nil) -> Bool {
-        let effectiveCurrentTime = currentTime ?? getCurrentTime()
-        return effectiveCurrentTime > 3 || pendingPreviousTrackId != nil
+        commandCenter.nextTrackCommand.isEnabled = true
+        commandCenter.previousTrackCommand.isEnabled = true
     }
 
     private func setupRemoteCommands() {
@@ -1609,7 +1600,7 @@ class NativeAudioEngine {
             guard let self = self else { return .commandFailed }
 
             // If more than 3 seconds in, restart the current track
-            if self.canGoPreviousForRemoteCommand() && self.getCurrentTime() > 3 {
+            if self.getCurrentTime() > 3 {
                 self.seek(time: 0)
                 self.syncNowPlaying()
                 self.delegate?.audioEngineRemotePrevious(nativeAction: "restart", loadedTrackId: nil)
@@ -1654,30 +1645,8 @@ class NativeAudioEngine {
             return .success
         }
 
-        commandCenter.skipBackwardCommand.preferredIntervals = [15]
-        commandCenter.skipBackwardCommand.isEnabled = true
-        commandCenter.skipBackwardCommand.addTarget { [weak self] event in
-            guard let self = self else { return .commandFailed }
-            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? 15
-            let target = max(0, self.getCurrentTime() - interval)
-            self.seek(time: target)
-            self.syncNowPlaying()
-            self.delegate?.audioEngineRemoteSeek(time: target)
-            return .success
-        }
-
-        commandCenter.skipForwardCommand.preferredIntervals = [15]
-        commandCenter.skipForwardCommand.isEnabled = true
-        commandCenter.skipForwardCommand.addTarget { [weak self] event in
-            guard let self = self else { return .commandFailed }
-            let interval = (event as? MPSkipIntervalCommandEvent)?.interval ?? 15
-            let duration = self.getDuration()
-            let target = duration > 0 ? min(duration, self.getCurrentTime() + interval) : self.getCurrentTime() + interval
-            self.seek(time: target)
-            self.syncNowPlaying()
-            self.delegate?.audioEngineRemoteSeek(time: target)
-            return .success
-        }
+        commandCenter.skipBackwardCommand.isEnabled = false
+        commandCenter.skipForwardCommand.isEnabled = false
 
         commandCenter.likeCommand.isEnabled = true
         commandCenter.likeCommand.localizedTitle = "Favorite"
