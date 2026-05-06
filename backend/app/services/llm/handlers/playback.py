@@ -47,10 +47,7 @@ class PlaybackHandlersMixin:
 
         self._queued_tracks = [self._track_to_dict(t) for t in tracks]
 
-        # Generate playlist name for ephemeral metadata (no DB save)
-        playlist_name = ""
-        if tracks and self.profile_id:
-            playlist_name = await self._generate_playlist_name_llm(self._queued_tracks)
+        playlist_name = self._playlist_name_from_request() if tracks else ""
 
         # Build ephemeral playlist metadata for frontend to store temporarily
         self._auto_saved_playlist = {

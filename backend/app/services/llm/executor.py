@@ -139,64 +139,52 @@ class ToolExecutor(
                 logger.warning(f"Skipping invalid UUID: {id_str!r}")
         return valid
 
-    async def _generate_playlist_name_llm(self, tracks: list[dict[str, Any]]) -> str:
-        """Generate a creative playlist name using the LLM."""
+    def _playlist_name_from_request(self) -> str:
+        """Derive a playlist name from the user's request by stripping filler words."""
         from datetime import datetime
 
-        logger.info(f"Generating playlist name for {len(tracks)} tracks, user_message='{self.user_message}'")
+        msg = self.user_message.strip()
+        if not msg:
+            return f"AI Playlist — {datetime.now().strftime('%b %d')}"
 
-        if not tracks:
-            return f"AI Playlist - {datetime.now().strftime('%b %d %H:%M')}"
+        # If the user put a name in quotes, use that directly
+        quoted = re.search(r'"([^"]{2,40})"', msg)
+        if quoted:
+            return quoted.group(1).strip()
 
-        artists = list(set(t.get("artist", "") for t in tracks[:10] if t.get("artist")))
-        genres = list(set(t.get("genre", "") for t in tracks[:10] if t.get("genre")))
+        # Strip leading filler phrases (order matters — longer patterns first)
+        leading = [
+            r"^please\s+(can you\s+)?",
+            r"^can you\s+",
+            r"^i('d| would) like\s+(you to\s+)?",
+            r"^i want\s+(you to\s+)?",
+            r"^(make|build|create|put together|generate|give me|get me)\s+(me\s+)?an?\s+",
+            r"^(make|build|create|put together|generate|give me|get me)\s+(me\s+)?",
+            r"^(play|queue|put on)\s+(me\s+|up\s+)?some\s+",
+            r"^(play|queue|put on)\s+(me\s+|up\s+)?",
+            r"^find\s+(me\s+)?some\s+",
+            r"^find\s+(me\s+)?",
+            r"^(show|suggest)\s+(me\s+)?",
+        ]
+        text = msg
+        for pattern in leading:
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
 
-        prompt = f"""Generate a short, creative playlist name (2-5 words max).
+        # Strip trailing filler
+        trailing = [
+            r"\s+for\s+me$",
+            r"\s+please$",
+            r",?\s+please$",
+        ]
+        for pattern in trailing:
+            text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
 
-User's request: "{self.user_message or 'curated selection'}"
-Artists included: {', '.join(artists[:5]) or 'Various'}
-Genres: {', '.join(genres[:3]) or 'Mixed'}
-Track count: {len(tracks)}
+        # Title-case and truncate at a word boundary
+        text = text[:1].upper() + text[1:] if text else text
+        if len(text) > 50:
+            text = text[:47].rsplit(" ", 1)[0] + "…"
 
-Rules:
-- Be creative and evocative, not literal
-- Don't just repeat the user's words
-- Avoid generic names like "Chill Vibes" or "Good Music"
-- No quotes, colons, or special characters
-- Examples of good names: "Midnight Drive", "Sunday Morning Coffee", "Electric Dreams"
-
-Respond with ONLY the playlist name, nothing else."""
-
-        try:
-            from .providers import get_provider
-
-            name = await get_provider().complete_utility(
-                prompt=prompt, max_tokens=50, timeout_seconds=30.0
-            )
-            name = name.strip('"\'').strip()
-            logger.info(f"LLM generated playlist name: '{name}'")
-            if name and len(name) <= 50 and not any(c in name for c in [":", "\n", '"']):
-                return name
-            else:
-                logger.warning(
-                    f"Generated name rejected (empty, too long, or invalid chars): '{name}'"
-                )
-
-        except Exception as e:
-            logger.warning(f"LLM playlist name generation failed: {e}")
-
-        return self._generate_playlist_name_fallback()
-
-    def _generate_playlist_name_fallback(self) -> str:
-        """Fallback playlist name from user message or timestamp."""
-        from datetime import datetime
-
-        if self.user_message:
-            name = self.user_message[:50].strip()
-            if len(self.user_message) > 50:
-                name += "..."
-            return name
-        return f"AI Playlist - {datetime.now().strftime('%b %d %H:%M')}"
+        return text or msg[:50]
 
     def _normalize_query_variations(self, query: str) -> list[str]:
         """Generate search variations to handle number padding, etc."""

@@ -699,12 +699,14 @@ aren't in the library. The current setting is shown at the end of these instruct
 
 ## How to Handle Requests
 
-**"Play [artist]"** or **"Songs like [artist]"**:
-1. search_library for the artist
+**"Play [artist]"** or **"Make me a [artist] playlist"** or any playlist/queue request for a specific artist:
+1. filter_tracks(artist=name, limit=20) — do NOT use search_library here; search_library caps results at 2 per artist due to diversity filtering
 2. If found: queue_tracks immediately (include suggested_tracks if discovery_mode is "suggest_missing")
 3. If NOT found: use get_similar_artists_in_library to find similar artists the user HAS
-4. Search for tracks by those similar artists, then queue_tracks (with suggested_tracks if applicable)
+4. filter_tracks(artist=similar_artist_name) for those similar artists, then queue_tracks (with suggested_tracks if applicable)
 5. IMPORTANT: If the artist isn't in the library, include the Bandcamp link from the tool result in your response so the user can discover/purchase it
+
+NOTE: queue_tracks automatically creates an ephemeral playlist the user can save if they want. There is no separate "save playlist" tool — always use queue_tracks.
 
 **"Play my favorites"** or **"What have I been listening to?"**:
 1. filter_tracks(is_favorite=true) for favorites

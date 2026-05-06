@@ -109,10 +109,14 @@ class AnthropicProvider:
                         "input": tool_input,
                     }
 
+                    # Log inputs (truncated) to aid debugging
+                    input_summary = {k: (str(v)[:80] if isinstance(v, (list, str)) and len(str(v)) > 80 else v) for k, v in tool_input.items()}
+                    logger.info(f"Tool {block.name} input: {input_summary}")
                     result = await tool_executor.execute(block.name, tool_input)
+                    result_count = result.get("count", result.get("queued", result.get("tracks_saved", "?"))) if isinstance(result, dict) else "?"
                     logger.info(
                         f"Tool {block.name} executed, result keys: "
-                        f"{list(result.keys()) if isinstance(result, dict) else 'not-dict'}"
+                        f"{list(result.keys()) if isinstance(result, dict) else 'not-dict'}, count={result_count}"
                     )
 
                     yield {"type": "tool_result", "name": block.name, "result": result}

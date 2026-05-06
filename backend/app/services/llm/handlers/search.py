@@ -514,7 +514,9 @@ class SearchHandlersMixin:
         result = await self.db.execute(stmt)
         all_tracks = list(result.scalars().all())
 
-        diverse_tracks = self._apply_diversity(all_tracks, max_per_artist=2, max_per_album=3)
+        # When filtering by a specific artist, don't cap per-artist — the user wants that artist.
+        max_per_artist = limit if artist is not None else 2
+        diverse_tracks = self._apply_diversity(all_tracks, max_per_artist=max_per_artist, max_per_album=3)
 
         if use_random:
             random.shuffle(diverse_tracks)
