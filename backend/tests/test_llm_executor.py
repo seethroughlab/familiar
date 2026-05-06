@@ -134,25 +134,11 @@ class TestHelperMethods:
         result = executor._apply_diversity(tracks, max_per_artist=2, max_per_album=2)
         assert len(result) == 5
 
-    @pytest.mark.asyncio
-    async def test_generate_playlist_name_routes_through_provider(self, executor):
-        """Playlist naming should route through the active provider's utility call."""
-        mock_provider = MagicMock()
-        mock_provider.complete_utility = AsyncMock(return_value="Midnight Drive")
-
-        with patch(
-            "app.services.llm.providers.get_provider", return_value=mock_provider
-        ):
-            name = await executor._generate_playlist_name_llm([
-                {"artist": "Boards of Canada", "genre": "Ambient"},
-                {"artist": "Autechre", "genre": "Electronic"},
-            ])
-
-        assert name == "Midnight Drive"
-        # Called with small max_tokens (short name) and a timeout appropriate for a utility call.
-        call_kwargs = mock_provider.complete_utility.call_args.kwargs
-        assert call_kwargs["max_tokens"] == 50
-        assert "prompt" in call_kwargs
+    def test_playlist_name_strips_filler_words(self, executor):
+        """Playlist name should strip common filler phrases from the user message."""
+        executor.user_message = "play me some chill electronic music"
+        name = executor._playlist_name_from_request()
+        assert "chill electronic" in name.lower()
 
 
 class TestQueuedTracksState:
@@ -306,10 +292,7 @@ class TestQueueTracks:
         mock_db.execute.return_value = mock_result
         mock_db.get = AsyncMock(return_value=mock_track)
 
-        # Mock the playlist name generation
-        with patch.object(executor, "_generate_playlist_name_llm", new_callable=AsyncMock) as mock_gen:
-            mock_gen.return_value = "Test Playlist"
-            result = await executor._queue_tracks([str(track_id)])
+        result = await executor._queue_tracks([str(track_id)])
 
         assert result["queued"] == 1
         assert len(result["tracks"]) == 1
@@ -703,7 +686,7 @@ class TestPlaylistNameGeneration:
 
     def test_fallback_uses_user_message(self, executor):
         """Fallback should use user message."""
-        name = executor._generate_playlist_name_fallback()
+        name = executor._playlist_name_from_request()
         assert "chill electronic" in name.lower()
 
     def test_fallback_truncates_long_message(self):
@@ -715,13 +698,13 @@ class TestPlaylistNameGeneration:
             user_message=long_message
         )
 
-        name = executor._generate_playlist_name_fallback()
+        name = executor._playlist_name_from_request()
         assert len(name) <= 54  # 50 chars + "..."
 
     def test_fallback_with_no_message(self):
         """Fallback should generate timestamp-based name."""
         executor = ToolExecutor(db=AsyncMock(), profile_id=uuid4(), user_message="")
-        name = executor._generate_playlist_name_fallback()
+        name = executor._playlist_name_from_request()
         assert "AI Playlist" in name
 
 
@@ -1373,9 +1356,7 @@ class TestInvalidUuidHandling:
         mock_db.execute.return_value = mock_result
         mock_db.get = AsyncMock(return_value=mock_track)
 
-        with patch.object(executor, "_generate_playlist_name_llm", new_callable=AsyncMock) as mock_gen:
-            mock_gen.return_value = "Test Playlist"
-            result = await executor._queue_tracks([str(valid_id), "invalid-id"])
+        result = await executor._queue_tracks([str(valid_id), "invalid-id"])
 
         assert result["queued"] == 1
 
