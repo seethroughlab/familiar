@@ -32,6 +32,10 @@ export class CapacitorEngine implements AudioEngine {
   private localPreloadingTrackId: string | null = null;
   private localIsCrossfading = false;
 
+  // Track the last track ID for which we emitted a 'playing' event,
+  // so we can fire it exactly once per loaded track (on first non-zero timeUpdate).
+  private lastPlayingTrackId: string | null = null;
+
   // Event subscribers
   private handlers: Set<EventHandler> = new Set();
 
@@ -384,6 +388,13 @@ export class CapacitorEngine implements AudioEngine {
         this.lastKnownDuration = data.duration;
       }
       this.emit({ type: 'timeUpdate', currentTime, duration });
+
+      // Emit 'playing' on first non-zero timeUpdate per track — mirrors WebAudioEngine's
+      // HTMLAudioElement 'playing' event, which is what clears isLoadingAudio in useAudioEngine.
+      if (currentTime > 0 && this.loadedTrackId && this.loadedTrackId !== this.lastPlayingTrackId) {
+        this.lastPlayingTrackId = this.loadedTrackId;
+        this.emit({ type: 'playing', trackId: this.loadedTrackId });
+      }
     }).then(h => this.listenerCleanups.push(() => h.remove()));
 
     // error
