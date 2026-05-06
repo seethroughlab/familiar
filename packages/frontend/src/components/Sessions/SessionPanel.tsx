@@ -2,13 +2,20 @@ import { useState } from 'react';
 import { Copy, Check, Crown, Loader2, Send, UserMinus, Share2, Lock } from 'lucide-react';
 import type { SessionInfo, ChatMessage, IceServer } from '../../hooks/useListeningSession';
 import { buildShareLink } from '../../hooks/useListeningSession';
-import type { BeatAnchor, FamiliarConfig, SessionReaction, SessionReactionKind } from '../../services/listeningSessionFamiliars';
+import type { SessionReaction, SessionReactionKind } from '../../services/listeningSessionFamiliars';
 import { IceDiagnostics } from './IceDiagnostics';
-import { FamiliarPicker, FamiliarRoom, ReactionBar } from './FamiliarRoom';
 import { showError } from '../../stores/toastStore';
 import { useThemeStore } from '../../stores/themeStore';
 
 const CHAT_MESSAGE_MAX_LENGTH = 500;
+
+const REACTION_KINDS: SessionReactionKind[] = ['cheer', 'pulse', 'wave', 'spark'];
+const reactionCopy: Record<SessionReactionKind, string> = {
+  cheer: 'Cheer',
+  pulse: 'Pulse',
+  wave: 'Wave',
+  spark: 'Spark',
+};
 
 interface SessionPanelProps {
   session: SessionInfo | null;
@@ -20,14 +27,11 @@ interface SessionPanelProps {
   iceServers: IceServer[];
   chatMessages: ChatMessage[];
   reactions: SessionReaction[];
-  myFamiliar: FamiliarConfig;
-  beatAnchor: BeatAnchor | null;
   onCreateSession: (name: string, password?: string) => void;
   onJoinSession: (code: string, password?: string) => void;
   onLeaveSession: () => void;
   onSendMessage: (message: string) => void;
   onReact: (kind: SessionReactionKind) => void;
-  onFamiliarChange: (familiar: FamiliarConfig) => void;
   onKick: (userId: string) => void;
 }
 
@@ -41,14 +45,11 @@ export function SessionPanel({
   iceServers,
   chatMessages,
   reactions,
-  myFamiliar,
-  beatAnchor,
   onCreateSession,
   onJoinSession,
   onLeaveSession,
   onSendMessage,
   onReact,
-  onFamiliarChange,
   onKick,
 }: SessionPanelProps) {
   const [mode, setMode] = useState<'menu' | 'create' | 'join'>('menu');
@@ -98,6 +99,9 @@ export function SessionPanel({
   };
 
   if (session) {
+    const latestReactionByUser = new Map<string, SessionReaction>();
+    for (const r of reactions) latestReactionByUser.set(r.user_id, r);
+
     return (
       <div className="h-full flex flex-col">
         <div className={`p-4 border-b ${panelBorder} space-y-4`}>
@@ -138,17 +142,24 @@ export function SessionPanel({
               {error}
             </div>
           )}
-          <FamiliarRoom
-            participants={session.participants}
-            reactions={reactions}
-            myUserId={myUserId}
-            isLight={isLight}
-            beatAnchor={beatAnchor}
-          />
-          <FamiliarPicker value={myFamiliar} onChange={onFamiliarChange} isLight={isLight} />
           <div>
             <div className={`mb-2 text-sm ${panelMuted}`}>Quick reactions</div>
-            <ReactionBar onReact={onReact} isLight={isLight} />
+            <div className="flex flex-wrap gap-2">
+              {REACTION_KINDS.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  onClick={() => onReact(kind)}
+                  className={`rounded-full border px-3 py-1.5 text-xs uppercase tracking-[0.18em] transition-colors ${
+                    isLight
+                      ? 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700'
+                  }`}
+                >
+                  {reactionCopy[kind]}
+                </button>
+              ))}
+            </div>
           </div>
           {isHost && iceServers.length > 0 && <IceDiagnostics iceServers={iceServers} />}
         </div>
@@ -156,26 +167,35 @@ export function SessionPanel({
         <div className={`p-4 border-b ${panelBorder}`}>
           <h3 className={`text-sm ${panelMuted} mb-2`}>Listeners ({session.participant_count})</h3>
           <div className="space-y-1 max-h-40 overflow-y-auto">
-            {session.participants.map((p) => (
-              <div key={p.user_id} className="flex items-center justify-between gap-2 text-sm py-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  {p.role === 'host' && <Crown className="w-4 h-4 text-yellow-500 shrink-0" />}
-                  <span className={`truncate ${p.role === 'host' ? (isLight ? 'text-zinc-900' : 'text-white') : isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
-                    {p.username}
-                  </span>
+            {session.participants.map((p) => {
+              const latestReaction = latestReactionByUser.get(p.user_id);
+              return (
+                <div key={p.user_id} className="flex items-center justify-between gap-2 text-sm py-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {p.role === 'host' && <Crown className="w-4 h-4 text-yellow-500 shrink-0" />}
+                    <span className={`truncate ${p.role === 'host' ? (isLight ? 'text-zinc-900' : 'text-white') : isLight ? 'text-zinc-700' : 'text-zinc-300'}`}>
+                      {p.username}
+                      {p.user_id === myUserId && <span className={`ml-1 text-xs ${panelMuted}`}>(you)</span>}
+                    </span>
+                    {latestReaction && (
+                      <span className={`text-[10px] uppercase tracking-[0.15em] ${panelMuted}`}>
+                        {reactionCopy[latestReaction.kind]}
+                      </span>
+                    )}
+                  </div>
+                  {isHost && p.role !== 'host' && (
+                    <button
+                      onClick={() => onKick(p.user_id)}
+                      className={`p-1 ${panelMuted} hover:text-red-400 rounded`}
+                      title="Remove from session"
+                      aria-label={`Remove ${p.username} from session`}
+                    >
+                      <UserMinus className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                {isHost && p.role !== 'host' && (
-                  <button
-                    onClick={() => onKick(p.user_id)}
-                    className={`p-1 ${panelMuted} hover:text-red-400 rounded`}
-                    title="Remove from session"
-                    aria-label={`Remove ${p.username} from session`}
-                  >
-                    <UserMinus className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -239,7 +259,6 @@ export function SessionPanel({
           <p className={`text-sm ${panelMuted}`}>
             Listen to music together in real-time. Create a session and share the code or link with friends.
           </p>
-          <FamiliarPicker value={myFamiliar} onChange={onFamiliarChange} isLight={isLight} />
           <button
             onClick={() => setMode('create')}
             className="w-full py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium transition-colors"

@@ -159,14 +159,11 @@ export function AppShell() {
                       iceServers={listeningSession.iceServers}
                       chatMessages={listeningSession.chatMessages}
                       reactions={listeningSession.reactions}
-                      myFamiliar={listeningSession.myFamiliar}
-                      beatAnchor={listeningSession.beatAnchor}
                       onCreateSession={listeningSession.createSession}
                       onJoinSession={listeningSession.joinSession}
                       onLeaveSession={listeningSession.leaveSession}
                       onSendMessage={listeningSession.sendChatMessage}
                       onReact={listeningSession.sendReaction}
-                      onFamiliarChange={listeningSession.updateMySessionFamiliar}
                       onKick={listeningSession.kick}
                     />
                   )}
@@ -281,14 +278,11 @@ export function AppShell() {
                     iceServers={listeningSession.iceServers}
                     chatMessages={listeningSession.chatMessages}
                     reactions={listeningSession.reactions}
-                    myFamiliar={listeningSession.myFamiliar}
-                    beatAnchor={listeningSession.beatAnchor}
                     onCreateSession={listeningSession.createSession}
                     onJoinSession={listeningSession.joinSession}
                     onLeaveSession={listeningSession.leaveSession}
                     onSendMessage={listeningSession.sendChatMessage}
                     onReact={listeningSession.sendReaction}
-                    onFamiliarChange={listeningSession.updateMySessionFamiliar}
                     onKick={listeningSession.kick}
                   />
                 </Suspense>

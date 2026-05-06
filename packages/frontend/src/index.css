@@ -94,24 +94,6 @@ body {
   animation: slide-up 0.3s ease-out;
 }
 
-/* Listening Session room: reaction bubble rises above the avatar */
-@keyframes familiar-reaction-rise {
-  0% { opacity: 0; transform: translate(-50%, 4px); }
-  20% { opacity: 1; transform: translate(-50%, -2px); }
-  80% { opacity: 1; transform: translate(-50%, -6px); }
-  100% { opacity: 0; transform: translate(-50%, -12px); }
-}
-
-/* Listening Session room: track-change glow on the stage */
-@keyframes familiar-room-glow {
-  0% { box-shadow: inset 0 0 0 0 rgba(255, 255, 255, 0); }
-  20% { box-shadow: inset 0 0 60px 8px rgba(255, 255, 255, 0.18); }
-  100% { box-shadow: inset 0 0 0 0 rgba(255, 255, 255, 0); }
-}
-
-.familiar-room-glowing {
-  animation: familiar-room-glow 1.2s ease-out;
-}
 
 /* Safe area insets for iOS notch/home indicator */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
