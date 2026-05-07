@@ -287,12 +287,12 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             artworkUrl={artworkUrl}
             lyrics={lyrics}
             isPlaying={isPlaying}
-            className="absolute inset-0 -translate-y-12"
+            className="absolute inset-0"
           />
         )}
 
-        {/* Album art thumbnail - inside content area so it's positioned relative to visualizer bounds */}
-        {(isVisualizerAvailable() || isMusicVideo) && !(isFullscreen && !controlsVisible) && (
+        {/* Album art thumbnail - shown over visualizers but not music video (it manages its own UI) */}
+        {isVisualizerAvailable() && !isMusicVideo && !(isFullscreen && !controlsVisible) && (
           <div className="absolute bottom-80 left-1/2 -translate-x-1/2 z-20">
             {imageError ? (
               <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">

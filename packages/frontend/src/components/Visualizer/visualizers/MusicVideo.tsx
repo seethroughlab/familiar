@@ -152,16 +152,24 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
   // Search results view
   if (showSearch) {
     return (
-      <div className="w-full h-full bg-zinc-900 overflow-auto p-4 sm:p-6">
-        <div className="max-w-2xl mx-auto">
-          <h3 className="text-xl font-bold mb-4">Select a music video</h3>
+      <div className="w-full h-full bg-zinc-900 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-zinc-800 flex-shrink-0">
+          <h3 className="text-xl font-bold">Select a music video</h3>
+          <button
+            onClick={() => setShowSearch(false)}
+            className="text-zinc-400 hover:text-white transition-colors px-3 py-1"
+          >
+            Cancel
+          </button>
+        </div>
 
+        <div className="flex-1 overflow-auto min-h-0 p-4 sm:p-6">
           {searchLoading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="h-full flex items-center justify-center">
               <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
             </div>
           ) : searchError ? (
-            <div className="flex flex-col items-center py-12">
+            <div className="h-full flex flex-col items-center justify-center">
               <Video className="w-12 h-12 text-red-500 mb-3 opacity-50" />
               <p className="text-red-400">Search failed</p>
               <button
@@ -172,7 +180,7 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
               </button>
             </div>
           ) : searchResults && searchResults.length > 0 ? (
-            <div className="space-y-3">
+            <div className="max-w-2xl mx-auto space-y-3">
               {searchResults.map((result) => (
                 <div
                   key={result.video_id}
@@ -217,17 +225,10 @@ function MusicVideo({ track, isPlaying }: VisualizerProps) {
               ))}
             </div>
           ) : (
-            <p className="text-center text-zinc-500 py-12">
-              No videos found for this track
-            </p>
+            <div className="h-full flex items-center justify-center">
+              <p className="text-zinc-500">No videos found for this track</p>
+            </div>
           )}
-
-          <button
-            onClick={() => setShowSearch(false)}
-            className="mt-6 text-zinc-400 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
         </div>
       </div>
     );
