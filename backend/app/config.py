@@ -136,7 +136,7 @@ def adaptive_queue_limit(base: int = 100) -> int:
 
 
 # Supported audio formats
-AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".aif"}
 
 # Global settings instance
 settings = Settings()
