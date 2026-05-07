@@ -373,6 +373,8 @@ class NativeAudioEngine {
     weak var delegate: NativeAudioEngineDelegate?
     private let stateQueue = DispatchQueue(label: "com.familiar.audio-engine.state")
 
+    // MARK: - Audio graph
+
     private let engine = AVAudioEngine()
     private var playerNodes: [AVAudioPlayerNode] = [AVAudioPlayerNode(), AVAudioPlayerNode()]
     private var activePlayerIndex = 0
@@ -392,9 +394,18 @@ class NativeAudioEngine {
     private let reverbPreDelayNode = AVAudioUnitDelay() // Pure delay before reverb for preDelay
 
 
+    private struct ManagedTempFile {
+        let url: URL
+        let owned: Bool
+        func cleanup() {
+            if owned { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    // MARK: - Playback state
+
     private var audioFile: AVAudioFile?
-    private var tempFileURL: URL?
-    private var tempFileOwnedByEngine = false
+    private var tempFile: ManagedTempFile?
     private var currentTrackId: String?
     private var isPlayerScheduled = false
     private var startFramePosition: AVAudioFramePosition = 0
@@ -407,10 +418,10 @@ class NativeAudioEngine {
     private var timeUpdateTimer: Timer?
     private var downloadTask: URLSessionDownloadTask?
 
-    // Crossfade state
+    // MARK: - Crossfade state
+
     private var nextAudioFile: AVAudioFile?
-    private var nextTempFileURL: URL?
-    private var nextTempFileOwnedByEngine = false
+    private var nextTempFile: ManagedTempFile?
     private var nextTrackId: String?
     private var preloadingTrackId: String?
     private var nextDownloadTask: URLSessionDownloadTask?
@@ -420,13 +431,15 @@ class NativeAudioEngine {
     private var nextNormalizationVolume: Float = 1.0
     private var preloadState: PreloadState = .idle
 
-    // Operation tokens to ignore stale async callbacks.
+    // MARK: - Operation tokens (serial queue ensures atomic increment + read)
+
     private var loadOperationToken: UInt64 = 0
     private var preloadOperationToken: UInt64 = 0
     private var seekOperationToken: UInt64 = 0
     private var crossfadeOperationToken: UInt64 = 0
 
-    // Now Playing metadata
+    // MARK: - Now Playing metadata
+
     private var nowPlayingTitle: String?
     private var nowPlayingArtist: String?
     private var nowPlayingAlbum: String?
@@ -440,7 +453,8 @@ class NativeAudioEngine {
     private var artworkFetchGeneration: UInt64 = 0
     private var lastArtworkUrl: String?
 
-    // Pending next/previous track info (pre-synced from JS for lock screen control)
+    // MARK: - Pending track info (pre-synced from JS for lock screen controls)
+
     private var pendingNextUrl: String?
     private var pendingNextTrackId: String?
     private var pendingNextTitle: String?
@@ -455,7 +469,8 @@ class NativeAudioEngine {
     private var pendingPreviousAlbum: String?
     private var pendingPreviousArtworkUrl: String?
 
-    // FFT analysis
+    // MARK: - FFT analysis
+
     private var isAnalysisEnabled = false
     private var lastAnalysisTime: CFAbsoluteTime = 0
     private static let analysisMinInterval: CFAbsoluteTime = 1.0 / 60.0  // ~60fps
@@ -678,8 +693,8 @@ class NativeAudioEngine {
             if options.contains(.shouldResume) {
                 do {
                     try engine.start()
-                    if isPlayerScheduled && isPaused {
-                        // Don't auto-resume — let JS side decide
+                    if isPlayerScheduled && !isPaused {
+                        playerNode.play()
                     }
                 } catch {
                     delegate?.audioEngineDidEncounterError(
@@ -741,8 +756,7 @@ class NativeAudioEngine {
 
                 DispatchQueue.main.async {
                     guard self.stateQueue.sync(execute: { token == self.loadOperationToken }) else { return }
-                    self.tempFileURL = tempURL
-                    self.tempFileOwnedByEngine = true
+                    self.tempFile = ManagedTempFile(url: tempURL, owned: true)
                     self.audioFile = file
                     self.scheduleFile(file, completion: completion)
                 }
@@ -769,8 +783,7 @@ class NativeAudioEngine {
             DispatchQueue.main.async {
                 guard self.stateQueue.sync(execute: { token == self.loadOperationToken }) else { return }
                 self.audioFile = file
-                self.tempFileURL = fileURL
-                self.tempFileOwnedByEngine = false
+                self.tempFile = ManagedTempFile(url: fileURL, owned: false)
                 self.scheduleFile(file, completion: completion)
             }
         } catch {
@@ -1204,8 +1217,7 @@ class NativeAudioEngine {
                     }
                     self.preloadTimeoutWorkItem?.cancel()
                     self.preloadTimeoutWorkItem = nil
-                    self.nextTempFileURL = tempURL
-                    self.nextTempFileOwnedByEngine = true
+                    self.nextTempFile = ManagedTempFile(url: tempURL, owned: true)
                     self.nextAudioFile = file
                     self.nextTrackId = trackId
                     self.preloadingTrackId = nil
@@ -1249,8 +1261,7 @@ class NativeAudioEngine {
         do {
             let file = try AVAudioFile(forReading: fileURL)
             guard stateQueue.sync(execute: { token == preloadOperationToken }) else { return }
-            nextTempFileURL = fileURL
-            nextTempFileOwnedByEngine = false
+            nextTempFile = ManagedTempFile(url: fileURL, owned: false)
             nextAudioFile = file
             nextTrackId = trackId
             preloadingTrackId = nil
@@ -1302,7 +1313,7 @@ class NativeAudioEngine {
 
         let capturedNextTrackId = nextId
         let capturedNextAudioFile = nextFile
-        let capturedNextTempFileURL = nextTempFileURL
+        let capturedNextTempFile = nextTempFile
 
         isCrossfadingFlag = true
 
@@ -1345,7 +1356,7 @@ class NativeAudioEngine {
                 self.finishCrossfade(
                     nextTrackId: capturedNextTrackId,
                     nextAudioFile: capturedNextAudioFile,
-                    nextTempFileURL: capturedNextTempFileURL,
+                    capturedTempFile: capturedNextTempFile,
                     completion: { completion(true, nil) }
                 )
             }
@@ -1357,7 +1368,7 @@ class NativeAudioEngine {
     private func finishCrossfade(
         nextTrackId: String,
         nextAudioFile: AVAudioFile,
-        nextTempFileURL: URL?,
+        capturedTempFile: ManagedTempFile?,
         completion: @escaping () -> Void
     ) {
         print("[FamiliarAudio] finishCrossfade: nextTrackId=\(nextTrackId)")
@@ -1377,10 +1388,8 @@ class NativeAudioEngine {
 
         // Replace current temp file with the next track's file
         cleanupTempFile()
-        tempFileURL = nextTempFileURL
-        self.nextTempFileURL = nil
-        self.tempFileOwnedByEngine = self.nextTempFileOwnedByEngine
-        self.nextTempFileOwnedByEngine = false
+        tempFile = capturedTempFile
+        nextTempFile = nil
 
         // Reset playback state for the new current track
         isPlayerScheduled = true
@@ -1760,16 +1769,16 @@ class NativeAudioEngine {
         isAnalysisEnabled = true
         let mixer = engine.mainMixerNode
         let format = mixer.outputFormat(forBus: 0)
-        analysisProcessor = NativeAudioAnalysisProcessor()
+        let processor = NativeAudioAnalysisProcessor()
+        analysisProcessor = processor
         analysisSampleBuffer.removeAll(keepingCapacity: true)
         analysisSampleBuffer.reserveCapacity(NativeAudioAnalysisProcessor.fftSize)
         lastAnalysisTime = 0
 
         mixer.installTap(onBus: 0, bufferSize: AVAudioFrameCount(NativeAudioAnalysisProcessor.fftSize), format: format) {
-            [weak self] buffer, _ in
+            [weak self, processor] buffer, _ in
             guard let self = self,
-                  self.isAnalysisEnabled,
-                  let processor = self.analysisProcessor else { return }
+                  self.isAnalysisEnabled else { return }
 
             // Throttle to ~60fps
             let now = CFAbsoluteTimeGetCurrent()
@@ -1826,23 +1835,13 @@ class NativeAudioEngine {
     // MARK: - Cleanup
 
     private func cleanupTempFile() {
-        if let url = tempFileURL {
-            if tempFileOwnedByEngine {
-                try? FileManager.default.removeItem(at: url)
-            }
-            tempFileURL = nil
-            tempFileOwnedByEngine = false
-        }
+        tempFile?.cleanup()
+        tempFile = nil
     }
 
     private func cleanupNextTempFile() {
-        if let url = nextTempFileURL {
-            if nextTempFileOwnedByEngine {
-                try? FileManager.default.removeItem(at: url)
-            }
-            nextTempFileURL = nil
-            nextTempFileOwnedByEngine = false
-        }
+        nextTempFile?.cleanup()
+        nextTempFile = nil
     }
 
     func cleanup() {
