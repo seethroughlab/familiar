@@ -13,10 +13,17 @@ enum RootTemplateBuilder {
         let onPlaylistTrackSelected: (String, CarPlayTrackSnapshot) -> Void
     }
 
+    struct RootTemplates {
+        let tabBar: CPTabBarTemplate
+        let favorites: CPListTemplate
+        let library: CPListTemplate
+        let playlists: CPListTemplate
+    }
+
     static func buildRootTemplate(
         state: CarPlayTemplateState,
         actions: Actions
-    ) -> CPTabBarTemplate {
+    ) -> RootTemplates {
         let favoritesTemplate = makeFavoritesTemplate(
             favorites: state.favorites,
             actions: actions
@@ -29,15 +36,22 @@ enum RootTemplateBuilder {
             playlists: state.playlists,
             actions: actions
         )
-
-        return CPTabBarTemplate(templates: [favoritesTemplate, libraryTemplate, playlistsTemplate])
+        let tabBar = CPTabBarTemplate(templates: [favoritesTemplate, libraryTemplate, playlistsTemplate])
+        return RootTemplates(
+            tabBar: tabBar,
+            favorites: favoritesTemplate,
+            library: libraryTemplate,
+            playlists: playlistsTemplate
+        )
     }
 
-    private static func makeFavoritesTemplate(
+    // MARK: - Section builders (called per-update for in-place CPListTemplate.updateSections)
+
+    static func makeFavoritesSections(
         favorites: [CarPlayTrackSnapshot],
         actions: Actions
-    ) -> CPListTemplate {
-        let items = favorites.isEmpty
+    ) -> [CPListSection] {
+        let items: [CPListItem] = favorites.isEmpty
             ? [placeholderItem(text: "Favorite tracks appear here.")]
             : favorites.map { track in
                 let item = CPListItem(text: track.title, detailText: track.subtitle)
@@ -48,20 +62,14 @@ enum RootTemplateBuilder {
                 }
                 return item
             }
-
-        return makeListTemplate(
-            title: "Favorites",
-            tabTitle: "Favorites",
-            tabImageName: "heart.fill",
-            items: items
-        )
+        return [CPListSection(items: items)]
     }
 
-    private static func makeLibraryTemplate(
+    static func makeLibrarySections(
         buckets: [CarPlayLibraryBucketSnapshot],
         actions: Actions
-    ) -> CPListTemplate {
-        let items = buckets.isEmpty
+    ) -> [CPListSection] {
+        let items: [CPListItem] = buckets.isEmpty
             ? [placeholderItem(text: "Open Familiar on your iPhone to load CarPlay.")]
             : buckets.map { bucket in
                 let item = CPListItem(text: bucket.title, detailText: detailText(for: bucket))
@@ -89,13 +97,71 @@ enum RootTemplateBuilder {
                 }
                 return item
             }
+        return [CPListSection(items: items)]
+    }
 
-        return makeListTemplate(
-            title: "Library",
-            tabTitle: "Library",
-            tabImageName: "music.note.list",
-            items: items
+    static func makePlaylistsSections(
+        playlists: [CarPlayPlaylistSnapshot],
+        actions: Actions
+    ) -> [CPListSection] {
+        let items: [CPListItem] = playlists.isEmpty
+            ? [placeholderItem(text: "No playlists available yet.")]
+            : playlists.map { playlist in
+                let item = CPListItem(text: playlist.title, detailText: playlist.subtitle)
+                item.handler = { _, completion in
+                    actions.onPlaylistSelected(playlist)
+                    let detailTemplate = makePlaylistTrackTemplate(
+                        title: playlist.title,
+                        playlist: playlist,
+                        actions: actions
+                    )
+                    actions.pushTemplate(detailTemplate)
+                    completion()
+                }
+                return item
+            }
+        return [CPListSection(items: items)]
+    }
+
+    // MARK: - Initial template builders (called once on attach)
+
+    private static func makeFavoritesTemplate(
+        favorites: [CarPlayTrackSnapshot],
+        actions: Actions
+    ) -> CPListTemplate {
+        let template = CPListTemplate(
+            title: "Favorites",
+            sections: makeFavoritesSections(favorites: favorites, actions: actions)
         )
+        template.tabTitle = "Favorites"
+        template.tabImage = UIImage(systemName: "heart.fill")
+        return template
+    }
+
+    private static func makeLibraryTemplate(
+        buckets: [CarPlayLibraryBucketSnapshot],
+        actions: Actions
+    ) -> CPListTemplate {
+        let template = CPListTemplate(
+            title: "Library",
+            sections: makeLibrarySections(buckets: buckets, actions: actions)
+        )
+        template.tabTitle = "Library"
+        template.tabImage = UIImage(systemName: "music.note.list")
+        return template
+    }
+
+    private static func makePlaylistsTemplate(
+        playlists: [CarPlayPlaylistSnapshot],
+        actions: Actions
+    ) -> CPListTemplate {
+        let template = CPListTemplate(
+            title: "Playlists",
+            sections: makePlaylistsSections(playlists: playlists, actions: actions)
+        )
+        template.tabTitle = "Playlists"
+        template.tabImage = UIImage(systemName: "music.note")
+        return template
     }
 
     private static func makeCollectionTemplate(
@@ -104,7 +170,7 @@ enum RootTemplateBuilder {
         collections: [CarPlayCollectionSnapshot],
         actions: Actions
     ) -> CPListTemplate {
-        let items = collections.isEmpty
+        let items: [CPListItem] = collections.isEmpty
             ? [placeholderItem(text: "Nothing to show yet.")]
             : collections.map { collection in
                 let item = CPListItem(text: collection.title, detailText: collection.subtitle)
@@ -138,7 +204,7 @@ enum RootTemplateBuilder {
         tracks: [CarPlayTrackSnapshot],
         actions: Actions
     ) -> CPListTemplate {
-        let items = tracks.isEmpty
+        let items: [CPListItem] = tracks.isEmpty
             ? [placeholderItem(text: "Nothing to play yet.")]
             : tracks.map { track in
                 let item = CPListItem(text: track.title, detailText: track.subtitle)
@@ -158,41 +224,12 @@ enum RootTemplateBuilder {
         )
     }
 
-    private static func makePlaylistsTemplate(
-        playlists: [CarPlayPlaylistSnapshot],
-        actions: Actions
-    ) -> CPListTemplate {
-        let items = playlists.isEmpty
-            ? [placeholderItem(text: "No playlists available yet.")]
-            : playlists.map { playlist in
-                let item = CPListItem(text: playlist.title, detailText: playlist.subtitle)
-                item.handler = { _, completion in
-                    actions.onPlaylistSelected(playlist)
-                    let detailTemplate = makePlaylistTrackTemplate(
-                        title: playlist.title,
-                        playlist: playlist,
-                        actions: actions
-                    )
-                    actions.pushTemplate(detailTemplate)
-                    completion()
-                }
-                return item
-            }
-
-        return makeListTemplate(
-            title: "Playlists",
-            tabTitle: "Playlists",
-            tabImageName: "music.note",
-            items: items
-        )
-    }
-
     private static func makePlaylistTrackTemplate(
         title: String,
         playlist: CarPlayPlaylistSnapshot,
         actions: Actions
     ) -> CPListTemplate {
-        let items = playlist.tracks.isEmpty
+        let items: [CPListItem] = playlist.tracks.isEmpty
             ? [placeholderItem(text: "No tracks in this playlist.")]
             : playlist.tracks.map { track in
                 let item = CPListItem(text: track.title, detailText: track.subtitle)
