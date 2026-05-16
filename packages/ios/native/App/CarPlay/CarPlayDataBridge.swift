@@ -56,10 +56,17 @@ final class CarPlayDataBridge {
     private weak var interfaceController: CPInterfaceController?
     private var eventSink: ((String, [String: Any]) -> Void)?
 
+    // Snapshot state — written by the JS sync calls, read by template builders
     private(set) var favorites: [CarPlayTrackSnapshot] = []
     private(set) var libraryBuckets: [CarPlayLibraryBucketSnapshot] = []
     private(set) var playlists: [CarPlayPlaylistSnapshot] = []
     private(set) var nowPlaying: CarPlayNowPlayingSnapshot?
+
+    // Root templates — created once in attachInterfaceController, mutated in-place via updateSections
+    private var favoritesTemplate: CPListTemplate?
+    private var libraryTemplate: CPListTemplate?
+    private var playlistsTemplate: CPListTemplate?
+    private var rootActions: RootTemplateBuilder.Actions?
 
     func setEventSink(_ sink: @escaping (String, [String: Any]) -> Void) {
         eventSink = sink
@@ -68,7 +75,25 @@ final class CarPlayDataBridge {
     func attachInterfaceController(_ controller: CPInterfaceController) {
         NSLog("[CarPlay] attach controller")
         interfaceController = controller
-        refreshRootTemplate(animated: false)
+
+        let actions = makeActions()
+        rootActions = actions
+
+        let root = RootTemplateBuilder.buildRootTemplate(
+            state: CarPlayTemplateState(
+                favorites: favorites,
+                libraryBuckets: libraryBuckets,
+                playlists: playlists,
+                nowPlaying: nowPlaying
+            ),
+            actions: actions
+        )
+        favoritesTemplate = root.favorites
+        libraryTemplate = root.library
+        playlistsTemplate = root.playlists
+
+        controller.setRootTemplate(root.tabBar, animated: false, completion: nil)
+        NSLog("[CarPlay] setRoot once favs=%d buckets=%d playlists=%d", favorites.count, libraryBuckets.count, playlists.count)
         NSLog("[CarPlay] initial empty root rendered")
         eventSink?("carPlayConnected", [:])
         NSLog("[CarPlay] sent carPlayConnected eventSink=%@", eventSink == nil ? "nil" : "set")
@@ -78,6 +103,10 @@ final class CarPlayDataBridge {
         NSLog("[CarPlay] detach controller")
         if interfaceController === controller {
             interfaceController = nil
+            favoritesTemplate = nil
+            libraryTemplate = nil
+            playlistsTemplate = nil
+            rootActions = nil
         }
     }
 
@@ -86,7 +115,7 @@ final class CarPlayDataBridge {
         let data = Data(json.utf8)
         libraryBuckets = try JSONDecoder().decode([CarPlayLibraryBucketSnapshot].self, from: data)
         NSLog("[CarPlay] updateLibrary decoded buckets=%d", libraryBuckets.count)
-        refreshRootTemplate()
+        updateLibraryTemplate()
     }
 
     func updateFavorites(from json: String) throws {
@@ -94,7 +123,7 @@ final class CarPlayDataBridge {
         let data = Data(json.utf8)
         favorites = try JSONDecoder().decode([CarPlayTrackSnapshot].self, from: data)
         NSLog("[CarPlay] updateFavorites decoded count=%d", favorites.count)
-        refreshRootTemplate()
+        updateFavoritesTemplate()
     }
 
     func updatePlaylists(from json: String) throws {
@@ -102,7 +131,7 @@ final class CarPlayDataBridge {
         let data = Data(json.utf8)
         playlists = try JSONDecoder().decode([CarPlayPlaylistSnapshot].self, from: data)
         NSLog("[CarPlay] updatePlaylists decoded count=%d", playlists.count)
-        refreshRootTemplate()
+        updatePlaylistsTemplate()
     }
 
     func updateNowPlaying(from json: String?) throws {
@@ -123,20 +152,19 @@ final class CarPlayDataBridge {
         libraryBuckets = []
         playlists = []
         nowPlaying = nil
-        refreshRootTemplate()
+        updateFavoritesTemplate()
+        updateLibraryTemplate()
+        updatePlaylistsTemplate()
     }
 
     func showNowPlaying() {
         interfaceController?.pushTemplate(CPNowPlayingTemplate.shared, animated: true, completion: nil)
     }
 
-    private func refreshRootTemplate(animated: Bool = true) {
-        guard let controller = interfaceController else {
-            NSLog("[CarPlay] refreshRoot skipped: no controller")
-            return
-        }
+    // MARK: - Private
 
-        let actions = RootTemplateBuilder.Actions(
+    private func makeActions() -> RootTemplateBuilder.Actions {
+        RootTemplateBuilder.Actions(
             pushTemplate: { [weak self] template in
                 self?.interfaceController?.pushTemplate(template, animated: true, completion: nil)
             },
@@ -180,18 +208,36 @@ final class CarPlayDataBridge {
                 ])
             }
         )
+    }
 
-        let root = RootTemplateBuilder.buildRootTemplate(
-            state: CarPlayTemplateState(
-                favorites: favorites,
-                libraryBuckets: libraryBuckets,
-                playlists: playlists,
-                nowPlaying: nowPlaying
-            ),
-            actions: actions
-        )
-        controller.setRootTemplate(root, animated: animated, completion: nil)
-        NSLog("[CarPlay] setRoot favs=%d buckets=%d playlists=%d", favorites.count, libraryBuckets.count, playlists.count)
+    private func updateFavoritesTemplate() {
+        guard let template = favoritesTemplate, let actions = rootActions else {
+            NSLog("[CarPlay] updateFavoritesTemplate skipped: no template")
+            return
+        }
+        let sections = RootTemplateBuilder.makeFavoritesSections(favorites: favorites, actions: actions)
+        template.updateSections(sections)
+        NSLog("[CarPlay] updateSections favorites count=%d", favorites.count)
+    }
+
+    private func updateLibraryTemplate() {
+        guard let template = libraryTemplate, let actions = rootActions else {
+            NSLog("[CarPlay] updateLibraryTemplate skipped: no template")
+            return
+        }
+        let sections = RootTemplateBuilder.makeLibrarySections(buckets: libraryBuckets, actions: actions)
+        template.updateSections(sections)
+        NSLog("[CarPlay] updateSections library buckets=%d", libraryBuckets.count)
+    }
+
+    private func updatePlaylistsTemplate() {
+        guard let template = playlistsTemplate, let actions = rootActions else {
+            NSLog("[CarPlay] updatePlaylistsTemplate skipped: no template")
+            return
+        }
+        let sections = RootTemplateBuilder.makePlaylistsSections(playlists: playlists, actions: actions)
+        template.updateSections(sections)
+        NSLog("[CarPlay] updateSections playlists count=%d", playlists.count)
     }
 
     private func emitLibrarySelection(
