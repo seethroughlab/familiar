@@ -11,6 +11,7 @@ export type EngineEvent =
   | { type: 'error'; message: string; code?: 'offline-unavailable' | 'network-unreachable' | 'media-decode' | 'state' | 'resource' | 'unknown' }
   | { type: 'playing'; trackId: string }
   | { type: 'waiting' }
+  | { type: 'canplay' }
   | { type: 'timeUpdate'; currentTime: number; duration: number }
   | { type: 'remotePlay' }
   | { type: 'remotePause' }

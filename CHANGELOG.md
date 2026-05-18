@@ -23,6 +23,8 @@ Fifth alpha — focused on reliability fixes across PWA playback, iOS audio, and
 ### Fixed
 
 - **Continuous playback (PWA)** — a transient buffering stall near the end of a track could silently block queue advancement, leaving the player silent indefinitely; playback now always advances when a track ends regardless of prior buffering state
+- **Stall recovery (PWA)** — on a slow connection the audio element can buffer and stall mid-track; the browser's `canplay` event fires when data is ready but does not guarantee auto-resume; the player now calls `play()` explicitly on recovery so the track resumes without user intervention
+- **Continuous playback (PWA) regression guard** — added integration tests asserting that `engine.load()` and `engine.play()` are invoked after `ended`, that a `waiting` stall on the current track does not suppress queue advancement, and that stall-recovery via `canplay` is correctly gated on `isPlaying` state
 - **macOS Docker setup: music library not mounting** — `MUSIC_LIBRARY_PATH=~/Music` in `.env` was not expanded by Docker Compose, causing the container's `/music` to be empty; `start.sh` now exports the expanded absolute path so Docker picks it up correctly
 - **macOS Docker setup: blank `MUSIC_LIBRARY_PATH`** now shows a clear warning instead of falling through silently
 - **iOS now-playing / lock-screen metadata** — `playing` event now emits on the first non-zero `timeUpdate` per track, fixing stale metadata on the lock screen and in CarPlay

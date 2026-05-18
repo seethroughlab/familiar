@@ -367,6 +367,17 @@ export function useAudioEngine() {
           setIsLoadingAudio(true);
           break;
 
+        case 'canplay': {
+          if (usePlayerStore.getState().isPlaying) {
+            engine.play().catch(err => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                log.warn('Stall recovery play() failed', err);
+              }
+            });
+          }
+          break;
+        }
+
         case 'timeUpdate': {
           setCurrentTime(event.currentTime);
           if (event.duration > 0) setDuration(event.duration);

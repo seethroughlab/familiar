@@ -21,6 +21,9 @@ function renderHook<T>(callback: () => T) {
 type EngineEvent =
   | { type: 'ended' }
   | { type: 'error'; message: string; code?: string }
+  | { type: 'playing'; trackId: string }
+  | { type: 'waiting' }
+  | { type: 'canplay' }
   | { type: 'remotePrevious'; nativeAction?: 'restart' }
   | { type: 'timeUpdate'; currentTime: number; duration: number };
 
@@ -58,7 +61,7 @@ const mockEngine = vi.hoisted(() => {
     setNormalizationGain: vi.fn(),
     getCurrentTime: vi.fn(() => 0),
     getDuration: vi.fn(() => 120),
-    getLoadedTrackId: vi.fn(() => null),
+    getLoadedTrackId: vi.fn((): string | null => null),
     on: vi.fn((handler: (event: EngineEvent) => void) => {
       handlers.add(handler);
       return () => handlers.delete(handler);
@@ -195,6 +198,8 @@ describe('useAudioEngine + playerStore integration parity', () => {
   beforeEach(() => {
     mockConnectivityStore.__reset();
     mockEngine.__reset();
+    // mockClear() doesn't reset mockReturnValue — explicitly restore the null default
+    mockEngine.getLoadedTrackId.mockReturnValue(null);
     mockTracksApi.getStreamUrl.mockClear();
     mockTracksApi.getArtworkUrl.mockClear();
     mockTracksApi.getAlbumGain.mockClear();
@@ -230,10 +235,12 @@ describe('useAudioEngine + playerStore integration parity', () => {
     const t2 = makeTrack('2');
     const t3 = makeTrack('3');
     usePlayerStore.getState().setQueue([t1, t2, t3], 0);
+    // Simulate real engine state: track '1' is loaded when ended fires
+    mockEngine.getLoadedTrackId.mockReturnValue('1');
 
     renderHook(() => useAudioEngine());
 
-    usePlayerStore.setState({ isLoadingAudio: false });
+    usePlayerStore.setState({ isLoadingAudio: false, isPlaying: true });
     await act(async () => {
       mockEngine.__emit({ type: 'ended' });
     });
@@ -241,6 +248,8 @@ describe('useAudioEngine + playerStore integration parity', () => {
     const state = usePlayerStore.getState();
     expect(state.queueIndex).toBe(1);
     expect(state.currentTrack?.id).toBe('2');
+    expect(mockEngine.load).toHaveBeenCalledWith('2', expect.stringContaining('2'), expect.anything());
+    expect(mockEngine.play).toHaveBeenCalled();
   });
 
   it('applies previous-button restart semantics from native remotePrevious restart', async () => {
@@ -475,5 +484,153 @@ describe('useAudioEngine + playerStore integration parity', () => {
     const state = usePlayerStore.getState();
     expect(state.currentTrack?.id).toBe('2');
     expect(mockEngine.resolveTrackUrl).toHaveBeenCalledWith('2');
+  });
+});
+
+describe('continuous play reliability', () => {
+  beforeEach(() => {
+    mockConnectivityStore.__reset();
+    mockEngine.__reset();
+    // mockClear() doesn't reset mockReturnValue — explicitly restore the null default
+    mockEngine.getLoadedTrackId.mockReturnValue(null);
+    mockTracksApi.getStreamUrl.mockClear();
+    mockTracksApi.getAlbumGain.mockClear();
+    mockTracksApi.reportPlaybackError.mockClear();
+    mockEngine.resolveTrackUrl.mockImplementation(async (trackId: string) => ({
+      url: `/api/v1/tracks/${trackId}/stream`,
+      isOffline: false,
+    }));
+    usePlayerStore.setState({
+      currentTrack: null,
+      isPlaying: false,
+      currentTime: 0,
+      duration: 0,
+      volume: 1,
+      shuffle: false,
+      repeat: 'off',
+      consume: false,
+      queue: [],
+      queueIndex: -1,
+      history: [],
+      shuffleOrder: [],
+      shuffleIndex: -1,
+      lazyQueueIds: null,
+      lazyQueueIndex: -1,
+      queueSource: null,
+      crossfadeState: 'idle',
+      nextTrackPreloaded: false,
+      isLoadingAudio: false,
+      isHydrated: true,
+      isQueueHydrating: false,
+    });
+  });
+
+  it('calls engine.load and engine.play for the next track after ended', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    usePlayerStore.getState().setQueue([t1, t2], 0);
+    usePlayerStore.setState({ isPlaying: true });
+    // Realistic engine state: track '1' is currently loaded
+    mockEngine.getLoadedTrackId.mockReturnValue('1');
+
+    renderHook(() => useAudioEngine());
+
+    await act(async () => {
+      mockEngine.__emit({ type: 'ended' });
+    });
+
+    expect(usePlayerStore.getState().currentTrack?.id).toBe('2');
+    expect(mockEngine.load).toHaveBeenCalledWith('2', '/api/v1/tracks/2/stream', expect.anything());
+    expect(mockEngine.play).toHaveBeenCalled();
+  });
+
+  it('regression: ended while isLoadingAudio=true (stall on current track) still advances', async () => {
+    // Regression test for the old bug where isLoadingAudio=true (set by a 'waiting' stall)
+    // would suppress playNext(), leaving the player silent after track end.
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    usePlayerStore.getState().setQueue([t1, t2], 0);
+    usePlayerStore.setState({ isPlaying: true, isLoadingAudio: true });
+    // IDs still match — the stall is on the current track, not a new one
+    mockEngine.getLoadedTrackId.mockReturnValue('1');
+
+    renderHook(() => useAudioEngine());
+
+    await act(async () => {
+      mockEngine.__emit({ type: 'ended' });
+    });
+
+    const state = usePlayerStore.getState();
+    expect(state.queueIndex).toBe(1);
+    expect(state.currentTrack?.id).toBe('2');
+    expect(mockEngine.play).toHaveBeenCalled();
+  });
+
+  it('suppresses ended when engine has a newer track loaded (double-advance guard)', async () => {
+    const t1 = makeTrack('1');
+    const t2 = makeTrack('2');
+    const t3 = makeTrack('3');
+    usePlayerStore.getState().setQueue([t1, t2, t3], 1);
+    usePlayerStore.setState({ isPlaying: true });
+    // Engine already moved to track '3' (queue was advanced externally, e.g. user pressed next)
+    mockEngine.getLoadedTrackId.mockReturnValue('3');
+
+    renderHook(() => useAudioEngine());
+    // Flush initial effects (load effect may call play() since IDs mismatch)
+    await act(async () => {});
+
+    const playCallsBefore = mockEngine.play.mock.calls.length;
+
+    await act(async () => {
+      mockEngine.__emit({ type: 'ended' });
+    });
+
+    // Store should NOT have advanced again
+    expect(usePlayerStore.getState().queueIndex).toBe(1);
+    expect(mockEngine.play.mock.calls.length).toBe(playCallsBefore);
+  });
+
+  it('stall recovery: canplay after waiting resumes playback when isPlaying=true', async () => {
+    const t1 = makeTrack('1');
+    usePlayerStore.getState().setQueue([t1], 0);
+    usePlayerStore.setState({ isPlaying: true });
+    mockEngine.getLoadedTrackId.mockReturnValue('1');
+
+    renderHook(() => useAudioEngine());
+    // Flush all initial effects before measuring (play/pause effect may have called play())
+    await act(async () => {});
+
+    await act(async () => {
+      mockEngine.__emit({ type: 'waiting' });
+    });
+    expect(usePlayerStore.getState().isLoadingAudio).toBe(true);
+
+    // Record baseline, then verify canplay causes at least one new play() call
+    const playCountBefore = mockEngine.play.mock.calls.length;
+    await act(async () => {
+      mockEngine.__emit({ type: 'canplay' });
+    });
+    expect(mockEngine.play.mock.calls.length).toBeGreaterThan(playCountBefore);
+
+    await act(async () => {
+      mockEngine.__emit({ type: 'playing', trackId: '1' });
+    });
+    expect(usePlayerStore.getState().isLoadingAudio).toBe(false);
+  });
+
+  it('stall recovery: canplay does not resume when isPlaying=false (user paused during stall)', async () => {
+    const t1 = makeTrack('1');
+    usePlayerStore.getState().setQueue([t1], 0);
+    usePlayerStore.setState({ isPlaying: false });
+
+    renderHook(() => useAudioEngine());
+    await act(async () => {}); // flush initial effects
+
+    // With isPlaying=false, the hook should not call play() for any reason
+    mockEngine.play.mockClear();
+    await act(async () => {
+      mockEngine.__emit({ type: 'canplay' });
+    });
+    expect(mockEngine.play).not.toHaveBeenCalled();
   });
 });
