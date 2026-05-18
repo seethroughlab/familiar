@@ -42,12 +42,21 @@ fi
 # MUSIC_LIBRARY_PATH set?
 if grep -q '^MUSIC_LIBRARY_PATH=' .env; then
     MUSIC_PATH=$(grep '^MUSIC_LIBRARY_PATH=' .env | head -1 | cut -d= -f2-)
-    # Expand tilde
-    MUSIC_PATH="${MUSIC_PATH/#\~/$HOME}"
-    if [ ! -d "$MUSIC_PATH" ]; then
-        echo -e "${YELLOW}Warning:${NC} MUSIC_LIBRARY_PATH=$MUSIC_PATH does not exist."
-        echo "Familiar will start, but won't find any music until the path is corrected in .env"
+    if [ -z "$MUSIC_PATH" ]; then
+        echo -e "${YELLOW}Warning:${NC} MUSIC_LIBRARY_PATH is not set in .env"
+        echo "Set it to your music folder path, e.g.:"
+        echo "  MUSIC_LIBRARY_PATH=~/Music"
         echo ""
+    else
+        # Expand tilde — Docker Compose does not expand ~ from .env variable substitution
+        MUSIC_PATH="${MUSIC_PATH/#\~/$HOME}"
+        if [ ! -d "$MUSIC_PATH" ]; then
+            echo -e "${YELLOW}Warning:${NC} MUSIC_LIBRARY_PATH=$MUSIC_PATH does not exist."
+            echo "Familiar will start, but won't find any music until the path is corrected in .env"
+            echo ""
+        fi
+        # Export so Docker Compose picks up the absolute path instead of the raw ~ value
+        export MUSIC_LIBRARY_PATH="$MUSIC_PATH"
     fi
 fi
 
