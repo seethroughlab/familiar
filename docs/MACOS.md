@@ -120,12 +120,13 @@ The Docker image is built for both `linux/amd64` and `linux/arm64`. Docker Deskt
 
 ## Updating
 
-Pull the latest image and restart:
+The easiest way is to double-click **Update Familiar.command** in the `docker` folder — it opens Terminal, pulls the latest image, refreshes the scripts, and restarts Familiar automatically.
+
+Or from Terminal:
 
 ```bash
-docker pull ghcr.io/seethroughlab/familiar:latest
-./stop.sh
-./start.sh
+cd ~/familiar/docker
+./update.sh
 ```
 
 Database migrations run automatically on startup.
