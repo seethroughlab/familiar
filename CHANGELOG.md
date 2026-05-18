@@ -5,7 +5,7 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0-alpha5] - 2026-05-18
 
 Fifth alpha — focused on reliability fixes across PWA playback, iOS audio, and first-run Docker setup for macOS, plus Opus format support and listening session simplification.
 
@@ -251,5 +251,8 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - Audio effects not available on iOS (require Web Audio routing which breaks background playback)
 
+[0.1.0-alpha5]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha5
+[0.1.0-alpha4]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha4
+[0.1.0-alpha3]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha3
 [0.1.0-alpha2]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha2
 [0.1.0-alpha1]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha1
