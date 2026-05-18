@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fifth alpha — focused on reliability fixes across PWA playback, iOS audio, and first-run Docker setup for macOS, plus Opus format support and listening session simplification.
+
+### Added
+
+- **Opus audio format support** — `.opus` files are now recognized, scanned, and playable
+
+### Changed
+
+- **Listening sessions simplified** — 2D spatial room and FamiliarPicker avatar chooser removed; per-user reactions retained; session kick corrected
+- **AI playlist naming** — creative naming dropped; playlists now use the user's original request as the name directly
+- **iOS lock screen controls** — 15-second skip commands removed from the lock screen control set
+- **Dynamic search placeholder** in the library browser now reflects the active tab (Artists, Albums, Tracks, etc.)
+
+### Fixed
+
+- **Continuous playback (PWA)** — a transient buffering stall near the end of a track could silently block queue advancement, leaving the player silent indefinitely; playback now always advances when a track ends regardless of prior buffering state
+- **macOS Docker setup: music library not mounting** — `MUSIC_LIBRARY_PATH=~/Music` in `.env` was not expanded by Docker Compose, causing the container's `/music` to be empty; `start.sh` now exports the expanded absolute path so Docker picks it up correctly
+- **macOS Docker setup: blank `MUSIC_LIBRARY_PATH`** now shows a clear warning instead of falling through silently
+- **iOS now-playing / lock-screen metadata** — `playing` event now emits on the first non-zero `timeUpdate` per track, fixing stale metadata on the lock screen and in CarPlay
+- **iOS audio engine hardening** — audio interruptions (phone calls, Siri) handled correctly in `NativeAudioEngine`; temp files cleaned up via RAII wrapper; audio analysis tap race condition fixed
+- **Full Player: music video layout** — incorrect clip offset, overlapping search view, and stray thumbnail element removed
+- **Artist alias race condition** — `ON CONFLICT DO NOTHING` prevents a crash when registering artist aliases concurrently during library scan
+- **AI artist playlists** — fixed playlist generation for artist-scoped queries
+
+### Infrastructure
+
+- `start.sh` script version bumped; users on older scripts will be prompted to re-download
+- Beginner macOS install guide updated: drag-from-Finder tip promoted to primary method, "no tracks after scan" troubleshooting entry added
+
 ## [0.1.0-alpha4] - 2026-05-03
 
 Fourth alpha — headline changes are CarPlay support, real-time listening sessions with a spatial 2D Room and beat-synced avatars, mixtape MP3 export with crossfades, and the canonical-artists model rolled out across the library and discovery surfaces.
