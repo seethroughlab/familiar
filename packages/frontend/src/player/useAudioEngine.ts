@@ -263,12 +263,17 @@ export function useAudioEngine() {
         case 'ended': {
           if (queueTransitionRef.current) return;
           const state = usePlayerStore.getState();
-          // Ignore stale/stray ended events while a newly selected track is still loading.
-          if (state.isLoadingAudio) {
-            log.debug('ended ignored while loading', { trackId: state.currentTrack?.id });
+          // Suppress only if the queue was already advanced externally (e.g. user pressed
+          // next while the track was ending). Do NOT suppress when isLoadingAudio=true was
+          // set by a transient 'waiting' stall on the current track — that scenario would
+          // silently block playNext() and leave the player stuck in silence.
+          const loadedId = engine.getLoadedTrackId();
+          const currentId = state.currentTrack?.id;
+          if (loadedId && currentId && loadedId !== currentId) {
+            log.debug('ended ignored: queue already advanced', { currentId, loadedId });
             return;
           }
-          log.debug('ended event', { trackId: state.currentTrack?.id });
+          log.debug('ended event', { trackId: currentId });
           playNext();
           break;
         }
