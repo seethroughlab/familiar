@@ -244,20 +244,14 @@ You can also just quit Docker Desktop, which stops everything.
 
 ## Updating Familiar
 
-When a new version is available, open Terminal and type these commands one at a time:
+When a new version is available, open Terminal and type:
 
 ```
 cd ~/familiar/docker
-docker pull ghcr.io/seethroughlab/familiar:latest
-./stop.sh
-./start.sh
+./update.sh
 ```
 
-The `docker pull` command downloads the latest version (the long address is just Familiar's location on the internet — you don't need to remember it, just copy and paste).
-
-Your music library, settings, and API keys are preserved across updates.
-
-If an update requires new scripts (we'll let you know), download the latest ZIP from **https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip**, unzip it, and replace your `~/familiar` folder. Your data is stored inside Docker, not in this folder, so nothing is lost.
+That's all. `update.sh` downloads the new version, refreshes the setup scripts, and restarts Familiar automatically. Your music library, settings, and API keys are never touched.
 
 ---
 

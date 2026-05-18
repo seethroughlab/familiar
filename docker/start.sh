@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 
 # Bump this when scripts or compose files change in a way that
 # requires users to re-download. The value should match the release tag.
-SCRIPT_VERSION="2026.05.18"
+SCRIPT_VERSION="0.1.0-alpha5"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
