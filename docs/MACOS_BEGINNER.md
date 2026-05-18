@@ -244,14 +244,16 @@ You can also just quit Docker Desktop, which stops everything.
 
 ## Updating Familiar
 
-When a new version is available, open Terminal and type:
+When a new version is available, open your `familiar/docker` folder in Finder and double-click **Update Familiar.command**. A Terminal window will open, download the new version, and restart Familiar automatically.
+
+Alternatively, from Terminal:
 
 ```
 cd ~/familiar/docker
 ./update.sh
 ```
 
-That's all. `update.sh` downloads the new version, refreshes the setup scripts, and restarts Familiar automatically. Your music library, settings, and API keys are never touched.
+Either way, your music library, settings, and API keys are never touched.
 
 ---
 
