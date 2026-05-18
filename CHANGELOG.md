@@ -35,8 +35,12 @@ Fifth alpha — focused on reliability fixes across PWA playback, iOS audio, and
 
 ### Infrastructure
 
-- `start.sh` script version bumped; users on older scripts will be prompted to re-download
-- Beginner macOS install guide updated: drag-from-Finder tip promoted to primary method, "no tracks after scan" troubleshooting entry added
+- **`update.sh`** — one-command update script: pulls the latest Docker image, refreshes all scripts from the master ZIP (preserving `.env`), and restarts Familiar
+- **`Update Familiar.command`** — double-clickable macOS wrapper for `update.sh`; no Terminal needed for future updates
+- `MACOS.md` and `INSTALLATION.md` updated to reference the new update scripts
+- `start.sh` script version bumped to semver format to match the Docker image version, eliminating a spurious "scripts outdated" warning that fired on every run
+- Beginner macOS install guide updated: drag-from-Finder tip promoted as primary method, "no tracks after scan" troubleshooting entry added, update instructions simplified to one step
+- CI: pinned pnpm to v10, migrated `onlyBuiltDependencies` config to `pnpm-workspace.yaml`, bumped Node.js to 22
 
 ## [0.1.0-alpha4] - 2026-05-03
 
