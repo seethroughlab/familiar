@@ -26,6 +26,7 @@ import { tracksApi, type LyricLine } from '../../api';
 import { useUIStore } from '../../stores/uiStore';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
 import { EffectsQuickAccess } from './EffectsQuickAccess';
+import { OutputSelector } from '../Player/OutputSelector';
 import { TrackContextMenu } from '../Library/TrackContextMenu';
 import type { ContextMenuState } from '../Library/types';
 import { initialContextMenuState } from '../Library/types';
@@ -253,15 +254,18 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           {areAudioEffectsAvailable() && <EffectsQuickAccess />}
         </div>
 
-        {!isMobile() && !isNativeApp() && (
-          <button
-            onClick={toggleFullscreen}
-            className="p-2 hover:bg-white/10 rounded-full transition-colors"
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          >
-            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          <OutputSelector />
+          {!isMobile() && !isNativeApp() && (
+            <button
+              onClick={toggleFullscreen}
+              className="p-2 hover:bg-white/10 rounded-full transition-colors"
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main content area */}
