@@ -51,6 +51,9 @@ dependencies = [
     "alembic>=1.13.0",
     # System monitoring
     "psutil>=5.9.0",
+    "async-upnp-client>=0.47.0",
+    "pyatv>=0.15.1",
+    "pychromecast>=14.0.10",
 ]
 
 [project.optional-dependencies]

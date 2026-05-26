@@ -5,13 +5,20 @@ from uuid import UUID
 
 from fastapi import APIRouter, status
 from pydantic import BaseModel
+from sqlalchemy import select
 
+from app.api.deps import DbSession
 from app.api.exceptions import NotFoundError, ValidationError
+from app.db.models import Track
 from app.services.outputs import (
+    AirPlayOutput,
     AudioOutput,
     BrowserOutput,
+    ChromecastOutput,
     OutputType,
     SonosOutput,
+    TrackMetadata,
+    UPnPOutput,
     get_output_manager,
 )
 
@@ -19,8 +26,6 @@ router = APIRouter(prefix="/outputs", tags=["outputs"])
 
 
 class OutputResponse(BaseModel):
-    """Audio output response."""
-
     id: str
     name: str
     type: str
@@ -31,8 +36,6 @@ class OutputResponse(BaseModel):
 
 
 class ZoneResponse(BaseModel):
-    """Zone response."""
-
     id: str
     name: str
     outputs: list[OutputResponse]
@@ -41,38 +44,55 @@ class ZoneResponse(BaseModel):
 
 
 class CreateZoneRequest(BaseModel):
-    """Request to create a zone."""
-
     name: str
     output_ids: list[str] | None = None
 
 
 class CreateOutputRequest(BaseModel):
-    """Request to create an output."""
-
     name: str
     type: OutputType
-    # Sonos-specific
+    # Sonos
     speaker_ip: str | None = None
+    # UPnP/DLNA/OpenHome (WiiM, generic)
+    device_url: str | None = None
+    # AirPlay
+    airplay_identifier: str | None = None
+    airplay_host: str | None = None
+    # Chromecast
+    cast_host: str | None = None
+    cast_uuid: str | None = None
 
 
 class PlayRequest(BaseModel):
-    """Request to play to an output or zone."""
-
     stream_url: str
     track_id: str | None = None
 
 
 class VolumeRequest(BaseModel):
-    """Request to set volume."""
-
     volume: int
 
 
 class SeekRequest(BaseModel):
-    """Request to seek."""
-
     position_ms: int
+
+
+async def _build_track_metadata(db: DbSession, track_id: UUID | None) -> TrackMetadata | None:
+    """Look up track and build metadata for network outputs."""
+    if not track_id:
+        return None
+    try:
+        result = await db.execute(select(Track).where(Track.id == track_id))
+        track = result.scalar_one_or_none()
+        if not track:
+            return None
+        return TrackMetadata(
+            title=track.title or "",
+            artist=track.artist or "",
+            album=track.album or "",
+            duration_ms=int((track.duration_seconds or 0) * 1000),
+        )
+    except Exception:
+        return None
 
 
 @router.get("", response_model=list[OutputResponse])
@@ -90,15 +110,49 @@ async def create_output(request: CreateOutputRequest) -> dict[str, Any]:
 
     if request.type == OutputType.BROWSER:
         output = BrowserOutput(name=request.name)
+
     elif request.type == OutputType.SONOS:
         if not request.speaker_ip:
             raise ValidationError("speaker_ip required for Sonos output")
         output = SonosOutput(name=request.name, speaker_ip=request.speaker_ip)
+
+    elif request.type == OutputType.UPNP:
+        if not request.device_url:
+            raise ValidationError("device_url required for UPnP output")
+        output = UPnPOutput(name=request.name, device_url=request.device_url)
+
+    elif request.type == OutputType.AIRPLAY:
+        if not request.airplay_identifier and not request.airplay_host:
+            raise ValidationError("airplay_identifier or airplay_host required for AirPlay output")
+        output = AirPlayOutput(
+            name=request.name,
+            identifier=request.airplay_identifier or "",
+            host=request.airplay_host or "",
+        )
+
+    elif request.type == OutputType.CHROMECAST:
+        if not request.cast_host and not request.cast_uuid:
+            raise ValidationError("cast_host or cast_uuid required for Chromecast output")
+        output = ChromecastOutput(
+            name=request.name,
+            cast_host=request.cast_host or "",
+            cast_uuid=request.cast_uuid or "",
+        )
+
     else:
         raise ValidationError("Unsupported output type", detail=f"Received: {request.type}")
 
     manager.register_output(output)
     return output.to_dict()
+
+
+# Discovery endpoints
+
+@router.get("/discover", response_model=dict[str, list[OutputResponse]])
+async def discover_all_outputs() -> dict[str, list[dict[str, Any]]]:
+    """Discover all output types in parallel (Sonos, UPnP, AirPlay, Chromecast)."""
+    manager = get_output_manager()
+    return await manager.discover_all()
 
 
 @router.get("/discover/sonos", response_model=list[OutputResponse])
@@ -108,6 +162,32 @@ async def discover_sonos() -> list[dict[str, Any]]:
     discovered = manager.discover_sonos()
     return [o.to_dict() for o in discovered]
 
+
+@router.get("/discover/upnp", response_model=list[OutputResponse])
+async def discover_upnp() -> list[dict[str, Any]]:
+    """Discover UPnP/DLNA/OpenHome devices (WiiM, generic DLNA speakers)."""
+    manager = get_output_manager()
+    discovered = await manager.discover_upnp()
+    return [o.to_dict() for o in discovered]
+
+
+@router.get("/discover/airplay", response_model=list[OutputResponse])
+async def discover_airplay() -> list[dict[str, Any]]:
+    """Discover AirPlay devices on the network."""
+    manager = get_output_manager()
+    discovered = await manager.discover_airplay()
+    return [o.to_dict() for o in discovered]
+
+
+@router.get("/discover/chromecast", response_model=list[OutputResponse])
+async def discover_chromecast() -> list[dict[str, Any]]:
+    """Discover Chromecast devices on the network."""
+    manager = get_output_manager()
+    discovered = await manager.discover_chromecast()
+    return [o.to_dict() for o in discovered]
+
+
+# Output control endpoints
 
 @router.get("/{output_id}", response_model=OutputResponse)
 async def get_output(output_id: UUID) -> dict[str, Any]:
@@ -128,11 +208,16 @@ async def delete_output(output_id: UUID) -> None:
 
 
 @router.post("/{output_id}/play")
-async def play_to_output(output_id: UUID, request: PlayRequest) -> dict[str, str]:
+async def play_to_output(
+    output_id: UUID,
+    request: PlayRequest,
+    db: DbSession,
+) -> dict[str, str]:
     """Play to a specific output."""
     manager = get_output_manager()
     track_id = UUID(request.track_id) if request.track_id else None
-    success = await manager.play_to_output(output_id, request.stream_url, track_id)
+    metadata = await _build_track_metadata(db, track_id)
+    success = await manager.play_to_output(output_id, request.stream_url, track_id, metadata)
     if not success:
         raise ValidationError("Failed to start playback")
     return {"status": "playing"}
@@ -195,7 +280,6 @@ async def set_output_volume(output_id: UUID, request: VolumeRequest) -> dict[str
 
 # Zone endpoints
 
-
 @router.get("/zones", response_model=list[ZoneResponse])
 async def list_zones() -> list[dict[str, Any]]:
     """List all zones."""
@@ -231,11 +315,16 @@ async def delete_zone(zone_id: UUID) -> None:
 
 
 @router.post("/zones/{zone_id}/play")
-async def play_to_zone(zone_id: UUID, request: PlayRequest) -> dict[str, Any]:
+async def play_to_zone(
+    zone_id: UUID,
+    request: PlayRequest,
+    db: DbSession,
+) -> dict[str, Any]:
     """Play to all outputs in a zone."""
     manager = get_output_manager()
     track_id = UUID(request.track_id) if request.track_id else None
-    results = await manager.play_to_zone(zone_id, request.stream_url, track_id)
+    metadata = await _build_track_metadata(db, track_id)
+    results = await manager.play_to_zone(zone_id, request.stream_url, track_id, metadata)
     if not results:
         raise NotFoundError("Zone not found")
     return {"status": "playing", "results": {str(k): v for k, v in results.items()}}
