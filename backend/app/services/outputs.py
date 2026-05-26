@@ -1097,7 +1097,7 @@ class OutputManager:
 
             pending: list[dict] = []
 
-            async def on_ssdp_device(headers: dict) -> None:
+            async def on_ssdp_device(headers: Any) -> None:
                 location = headers.get("LOCATION") or headers.get("location", "")
                 # Skip non-audio and already-seen devices
                 st = headers.get("ST") or headers.get("st", "")
@@ -1181,7 +1181,7 @@ class OutputManager:
                     continue
                 output = AirPlayOutput(
                     name=config.name or "AirPlay Device",
-                    identifier=identifier,
+                    identifier=identifier or "",
                     host=str(config.address),
                     _config=config,
                 )
