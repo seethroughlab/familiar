@@ -59,6 +59,9 @@ WORKDIR /app
 # =============================================================================
 FROM python-base AS python-deps
 
+# g++ is needed to compile miniaudio (a pyatv dependency) which has no aarch64 wheel
+RUN apt-get update && apt-get install -y --no-install-recommends g++ && rm -rf /var/lib/apt/lists/*
+
 # Copy only dependency files first for caching
 COPY backend/pyproject.toml ./
 COPY backend/uv.lock ./
