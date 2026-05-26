@@ -1085,9 +1085,9 @@ class OutputManager:
         """Discover UPnP/DLNA/OpenHome devices via SSDP."""
         discovered = []
         try:
-            from async_upnp_client.search import async_search
             from async_upnp_client.aiohttp import AiohttpRequester
             from async_upnp_client.client_factory import UpnpFactory
+            from async_upnp_client.search import async_search
 
             seen_locations: set[str] = set()
             # Already registered locations
