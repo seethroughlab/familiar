@@ -5,6 +5,22 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha6] - 2026-05-26
+
+Sixth alpha — adds network audio output routing so playback can be sent to Sonos, WiiM/UPnP, AirPlay, and Chromecast devices directly from the player bar or full player.
+
+### Added
+
+- **Network audio output routing** — new "Play To" selector in the player bar and full player lets you route audio to Sonos, WiiM/UPnP (generic DLNA/OpenHome), AirPlay, or Chromecast devices. "Scan for devices" discovers available outputs on the local network. Switching away from a network device stops it automatically; switching to one while a track is playing starts it immediately
+- **UPnP/DLNA/OpenHome output** — covers WiiM streamers and other generic UPnP renderers via `async-upnp-client`; DIDL-Lite metadata (title, artist, album, artwork, duration) sent with each play command
+- **AirPlay output** — native AirPlay 1/2 support via `pyatv`
+- **Chromecast output** — cast to any Google Cast device via `pychromecast`
+
+### Infrastructure
+
+- iOS build number bumped to 11
+- Deploy script SSH user changed from `root` to `jeff`
+
 ## [0.1.0-alpha5] - 2026-05-18
 
 Fifth alpha — focused on reliability fixes across PWA playback, iOS audio, and first-run Docker setup for macOS, plus Opus format support and listening session simplification.
@@ -257,6 +273,7 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - Audio effects not available on iOS (require Web Audio routing which breaks background playback)
 
+[0.1.0-alpha6]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha6
 [0.1.0-alpha5]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha5
 [0.1.0-alpha4]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha4
 [0.1.0-alpha3]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha3
