@@ -858,7 +858,20 @@ export function TrackListBrowser({
           className="grid gap-4 px-4 py-2 text-sm text-zinc-400 border-b border-zinc-800 flex-shrink-0"
           style={{ gridTemplateColumns: gridColumns }}
         >
-          <div>#</div>
+          <div
+            onClick={() => toggleSort('trackNum')}
+            className={`cursor-pointer hover:text-white flex items-center gap-1 ${
+              sortBy === 'trackNum' ? 'text-white' : ''
+            }`}
+            title="Click to sort by track number"
+          >
+            <span>#</span>
+            {sortBy === 'trackNum' && (
+              sortOrder === 'asc'
+                ? <ChevronUp className="w-3 h-3 flex-shrink-0" />
+                : <ChevronDown className="w-3 h-3 flex-shrink-0" />
+            )}
+          </div>
           <div
             onClick={() => toggleSort('title')}
             className={`cursor-pointer hover:text-white flex items-center gap-1 ${
