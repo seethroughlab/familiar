@@ -380,7 +380,7 @@ export function AlbumDetail({
   }
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6 p-4 pb-24">
       {/* Header - stacks vertically on mobile */}
       <div className="space-y-4">
         {/* Back button */}

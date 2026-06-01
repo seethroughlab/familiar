@@ -389,7 +389,7 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
   const bioText = stripHtml(showFullBio ? artist.bio_content : artist.bio_summary);
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6 p-4 pb-24">
       {/* Header - stacks vertically on mobile */}
       <div className="space-y-4">
         {/* Back button row */}
