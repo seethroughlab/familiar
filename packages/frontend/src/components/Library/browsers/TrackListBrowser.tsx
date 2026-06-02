@@ -852,7 +852,10 @@ export function TrackListBrowser({
       </div>
 
       {/* Desktop view - virtualized grid layout (visible at md and above) */}
-      <div className="hidden md:flex md:flex-col md:h-full">
+      {/* flex-1 + min-h-0 (not h-full) so the scroll area takes the space *remaining*
+          after the album header / toolbar siblings — h-full ignores them and pushes
+          the list's bottom (and footer) behind the fixed player bar. */}
+      <div className="hidden md:flex md:flex-col md:flex-1 md:min-h-0">
         {/* Header - fixed outside scroll area */}
         <div
           className="grid gap-4 px-4 py-2 text-sm text-zinc-400 border-b border-zinc-800 flex-shrink-0"
