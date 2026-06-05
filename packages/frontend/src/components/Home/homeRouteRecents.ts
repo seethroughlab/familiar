@@ -27,12 +27,9 @@ export function classifyRecentDestination(pathname: string): Omit<RecentDestinat
     '/library/tracks': 'Tracks',
     '/library/artists': 'Artists',
     '/library/albums': 'Albums',
-    '/library/mood-grid': 'Mood Grid',
     '/library/music-map': 'Music Map',
-    '/library/explorer': '3D Explorer',
     '/library/proposed-changes': 'Changes',
     '/library/pending-review': 'Review',
-    '/library/spotify': 'Spotify Library',
   };
   if (browserLabels[pathname]) {
     return { route: pathname, label: browserLabels[pathname], type: 'browser' };

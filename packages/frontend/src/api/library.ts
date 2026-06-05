@@ -224,6 +224,8 @@ export interface MapNode {
   y: number;
   track_count: number;
   first_track_id: string;
+  // Per-artist mean of each lens feature (energy/valence/etc.), 0-1 scaled.
+  features?: Record<string, number>;
 }
 
 export interface MapEdge {

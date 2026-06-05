@@ -226,6 +226,9 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   }
 
   const artworkUrl = tracksApi.getArtworkUrl(currentTrack.id);
+  // With a visualizer behind it, lay the now-playing info out like the transport
+  // bar (art on the left, title/artist to the right) instead of centered.
+  const showInlineArt = isVisualizerAvailable() && !isMusicVideo;
 
   return (
     <div
@@ -295,60 +298,58 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           />
         )}
 
-        {/* Album art thumbnail - shown over visualizers but not music video (it manages its own UI) */}
-        {isVisualizerAvailable() && !isMusicVideo && !(isFullscreen && !controlsVisible) && (
-          <div className="absolute bottom-80 left-1/2 -translate-x-1/2 z-20">
-            {imageError ? (
-              <div className="w-24 h-24 bg-zinc-800 rounded-lg flex items-center justify-center shadow-2xl">
-                <Music className="w-12 h-12 text-zinc-600" />
-              </div>
-            ) : (
-              <img
-                src={artworkUrl}
-                alt="Album art"
-                className="w-24 h-24 rounded-lg shadow-2xl object-cover"
-                onError={() => setImageError(true)}
-              />
-            )}
-          </div>
-        )}
       </div>
 
       {/* Bottom controls - includes safe area padding for home indicator */}
       <div className={`absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black via-black/95 to-transparent p-4 pt-8 sm:p-6 sm:pt-16 transition-opacity duration-300 ${isFullscreen && !controlsVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'}`} style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))' }}>
         {/* Track info - right-click for context menu */}
         <div
-          className="text-center mb-3 sm:mb-6"
+          className={`mb-3 sm:mb-6 ${showInlineArt ? 'flex items-center gap-3' : 'text-center'}`}
           onContextMenu={handleContextMenu}
         >
-          <div className="flex items-center justify-center gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
-            <button
-              onClick={handleContextMenu}
-              className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0"
-              aria-label="More options"
-            >
-              <EllipsisVertical className="w-5 h-5" />
-            </button>
+          {showInlineArt &&
+            (imageError ? (
+              <div className="w-14 h-14 bg-zinc-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Music className="w-7 h-7 text-zinc-600" />
+              </div>
+            ) : (
+              <img
+                src={artworkUrl}
+                alt="Album art"
+                className="w-14 h-14 rounded-lg shadow-lg object-cover flex-shrink-0"
+                onError={() => setImageError(true)}
+              />
+            ))}
+          <div className={`min-w-0 ${showInlineArt ? 'flex-1 text-left' : ''}`}>
+            <div className={`flex items-center gap-2 ${showInlineArt ? '' : 'justify-center'}`}>
+              <h2 className="text-xl sm:text-2xl font-bold truncate">{currentTrack.title || 'Unknown'}</h2>
+              <button
+                onClick={handleContextMenu}
+                className="p-1.5 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-colors flex-shrink-0"
+                aria-label="More options"
+              >
+                <EllipsisVertical className="w-5 h-5" />
+              </button>
+            </div>
+            {currentTrack.artist ? (
+              <button
+                onClick={() => { onClose(); navigateToArtist(currentTrack.artist!); }}
+                className="block max-w-full truncate text-lg text-zinc-400 hover:text-zinc-200 hover:underline transition-colors"
+              >
+                {currentTrack.artist}
+              </button>
+            ) : (
+              <p className="text-lg text-zinc-400">Unknown</p>
+            )}
+            {currentTrack.album ? (
+              <button
+                onClick={() => { onClose(); navigateToAlbum(currentTrack.artist!, currentTrack.album!); }}
+                className="block max-w-full truncate text-sm text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
+              >
+                {currentTrack.album}
+              </button>
+            ) : null}
           </div>
-          {currentTrack.artist ? (
-            <button
-              onClick={() => { onClose(); navigateToArtist(currentTrack.artist!); }}
-              className="block text-lg text-zinc-400 hover:text-zinc-200 hover:underline transition-colors"
-            >
-              {currentTrack.artist}
-            </button>
-          ) : (
-            <p className="text-lg text-zinc-400">Unknown</p>
-          )}
-          {currentTrack.album ? (
-            <button
-              onClick={() => { onClose(); navigateToAlbum(currentTrack.artist!, currentTrack.album!); }}
-              className="block text-sm text-zinc-500 hover:text-zinc-300 hover:underline transition-colors"
-            >
-              {currentTrack.album}
-            </button>
-          ) : null}
         </div>
 
         {/* Progress bar */}

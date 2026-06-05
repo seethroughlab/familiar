@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { getAudioAnalyser, getAudioContext } from '../player/audio/engineInstance';
+import { usePlayerStore } from '../stores/playerStore';
 import { isMobile } from '../utils/platform';
 import {
   computeFrequencyBands,
@@ -15,6 +16,10 @@ export interface AudioAnalysisData {
   bass: number;
   mid: number;
   treble: number;
+  /** Decaying beat envelope (0-1): spikes to 1 on a detected onset, then decays. */
+  beat: number;
+  /** True only on the single frame an onset (transient) is detected. */
+  onset: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -57,13 +62,101 @@ function computeBands(freqData: Uint8Array): void {
   sharedData!.treble = bands.treble;
 }
 
+// ---------------------------------------------------------------------------
+// Real-time onset / beat detection (spectral flux + adaptive threshold).
+//
+// Locks visuals to the actual audio without any backend/stored beat grid:
+// an onset fires when the positive spectral flux (over the lower ~60% of the
+// spectrum, where transients dominate) jumps above a running average. `beat`
+// is a time-decaying envelope spiking to 1 on each onset for smooth pulsing.
+// ---------------------------------------------------------------------------
+
+const FLUX_EMA_ALPHA = 0.1; // how fast the running flux baseline adapts
+const ONSET_SENSITIVITY = 1.4; // flux must exceed baseline * this to fire
+const ONSET_MIN_FLUX = 0.010; // absolute floor (normalized) to ignore noise
+const ONSET_REFRACTORY_MS = 110; // min gap between onsets (~max 9/s)
+const BEAT_DECAY_MS = 230; // how long the beat envelope takes to fall to 0
+const FLUX_BAND = 0.85; // fraction of the spectrum used for flux (incl. snares/hats)
+
+let prevFreq: Uint8Array | null = null;
+let fluxEMA = 0;
+let beatEnv = 0;
+let lastOnsetTime = 0;
+let lastBeatUpdate = 0;
+
+// Silence watchdog: warn once if we're "playing" but the analyser reads silence
+// for a sustained period (suspended AudioContext, broken routing, CORS taint…).
+let lastSignalTime = 0;
+let silenceWarned = false;
+
+function computeOnset(freq: Uint8Array, now: number): void {
+  if (!prevFreq || prevFreq.length !== freq.length) {
+    prevFreq = new Uint8Array(freq.length);
+    prevFreq.set(freq);
+    sharedData!.beat = 0;
+    sharedData!.onset = false;
+    lastBeatUpdate = now;
+    lastSignalTime = now;
+    return;
+  }
+
+  const n = Math.max(1, Math.floor(freq.length * FLUX_BAND));
+  let flux = 0;
+  let maxV = 0;
+  for (let i = 0; i < freq.length; i++) {
+    if (i < n) {
+      const d = freq[i] - prevFreq[i];
+      if (d > 0) flux += d;
+    }
+    if (freq[i] > maxV) maxV = freq[i];
+    prevFreq[i] = freq[i];
+  }
+  flux = flux / (n * 255); // normalize to ~0-1
+
+  fluxEMA += FLUX_EMA_ALPHA * (flux - fluxEMA);
+
+  let onset = false;
+  if (
+    flux > ONSET_MIN_FLUX &&
+    flux > fluxEMA * ONSET_SENSITIVITY &&
+    now - lastOnsetTime > ONSET_REFRACTORY_MS
+  ) {
+    onset = true;
+    lastOnsetTime = now;
+    beatEnv = 1;
+  }
+
+  const dt = now - lastBeatUpdate;
+  lastBeatUpdate = now;
+  if (!onset && dt > 0) {
+    beatEnv = Math.max(0, beatEnv - dt / BEAT_DECAY_MS);
+  }
+
+  sharedData!.beat = beatEnv;
+  sharedData!.onset = onset;
+
+  // Silence watchdog (only meaningful while the player thinks it's playing).
+  const playing = usePlayerStore.getState().isPlaying;
+  if (!playing || maxV > 3) {
+    lastSignalTime = now;
+    silenceWarned = false;
+  } else if (now - lastSignalTime > 1500 && !silenceWarned) {
+    silenceWarned = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[Visualizer] AnalyserNode is receiving silence during playback — ' +
+        'check AudioContext state / audio routing / CORS on the stream.'
+    );
+  }
+}
+
 function analyseLoop() {
   if (!loopRunning) return;
   animationFrameId = requestAnimationFrame(analyseLoop);
 
+  const now = performance.now();
   // Throttle analysis work to ~30fps on mobile (still re-queues rAF above)
   if (mobile) {
-    const now = performance.now();
     if (now - lastAnalyseTime < 33) return;
     lastAnalyseTime = now;
   }
@@ -81,12 +174,15 @@ function analyseLoop() {
         bass: 0,
         mid: 0,
         treble: 0,
+        beat: 0,
+        onset: false,
       };
     }
 
     sharedData.frequencyData.set(nativeBuffers.frequency);
     sharedData.timeDomainData.set(nativeBuffers.timeDomain);
     computeBands(sharedData.frequencyData);
+    computeOnset(sharedData.frequencyData, now);
     sharedAudioDataRef.current = sharedData;
     recordConsumedAnalysisFrame('native', sharedData.frequencyData, sharedData.timeDomainData);
     return;
@@ -111,6 +207,8 @@ function analyseLoop() {
       bass: 0,
       mid: 0,
       treble: 0,
+      beat: 0,
+      onset: false,
     };
   }
 
@@ -121,6 +219,7 @@ function analyseLoop() {
   analyser.getByteTimeDomainData(sharedData.timeDomainData as any);
 
   computeBands(sharedData.frequencyData);
+  computeOnset(sharedData.frequencyData, now);
   sharedAudioDataRef.current = sharedData;
   recordConsumedAnalysisFrame('web', sharedData.frequencyData, sharedData.timeDomainData);
 }

@@ -10,6 +10,7 @@ import {
   ClipboardList,
   X,
   AlertCircle,
+  Search,
 } from 'lucide-react';
 import {
   proposedChangesApi,
@@ -329,6 +330,14 @@ export function ProposedChangesPanel() {
     },
   });
 
+  const scanMutation = useMutation({
+    mutationFn: proposedChangesApi.scan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.proposedChanges.stats });
+    },
+  });
+
   const handlePreview = async (changeId: string) => {
     setLoadingChangeId(changeId);
     try {
@@ -383,8 +392,24 @@ export function ProposedChangesPanel() {
           <h4 className="font-medium text-white dark:text-white light:text-zinc-900">No Proposed Changes</h4>
         </div>
         <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
-          When the AI suggests metadata corrections or you request changes, they'll appear here for review.
+          Proposals are generated automatically after each library sync (and when the AI suggests
+          corrections or you request changes). You can also scan now:
         </p>
+        <button
+          onClick={() => scanMutation.mutate()}
+          disabled={scanMutation.isPending}
+          className="mt-3 flex items-center gap-2 px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-md transition-colors"
+        >
+          {scanMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          Scan library for issues
+        </button>
+        {scanMutation.isSuccess && (
+          <p className="text-xs text-zinc-500 mt-2">
+            {scanMutation.data.created > 0
+              ? `Queued ${scanMutation.data.created} proposal${scanMutation.data.created !== 1 ? 's' : ''}.`
+              : 'No new issues found.'}
+          </p>
+        )}
       </div>
     );
   }

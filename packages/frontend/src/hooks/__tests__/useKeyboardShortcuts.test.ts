@@ -351,17 +351,6 @@ describe('useKeyboardShortcuts', () => {
       expect(onToggleFullPlayer).toHaveBeenCalled()
     })
 
-    it('should call onShowHelp on ? key', () => {
-      const onShowHelp = vi.fn()
-      renderHook(() => useKeyboardShortcuts({ onShowHelp }))
-
-      act(() => {
-        fireKeyDown('?')
-      })
-
-      expect(onShowHelp).toHaveBeenCalled()
-    })
-
     it('should call onEscape on Escape key', () => {
       const onEscape = vi.fn()
       renderHook(() => useKeyboardShortcuts({ onEscape }))
@@ -408,7 +397,6 @@ describe('SHORTCUTS', () => {
     expect(SHORTCUTS.volumeDown).toBeDefined()
     expect(SHORTCUTS.mute).toBeDefined()
     expect(SHORTCUTS.fullPlayer).toBeDefined()
-    expect(SHORTCUTS.help).toBeDefined()
     expect(SHORTCUTS.seekForward).toBeDefined()
     expect(SHORTCUTS.seekBackward).toBeDefined()
     expect(SHORTCUTS.shuffle).toBeDefined()

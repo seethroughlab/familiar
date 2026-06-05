@@ -255,11 +255,15 @@ class TestAggregation:
 
     @pytest.mark.asyncio
     async def test_aggregate_by_artist_groups_tracks(self, service, mock_db):
-        """Should group tracks by artist and average embeddings."""
+        """Should group tracks by artist and average embeddings + lens features."""
+        # Rows are (track_id, artist, embedding, *LENS_FEATURES). energy is the
+        # first lens feature; give Test Artist 0.2 and 0.4 so the mean is 0.3.
+        feats_a = [0.2] + [0.5] * 9
+        feats_b = [0.4] + [0.5] * 9
         rows = [
-            (uuid4(), "Test Artist", list(np.ones(512))),
-            (uuid4(), "Test Artist", list(np.ones(512) * 2)),
-            (uuid4(), "Other Artist", list(np.zeros(512))),
+            (uuid4(), "Test Artist", list(np.ones(512)), *feats_a),
+            (uuid4(), "Test Artist", list(np.ones(512) * 2), *feats_b),
+            (uuid4(), "Other Artist", list(np.zeros(512)), *([None] * 10)),
         ]
         mock_db.stream = AsyncMock(return_value=_stream_rows(rows))
 
@@ -272,13 +276,17 @@ class TestAggregation:
         assert result["Other Artist"]["track_count"] == 1
         # Mean embedding of [1,1,...] and [2,2,...] should be [1.5,1.5,...]
         assert result["Test Artist"]["mean_embedding"][0] == pytest.approx(1.5)
+        # Lens feature means: energy = (0.2 + 0.4) / 2 = 0.3
+        assert result["Test Artist"]["features"]["energy"] == pytest.approx(0.3)
+        # All-None features produce an empty features dict (no spurious zeros).
+        assert result["Other Artist"]["features"] == {}
 
     @pytest.mark.asyncio
     async def test_aggregate_skips_blank_artists(self, service, mock_db):
         """Should skip rows with whitespace-only artist names."""
         rows = [
-            (uuid4(), "Artist With Embedding", list(np.ones(512))),
-            (uuid4(), "   ", list(np.ones(512))),
+            (uuid4(), "Artist With Embedding", list(np.ones(512)), *([0.5] * 10)),
+            (uuid4(), "   ", list(np.ones(512)), *([0.5] * 10)),
         ]
         mock_db.stream = AsyncMock(return_value=_stream_rows(rows))
 

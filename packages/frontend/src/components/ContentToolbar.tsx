@@ -9,11 +9,7 @@ import { useLocation, useSearchParams } from 'react-router-dom';
 import { Search, X } from 'lucide-react';
 import { ColumnSelector } from './Library/ColumnSelector';
 import { useThemeStore } from '../stores/themeStore';
-import { HealthIndicator } from './HealthIndicator';
-import { BackgroundJobsIndicator } from './BackgroundJobsIndicator';
-import { DownloadIndicator } from './DownloadIndicator';
-import { MixTapeRenderIndicator } from './MixTape';
-import { ProposedChangesIndicator } from './ProposedChangesIndicator';
+import { StatusMenu } from './StatusMenu';
 
 export function ContentToolbar() {
   const location = useLocation();
@@ -51,11 +47,7 @@ export function ContentToolbar() {
 
   const indicators = (
     <div className="flex items-center gap-1">
-      <DownloadIndicator />
-      <ProposedChangesIndicator />
-      <BackgroundJobsIndicator />
-      <MixTapeRenderIndicator />
-      <HealthIndicator />
+      <StatusMenu />
     </div>
   );
 

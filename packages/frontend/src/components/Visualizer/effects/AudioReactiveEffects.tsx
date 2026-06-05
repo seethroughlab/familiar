@@ -11,6 +11,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RGBShiftShader } from 'three/examples/jsm/shaders/RGBShiftShader.js';
 import * as THREE from 'three';
 import { getAudioData } from '../../../hooks/useAudioAnalyser';
 import { useVisualizerStore } from '../../../stores/visualizerStore';
@@ -52,6 +53,11 @@ interface AudioReactiveEffectsProps {
   vignetteIntensity?: number;
   /** Run post-processing at half canvas resolution (quarters pixel count) */
   halfResolution?: boolean;
+  /** Add a chromatic-aberration (RGB shift) pass */
+  enableRGBShift?: boolean;
+  rgbShiftAmount?: number;
+  /** How much bass adds to bloom strength (default 1.5; lower = calmer bloom) */
+  bloomBassBoost?: number;
 }
 
 export function AudioReactiveEffects({
@@ -62,6 +68,9 @@ export function AudioReactiveEffects({
   bloomRadius = 0.5,
   vignetteIntensity = 0.5,
   halfResolution = false,
+  enableRGBShift = false,
+  rgbShiftAmount = 0.0015,
+  bloomBassBoost = 1.5,
 }: AudioReactiveEffectsProps) {
   const { gl, scene, camera, size } = useThree();
   const glowLevel = useVisualizerStore((s) => s.glowLevel);
@@ -108,12 +117,19 @@ export function AudioReactiveEffects({
       (effectComposer as EffectComposer & { _vignettePass?: ShaderPass })._vignettePass = vignettePass;
     }
 
+    // Chromatic aberration (RGB shift)
+    if (enableRGBShift) {
+      const rgbShiftPass = new ShaderPass(RGBShiftShader);
+      rgbShiftPass.uniforms.amount.value = rgbShiftAmount;
+      effectComposer.addPass(rgbShiftPass);
+    }
+
     // Output pass for proper color space
     const outputPass = new OutputPass();
     effectComposer.addPass(outputPass);
 
     return effectComposer;
-  }, [gl, scene, camera, enableBloom, enableVignette, size.width, size.height, bloomIntensity, bloomRadius, bloomThreshold, vignetteIntensity, halfResolution]);
+  }, [gl, scene, camera, enableBloom, enableVignette, size.width, size.height, bloomIntensity, bloomRadius, bloomThreshold, vignetteIntensity, halfResolution, enableRGBShift, rgbShiftAmount]);
 
   // Update refs after composer creation (must be in useEffect, not during render)
   useEffect(() => {
@@ -149,7 +165,7 @@ export function AudioReactiveEffects({
     const intensity = (audioData?.averageFrequency ?? 128) / 255;
 
     if (bloomPassRef.current) {
-      const rawStrength = bloomIntensity + bass * 1.5;
+      const rawStrength = bloomIntensity + bass * bloomBassBoost;
       bloomPassRef.current.strength = rawStrength * glowScale;
       const rawThreshold = Math.max(0.3, bloomThreshold - intensity * 0.2);
       bloomPassRef.current.threshold = rawThreshold + (1.0 - glowScale) * 0.3;

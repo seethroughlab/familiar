@@ -89,8 +89,11 @@ export class WebAudioEngine implements AudioEngine {
 
       if (!this.analyser) {
         this.analyser = this.audioContext.createAnalyser();
-        this.analyser.fftSize = 256;
-        this.analyser.smoothingTimeConstant = 0.8;
+        // 1024-pt FFT (512 bins) for finer bass/kick separation; lower smoothing
+        // so transients survive for the onset/beat detector (0.8 over-averaged the
+        // spectrum and starved spectral-flux onset detection).
+        this.analyser.fftSize = 1024;
+        this.analyser.smoothingTimeConstant = 0.5;
       }
 
       if (!this.elementA) {

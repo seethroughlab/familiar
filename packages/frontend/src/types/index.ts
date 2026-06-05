@@ -73,34 +73,3 @@ export interface QueueItem {
   queueId: string;
 }
 
-// Playlist sharing (.familiar file format)
-export interface FamiliarPlaylistTrack {
-  title: string;
-  artist: string;
-  album: string | null;
-  duration_seconds: number | null;
-  track_number: number | null;
-  // Match status (populated during import)
-  matched_id?: string;
-  match_confidence?: number;
-}
-
-export interface FamiliarPlaylist {
-  format: 'familiar-playlist';
-  version: 1;
-  exported_at: string;
-  playlist: {
-    name: string;
-    description: string | null;
-    type: 'static' | 'smart';
-    // For smart playlists
-    rules?: Array<{
-      field: string;
-      operator: string;
-      value?: unknown;
-    }>;
-    match_mode?: 'all' | 'any';
-    // Track list (for static playlists or exported smart playlist contents)
-    tracks: FamiliarPlaylistTrack[];
-  };
-}

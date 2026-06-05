@@ -30,6 +30,8 @@ class MapNode(BaseModel):
     y: float
     track_count: int
     first_track_id: str
+    # Per-entity mean of each lens feature (energy/valence/etc.), for color/size lensing.
+    features: dict[str, float] = {}
 
 
 class MapEdge(BaseModel):
@@ -88,6 +90,7 @@ async def get_music_map(
                 y=n.y,
                 track_count=n.track_count,
                 first_track_id=n.first_track_id,
+                features=n.features,
             )
             for n in map_data.nodes
         ],
@@ -151,6 +154,7 @@ async def get_music_map_stream(
                                 "y": n.y,
                                 "track_count": n.track_count,
                                 "first_track_id": n.first_track_id,
+                                "features": n.features,
                             }
                             for n in item.nodes
                         ],

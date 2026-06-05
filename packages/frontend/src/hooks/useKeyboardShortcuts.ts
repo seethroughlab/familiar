@@ -8,7 +8,6 @@ import { getEngine } from '../player/audio/engineInstance';
 
 interface ShortcutHandlers {
   onToggleFullPlayer?: () => void;
-  onShowHelp?: () => void;
   onEscape?: () => void;
 }
 
@@ -26,7 +25,6 @@ export const SHORTCUTS: Record<string, ShortcutDefinition> = {
   volumeDown: { key: 'ArrowDown', description: 'Volume down' },
   mute: { key: 'm', description: 'Mute / Unmute' },
   fullPlayer: { key: 'f', description: 'Toggle full player' },
-  help: { key: '?', description: 'Show keyboard shortcuts', modifiers: ['shift'] },
   escape: { key: 'Escape', description: 'Close overlay' },
   seekForward: { key: 'l', description: 'Seek forward 10s' },
   seekBackward: { key: 'j', description: 'Seek backward 10s' },
@@ -121,11 +119,6 @@ export function useKeyboardShortcuts(handlers: ShortcutHandlers = {}) {
             handled();
             handlers.onToggleFullPlayer?.();
           }
-          break;
-
-        case '?': // Help
-          handled();
-          handlers.onShowHelp?.();
           break;
 
         case 'Escape': // Close overlays

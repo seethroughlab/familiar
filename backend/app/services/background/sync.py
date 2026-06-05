@@ -182,6 +182,7 @@ class SyncMixin(_SyncBase):
         try:
             result = await run_library_sync(reread_unchanged=reread_unchanged)
             await self._post_sync_backup()
+            await self._post_sync_auto_proposals()
             record_background_event(
                 "sync_complete",
                 {
@@ -206,6 +207,20 @@ class SyncMixin(_SyncBase):
         finally:
             self._current_sync_task = None
             self._release_sync_lock()
+
+    async def _post_sync_auto_proposals(self) -> None:
+        """Best-effort: queue auto-generated metadata proposals after a sync.
+
+        Never raises — a failed scan must not break the sync flow.
+        """
+        try:
+            from app.services.auto_proposals import run_auto_proposal_scan
+
+            count = await run_auto_proposal_scan()
+            if count:
+                logger.info(f"Post-sync auto-proposals: queued {count} change(s)")
+        except Exception as e:
+            logger.warning(f"Post-sync auto-proposal scan failed: {e}")
 
     async def _startup_sync(self) -> None:
         """Run initial sync on startup after a short delay."""
