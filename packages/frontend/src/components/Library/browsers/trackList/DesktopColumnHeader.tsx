@@ -19,7 +19,6 @@ export function DesktopColumnHeader({ gridColumns }: DesktopColumnHeaderProps) {
   const sortBy = useColumnStore((state) => state.sortBy);
   const sortOrder = useColumnStore((state) => state.sortOrder);
   const toggleSort = useColumnStore((state) => state.toggleSort);
-  const setSortBy = useColumnStore((state) => state.setSortBy);
   const setColumnWidth = useColumnStore((state) => state.setColumnWidth);
   const resetColumnWidth = useColumnStore((state) => state.resetColumnWidth);
 

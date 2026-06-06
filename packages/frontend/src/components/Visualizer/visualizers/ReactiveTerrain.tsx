@@ -654,8 +654,8 @@ function makeFrondsGeometry(): THREE.BufferGeometry {
 }
 
 function PalmRows({ palette }: { palette: string[] }) {
-  const trunkGeo = useMemo(makeTrunkGeometry, []);
-  const frondsGeo = useMemo(makeFrondsGeometry, []);
+  const trunkGeo = useMemo(() => makeTrunkGeometry(), []);
+  const frondsGeo = useMemo(() => makeFrondsGeometry(), []);
   const bands = useMemo(() => new Float32Array(NUM_BANDS), []); // shared live spectrum
   const palms = useMemo(() => {
     const baseCol = hexColor(palette[0], '#ff3df5');
@@ -898,7 +898,7 @@ function makeChevronGeometry(): THREE.BufferGeometry {
 }
 
 function RoadChevrons({ palette }: { palette: string[] }) {
-  const geo = useMemo(makeChevronGeometry, []);
+  const geo = useMemo(() => makeChevronGeometry(), []);
   const baseCol = useMemo(() => hexColor(palette[0], '#ff3df5'), [palette]);
   const mat = useMemo(
     () => new THREE.MeshBasicMaterial({ color: baseCol.clone(), side: THREE.DoubleSide, toneMapped: false }),
