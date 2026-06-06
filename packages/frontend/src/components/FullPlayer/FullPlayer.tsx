@@ -22,7 +22,8 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
-import { tracksApi, type LyricLine } from '../../api';
+import { useSyncedLyrics } from '../../hooks/useSyncedLyrics';
+import { tracksApi } from '../../api';
 import { useUIStore } from '../../stores/uiStore';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
 import { EffectsQuickAccess } from './EffectsQuickAccess';
@@ -52,7 +53,6 @@ interface FullPlayerProps {
 
 export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
   const [imageError, setImageError] = useState(false);
-  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -129,24 +129,8 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
     setContextMenu(initialContextMenuState);
   }, []);
 
-  // Fetch lyrics for visualizer
-  useEffect(() => {
-    if (!currentTrack) {
-      setLyrics(null);
-      return;
-    }
-
-    tracksApi.getLyrics(currentTrack.id)
-      .then(response => {
-        if (response.synced && response.lines.length > 0) {
-          setLyrics(response.lines);
-        } else {
-          setLyrics(null);
-        }
-      })
-      .catch(() => setLyrics(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when track ID changes
-  }, [currentTrack?.id]);
+  // Fetch lyrics for the visualizer (race-safe across track skips).
+  const lyrics = useSyncedLyrics(currentTrack?.id ?? null);
 
   // Reset image error when track changes
   useEffect(() => {
@@ -294,6 +278,8 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             artworkUrl={artworkUrl}
             lyrics={lyrics}
             isPlaying={isPlaying}
+            currentTime={currentTime}
+            duration={duration}
             className="absolute inset-0"
           />
         )}

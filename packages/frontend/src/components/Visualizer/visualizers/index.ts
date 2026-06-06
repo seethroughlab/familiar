@@ -16,8 +16,8 @@ registerVisualizer(
   lazy(() => import('./BeatTiles'))
 );
 registerVisualizer(
-  { id: 'lyrics', name: 'Lyrics', description: 'Bold beat-synced kinetic typography', usesMetadata: true },
-  lazy(() => import('./KineticLyrics'))
+  { id: 'lyrics', name: 'Lyrics', description: 'Scrolling synced lyrics over a drifting field of the song\'s words', usesMetadata: true },
+  lazy(() => import('./ScrollingLyrics'))
 );
 registerVisualizer(
   { id: 'music-video', name: 'Music Video', description: 'Search and play synced music videos from YouTube', usesMetadata: false },
