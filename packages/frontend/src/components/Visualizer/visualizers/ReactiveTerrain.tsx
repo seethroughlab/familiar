@@ -105,6 +105,28 @@ const SEG_D = mobile ? 48 : 72;
 const terrainScrollRef = { current: 0 };
 const terrainDispRef = { current: 3.0 };
 
+// Per-band hill reactivity: each column of the terrain (by width) is driven by one
+// of 8 frequency bands, adaptively normalized so every column animates (no dead
+// zones) while still tracking the spectrum. Shared by the solid + wireframe mats.
+const terrainBands = new Float32Array(8);
+const terrainBandMax = new Float32Array(8).fill(0.15); // per-band running max (AGC)
+function applyBandDisplacement(material: THREE.Material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uBands = { value: terrainBands };
+    shader.vertexShader = 'uniform float uBands[8];\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace(
+      '#include <displacementmap_vertex>',
+      `#ifdef USE_DISPLACEMENTMAP
+        float bf = clamp((position.x / ${TERRAIN_W.toFixed(1)} + 0.5) * 8.0, 0.0, 7.999);
+        int bi = int(bf);
+        float bandE = mix(uBands[bi], uBands[bi + 1 > 7 ? 7 : bi + 1], fract(bf));
+        float dScale = displacementScale * (0.4 + 1.5 * bandE);
+        transformed += normalize(objectNormal) * (texture2D(displacementMap, vDisplacementMapUv).x * dScale + displacementBias);
+      #endif`
+    );
+  };
+}
+
 // A metallic "shard" the CV overlay can lock onto.
 interface MetalCell {
   u: number;
@@ -113,6 +135,7 @@ interface MetalCell {
   cz: number; // plane-local z (world z = cz + scroll)
   strength: number; // metalness 0..1
   height: number; // heightmap value 0..1 at this cell
+  radius: number; // patch radius in UV (drives the CV box size)
   id: string;
   conf: number;
 }
@@ -129,26 +152,27 @@ function getMetalField(): MetalField {
   const W = 64;
   const H = 64;
   const data = new Uint8Array(W * H * 4);
-  const GW = 10;
-  const GH = 10;
-  const lat = new Float32Array(GW * GH);
-  for (let i = 0; i < lat.length; i++) lat[i] = Math.random();
-  const sample = (u: number, v: number) => {
-    const fx = u * GW;
-    const fy = v * GH;
-    const x0 = Math.floor(fx);
-    const y0 = Math.floor(fy);
-    const tx = THREE.MathUtils.smoothstep(fx - x0, 0, 1);
-    const ty = THREE.MathUtils.smoothstep(fy - y0, 0, 1);
-    const at = (xi: number, yi: number) => lat[(((yi % GH) + GH) % GH) * GW + (((xi % GW) + GW) % GW)];
-    const top = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
-    const bot = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
-    return top + (bot - top) * ty;
-  };
+  const height = getHeightField();
+
+  // Discrete metallic patches of various sizes, on the side terrain.
+  const N = mobile ? 12 : 20;
+  const patches: { u: number; v: number; r: number; strength: number }[] = [];
+  for (let i = 0; i < N; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const off = 0.12 + Math.random() * 0.34; // 0.12..0.46 out on the side
+    const u = 0.5 + side * off;
+    const v = Math.random();
+    const r = 0.02 + Math.random() * Math.random() * 0.11; // biased small, a few large
+    const strength = 0.55 + Math.random() * 0.45;
+    patches.push({ u, v, r, strength });
+  }
   const metalAt = (u: number, v: number) => {
-    const sideMask = THREE.MathUtils.smoothstep(Math.abs(u - 0.5), 0.06, 0.2);
-    const patch = THREE.MathUtils.smoothstep(sample(u, v), 0.42, 0.78);
-    return sideMask * (0.35 + 0.65 * patch);
+    let m = 0;
+    for (const p of patches) {
+      const d = Math.hypot(u - p.u, v - p.v);
+      m = Math.max(m, p.strength * (1 - THREE.MathUtils.smoothstep(d, p.r * 0.5, p.r)));
+    }
+    return m;
   };
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -166,33 +190,17 @@ function getMetalField(): MetalField {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.needsUpdate = true;
 
-  // Pick the strongest metallic shards (local maxima on a coarse grid).
-  const height = getHeightField();
-  const SX = 26;
-  const SY = 26;
-  const mAt = (i: number, j: number) => metalAt(i / (SX - 1), j / (SY - 1));
-  const cand: MetalCell[] = [];
-  for (let j = 1; j < SY - 1; j++) {
-    for (let i = 1; i < SX - 1; i++) {
-      const c = mAt(i, j);
-      if (c < 0.62) continue;
-      let isMax = true;
-      for (let dj = -1; dj <= 1 && isMax; dj++) {
-        for (let di = -1; di <= 1; di++) {
-          if ((di || dj) && mAt(i + di, j + dj) > c) { isMax = false; break; }
-        }
-      }
-      if (!isMax) continue;
-      const u = i / (SX - 1);
-      const v = j / (SY - 1);
-      cand.push({ u, v, x: (u - 0.5) * TERRAIN_W, cz: (0.5 - v) * TERRAIN_D, strength: c, height: height.sample(u, v), id: '', conf: 0 });
-    }
-  }
-  cand.sort((a, b) => b.strength - a.strength);
-  const cells = cand.slice(0, mobile ? 10 : 16).map((c, i) => ({
-    ...c,
+  // The patches ARE the CV cells — each box is sized by its patch radius.
+  const cells: MetalCell[] = patches.map((p, i) => ({
+    u: p.u,
+    v: p.v,
+    x: (p.u - 0.5) * TERRAIN_W,
+    cz: (0.5 - p.v) * TERRAIN_D,
+    strength: p.strength,
+    height: height.sample(p.u, p.v),
+    radius: p.r,
     id: `0x${(0x2a + i * 7).toString(16).toUpperCase().padStart(2, '0')}`,
-    conf: Math.min(0.99, 0.78 + (c.strength - 0.62) * 0.5),
+    conf: Math.min(0.99, 0.74 + p.strength * 0.25),
   }));
   _metalField = { texture: t, cells };
   return _metalField;
@@ -206,38 +214,43 @@ function VaporwaveTerrain({ palette, features }: { palette: string[]; features: 
   // Layer 1: solid metallic faces. No diffuse (metal), so they're dark except where a
   // facet is angled toward the sun/spotlights → a glint. polygonOffset pushes them back
   // so the wireframe overlay sits cleanly on top.
-  const solidMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: new THREE.Color('#10101c'),
-        metalness: 0.9,
-        roughness: 0.45,
-        metalnessMap, // matte road in the middle, metallic sides
-        displacementMap: height,
-        displacementScale: 3.0,
-        flatShading: true,
-        polygonOffset: true,
-        polygonOffsetFactor: 1,
-        polygonOffsetUnits: 1,
-      }),
-    [height, metalnessMap]
-  );
+  const solidMat = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#10101c'),
+      metalness: 0.9,
+      roughness: 0.45,
+      metalnessMap, // matte road in the middle, metallic sides
+      // The same patch mask drives emissive, so the metallic shards GLOW with the
+      // sun colour (set per mood below) — "catching the sun" instead of near-black.
+      emissive: new THREE.Color('#ff8a4d'),
+      emissiveMap: metalnessMap,
+      emissiveIntensity: 1.3,
+      displacementMap: height,
+      displacementScale: 3.0,
+      flatShading: true,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
+    });
+    applyBandDisplacement(m); // per-frequency hill reactivity
+    return m;
+  }, [height, metalnessMap]);
 
   // Layer 2: real GL wireframe overlay (same method as the shapes/palms) — thin neon
   // edges that follow the displacement. No texture → no moiré/blink.
-  const wireMat = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: new THREE.Color('#000000'),
-        emissive: new THREE.Color('#ff2bd6'),
-        emissiveIntensity: 1.0,
-        wireframe: true,
-        displacementMap: height,
-        displacementScale: 3.0,
-        flatShading: true,
-      }),
-    [height]
-  );
+  const wireMat = useMemo(() => {
+    const m = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#000000'),
+      emissive: new THREE.Color('#ff2bd6'),
+      emissiveIntensity: 1.0,
+      wireframe: true,
+      displacementMap: height,
+      displacementScale: 3.0,
+      flatShading: true,
+    });
+    applyBandDisplacement(m); // same per-band displacement → stays locked to the solid layer
+    return m;
+  }, [height]);
 
   const group1 = useRef<THREE.Group>(null);
   const group2 = useRef<THREE.Group>(null);
@@ -259,7 +272,8 @@ function VaporwaveTerrain({ palette, features }: { palette: string[]; features: 
     const sunCol = new THREE.Color(isSun ? '#ff8a4d' : '#9fc0ff').lerp(hexColor(palette[0], '#ffffff'), 0.3);
     if (sunLight.current) sunLight.current.color.copy(sunCol);
     if (hemi.current) hemi.current.color.copy(sunCol);
-  }, [palette, isSun, wireMat]);
+    solidMat.emissive.copy(sunCol); // metallic shards glow in the sun colour
+  }, [palette, isSun, wireMat, solidMat]);
 
   useEffect(
     () => () => {
@@ -284,8 +298,34 @@ function VaporwaveTerrain({ palette, features }: { palette: string[]; features: 
     if (group2.current) group2.current.position.z = zoff.current - TERRAIN_D;
     if (group3.current) group3.current.position.z = zoff.current - 2 * TERRAIN_D;
 
-    // Peaks swell with bass + jump on the beat; the road stays flat (heightmap 0).
-    const ds = 3.0 + bass * 2.6 + beat * 1.8;
+    // Per-band hill reactivity: split the spectrum into 8 bands mapped across the
+    // terrain width, adaptively normalized so each column tracks its own band and
+    // none stays inert. (Replaces the old uniform bass term.)
+    const fd = a?.frequencyData;
+    if (fd && fd.length) {
+      const n = fd.length;
+      let overall = 0;
+      const raw: number[] = [];
+      for (let b = 0; b < 8; b++) {
+        const lo = Math.floor(Math.pow(b / 8, 1.7) * n);
+        const hi = Math.max(lo + 1, Math.floor(Math.pow((b + 1) / 8, 1.7) * n));
+        let s = 0;
+        for (let k = lo; k < hi && k < n; k++) s += fd[k];
+        const e = s / (hi - lo) / 255;
+        raw.push(e);
+        overall += e;
+      }
+      overall /= 8;
+      for (let b = 0; b < 8; b++) {
+        terrainBandMax[b] = Math.max(raw[b], terrainBandMax[b] * 0.992); // slow-decay running max
+        const agc = raw[b] / Math.max(terrainBandMax[b], 0.12); // ~0..1 relative to its own peak
+        const target = THREE.MathUtils.clamp(Math.max(agc, 0.3 * (overall / 0.4)), 0, 1.3);
+        terrainBands[b] += (target - terrainBands[b]) * Math.min(1, d * 14); // smooth
+      }
+    }
+
+    // Steady base displacement (small beat punch); the per-band factor does the rest.
+    const ds = 3.0 + beat * 0.6;
     solidMat.displacementScale = ds;
     wireMat.displacementScale = ds;
     terrainScrollRef.current = zoff.current; // share with the CV overlay
@@ -336,6 +376,7 @@ const SKY_FRAG = /* glsl */ `
   uniform vec3 uSkyTop;
   uniform vec3 uSkyHorizon;
   uniform vec3 uDiscColor;
+  uniform vec3 uHaloColor;
   uniform float uDiscY;
   uniform float uDiscR;
   uniform float uAspect;
@@ -357,15 +398,22 @@ const SKY_FRAG = /* glsl */ `
     float yy = (vUv.y - (uDiscY - uDiscR)) / (2.0 * uDiscR); // 0 = disc bottom, 1 = top
     float stripes = fract(yy * 6.0);
     float gapAmt = 0.70 * (1.0 - smoothstep(0.0, 0.82, yy)); // bars across most of the disc, solid only at the very top
-    float line = smoothstep(gapAmt - 0.05, gapAmt + 0.05, stripes);
-    float sunMask = disc * line;
+    float line = smoothstep(gapAmt - 0.05, gapAmt + 0.05, stripes); // 1 = solid disc, 0 = bar gap
 
-    // Glow only OUTSIDE the disc, so it can't fill the stripe gaps.
-    float halo = pow(clamp(1.0 - d / (uDiscR * 2.1), 0.0, 1.0), 2.5) * (1.0 - disc) * uGlow;
+    // Bright sun disc: a warm gradient (brighter toward the top) with DARK horizontal
+    // bars cut into it. The disc's own brightness blooms into the glow; the dark bars
+    // stay visible as cuts (they darken the disc rather than showing sky).
+    vec3 discGrad = uDiscColor * (0.75 + 0.7 * clamp(yy, 0.0, 1.0));
+
+    // Only a small rim just outside the disc — the disc's bloom does the heavy lifting.
+    float outside = smoothstep(uDiscR * 0.99, uDiscR * 1.15, d);
+    float halo = pow(clamp(1.0 - d / (uDiscR * 2.2), 0.0, 1.0), 2.0) * outside * uGlow;
 
     vec3 col = sky;
-    col += uDiscColor * halo;
-    col = mix(col, uDiscColor, sunMask);
+    col += uHaloColor * halo;
+    // Solid disc shows the bright gradient; the bar gaps (line=0) cut straight to the
+    // sky/background — so the bars are never darker than the surrounding sky.
+    col = mix(col, discGrad, disc * line);
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -383,11 +431,12 @@ function Backdrop({ palette, features }: { palette: string[]; features: TrackFea
       uSkyTop: { value: new THREE.Color('#05010a') },
       uSkyHorizon: { value: new THREE.Color('#1a0b2e') },
       uDiscColor: { value: new THREE.Color('#ffd27f') },
+      uHaloColor: { value: new THREE.Color('#ffeccf') },
       uDiscY: { value: 0.52 },
       uDiscR: { value: 0.16 },
       uAspect: { value: 1 },
       uIsSun: { value: 1 },
-      uGlow: { value: 0.12 },
+      uGlow: { value: 0.35 },
     }),
     []
   );
@@ -397,23 +446,26 @@ function Backdrop({ palette, features }: { palette: string[]; features: TrackFea
     const accent = hexColor(palette[0], '#ff3df5');
     if (isSun) {
       // Dimmed well below the bloom threshold so the disc doesn't blow out to white.
-      u.uDiscColor.value.copy(hexColor('#ffcf73', '#ffcf73')).lerp(accent, 0.35).multiplyScalar(0.5);
+      // Disc glows moderately at the top; the lower disc stays below bloom so bars stay crisp.
+      u.uDiscColor.value.copy(hexColor('#ffcf73', '#ffcf73')).lerp(accent, 0.3).multiplyScalar(0.6);
       u.uSkyHorizon.value.copy(hexColor(palette[1], '#ff7eb0')).multiplyScalar(0.5);
+      u.uHaloColor.value.copy(new THREE.Color('#ffeccf')).lerp(accent, 0.18).multiplyScalar(0.6);
     } else {
-      u.uDiscColor.value.copy(hexColor('#cfe6ff', '#cfe6ff')).lerp(accent, 0.2).multiplyScalar(0.5);
+      u.uDiscColor.value.copy(hexColor('#cfe6ff', '#cfe6ff')).lerp(accent, 0.2).multiplyScalar(0.58);
       u.uSkyHorizon.value.copy(hexColor(palette[2] ?? palette[1], '#243b6b')).multiplyScalar(0.45);
+      u.uHaloColor.value.copy(new THREE.Color('#dce8ff')).lerp(accent, 0.15).multiplyScalar(0.55);
     }
     u.uSkyTop.value.copy(hexColor(palette[3] ?? '#05010a', '#05010a')).multiplyScalar(0.3);
     u.uIsSun.value = isSun ? 1 : 0;
     u.uDiscR.value = (isSun ? 0.13 : 0.1) + energy * 0.06;
-    u.uGlow.value = (isSun ? 0.14 : 0.1) + energy * 0.07;
+    u.uGlow.value = (isSun ? 0.35 : 0.3) + energy * 0.1;
   }, [palette, isSun, energy, uniforms]);
 
   useFrame(() => {
     if (matRef.current) {
       matRef.current.uniforms.uAspect.value = size.width / size.height;
       const bass = getAudioData()?.bass ?? 0;
-      matRef.current.uniforms.uGlow.value = (isSun ? 0.14 : 0.1) + energy * 0.07 + bass * 0.12;
+      matRef.current.uniforms.uGlow.value = (isSun ? 0.35 : 0.3) + energy * 0.1 + bass * 0.15;
     }
   });
 
@@ -460,6 +512,31 @@ const PALM = {
 // Segmented trunk: a curved tube whose radius bulges mid-segment and pinches at
 // each leaf-scar ring, so the wireframe reads as stacked segments (like a real
 // palm trunk), tapering toward the top.
+// Palms react per-part to the spectrum: each frond / trunk-segment is tagged with a
+// frequency band (aBand), and the shader glows it by that band's live energy (uBands).
+const NUM_BANDS = 8;
+const PALM_VERT = /* glsl */ `
+  attribute float aBand;
+  uniform float uBands[8];
+  varying float vGlow;
+  void main() {
+    int bi = int(aBand + 0.5);
+    float g = 0.0;
+    for (int k = 0; k < 8; k++) { if (k == bi) g = uBands[k]; }
+    vGlow = g;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const PALM_FRAG = /* glsl */ `
+  precision highp float;
+  uniform vec3 uColor;
+  uniform float uBase;
+  varying float vGlow;
+  void main() {
+    gl_FragColor = vec4(uColor * (uBase + vGlow * 2.6), 1.0);
+  }
+`;
+
 function makeTrunkGeometry(): THREE.BufferGeometry {
   const curve = new THREE.QuadraticBezierCurve3(
     new THREE.Vector3(0, 0, 0),
@@ -471,6 +548,7 @@ function makeTrunkGeometry(): THREE.BufferGeometry {
   const N_SEG = 8; // stacked trunk segments
   const frames = curve.computeFrenetFrames(STN, false);
   const positions: number[] = [];
+  const bands: number[] = [];
   const indices: number[] = [];
   for (let i = 0; i <= STN; i++) {
     const t = i / STN;
@@ -480,6 +558,7 @@ function makeTrunkGeometry(): THREE.BufferGeometry {
     const taper = 1 - 0.32 * t; // thinner toward the top
     const seg = 0.82 + 0.34 * Math.sin(((t * N_SEG) % 1) * Math.PI); // bulge / pinch
     const r = PALM.trunkRadius * taper * seg;
+    const band = Math.min(N_SEG - 1, Math.floor(t * N_SEG)) % NUM_BANDS; // segment → band
     for (let j = 0; j <= RAD; j++) {
       const a = (j / RAD) * Math.PI * 2;
       const v = p
@@ -487,6 +566,7 @@ function makeTrunkGeometry(): THREE.BufferGeometry {
         .addScaledVector(Nrm, Math.cos(a) * r)
         .addScaledVector(Bin, Math.sin(a) * r);
       positions.push(v.x, v.y, v.z);
+      bands.push(band);
     }
   }
   for (let i = 0; i < STN; i++) {
@@ -500,6 +580,7 @@ function makeTrunkGeometry(): THREE.BufferGeometry {
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('aBand', new THREE.Float32BufferAttribute(bands, 1));
   g.setIndex(indices);
   g.computeVertexNormals();
   return g;
@@ -513,6 +594,8 @@ function makeFrondsGeometry(): THREE.BufferGeometry {
   const UP = 1.5; // arch higher
   const DROOP = 1.5; // droop less, so the crown stays up and out of the way
   const verts: number[] = [];
+  const bands: number[] = [];
+  let curBand = 0;
   const Z = new THREE.Vector3(0, 0, 1);
   const DOWN = new THREE.Vector3(0, -1, 0);
   const rachisPt = (t: number) =>
@@ -522,10 +605,12 @@ function makeFrondsGeometry(): THREE.BufferGeometry {
     for (const v of [a, b, c]) {
       const p = v.clone().applyMatrix4(M);
       verts.push(p.x, p.y, p.z);
+      bands.push(curBand);
     }
   };
 
   for (let fi = 0; fi < frondCount; fi++) {
+    curBand = fi % NUM_BANDS; // each frond reacts to one frequency band
     const M = new THREE.Matrix4().makeRotationY((fi / frondCount) * Math.PI * 2);
 
     // Rachis (central spine) — a thin tapering strip following the arc.
@@ -563,6 +648,7 @@ function makeFrondsGeometry(): THREE.BufferGeometry {
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  g.setAttribute('aBand', new THREE.Float32BufferAttribute(bands, 1));
   g.computeVertexNormals();
   return g;
 }
@@ -570,20 +656,28 @@ function makeFrondsGeometry(): THREE.BufferGeometry {
 function PalmRows({ palette }: { palette: string[] }) {
   const trunkGeo = useMemo(makeTrunkGeometry, []);
   const frondsGeo = useMemo(makeFrondsGeometry, []);
+  const bands = useMemo(() => new Float32Array(NUM_BANDS), []); // shared live spectrum
   const palms = useMemo(() => {
     const baseCol = hexColor(palette[0], '#ff3df5');
     const hsl = { h: 0, s: 0, l: 0 };
     baseCol.getHSL(hsl);
     const perSide = mobile ? 4 : 7;
-    const out: { group: THREE.Group; mat: THREE.MeshBasicMaterial; x: number; z: number }[] = [];
+    const out: { group: THREE.Group; mat: THREE.ShaderMaterial; x: number; z: number }[] = [];
     let i = 0;
     // On the flat road (|x| < ~3) so the ground under them doesn't move with the peaks.
     for (const x of [-2.8, 2.8]) {
       for (let j = 0; j < perSide; j++) {
-        // Each palm gets a distinct neon hue, spread around the album's base hue.
-        const mat = new THREE.MeshBasicMaterial({
-          color: new THREE.Color().setHSL((hsl.h + i * 0.16) % 1, 0.85, 0.6),
+        // Each palm gets a distinct neon hue; its fronds/segments glow per-band (uBands).
+        const mat = new THREE.ShaderMaterial({
+          uniforms: {
+            uColor: { value: new THREE.Color().setHSL((hsl.h + i * 0.16) % 1, 0.85, 0.6) },
+            uBase: { value: 0.32 },
+            uBands: { value: bands },
+          },
+          vertexShader: PALM_VERT,
+          fragmentShader: PALM_FRAG,
           wireframe: true,
+          toneMapped: false,
         });
         const group = new THREE.Group();
         const trunk = new THREE.Mesh(trunkGeo, mat);
@@ -599,7 +693,7 @@ function PalmRows({ palette }: { palette: string[] }) {
       }
     }
     return out;
-  }, [trunkGeo, frondsGeo, palette]);
+  }, [trunkGeo, frondsGeo, palette, bands]);
 
   useEffect(
     () => () => {
@@ -617,6 +711,21 @@ function PalmRows({ palette }: { palette: string[] }) {
     const beat = audio?.beat ?? 0;
     const speed = 4 + bass * 7.0;
     const t = state.clock.elapsedTime;
+
+    // Split the spectrum into NUM_BANDS (log-ish) → peak-hold + decay into the shared
+    // uBands array so each frond/segment pulses with its own frequency.
+    const fd = audio?.frequencyData;
+    if (fd && fd.length) {
+      const n = fd.length;
+      for (let b = 0; b < NUM_BANDS; b++) {
+        const lo = Math.floor(Math.pow(b / NUM_BANDS, 1.6) * n);
+        const hi = Math.max(lo + 1, Math.floor(Math.pow((b + 1) / NUM_BANDS, 1.6) * n));
+        let s = 0;
+        for (let k = lo; k < hi && k < n; k++) s += fd[k];
+        const e = s / (hi - lo) / 255;
+        bands[b] = Math.max(e, bands[b] - d * 2.2); // fast attack, ~0.45s decay
+      }
+    }
 
     for (const p of palms) {
       p.z += speed * d;
@@ -651,7 +760,14 @@ interface FlyObject {
   baseScale: number;
   spin: THREE.Vector3;
   bob: number;
+  radius: number; // bounding-sphere radius (for the CV box)
+  id: string;
+  conf: number;
 }
+
+// Live world positions + radii of the flying shapes, so the CV overlay can box them.
+interface FlyTarget { x: number; y: number; z: number; r: number; id: string; conf: number }
+const flyingTargetsRef: { current: FlyTarget[] } = { current: [] };
 
 function FlyingObjects({ palette }: { palette: string[] }) {
   const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -687,6 +803,7 @@ function FlyingObjects({ palette }: { palette: string[] }) {
         material = new THREE.MeshBasicMaterial({ color: accent(i).multiplyScalar(1.2), wireframe: true });
         baseY = 1.2;
       }
+      geometry.computeBoundingSphere();
       out.push({
         kind, geometry, material,
         lane: lanes[i % lanes.length],
@@ -694,6 +811,9 @@ function FlyingObjects({ palette }: { palette: string[] }) {
         baseY, baseScale: 1,
         spin: new THREE.Vector3(0.2 + (i % 3) * 0.15, 0.3 + (i % 2) * 0.2, 0.1),
         bob: i * 1.7,
+        radius: geometry.boundingSphere?.radius ?? 1,
+        id: `0x${(0x2a + i * 9).toString(16).toUpperCase().padStart(2, '0')}`,
+        conf: 0.88 + ((i * 13) % 6) * 0.018,
       });
     }
     return out;
@@ -716,6 +836,7 @@ function FlyingObjects({ palette }: { palette: string[] }) {
     const speed = 4 + bass * 7.0;
     const t = state.clock.elapsedTime;
 
+    const targets: FlyTarget[] = [];
     for (let i = 0; i < objects.length; i++) {
       const mesh = meshRefs.current[i];
       if (!mesh) continue;
@@ -723,15 +844,19 @@ function FlyingObjects({ palette }: { palette: string[] }) {
       o.z += speed * d;
       if (o.z > Z_NEAR) o.z -= Z_SPAN;
       const bob = Math.sin(t * 0.8 + o.bob) * 0.3;
-      mesh.position.set(o.lane, o.baseY + bob + bass * 0.6, o.z);
-      mesh.scale.setScalar(o.baseScale * (1 + beat * 0.25));
+      const y = o.baseY + bob + bass * 0.6;
+      const scale = o.baseScale * (1 + beat * 0.25);
+      mesh.position.set(o.lane, y, o.z);
+      mesh.scale.setScalar(scale);
       if (o.kind !== 'monolith') {
         mesh.rotation.x += o.spin.x * d;
         mesh.rotation.y += o.spin.y * d;
       } else {
         mesh.rotation.y += o.spin.y * d * 0.3;
       }
+      targets.push({ x: o.lane, y, z: o.z, r: o.radius * scale, id: o.id, conf: o.conf });
     }
+    flyingTargetsRef.current = targets;
   });
 
   return (
@@ -811,7 +936,7 @@ function RoadChevrons({ palette }: { palette: string[] }) {
 
 function SoundRiver({ palette }: { palette: string[] }) {
   const LEN = 64;
-  const WIDTH = 1.4;
+  const WIDTH = 0.6;
   const geo = useMemo(() => {
     const positions: number[] = [];
     const indices: number[] = [];
@@ -825,12 +950,19 @@ function SoundRiver({ palette }: { palette: string[] }) {
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array((LEN + 1) * 2 * 3), 3));
     g.setIndex(indices);
     return g;
   }, []);
+  const baseCol = useMemo(() => hexColor(palette[2] ?? palette[0], '#00ffd0'), [palette]);
   const mat = useMemo(
-    () => new THREE.MeshBasicMaterial({ color: hexColor(palette[2] ?? palette[0], '#00ffd0'), wireframe: true, toneMapped: false }),
-    [palette]
+    () =>
+      new THREE.MeshBasicMaterial({
+        vertexColors: true, // brightness ∝ height → the waveform contours read
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+    []
   );
   const scroll = useRef(0);
   useEffect(() => () => { geo.dispose(); mat.dispose(); }, [geo, mat]);
@@ -843,6 +975,7 @@ function SoundRiver({ palette }: { palette: string[] }) {
     scroll.current += d * (4 + bass * 7) * 1.5;
     const s = Math.floor(scroll.current);
     const pos = geo.attributes.position as THREE.BufferAttribute;
+    const col = geo.attributes.color as THREE.BufferAttribute;
     for (let i = 0; i <= LEN; i++) {
       let amp = 0;
       if (fd && fd.length) {
@@ -852,8 +985,16 @@ function SoundRiver({ palette }: { palette: string[] }) {
       }
       pos.setY(i * 2, amp);
       pos.setY(i * 2 + 1, amp);
+      // Brightness ∝ height → glowing crests, dim troughs (the contour shading).
+      const b = 0.25 + amp * 1.4;
+      const r = baseCol.r * b;
+      const g = baseCol.g * b;
+      const bl = baseCol.b * b;
+      col.setXYZ(i * 2, r, g, bl);
+      col.setXYZ(i * 2 + 1, r, g, bl);
     }
     pos.needsUpdate = true;
+    col.needsUpdate = true;
   });
 
   return <mesh geometry={geo} material={mat} position={[0, -1.0, 0]} />;
@@ -868,6 +1009,43 @@ function loadCarTemplate(): Promise<THREE.Group> {
     });
   }
   return carTemplatePromise;
+}
+
+// Soft radial glow texture (bright centre → transparent edges) for the car underglow,
+// so the plane reads as a soft pool of light instead of a hard rectangle.
+let _glowTex: THREE.CanvasTexture | null = null;
+function getGlowTexture(): THREE.CanvasTexture {
+  if (_glowTex) return _glowTex;
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  _glowTex = new THREE.CanvasTexture(c);
+  return _glowTex;
+}
+
+// Soft dark contact shadow (dark centre → transparent edges) to plant the car.
+let _shadowTex: THREE.CanvasTexture | null = null;
+function getShadowTexture(): THREE.CanvasTexture {
+  if (_shadowTex) return _shadowTex;
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(0,0,0,1.0)');
+  g.addColorStop(0.5, 'rgba(0,0,0,0.6)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, S, S);
+  _shadowTex = new THREE.CanvasTexture(c);
+  return _shadowTex;
 }
 
 function OutrunCar({ palette }: { palette: string[] }) {
@@ -923,28 +1101,51 @@ function OutrunCar({ palette }: { palette: string[] }) {
     () =>
       new THREE.MeshBasicMaterial({
         color: hexColor(palette[0], '#ff3df5'),
+        map: getGlowTexture(), // soft radial falloff → no hard rectangle
         transparent: true,
-        opacity: 0.55,
+        opacity: 0.1, // faint — the shadow does the grounding now
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         toneMapped: false,
       }),
     [palette]
   );
+  const shadowMat = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        map: getShadowTexture(),
+        color: new THREE.Color('#000000'),
+        transparent: true,
+        opacity: 0.9, // darkens the bright neon grid under the car → reads as a shadow
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    []
+  );
+  useEffect(() => () => shadowMat.dispose(), [shadowMat]);
   useEffect(() => () => underglow.dispose(), [underglow]);
 
   useFrame((state) => {
     if (!groupRef.current) return;
-    const bass = getAudioData()?.bass ?? 0;
+    const beat = getAudioData()?.beat ?? 0;
     const t = state.clock.elapsedTime;
-    groupRef.current.position.y = -1.5 + bass * 0.2 + Math.sin(t * 1.5) * 0.04;
-    groupRef.current.rotation.z = Math.sin(t * 0.8) * 0.03; // gentle sway
+    const g = groupRef.current;
+
+    // Small, level drift on the road — a little side to side and forward/back.
+    const x = Math.sin(t * 0.31) * 0.18 + Math.sin(t * 0.13) * 0.12;
+    const z = -5.0 + Math.sin(t * 0.23) * 0.6 - beat * 0.3;
+    g.position.set(x, -1.5, z); // planted, no vertical bob
+    g.rotation.set(0, Math.PI, 0); // fixed heading — no twisting
   });
 
   if (!car) return null;
   return (
     <group ref={groupRef} position={[0, -1.5, -4.5]} rotation={[0, Math.PI, 0]}>
       <primitive object={car.group} />
+      {/* Contact shadow on the road, just under the car — darkens the neon grid → grounds it. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} material={shadowMat} renderOrder={2}>
+        <planeGeometry args={[3.4, 6.6]} />
+      </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]} material={underglow}>
         <planeGeometry args={[3.8, 6.2]} />
       </mesh>
@@ -964,32 +1165,27 @@ const cvTargetsRef: { current: CVTarget[] } = { current: [] };
 function CVTargets() {
   const { camera, size } = useThree();
   const v = useMemo(() => new THREE.Vector3(), []);
-  const cells = useMemo(() => getMetalField().cells, []);
 
   useEffect(() => () => { cvTargetsRef.current = []; }, []);
 
   useFrame(() => {
     const W = size.width;
     const H = size.height;
-    const scroll = terrainScrollRef.current;
-    const disp = terrainDispRef.current;
     const out: CVTarget[] = [];
-    for (const c of cells) {
-      // World z of this shard, wrapped to the nearest plane window (Z_NEAR-TD, Z_NEAR].
-      let z = c.cz + scroll;
-      z = (((z - Z_NEAR) % TERRAIN_D) + TERRAIN_D) % TERRAIN_D + (Z_NEAR - TERRAIN_D);
-      const y = -1.5 + c.height * disp; // sits on the actual peak
-      v.set(c.x, y, z).project(camera);
+    // Box the floating wireframe shapes (their live world positions/radii).
+    for (const f of flyingTargetsRef.current) {
+      v.set(f.x, f.y, f.z);
+      const dist = camera.position.distanceTo(v);
+      v.project(camera);
       if (v.z > 1 || Math.abs(v.x) > 1.3 || Math.abs(v.y) > 1.3) continue; // behind / off-screen
-      const dist = Math.abs(z - 9);
       const edge = THREE.MathUtils.clamp((1.3 - Math.max(Math.abs(v.x), Math.abs(v.y))) / 0.3, 0, 1);
       out.push({
         x: (v.x * 0.5 + 0.5) * W,
         y: (-v.y * 0.5 + 0.5) * H,
-        size: THREE.MathUtils.clamp((c.strength * 1500) / (dist + 6), 18, 230), // ∝ shard size × perspective
+        size: THREE.MathUtils.clamp((f.r * 2.4 * H) / (dist * 0.9), 22, 360), // bound the shape
         vis: edge,
-        id: c.id,
-        conf: c.conf,
+        id: f.id,
+        conf: f.conf,
       });
     }
     cvTargetsRef.current = out;
@@ -1071,7 +1267,7 @@ function TerrainScene({ palette, features }: { palette: string[]; features: Trac
   return (
     <>
       <color attach="background" args={[fogHex]} />
-      <fog attach="fog" args={[fogHex, 5, 24]} />
+      <fog attach="fog" args={[fogHex, 6, 42]} />
       <Backdrop palette={palette} features={features} />
       <VaporwaveTerrain palette={palette} features={features} />
       <RoadChevrons palette={palette} />
