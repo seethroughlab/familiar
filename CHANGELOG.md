@@ -5,6 +5,40 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha7] - 2026-06-05
+
+Seventh alpha — a major **visualizer overhaul** (a new audio-reactive vaporwave/outrun scene, richer 3D album-art tiles, and synced lyrics) plus a **library/feature cleanup** that consolidates the map browsers and status UI and adds background metadata auto-proposals.
+
+### Added
+
+- **Reactive Terrain visualizer** — a driving vaporwave/outrun scene that locks to the music. Hills rise **per-frequency-band across the landscape** (the spectrum mapped left→right, adaptively normalized so no region is ever inert) under a neon GL wireframe grid; a mood-based **sun/moon** with classic outrun horizontal bars and a soft light aura; **metallic "shards"** scattered across the side terrain that glow as they catch the sun; a **computer-vision detection HUD** that boxes the floating wireframe shapes; procedural **palm trees** whose individual fronds and trunk segments glow to different frequency bands; scrolling road chevrons; a **driving car** (CC0 model, neon edge highlights) with a grounded contact shadow; and a solid, height-shaded **"sound river"** waveform ribbon flowing down the road. Chromatic aberration, bloom, and fog throughout.
+- **Beat Tiles visualizer** — the album cover as a grid of **3D box tiles** that pop outward in a wave **rippling from the center** on each onset. **Holographic + embossed foil** side faces (the cover drives a normal map under a fresnel iridescence), a **reflective floor** and soft blurred-cover **backdrop**, a drifting camera with an idle "breathing" wave, and flip-dot **tile flips** on strong beats. The artwork still reassembles and stays recognizable.
+- **Scrolling Lyrics visualizer** — an Apple-Music-style **synced lyric column** (current line centered and bright, sung lines fading above, upcoming lines to read ahead) over an ambient **3D field of the song's own words** and a palette "aurora" wash. Synced lyrics are fetched from LRCLIB and **cached per track**.
+- **Vibe Map** — a single consolidated library map, replacing the separate map browsers.
+- **Background auto-proposals** — a backend service that proposes metadata changes in the background, surfaced in the Proposed Changes panel.
+- **Real-time audio analysis** — onset/beat detection (spectral flux) shared across the visualizers so visuals track the actual audio.
+
+### Changed
+
+- **Status UI consolidated** — background-jobs, download, health, proposed-changes, and mixtape-render indicators merged into a single **Status menu**.
+- **Full Player now-playing layout** — over a visualizer, the now-playing info uses the transport-bar layout (artwork left, title/artist right) instead of a thumbnail floating over the title.
+- **Audio engine analysis tuning** — FFT size / smoothing adjusted so the spectrum reacts tightly to the music.
+
+### Removed
+
+- **Unused library browsers** — Music Map, Ego Music Map, Mood Grid, Spotify Browser, and UMAP Explorer (consolidated into Vibe Map).
+- **Unused features** — S3 backup settings, playlist import/export sharing, and the keyboard-shortcuts help overlay.
+- **Old visualizers** — Album Kaleidoscope, Cosmic Orb, Frequency Bars, Lyric Storm, and Rain Window (replaced by Reactive Terrain, Beat Tiles, and Scrolling Lyrics).
+
+### Fixed
+
+- **Synced-lyrics fetching** — lyrics no longer linger from the previous track or get overwritten by a late, out-of-order response when skipping quickly between tracks.
+
+### Infrastructure
+
+- New backend migration: a `synced_lyrics` JSONB cache on `tracks` (cached LRCLIB result per track).
+- CI: site deploy migrated from GitHub Pages to **Cloudflare Pages**; GitHub Actions runners moved to **Node.js 24**.
+
 ## [0.1.0-alpha6] - 2026-05-26
 
 Sixth alpha — adds network audio output routing so playback can be sent to Sonos, WiiM/UPnP, AirPlay, and Chromecast devices directly from the player bar or full player.
