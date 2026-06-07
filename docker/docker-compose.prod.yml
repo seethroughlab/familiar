@@ -108,6 +108,8 @@ services:
       - S3_BACKUP_BUCKET=${S3_BACKUP_BUCKET:-}
       - S3_BACKUP_REGION=${S3_BACKUP_REGION:-us-east-1}
       - S3_BACKUP_PREFIX=${S3_BACKUP_PREFIX:-}
+      # Network audio outputs (WiiM/Sonos/AirPlay/Chromecast). See docker/.env.example.
+      - DEVICE_STREAM_BASE_URL=${DEVICE_STREAM_BASE_URL:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -122,6 +122,9 @@ class SettingsUpdateRequest(BaseModel):
     # Update notifications
     update_channel: str | None = None
 
+    # Network audio outputs — LAN base URL devices use to fetch the stream
+    device_stream_base_url: str | None = None
+
 
 def _get_library_status() -> LibraryStatus:
     """Get current library mount status."""

@@ -68,7 +68,7 @@ ssh jeff@$NAS_HOST "docker restart familiar-api"
 echo "Installing additional dependencies..."
 ssh jeff@$NAS_HOST "docker exec familiar-api sh -c 'which pg_dump > /dev/null 2>&1 || apt-get update -qq && apt-get install -y -qq postgresql-client > /dev/null 2>&1'" || true
 ssh jeff@$NAS_HOST "docker exec familiar-api sh -c 'which deno > /dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq curl unzip > /dev/null 2>&1 && curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh)'" || true
-ssh jeff@$NAS_HOST "docker exec familiar-api uv pip install 'curl_cffi>=0.7.0' 'trafilatura>=1.6.0' 'boto3>=1.34.0' 'yt-dlp[default]' 'bcrypt>=4.0.0' 'pyloudnorm>=0.1.0' 'soundfile>=0.12.0' 'basic-pitch[onnx]>=0.3.0' 'matplotlib>=3.5.0' --python /app/.venv/bin/python -q" || true
+ssh jeff@$NAS_HOST "docker exec familiar-api uv pip install 'curl_cffi>=0.7.0' 'trafilatura>=1.6.0' 'boto3>=1.34.0' 'yt-dlp[default]' 'bcrypt>=4.0.0' 'pyloudnorm>=0.1.0' 'soundfile>=0.12.0' 'basic-pitch[onnx]>=0.3.0' 'matplotlib>=3.5.0' 'async-upnp-client>=0.47.0' --python /app/.venv/bin/python -q" || true
 
 # Copy code into container (container runs from /app/, not host filesystem)
 if [ "$DEPLOY_BACKEND" = true ]; then

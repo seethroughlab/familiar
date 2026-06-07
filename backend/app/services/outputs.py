@@ -52,6 +52,7 @@ class TrackMetadata:
     album: str = ""
     duration_ms: int = 0
     artwork_url: str | None = None
+    content_type: str | None = None  # e.g. "audio/mpeg" — for DIDL res protocolInfo
 
 
 def _build_didl_metadata(stream_url: str, metadata: TrackMetadata) -> str:
@@ -69,6 +70,11 @@ def _build_didl_metadata(stream_url: str, metadata: TrackMetadata) -> str:
 
     res_duration = f' duration="{duration}"' if duration else ""
 
+    # protocolInfo MUST match the actual stream content type — strict renderers (WiiM/LinkPlay)
+    # reject SetAVTransportURI when it lies (e.g. claiming FLAC for an MP3). Default to MP3, the
+    # most common case, when the type is unknown.
+    content_type = metadata.content_type or "audio/mpeg"
+
     return (
         '<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" '
         'xmlns:dc="http://purl.org/dc/elements/1.1/" '
@@ -80,7 +86,7 @@ def _build_didl_metadata(stream_url: str, metadata: TrackMetadata) -> str:
         f"<upnp:album>{escape(metadata.album)}</upnp:album>"
         f"{art_tag}"
         "<upnp:class>object.item.audioItem.musicTrack</upnp:class>"
-        f'<res{res_duration} protocolInfo="http-get:*:audio/flac:*">'
+        f'<res{res_duration} protocolInfo="http-get:*:{content_type}:*">'
         f"{escape(stream_url)}</res>"
         "</item></DIDL-Lite>"
     )
@@ -451,7 +457,12 @@ class UPnPOutput(AudioOutput):
             self.position_ms = 0
             return True
         except Exception as e:
-            logger.error(f"UPnP play error: {e}")
+            # Full traceback + the UPnP/SOAP fault — strict renderers reject SetAVTransportURI
+            # with an actionable error code, which the bare message would otherwise hide.
+            logger.exception(
+                "UPnP play failed for %s (openhome=%s, url=%s): %r",
+                self.name, self._has_openhome, stream_url, e,
+            )
             self.state = OutputState.ERROR
             return False
 
@@ -1244,11 +1255,19 @@ class OutputManager:
             return_exceptions=True,
         )
 
+        def _devices(kind: str, result: Any) -> list[dict]:
+            # Surface failures instead of silently returning an empty list — a swallowed
+            # exception here looks identical to "no devices on the network".
+            if isinstance(result, BaseException):
+                logger.error(f"{kind} discovery failed: {result!r}")
+                return []
+            return [o.to_dict() for o in result]
+
         return {
-            "sonos": [o.to_dict() for o in (sonos if isinstance(sonos, list) else [])],
-            "upnp": [o.to_dict() for o in (upnp if isinstance(upnp, list) else [])],
-            "airplay": [o.to_dict() for o in (airplay if isinstance(airplay, list) else [])],
-            "chromecast": [o.to_dict() for o in (chromecast if isinstance(chromecast, list) else [])],
+            "sonos": _devices("Sonos", sonos),
+            "upnp": _devices("UPnP", upnp),
+            "airplay": _devices("AirPlay", airplay),
+            "chromecast": _devices("Chromecast", chromecast),
         }
 
     def list_outputs(self) -> list[dict[str, Any]]:

@@ -1,5 +1,6 @@
 """Multi-room audio output API endpoints."""
 
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -9,7 +10,9 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession
 from app.api.exceptions import NotFoundError, ValidationError
+from app.api.routes.tracks import AUDIO_MIME_TYPES
 from app.db.models import Track
+from app.services.app_settings import get_app_settings_service
 from app.services.outputs import (
     AirPlayOutput,
     AudioOutput,
@@ -76,6 +79,20 @@ class SeekRequest(BaseModel):
     position_ms: int
 
 
+def _device_stream_url(stream_url: str, track_id: UUID | None) -> str:
+    """Resolve the stream URL a network device should fetch.
+
+    The frontend builds ``stream_url`` from its own origin (``window.location.origin``), which a
+    network device may not be able to reach (e.g. the browser is on Tailscale but the WiiM is only
+    on the LAN). When ``device_stream_base_url`` is configured, rebuild the URL from that
+    LAN-reachable base so the device can fetch the audio. Falls back to the frontend-provided URL.
+    """
+    base = get_app_settings_service().get_effective("device_stream_base_url")
+    if base and track_id:
+        return f"{base.rstrip('/')}/api/v1/tracks/{track_id}/stream"
+    return stream_url
+
+
 async def _build_track_metadata(db: DbSession, track_id: UUID | None) -> TrackMetadata | None:
     """Look up track and build metadata for network outputs."""
     if not track_id:
@@ -85,11 +102,14 @@ async def _build_track_metadata(db: DbSession, track_id: UUID | None) -> TrackMe
         track = result.scalar_one_or_none()
         if not track:
             return None
+        suffix = Path(track.file_path).suffix.lower() if track.file_path else ""
+        content_type = AUDIO_MIME_TYPES.get(suffix)
         return TrackMetadata(
             title=track.title or "",
             artist=track.artist or "",
             album=track.album or "",
             duration_ms=int((track.duration_seconds or 0) * 1000),
+            content_type=content_type,
         )
     except Exception:
         return None
@@ -217,7 +237,8 @@ async def play_to_output(
     manager = get_output_manager()
     track_id = UUID(request.track_id) if request.track_id else None
     metadata = await _build_track_metadata(db, track_id)
-    success = await manager.play_to_output(output_id, request.stream_url, track_id, metadata)
+    stream_url = _device_stream_url(request.stream_url, track_id)
+    success = await manager.play_to_output(output_id, stream_url, track_id, metadata)
     if not success:
         raise ValidationError("Failed to start playback")
     return {"status": "playing"}
@@ -324,7 +345,8 @@ async def play_to_zone(
     manager = get_output_manager()
     track_id = UUID(request.track_id) if request.track_id else None
     metadata = await _build_track_metadata(db, track_id)
-    results = await manager.play_to_zone(zone_id, request.stream_url, track_id, metadata)
+    stream_url = _device_stream_url(request.stream_url, track_id)
+    results = await manager.play_to_zone(zone_id, stream_url, track_id, metadata)
     if not results:
         raise NotFoundError("Zone not found")
     return {"status": "playing", "results": {str(k): v for k, v in results.items()}}

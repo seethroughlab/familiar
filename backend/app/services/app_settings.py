@@ -98,6 +98,11 @@ class AppSettings(BaseModel):
     # Update notifications
     update_channel: str = "disabled"  # "disabled", "stable", "beta", "alpha"
 
+    # Network audio outputs — LAN-reachable base URL (e.g. http://192.168.1.50:4400) that devices
+    # (WiiM/Sonos/etc.) use to fetch the audio stream. Needed when the browser reaches the app over
+    # a network the device can't (e.g. Tailscale). Falls back to DEVICE_STREAM_BASE_URL env var.
+    device_stream_base_url: str | None = None
+
 
 
 class AppSettingsService:
