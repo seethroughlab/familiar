@@ -11,6 +11,7 @@ import { useActiveSessionStore } from '../stores/activeSessionStore';
 import { useFavorites } from '../hooks/useFavorites';
 import { log } from './audio/platform';
 import { useConnectivityStore } from '../stores/connectivityStore';
+import { useOutputStore } from '../stores/outputStore';
 import { prefetchService } from '../services/prefetchService';
 import {
   getCrossfadeTrigger,
@@ -84,6 +85,10 @@ export function useAudioEngine() {
   const advanceToNextTrack = usePlayerStore((s) => s.advanceToNextTrack);
   const setIsLoadingAudio = usePlayerStore((s) => s.setIsLoadingAudio);
   const jumpToQueueIndex = usePlayerStore((s) => s.jumpToQueueIndex);
+
+  // When a network output (WiiM/Sonos/…) is active, the local engine must stay silent —
+  // it keeps running as the transport master so the queue advances and mirrors to the device.
+  const activeOutputId = useOutputStore((s) => s.activeOutputId);
 
   const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationMode, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
   const offlineModeActive = useConnectivityStore((s) => s.offlineModeActive);
@@ -678,8 +683,9 @@ export function useAudioEngine() {
 
   useEffect(() => {
     if (!isInitialized) return;
-    engine.setVolume(volume);
-  }, [volume, isInitialized, engine]);
+    // Mute local output while casting to a network device (avoids double audio); restore on return.
+    engine.setVolume(activeOutputId ? 0 : volume);
+  }, [volume, activeOutputId, isInitialized, engine]);
 
   // --------------------------------------------------------------------------
   // Effect: Load track when currentTrack changes
