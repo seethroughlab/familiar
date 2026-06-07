@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Monitor, Wifi, Radio, Cast, Speaker, RefreshCw, Check } from 'lucide-react';
 import { useOutputStore } from '../../stores/outputStore';
 import type { OutputType } from '../../api/outputs';
+import { AirPlayButton } from './AirPlayButton';
 
 const TYPE_ICONS: Record<OutputType, typeof Monitor> = {
   browser: Monitor,
@@ -62,7 +63,9 @@ export function OutputSelector() {
   const isNetworkActive = !!activeOutputId;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div ref={containerRef} className="relative flex items-center">
+      {/* Native-only: OS-level AirPlay route picker (renders null on web). */}
+      <AirPlayButton />
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`p-2 rounded-full transition-colors ${
