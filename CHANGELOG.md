@@ -5,6 +5,25 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha8] - 2026-06-07
+
+Eighth alpha — **network audio output** arrives: stream from Familiar to a WiiM (and other UPnP/DLNA/AirPlay 2 receivers) over your LAN, with a native iOS AirPlay button in the player. Plus an **un-skip** path so files you skipped during import are no longer gone for good.
+
+### Added
+
+- **Network audio output (WiiM / UPnP / DLNA)** — the "Play To" picker now streams the current track to a network renderer and keeps it in sync with the player (play/pause/seek/next). Devices can be discovered on the LAN or added directly by address. Selecting a device silences the local speakers so you don't get double audio.
+- **Native iOS AirPlay** — an AirPlay button in the player opens the system route picker, sending the app's audio to AirPlay 2 devices (a WiiM, HomePod, Apple TV, …) at the OS level.
+- **Un-skip skipped imports** — Library → Pending Review has a new **Skipped** tab listing files you skipped during review, with per-track, per-folder, and bulk **Un-skip** to send them back to the review queue. Skipping is no longer permanent.
+- **LAN stream base URL** — a runtime `DEVICE_STREAM_BASE_URL` setting so network devices can fetch the audio even when you open the app over Tailscale or a public domain (the device always gets a LAN-reachable URL, regardless of how you reached the app).
+
+### Fixed
+
+- **Network playback to strict renderers** — WiiM/LinkPlay devices now play correctly: the stream metadata advertises the track's real audio type instead of always claiming FLAC, and discovery/playback errors surface in logs instead of being silently swallowed.
+
+### Infrastructure
+
+- CI: release wait-for-CI timeout raised 30 → 60 min.
+
 ## [0.1.0-alpha7] - 2026-06-05
 
 Seventh alpha — a major **visualizer overhaul** (a new audio-reactive vaporwave/outrun scene, richer 3D album-art tiles, and synced lyrics) plus a **library/feature cleanup** that consolidates the map browsers and status UI and adds background metadata auto-proposals.
@@ -307,6 +326,8 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - Audio effects not available on iOS (require Web Audio routing which breaks background playback)
 
+[0.1.0-alpha8]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha8
+[0.1.0-alpha7]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha7
 [0.1.0-alpha6]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha6
 [0.1.0-alpha5]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha5
 [0.1.0-alpha4]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha4
