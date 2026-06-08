@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Music,
   RefreshCw,
+  RotateCcw,
   SkipForward,
   Check,
   Pencil,
@@ -505,10 +506,100 @@ function GroupCard({
   );
 }
 
+/** Read-only group card for the Skipped view: per-track and per-group "Un-skip". */
+function SkippedGroupCard({
+  group,
+  onInvalidate,
+}: {
+  group: PendingTrackGroup;
+  onInvalidate: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
+
+  const unskipMutation = useMutation({
+    mutationFn: (trackId: string) => pendingTracksApi.unskip(trackId),
+    onSuccess: onInvalidate,
+  });
+  const groupUnskipMutation = useMutation({
+    mutationFn: () => pendingTracksApi.groupUnskip(group.folder_path),
+    onSuccess: onInvalidate,
+  });
+
+  return (
+    <div className="rounded-lg border border-zinc-700 bg-zinc-900/50 overflow-hidden">
+      <div
+        className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-800/50"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-medium text-white truncate">{group.folder_name}</span>
+          <span className="text-xs text-zinc-500 ml-2">{group.track_count} track{group.track_count !== 1 ? 's' : ''}</span>
+        </div>
+        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => groupUnskipMutation.mutate()}
+            disabled={groupUnskipMutation.isPending}
+            className="px-2 py-1 rounded text-xs bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+          >
+            {groupUnskipMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Un-skip All'}
+          </button>
+        </div>
+      </div>
+      {expanded && (
+        <div className="border-t border-zinc-800 py-1">
+          {group.tracks.map((track) => (
+            <div key={track.id} className="flex items-center gap-3 px-3 py-2 hover:bg-zinc-800/50 rounded-lg group">
+              <Music className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-white truncate">{track.title || '(untitled)'}</div>
+                <div className="flex items-center gap-2 text-xs text-zinc-500">
+                  <span>{track.artist || 'Unknown'}</span>
+                  {track.album && (
+                    <>
+                      <span className="text-zinc-600">&middot;</span>
+                      <span>{track.album}</span>
+                    </>
+                  )}
+                  <span className="text-zinc-600">&middot;</span>
+                  <span>{track.format?.toUpperCase()}</span>
+                  <span>{formatDuration(track.duration_seconds)}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setLoadingTrackId(track.id);
+                  unskipMutation.mutate(track.id, { onSettled: () => setLoadingTrackId(null) });
+                }}
+                disabled={loadingTrackId === track.id}
+                className="p-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Un-skip (return to review)"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PendingReviewBrowser(_props: BrowserProps) {
   const queryClient = useQueryClient();
+  const [mode, setMode] = useState<'pending' | 'skipped'>('pending');
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [queueAnalysis, setQueueAnalysis] = useState(true);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.pendingTracks.all });
+    queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
+  };
 
   const { data: stats } = useQuery({
     queryKey: queryKeys.pendingTracks.stats,
@@ -516,36 +607,48 @@ function PendingReviewBrowser(_props: BrowserProps) {
     refetchInterval: 30000,
   });
 
+  // Lightweight count of skipped tracks for the toggle badge.
+  const { data: skippedCountData } = useQuery({
+    queryKey: queryKeys.pendingTracks.groups({ count: 'skipped' }),
+    queryFn: () => pendingTracksApi.listGroups({ status: 'skipped', limit: 1 }),
+    refetchInterval: 30000,
+  });
+  const skippedCount = skippedCountData?.total_tracks ?? 0;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: queryKeys.pendingTracks.groups({ filter: filterTab }),
-    queryFn: () => pendingTracksApi.listGroups(),
+    queryKey: queryKeys.pendingTracks.groups({ mode, filter: filterTab }),
+    queryFn: () =>
+      pendingTracksApi.listGroups({ status: mode === 'skipped' ? 'skipped' : 'pending_review' }),
   });
 
   const bulkApproveMutation = useMutation({
     mutationFn: () => pendingTracksApi.bulkApproveAll({ queue_analysis: queueAnalysis }),
-    onSuccess: () => invalidate(),
+    onSuccess: invalidate,
   });
 
   const bulkSkipMutation = useMutation({
     mutationFn: () => pendingTracksApi.bulkSkipAll(),
-    onSuccess: () => invalidate(),
+    onSuccess: invalidate,
   });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: queryKeys.pendingTracks.all });
-    queryClient.invalidateQueries({ queryKey: queryKeys.tracks.all });
-  };
+  const bulkUnskipMutation = useMutation({
+    mutationFn: () => pendingTracksApi.bulkUnskipAll(),
+    onSuccess: invalidate,
+  });
 
-  // Filter groups based on tab
+  // Filter groups based on tab (pending mode only)
   let filteredGroups = data?.groups ?? [];
-  if (filterTab === 'duplicates') {
-    filteredGroups = filteredGroups.filter((g) => g.duplicate_count > 0);
-  } else if (filterTab === 'clean') {
-    filteredGroups = filteredGroups.filter((g) => g.duplicate_count === 0);
+  if (mode === 'pending') {
+    if (filterTab === 'duplicates') {
+      filteredGroups = filteredGroups.filter((g) => g.duplicate_count > 0);
+    } else if (filterTab === 'clean') {
+      filteredGroups = filteredGroups.filter((g) => g.duplicate_count === 0);
+    }
   }
 
   const totalTracks = stats?.total_tracks ?? 0;
-  const isBulkLoading = bulkApproveMutation.isPending || bulkSkipMutation.isPending;
+  const isBulkLoading =
+    bulkApproveMutation.isPending || bulkSkipMutation.isPending || bulkUnskipMutation.isPending;
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
@@ -555,12 +658,16 @@ function PendingReviewBrowser(_props: BrowserProps) {
         <div className="flex-1">
           <h2 className="text-xl font-semibold text-white">Pending Review</h2>
           <p className="text-sm text-zinc-400">
-            {totalTracks > 0
-              ? `${totalTracks} track${totalTracks !== 1 ? 's' : ''} in ${stats?.total_groups ?? 0} group${(stats?.total_groups ?? 0) !== 1 ? 's' : ''} awaiting review`
-              : 'No tracks awaiting review'}
+            {mode === 'pending'
+              ? (totalTracks > 0
+                  ? `${totalTracks} track${totalTracks !== 1 ? 's' : ''} in ${stats?.total_groups ?? 0} group${(stats?.total_groups ?? 0) !== 1 ? 's' : ''} awaiting review`
+                  : 'No tracks awaiting review')
+              : (skippedCount > 0
+                  ? `${skippedCount} skipped track${skippedCount !== 1 ? 's' : ''} — un-skip to return them to review`
+                  : 'No skipped tracks')}
           </p>
         </div>
-        {totalTracks > 0 && (
+        {mode === 'pending' && totalTracks > 0 && (
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-sm text-zinc-400 cursor-pointer select-none">
               <input
@@ -598,10 +705,46 @@ function PendingReviewBrowser(_props: BrowserProps) {
             </button>
           </div>
         )}
+        {mode === 'skipped' && skippedCount > 0 && (
+          <button
+            onClick={() => bulkUnskipMutation.mutate()}
+            disabled={isBulkLoading}
+            className="px-3 py-1.5 rounded text-sm bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {bulkUnskipMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <RotateCcw className="w-4 h-4" />
+                Un-skip All
+              </>
+            )}
+          </button>
+        )}
       </div>
 
-      {/* Empty state */}
-      {totalTracks === 0 && !isLoading && (
+      {/* Mode toggle */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setMode('pending')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'pending' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+          }`}
+        >
+          Pending ({totalTracks})
+        </button>
+        <button
+          onClick={() => setMode('skipped')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            mode === 'skipped' ? 'bg-blue-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+          }`}
+        >
+          Skipped ({skippedCount})
+        </button>
+      </div>
+
+      {/* Empty states */}
+      {mode === 'pending' && totalTracks === 0 && !isLoading && (
         <div className="text-center py-12">
           <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">All Clear</h3>
@@ -610,8 +753,17 @@ function PendingReviewBrowser(_props: BrowserProps) {
           </p>
         </div>
       )}
+      {mode === 'skipped' && skippedCount === 0 && !isLoading && (
+        <div className="text-center py-12">
+          <CheckCircle className="w-12 h-12 text-zinc-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-white mb-2">No skipped tracks</h3>
+          <p className="text-zinc-400 max-w-md mx-auto">
+            Tracks you skip during review appear here so you can un-skip them later.
+          </p>
+        </div>
+      )}
 
-      {totalTracks > 0 && (
+      {mode === 'pending' && totalTracks > 0 && (
         <>
           {/* Filter tabs */}
           <div className="flex flex-wrap gap-2 mb-4">
@@ -673,6 +825,35 @@ function PendingReviewBrowser(_props: BrowserProps) {
               ) : (
                 filteredGroups.map((group) => (
                   <GroupCard key={group.folder_path} group={group} queueAnalysis={queueAnalysis} onInvalidate={invalidate} />
+                ))
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Skipped mode body */}
+      {mode === 'skipped' && skippedCount > 0 && (
+        <>
+          {isLoading && (
+            <div className="flex items-center gap-2 py-12 justify-center">
+              <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+              <span className="text-zinc-400">Loading...</span>
+            </div>
+          )}
+          {error && (
+            <div className="flex items-center gap-2 p-4 bg-red-900/30 rounded-lg border border-red-800">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <span className="text-red-400">Failed to load skipped tracks</span>
+            </div>
+          )}
+          {!isLoading && !error && (
+            <div className="space-y-3">
+              {filteredGroups.length === 0 ? (
+                <p className="text-zinc-500 text-center py-8">No skipped tracks</p>
+              ) : (
+                filteredGroups.map((group) => (
+                  <SkippedGroupCard key={group.folder_path} group={group} onInvalidate={invalidate} />
                 ))
               )}
             </div>

@@ -20,6 +20,12 @@ router = APIRouter(prefix="/pending-tracks", tags=["pending-review"])
 group_router = APIRouter(prefix="/pending-tracks/group", tags=["pending-review"])
 bulk_router = APIRouter(prefix="/pending-tracks/bulk", tags=["pending-review"])
 
+# Review statuses the listing/un-skip endpoints can target.
+_REVIEW_STATUSES = {
+    "pending_review": TrackStatus.PENDING_REVIEW,
+    "skipped": TrackStatus.SKIPPED,
+}
+
 
 # ============================================================================
 # Request/Response Models
@@ -164,10 +170,12 @@ def _track_to_response(track: Track) -> PendingTrackResponse:
     )
 
 
-async def _get_pending_track(db: AsyncSession, track_id: UUID) -> Track:
-    """Fetch a pending track or raise 404."""
+async def _get_pending_track(
+    db: AsyncSession, track_id: UUID, status: TrackStatus = TrackStatus.PENDING_REVIEW
+) -> Track:
+    """Fetch a track in the given review status (default PENDING_REVIEW) or raise 404."""
     result = await db.execute(
-        select(Track).where(Track.id == track_id, Track.status == TrackStatus.PENDING_REVIEW)
+        select(Track).where(Track.id == track_id, Track.status == status)
     )
     track = result.scalar_one_or_none()
     if not track:
@@ -180,12 +188,14 @@ def _escape_like(s: str) -> str:
     return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-async def _get_pending_tracks_in_folder(db: AsyncSession, folder_path: str) -> list[Track]:
-    """Get all PENDING_REVIEW tracks whose file_path starts with folder_path/."""
+async def _get_pending_tracks_in_folder(
+    db: AsyncSession, folder_path: str, status: TrackStatus = TrackStatus.PENDING_REVIEW
+) -> list[Track]:
+    """Get all tracks in the given review status whose file_path starts with folder_path/."""
     escaped_prefix = _escape_like(folder_path.rstrip("/")) + "/"
     result = await db.execute(
         select(Track).where(
-            Track.status == TrackStatus.PENDING_REVIEW,
+            Track.status == status,
             Track.file_path.like(escaped_prefix + "%", escape="\\"),
             # Ensure we only get files directly in this folder (not subfolders)
             ~Track.file_path.like(escaped_prefix + "%/%", escape="\\"),
@@ -271,11 +281,13 @@ async def list_groups(
     sort_by: str = Query("created_at", pattern="^(folder_name|track_count|created_at)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     search: str | None = None,
+    status: str = Query("pending_review", pattern="^(pending_review|skipped)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> PendingGroupsListResponse:
-    """List import groups of pending tracks."""
-    query = select(Track).where(Track.status == TrackStatus.PENDING_REVIEW)
+    """List import groups of tracks awaiting review (default) or previously skipped."""
+    review_status = _REVIEW_STATUSES[status]
+    query = select(Track).where(Track.status == review_status)
 
     if search:
         search_filter = f"%{search}%"
@@ -408,6 +420,26 @@ async def group_skip(
     return {"status": "skipped", "count": len(tracks)}
 
 
+@group_router.post("/unskip")
+async def group_unskip(
+    db: DbSession,
+    _profile: RequiredProfile,
+    request: GroupSkipRequest,
+) -> dict[str, Any]:
+    """Return all skipped tracks in a folder to the review queue."""
+    tracks = await _get_pending_tracks_in_folder(
+        db, request.folder_path, status=TrackStatus.SKIPPED
+    )
+    if not tracks:
+        raise ValidationError("No skipped tracks found in folder")
+
+    for track in tracks:
+        track.status = TrackStatus.PENDING_REVIEW
+
+    await db.commit()
+    return {"status": "pending_review", "count": len(tracks)}
+
+
 @group_router.post("/replace-upgrades")
 async def group_replace_upgrades(
     db: DbSession,
@@ -517,6 +549,18 @@ async def bulk_skip_all(db: DbSession, _profile: RequiredProfile) -> dict[str, A
     return {"status": "skipped", "count": result.rowcount}  # type: ignore[attr-defined]
 
 
+@bulk_router.post("/unskip-all")
+async def bulk_unskip_all(db: DbSession, _profile: RequiredProfile) -> dict[str, Any]:
+    """Return all skipped tracks to the review queue globally."""
+    result = await db.execute(
+        update(Track)
+        .where(Track.status == TrackStatus.SKIPPED)
+        .values(status=TrackStatus.PENDING_REVIEW)
+    )
+    await db.commit()
+    return {"status": "pending_review", "count": result.rowcount}  # type: ignore[attr-defined]
+
+
 # ============================================================================
 # Single track actions
 # ============================================================================
@@ -585,6 +629,23 @@ async def skip_track(
     track.review_info = None
     await db.commit()
     return {"status": "skipped", "track_id": str(track_id)}
+
+
+@router.post("/{track_id}/unskip")
+async def unskip_track(
+    db: DbSession,
+    _profile: RequiredProfile,
+    track_id: UUID,
+) -> dict[str, str]:
+    """Return a skipped track to the review queue (SKIPPED -> PENDING_REVIEW).
+
+    review_info stays None — the track re-enters review as a clean pending item; duplicate
+    detection is not re-run.
+    """
+    track = await _get_pending_track(db, track_id, status=TrackStatus.SKIPPED)
+    track.status = TrackStatus.PENDING_REVIEW
+    await db.commit()
+    return {"status": "pending_review", "track_id": str(track_id)}
 
 
 @router.patch("/{track_id}/metadata")
