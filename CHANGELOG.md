@@ -16,6 +16,10 @@ Eighth alpha — **network audio output** arrives: stream from Familiar to a Wii
 - **Un-skip skipped imports** — Library → Pending Review has a new **Skipped** tab listing files you skipped during review, with per-track, per-folder, and bulk **Un-skip** to send them back to the review queue. Skipping is no longer permanent.
 - **LAN stream base URL** — a runtime `DEVICE_STREAM_BASE_URL` setting so network devices can fetch the audio even when you open the app over Tailscale or a public domain (the device always gets a LAN-reachable URL, regardless of how you reached the app).
 
+### Changed
+
+- **"Merge duplicate artists" moved out of Settings** — it's now a dedicated full-page **Cleanup** browser in the Library sidebar (beside Changes and Review), instead of a tall panel crowding the Library settings section.
+
 ### Fixed
 
 - **Network playback to strict renderers** — WiiM/LinkPlay devices now play correctly: the stream metadata advertises the track's real audio type instead of always claiming FLAC, and discovery/playback errors surface in logs instead of being silently swallowed.
