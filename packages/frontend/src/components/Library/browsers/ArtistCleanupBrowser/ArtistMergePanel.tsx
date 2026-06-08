@@ -26,12 +26,12 @@ import {
   TagIcon,
   Search,
 } from 'lucide-react';
-import { adminArtistsApi } from '../../../api/admin';
+import { adminArtistsApi } from '../../../../api/admin';
 import type {
   MergeSuggestion,
   MergeCandidate,
   ArtistSearchResult,
-} from '../../../api/admin';
+} from '../../../../api/admin';
 
 export function ArtistMergePanel() {
   const queryClient = useQueryClient();

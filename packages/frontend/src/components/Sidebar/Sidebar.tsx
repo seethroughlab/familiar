@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   House,
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download, Inbox,
+  Heart, Download, Inbox, Combine,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus, CassetteTape,
 } from 'lucide-react';
@@ -47,6 +47,7 @@ const LIBRARY_ICON_MAP: Record<string, typeof List> = {
   '/library/discover': Sparkles,
   '/library/proposed-changes': FileText,
   '/library/pending-review': Inbox,
+  '/library/artist-cleanup': Combine,
 };
 
 const LIBRARY_ITEMS = LIBRARY_ITEM_DEFS.map((item) => ({

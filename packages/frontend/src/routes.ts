@@ -15,6 +15,7 @@ export const BROWSER_ROUTES = [
   { path: 'discover/new-releases', browserId: 'new-releases-detail' },
   { path: 'proposed-changes', browserId: 'proposed-changes' },
   { path: 'pending-review', browserId: 'pending-review' },
+  { path: 'artist-cleanup', browserId: 'artist-cleanup' },
 ] as const;
 
 export const HOME_ROUTE = {
@@ -31,4 +32,5 @@ export const LIBRARY_ITEMS = [
   { path: '/library/discover', label: 'Discover' },
   { path: '/library/proposed-changes', label: 'Changes' },
   { path: '/library/pending-review', label: 'Review' },
+  { path: '/library/artist-cleanup', label: 'Cleanup' },
 ] as const;
