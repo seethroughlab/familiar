@@ -7,11 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0-alpha9] - 2026-06-11
 
-Ninth alpha — a fix so **network audio outputs survive restarts**. Devices you add to "Play To" (a WiiM and other UPnP/DLNA renderers) are now remembered across backend restarts and reboots instead of silently disappearing.
+Ninth alpha — **network audio outputs grow up**: the devices you cast to survive restarts, the volume slider controls them, and casting works out of the box on a LAN without manual config. Plus open PWAs now refresh themselves after a deploy.
+
+### Added
+
+- **Volume slider controls the active network device** — when a WiiM/Sonos/UPnP device is the active "Play To" output, the player volume slider (and mute) now drives the device volume, debounced so a drag sends a single update once you settle.
+- **Auto-detected LAN stream base** — `start.sh` detects this host's LAN IP and hands it to network devices, so casting works even when you open the app at localhost/127.0.0.1. Override with `DEVICE_STREAM_BASE_URL` for Tailscale/public access or multi-NIC hosts.
 
 ### Fixed
 
 - **Network outputs persist across restarts** — registered "Play To" devices (WiiM/UPnP/DLNA/AirPlay/Chromecast) were held only in memory and vanished on every backend restart or reboot. They're now saved to disk and reloaded on boot, so a device added once stays available.
+- **PWA refreshes itself after a deploy** — an open or docked PWA could keep running a stale cached bundle after an update; it now reloads automatically when the new service worker takes control.
 
 ## [0.1.0-alpha8] - 2026-06-07
 
