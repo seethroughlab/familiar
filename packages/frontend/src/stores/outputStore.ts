@@ -28,9 +28,11 @@ export const useOutputStore = create<OutputStore>((set, get) => ({
     if (prev && prev !== id) {
       outputsApi.stop(prev).catch(() => {});
     }
-    // If switching to a network output and a track is currently playing, start it
+    // If switching to a network output, make the slider authoritative immediately and,
+    // if a track is currently playing, start it on the device.
     if (id) {
-      const { currentTrack, isPlaying } = usePlayerStore.getState();
+      const { currentTrack, isPlaying, volume } = usePlayerStore.getState();
+      outputsApi.setVolume(id, toDeviceVolume(volume)).catch(() => {});
       if (currentTrack && isPlaying) {
         const url = getAbsoluteStreamUrl(currentTrack.id);
         outputsApi.play(id, url, currentTrack.id).catch(() => {});
@@ -65,19 +67,37 @@ export const useOutputStore = create<OutputStore>((set, get) => ({
   },
 }));
 
+/** Player volume is 0–1; network devices (UPnP RenderingControl, Sonos, …) want 0–100. */
+function toDeviceVolume(volume: number): number {
+  return Math.round(Math.max(0, Math.min(1, volume)) * 100);
+}
+
 // Mirror player state changes to the active network output.
 // playerStore is a facade — subscribe takes () => void; we snapshot prev state manually.
 let _prevTrackId: string | null = null;
 let _prevIsPlaying = false;
+let _prevVolume = usePlayerStore.getState().volume;
+
+// Slider drags fire many changes per second — debounce the device call so we send one
+// SetVolume after the user settles instead of flooding the speaker with requests.
+let _volumeTimer: ReturnType<typeof setTimeout> | null = null;
+function pushVolumeToDevice(outputId: string, volume: number) {
+  if (_volumeTimer) clearTimeout(_volumeTimer);
+  _volumeTimer = setTimeout(() => {
+    _volumeTimer = null;
+    outputsApi.setVolume(outputId, toDeviceVolume(volume)).catch(() => {});
+  }, 150);
+}
 
 usePlayerStore.subscribe(() => {
   const { activeOutputId } = useOutputStore.getState();
   if (!activeOutputId) return;
 
-  const { currentTrack, isPlaying } = usePlayerStore.getState();
+  const { currentTrack, isPlaying, volume } = usePlayerStore.getState();
   const trackId = currentTrack?.id ?? null;
   const trackChanged = trackId !== _prevTrackId;
   const playingChanged = isPlaying !== _prevIsPlaying;
+  const volumeChanged = volume !== _prevVolume;
 
   if (trackChanged && currentTrack && isPlaying) {
     const url = getAbsoluteStreamUrl(currentTrack.id);
@@ -90,6 +110,12 @@ usePlayerStore.subscribe(() => {
     }
   }
 
+  // The volume slider controls the active network device (WiiM/Sonos/UPnP).
+  if (volumeChanged) {
+    pushVolumeToDevice(activeOutputId, volume);
+  }
+
   _prevTrackId = trackId;
   _prevIsPlaying = isPlaying;
+  _prevVolume = volume;
 });
