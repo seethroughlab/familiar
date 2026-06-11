@@ -5,6 +5,14 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha9] - 2026-06-11
+
+Ninth alpha — a fix so **network audio outputs survive restarts**. Devices you add to "Play To" (a WiiM and other UPnP/DLNA renderers) are now remembered across backend restarts and reboots instead of silently disappearing.
+
+### Fixed
+
+- **Network outputs persist across restarts** — registered "Play To" devices (WiiM/UPnP/DLNA/AirPlay/Chromecast) were held only in memory and vanished on every backend restart or reboot. They're now saved to disk and reloaded on boot, so a device added once stays available.
+
 ## [0.1.0-alpha8] - 2026-06-07
 
 Eighth alpha — **network audio output** arrives: stream from Familiar to a WiiM (and other UPnP/DLNA/AirPlay 2 receivers) over your LAN, with a native iOS AirPlay button in the player. Plus an **un-skip** path so files you skipped during import are no longer gone for good.
@@ -330,6 +338,7 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - Audio effects not available on iOS (require Web Audio routing which breaks background playback)
 
+[0.1.0-alpha9]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha9
 [0.1.0-alpha8]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha8
 [0.1.0-alpha7]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha7
 [0.1.0-alpha6]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha6
