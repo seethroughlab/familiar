@@ -12,15 +12,23 @@ with each zone potentially using a different output type.
 """
 
 import asyncio
+import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 from xml.sax.saxutils import escape
 
 logger = logging.getLogger(__name__)
+
+# Registered network outputs are persisted here so manually-added (and
+# discovered) devices survive a container restart. Lives in the same `data/`
+# dir as settings.json (the persisted app_data volume). Browser outputs are
+# never persisted — "This Device" is re-created on each boot.
+_OUTPUTS_FILE = Path("data/outputs.json")
 
 
 class OutputType(StrEnum):
@@ -980,6 +988,44 @@ class Zone:
         }
 
 
+def _serialize_persisted(output: AudioOutput) -> dict[str, Any] | None:
+    """Serialize an output to its reconstruction fields, or None if it should
+    not be persisted (browser outputs are ephemeral and re-created on boot)."""
+    if isinstance(output, UPnPOutput):
+        return {"id": str(output.id), "type": "upnp", "name": output.name,
+                "device_url": output.device_url, "udn": output.udn}
+    if isinstance(output, SonosOutput):
+        return {"id": str(output.id), "type": "sonos", "name": output.name,
+                "speaker_ip": output.speaker_ip}
+    if isinstance(output, AirPlayOutput):
+        return {"id": str(output.id), "type": "airplay", "name": output.name,
+                "identifier": output.identifier, "host": output.host}
+    if isinstance(output, ChromecastOutput):
+        return {"id": str(output.id), "type": "chromecast", "name": output.name,
+                "cast_host": output.cast_host, "cast_uuid": output.cast_uuid}
+    return None
+
+
+def _deserialize_persisted(item: dict[str, Any]) -> AudioOutput | None:
+    """Reconstruct an output from a persisted dict (mirrors the POST /outputs
+    constructors). Returns None for unknown types."""
+    output_type = item.get("type")
+    oid = UUID(item["id"]) if item.get("id") else uuid4()
+    name = item.get("name", "")
+    if output_type == "upnp":
+        return UPnPOutput(id=oid, name=name, device_url=item.get("device_url", ""),
+                          udn=item.get("udn", ""))
+    if output_type == "sonos":
+        return SonosOutput(id=oid, name=name, speaker_ip=item.get("speaker_ip", ""))
+    if output_type == "airplay":
+        return AirPlayOutput(id=oid, name=name, identifier=item.get("identifier", ""),
+                             host=item.get("host", ""))
+    if output_type == "chromecast":
+        return ChromecastOutput(id=oid, name=name, cast_host=item.get("cast_host", ""),
+                                cast_uuid=item.get("cast_uuid", ""))
+    return None
+
+
 class OutputManager:
     """Manages all audio outputs and zones."""
 
@@ -993,6 +1039,7 @@ class OutputManager:
         if self._default_output_id is None:
             self._default_output_id = output.id
         logger.info(f"Registered output: {output.name} ({output.output_type.value})")
+        self._persist()
         return output.id
 
     def unregister_output(self, output_id: UUID) -> bool:
@@ -1000,8 +1047,41 @@ class OutputManager:
             del self.outputs[output_id]
             if self._default_output_id == output_id:
                 self._default_output_id = next(iter(self.outputs), None)
+            self._persist()
             return True
         return False
+
+    def _persist(self) -> None:
+        """Write all persistable (non-browser) outputs to disk so they survive
+        a restart. Best-effort: failures are logged, never raised."""
+        try:
+            items = [d for o in self.outputs.values()
+                     if (d := _serialize_persisted(o)) is not None]
+            _OUTPUTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _OUTPUTS_FILE.write_text(json.dumps(items, indent=2))
+        except Exception as e:
+            logger.error(f"Failed to persist outputs: {e}")
+
+    def load_persisted(self) -> None:
+        """Restore previously-registered outputs from disk. Inserts directly
+        (no re-persist); each device is reconstructed independently so one bad
+        entry can't block the rest."""
+        try:
+            if not _OUTPUTS_FILE.exists():
+                return
+            items = json.loads(_OUTPUTS_FILE.read_text())
+        except Exception as e:
+            logger.error(f"Failed to read persisted outputs: {e}")
+            return
+        for item in items:
+            try:
+                output = _deserialize_persisted(item)
+                if output is not None:
+                    self.outputs[output.id] = output
+                    logger.info(f"Reloaded persisted output: {output.name} "
+                                f"({output.output_type.value})")
+            except Exception as e:
+                logger.error(f"Failed to reload persisted output {item!r}: {e}")
 
     def create_zone(self, name: str, output_ids: list[UUID] | None = None) -> Zone:
         zone = Zone(name=name)
@@ -1285,6 +1365,10 @@ def get_output_manager() -> OutputManager:
     global _output_manager
     if _output_manager is None:
         _output_manager = OutputManager()
+        # Restore saved devices BEFORE registering the browser default, so the
+        # browser's register_output()->_persist() rewrites the file with the
+        # loaded devices intact rather than clobbering it with an empty list.
+        _output_manager.load_persisted()
         default_output = BrowserOutput(name="This Device")
         _output_manager.register_output(default_output)
     return _output_manager
