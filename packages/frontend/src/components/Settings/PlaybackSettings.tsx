@@ -1,8 +1,10 @@
-import { Volume2, AudioLines, Monitor } from 'lucide-react';
+import { Volume2, AudioLines, Monitor, Radio } from 'lucide-react';
 import { useAudioSettingsStore } from '../../stores/audioSettingsStore';
 import type { NormalizationMode } from '../../stores/audioSettingsStore';
+import { useOutputStore } from '../../stores/outputStore';
 
 export function PlaybackSettings() {
+  const networkOutputActive = useOutputStore((s) => s.activeOutputId !== null);
   const {
     crossfadeEnabled,
     crossfadeDuration,
@@ -64,6 +66,16 @@ export function PlaybackSettings() {
             <div className="w-11 h-6 bg-zinc-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
           </label>
         </div>
+
+        {networkOutputActive && (
+          <div className="mt-4 flex items-center gap-2 text-xs text-zinc-500 bg-zinc-700/50 rounded-lg px-3 py-2">
+            <Radio className="w-3.5 h-3.5 flex-shrink-0" />
+            <span>
+              Crossfade isn't available on network outputs (WiiM / Sonos / UPnP).
+              Tracks play to their natural end while casting.
+            </span>
+          </div>
+        )}
 
         {crossfadeEnabled && (
           <div className="mt-4 space-y-3">

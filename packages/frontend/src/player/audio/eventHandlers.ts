@@ -46,11 +46,18 @@ export function getErrorAction(
 
 /**
  * Computes the effective crossfade duration based on settings.
+ *
+ * When a network output (WiiM/Sonos/UPnP) is active the local Web Audio crossfade
+ * is inaudible (the local engine is muted) and triggering it early clips the tail
+ * of every track on the device, so crossfade is forced off — the queue advances on
+ * the natural 'ended' event instead.
  */
 export function getEffectiveCrossfadeDuration(
   crossfadeEnabled: boolean,
   crossfadeDuration: number,
+  networkOutputActive = false,
 ): number {
+  if (networkOutputActive) return 0;
   return crossfadeEnabled ? crossfadeDuration : 0;
 }
 
@@ -59,13 +66,21 @@ export function getEffectiveCrossfadeDuration(
  * - 'none': too early or too late for any action
  * - 'preload': in the preload window (~15s before crossfade point)
  * - 'crossfade': at or past the crossfade trigger point
+ *
+ * `networkOutputActive` forces 'none' for the end-of-track window so a network
+ * device plays each track to its true end (see getEffectiveCrossfadeDuration).
  */
 export function getCrossfadeTrigger(
   timeRemaining: number,
   crossfadeEnabled: boolean,
   crossfadeDuration: number,
+  networkOutputActive = false,
 ): 'none' | 'preload' | 'crossfade' {
-  const effectiveCrossfade = getEffectiveCrossfadeDuration(crossfadeEnabled, crossfadeDuration);
+  const effectiveCrossfade = getEffectiveCrossfadeDuration(
+    crossfadeEnabled,
+    crossfadeDuration,
+    networkOutputActive,
+  );
 
   if (timeRemaining <= effectiveCrossfade && timeRemaining > 0.1) return 'crossfade';
   if (timeRemaining <= effectiveCrossfade + 15 && timeRemaining > effectiveCrossfade + 1) return 'preload';
