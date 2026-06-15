@@ -146,6 +146,32 @@ describe('getCrossfadeTrigger', () => {
   it("returns 'none' when timeRemaining is exactly 0.1", () => {
     expect(getCrossfadeTrigger(0.1, true, 5)).toBe('none');
   });
+
+  describe('with a network output active', () => {
+    // A network device (WiiM/Sonos/UPnP) plays one stream at a time and hard-cuts
+    // between tracks. The 'crossfade' trigger advances the queue early, which clips
+    // the track's tail on the device — so it must never fire. ('preload' is harmless:
+    // it only warms the muted local engine and sends nothing to the device.)
+    const crossfadeDuration = 5;
+
+    it("never returns 'crossfade' across the whole end-of-track window", () => {
+      for (const t of [4.5, 3, 2, 1, 0.5, 0.2]) {
+        expect(getCrossfadeTrigger(t, true, crossfadeDuration, true)).not.toBe('crossfade');
+      }
+    });
+
+    it("suppresses the would-be crossfade trigger", () => {
+      // Without a network output this is 'crossfade' (4.5 <= effectiveCrossfade=5)
+      expect(getCrossfadeTrigger(4.5, true, crossfadeDuration)).toBe('crossfade');
+      // With a network output active, effectiveCrossfade is forced to 0 → no early advance
+      expect(getCrossfadeTrigger(4.5, true, crossfadeDuration, true)).not.toBe('crossfade');
+    });
+
+    it("still allows preload within 15s of the true end (effectiveCrossfade=0)", () => {
+      // effectiveCrossfade=0 => preload window is 1 < timeRemaining <= 15
+      expect(getCrossfadeTrigger(10, true, crossfadeDuration, true)).toBe('preload');
+    });
+  });
 });
 
 // ============================================================================
@@ -164,5 +190,10 @@ describe('getEffectiveCrossfadeDuration', () => {
   it('returns 0 when crossfade disabled regardless of crossfadeDuration', () => {
     expect(getEffectiveCrossfadeDuration(false, 10)).toBe(0);
     expect(getEffectiveCrossfadeDuration(false, 0)).toBe(0);
+  });
+
+  it('returns 0 when a network output is active even if crossfade is enabled', () => {
+    expect(getEffectiveCrossfadeDuration(true, 5, true)).toBe(0);
+    expect(getEffectiveCrossfadeDuration(true, 10, true)).toBe(0);
   });
 });

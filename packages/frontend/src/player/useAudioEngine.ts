@@ -105,6 +105,12 @@ export function useAudioEngine() {
   crossfadeEnabledRef.current = crossfadeEnabled;
   crossfadeDurationRef.current = crossfadeDuration;
 
+  // Mirror activeOutputId into a ref so the timeUpdate event callback can read the
+  // current value without re-subscribing. When a network output is active, crossfade
+  // is suppressed so the device plays each track to its true end (no clipped tails).
+  const activeOutputIdRef = useRef(activeOutputId);
+  activeOutputIdRef.current = activeOutputId;
+
   // Queue transition flag — scoped to hook lifecycle (not module-level)
   const queueTransitionRef = useRef(false);
 
@@ -397,6 +403,7 @@ export function useAudioEngine() {
             timeRemaining,
             crossfadeEnabledRef.current,
             crossfadeDurationRef.current,
+            Boolean(activeOutputIdRef.current),
           );
 
           if (trigger === 'preload') {
