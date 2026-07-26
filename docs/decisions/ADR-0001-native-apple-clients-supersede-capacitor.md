@@ -12,6 +12,13 @@ Implementation:
   [ADR-0006](ADR-0006-offline-ranking-is-precomputed-server-side.md), and
   [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) are stable, per the execution order in
   `CLAUDE.md`.
+- **Grandfathered past the freeze:** PR #3 (`refactor(carplay): in-place template updates instead of
+  setRootTemplate spam`) was merged on 2026-07-26, after acceptance. It is a refactor, not a bug fix,
+  so it does not satisfy the rule above; it was opened in May, well before this ADR, and landed by
+  explicit decision to leave the Swift in better shape before it is ported into `FamiliarKit`. It is
+  the only such exception so far. **⚠️ It merged without its CarPlay simulator verification** — the
+  four checks listed in that PR's description are still outstanding and should be run against master
+  before the next TestFlight build.
 
 ## Context
 
