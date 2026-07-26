@@ -10,7 +10,12 @@ Implementation:
   hook) and required that no new state be introduced, which turned out to be impossible — see the
   advance-reason discussion in point 5. Points 6 and 7 are new.
 - Phase 1 — backend: `PlayEvent` model, migration `20260726_play_events`, and the three endpoints,
-  on branch `feat/adr-0004-play-events`.
+  on branch `feat/adr-0004-play-events`. Deployed to the NAS 2026-07-26 and verified against the
+  live 26,462-track library: `/skipped` and `/rejected` recorded events while the library-wide
+  `sum(play_count)` held at 5960 across both calls — the decision point 2 guarantee, checked rather
+  than assumed. Outcome derivation confirmed end to end, including the crossfade case (ratio 0.90
+  with `reason=natural` resolving to `completed`, where ratio alone would have said `skipped`) and
+  the error case resolving to `errored`. Probe rows were reverted afterwards; the table starts empty.
 - Phase 2 — client emission: advance-reason threading through `queueStore`, the `usePlayTracking`
   rewrite, and the outbox `listen_event` type. Tracked separately; deliberately split so a DB
   migration does not land together with changes to the player's most delicate code path.
