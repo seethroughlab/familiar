@@ -22,6 +22,7 @@ from app.db.models import (
     ChangeScope,
     ChangeSource,
     ChangeStatus,
+    PlayEvent,
     Playlist,
     PlaylistTrack,
     Profile,
@@ -243,6 +244,36 @@ async def insert_test_play_history(
     db.add(history)
     await db.flush()
     return history
+
+
+async def insert_test_play_event(
+    db: AsyncSession,
+    profile_id: UUID,
+    track_id: UUID,
+    *,
+    outcome: str = "completed",
+    played_seconds: float = 180.0,
+    track_duration: float | None = 200.0,
+    completion_ratio: float = 0.9,
+    context: str | None = None,
+    source_track_id: UUID | None = None,
+    started_at: datetime | None = None,
+) -> PlayEvent:
+    """Insert a PlayEvent row."""
+    event = PlayEvent(
+        profile_id=profile_id,
+        track_id=track_id,
+        source_track_id=source_track_id,
+        started_at=started_at or utcnow(),
+        played_seconds=played_seconds,
+        track_duration=track_duration,
+        completion_ratio=completion_ratio,
+        outcome=outcome,
+        context=context,
+    )
+    db.add(event)
+    await db.flush()
+    return event
 
 
 async def insert_test_proposed_change(

@@ -25,6 +25,7 @@ from .mixtapes import MixTape
 from .playlists import Playlist, PlaylistTrack, SmartPlaylist
 from .profiles import (
     LastfmProfile,
+    PlayEvent,
     Profile,
     ProfileFavorite,
     ProfilePlayHistory,
@@ -50,6 +51,7 @@ __all__ = [
     "FrontendLog",
     "LastfmProfile",
     "MixTape",
+    "PlayEvent",
     "Playlist",
     "PlaylistTrack",
     "Profile",

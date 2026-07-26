@@ -7,7 +7,9 @@ to hit API endpoints. Both share the same DATABASE_URL so committed data is visi
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 
+from app.db.models import PlayEvent, ProfilePlayHistory
 from tests.factories import (
     insert_test_profile,
     insert_test_track,
@@ -235,6 +237,266 @@ class TestPlayRecording:
 
         resp = client.get("/api/v1/tracks/stats/plays", headers=headers)
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Listening events (ADR-0004)
+# ---------------------------------------------------------------------------
+
+
+async def _play_events_for(db, profile_id, track_id) -> list[PlayEvent]:
+    """Read back the PlayEvent rows the API wrote, oldest first."""
+    result = await db.execute(
+        select(PlayEvent)
+        .where(PlayEvent.profile_id == profile_id, PlayEvent.track_id == track_id)
+        .order_by(PlayEvent.started_at)
+    )
+    return list(result.scalars().all())
+
+
+async def _play_count_for(db, profile_id, track_id) -> int | None:
+    result = await db.execute(
+        select(ProfilePlayHistory.play_count).where(
+            ProfilePlayHistory.profile_id == profile_id,
+            ProfilePlayHistory.track_id == track_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+class TestListeningEvents:
+    @pytest.mark.asyncio
+    async def test_played_writes_both_aggregate_and_event(self, async_db, client):
+        t = await insert_test_track(async_db, title="EventPlayed")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/played",
+            json={"duration_seconds": 190, "track_duration": 200, "context": "playlist"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+        assert await _play_count_for(async_db, profile.id, t.id) == 1
+
+        events = await _play_events_for(async_db, profile.id, t.id)
+        assert len(events) == 1
+        assert events[0].outcome == "completed"
+        assert events[0].context == "playlist"
+        assert events[0].played_seconds == 190
+
+    @pytest.mark.asyncio
+    async def test_played_contract_unchanged_for_legacy_client(self, async_db, client):
+        """A client sending only duration_seconds must keep working exactly as before."""
+        t = await insert_test_track(async_db, title="EventLegacy")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/played",
+            json={"duration_seconds": 60},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert set(body) == {"track_id", "play_count", "total_play_seconds"}
+        assert body["play_count"] == 1
+        assert body["total_play_seconds"] == 60
+
+    @pytest.mark.asyncio
+    async def test_skip_records_event_without_touching_aggregate(self, async_db, client):
+        """The core ADR-0004 promise: skips must not inflate ProfilePlayHistory."""
+        t = await insert_test_track(async_db, title="EventSkipped")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"played_seconds": 5, "track_duration": 200},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "skipped"
+
+        # No aggregate row at all — a skip is not a play
+        assert await _play_count_for(async_db, profile.id, t.id) is None
+
+        events = await _play_events_for(async_db, profile.id, t.id)
+        assert len(events) == 1
+        assert events[0].outcome == "skipped"
+        assert events[0].completion_ratio == pytest.approx(0.025)
+
+    @pytest.mark.asyncio
+    async def test_skip_near_end_counts_as_completed(self, async_db, client):
+        """Pressing next at 95% is a completion, not a rejection of the track."""
+        t = await insert_test_track(async_db, title="EventNearEnd")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"played_seconds": 190, "track_duration": 200},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_short_track_played_fully_is_not_a_skip(self, async_db, client):
+        """A 20s interlude played end to end must not look like a skip."""
+        t = await insert_test_track(async_db, title="EventShort")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"played_seconds": 20, "track_duration": 20},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_natural_stop_is_completed_despite_crossfade_shortfall(
+        self, async_db, client
+    ):
+        """Crossfade advances early, so ratio alone would misread a full play."""
+        t = await insert_test_track(async_db, title="EventCrossfade")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"played_seconds": 180, "track_duration": 200, "reason": "natural"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_playback_error_is_errored_not_skipped(self, async_db, client):
+        """A broken file must never become a negative taste signal (ADR-0004 point 6)."""
+        t = await insert_test_track(async_db, title="EventErrored")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"played_seconds": 0, "track_duration": 200, "reason": "error"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "errored"
+
+        events = await _play_events_for(async_db, profile.id, t.id)
+        assert [e.outcome for e in events] == ["errored"]
+
+    @pytest.mark.asyncio
+    async def test_rejection_is_distinguishable_from_a_skip(self, async_db, client):
+        t = await insert_test_track(async_db, title="EventRejected")
+        seed = await insert_test_track(async_db, title="EventRejectedSeed")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/rejected",
+            json={
+                "played_seconds": 12,
+                "track_duration": 200,
+                "context": "radio",
+                "source_track_id": str(seed.id),
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "rejected"
+
+        assert await _play_count_for(async_db, profile.id, t.id) is None
+
+        events = await _play_events_for(async_db, profile.id, t.id)
+        assert len(events) == 1
+        assert events[0].outcome == "rejected"
+        assert events[0].context == "radio"
+        assert events[0].source_track_id == seed.id
+
+    @pytest.mark.asyncio
+    async def test_rejection_stays_rejected_even_when_nearly_complete(
+        self, async_db, client
+    ):
+        """An explicit thumbs-down is never downgraded by the completion heuristic."""
+        t = await insert_test_track(async_db, title="EventRejectedLate")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/rejected",
+            json={"played_seconds": 199, "track_duration": 200},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "rejected"
+
+    @pytest.mark.asyncio
+    async def test_unknown_duration_does_not_look_like_completion(self, async_db, client):
+        t = await insert_test_track(async_db, title="EventNoDuration")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"played_seconds": 30},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "skipped"
+        assert resp.json()["completion_ratio"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_event_endpoints_reject_unknown_track(self, async_db, client):
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        missing = uuid4()
+        for path in ("skipped", "rejected"):
+            resp = client.post(f"/api/v1/tracks/{missing}/{path}", json={}, headers=headers)
+            assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_event_endpoints_accept_empty_body(self, async_db, client):
+        t = await insert_test_track(async_db, title="EventEmptyBody")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(f"/api/v1/tracks/{t.id}/skipped", headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["outcome"] == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_invalid_context_is_rejected(self, async_db, client):
+        t = await insert_test_track(async_db, title="EventBadContext")
+        profile = await insert_test_profile(async_db)
+        await async_db.commit()
+
+        headers = {"X-Profile-ID": str(profile.id)}
+        resp = client.post(
+            f"/api/v1/tracks/{t.id}/skipped",
+            json={"context": "not-a-real-context"},
+            headers=headers,
+        )
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
