@@ -142,7 +142,7 @@ v0.2.2           Stable release with critical bug
     │
     ├── Branch: git checkout -b hotfix/0.2.3 v0.2.2
     ├── Fix the bug
-    ├── Merge to master
+    ├── Merge to main
     │
 v0.2.3           Hotfix release
 ```
@@ -170,13 +170,13 @@ The release workflow automatically detects pre-releases by checking for a hyphen
 
 | Event | Workflow | Result |
 |-------|----------|--------|
-| Push to `master` | CI | Lint + test + build |
+| Push to `main` | CI | Lint + test + build |
 | Pull request | CI | Lint + test + build |
 | Tag `v*` | Release | Build Docker + push to ghcr.io + GitHub Release |
 
 ### Creating a Release
 
-1. Ensure CI passes on `master`
+1. Ensure CI passes on `main`
 2. Update `CHANGELOG.md` with release notes
 3. Create and push the tag:
    ```bash

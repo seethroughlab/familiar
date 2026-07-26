@@ -17,7 +17,7 @@ Implementation:
   so it does not satisfy the rule above; it was opened in May, well before this ADR, and landed by
   explicit decision to leave the Swift in better shape before it is ported into `FamiliarKit`. It is
   the only such exception so far. **⚠️ It merged without its CarPlay simulator verification** — the
-  four checks listed in that PR's description are still outstanding and should be run against master
+  four checks listed in that PR's description are still outstanding and should be run against main
   before the next TestFlight build.
 
 ## Context

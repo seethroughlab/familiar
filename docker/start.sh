@@ -168,7 +168,7 @@ else
                 echo -e "${YELLOW}Note:${NC} Your Docker image ($IMAGE_VERSION) is newer than these"
                 echo "scripts ($SCRIPT_VERSION). You can usually ignore this, but if you"
                 echo "run into issues, download the latest scripts from:"
-                echo "  https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip"
+                echo "  https://github.com/seethroughlab/familiar/archive/refs/heads/main.zip"
             fi
 
             exit 0

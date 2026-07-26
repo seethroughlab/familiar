@@ -6,7 +6,7 @@ on:
   # To re-enable: uncomment the `push:` block below.
   # push:
   #   branches:
-  #     - master
+  #     - main
   #   paths:
   #     - 'backend/**'
   #     - 'deploy/fly/**'

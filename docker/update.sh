@@ -31,13 +31,13 @@ WORK_DIR=$(mktemp -d)
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 if curl -fsSL --connect-timeout 15 \
-    "https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip" \
+    "https://github.com/seethroughlab/familiar/archive/refs/heads/main.zip" \
     -o "$WORK_DIR/familiar.zip" 2>/dev/null; then
 
     unzip -q "$WORK_DIR/familiar.zip" -d "$WORK_DIR"
 
     # Copy docker/ files, preserving the user's .env
-    for f in "$WORK_DIR/familiar-master/docker/"*; do
+    for f in "$WORK_DIR/familiar-main/docker/"*; do
         fname=$(basename "$f")
         [ "$fname" = ".env" ] && continue
         cp "$f" "./$fname"

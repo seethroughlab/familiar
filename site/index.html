@@ -44,7 +44,7 @@
   <div class="hero-body">
     <h1 class="hero-title">Familiar</h1>
     <p class="hero-tagline">Host your own music streaming service — for the library you already own. AI listens to every track and builds playlists from your collection, not a streaming catalog.</p>
-    <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/master/CHANGELOG.md" target="_blank" rel="noopener">
+    <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
       <span class="version-dot"></span> v0.1.0-alpha2 · 2026-04-17
     </a>
     <div class="nav-links">
@@ -218,8 +218,8 @@
   <div class="step" data-step="1">
     <h3>Pull the prebuilt image and start the stack</h3>
 <pre><code>mkdir familiar &amp;&amp; cd familiar
-curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/master/docker/docker-compose.prod.yml
-curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/master/docker/init-pgvector.sql
+curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.prod.yml
+curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql
 MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code></pre>
     <p>Two files, one <code>compose up</code>. Uses the multi-arch image at <code>ghcr.io/seethroughlab/familiar:latest</code>.</p>
   </div>
@@ -242,7 +242,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
     <summary>macOS? (journald swap + 8 GB RAM note)</summary>
     <p>The production compose uses <code>journald</code> logging (Linux-only). On macOS, add the override:</p>
 <pre><code>docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d</code></pre>
-    <p>See the <a href="https://github.com/seethroughlab/familiar/blob/master/docs/MACOS.md" target="_blank" rel="noopener">macOS guide</a> for Apple Silicon notes and the <code>./start.sh</code> helper script.</p>
+    <p>See the <a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS.md" target="_blank" rel="noopener">macOS guide</a> for Apple Silicon notes and the <code>./start.sh</code> helper script.</p>
   </details>
 
   <details class="install-alt">
@@ -255,11 +255,11 @@ cd familiar/docker
 
   <h3>Detailed guides</h3>
   <ul class="doc-links">
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a><span class="desc">Docker, OpenMediaVault, Synology, dev setup</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/MACOS.md" target="_blank" rel="noopener">macOS Guide</a><span class="desc">Docker Desktop, Apple Silicon, library paths</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/CONFIGURATION.md" target="_blank" rel="noopener">Configuration</a><span class="desc">Env vars, API keys, Tailscale HTTPS, backup</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a><span class="desc">Build custom 2D/3D visualizations</span></li>
-    <li><a href="https://github.com/seethroughlab/familiar/blob/master/docs/REST-API.md" target="_blank" rel="noopener">REST API</a><span class="desc">Backend API reference</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation Guide</a><span class="desc">Docker, OpenMediaVault, Synology, dev setup</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS.md" target="_blank" rel="noopener">macOS Guide</a><span class="desc">Docker Desktop, Apple Silicon, library paths</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/CONFIGURATION.md" target="_blank" rel="noopener">Configuration</a><span class="desc">Env vars, API keys, Tailscale HTTPS, backup</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a><span class="desc">Build custom 2D/3D visualizations</span></li>
+    <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/REST-API.md" target="_blank" rel="noopener">REST API</a><span class="desc">Backend API reference</span></li>
   </ul>
 </section>
 
@@ -273,7 +273,7 @@ cd familiar/docker
 <pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
     <p>Visit <code>https://&lt;your-server&gt;.&lt;tailnet&gt;.ts.net</code> from any signed-in device — iPhone, laptop, TV. Tailscale provisions a Let's Encrypt cert automatically and renews it for you.</p>
     <p class="remote-why"><strong>Why HTTPS matters:</strong> the iOS/Android PWA install prompt, service-worker caching, and "Add to Home Screen" only work over HTTPS. Plain <code>http://10.0.0.42:4400</code> does not.</p>
-    <p><a href="https://github.com/seethroughlab/familiar/blob/master/docs/CONFIGURATION.md#tailscale-https" target="_blank" rel="noopener">Full walkthrough in CONFIGURATION.md →</a></p>
+    <p><a href="https://github.com/seethroughlab/familiar/blob/main/docs/CONFIGURATION.md#tailscale-https" target="_blank" rel="noopener">Full walkthrough in CONFIGURATION.md →</a></p>
   </div>
 
   <div class="remote-alts">

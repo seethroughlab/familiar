@@ -1,6 +1,6 @@
 # Site
 
-Plain static site for [familiar.seethroughlab.com](https://familiar.seethroughlab.com). Published via GitHub Pages on push to `master` (see `.github/workflows/pages.yml`).
+Plain static site for [familiar.seethroughlab.com](https://familiar.seethroughlab.com). Published via GitHub Pages on push to `main` (see `.github/workflows/pages.yml`).
 
 ## Local preview
 

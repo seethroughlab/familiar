@@ -58,9 +58,9 @@ Terminal is a built-in app that lets you type commands. Don't worry — we'll te
 
 ## Step 4: Download Familiar
 
-1. In your browser, go to: **https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip**
+1. In your browser, go to: **https://github.com/seethroughlab/familiar/archive/refs/heads/main.zip**
    - This will download a ZIP file to your Downloads folder.
-2. Double-click the ZIP file in Finder to unzip it. You'll get a folder called `familiar-master`.
+2. Double-click the ZIP file in Finder to unzip it. You'll get a folder called `familiar-main`.
 3. Rename the folder to `familiar` (right-click > Rename), then drag it into your **home folder**. To find your home folder in Finder: click **Go** in the menu bar, then **Home** (or press **Shift + Command + H**).
 
 Now, in Terminal, type:
