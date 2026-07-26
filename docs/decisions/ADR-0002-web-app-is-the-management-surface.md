@@ -1,8 +1,15 @@
 # ADR-0002: The Web App Is the Management Surface
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-26
+
+Implementation:
+- Accepted 2026-07-26 alongside [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
+  Mobile-web polish, install-prompt work, and iOS-Safari-specific layout work stop as of this date;
+  existing code stays in place until it is actively in the way.
+- The deletion-or-dormancy call on `MobileNav/`, `PWA/InstallPrompt.tsx`, and the iOS Safari layout
+  workarounds is deferred until the native client ships, per the follow-up below.
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
 

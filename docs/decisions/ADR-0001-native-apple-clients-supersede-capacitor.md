@@ -1,8 +1,17 @@
 # ADR-0001: Native Apple Clients Supersede the Capacitor App
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-26
+
+Implementation:
+- Accepted 2026-07-26. `packages/ios` is bug-fix-only from this date; no new features land on the
+  Capacitor app. Retirement happens once the native client reaches the v1 scope in decision point 4.
+- The `familiar-apple` repo is not yet created — it begins after
+  [ADR-0003](ADR-0003-server-owns-the-playback-queue.md),
+  [ADR-0006](ADR-0006-offline-ranking-is-precomputed-server-side.md), and
+  [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) are stable, per the execution order in
+  `CLAUDE.md`.
 
 ## Context
 
