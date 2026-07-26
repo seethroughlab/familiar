@@ -10,6 +10,64 @@ An LLM-powered local music player that combines library management with AI-power
 - **LLM**: Claude API with tool-use
 - **Offline**: IndexedDB (Dexie) for track caching, download queue, playlist cache
 
+## Architecture Decisions (ADRs)
+
+**Architectural changes are made through ADRs in `docs/decisions/`. Read the relevant ones before
+changing anything they govern, and propose a new one before making a decision they don't cover.**
+
+An ADR is warranted when a change sets a direction rather than implements one: a new client or
+platform, a data model that other work will build on, moving responsibility between server and
+client, a new external dependency or protocol, or reversing something an existing ADR decided.
+Ordinary feature work, bug fixes, and refactors inside an established direction do not need one —
+they just need to respect the ADRs already in force.
+
+### Convention
+
+- Filename `ADR-NNNN-kebab-case-title.md`; heading `# ADR-NNNN: Title Case`.
+- `Status:` (`proposed` → `accepted`; also `superseded by ADR-NNNN` / `rejected`) and `Date:` lines.
+- Optional `Implementation:` block, added as phases land, recording what shipped on which branch —
+  an accepted ADR stays a living record, not a snapshot.
+- Optional `Extends [ADR-NNNN](ADR-NNNN-slug.md)` links after the header.
+- Sections in order: `## Context`, `## Decision` (numbered points once non-trivial),
+  `## Alternatives Considered`, `## Consequences` (bulleted, tagged **Positive** / **Tradeoff** /
+  **Follow-up**).
+- The directory holds only ADRs — no README, no template file.
+
+### Rules
+
+1. **One decision per ADR**, decomposed so each can be planned, approved, and executed on its own.
+   Propose the set together; note the execution order, which often differs from the numbering.
+2. **New ADRs start `Status: proposed`** and flip to `accepted` only when that specific ADR is
+   approved. Never write one straight to `accepted`.
+3. **`## Alternatives Considered` must contain real rejected options with real reasons.** Strawmen
+   make the record worthless.
+4. **Verify every metric, file path, and line number cited** against the repo at write time. ADRs
+   are read months later as fact.
+5. **Record contradicted premises in `## Context`.** If investigation disproved the original
+   rationale, say so, so nobody re-derives it. See `ADR-0001` for an example.
+6. **Never edit an accepted ADR's Decision to reflect a change of mind** — supersede it with a new
+   ADR and update the old one's `Status:`.
+
+### Current set and execution order
+
+`ADR-0001`–`ADR-0007` cover the move to native macOS/iOS clients, the web app's role as the
+management surface, server-owned playback queue, event-sourced listening feedback, the shared
+ranking engine, precomputed offline ranking, and OpenAPI-generated clients.
+
+**Numbering is logical order; execution order is different and deliberate:**
+
+| # | ADR | Why here |
+|---|---|---|
+| 1 | `0001`, `0002` | Framing only. No product code beyond freezing `packages/ios` to bug-fix-only. Everything else inherits from these. |
+| 2 | `0004` → `0005` | Ships the radio feature to the web app in weeks. `0004` first so skip/completion events accumulate during the months of native work — the recommender is otherwise cold at launch, and that data can only be gathered in wall-clock time. |
+| 3 | `0007` | Must land before Swift consumes the API; the schema hardening is a prerequisite, not a cleanup. |
+| 4 | `0003` | Behind a flag, in the web app, proven against the existing player test suite before the native client depends on it. Highest-risk change in the set. |
+| 5 | `0006` | Depends on `0005`'s weight profiles existing. |
+| 6 | native build | Begins under `0001` once `0003`, `0006`, `0007` are stable. |
+
+The ordering principle: **server-side work that every client inherits comes before client work**, and
+anything that accumulates data over time starts as early as possible.
+
 ## Key Directories
 
 ```
@@ -39,18 +97,20 @@ packages/
 backend/
 ├── app/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)
-│   ├── db/models.py       # SQLAlchemy models
+│   ├── db/models/         # SQLAlchemy models (tracks, profiles, playlists, artists, ...)
 │   └── services/          # Business logic
 │       └── llm/           # LLM module (service.py, executor.py, tools.py, providers.py)
 ├── migrations/versions/   # Alembic database migrations
 └── tests/                 # pytest tests
+docs/
+└── decisions/             # ADRs — read before changing what they govern
 ```
 
 ## Key Files
 
 | Task | Files |
 |------|-------|
-| Database models | `backend/app/db/models.py` |
+| Database models | `backend/app/db/models/` (package: `tracks.py`, `profiles.py`, `playlists.py`, `artists.py`, …) |
 | Database migrations | `backend/migrations/versions/*.py` |
 | API routes | `backend/app/api/routes/*.py` |
 | Audio analysis | `backend/app/services/analysis.py` |
@@ -112,7 +172,7 @@ def upgrade():
     if not column_exists("tracks", "my_new_col"):
         op.add_column("tracks", sa.Column("my_new_col", sa.Text()))
 ```
-4. Add corresponding field to the SQLAlchemy model in `models.py`
+4. Add corresponding field to the SQLAlchemy model in the matching `backend/app/db/models/*.py`
 5. `deploy-dev.sh` auto-runs `alembic upgrade head` on deploy
 
 ### Add a new settings section
