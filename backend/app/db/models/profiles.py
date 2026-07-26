@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     func,
@@ -48,6 +49,9 @@ class Profile(Base):
         back_populates="profile", cascade="all, delete"
     )
     play_history: Mapped[list["ProfilePlayHistory"]] = relationship(
+        back_populates="profile", cascade="all, delete"
+    )
+    play_events: Mapped[list["PlayEvent"]] = relationship(
         back_populates="profile", cascade="all, delete"
     )
 
@@ -110,3 +114,58 @@ class ProfilePlayHistory(Base):
     # Relationships
     profile: Mapped["Profile"] = relationship(back_populates="play_history")
     track: Mapped["Track"] = relationship()
+
+
+class PlayEvent(Base):
+    """One row per listening event — the per-play log behind ProfilePlayHistory.
+
+    ProfilePlayHistory aggregates (play_count, summed total_play_seconds) and so cannot
+    distinguish a track played once in full from one skipped twenty times at three seconds.
+    This table keeps each play intact so completion and skips stay recoverable.
+
+    Written alongside ProfilePlayHistory, which keeps its existing semantics: only a
+    'completed' event bumps the aggregate. Skips and rejections are recorded here only.
+    """
+
+    __tablename__ = "play_events"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    profile_id: Mapped[UUID] = mapped_column(
+        ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False
+    )
+    track_id: Mapped[UUID] = mapped_column(
+        ForeignKey("tracks.id", ondelete="CASCADE"), nullable=False
+    )
+    # The track this one was suggested from (radio insertion); NULL for ordinary plays
+    source_track_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("tracks.id", ondelete="SET NULL")
+    )
+
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
+    played_seconds: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # Duration as known by the client at play time; NULL when unavailable
+    track_duration: Mapped[float | None] = mapped_column(Float)
+    completion_ratio: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    # 'completed' | 'skipped' | 'rejected' | 'errored'
+    # 'errored' means playback failed, NOT that the listener disliked it — it must never
+    # be used as a negative taste signal.
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    # 'library' | 'album' | 'playlist' | 'artist' | 'ephemeral' | 'radio' | 'ambient' | 'other'
+    context: Mapped[str | None] = mapped_column(String(16))
+
+    __table_args__ = (
+        # Recent-history scans for a profile
+        Index("ix_play_events_profile_started_at", "profile_id", "started_at"),
+        # Per-candidate feedback lookup when ranking (profile + track)
+        Index("ix_play_events_profile_track", "profile_id", "track_id"),
+        # Supports the ON DELETE CASCADE from tracks
+        Index("ix_play_events_track_id", "track_id"),
+    )
+
+    # Relationships
+    profile: Mapped["Profile"] = relationship(back_populates="play_events")
+    # Explicit foreign_keys: two FKs point at tracks.id (track_id and source_track_id)
+    track: Mapped["Track"] = relationship(foreign_keys=[track_id])

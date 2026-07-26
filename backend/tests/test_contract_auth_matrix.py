@@ -22,6 +22,8 @@ REQUIRED_PROFILE_ENDPOINTS = [
     ("POST", "/api/v1/export-import/export"),
     ("GET", f"/api/v1/download/playlist/{ZERO_UUID}"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/played"),
+    ("POST", f"/api/v1/tracks/{ZERO_UUID}/skipped"),
+    ("POST", f"/api/v1/tracks/{ZERO_UUID}/rejected"),
 ]
 
 

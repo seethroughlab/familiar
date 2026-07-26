@@ -1,8 +1,19 @@
 # ADR-0004: Listening Feedback Is Event-Sourced
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-26
+
+Implementation:
+- Decision points 4–7 were revised before acceptance, after investigating the client. The original
+  point 5 named `player/useAudioEngine.ts` (the emission point is actually the `usePlayTracking`
+  hook) and required that no new state be introduced, which turned out to be impossible — see the
+  advance-reason discussion in point 5. Points 6 and 7 are new.
+- Phase 1 — backend: `PlayEvent` model, migration `20260726_play_events`, and the three endpoints,
+  on branch `feat/adr-0004-play-events`.
+- Phase 2 — client emission: advance-reason threading through `queueStore`, the `usePlayTracking`
+  rewrite, and the outbox `listen_event` type. Tracked separately; deliberately split so a DB
+  migration does not land together with changes to the player's most delicate code path.
 
 ## Context
 
@@ -52,14 +63,40 @@ Record listening as **events**, and derive aggregates from them rather than only
 3. **`outcome` is derived at write time from `completion_ratio`,** with the threshold as a named
    constant rather than a magic number scattered across the codebase.
 
-4. **Add `POST /tracks/{track_id}/rejected`** for an explicit thumbs-down on a radio insertion. This
-   is a stronger signal than a skip and must be distinguishable from one.
+4. **Three endpoints, each named for its effect.** `record_play` increments `play_count`
+   unconditionally, so skips cannot ride on `/played` without inflating the aggregate that decision
+   point 2 promises to leave alone.
+   - `POST /tracks/{track_id}/played` — contract unchanged; bumps the aggregate **and** writes a
+     `completed` event.
+   - `POST /tracks/{track_id}/skipped` — writes an event only; the aggregate is untouched.
+   - `POST /tracks/{track_id}/rejected` — writes an event only. An explicit thumbs-down on a radio
+     insertion is a stronger signal than a skip and must be distinguishable from one.
 
-5. **Clients emit from the point where play and skip already resolve** —
-   `packages/frontend/src/player/useAudioEngine.ts` — so no new state tracking is introduced to do
-   it.
+5. **Clients emit from the existing play-tracking hook,**
+   `packages/frontend/src/hooks/usePlayTracking.ts` (mounted at `hooks/useAppBootstrap.ts:35`), which
+   already accumulates forward-progress play time and ignores backward seeks.
 
-6. **The migration follows the project convention:** a file in `backend/migrations/versions/` named
+   This does require **one piece of new state**: an advance reason. Nothing currently tells the
+   client *why* the current track changed — `usePlayTracking` only observes `currentTrack?.id`
+   flipping, so a natural end and a hard skip are indistinguishable. The queue store must expose why
+   it advanced (`ended`, `crossfade`, `native-auto`, `user`, `error`). Completion ratio alone is not
+   sufficient: the crossfade path advances at roughly `duration - crossfadeDuration`, so a
+   fully-played track reads as ~0.9, and iOS background auto-advance can leave the accumulated time
+   stale.
+
+6. **Error-driven skips are recorded as `errored` and excluded from ranking.**
+   `packages/frontend/src/player/useAudioEngine.ts:358` and `:835` call `playNext()` when a track
+   fails to load. A track with a broken file is not a track the listener dislikes; feeding those into
+   [ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md)'s negative term would train the
+   recommender against unplayable files. They are logged for diagnostics and must never reach the
+   taste signal.
+
+7. **Events queue through the existing offline outbox** — the `pendingActions` table and
+   `packages/frontend/src/services/syncService.ts`. Offline plays are currently lost silently
+   (`usePlayTracking` swallows errors), and offline listening is exactly where skipping is most
+   frequent.
+
+8. **The migration follows the project convention:** a file in `backend/migrations/versions/` named
    `YYYYMMDD_slug.py`, a revision ID of 32 characters or fewer, and `table_exists` / `column_exists`
    guards from `migrations.helpers` for idempotency.
 
@@ -88,8 +125,15 @@ Record listening as **events**, and derive aggregates from them rather than only
   rollup; at personal-library scale this is not urgent but should not be ignored forever.
 - **Tradeoff:** Dual writes to `PlayEvent` and `ProfilePlayHistory` must stay consistent. They should
   share a transaction.
+- **Tradeoff:** The advance reason in decision point 5 is new state in the queue store — the most
+  heavily tested code in the repo. It is unavoidable: without it, outcomes are wrong for the
+  crossfade and iOS background-advance paths, and error-skips would be indistinguishable from real
+  ones.
+- **Tradeoff:** Three endpoints rather than one. Accepted so that each endpoint's name matches its
+  effect and `/played`'s existing contract is untouched.
+- **Resolved:** Backfilling `PlayEvent` from `ProfilePlayHistory` — **no.** Synthetic rows would need
+  invented timestamps and have no real completion data, so they would pollute exactly the signal
+  [ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md) depends on. History starts at
+  the migration.
 - **Follow-up:** Decide the completion-ratio threshold for `skipped` empirically once data exists,
   rather than fixing it by convention now.
-- **Follow-up:** Consider backfilling `PlayEvent` from `ProfilePlayHistory` as low-confidence
-  synthetic rows, or explicitly decide not to. Synthetic events with no real timestamps may be worse
-  than none.
