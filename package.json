@@ -8,10 +8,5 @@
     "lint": "pnpm --filter @familiar/frontend lint",
     "test": "pnpm --filter @familiar/frontend test",
     "test:watch": "pnpm --filter @familiar/frontend test:watch"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

@@ -5,7 +5,129 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0-alpha9] - 2026-06-11
+
+Ninth alpha — **network audio outputs grow up**: the devices you cast to survive restarts, the volume slider controls them, and casting works out of the box on a LAN without manual config. Plus open PWAs now refresh themselves after a deploy.
+
+### Added
+
+- **Volume slider controls the active network device** — when a WiiM/Sonos/UPnP device is the active "Play To" output, the player volume slider (and mute) now drives the device volume, debounced so a drag sends a single update once you settle.
+- **Auto-detected LAN stream base** — `start.sh` detects this host's LAN IP and hands it to network devices, so casting works even when you open the app at localhost/127.0.0.1. Override with `DEVICE_STREAM_BASE_URL` for Tailscale/public access or multi-NIC hosts.
+
+### Fixed
+
+- **Network outputs persist across restarts** — registered "Play To" devices (WiiM/UPnP/DLNA/AirPlay/Chromecast) were held only in memory and vanished on every backend restart or reboot. They're now saved to disk and reloaded on boot, so a device added once stays available.
+- **PWA refreshes itself after a deploy** — an open or docked PWA could keep running a stale cached bundle after an update; it now reloads automatically when the new service worker takes control.
+
+## [0.1.0-alpha8] - 2026-06-07
+
+Eighth alpha — **network audio output** arrives: stream from Familiar to a WiiM (and other UPnP/DLNA/AirPlay 2 receivers) over your LAN, with a native iOS AirPlay button in the player. Plus an **un-skip** path so files you skipped during import are no longer gone for good.
+
+### Added
+
+- **Network audio output (WiiM / UPnP / DLNA)** — the "Play To" picker now streams the current track to a network renderer and keeps it in sync with the player (play/pause/seek/next). Devices can be discovered on the LAN or added directly by address. Selecting a device silences the local speakers so you don't get double audio.
+- **Native iOS AirPlay** — an AirPlay button in the player opens the system route picker, sending the app's audio to AirPlay 2 devices (a WiiM, HomePod, Apple TV, …) at the OS level.
+- **Un-skip skipped imports** — Library → Pending Review has a new **Skipped** tab listing files you skipped during review, with per-track, per-folder, and bulk **Un-skip** to send them back to the review queue. Skipping is no longer permanent.
+- **LAN stream base URL** — a runtime `DEVICE_STREAM_BASE_URL` setting so network devices can fetch the audio even when you open the app over Tailscale or a public domain (the device always gets a LAN-reachable URL, regardless of how you reached the app).
+
+### Changed
+
+- **"Merge duplicate artists" moved out of Settings** — it's now a dedicated full-page **Cleanup** browser in the Library sidebar (beside Changes and Review), instead of a tall panel crowding the Library settings section.
+
+### Fixed
+
+- **Network playback to strict renderers** — WiiM/LinkPlay devices now play correctly: the stream metadata advertises the track's real audio type instead of always claiming FLAC, and discovery/playback errors surface in logs instead of being silently swallowed.
+
+### Infrastructure
+
+- CI: release wait-for-CI timeout raised 30 → 60 min.
+
+## [0.1.0-alpha7] - 2026-06-05
+
+Seventh alpha — a major **visualizer overhaul** (a new audio-reactive vaporwave/outrun scene, richer 3D album-art tiles, and synced lyrics) plus a **library/feature cleanup** that consolidates the map browsers and status UI and adds background metadata auto-proposals.
+
+### Added
+
+- **Reactive Terrain visualizer** — a driving vaporwave/outrun scene that locks to the music. Hills rise **per-frequency-band across the landscape** (the spectrum mapped left→right, adaptively normalized so no region is ever inert) under a neon GL wireframe grid; a mood-based **sun/moon** with classic outrun horizontal bars and a soft light aura; **metallic "shards"** scattered across the side terrain that glow as they catch the sun; a **computer-vision detection HUD** that boxes the floating wireframe shapes; procedural **palm trees** whose individual fronds and trunk segments glow to different frequency bands; scrolling road chevrons; a **driving car** (CC0 model, neon edge highlights) with a grounded contact shadow; and a solid, height-shaded **"sound river"** waveform ribbon flowing down the road. Chromatic aberration, bloom, and fog throughout.
+- **Beat Tiles visualizer** — the album cover as a grid of **3D box tiles** that pop outward in a wave **rippling from the center** on each onset. **Holographic + embossed foil** side faces (the cover drives a normal map under a fresnel iridescence), a **reflective floor** and soft blurred-cover **backdrop**, a drifting camera with an idle "breathing" wave, and flip-dot **tile flips** on strong beats. The artwork still reassembles and stays recognizable.
+- **Scrolling Lyrics visualizer** — an Apple-Music-style **synced lyric column** (current line centered and bright, sung lines fading above, upcoming lines to read ahead) over an ambient **3D field of the song's own words** and a palette "aurora" wash. Synced lyrics are fetched from LRCLIB and **cached per track**.
+- **Vibe Map** — a single consolidated library map, replacing the separate map browsers.
+- **Background auto-proposals** — a backend service that proposes metadata changes in the background, surfaced in the Proposed Changes panel.
+- **Real-time audio analysis** — onset/beat detection (spectral flux) shared across the visualizers so visuals track the actual audio.
+
+### Changed
+
+- **Status UI consolidated** — background-jobs, download, health, proposed-changes, and mixtape-render indicators merged into a single **Status menu**.
+- **Full Player now-playing layout** — over a visualizer, the now-playing info uses the transport-bar layout (artwork left, title/artist right) instead of a thumbnail floating over the title.
+- **Audio engine analysis tuning** — FFT size / smoothing adjusted so the spectrum reacts tightly to the music.
+
+### Removed
+
+- **Unused library browsers** — Music Map, Ego Music Map, Mood Grid, Spotify Browser, and UMAP Explorer (consolidated into Vibe Map).
+- **Unused features** — S3 backup settings, playlist import/export sharing, and the keyboard-shortcuts help overlay.
+- **Old visualizers** — Album Kaleidoscope, Cosmic Orb, Frequency Bars, Lyric Storm, and Rain Window (replaced by Reactive Terrain, Beat Tiles, and Scrolling Lyrics).
+
+### Fixed
+
+- **Synced-lyrics fetching** — lyrics no longer linger from the previous track or get overwritten by a late, out-of-order response when skipping quickly between tracks.
+
+### Infrastructure
+
+- New backend migration: a `synced_lyrics` JSONB cache on `tracks` (cached LRCLIB result per track).
+- CI: site deploy migrated from GitHub Pages to **Cloudflare Pages**; GitHub Actions runners moved to **Node.js 24**.
+
+## [0.1.0-alpha6] - 2026-05-26
+
+Sixth alpha — adds network audio output routing so playback can be sent to Sonos, WiiM/UPnP, AirPlay, and Chromecast devices directly from the player bar or full player.
+
+### Added
+
+- **Network audio output routing** — new "Play To" selector in the player bar and full player lets you route audio to Sonos, WiiM/UPnP (generic DLNA/OpenHome), AirPlay, or Chromecast devices. "Scan for devices" discovers available outputs on the local network. Switching away from a network device stops it automatically; switching to one while a track is playing starts it immediately
+- **UPnP/DLNA/OpenHome output** — covers WiiM streamers and other generic UPnP renderers via `async-upnp-client`; DIDL-Lite metadata (title, artist, album, artwork, duration) sent with each play command
+- **AirPlay output** — native AirPlay 1/2 support via `pyatv`
+- **Chromecast output** — cast to any Google Cast device via `pychromecast`
+
+### Infrastructure
+
+- iOS build number bumped to 11
+- Deploy script SSH user changed from `root` to `jeff`
+
+## [0.1.0-alpha5] - 2026-05-18
+
+Fifth alpha — focused on reliability fixes across PWA playback, iOS audio, and first-run Docker setup for macOS, plus Opus format support and listening session simplification.
+
+### Added
+
+- **Opus audio format support** — `.opus` files are now recognized, scanned, and playable
+
+### Changed
+
+- **Listening sessions simplified** — 2D spatial room and FamiliarPicker avatar chooser removed; per-user reactions retained; session kick corrected
+- **AI playlist naming** — creative naming dropped; playlists now use the user's original request as the name directly
+- **iOS lock screen controls** — 15-second skip commands removed from the lock screen control set
+- **Dynamic search placeholder** in the library browser now reflects the active tab (Artists, Albums, Tracks, etc.)
+
+### Fixed
+
+- **Continuous playback (PWA)** — a transient buffering stall near the end of a track could silently block queue advancement, leaving the player silent indefinitely; playback now always advances when a track ends regardless of prior buffering state
+- **Stall recovery (PWA)** — on a slow connection the audio element can buffer and stall mid-track; the browser's `canplay` event fires when data is ready but does not guarantee auto-resume; the player now calls `play()` explicitly on recovery so the track resumes without user intervention
+- **Continuous playback (PWA) regression guard** — added integration tests asserting that `engine.load()` and `engine.play()` are invoked after `ended`, that a `waiting` stall on the current track does not suppress queue advancement, and that stall-recovery via `canplay` is correctly gated on `isPlaying` state
+- **macOS Docker setup: music library not mounting** — `MUSIC_LIBRARY_PATH=~/Music` in `.env` was not expanded by Docker Compose, causing the container's `/music` to be empty; `start.sh` now exports the expanded absolute path so Docker picks it up correctly
+- **macOS Docker setup: blank `MUSIC_LIBRARY_PATH`** now shows a clear warning instead of falling through silently
+- **iOS now-playing / lock-screen metadata** — `playing` event now emits on the first non-zero `timeUpdate` per track, fixing stale metadata on the lock screen and in CarPlay
+- **iOS audio engine hardening** — audio interruptions (phone calls, Siri) handled correctly in `NativeAudioEngine`; temp files cleaned up via RAII wrapper; audio analysis tap race condition fixed
+- **Full Player: music video layout** — incorrect clip offset, overlapping search view, and stray thumbnail element removed
+- **Artist alias race condition** — `ON CONFLICT DO NOTHING` prevents a crash when registering artist aliases concurrently during library scan
+- **AI artist playlists** — fixed playlist generation for artist-scoped queries
+
+### Infrastructure
+
+- **`update.sh`** — one-command update script: pulls the latest Docker image, refreshes all scripts from the master ZIP (preserving `.env`), and restarts Familiar
+- **`Update Familiar.command`** — double-clickable macOS wrapper for `update.sh`; no Terminal needed for future updates
+- `MACOS.md` and `INSTALLATION.md` updated to reference the new update scripts
+- `start.sh` script version bumped to semver format to match the Docker image version, eliminating a spurious "scripts outdated" warning that fired on every run
+- Beginner macOS install guide updated: drag-from-Finder tip promoted as primary method, "no tracks after scan" troubleshooting entry added, update instructions simplified to one step
+- CI: pinned pnpm to v10, migrated `onlyBuiltDependencies` config to `pnpm-workspace.yaml`, bumped Node.js to 22
 
 ## [0.1.0-alpha4] - 2026-05-03
 
@@ -222,5 +344,12 @@ First alpha release of Familiar — an LLM-powered local music player that combi
 - Audio analysis can be memory-intensive on systems with <8GB RAM
 - Audio effects not available on iOS (require Web Audio routing which breaks background playback)
 
+[0.1.0-alpha9]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha9
+[0.1.0-alpha8]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha8
+[0.1.0-alpha7]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha7
+[0.1.0-alpha6]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha6
+[0.1.0-alpha5]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha5
+[0.1.0-alpha4]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha4
+[0.1.0-alpha3]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha3
 [0.1.0-alpha2]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha2
 [0.1.0-alpha1]: https://github.com/seethroughlab/familiar/releases/tag/v0.1.0-alpha1

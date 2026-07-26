@@ -9,14 +9,12 @@
 import './TrackListBrowser';
 import './ArtistList';
 import './AlbumGrid';
-import './MoodGrid';
-import './EgoMusicMap';
-import './UMAPExplorer';
+import './VibeMap';
 import './ProposedChangesBrowser';
 import './PendingReviewBrowser';
+import './ArtistCleanupBrowser';
 import './DiscoverBrowser';
 import './NewReleasesDetail';
-import './SpotifyBrowser';
 
 // Phase 6 browsers:
 // import './TempoSpectrum';

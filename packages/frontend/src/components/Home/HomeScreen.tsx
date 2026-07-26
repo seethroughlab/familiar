@@ -202,7 +202,7 @@ export function HomeScreen() {
     { label: 'Tracks', to: '/library/tracks', icon: Music2, detail: 'All tracks' },
     { label: 'Artists', to: '/library/artists', icon: Library, detail: 'Browse artists' },
     { label: 'Albums', to: '/library/albums', icon: Home, detail: 'Browse albums' },
-    { label: 'Mood Grid', to: '/library/mood-grid', icon: Sparkles, detail: 'Browse by feel' },
+    { label: 'Music Map', to: '/library/music-map', icon: Sparkles, detail: 'Explore by sound' },
   ];
 
   const refreshPrompts = () => {

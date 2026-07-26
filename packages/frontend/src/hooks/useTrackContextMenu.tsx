@@ -57,7 +57,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
+  const { navigateToArtist, navigateToAlbumDetail } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
@@ -167,7 +167,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
             const albumArtist = track.album_artist || track.artist;
             if (albumArtist && track.album) {
               options.beforeNavigate?.();
-              navigateToAlbum(albumArtist, track.album);
+              navigateToAlbumDetail(albumArtist, track.album);
             }
           }
         }}
@@ -220,7 +220,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
     );
   }, [
     contextMenu, options, closeContextMenu, addToQueue, setQueue,
-    navigateToArtist, navigateToAlbum, isFavorite, toggleFavorite,
+    navigateToArtist, navigateToAlbumDetail, isFavorite, toggleFavorite,
   ]);
 
   return {

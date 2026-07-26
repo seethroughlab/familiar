@@ -4,9 +4,9 @@
 # =============================================================================
 # Stage 1: Build frontend (pnpm workspace)
 # =============================================================================
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
@@ -58,6 +58,9 @@ WORKDIR /app
 # Stage 3: Install Python dependencies
 # =============================================================================
 FROM python-base AS python-deps
+
+# g++ is needed to compile miniaudio (a pyatv dependency) which has no aarch64 wheel
+RUN apt-get update && apt-get install -y --no-install-recommends g++ && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency files first for caching
 COPY backend/pyproject.toml ./

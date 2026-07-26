@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
 
+    # Network audio outputs (Sonos / WiiM / AirPlay / Chromecast).
+    # DEVICE_STREAM_BASE_URL: LAN-reachable base URL (e.g. http://192.168.1.50:4400) that network
+    # devices use to fetch the audio stream. Needed when the browser reaches the app via a network
+    # the device can't (e.g. Tailscale), since the frontend builds stream URLs from its own origin.
+    device_stream_base_url: str | None = None
+
     # LLM provider selection and OpenAI-compatible endpoint config.
     # Set LLM_PROVIDER=openai to route chat + utility calls through an OpenAI-compatible server
     # (e.g. Groq, Together, OpenRouter, LocalAI, vLLM, llama.cpp, LM Studio, Ollama /v1).
@@ -136,7 +142,7 @@ def adaptive_queue_limit(base: int = 100) -> int:
 
 
 # Supported audio formats
-AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".wav", ".aiff", ".aif"}
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".aac", ".ogg", ".opus", ".wav", ".aiff", ".aif"}
 
 # Global settings instance
 settings = Settings()

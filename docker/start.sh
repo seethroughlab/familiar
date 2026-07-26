@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 
 # Bump this when scripts or compose files change in a way that
 # requires users to re-download. The value should match the release tag.
-SCRIPT_VERSION="2026.04.13"
+SCRIPT_VERSION="0.1.0-alpha5"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -42,12 +42,21 @@ fi
 # MUSIC_LIBRARY_PATH set?
 if grep -q '^MUSIC_LIBRARY_PATH=' .env; then
     MUSIC_PATH=$(grep '^MUSIC_LIBRARY_PATH=' .env | head -1 | cut -d= -f2-)
-    # Expand tilde
-    MUSIC_PATH="${MUSIC_PATH/#\~/$HOME}"
-    if [ ! -d "$MUSIC_PATH" ]; then
-        echo -e "${YELLOW}Warning:${NC} MUSIC_LIBRARY_PATH=$MUSIC_PATH does not exist."
-        echo "Familiar will start, but won't find any music until the path is corrected in .env"
+    if [ -z "$MUSIC_PATH" ]; then
+        echo -e "${YELLOW}Warning:${NC} MUSIC_LIBRARY_PATH is not set in .env"
+        echo "Set it to your music folder path, e.g.:"
+        echo "  MUSIC_LIBRARY_PATH=~/Music"
         echo ""
+    else
+        # Expand tilde — Docker Compose does not expand ~ from .env variable substitution
+        MUSIC_PATH="${MUSIC_PATH/#\~/$HOME}"
+        if [ ! -d "$MUSIC_PATH" ]; then
+            echo -e "${YELLOW}Warning:${NC} MUSIC_LIBRARY_PATH=$MUSIC_PATH does not exist."
+            echo "Familiar will start, but won't find any music until the path is corrected in .env"
+            echo ""
+        fi
+        # Export so Docker Compose picks up the absolute path instead of the raw ~ value
+        export MUSIC_LIBRARY_PATH="$MUSIC_PATH"
     fi
 fi
 
@@ -76,6 +85,52 @@ COMPOSE_CMD="docker compose -f docker-compose.prod.yml"
 
 if [ "$(uname)" = "Darwin" ]; then
     COMPOSE_CMD="$COMPOSE_CMD -f docker-compose.macos.yml"
+fi
+
+# --- Network audio: auto-detect a LAN-reachable stream base ---
+# Network speakers (WiiM / Sonos / UPnP / Chromecast) fetch the audio over HTTP.
+# If you open the app at localhost/127.0.0.1, the browser's origin isn't an address
+# the speaker can reach, so we hand the device a URL built from this host's LAN IP.
+# Your own DEVICE_STREAM_BASE_URL (in .env or the environment) always wins; this only
+# fills it in when unset. Detection follows the default route, so it skips Docker and
+# loopback interfaces. Multi-NIC or VPN hosts can override in .env.
+detect_lan_ip() {
+    local ip="" iface=""
+    if [ "$(uname)" = "Darwin" ]; then
+        iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2; exit}')
+        [ -n "$iface" ] && ip=$(ipconfig getifaddr "$iface" 2>/dev/null || true)
+    else
+        ip=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}' || true)
+        [ -z "$ip" ] && ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+    fi
+    printf '%s' "$ip"
+}
+
+STREAM_BASE_SET="${DEVICE_STREAM_BASE_URL:-}"
+if [ -z "$STREAM_BASE_SET" ] && [ -f .env ]; then
+    STREAM_BASE_SET=$(grep -E '^DEVICE_STREAM_BASE_URL=.+' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)
+fi
+
+if [ -n "$STREAM_BASE_SET" ]; then
+    echo "Network audio: using your DEVICE_STREAM_BASE_URL (${STREAM_BASE_SET})"
+else
+    LAN_IP=$(detect_lan_ip)
+    case "$LAN_IP" in
+        ""|127.*|169.254.*)
+            echo -e "${YELLOW}Note:${NC} couldn't auto-detect a LAN IP for network audio."
+            echo "      If casting to a WiiM/Sonos doesn't play, set DEVICE_STREAM_BASE_URL in .env."
+            ;;
+        *)
+            STREAM_PORT="${API_PORT:-4400}"
+            if [ -f .env ]; then
+                _p=$(grep -E '^API_PORT=.+' .env 2>/dev/null | tail -1 | cut -d= -f2- || true)
+                [ -n "$_p" ] && STREAM_PORT="$_p"
+            fi
+            export DEVICE_STREAM_BASE_URL="http://${LAN_IP}:${STREAM_PORT}"
+            echo "Network audio: auto-detected stream base ${DEVICE_STREAM_BASE_URL}"
+            echo "  (override anytime by setting DEVICE_STREAM_BASE_URL in .env)"
+            ;;
+    esac
 fi
 
 # --- Start ---

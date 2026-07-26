@@ -114,17 +114,20 @@ This opens the file in TextEdit. Find the line that says:
 MUSIC_LIBRARY_PATH=
 ```
 
-Type your music folder path from Step 5 after the `=`. For example, if your music is in the default Apple Music location, change it to:
+Type your music folder path from Step 5 after the `=`.
 
+**The easiest and most reliable way** to get the correct path is to drag your music folder from Finder directly into the Terminal window — it will paste the full absolute path for you. Then copy that path into your `.env` file.
+
+For example, your line might look like one of these:
+
+```
+MUSIC_LIBRARY_PATH=/Users/yourname/Music
+```
 ```
 MUSIC_LIBRARY_PATH=~/Music/Music/Media.localized/Music
 ```
 
-Or if your music is simply in ~/Music:
-
-```
-MUSIC_LIBRARY_PATH=~/Music
-```
+Both formats work. (`~/` is a shorthand for your home folder — Familiar expands it automatically.)
 
 ### If Your Mac Has 8GB of Memory
 
@@ -241,20 +244,16 @@ You can also just quit Docker Desktop, which stops everything.
 
 ## Updating Familiar
 
-When a new version is available, open Terminal and type these commands one at a time:
+When a new version is available, open your `familiar/docker` folder in Finder and double-click **Update Familiar.command**. A Terminal window will open, download the new version, and restart Familiar automatically.
+
+Alternatively, from Terminal:
 
 ```
 cd ~/familiar/docker
-docker pull ghcr.io/seethroughlab/familiar:latest
-./stop.sh
-./start.sh
+./update.sh
 ```
 
-The `docker pull` command downloads the latest version (the long address is just Familiar's location on the internet — you don't need to remember it, just copy and paste).
-
-Your music library, settings, and API keys are preserved across updates.
-
-If an update requires new scripts (we'll let you know), download the latest ZIP from **https://github.com/seethroughlab/familiar/archive/refs/heads/master.zip**, unzip it, and replace your `~/familiar` folder. Your data is stored inside Docker, not in this folder, so nothing is lost.
+Either way, your music library, settings, and API keys are never touched.
 
 ---
 
@@ -283,7 +282,9 @@ DISABLE_CLAP_EMBEDDINGS=true
 Then restart: `./stop.sh` followed by `./start.sh`.
 
 **Scanned my library but no music appears**
-- Make sure your `MUSIC_LIBRARY_PATH` points to the folder containing actual audio files (`.mp3`, `.m4a`, `.flac`), not the Apple Music app itself
+- Double-check your `MUSIC_LIBRARY_PATH` in the `.env` file (inside the `docker` folder). Open it with `open -e .env` and confirm the path points to the folder containing your actual audio files
+- After changing the path, you must restart Familiar: run `./stop.sh` then `./start.sh` so Docker picks up the new location
+- Make sure the path points to the folder containing actual audio files (`.mp3`, `.m4a`, `.flac`), not the Apple Music app itself
 - Apple Music streaming-only tracks (ones you don't own) won't appear
 - DRM-protected files (`.m4p`) are skipped
 

@@ -25,9 +25,7 @@ const LABELS: Record<string, string> = {
   '/library/tracks': 'Tracks',
   '/library/artists': 'Artists',
   '/library/albums': 'Albums',
-  '/library/mood-grid': 'Mood Grid',
   '/library/music-map': 'Music Map',
-  '/library/explorer': '3D Explorer',
   '/library/discover': 'Discover',
   '/library/proposed-changes': 'Changes',
 };
@@ -110,8 +108,8 @@ export function LibraryItemContextMenu({ path, position, onClose }: Props) {
     );
   }
 
-  // Mood Grid, Music Map, 3D Explorer, Discover — Open in New Tab
-  if (['/library/mood-grid', '/library/music-map', '/library/explorer', '/library/discover'].includes(path)) {
+  // Music Map, Discover — Open in New Tab
+  if (['/library/music-map', '/library/discover'].includes(path)) {
     return (
       <ContextMenuContainer position={position} onClose={onClose}>
         <MenuHeader title={label} />

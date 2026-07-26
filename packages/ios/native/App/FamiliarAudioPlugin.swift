@@ -1,5 +1,7 @@
+import AVKit
 import Capacitor
 import Foundation
+import UIKit
 
 @objc(FamiliarAudioPlugin)
 public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -35,6 +37,7 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "executeCrossfade", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancelCrossfade", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setNextNormalizationVolume", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "showAirPlayPicker", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "syncCarPlayFavorites", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "syncCarPlayLibrary", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "syncCarPlayPlaylists", returnType: CAPPluginReturnPromise),
@@ -48,11 +51,49 @@ public class FamiliarAudioPlugin: CAPPlugin, CAPBridgedPlugin {
         return engine
     }()
 
+    // Off-screen route picker kept in the view hierarchy; its button presents the system
+    // AirPlay route sheet when triggered. Retained so the sheet stays up while shown.
+    private var airPlayRoutePicker: AVRoutePickerView?
+
     public override func load() {
         super.load()
         NSLog("[CarPlay] plugin.load — wiring eventSink")
         CarPlayDataBridge.shared.setEventSink { [weak self] event, data in
             self?.notifyListeners(event, data: data)
+        }
+    }
+
+    // MARK: - AirPlay
+
+    @objc func showAirPlayPicker(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let container = self.bridge?.viewController?.view else {
+                call.reject("No view controller available for AirPlay picker")
+                return
+            }
+
+            let picker: AVRoutePickerView
+            if let existing = self.airPlayRoutePicker {
+                picker = existing
+            } else {
+                // Off-screen so it doesn't draw over the web UI. Audio routing follows the
+                // selected route automatically because the session uses the .playback category.
+                let created = AVRoutePickerView(frame: CGRect(x: -200, y: -200, width: 44, height: 44))
+                created.prioritizesVideoDevices = false
+                container.addSubview(created)
+                self.airPlayRoutePicker = created
+                picker = created
+            }
+
+            // Trigger the picker's internal button to present the system route sheet.
+            for subview in picker.subviews {
+                if let button = subview as? UIButton {
+                    button.sendActions(for: .touchUpInside)
+                    call.resolve()
+                    return
+                }
+            }
+            call.reject("Could not present AirPlay route picker")
         }
     }
 

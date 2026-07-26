@@ -22,15 +22,16 @@ Access at http://localhost:4400. API keys are configured in your `.env` file —
 
 ## Upgrading
 
-Pull the latest image and restart:
+Run the update script from the `docker` folder:
 
 ```bash
-docker pull ghcr.io/seethroughlab/familiar:latest
-docker compose -f docker-compose.prod.yml down
-docker compose -f docker-compose.prod.yml up -d
+cd ~/familiar/docker
+./update.sh
 ```
 
-Database migrations run automatically on startup.
+This pulls the latest image, refreshes the scripts, and restarts Familiar. Database migrations run automatically on startup.
+
+On macOS you can also double-click **Update Familiar.command** in the `docker` folder instead of using Terminal.
 
 ---
 
@@ -191,19 +192,14 @@ If you want to access Familiar over HTTPS using OMV's SSL certificate (recommend
 
 ### Updating on OpenMediaVault
 
-To update to a new version:
+To update to a new version, SSH in and run:
 
 ```bash
-# Pull the latest image
-docker pull ghcr.io/seethroughlab/familiar:latest
-
-# Restart the containers
-cd /path/to/familiar
-docker compose down && docker compose up -d
-
-# Or via OMV web UI:
-# Compose → Files → Select familiar → Down → Pull → Up
+cd /path/to/familiar/docker
+./update.sh
 ```
+
+Or via the OMV web UI: Compose → Files → Select familiar → Down → Pull → Up.
 
 ### Troubleshooting OMV Installation
 

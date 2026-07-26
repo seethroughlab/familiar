@@ -93,6 +93,11 @@ class Track(Base):
     lyrics: Mapped[str | None] = mapped_column(Text)
     lyrics_language: Mapped[str | None] = mapped_column(String(10))  # ISO 639-1
 
+    # Cached synced lyrics fetched from LRCLIB (for the lyrics visualizer).
+    # Shape: {"synced": bool, "lines": [{"time": float, "text": str}],
+    #         "plain_text": str, "source": str}
+    synced_lyrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
     # User overrides for auto-detected analysis values
     # Example: {"bpm": 124.0, "key": "Am"} - overrides analysis.features values
     user_overrides: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

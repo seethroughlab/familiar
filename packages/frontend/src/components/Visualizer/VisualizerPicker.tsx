@@ -4,18 +4,15 @@
  * Dropdown/popup for selecting between visualizers.
  */
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, BarChart3, Image, Palette, Type, Music, Video } from 'lucide-react';
+import { ChevronDown, Sparkles, Image, Type, Video } from 'lucide-react';
 import { getVisualizers } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 
 // Icon mapping for visualizers
 const visualizerIcons: Record<string, typeof Sparkles> = {
-  'cosmic-orb': Sparkles,
-  'frequency-bars': BarChart3,
-  'album-kaleidoscope': Image,
-  'color-flow': Palette,
-  'typography-wave': Type,
-  'lyric-pulse': Music,
+  'reactive-terrain': Sparkles,
+  'beat-tiles': Image,
+  'lyrics': Type,
   'music-video': Video,
 };
 

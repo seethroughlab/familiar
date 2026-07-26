@@ -203,6 +203,22 @@ async def get_stats(
     return _stats_to_response(stats)
 
 
+@router.post("/scan")
+async def scan_for_proposals(
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Scan the library now for auto-detectable metadata issues and queue proposals.
+
+    Currently detects duplicate artist spellings and proposes merges. Idempotent —
+    re-running won't duplicate pending proposals. This also runs automatically
+    after each library sync.
+    """
+    from app.services.auto_proposals import scan_for_duplicate_artist_proposals
+
+    created = await scan_for_duplicate_artist_proposals(db)
+    return {"created": created}
+
+
 @router.get("/{change_id}", response_model=ProposedChangeResponse)
 async def get_change(
     change_id: UUID,

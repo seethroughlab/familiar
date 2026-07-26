@@ -40,6 +40,10 @@ export interface AudioData {
   treble: number;
   /** Overall audio intensity, 0-255 */
   averageFrequency: number;
+  /** Decaying beat envelope (0-1): spikes to 1 on a detected onset, then decays. */
+  beat: number;
+  /** True only on the single frame an onset (transient) is detected. */
+  onset: boolean;
 }
 
 /**

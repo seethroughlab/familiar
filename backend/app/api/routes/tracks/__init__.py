@@ -59,6 +59,7 @@ AUDIO_MIME_TYPES = {
     ".m4a": "audio/mp4",
     ".aac": "audio/aac",
     ".ogg": "audio/ogg",
+    ".opus": "audio/ogg; codecs=opus",
     ".wav": "audio/wav",
     ".aiff": "audio/aiff",
     ".aif": "audio/aiff",

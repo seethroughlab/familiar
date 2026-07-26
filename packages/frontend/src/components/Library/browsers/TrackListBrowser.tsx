@@ -852,13 +852,29 @@ export function TrackListBrowser({
       </div>
 
       {/* Desktop view - virtualized grid layout (visible at md and above) */}
-      <div className="hidden md:flex md:flex-col md:h-full">
+      {/* flex-1 + min-h-0 (not h-full) so the scroll area takes the space *remaining*
+          after the album header / toolbar siblings — h-full ignores them and pushes
+          the list's bottom (and footer) behind the fixed player bar. */}
+      <div className="hidden md:flex md:flex-col md:flex-1 md:min-h-0">
         {/* Header - fixed outside scroll area */}
         <div
           className="grid gap-4 px-4 py-2 text-sm text-zinc-400 border-b border-zinc-800 flex-shrink-0"
           style={{ gridTemplateColumns: gridColumns }}
         >
-          <div>#</div>
+          <div
+            onClick={() => toggleSort('trackNum')}
+            className={`cursor-pointer hover:text-white flex items-center gap-1 ${
+              sortBy === 'trackNum' ? 'text-white' : ''
+            }`}
+            title="Click to sort by track number"
+          >
+            <span>#</span>
+            {sortBy === 'trackNum' && (
+              sortOrder === 'asc'
+                ? <ChevronUp className="w-3 h-3 flex-shrink-0" />
+                : <ChevronDown className="w-3 h-3 flex-shrink-0" />
+            )}
+          </div>
           <div
             onClick={() => toggleSort('title')}
             className={`cursor-pointer hover:text-white flex items-center gap-1 ${

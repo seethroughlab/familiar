@@ -73,6 +73,10 @@ export class WebAudioEngine implements AudioEngine {
   // DOM event listener refs for cleanup
   private domListenerCleanups: (() => void)[] = [];
 
+  // Set when 'waiting' fires on the current element; cleared on 'playing', 'pause', or 'ended'.
+  // When 'canplay' fires while this is true, we emit 'canplay' so the hook can call play().
+  private stallRecoveryPending = false;
+
   // ========================================================================
   // Lifecycle
   // ========================================================================
@@ -85,8 +89,11 @@ export class WebAudioEngine implements AudioEngine {
 
       if (!this.analyser) {
         this.analyser = this.audioContext.createAnalyser();
-        this.analyser.fftSize = 256;
-        this.analyser.smoothingTimeConstant = 0.8;
+        // 1024-pt FFT (512 bins) for finer bass/kick separation; lower smoothing
+        // so transients survive for the onset/beat detector (0.8 over-averaged the
+        // spectrum and starved spectral-flux onset detection).
+        this.analyser.fftSize = 1024;
+        this.analyser.smoothingTimeConstant = 0.5;
       }
 
       if (!this.elementA) {
@@ -724,6 +731,7 @@ export class WebAudioEngine implements AudioEngine {
 
     const handlePlaying = (e: Event) => {
       const target = e.target as HTMLAudioElement;
+      this.stallRecoveryPending = false;
       const trackId = target.getAttribute('data-track-id');
       if (trackId) {
         this.emit({ type: 'playing', trackId });
@@ -733,8 +741,18 @@ export class WebAudioEngine implements AudioEngine {
     const handleWaiting = (e: Event) => {
       const target = e.target as HTMLAudioElement;
       if (target === this.getCurrentElement()) {
+        this.stallRecoveryPending = true;
         this.emit({ type: 'waiting' });
       }
+    };
+
+    const handleCanPlay = (e: Event) => {
+      const target = e.target as HTMLAudioElement;
+      if (target !== this.getCurrentElement()) return;
+      if (!this.stallRecoveryPending) return;
+      this.stallRecoveryPending = false;
+      log.debug('stall recovery: emitting canplay');
+      this.emit({ type: 'canplay' });
     };
 
     const handleStalled = (e: Event) => {
@@ -752,6 +770,7 @@ export class WebAudioEngine implements AudioEngine {
       const target = e.target as HTMLAudioElement;
       const isCurrent = target === this.getCurrentElement();
       if (isCurrent && !target.ended) {
+        this.stallRecoveryPending = false;
         log.debug('pause event (external interruption)', { currentTime: target.currentTime });
       }
     };
@@ -781,6 +800,7 @@ export class WebAudioEngine implements AudioEngine {
       el.addEventListener('error', handleError);
       el.addEventListener('playing', handlePlaying);
       el.addEventListener('waiting', handleWaiting);
+      el.addEventListener('canplay', handleCanPlay);
       el.addEventListener('stalled', handleStalled);
       el.addEventListener('pause', handlePause);
       el.addEventListener('timeupdate', handleTimeUpdate);
@@ -792,6 +812,7 @@ export class WebAudioEngine implements AudioEngine {
         el.removeEventListener('error', handleError);
         el.removeEventListener('playing', handlePlaying);
         el.removeEventListener('waiting', handleWaiting);
+        el.removeEventListener('canplay', handleCanPlay);
         el.removeEventListener('stalled', handleStalled);
         el.removeEventListener('pause', handlePause);
         el.removeEventListener('timeupdate', handleTimeUpdate);

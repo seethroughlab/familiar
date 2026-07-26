@@ -334,14 +334,23 @@ async def delete_track_artwork(
     )
 
 
-@router.get("/{track_id}/lyrics", response_model=LyricsResponse | None)
+def _empty_lyrics() -> LyricsResponse:
+    """An empty (no-lyrics) response — returned on a genuine miss so the client
+    can distinguish 'no lyrics for this track' from an actual error."""
+    return LyricsResponse(synced=False, lines=[], plain_text="", source="none")
+
+
+@router.get("/{track_id}/lyrics", response_model=LyricsResponse)
 async def get_track_lyrics(
     db: DbSession,
     track_id: UUID,
-) -> LyricsResponse | None:
+) -> LyricsResponse:
     """
     Get lyrics for a track.
-    Returns synced lyrics with timestamps if available, otherwise plain lyrics.
+
+    Returns synced lyrics with timestamps when available. Results are cached on
+    the track (``synced_lyrics``) so repeat requests don't re-hit LRCLIB. A
+    genuine miss returns an empty 200 response (not a 404).
     """
     from sqlalchemy import select
 
@@ -355,8 +364,22 @@ async def get_track_lyrics(
     if not track:
         raise TrackNotFoundError()
 
+    # Serve from cache when we've already fetched synced lyrics for this track.
+    if track.synced_lyrics:
+        cached = track.synced_lyrics
+        return LyricsResponse(
+            synced=cached.get("synced", False),
+            lines=[
+                LyricLineResponse(time=line["time"], text=line["text"])
+                for line in cached.get("lines", [])
+            ],
+            plain_text=cached.get("plain_text", ""),
+            source=cached.get("source", "cache"),
+        )
+
+    # Need title + artist to search; treat as a miss rather than erroring out.
     if not track.title or not track.artist:
-        raise ValidationError("Track must have title and artist to search for lyrics")
+        return _empty_lyrics()
 
     # Search for lyrics
     lyrics_service = get_lyrics_service()
@@ -368,11 +391,24 @@ async def get_track_lyrics(
     )
 
     if not lyrics:
-        raise NotFoundError("No lyrics found")
+        return _empty_lyrics()
 
-    return LyricsResponse(
+    response = LyricsResponse(
         synced=lyrics.synced,
         lines=[LyricLineResponse(time=line.time, text=line.text) for line in lyrics.lines],
         plain_text=lyrics.plain_text,
         source=lyrics.source
     )
+
+    # Cache only positive *synced* results — the visualizer needs the timing,
+    # and a negative result shouldn't be pinned in case lyrics appear later.
+    if lyrics.synced and lyrics.lines:
+        track.synced_lyrics = {
+            "synced": lyrics.synced,
+            "lines": [{"time": line.time, "text": line.text} for line in lyrics.lines],
+            "plain_text": lyrics.plain_text,
+            "source": lyrics.source,
+        }
+        await db.commit()
+
+    return response

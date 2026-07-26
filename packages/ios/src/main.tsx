@@ -30,6 +30,14 @@ import('./CapacitorAmbientSynthAdapter').then(({ CapacitorAmbientSynthAdapter })
   log.warn('Ambient synth bridge not available');
 });
 
+// Register AirPlay bridge (deferred — must not block boot)
+import { registerAirPlayBridge } from '@familiar/frontend/src/player/audio/airPlayBridge';
+import('./AirPlayAdapter').then(({ AirPlayAdapter }) => {
+  registerAirPlayBridge(new AirPlayAdapter());
+}).catch(() => {
+  log.warn('AirPlay bridge not available');
+});
+
 // Register Capacitor Filesystem provider for native track storage
 import { registerFilesystemProvider } from '@familiar/frontend/src/services/offlineService';
 import('@capacitor/filesystem').then(({ Filesystem }) => {

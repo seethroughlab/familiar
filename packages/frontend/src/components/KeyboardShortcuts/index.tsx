@@ -1,1 +1,0 @@
-export { ShortcutsHelp } from './ShortcutsHelp';

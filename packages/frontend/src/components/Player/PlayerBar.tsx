@@ -14,6 +14,7 @@ import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useUIStore } from '../../stores/uiStore';
 import { ShuffleWeightPopover } from './ShuffleWeightPopover';
+import { OutputSelector } from './OutputSelector';
 
 interface PlayerBarProps {
   onExpandClick?: () => void;
@@ -230,6 +231,7 @@ export function PlayerBar({
               <Play className="w-5 h-5" fill="currentColor" />
             )}
           </button>
+          <OutputSelector />
         </div>
         {/* Row 2: Progress bar (full width, tappable) */}
         <div className="px-4 pb-2">
@@ -471,6 +473,9 @@ export function PlayerBar({
             <Radio className="w-5 h-5" />
           </button>
         )}
+
+        {/* Output selector */}
+        <OutputSelector />
       </div>
 
       {/* Context menu */}

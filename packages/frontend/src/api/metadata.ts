@@ -256,4 +256,9 @@ export const proposedChangesApi = {
     });
     return data;
   },
+
+  scan: async (): Promise<{ created: number }> => {
+    const { data } = await api.post('/proposed-changes/scan');
+    return data;
+  },
 };

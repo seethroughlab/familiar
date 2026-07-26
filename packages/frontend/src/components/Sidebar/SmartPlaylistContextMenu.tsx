@@ -7,7 +7,6 @@ import {
   Shuffle,
   ListPlus,
   Download,
-  FileDown,
   ArrowRightLeft,
   Settings2,
   Trash2,
@@ -22,7 +21,6 @@ import { queryKeys } from '../../api/queryKeys';
 import type { SmartPlaylist } from '../../api';
 import { usePlayerStore } from '../../stores/playerStore';
 import { showSuccess, showError } from '../../stores/toastStore';
-import type { FamiliarPlaylist } from '../../types';
 
 interface Props {
   playlist: SmartPlaylist;
@@ -114,48 +112,6 @@ export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRu
     }
   };
 
-  const handleExport = async () => {
-    try {
-      const response = await smartPlaylistsApi.getTracks(playlist.id, 10000);
-      const familiarPlaylist: FamiliarPlaylist = {
-        format: 'familiar-playlist',
-        version: 1,
-        exported_at: new Date().toISOString(),
-        playlist: {
-          name: playlist.name,
-          description: playlist.description,
-          type: 'smart',
-          rules: playlist.rules,
-          match_mode: playlist.match_mode,
-          tracks: response.tracks.map((t) => ({
-            title: t.title || 'Unknown',
-            artist: t.artist || 'Unknown',
-            album: t.album,
-            duration_seconds: t.duration_seconds,
-            track_number: null,
-          })),
-        },
-      };
-
-      const blob = new Blob([JSON.stringify(familiarPlaylist, null, 2)], {
-        type: 'application/json',
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${playlist.name.replace(/[^a-z0-9]/gi, '_')}.familiar`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      showSuccess('Exported .familiar file');
-    } catch {
-      showError('Export failed');
-    }
-    onClose();
-  };
-
   const handleConvertToStatic = async () => {
     try {
       const result = await smartPlaylistsApi.convertToStatic(playlist.id);
@@ -207,11 +163,6 @@ export function SmartPlaylistContextMenu({ playlist, position, onClose, onEditRu
         label="Download as ZIP"
         onClick={handleDownloadZip}
         disabled={downloading}
-      />
-      <MenuItem
-        icon={<FileDown className="w-4 h-4" />}
-        label="Export .familiar"
-        onClick={handleExport}
       />
       {/* Smart playlists with >15 matched tracks are allowed — backend truncates. */}
       <MenuItem

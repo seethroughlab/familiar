@@ -10,14 +10,12 @@ export const BROWSER_ROUTES = [
   { path: 'tracks', browserId: 'track-list' },
   { path: 'artists', browserId: 'artist-list' },
   { path: 'albums', browserId: 'album-grid' },
-  { path: 'mood-grid', browserId: 'mood-grid' },
-  { path: 'music-map', browserId: 'ego-music-map' },
-  { path: 'explorer', browserId: 'umap-explorer' },
+  { path: 'music-map', browserId: 'vibe-map' },
   { path: 'discover', browserId: 'discover' },
   { path: 'discover/new-releases', browserId: 'new-releases-detail' },
   { path: 'proposed-changes', browserId: 'proposed-changes' },
   { path: 'pending-review', browserId: 'pending-review' },
-  { path: 'spotify', browserId: 'spotify' },
+  { path: 'artist-cleanup', browserId: 'artist-cleanup' },
 ] as const;
 
 export const HOME_ROUTE = {
@@ -30,10 +28,9 @@ export const LIBRARY_ITEMS = [
   { path: '/library/tracks', label: 'Tracks' },
   { path: '/library/artists', label: 'Artists' },
   { path: '/library/albums', label: 'Albums' },
-  { path: '/library/mood-grid', label: 'Mood Grid' },
   { path: '/library/music-map', label: 'Music Map' },
-  { path: '/library/explorer', label: '3D Explorer' },
   { path: '/library/discover', label: 'Discover' },
   { path: '/library/proposed-changes', label: 'Changes' },
   { path: '/library/pending-review', label: 'Review' },
+  { path: '/library/artist-cleanup', label: 'Cleanup' },
 ] as const;

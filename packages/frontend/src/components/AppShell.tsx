@@ -21,7 +21,6 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { SpotifyImportModal } from './Import';
 import { InstallPrompt } from './PWA/InstallPrompt';
 import { OfflineIndicator } from './PWA/OfflineIndicator';
-import { ShortcutsHelp } from './KeyboardShortcuts';
 import { TrackEditModal } from './TrackEdit';
 import { MobileBottomNav } from './MobileNav';
 import { PlaylistPickerModal } from './Playlists/PlaylistPickerModal';
@@ -48,7 +47,6 @@ export function AppShell() {
   const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [spotifyImportFile, setSpotifyImportFile] = useState<File | null>(null);
-  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
 
   // UI store
@@ -84,11 +82,8 @@ export function AppShell() {
   // Keyboard shortcuts
   useKeyboardShortcuts({
     onToggleFullPlayer: () => setShowFullPlayer(!showFullPlayer),
-    onShowHelp: () => setShowShortcutsHelp(true),
     onEscape: () => {
-      if (showShortcutsHelp) {
-        setShowShortcutsHelp(false);
-      } else if (showFullPlayer) {
+      if (showFullPlayer) {
         setShowFullPlayer(false);
       } else if (showSettings) {
         setShowSettings(false);
@@ -314,11 +309,6 @@ export function AppShell() {
         {/* PWA install prompt */}
         <InstallPrompt />
         <OfflineIndicator />
-
-        {/* Keyboard shortcuts help */}
-        {showShortcutsHelp && (
-          <ShortcutsHelp onClose={() => setShowShortcutsHelp(false)} />
-        )}
 
         {/* Track edit modal */}
         {editingTrackId && <TrackEditModal />}

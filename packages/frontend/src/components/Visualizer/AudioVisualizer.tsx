@@ -22,6 +22,10 @@ interface AudioVisualizerProps {
   lyrics?: LyricLine[] | null;
   isPlaying?: boolean;
   features?: TrackFeatures | null;
+  /** Current playback position in seconds — drives time-synced visualizers (e.g. lyrics) */
+  currentTime?: number;
+  /** Track duration in seconds */
+  duration?: number;
   className?: string;
 }
 
@@ -55,6 +59,8 @@ export function AudioVisualizer({
   lyrics = null,
   isPlaying = false,
   features = null,
+  currentTime = 0,
+  duration = 0,
   className = '',
 }: AudioVisualizerProps) {
   const { visualizerId } = useVisualizerStore();
@@ -83,8 +89,8 @@ export function AudioVisualizer({
             track={track}
             artworkUrl={artworkUrl}
             lyrics={lyrics}
-            currentTime={0}
-            duration={0}
+            currentTime={currentTime}
+            duration={duration}
             isPlaying={isPlaying}
             features={features}
           />

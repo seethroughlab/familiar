@@ -11,6 +11,7 @@ import { useActiveSessionStore } from '../stores/activeSessionStore';
 import { useFavorites } from '../hooks/useFavorites';
 import { log } from './audio/platform';
 import { useConnectivityStore } from '../stores/connectivityStore';
+import { useOutputStore } from '../stores/outputStore';
 import { prefetchService } from '../services/prefetchService';
 import {
   getCrossfadeTrigger,
@@ -84,6 +85,10 @@ export function useAudioEngine() {
   const advanceToNextTrack = usePlayerStore((s) => s.advanceToNextTrack);
   const setIsLoadingAudio = usePlayerStore((s) => s.setIsLoadingAudio);
   const jumpToQueueIndex = usePlayerStore((s) => s.jumpToQueueIndex);
+
+  // When a network output (WiiM/Sonos/…) is active, the local engine must stay silent —
+  // it keeps running as the transport master so the queue advances and mirrors to the device.
+  const activeOutputId = useOutputStore((s) => s.activeOutputId);
 
   const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationMode, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
   const offlineModeActive = useConnectivityStore((s) => s.offlineModeActive);
@@ -263,12 +268,17 @@ export function useAudioEngine() {
         case 'ended': {
           if (queueTransitionRef.current) return;
           const state = usePlayerStore.getState();
-          // Ignore stale/stray ended events while a newly selected track is still loading.
-          if (state.isLoadingAudio) {
-            log.debug('ended ignored while loading', { trackId: state.currentTrack?.id });
+          // Suppress only if the queue was already advanced externally (e.g. user pressed
+          // next while the track was ending). Do NOT suppress when isLoadingAudio=true was
+          // set by a transient 'waiting' stall on the current track — that scenario would
+          // silently block playNext() and leave the player stuck in silence.
+          const loadedId = engine.getLoadedTrackId();
+          const currentId = state.currentTrack?.id;
+          if (loadedId && currentId && loadedId !== currentId) {
+            log.debug('ended ignored: queue already advanced', { currentId, loadedId });
             return;
           }
-          log.debug('ended event', { trackId: state.currentTrack?.id });
+          log.debug('ended event', { trackId: currentId });
           playNext();
           break;
         }
@@ -361,6 +371,17 @@ export function useAudioEngine() {
         case 'waiting':
           setIsLoadingAudio(true);
           break;
+
+        case 'canplay': {
+          if (usePlayerStore.getState().isPlaying) {
+            engine.play().catch(err => {
+              if ((err as { name?: string })?.name !== 'AbortError') {
+                log.warn('Stall recovery play() failed', err);
+              }
+            });
+          }
+          break;
+        }
 
         case 'timeUpdate': {
           setCurrentTime(event.currentTime);
@@ -662,8 +683,9 @@ export function useAudioEngine() {
 
   useEffect(() => {
     if (!isInitialized) return;
-    engine.setVolume(volume);
-  }, [volume, isInitialized, engine]);
+    // Mute local output while casting to a network device (avoids double audio); restore on return.
+    engine.setVolume(activeOutputId ? 0 : volume);
+  }, [volume, activeOutputId, isInitialized, engine]);
 
   // --------------------------------------------------------------------------
   // Effect: Load track when currentTrack changes

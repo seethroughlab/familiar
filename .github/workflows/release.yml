@@ -14,6 +14,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 # Philosophy: this workflow runs on GitHub-hosted runners end-to-end. The
 # self-hosted NAS runner used for everyday CI has unreliable upstream
@@ -44,7 +45,7 @@ jobs:
         run: |
           SHA=$(git rev-parse HEAD)
           echo "Waiting for CI to pass on $SHA..."
-          for i in $(seq 1 60); do
+          for i in $(seq 1 120); do
             RESULT=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1" \
               --jq '.workflow_runs[0] | .conclusion // .status')
             case "$RESULT" in
@@ -57,12 +58,12 @@ jobs:
                 exit 1
                 ;;
               *)
-                echo "CI status: ${RESULT:-no run found} (attempt $i/60, waiting 30s...)"
+                echo "CI status: ${RESULT:-no run found} (attempt $i/120, waiting 30s...)"
                 sleep 30
                 ;;
             esac
           done
-          echo "::error::Timed out waiting for CI after 30 minutes"
+          echo "::error::Timed out waiting for CI after 60 minutes"
           exit 1
 
   build:

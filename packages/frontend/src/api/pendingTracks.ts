@@ -91,6 +91,7 @@ export const pendingTracksApi = {
     sort_by?: string;
     sort_order?: string;
     search?: string;
+    status?: 'pending_review' | 'skipped';
     limit?: number;
     offset?: number;
   }): Promise<PendingGroupsListResponse> {
@@ -115,6 +116,10 @@ export const pendingTracksApi = {
     await api.post(`/pending-tracks/${trackId}/skip`);
   },
 
+  async unskip(trackId: string): Promise<void> {
+    await api.post(`/pending-tracks/${trackId}/unskip`);
+  },
+
   async updateMetadata(trackId: string, metadata: MetadataUpdate): Promise<void> {
     await api.patch(`/pending-tracks/${trackId}/metadata`, metadata);
   },
@@ -125,6 +130,10 @@ export const pendingTracksApi = {
 
   async groupSkip(folderPath: string): Promise<void> {
     await api.post('/pending-tracks/group/skip', { folder_path: folderPath });
+  },
+
+  async groupUnskip(folderPath: string): Promise<void> {
+    await api.post('/pending-tracks/group/unskip', { folder_path: folderPath });
   },
 
   async groupReplaceUpgrades(folderPath: string, opts?: { queue_analysis?: boolean }): Promise<void> {
@@ -145,5 +154,9 @@ export const pendingTracksApi = {
 
   async bulkSkipAll(): Promise<void> {
     await api.post('/pending-tracks/bulk/skip-all');
+  },
+
+  async bulkUnskipAll(): Promise<void> {
+    await api.post('/pending-tracks/bulk/unskip-all');
   },
 };

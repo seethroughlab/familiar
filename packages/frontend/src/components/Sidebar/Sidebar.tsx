@@ -10,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   House,
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
-  Heart, Download, Disc3, Inbox,
+  Heart, Download, Inbox, Combine,
   Settings, PanelLeftClose, PanelLeft,
   ListMusic, Clock, ChevronDown, ChevronUp, Plus, CassetteTape,
 } from 'lucide-react';
@@ -23,7 +23,6 @@ import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { playlistsApi, smartPlaylistsApi, pendingTracksApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
-import { spotifyApi } from '../../api/spotify';
 import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
 import type { Playlist, SmartPlaylist } from '../../api';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
@@ -48,6 +47,7 @@ const LIBRARY_ICON_MAP: Record<string, typeof List> = {
   '/library/discover': Sparkles,
   '/library/proposed-changes': FileText,
   '/library/pending-review': Inbox,
+  '/library/artist-cleanup': Combine,
 };
 
 const LIBRARY_ITEMS = LIBRARY_ITEM_DEFS.map((item) => ({
@@ -109,14 +109,6 @@ export function Sidebar() {
     retry: offlineAwareRetry(isOffline, 1),
   });
   const pendingReviewCount = pendingStats?.total_tracks ?? 0;
-
-  // Spotify import existence check (shares cache with SpotifyBrowser)
-  const { data: spotifyImport } = useQuery({
-    queryKey: queryKeys.spotifyImport.all,
-    queryFn: () => spotifyApi.get(),
-    staleTime: STALE_TIME.MEDIUM,
-    retry: offlineAwareRetry(isOffline, 1),
-  });
 
   // Playlists
   const { data: playlists } = useQuery({
@@ -186,17 +178,6 @@ export function Sidebar() {
               </Link>
             </div>
           ))}
-          {spotifyImport && (
-            <Link
-              to="/library/spotify"
-              className={`flex items-center justify-center mx-1 p-2 rounded-lg transition-colors ${
-                isActive('/library/spotify') ? activeClass : `${textClass} ${hoverClass}`
-              }`}
-              title="Spotify Library"
-            >
-              <Disc3 className="w-5 h-5" />
-            </Link>
-          )}
           <div className={`mx-3 my-2 border-t ${dividerClass}`} />
           {COLLECTION_ITEMS.map((item) => (
             <div key={item.path} onContextMenu={(e) => collectionMenu.open(item.path, e)}>
@@ -289,17 +270,6 @@ export function Sidebar() {
               </Link>
             </div>
           ))}
-          {spotifyImport && (
-            <Link
-              to="/library/spotify"
-              className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-                isActive('/library/spotify') ? activeClass : `${textClass} ${hoverClass}`
-              }`}
-            >
-              <Disc3 className="w-4 h-4 flex-shrink-0 text-green-400" />
-              <span className="truncate">Spotify Library</span>
-            </Link>
-          )}
         </nav>
 
         <div className={`mx-4 my-3 border-t ${dividerClass}`} />

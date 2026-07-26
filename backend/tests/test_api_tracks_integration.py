@@ -20,6 +20,25 @@ def headers():
     return {}
 
 
+def _patch_lyrics_service(monkeypatch, *, result):
+    """Patch the lyrics service so the endpoint never hits the network.
+
+    Returns a list that records each ``search()`` call so tests can assert
+    whether LRCLIB was consulted (vs. served from the DB cache).
+    """
+    calls: list[dict] = []
+
+    class _FakeLyricsService:
+        async def search(self, **kwargs):
+            calls.append(kwargs)
+            return result
+
+    monkeypatch.setattr(
+        "app.services.lyrics.get_lyrics_service", lambda: _FakeLyricsService()
+    )
+    return calls
+
+
 # ---------------------------------------------------------------------------
 # Track IDs & batch
 # ---------------------------------------------------------------------------
@@ -241,13 +260,76 @@ class TestStreamAndArtwork:
         assert resp.status_code in (200, 404)  # 404 if no artwork, 200 if fallback
 
     @pytest.mark.asyncio
-    async def test_lyrics_not_found(self, async_db, client):
+    async def test_lyrics_miss_returns_empty_200(self, async_db, client, monkeypatch):
+        """A genuine miss returns an empty 200 (not a 404) so the client can
+        distinguish 'no lyrics' from a real error without console noise."""
         t = await insert_test_track(async_db, title="NoLyrics", artist="NoArtist")
         await async_db.commit()
 
+        calls = _patch_lyrics_service(monkeypatch, result=None)
+
         resp = client.get(f"/api/v1/tracks/{t.id}/lyrics")
-        # 404 when lyrics service can't find them, or 500 if service unavailable
-        assert resp.status_code in (404, 500)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["synced"] is False
+        assert body["lines"] == []
+        assert len(calls) == 1  # LRCLIB was consulted
+
+    @pytest.mark.asyncio
+    async def test_lyrics_cached_in_db_avoids_lrclib(self, async_db, client, monkeypatch):
+        """Once synced lyrics are cached on the track, the endpoint serves them
+        without calling LRCLIB again."""
+        t = await insert_test_track(async_db, title="Cached", artist="Band")
+        t.synced_lyrics = {
+            "synced": True,
+            "lines": [{"time": 0.0, "text": "hello"}, {"time": 1.5, "text": "world"}],
+            "plain_text": "hello\nworld",
+            "source": "lrclib",
+        }
+        await async_db.commit()
+
+        calls = _patch_lyrics_service(monkeypatch, result=None)
+
+        resp = client.get(f"/api/v1/tracks/{t.id}/lyrics")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["synced"] is True
+        assert body["lines"] == [
+            {"time": 0.0, "text": "hello"},
+            {"time": 1.5, "text": "world"},
+        ]
+        assert calls == []  # cache hit — LRCLIB was NOT consulted
+
+    @pytest.mark.asyncio
+    async def test_lyrics_fetched_then_persisted(self, async_db, client, monkeypatch):
+        """First request fetches from LRCLIB and persists; a second request is a
+        cache hit that no longer consults the network."""
+        from app.services.lyrics import LyricLine, LyricsResult
+
+        t = await insert_test_track(async_db, title="Fresh", artist="Singer")
+        await async_db.commit()
+
+        result = LyricsResult(
+            synced=True,
+            lines=[LyricLine(time=0.0, text="la"), LyricLine(time=2.0, text="la la")],
+            plain_text="la\nla la",
+            source="lrclib",
+        )
+        calls = _patch_lyrics_service(monkeypatch, result=result)
+
+        resp1 = client.get(f"/api/v1/tracks/{t.id}/lyrics")
+        assert resp1.status_code == 200
+        assert resp1.json()["synced"] is True
+        assert len(calls) == 1  # first request hit LRCLIB
+
+        # Second request should be served from the persisted cache.
+        resp2 = client.get(f"/api/v1/tracks/{t.id}/lyrics")
+        assert resp2.status_code == 200
+        assert resp2.json()["lines"] == [
+            {"time": 0.0, "text": "la"},
+            {"time": 2.0, "text": "la la"},
+        ]
+        assert len(calls) == 1  # still 1 — second request was a cache hit
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Zap, Plus, MoreVertical, Pencil, Trash2, RefreshCw, Play, Loader2, Upload, CloudOff } from 'lucide-react';
+import { Zap, Plus, MoreVertical, Pencil, Trash2, RefreshCw, Play, Loader2, CloudOff } from 'lucide-react';
 import { smartPlaylistsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { offlineAwareRetry } from '../../api/queryDefaults';
@@ -8,7 +8,6 @@ import type { SmartPlaylist } from '../../api';
 import { SmartPlaylistBuilder } from './SmartPlaylistBuilder';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { PlaylistExport, PlaylistImport } from '../PlaylistSharing';
 import * as playlistCache from '../../services/playlistCache';
 
 interface Props {
@@ -18,7 +17,6 @@ interface Props {
 export function SmartPlaylistList({ onSelectPlaylist }: Props) {
   const queryClient = useQueryClient();
   const [showBuilder, setShowBuilder] = useState(false);
-  const [showImport, setShowImport] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState<SmartPlaylist | undefined>();
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [cachedPlaylistIds, setCachedPlaylistIds] = useState<Set<string>>(new Set());
@@ -162,15 +160,6 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
         </h3>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowImport(true)}
-            disabled={isOffline}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 disabled:hover:bg-zinc-700 rounded-md transition-colors"
-            title={isOffline ? 'Cannot import while offline' : 'Import .familiar playlist'}
-          >
-            <Upload className="w-4 h-4" />
-            Import
-          </button>
-          <button
             onClick={() => {
               setEditingPlaylist(undefined);
               setShowBuilder(true);
@@ -274,10 +263,6 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
                         <RefreshCw className="w-4 h-4" />
                         Refresh
                       </button>
-                      <PlaylistExport
-                        playlist={playlist}
-                        onExport={() => setMenuOpen(null)}
-                      />
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -315,13 +300,6 @@ export function SmartPlaylistList({ onSelectPlaylist }: Props) {
         />
       )}
 
-      {/* Import modal */}
-      {showImport && (
-        <PlaylistImport
-          onClose={() => setShowImport(false)}
-          onImportComplete={() => setShowImport(false)}
-        />
-      )}
     </div>
   );
 }

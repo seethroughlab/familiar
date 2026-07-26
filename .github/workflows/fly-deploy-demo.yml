@@ -12,6 +12,9 @@ on:
   #     - 'deploy/fly/**'
   #     - '.github/workflows/fly-deploy-demo.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     name: Deploy familiar-demo

@@ -197,7 +197,7 @@ export function SpotifyImportModal({ file, onClose }: SpotifyImportModalProps) {
             <ReadyView
               ready={state.ready}
               onViewLibrary={() => {
-                navigate('/library/spotify');
+                navigate('/library/tracks');
                 onClose();
               }}
             />

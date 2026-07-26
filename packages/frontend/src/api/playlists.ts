@@ -82,32 +82,6 @@ export interface AvailableFields {
   };
 }
 
-export interface PlaylistImportResult {
-  playlist_id: string;
-  playlist_name: string;
-  total_tracks: number;
-  matched_tracks: number;
-  unmatched_tracks: number;
-  tracks: Array<{
-    title: string;
-    artist: string;
-    matched: boolean;
-    matched_track_id: string | null;
-    confidence: number;
-  }>;
-}
-
-export const playlistSharingApi = {
-  importPlaylist: async (file: File): Promise<PlaylistImportResult> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const { data } = await api.post('/playlists/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return data;
-  },
-};
-
 export const smartPlaylistsApi = {
   list: async (): Promise<SmartPlaylist[]> => {
     const { data } = await api.get('/smart-playlists');

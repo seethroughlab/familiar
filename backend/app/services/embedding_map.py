@@ -8,7 +8,7 @@ import json
 import logging
 from collections import defaultdict
 from collections.abc import AsyncGenerator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 import numpy as np
@@ -30,6 +30,22 @@ MIN_TRACKS_PER_ENTITY = 1
 # Maximum entities to include (for performance)
 MAX_ENTITIES = 500
 
+# Audio features surfaced as the map's color "lens". All are roughly 0-1 scaled
+# scalar columns on TrackAnalysis, so adding them to the aggregate projection is
+# cheap (unlike the JSONB feature blobs, which must NOT be loaded here).
+LENS_FEATURES = [
+    "energy",
+    "valence",
+    "danceability",
+    "acousticness",
+    "instrumentalness",
+    "speechiness",
+    "harmonic_complexity",
+    "swing_ratio",
+    "syncopation",
+    "brightness",
+]
+
 
 @dataclass
 class MapNode:
@@ -41,6 +57,8 @@ class MapNode:
     y: float
     track_count: int
     first_track_id: str
+    # Per-entity mean of each LENS_FEATURES value (used for color/size lensing).
+    features: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -167,6 +185,7 @@ class EmbeddingMapService:
                         "y": n.y,
                         "track_count": n.track_count,
                         "first_track_id": n.first_track_id,
+                        "features": n.features,
                     }
                     for n in map_data.nodes
                 ],
@@ -289,6 +308,7 @@ class EmbeddingMapService:
                     y=float(positions_2d[i][1]),
                     track_count=entity_data["track_count"],
                     first_track_id=entity_data["first_track_id"],
+                    features=entity_data.get("features", {}),
                 )
             )
 
@@ -381,6 +401,7 @@ class EmbeddingMapService:
                     y=float(positions_2d[i][1]),
                     track_count=entity_data["track_count"],
                     first_track_id=entity_data["first_track_id"],
+                    features=entity_data.get("features", {}),
                 )
             )
 
@@ -412,8 +433,10 @@ class EmbeddingMapService:
         # full Track ORM rows + selectinload-ed every TrackAnalysis (with all its
         # JSONB blobs and 30+ feature columns), pulling hundreds of MB into
         # memory for a 23K-track library and OOM-killing the container.
+        # Project only the scalar lens-feature columns alongside the embedding.
+        feature_cols = [getattr(TrackAnalysis, f) for f in LENS_FEATURES]
         query = (
-            select(Track.id, Track.artist, TrackAnalysis.embedding)
+            select(Track.id, Track.artist, TrackAnalysis.embedding, *feature_cols)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             .where(
                 Track.status == TrackStatus.ACTIVE,
@@ -425,19 +448,23 @@ class EmbeddingMapService:
             .execution_options(yield_per=2000)
         )
 
-        # Group by artist - store both embeddings and track IDs
+        # Group by artist - store embeddings, track IDs, and feature sums/counts.
         artist_embeddings: dict[str, dict] = defaultdict(
             lambda: {
                 "embeddings": [],
                 "track_ids": [],
                 "track_count": 0,
                 "first_track_id": None,
+                "feature_sums": defaultdict(float),
+                "feature_counts": defaultdict(int),
             }
         )
 
         result = await db.stream(query)
-        async for track_id, artist, embedding in result:
-            display_name = artist.strip()
+        async for row in result:
+            track_id, artist, embedding = row[0], row[1], row[2]
+            feature_values = row[3:]
+            display_name = (artist or "").strip()
             if not display_name:
                 continue
 
@@ -450,6 +477,10 @@ class EmbeddingMapService:
             artist_data["embeddings"].append(np.asarray(embedding, dtype=np.float32))
             artist_data["track_ids"].append(track_id_str)
             artist_data["track_count"] += 1
+            for fname, value in zip(LENS_FEATURES, feature_values):
+                if value is not None:
+                    artist_data["feature_sums"][fname] += float(value)
+                    artist_data["feature_counts"][fname] += 1
             if artist_data["first_track_id"] is None:
                 artist_data["first_track_id"] = track_id_str
                 artist_data["display_name"] = display_name
@@ -473,6 +504,13 @@ class EmbeddingMapService:
                     closest_idx = int(np.argmax(similarities))
                     representative_track_id = data["track_ids"][closest_idx]
 
+                # Mean of each lens feature (skip features with no values).
+                features = {
+                    fname: data["feature_sums"][fname] / data["feature_counts"][fname]
+                    for fname in LENS_FEATURES
+                    if data["feature_counts"][fname] > 0
+                }
+
                 # Use display_name (first casing encountered) as the dict key
                 display_name = data.get("display_name", key)
                 result_dict[display_name] = {
@@ -480,6 +518,7 @@ class EmbeddingMapService:
                     "track_count": data["track_count"],
                     "first_track_id": data["first_track_id"],
                     "representative_track_id": representative_track_id,
+                    "features": features,
                 }
 
         return result_dict

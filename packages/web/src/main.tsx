@@ -37,6 +37,24 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Service worker update check (web only — no SW in native apps)
 if ('serviceWorker' in navigator) {
+  // With registerType: 'autoUpdate' a new SW activates in the background, but an
+  // already-open page (especially a docked PWA) keeps running the old in-memory
+  // bundle until it's reloaded. Reload once the new SW takes control so deploys
+  // go live without a manual relaunch.
+  //
+  // Only reload when a controller was already present at load time: on a first-ever
+  // visit clientsClaim fires controllerchange too, but the page already has the
+  // latest assets, so reloading there would be a pointless extra refresh. Guarded
+  // so it fires at most once.
+  const hadControllerAtLoad = !!navigator.serviceWorker.controller;
+  let reloadingForSwUpdate = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadControllerAtLoad || reloadingForSwUpdate) return;
+    reloadingForSwUpdate = true;
+    log.info('SW: New service worker took control — reloading for fresh assets');
+    window.location.reload();
+  });
+
   navigator.serviceWorker.getRegistration().then((reg) => {
     if (reg) {
       log.info('SW: Checking for updates...');

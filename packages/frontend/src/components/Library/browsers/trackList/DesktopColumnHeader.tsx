@@ -19,7 +19,6 @@ export function DesktopColumnHeader({ gridColumns }: DesktopColumnHeaderProps) {
   const sortBy = useColumnStore((state) => state.sortBy);
   const sortOrder = useColumnStore((state) => state.sortOrder);
   const toggleSort = useColumnStore((state) => state.toggleSort);
-  const setSortBy = useColumnStore((state) => state.setSortBy);
   const setColumnWidth = useColumnStore((state) => state.setColumnWidth);
   const resetColumnWidth = useColumnStore((state) => state.resetColumnWidth);
 
@@ -121,15 +120,17 @@ export function DesktopColumnHeader({ gridColumns }: DesktopColumnHeaderProps) {
       style={{ gridTemplateColumns: gridColumns }}
     >
       <div
-        onClick={() => setSortBy(null)}
+        onClick={() => toggleSort('trackNum')}
         className={`cursor-pointer hover:text-white flex items-center gap-1 ${
-          sortBy === null ? 'text-white' : ''
+          sortBy === 'trackNum' ? 'text-white' : ''
         }`}
-        title="Click to sort by default order"
+        title="Click to sort by track number"
       >
         <span>#</span>
-        {sortBy === null && (
-          <ChevronDown className="w-3 h-3 flex-shrink-0" />
+        {sortBy === 'trackNum' && (
+          sortOrder === 'asc'
+            ? <ChevronUp className="w-3 h-3 flex-shrink-0" />
+            : <ChevronDown className="w-3 h-3 flex-shrink-0" />
         )}
       </div>
       <div

@@ -63,6 +63,9 @@ export interface FamiliarAudioPlugin {
     prevArtworkUrl?: string;
   }): Promise<void>;
 
+  // AirPlay — present the iOS system route picker (audio follows the selected route)
+  showAirPlayPicker(): Promise<void>;
+
   // CarPlay
   syncCarPlayFavorites(options: { snapshot: string }): Promise<void>;
   syncCarPlayLibrary(options: { snapshot: string }): Promise<void>;

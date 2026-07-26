@@ -18,6 +18,7 @@ export * from './diagnosticsLogs';
 export * from './mapStream';
 export * from './spotify';
 export * from './ambient';
+export * from './outputs';
 export * from './pendingTracks';
 export * from './discovery';
 // Default export: shared axios instance (for MusicBrainzLookup)

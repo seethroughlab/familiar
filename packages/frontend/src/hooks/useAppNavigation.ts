@@ -34,9 +34,7 @@ export function useAppNavigation() {
         'track-list': '/library/tracks',
         'artist-list': '/library/artists',
         'album-grid': '/library/albums',
-        'mood-grid': '/library/mood-grid',
-        'ego-music-map': '/library/music-map',
-        'umap-explorer': '/library/explorer',
+        'vibe-map': '/library/music-map',
         'discover': '/library/discover',
         'proposed-changes': '/library/proposed-changes',
       };
