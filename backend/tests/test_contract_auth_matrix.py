@@ -24,6 +24,9 @@ REQUIRED_PROFILE_ENDPOINTS = [
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/played"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/skipped"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/rejected"),
+    # Radio suggestions weigh this profile's taste and skip history, so unlike the
+    # ambient routes they cannot run profile-less (ADR-0005).
+    ("POST", "/api/v1/queue/suggestions"),
 ]
 
 

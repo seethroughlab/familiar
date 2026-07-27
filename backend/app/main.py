@@ -53,6 +53,7 @@ from app.api.routes import (
     playlists,
     profiles,
     proposed_changes,
+    queue,
     s3_backup,
     smart_playlists,
     spotify_import,
@@ -483,6 +484,7 @@ app.include_router(download.router, prefix="/api/v1")
 app.include_router(updates.router, prefix="/api/v1")
 app.include_router(spotify_import.router, prefix="/api/v1")
 app.include_router(ambient.router, prefix="/api/v1")
+app.include_router(queue.router, prefix="/api/v1")
 app.include_router(external_albums.router, prefix="/api/v1")
 app.include_router(new_releases.router, prefix="/api/v1")
 app.include_router(admin_artists.router, prefix="/api/v1")
