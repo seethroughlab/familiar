@@ -6,15 +6,24 @@ No session persistence; all state lives on the client.
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Track, TrackAnalysis
+from app.db.models import (
+    PlayEvent,
+    ProfileFavorite,
+    ProfilePlayHistory,
+    Track,
+    TrackAnalysis,
+)
 from app.logging_config import get_logger
 from app.services.ranking_profiles import AMBIENT, RankingProfile
+from app.services.taste_weighting import SHUFFLE_PRESETS, compute_track_weight
+from app.utils.time import utcnow
 
 logger = get_logger(__name__)
 
@@ -449,6 +458,131 @@ async def pick_surprise_seed(
     return _row_to_descriptor(best[0], best[1])
 
 
+# How far back skips and rejections count against a track. Recent dislikes matter and
+# old ones fade — taste changes, and a track skipped repeatedly last year should not be
+# exiled forever. Also bounds the aggregate as `play_events` grows.
+NEGATIVE_SIGNAL_WINDOW_DAYS = 90
+
+# Which shuffle preset supplies radio's taste signal: favour well-played tracks that have
+# not been heard lately. That "I'd forgotten about this" quality is what makes an
+# insertion land; `comfort_zone` would mostly re-surface what already plays often.
+RADIO_TASTE_PRESET = "rediscover"
+
+
+async def _fetch_taste_scores(
+    db: AsyncSession,
+    profile_id: UUID,
+    track_ids: list[UUID],
+) -> dict[UUID, float]:
+    """Taste weight per candidate, normalised to [0, 1].
+
+    Reuses `compute_track_weight` rather than reimplementing play-count/recency/favourite
+    weighting (ADR-0005 point 3). The join shape mirrors `routes/tracks/listing.py`: the
+    `profile_id` predicate lives **inside** the ON clause, because in a WHERE the outer
+    join degrades to an inner join and every unplayed or unfavourited track disappears.
+
+    Normalisation matters. `compute_track_weight` returns an unbounded multiplier while
+    `score_candidate` clamps `taste_score` to [0, 1] — passing it raw would saturate at
+    1.0 for essentially every track and reorder nothing. Dividing by the candidate set's
+    max preserves the ratios between candidates; min-max scaling was rejected because it
+    manufactures a full 0–1 spread even when every candidate is near-identical, turning
+    noise into ranking signal.
+    """
+    if not track_ids:
+        return {}
+
+    preset = SHUFFLE_PRESETS[RADIO_TASTE_PRESET]
+
+    rows = (
+        await db.execute(
+            select(
+                Track.id,
+                Track.created_at,
+                ProfilePlayHistory.play_count,
+                ProfilePlayHistory.last_played_at,
+                ProfileFavorite.favorited_at,
+            )
+            .outerjoin(
+                ProfilePlayHistory,
+                (ProfilePlayHistory.track_id == Track.id)
+                & (ProfilePlayHistory.profile_id == profile_id),
+            )
+            .outerjoin(
+                ProfileFavorite,
+                (ProfileFavorite.track_id == Track.id)
+                & (ProfileFavorite.profile_id == profile_id),
+            )
+            .where(Track.id.in_(track_ids))
+        )
+    ).all()
+
+    if not rows:
+        return {}
+
+    now = utcnow()  # one clock for the whole batch, as listing.py does
+    max_pc = max((r.play_count or 0) for r in rows) or 1
+
+    raw = {
+        r.id: compute_track_weight(
+            play_count=r.play_count,
+            last_played_at=r.last_played_at,
+            created_at=r.created_at,
+            is_favorited=r.favorited_at is not None,
+            preset=preset,
+            now=now,
+            max_play_count=max_pc,
+        )
+        for r in rows
+    }
+
+    max_w = max(raw.values())
+    if max_w <= 0:
+        return {}
+    return {tid: w / max_w for tid, w in raw.items()}
+
+
+async def _fetch_negative_signal(
+    db: AsyncSession,
+    profile_id: UUID,
+    track_ids: list[UUID],
+) -> dict[UUID, tuple[int, int]]:
+    """(skip_count, reject_count) per candidate, from ADR-0004 `PlayEvent`.
+
+    Counts only `'skipped'` and `'rejected'`. **`'errored'` must never appear here** — it
+    means playback failed, not that the listener disliked the track, and treating a
+    stream failure as a taste signal would let a bad network night quietly poison the
+    recommender. The FILTER clauses exclude it by construction; a test asserts it.
+
+    Served by `ix_play_events_profile_track`, added for exactly this query.
+    """
+    if not track_ids:
+        return {}
+
+    cutoff = utcnow() - timedelta(days=NEGATIVE_SIGNAL_WINDOW_DAYS)
+
+    rows = (
+        await db.execute(
+            select(
+                PlayEvent.track_id,
+                func.count().filter(PlayEvent.outcome == "skipped").label("skips"),
+                func.count().filter(PlayEvent.outcome == "rejected").label("rejects"),
+            )
+            .where(
+                PlayEvent.profile_id == profile_id,
+                PlayEvent.track_id.in_(track_ids),
+                PlayEvent.started_at >= cutoff,
+                # Belt and braces with the FILTER clauses above: excluding 'errored' and
+                # 'completed' here as well means the property holds even if someone later
+                # edits the aggregate, and it scans far fewer rows.
+                PlayEvent.outcome.in_(("skipped", "rejected")),
+            )
+            .group_by(PlayEvent.track_id)
+        )
+    ).all()
+
+    return {r.track_id: (r.skips or 0, r.rejects or 0) for r in rows}
+
+
 async def get_candidates(
     db: AsyncSession,
     current_track_id: UUID,
@@ -457,13 +591,25 @@ async def get_candidates(
     recent_track_ids: list[UUID] | None = None,
     recent_artist_names: list[str] | None = None,
     limit: int = 10,
+    profile: RankingProfile | None = None,
+    profile_id: UUID | None = None,
 ) -> tuple[list[AmbientCandidate], int, bool]:
     """Fetch and rank candidates for ambient continuation.
 
     Two-phase: SQL fetches top-150 by embedding distance, Python scores & sorts.
 
+    ``profile`` selects the weighting (ADR-0005), defaulting to ``AMBIENT``.
+    ``profile_id`` is whose listening history to weigh. The taste and negative terms are
+    per-candidate, so they can only be fetched once the candidate set is known — hence
+    they happen here, between the two phases, rather than at the call site.
+
+    Both extra queries are skipped entirely unless ``profile_id`` is given **and** the
+    ranking profile actually uses those terms, so ambient callers run exactly the SQL
+    they ran before.
+
     Returns: (candidates, pool_size, pool_collapsed)
     """
+    profile = profile or AMBIENT
     recent_ids = set(recent_track_ids or [])
     recent_ids.add(current_track_id)
 
@@ -474,6 +620,10 @@ async def get_candidates(
 
     # Build SQL query — top 150 by embedding similarity
     base_conditions = [
+        # Excludes MISSING tracks — files no longer on disk, which 404 on stream.
+        # This was absent, so ambient could and did surface unplayable tracks; putting
+        # one into a queue is exactly the failure `active_filter` exists to prevent.
+        Track.active_filter(),
         Track.id.notin_(recent_ids),
         Track.duration_seconds >= 45,
         TrackAnalysis.energy.isnot(None),
@@ -521,6 +671,17 @@ async def get_candidates(
     pool_size = len(rows)
     pool_collapsed = pool_size < 5
 
+    # Per-candidate taste and listening history. Only fetched when a profile is supplied
+    # and the ranking profile actually weighs them — ambient runs neither query.
+    taste_scores: dict[UUID, float] = {}
+    negative: dict[UUID, tuple[int, int]] = {}
+    if profile_id is not None and rows:
+        candidate_ids = [row[0].id for row in rows]
+        if profile.taste_weight:
+            taste_scores = await _fetch_taste_scores(db, profile_id, candidate_ids)
+        if profile.max_negative_penalty:
+            negative = await _fetch_negative_signal(db, profile_id, candidate_ids)
+
     # Python-side scoring
     scored: list[AmbientCandidate] = []
     for row in rows:
@@ -528,6 +689,7 @@ async def get_candidates(
         descriptor = _row_to_descriptor(track, analysis)
         emb_sim_float = float(emb_sim) if emb_sim is not None else None
 
+        skips, rejects = negative.get(track.id, (0, 0))
         key_compat = key_compatibility(current.key, descriptor.key)
         total_score = score_candidate(
             current,
@@ -535,6 +697,10 @@ async def get_candidates(
             intensity=intensity,
             embedding_similarity=emb_sim_float,
             recent_artist_names=recent_artist_names,
+            profile=profile,
+            taste_score=taste_scores.get(track.id),
+            skip_count=skips,
+            reject_count=rejects,
         )
 
         start_pct, end_pct = suggest_snippet_window(
