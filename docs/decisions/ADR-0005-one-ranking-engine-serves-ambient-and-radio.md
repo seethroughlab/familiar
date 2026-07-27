@@ -1,6 +1,6 @@
 # ADR-0005: One Ranking Engine Serves Both Ambient and Radio
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-26
 
@@ -84,6 +84,13 @@ Generalise the existing engine into named weight profiles rather than building a
    feeding [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md). A suggestion the listener
    cannot identify as a suggestion cannot be evaluated by them or learned from.
 
+8. **Insertion fires every N tracks, N = 4, not user-configurable initially.** Resolved at
+   acceptance; it had been left open and decision point 6 cannot be built without it. Inserting only
+   on queue exhaustion was rejected because the queue does not empty in normal use — a library queue
+   is a lazy reservoir over the whole collection (`queueStore.setLazyQueue`), so the trigger would
+   effectively never fire. A setting was rejected for now on the grounds that a preference nobody
+   finds does not help; N is a constant to be revisited once ADR-0004 data shows whether 4 is right.
+
 ## Alternatives Considered
 
 - **Build a separate recommender service.** Rejected. It would duplicate a tuned scorer, a harmonic
@@ -116,5 +123,5 @@ Generalise the existing engine into named weight profiles rather than building a
 - **Follow-up:** Tune `RADIO` weights against real listening once
   [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md) data exists. Initial values are a
   starting guess.
-- **Follow-up:** Decide the insertion cadence — every N tracks, or on queue exhaustion — and whether
-  it is user-configurable.
+- **Follow-up:** Revisit `N = 4` and whether the cadence should become user-configurable, once
+  ADR-0004 data shows how often suggestions are accepted. Decided at acceptance as decision point 8.

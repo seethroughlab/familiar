@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track, TrackAnalysis
 from app.logging_config import get_logger
+from app.services.ranking_profiles import AMBIENT, RankingProfile
 
 logger = get_logger(__name__)
 
@@ -182,11 +183,24 @@ def score_candidate(
     intensity: str = "balanced",
     embedding_similarity: float | None = None,
     recent_artist_names: list[str] | None = None,
+    profile: RankingProfile | None = None,
+    taste_score: float | None = None,
+    skip_count: int = 0,
+    reject_count: int = 0,
 ) -> float:
     """Score a candidate track against the current track.
 
     Returns a score in [0, 1] range (higher = better fit).
+
+    ``profile`` selects the weighting (ADR-0005); it defaults to ``AMBIENT``, which
+    reproduces this function's original hard-coded behaviour exactly. ``taste_score``,
+    ``skip_count`` and ``reject_count`` are inert under ``AMBIENT`` — their profile
+    weights are zero — so ambient callers are unaffected by their presence.
+
+    Stays pure: taste and listening history arrive as numbers rather than being queried
+    here, so this remains directly testable and usable from either retrieval path.
     """
+    profile = profile or AMBIENT
     # Key compatibility
     key_score = key_compatibility(current.key, candidate.key)
 
@@ -217,24 +231,8 @@ def score_candidate(
     )
     dr_score = 1.0 - min(dr_diff / 20.0, 1.0)
 
-    # Base weights
-    weights = {
-        "key": 0.30,
-        "energy": 0.20,
-        "embedding": 0.15,
-        "vocal": 0.10,
-        "brightness": 0.10,
-        "valence": 0.10,
-        "dr": 0.05,
-    }
-
-    # Intensity modifiers
-    if intensity == "quiet":
-        weights["energy"] = 0.30
-        weights["key"] = 0.20
-    elif intensity == "immersive":
-        weights["embedding"] = 0.25
-        weights["key"] = 0.20
+    # Base weights, with this intensity's overrides applied (see ranking_profiles).
+    weights = profile.weights_for(intensity)
 
     total = (
         weights["key"] * key_score
@@ -246,24 +244,40 @@ def score_candidate(
         + weights["dr"] * dr_score
     )
 
+    # Taste: play count, recency, favourites — reuses the weighting already tuned for
+    # this library (`taste_weighting`). Zero-weighted under AMBIENT.
+    if profile.taste_weight and taste_score is not None:
+        total += profile.taste_weight * max(0.0, min(1.0, taste_score))
+
     # BPM penalty
     cur_bpm = _safe_float(current.bpm)
     cand_bpm = _safe_float(candidate.bpm)
-    if cur_bpm > 0 and cand_bpm > 0 and abs(cur_bpm - cand_bpm) > 40:
-        total -= 0.15
+    if cur_bpm > 0 and cand_bpm > 0 and abs(cur_bpm - cand_bpm) > profile.bpm_threshold:
+        total -= profile.bpm_penalty
 
     # Quiet intensity bonus for low-energy tracks
-    if intensity == "quiet" and _safe_float(candidate.energy) < 0.35:
-        total += 0.10
+    if (
+        profile.quiet_energy_bonus
+        and intensity == "quiet"
+        and _safe_float(candidate.energy) < profile.quiet_energy_threshold
+    ):
+        total += profile.quiet_energy_bonus
 
     # Dark filter bonus for minor keys
-    if candidate.modal_character and "minor" in (candidate.modal_character or "").lower():
-        total += 0.02  # Small bonus, mainly used by dark filter
+    if profile.minor_key_bonus and candidate.modal_character and "minor" in (candidate.modal_character or "").lower():
+        total += profile.minor_key_bonus  # Small bonus, mainly used by dark filter
 
     # Artist cooldown
     if recent_artist_names and candidate.artist:
         if candidate.artist.lower() in [a.lower() for a in recent_artist_names]:
-            total -= 0.25
+            total -= profile.artist_cooldown_penalty
+
+    # Negative signal from ADR-0004 PlayEvent. Capped so a track the listener happened to
+    # skip a few times is demoted rather than permanently exiled — skips are ambiguous,
+    # and an uncapped penalty would make the catalogue shrink over time.
+    if profile.max_negative_penalty:
+        penalty = profile.skip_penalty * skip_count + profile.reject_penalty * reject_count
+        total -= min(penalty, profile.max_negative_penalty)
 
     return max(0.0, min(1.0, total))
 
