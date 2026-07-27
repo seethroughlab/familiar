@@ -65,9 +65,10 @@ export function usePlayTracking() {
   const accumulatedTimeRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const lastTrackIdRef = useRef<string | null>(null);
-  // The outgoing track's duration. By the time the reset effect runs, `duration` in the
-  // render closure is already the NEW track's, so a completion ratio computed from it
-  // would measure every track against the wrong length.
+  // The outgoing track's duration, taken from track metadata rather than the engine.
+  // The store's `duration` cannot be trusted for this: it belongs to whatever the engine
+  // last loaded, so it is the PREVIOUS track's value whenever the current one fails to
+  // load — which is exactly when an errored event is about to be reported.
   const lastDurationRef = useRef<number>(0);
   const currentTrackIdRef = useRef<string | null>(null);
 
@@ -123,15 +124,22 @@ export function usePlayTracking() {
         });
       }
 
-      recordedTrackRef.current = null;
+      // Deliberately NOT clearing recordedTrackRef here.
+      //
+      // A failed crossfade rolls the queue back to the track that was just playing
+      // (useAudioEngine's error handler → setQueueByTrackId). Clearing on every change
+      // meant the returned-to track crossed its threshold a second time and was
+      // recorded twice — observed as play_count 2 and total_play_seconds 110.8 for a
+      // single listen of a 75-second track. It also wrote a duplicate PlayEvent, biasing
+      // the taste signal toward whichever tracks happen to fail a crossfade.
+      //
+      // Instead the accumulate effect clears it once a *different* track has genuinely
+      // been listened to, so a real replay later still records while a rollback cannot.
       accumulatedTimeRef.current = 0;
       lastTimeRef.current = 0;
     }
 
-    // Seed from the incoming track's own metadata. The accumulate effect refines this
-    // with the engine's reading once playback starts — but a track that never plays
-    // (a failed load, say) would otherwise report the PREVIOUS track's duration, since
-    // the accumulate effect early-returns before updating the ref.
+    // Track metadata is authoritative and always corresponds to this track.
     if (previousId !== trackId) {
       lastDurationRef.current = currentTrack?.duration_seconds ?? 0;
     }
@@ -144,9 +152,6 @@ export function usePlayTracking() {
   useEffect(() => {
     if (!currentTrack || !isPlaying || !duration) return;
 
-    // Keep the outgoing duration current while this track is the one playing.
-    lastDurationRef.current = duration;
-
     // Already recorded this track
     if (recordedTrackRef.current === currentTrack.id) return;
 
@@ -157,6 +162,18 @@ export function usePlayTracking() {
       // User seeked backward - don't subtract, just update reference
     }
     lastTimeRef.current = currentTime;
+
+    // A different track has now been genuinely listened to, so the previously recorded
+    // one is free to be recorded again if the listener returns to it. Held until this
+    // point so that a crossfade rollback — which spends no real time on the intervening
+    // track — cannot re-record what it just left.
+    if (
+      recordedTrackRef.current !== null
+      && recordedTrackRef.current !== currentTrack.id
+      && accumulatedTimeRef.current >= MIN_PLAY_SECONDS
+    ) {
+      recordedTrackRef.current = null;
+    }
 
     const recordThreshold = Math.min(duration / 2, MAX_PLAY_SECONDS);
 

@@ -240,9 +240,12 @@ describe('usePlayTracking', () => {
 
   describe('completion ratio', () => {
     it('uses the OUTGOING track duration, not the incoming one', async () => {
-      // The regression this guards: by the time the reset effect runs, `duration` in the
-      // render closure is already the new track's.
-      await playThenAdvance(createMockTrack('track-short'), 10, 'user', 40);
+      // Duration comes from track metadata, not the store's `duration` — that belongs to
+      // whatever the engine last loaded, so it is the previous track's value whenever the
+      // current one fails to load, which is precisely when an error is about to be
+      // reported. The store is deliberately left at 180 here to prove it is not used.
+      const short = { ...createMockTrack('track-short'), duration_seconds: 40 };
+      await playThenAdvance(short, 10, 'user', 180);
 
       expect(mockDeliver).toHaveBeenCalledWith(
         'track-short',
@@ -284,6 +287,88 @@ describe('usePlayTracking', () => {
         'skipped',
         expect.objectContaining({ reason: 'error', track_duration: 374 }),
       );
+    });
+  });
+
+  describe('crossfade rollback', () => {
+    it('does not re-record a track the player rolled back to', async () => {
+      // Observed in a real session: a failed crossfade rolls the queue back to the track
+      // that was just playing, which used to cross its threshold a second time —
+      // play_count 2 and total_play_seconds 110.8 for one listen of a 75s track.
+      const a = { ...createMockTrack('track-a'), duration_seconds: 75 };
+      const b = { ...createMockTrack('track-b'), duration_seconds: 374 };
+      const { rerender } = renderHook(() => usePlayTracking());
+
+      // A plays past its threshold and is recorded.
+      act(() => {
+        usePlayerStore.setState({ currentTrack: a, isPlaying: true, duration: 75, currentTime: 0 });
+      });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 40 }); });
+      rerender();
+      await waitFor(() => {
+        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
+      });
+
+      // Crossfade advances to B...
+      act(() => {
+        usePlayerStore.setState({ currentTrack: b, currentTime: 0, _advanceReason: 'crossfade' });
+      });
+      rerender();
+      // ...then fails, rolling straight back to A having played none of B.
+      act(() => {
+        usePlayerStore.setState({ currentTrack: a, currentTime: 40, _advanceReason: 'error' });
+      });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 72 }); });
+      rerender();
+      await flush();
+
+      // B is reported as errored, but A must not be recorded a second time.
+      expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
+      expect(mockDeliver).toHaveBeenCalledWith(
+        'track-b', 'skipped', expect.objectContaining({ reason: 'error', track_duration: 374 }),
+      );
+    });
+
+    it('still records a genuine replay after another track was listened to', async () => {
+      const a = createMockTrack('track-a');
+      const b = createMockTrack('track-b');
+      const { rerender } = renderHook(() => usePlayTracking());
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: a, isPlaying: true, duration: 180, currentTime: 0 });
+      });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 95 }); });
+      rerender();
+      await waitFor(() => {
+        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
+      });
+
+      // B genuinely plays through.
+      act(() => {
+        usePlayerStore.setState({ currentTrack: b, currentTime: 0, _advanceReason: 'ended' });
+      });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 95 }); });
+      rerender();
+      await waitFor(() => {
+        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(2);
+      });
+
+      // Returning to A is a real replay and must count.
+      act(() => {
+        usePlayerStore.setState({ currentTrack: a, currentTime: 0, _advanceReason: 'user' });
+      });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 95 }); });
+      rerender();
+
+      await waitFor(() => {
+        const plays = mockDeliver.mock.calls.filter((c) => c[1] === 'played' && c[0] === 'track-a');
+        expect(plays).toHaveLength(2);
+      });
     });
   });
 
