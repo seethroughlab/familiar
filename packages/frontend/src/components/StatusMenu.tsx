@@ -115,7 +115,14 @@ function DownloadRow({ job }: { job: DownloadJob }) {
             <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
               <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
             </div>
-            <div className="text-xs text-zinc-500 mt-0.5">{completedCount}/{totalCount} tracks</div>
+            <div className="text-xs text-zinc-500 mt-0.5">
+              {completedCount}/{totalCount} tracks
+              {/* A throttled download is deliberately slow, not stuck. Saying so keeps
+                  it from reading as a hang while music is playing. */}
+              {job.throttled && job.status === 'downloading' && (
+                <span className="text-amber-400/80"> · slowed while playing</span>
+              )}
+            </div>
           </div>
         )}
         {job.status === 'completed' && (
