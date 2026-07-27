@@ -294,7 +294,15 @@ export function useAudioEngine() {
 
           // If error during crossfade, roll back the store to the previous track
           if (state.crossfadeState === 'crossfading') {
-            log.warn('Crossfade failed, rolling back to previous track');
+            // Log the underlying reason — this branch returns before the general
+            // error logging below, so the actual media error used to be discarded and
+            // "Crossfade failed" was all that reached the logs.
+            log.warn('Crossfade failed, rolling back to previous track', {
+              reason: event.message,
+              code: event.code,
+              fromTrack: state.currentTrack?.title,
+              rollbackTo: state.history[state.history.length - 1]?.title,
+            });
             setCrossfadeState('idle');
             const prevTrack = state.history[state.history.length - 1];
             if (prevTrack) {
