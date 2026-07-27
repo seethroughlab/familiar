@@ -155,11 +155,67 @@ export interface PlayStatsResponse {
   }>;
 }
 
+/** Why playback of a track stopped. Mirrors the backend `StopReason` (ADR-0004). */
+export type ListenStopReason = 'natural' | 'user' | 'error';
+
+/** Where the track was played from. Mirrors the backend `PlayContext`. */
+export type ListenContext =
+  | 'library' | 'album' | 'playlist' | 'artist'
+  | 'ephemeral' | 'radio' | 'ambient' | 'other';
+
+/** Body shared by /played, /skipped and /rejected. Every field is optional. */
+export interface ListenEventBody {
+  played_seconds?: number;
+  track_duration?: number;
+  completion_ratio?: number;
+  context?: ListenContext;
+  source_track_id?: string;
+  reason?: ListenStopReason;
+}
+
+export interface ListenEventResponse {
+  track_id: string;
+  outcome: 'completed' | 'skipped' | 'rejected' | 'errored';
+  completion_ratio: number;
+}
+
 export const playTrackingApi = {
-  recordPlay: async (trackId: string, durationSeconds?: number): Promise<PlayRecordResponse> => {
+  /**
+   * Record a play. Bumps ProfilePlayHistory *and* writes a `completed` PlayEvent.
+   *
+   * Called only once scrobble thresholds are met, so reaching this endpoint is itself
+   * the definition of a play — the backend does not derive the outcome here.
+   */
+  recordPlay: async (
+    trackId: string,
+    durationSeconds?: number,
+    detail?: Omit<ListenEventBody, 'played_seconds' | 'reason'>,
+  ): Promise<PlayRecordResponse> => {
     const { data } = await api.post(`/tracks/${trackId}/played`, {
       duration_seconds: durationSeconds,
+      ...detail,
     });
+    return data;
+  },
+
+  /**
+   * Record that playback stopped before the track was scrobbled.
+   *
+   * Does NOT touch ProfilePlayHistory — only completed plays count toward it. The
+   * backend derives the outcome, so a track abandoned at 95%, or a short one played in
+   * full, comes back `completed` rather than `skipped`.
+   */
+  recordSkip: async (trackId: string, body: ListenEventBody = {}): Promise<ListenEventResponse> => {
+    const { data } = await api.post(`/tracks/${trackId}/skipped`, body);
+    return data;
+  },
+
+  /**
+   * Record an explicit thumbs-down — a stronger signal than a skip, and stored
+   * distinctly. Intended for radio insertions (ADR-0005); no UI triggers it yet.
+   */
+  recordRejection: async (trackId: string, body: ListenEventBody = {}): Promise<ListenEventResponse> => {
+    const { data } = await api.post(`/tracks/${trackId}/rejected`, body);
     return data;
   },
 

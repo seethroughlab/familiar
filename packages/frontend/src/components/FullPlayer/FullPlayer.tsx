@@ -388,7 +388,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           </div>
 
           <button
-            onClick={playPrevious}
+            onClick={() => playPrevious()}
             className="p-3 hover:bg-white/10 rounded-full transition-colors"
             aria-label="Previous track"
           >
@@ -410,7 +410,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           </button>
 
           <button
-            onClick={playNext}
+            onClick={() => playNext()}
             className="p-3 hover:bg-white/10 rounded-full transition-colors"
             aria-label="Next track"
           >

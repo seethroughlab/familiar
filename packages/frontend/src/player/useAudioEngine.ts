@@ -205,7 +205,7 @@ export function useAudioEngine() {
           stopForCircuitBreaker();
           return true;
         }
-        jumpToQueueIndex(idx);
+        jumpToQueueIndex(idx, { reason: 'error' });
         return true;
       }
     }
@@ -236,7 +236,7 @@ export function useAudioEngine() {
     });
 
     // Advance to next track in the store
-    advanceToNextTrack(nextTrack);
+    advanceToNextTrack(nextTrack, { reason: 'crossfade' });
   }, [engine, advanceToNextTrack, setCrossfadeState, setNextTrackPreloaded, applyNormalizationGain, setIsLoadingAudio]);
 
   executeCrossfadeRef.current = executeCrossfade;
@@ -285,7 +285,7 @@ export function useAudioEngine() {
             return;
           }
           log.debug('ended event', { trackId: currentId });
-          playNext();
+          playNext({ reason: 'ended' });
           break;
         }
 
@@ -306,7 +306,7 @@ export function useAudioEngine() {
             setCrossfadeState('idle');
             const prevTrack = state.history[state.history.length - 1];
             if (prevTrack) {
-              state.setQueueByTrackId(state.queue.map(q => q.track), prevTrack.id, state.queueSource ?? undefined);
+              state.setQueueByTrackId(state.queue.map(q => q.track), prevTrack.id, state.queueSource ?? undefined, { reason: 'error' });
             }
             setIsLoadingAudio(false);
             break;
@@ -363,7 +363,7 @@ export function useAudioEngine() {
             }
             showError('Skipping track', { description: `${trackName}: ${event.message}` });
             setIsLoadingAudio(false);
-            playNext();
+            playNext({ reason: 'error' });
           } else {
             showError('Playback error', { description: `${trackName}: ${event.message}` });
             setIsPlaying(false);
@@ -454,11 +454,11 @@ export function useAudioEngine() {
           break;
 
         case 'remoteNext':
-          playNext();
+          playNext({ reason: 'user' });
           break;
 
         case 'nativeAutoAdvanced':
-          playNext();
+          playNext({ reason: 'native-auto' });
           break;
 
         case 'remotePrevious':
@@ -840,7 +840,7 @@ export function useAudioEngine() {
           }
           const trackName = currentTrack.title || 'Unknown track';
           showError('Skipping track', { description: `${trackName}: failed to load` });
-          playNext();
+          playNext({ reason: 'error' });
         }
       }
     };

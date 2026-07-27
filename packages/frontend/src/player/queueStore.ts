@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Track, QueueItem } from '../types';
-import { usePlaybackStore } from './playbackStore';
+import { usePlaybackStore, normalizeAdvanceReason } from './playbackStore';
+import type { AdvanceReason } from './playbackStore';
 import { persistCombinedState, _setQueueStateGetter } from './persistenceAdapter';
 import {
   loadPlayerState,
@@ -114,19 +115,19 @@ export interface QueueActions {
   addToQueue: (track: Track, insertIndex?: number, shuffleInsertPosition?: number) => void;
   removeFromQueue: (queueId: string) => void;
   clearQueue: () => void;
-  playTrack: (track: Track) => void;
-  playNext: () => void | Promise<void>;
-  playPrevious: () => void;
-  setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource, options?: { preservePlaybackState?: boolean }) => void;
-  setQueueByTrackId: (tracks: Track[], trackId: string, source?: QueueSource) => void;
+  playTrack: (track: Track, options?: { reason?: AdvanceReason }) => void;
+  playNext: (options?: { reason?: AdvanceReason }) => void | Promise<void>;
+  playPrevious: (options?: { reason?: AdvanceReason }) => void;
+  setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason }) => void;
+  setQueueByTrackId: (tracks: Track[], trackId: string, source?: QueueSource, options?: { reason?: AdvanceReason }) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   reorderShuffleOrder: (fromIndex: number, toIndex: number) => void;
-  jumpToQueueIndex: (index: number) => void;
+  jumpToQueueIndex: (index: number, options?: { reason?: AdvanceReason }) => void;
   setLazyQueue: (ids: string[], source?: QueueSource, options?: { initialTrack?: Track }) => Promise<void>;
   exitLazyMode: () => void;
   getNextTrack: () => Track | null;
   getUpcomingTrackIds: (count: number) => string[];
-  advanceToNextTrack: (track: Track) => void;
+  advanceToNextTrack: (track: Track, options?: { reason?: AdvanceReason }) => void;
   toggleShuffle: () => void | Promise<void>;
   hydrate: () => Promise<void>;
   resetForProfileSwitch: () => void;
@@ -216,7 +217,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     persistCombinedState();
   },
 
-  playTrack: (track) => {
+  playTrack: (track, options) => {
+    const reason = normalizeAdvanceReason(options?.reason);
     log.info('playTrack', { id: track.id, title: track.title });
     const currentTrack = usePlaybackStore.getState().currentTrack;
     if (currentTrack) {
@@ -226,6 +228,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     }
     usePlaybackStore.setState({
       currentTrack: track,
+      _advanceReason: reason,
       isPlaying: true,
       currentTime: 0,
       isLoadingAudio: true,
@@ -233,7 +236,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     persistCombinedState();
   },
 
-  playNext: async () => {
+  playNext: async (options) => {
+    const reason = normalizeAdvanceReason(options?.reason);
     const { queue, queueIndex, shuffleOrder, shuffleIndex } = get();
     const { shuffle, repeat, consume, currentTrack } = usePlaybackStore.getState();
 
@@ -320,6 +324,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       });
       usePlaybackStore.setState({
         currentTrack: newQueue[nextQueueIndex].track,
+        _advanceReason: reason,
         isPlaying: true,
         currentTime: 0,
         isLoadingAudio: true,
@@ -353,6 +358,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     });
     usePlaybackStore.setState({
       currentTrack: nextTrack,
+      _advanceReason: reason,
       isPlaying: true,
       currentTime: 0,
       isLoadingAudio: true,
@@ -361,7 +367,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     refillFromReservoir();
   },
 
-  playPrevious: () => {
+  playPrevious: (options) => {
+    const reason = normalizeAdvanceReason(options?.reason);
     const { queue, shuffleOrder, shuffleIndex } = get();
     const { shuffle, currentTrack, currentTime } = usePlaybackStore.getState();
 
@@ -393,6 +400,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
         });
         usePlaybackStore.setState({
           currentTrack: prevTrack,
+          _advanceReason: reason,
           isPlaying: true,
           currentTime: 0,
           isLoadingAudio: true,
@@ -413,6 +421,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       }));
       usePlaybackStore.setState({
         currentTrack: prevTrack,
+        _advanceReason: reason,
         isPlaying: true,
         currentTime: 0,
         isLoadingAudio: true,
@@ -421,7 +430,9 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     }
   },
 
-  setQueue: (tracks, startIndex = 0, source?: QueueSource, options?: { preservePlaybackState?: boolean }) => {
+  setQueue: (tracks, startIndex = 0, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason }) => {
+    // Callers are queue rebuilds, hydration and profile switches — not listener actions.
+    const reason = normalizeAdvanceReason(options?.reason ?? 'system');
     const requestedTrackId = tracks[startIndex]?.id;
     const queueTracks = enforceOfflineQueueInvariant(tracks);
 
@@ -473,6 +484,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     });
     usePlaybackStore.setState({
       currentTrack: finalStartIndex >= 0 ? queueTracks[finalStartIndex] : null,
+      _advanceReason: reason,
       isPlaying: options?.preservePlaybackState ? usePlaybackStore.getState().isPlaying : finalStartIndex >= 0,
       currentTime: 0,
       isLoadingAudio: options?.preservePlaybackState ? usePlaybackStore.getState().isLoadingAudio : finalStartIndex >= 0,
@@ -480,7 +492,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     persistCombinedState();
   },
 
-  setQueueByTrackId: (tracks, trackId, source?: QueueSource) => {
+  setQueueByTrackId: (tracks, trackId, source?: QueueSource, options?: { reason?: AdvanceReason }) => {
+    const reason = normalizeAdvanceReason(options?.reason ?? 'system');
     const offlineModeActive = useConnectivityStore.getState().offlineModeActive;
     const queueTracks = enforceOfflineQueueInvariant(tracks);
     const resolvedIndex = queueTracks.findIndex((track) => track.id === trackId);
@@ -503,10 +516,10 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
         });
         return;
       }
-      get().setQueue(queueTracks, 0, source);
+      get().setQueue(queueTracks, 0, source, { reason });
       return;
     }
-    get().setQueue(queueTracks, resolvedIndex, source);
+    get().setQueue(queueTracks, resolvedIndex, source, { reason });
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -555,7 +568,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     persistCombinedState();
   },
 
-  jumpToQueueIndex: (index: number) => {
+  jumpToQueueIndex: (index: number, options?: { reason?: AdvanceReason }) => {
+    const reason = normalizeAdvanceReason(options?.reason);
     const { queue, shuffleOrder } = get();
     const { shuffle, currentTrack } = usePlaybackStore.getState();
     if (index < 0 || index >= queue.length) {
@@ -584,6 +598,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     });
     usePlaybackStore.setState({
       currentTrack: targetItem.track,
+      _advanceReason: reason,
       isPlaying: true,
       currentTime: 0,
       isLoadingAudio: true,
@@ -754,7 +769,9 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     return result;
   },
 
-  advanceToNextTrack: (track) => {
+  advanceToNextTrack: (track, options) => {
+    // Only caller is the crossfade path in useAudioEngine.
+    const reason = normalizeAdvanceReason(options?.reason ?? 'crossfade');
     const { queueIndex, shuffleOrder, shuffleIndex, queue } = get();
     const { shuffle, repeat, consume, currentTrack } = usePlaybackStore.getState();
     log.info('advanceToNextTrack (crossfade)', { from: currentTrack?.title, to: track.title, toId: track.id });
@@ -815,6 +832,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     });
     usePlaybackStore.setState({
       currentTrack: track,
+      _advanceReason: reason,
       currentTime: 0,
     });
     persistCombinedState();
@@ -1010,6 +1028,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       nextTrackPreloaded: false,
       isHydrated: false,
       _circuitBreakerTimestamps: [],
+      _advanceReason: 'system',
     });
   },
 }));

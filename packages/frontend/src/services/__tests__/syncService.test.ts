@@ -58,17 +58,26 @@ const mockFavoritesApi = {
   toggle: vi.fn(),
 };
 
+const mockPlayTrackingApi = {
+  recordPlay: vi.fn(),
+  recordSkip: vi.fn(),
+  recordRejection: vi.fn(),
+};
+
 vi.mock('../../api/integrations', () => ({
   lastfmApi: mockLastfmApi,
 }));
 
 vi.mock('../../api/profiles', () => ({
   favoritesApi: mockFavoritesApi,
+  playTrackingApi: mockPlayTrackingApi,
 }));
+
+const mockConnectivityState = { browserOnline: true, offlineModeActive: false };
 
 vi.mock('../../stores/connectivityStore', () => ({
   useConnectivityStore: {
-    getState: vi.fn(() => ({ browserOnline: true })),
+    getState: vi.fn(() => mockConnectivityState),
   },
 }));
 
@@ -86,6 +95,7 @@ describe('syncService', () => {
     mockClear.mockResolvedValue(undefined);
     mockCount.mockResolvedValue(0);
     mockToArray.mockResolvedValue([]);
+    mockConnectivityState.offlineModeActive = false;
   });
 
   afterEach(() => {
@@ -308,6 +318,83 @@ describe('syncService', () => {
       await processPendingActions();
 
       expect(mockFavoritesApi.toggle).toHaveBeenCalledWith('track-1');
+    });
+
+    it('should dispatch a queued listen_event skip via playTrackingApi', async () => {
+      const actions = [
+        { id: 1, profileId: 'profile-123', type: 'listen_event' as const, payload: {
+          trackId: 'track-1', kind: 'skipped',
+          body: { played_seconds: 5, track_duration: 200, reason: 'user', context: 'playlist' },
+        }, createdAt: new Date(), retries: 0 },
+      ];
+      mockToArray.mockResolvedValueOnce(actions);
+      mockPlayTrackingApi.recordSkip.mockResolvedValueOnce({ track_id: 'track-1', outcome: 'skipped', completion_ratio: 0.025 });
+
+      const { processPendingActions } = await getModule();
+      await processPendingActions();
+
+      expect(mockPlayTrackingApi.recordSkip).toHaveBeenCalledWith(
+        'track-1',
+        expect.objectContaining({ reason: 'user', played_seconds: 5 }),
+      );
+      expect(mockPlayTrackingApi.recordPlay).not.toHaveBeenCalled();
+    });
+
+    it('should dispatch a queued listen_event rejection via playTrackingApi', async () => {
+      const actions = [
+        { id: 1, profileId: 'profile-123', type: 'listen_event' as const, payload: {
+          trackId: 'track-2', kind: 'rejected', body: { context: 'radio' },
+        }, createdAt: new Date(), retries: 0 },
+      ];
+      mockToArray.mockResolvedValueOnce(actions);
+      mockPlayTrackingApi.recordRejection.mockResolvedValueOnce({ track_id: 'track-2', outcome: 'rejected', completion_ratio: 0 });
+
+      const { processPendingActions } = await getModule();
+      await processPendingActions();
+
+      expect(mockPlayTrackingApi.recordRejection).toHaveBeenCalledWith('track-2', expect.objectContaining({ context: 'radio' }));
+    });
+  });
+
+  describe('deliverListenEvent', () => {
+    it('sends directly when online', async () => {
+      mockPlayTrackingApi.recordSkip.mockResolvedValueOnce({ track_id: 't', outcome: 'skipped', completion_ratio: 0 });
+
+      const { deliverListenEvent } = await getModule();
+      await deliverListenEvent('t', 'skipped', { played_seconds: 3 });
+
+      expect(mockPlayTrackingApi.recordSkip).toHaveBeenCalled();
+      expect(mockAdd).not.toHaveBeenCalled();
+    });
+
+    it('queues without attempting the request when already offline', async () => {
+      mockConnectivityState.offlineModeActive = true;
+
+      const { deliverListenEvent } = await getModule();
+      await deliverListenEvent('t', 'skipped', { played_seconds: 3 });
+
+      expect(mockPlayTrackingApi.recordSkip).not.toHaveBeenCalled();
+      expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({ type: 'listen_event' }));
+    });
+
+    it('queues when an online request fails, rather than losing the event', async () => {
+      // The case no existing producer handles: useFavorites only pre-checks isOffline,
+      // so a 500 or a mid-flight drop would silently discard the data.
+      mockPlayTrackingApi.recordSkip.mockRejectedValueOnce(new Error('500'));
+
+      const { deliverListenEvent } = await getModule();
+      await deliverListenEvent('t', 'skipped', { played_seconds: 3 });
+
+      expect(mockPlayTrackingApi.recordSkip).toHaveBeenCalled();
+      expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({ type: 'listen_event' }));
+    });
+
+    it('never throws, so a failed event cannot disturb playback', async () => {
+      mockPlayTrackingApi.recordSkip.mockRejectedValueOnce(new Error('boom'));
+      mockAdd.mockRejectedValueOnce(new Error('indexeddb gone'));
+
+      const { deliverListenEvent } = await getModule();
+      await expect(deliverListenEvent('t', 'skipped')).resolves.toBeUndefined();
     });
   });
 
