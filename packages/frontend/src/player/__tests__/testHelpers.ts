@@ -1,4 +1,18 @@
-import { vi } from 'vitest';
+/**
+ * Shared fixtures for player tests.
+ *
+ * Deliberately contains **no `vi.mock` calls**. Vitest hoists `vi.mock` to the top of the
+ * module it appears in, even from inside a function body — so a helper module that merely
+ * *defines* mocks registers them for every test file that imports anything from it, and
+ * those hoisted mocks win over the importing file's own. This module previously exported
+ * an unused `setupStandardMocks()` doing exactly that, which silently replaced
+ * `../persistence` with inert spies in any test that imported `createMockTrack`. Tests
+ * needing a controllable mock got the inert one and failed for reasons unrelated to what
+ * they were testing.
+ *
+ * Each test file declares its own mocks, using `vi.hoisted()` for any spy the factory
+ * dereferences at factory-call time.
+ */
 import type { Track } from '../../types';
 
 export const createMockTrack = (id: string, title = 'Test Track'): Track => ({
@@ -23,26 +37,3 @@ export const mockConnectivityState = {
   offlineTrackIds: new Set<string>(),
 };
 
-/**
- * Standard mock setup for playerStore tests.
- * Call vi.mock() with these in your test file's top-level scope.
- */
-export function setupStandardMocks() {
-  vi.mock('../persistence', () => ({
-    debouncedSavePlayerState: vi.fn(),
-    loadPlayerState: vi.fn(() => Promise.resolve(null)),
-    fetchTracksBatched: vi.fn(() => Promise.resolve([])),
-    migrateOldPlayerState: vi.fn(() => Promise.resolve()),
-  }));
-
-  vi.mock('../audio/engineInstance', () => ({
-    getEngine: () => ({ seek: vi.fn(), cancelCrossfade: vi.fn() }),
-  }));
-
-  vi.mock('../../stores/connectivityStore', () => ({
-    useConnectivityStore: Object.assign(
-      (selector: (state: typeof mockConnectivityState) => unknown) => selector(mockConnectivityState),
-      { getState: () => mockConnectivityState }
-    ),
-  }));
-}

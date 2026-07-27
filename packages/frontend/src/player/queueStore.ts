@@ -48,6 +48,25 @@ const REFILL_BATCH = 20;
 let isRefilling = false;
 let hydrationVersion = 0;
 
+/**
+ * Validate a persisted lazy reservoir before trusting it.
+ *
+ * Falls back to non-lazy mode rather than restoring something unusable: an index at or
+ * past the end of the list can only ever produce an empty refill batch, so lazy mode
+ * would stay on while never delivering another track — the same silent stall the missing
+ * persistence caused, just from the other direction.
+ */
+function restoreReservoir(
+  ids: string[] | null | undefined,
+  index: number | undefined
+): { lazyQueueIds: string[] | null; lazyQueueIndex: number } {
+  if (!ids || ids.length === 0) return { lazyQueueIds: null, lazyQueueIndex: -1 };
+  if (typeof index !== 'number' || index < 0 || index > ids.length) {
+    return { lazyQueueIds: null, lazyQueueIndex: -1 };
+  }
+  return { lazyQueueIds: ids, lazyQueueIndex: index };
+}
+
 const refillFromReservoir = async () => {
   if (isRefilling) return;
 
@@ -948,8 +967,16 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
         isPlaying: false,
         isHydrated: true,
       });
+      // Restore the queue's provenance before anything can read it. Without
+      // `queueSource`, listening events lose their context and `toggleShuffle` falls
+      // through to the standard branch, bypassing the server-side weighted preset.
+      // Without the reservoir, `refillFromReservoir` bails at its first guard and the
+      // queue never grows past the materialised window — playback just stops at track
+      // ~50 with no error. Both were dropped on every reload.
       set({
         isQueueHydrating: persisted.queueTrackIds.length > 0,
+        queueSource: persisted.queueSource ?? null,
+        ...restoreReservoir(persisted.lazyQueueIds, persisted.lazyQueueIndex),
       });
 
       if (persisted.queueTrackIds.length === 0) return;
@@ -1036,5 +1063,13 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
 // Wire the queue state getter for persistenceAdapter
 _setQueueStateGetter(() => {
   const s = useQueueStore.getState();
-  return { queue: s.queue, queueIndex: s.queueIndex, shuffleOrder: s.shuffleOrder, shuffleIndex: s.shuffleIndex };
+  return {
+    queue: s.queue,
+    queueIndex: s.queueIndex,
+    shuffleOrder: s.shuffleOrder,
+    shuffleIndex: s.shuffleIndex,
+    queueSource: s.queueSource,
+    lazyQueueIds: s.lazyQueueIds,
+    lazyQueueIndex: s.lazyQueueIndex,
+  };
 });

@@ -10,6 +10,10 @@ const { mockPlayerState } = vi.hoisted(() => ({
     get: vi.fn() as any,
     put: vi.fn(() => Promise.resolve()) as any,
     delete: vi.fn(() => Promise.resolve()) as any,
+    // The lazy reservoir lives in its own row (`<profileId>::reservoir`) so that a ~1 MB
+    // ID list is not rewritten twice a second by the `setCurrentTime` throttle. Loads
+    // read both rows; clears delete both.
+    bulkDelete: vi.fn(() => Promise.resolve()) as any,
   },
 }));
 
@@ -196,8 +200,10 @@ describe('playerPersistence', () => {
 
       const result = await loadPlayerState();
 
-      expect(result).toEqual(persisted);
+      // `lazyQueueIds` is stitched in from the reservoir row, which is absent here.
+      expect(result).toEqual({ ...persisted, lazyQueueIds: null });
       expect(mockPlayerState.get).toHaveBeenCalledWith('profile-123');
+      expect(mockPlayerState.get).toHaveBeenCalledWith('profile-123::reservoir');
     });
 
     it('should return null when no saved state', async () => {
@@ -249,8 +255,9 @@ describe('playerPersistence', () => {
 
       const result = await loadPlayerStateForProfile('other-profile');
 
-      expect(result).toEqual(persisted);
+      expect(result).toEqual({ ...persisted, lazyQueueIds: null });
       expect(mockPlayerState.get).toHaveBeenCalledWith('other-profile');
+      expect(mockPlayerState.get).toHaveBeenCalledWith('other-profile::reservoir');
     });
 
     it('should return null when IndexedDB unavailable', async () => {
@@ -269,28 +276,32 @@ describe('playerPersistence', () => {
   });
 
   describe('clearPlayerState', () => {
-    it('should delete state for current profile', async () => {
+    it('should delete both rows for current profile', async () => {
       await clearPlayerState();
 
-      expect(mockPlayerState.delete).toHaveBeenCalledWith('profile-123');
+      // Including the reservoir, or a ~1 MB ID list outlives the state referencing it.
+      expect(mockPlayerState.bulkDelete).toHaveBeenCalledWith([
+        'profile-123',
+        'profile-123::reservoir',
+      ]);
     });
 
     it('should not delete when IndexedDB unavailable', async () => {
       vi.mocked(isIndexedDBAvailable).mockResolvedValueOnce(false);
 
       await clearPlayerState();
-      expect(mockPlayerState.delete).not.toHaveBeenCalled();
+      expect(mockPlayerState.bulkDelete).not.toHaveBeenCalled();
     });
 
     it('should not delete when no profile selected', async () => {
       vi.mocked(getSelectedProfileId).mockResolvedValueOnce(null);
 
       await clearPlayerState();
-      expect(mockPlayerState.delete).not.toHaveBeenCalled();
+      expect(mockPlayerState.bulkDelete).not.toHaveBeenCalled();
     });
 
     it('should silently handle errors', async () => {
-      mockPlayerState.delete.mockRejectedValueOnce(new Error('delete failed'));
+      mockPlayerState.bulkDelete.mockRejectedValueOnce(new Error('delete failed'));
 
       // Should not throw
       await clearPlayerState();

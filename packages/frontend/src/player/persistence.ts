@@ -3,7 +3,12 @@
  * Saves and loads player state from IndexedDB per profile.
  * All operations silently fail if IndexedDB isn't available (iOS private browsing).
  */
-import { db, isIndexedDBAvailable, type PersistedPlayerState } from '../db';
+import {
+  db,
+  isIndexedDBAvailable,
+  type PersistedPlayerState,
+  type PersistedQueueSource,
+} from '../db';
 import { getSelectedProfileId } from '../services/profileService';
 import type { Track, QueueItem } from '../types';
 import { tracksApi } from '../api';
@@ -11,10 +16,8 @@ import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlayerPersistence');
 
-/**
- * Save player state to IndexedDB for the current profile.
- */
-export async function savePlayerState(state: {
+/** The shape both `savePlayerState` and its throttled wrapper accept. */
+export interface PersistablePlayerState {
   volume: number;
   shuffle: boolean;
   repeat: 'off' | 'all' | 'one';
@@ -25,7 +28,66 @@ export async function savePlayerState(state: {
   shuffleOrder: number[];
   shuffleIndex: number;
   currentTime: number;
-}): Promise<void> {
+  queueSource?: PersistedQueueSource | null;
+  lazyQueueIds?: string[] | null;
+  lazyQueueIndex?: number;
+}
+
+/**
+ * Key for a profile's lazy reservoir, stored as its own row in the same table.
+ *
+ * The reservoir is the one field here that is both large and rarely changing. For a full
+ * library it is ~26k UUIDs (~1 MB), but it only changes on `setLazyQueue`, `toggleShuffle`
+ * and a refill. Meanwhile `setCurrentTime` persists on every tick, throttled to 500ms —
+ * so keeping the reservoir in the main record would rewrite that megabyte twice a second
+ * for the whole of playback. The clone cost is negligible (~0.9ms measured), but the
+ * sustained ~2 MB/s of flash writes is not, particularly on iOS.
+ *
+ * `playerState` is keyed on `id` alone, so a second row costs no schema change.
+ */
+const reservoirKey = (profileId: string) => `${profileId}::reservoir`;
+
+interface ReservoirRecord {
+  id: string;
+  lazyQueueIds: string[] | null;
+  lazyQueueIndex: number;
+  updatedAt: Date;
+}
+
+// Last reservoir written, per profile, so unchanged ones can be skipped. Compared by
+// reference: the store replaces the array wholesale whenever it changes.
+const lastWrittenReservoir = new Map<string, string[] | null>();
+
+async function saveReservoir(
+  profileId: string,
+  ids: string[] | null,
+  index: number
+): Promise<void> {
+  if (lastWrittenReservoir.get(profileId) === ids) return;
+  lastWrittenReservoir.set(profileId, ids);
+
+  const key = reservoirKey(profileId);
+  if (!ids || ids.length === 0) {
+    await db.playerState.delete(key);
+    return;
+  }
+  await db.playerState.put({
+    id: key,
+    lazyQueueIds: ids,
+    lazyQueueIndex: index,
+    updatedAt: new Date(),
+  } as unknown as PersistedPlayerState);
+}
+
+async function loadReservoir(profileId: string): Promise<ReservoirRecord | null> {
+  const row = await db.playerState.get(reservoirKey(profileId));
+  return (row as unknown as ReservoirRecord) ?? null;
+}
+
+/**
+ * Save player state to IndexedDB for the current profile.
+ */
+export async function savePlayerState(state: PersistablePlayerState): Promise<void> {
   const idbAvailable = await isIndexedDBAvailable();
   if (!idbAvailable) return;
 
@@ -47,13 +109,25 @@ export async function savePlayerState(state: {
       shuffleOrder: state.shuffleOrder,
       shuffleIndex: state.shuffleIndex,
       currentTime: state.currentTime,
+      queueSource: state.queueSource ?? null,
+      // The reservoir itself lives in its own row; the cursor into it is small and
+      // changes with the queue, so it stays here.
+      lazyQueueIndex: state.lazyQueueIndex ?? -1,
       updatedAt: new Date(),
     };
 
     await db.playerState.put(persistedState);
+    await saveReservoir(profileId, state.lazyQueueIds ?? null, state.lazyQueueIndex ?? -1);
   } catch (error) {
     log.warn('Failed to save player state:', error);
   }
+}
+
+async function readPlayerState(profileId: string): Promise<PersistedPlayerState | null> {
+  const state = await db.playerState.get(profileId);
+  if (!state) return null;
+  const reservoir = await loadReservoir(profileId);
+  return { ...state, lazyQueueIds: reservoir?.lazyQueueIds ?? null };
 }
 
 /**
@@ -69,8 +143,7 @@ export async function loadPlayerState(): Promise<PersistedPlayerState | null> {
   }
 
   try {
-    const state = await db.playerState.get(profileId);
-    return state || null;
+    return await readPlayerState(profileId);
   } catch (error) {
     log.warn('Failed to load player state:', error);
     return null;
@@ -85,8 +158,7 @@ export async function loadPlayerStateForProfile(profileId: string): Promise<Pers
   if (!idbAvailable) return null;
 
   try {
-    const state = await db.playerState.get(profileId);
-    return state || null;
+    return await readPlayerState(profileId);
   } catch (error) {
     log.warn('Failed to load player state for profile:', error);
     return null;
@@ -155,7 +227,9 @@ export async function clearPlayerState(): Promise<void> {
   }
 
   try {
-    await db.playerState.delete(profileId);
+    // Both rows, or the reservoir outlives the state that referenced it.
+    await db.playerState.bulkDelete([profileId, reservoirKey(profileId)]);
+    lastWrittenReservoir.delete(profileId);
   } catch (error) {
     log.warn('Failed to clear player state:', error);
   }
@@ -204,18 +278,7 @@ export async function migrateOldPlayerState(): Promise<void> {
 let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastSaveTime = 0;
 
-export function debouncedSavePlayerState(state: {
-  volume: number;
-  shuffle: boolean;
-  repeat: 'off' | 'all' | 'one';
-  consume: boolean;
-  queue: QueueItem[];
-  queueIndex: number;
-  currentTrack: Track | null;
-  shuffleOrder: number[];
-  shuffleIndex: number;
-  currentTime: number;
-}): void {
+export function debouncedSavePlayerState(state: PersistablePlayerState): void {
   const now = Date.now();
 
   if (saveTimeout) {
