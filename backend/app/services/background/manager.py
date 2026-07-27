@@ -155,9 +155,15 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 "metrics_summary",
                 extra={
                     "requests_5m": req["total_requests"],
+                    "client_disconnects": req["client_disconnects"],
                     "error_rate": req["error_rate"],
+                    # API latency only. `transfer_*` covers audio/video bodies, whose
+                    # elapsed time is byte-movement — a single skipped track used to set
+                    # p95 for the whole window.
                     "p50_ms": req["duration_p50_ms"],
                     "p95_ms": req["duration_p95_ms"],
+                    "transfers": req["transfer_requests"],
+                    "transfer_p95_ms": req["transfer_p95_ms"],
                     "analysis_queue": bg.get("analysis_queue_depth", 0),
                     "sync_running": bg.get("sync_running", False),
                     "current_phase": bg.get("current_phase"),

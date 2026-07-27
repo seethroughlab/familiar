@@ -191,7 +191,14 @@ class TestCheckPressureAlarms:
 
 
 class TestAdaptiveQueueLimit:
-    """Test CPU-adaptive queue burst sizing."""
+    """Test CPU-adaptive queue burst sizing.
+
+    These patch `app.config.available_cpu_count`, not `os.cpu_count`. The count is now
+    cgroup-aware (see `test_cpu_limits.py`), so patching `os.cpu_count` would no longer
+    determine the answer on a host that has a CPU quota — these tests would start
+    depending on the machine running them. The scaling behaviour asserted here is
+    unchanged; only the seam moved.
+    """
 
     def test_default_returns_int_in_range(self):
         """Default call returns an int clamped to [50, 500]."""
@@ -199,7 +206,7 @@ class TestAdaptiveQueueLimit:
         assert isinstance(result, int)
         assert 50 <= result <= 500
 
-    @patch("os.cpu_count")
+    @patch("app.config.available_cpu_count")
     def test_scales_with_cpu_count(self, mock_cpus):
         """Limit scales linearly with CPU count."""
         mock_cpus.return_value = 1
@@ -211,21 +218,13 @@ class TestAdaptiveQueueLimit:
         mock_cpus.return_value = 8
         assert adaptive_queue_limit() == 500  # 8 * 100 = 800 → clamped to 500
 
-    @patch("os.cpu_count")
-    def test_none_cpus_fallback(self, mock_cpus):
-        """os.cpu_count() returning None should still produce a valid result."""
-        mock_cpus.return_value = None
-        result = adaptive_queue_limit()
-        assert isinstance(result, int)
-        assert result == 200  # fallback: 2 * 100
-
-    @patch("os.cpu_count")
+    @patch("app.config.available_cpu_count")
     def test_custom_base(self, mock_cpus):
         """Custom base value scales correctly."""
         mock_cpus.return_value = 4
         assert adaptive_queue_limit(base=50) == 200  # 4 * 50
 
-    @patch("os.cpu_count")
+    @patch("app.config.available_cpu_count")
     def test_clamp_floor(self, mock_cpus):
         """Very low CPU * base is clamped to 50."""
         mock_cpus.return_value = 1

@@ -1,5 +1,6 @@
 """Familiar API - Main FastAPI application."""
 
+import asyncio
 import logging
 import multiprocessing
 import time
@@ -91,12 +92,22 @@ class RequestIDMiddleware:
         skip_timing = any(path.startswith(p) for p in self._SKIP_TIMING_PREFIXES)
 
         status_code = 500  # default in case send is never called with response
+        response_started = False
+        is_transfer = False
 
         async def send_with_request_id(message: Message) -> None:
-            nonlocal status_code
+            nonlocal status_code, response_started, is_transfer
             if message["type"] == "http.response.start":
                 status_code = message["status"]
+                response_started = True
                 headers = list(message.get("headers", []))
+                # An audio or video body takes as long as it takes to push the bytes,
+                # and the client reads it at playback speed or hangs up mid-track. That
+                # elapsed time is transfer, not latency — see `MetricsCollector`.
+                for name, value in headers:
+                    if name.lower() == b"content-type":
+                        is_transfer = value.lower().startswith((b"audio/", b"video/"))
+                        break
                 headers.append((b"x-request-id", request_id.encode()))
                 message = {**message, "headers": headers}
             await send(message)
@@ -105,32 +116,74 @@ class RequestIDMiddleware:
             await self.app(scope, receive, send_with_request_id)
             return
 
-        from app.services.metrics import get_metrics_collector, get_query_count, reset_query_count
+        from app.services.metrics import (
+            OUTCOME_CLIENT_DISCONNECT,
+            OUTCOME_COMPLETED,
+            OUTCOME_ERROR,
+            get_metrics_collector,
+            get_query_count,
+            reset_query_count,
+        )
         reset_query_count()
 
+        outcome = OUTCOME_COMPLETED
         start = time.perf_counter()
-        await self.app(scope, receive, send_with_request_id)
-        duration_ms = (time.perf_counter() - start) * 1000
+        try:
+            await self.app(scope, receive, send_with_request_id)
+        except BaseException as exc:
+            # Catches `BaseException`, not `Exception`, so that `CancelledError` — which
+            # is not an `Exception` — is recorded too. Without any of this, an unhandled
+            # exception propagated straight past the logging below and the request was
+            # never recorded at all: the log showed only successes. That is not
+            # hypothetical. While diagnosing #13 the absence of non-2xx entries in this
+            # very log was read as evidence the server was healthy.
+            #
+            # Note that a *client disconnect* does not arrive here under uvicorn: its
+            # `send` silently no-ops once the socket is gone (`if self.disconnected:
+            # return`), so `FileResponse` reads on to EOF and returns normally. The
+            # disconnect case is handled by classifying transfers instead — see
+            # `is_transfer` above.
+            outcome = (
+                OUTCOME_CLIENT_DISCONNECT
+                if isinstance(exc, asyncio.CancelledError)
+                else OUTCOME_ERROR
+            )
+            # Only claim a 500 if nothing was sent. A response that already delivered a
+            # 206 and real bytes was not a server error.
+            if not response_started:
+                status_code = 500
+            raise
+        finally:
+            # Never swallow: `CancelledError` must reach uvicorn for connection teardown,
+            # and an unhandled exception must reach `ServerErrorMiddleware`, which is what
+            # actually produces the 500 body.
+            duration_ms = (time.perf_counter() - start) * 1000
+            query_count = get_query_count()
 
-        query_count = get_query_count()
+            route = scope.get("route")
+            template = route.path if route else path
+            method = scope.get("method", "?")
 
-        route = scope.get("route")
-        template = route.path if route else path
-        method = scope.get("method", "?")
+            log_at = logger.warning if outcome == OUTCOME_ERROR else logger.info
+            log_at(
+                "request_completed",
+                extra={
+                    "method": method,
+                    "route": template,
+                    "status_code": status_code,
+                    "duration_ms": round(duration_ms, 2),
+                    "query_count": query_count,
+                    "request_id": request_id,
+                    "outcome": outcome,
+                    "response_started": response_started,
+                    "transfer": is_transfer,
+                },
+            )
 
-        logger.info(
-            "request_completed",
-            extra={
-                "method": method,
-                "route": template,
-                "status_code": status_code,
-                "duration_ms": round(duration_ms, 2),
-                "query_count": query_count,
-                "request_id": request_id,
-            },
-        )
-
-        get_metrics_collector().record_request(method, template, status_code, duration_ms, query_count)
+            get_metrics_collector().record_request(
+                method, template, status_code, duration_ms, query_count,
+                outcome=outcome, transfer=is_transfer,
+            )
 
 
 def create_error_response(
@@ -149,7 +202,12 @@ def create_error_response(
         content["detail"] = detail
     if request_id:
         content["request_id"] = request_id
-    return JSONResponse(status_code=status_code, content=content)
+    # Also as a header. Starlette hoists the `@app.exception_handler(Exception)` catch-all
+    # into `ServerErrorMiddleware`, which sits *outside* `RequestIDMiddleware` — so the
+    # 500 it emits never passes through `send_with_request_id` and would otherwise be the
+    # one response with no `x-request-id` to correlate against the log.
+    headers = {"x-request-id": request_id} if request_id else None
+    return JSONResponse(status_code=status_code, content=content, headers=headers)
 
 
 def validate_library_path() -> None:
