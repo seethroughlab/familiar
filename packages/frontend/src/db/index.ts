@@ -5,6 +5,7 @@
  */
 import Dexie, { type Table } from 'dexie';
 import { createLogger } from '../utils/logger';
+import type { QueueSource } from '../player/playerStore.types';
 
 const log = createLogger('DB');
 
@@ -179,8 +180,29 @@ export interface PersistedPlayerState {
   shuffleIndex: number; // Current position in shuffleOrder (-1 when off)
   currentTime: number; // Playback position in seconds
   consume?: boolean; // Remove tracks from queue after playing
+
+  // Where the queue came from — needed so listening events keep their context across a
+  // reload, and so `toggleShuffle` can still take its server-side branch.
+  queueSource?: PersistedQueueSource | null;
+
+  // The lazy reservoir. `queueTrackIds` above holds only the ~50-track materialised
+  // window; without these the rest of the queue is lost on reload and playback simply
+  // stops at the end of the window. Optional so records written before this existed load
+  // as `undefined` and fall back to non-lazy mode — no Dexie version bump needed.
+  lazyQueueIds?: string[] | null;
+  lazyQueueIndex?: number;
+
   updatedAt: Date;
 }
+
+/**
+ * What gets persisted for `queueSource`.
+ *
+ * Aliased to the player's own `QueueSource` rather than restated structurally, so the two
+ * cannot drift. `playerStore.types` has no runtime imports and this is a type-only
+ * import, so it is erased at build time — `db/` gains no dependency on `player/`.
+ */
+export type PersistedQueueSource = QueueSource;
 
 // Track IndexedDB availability (can be disabled on iOS private browsing)
 let indexedDBAvailable: boolean | null = null;

@@ -2,15 +2,36 @@ import { usePlaybackStore, _setPersistHook } from './playbackStore';
 import { debouncedSavePlayerState } from './persistence';
 
 // Late-bound import to avoid circular dependency (queueStore imports playbackStore)
-let getQueueState: (() => { queue: import('../types').QueueItem[]; queueIndex: number; shuffleOrder: number[]; shuffleIndex: number }) | null = null;
+interface PersistableQueueState {
+  queue: import('../types').QueueItem[];
+  queueIndex: number;
+  shuffleOrder: number[];
+  shuffleIndex: number;
+  queueSource: import('../db').PersistedQueueSource | null;
+  lazyQueueIds: string[] | null;
+  lazyQueueIndex: number;
+}
+
+let getQueueState: (() => PersistableQueueState) | null = null;
+
+const EMPTY_QUEUE_STATE: PersistableQueueState = {
+  queue: [],
+  queueIndex: -1,
+  shuffleOrder: [],
+  shuffleIndex: -1,
+  queueSource: null,
+  lazyQueueIds: null,
+  lazyQueueIndex: -1,
+};
 
 export function _setQueueStateGetter(fn: typeof getQueueState) {
   getQueueState = fn;
 }
 
+// Every caller persists through here, so widening the payload once covers all of them.
 export function persistCombinedState() {
   const playback = usePlaybackStore.getState();
-  const queue = getQueueState?.() ?? { queue: [], queueIndex: -1, shuffleOrder: [], shuffleIndex: -1 };
+  const queue = getQueueState?.() ?? EMPTY_QUEUE_STATE;
   debouncedSavePlayerState({
     volume: playback.volume,
     shuffle: playback.shuffle,
@@ -22,6 +43,9 @@ export function persistCombinedState() {
     queueIndex: queue.queueIndex,
     shuffleOrder: queue.shuffleOrder,
     shuffleIndex: queue.shuffleIndex,
+    queueSource: queue.queueSource,
+    lazyQueueIds: queue.lazyQueueIds,
+    lazyQueueIndex: queue.lazyQueueIndex,
   });
 }
 
