@@ -71,5 +71,12 @@ export interface LibraryStats {
 export interface QueueItem {
   track: Track;
   queueId: string;
+  /**
+   * Set when the radio controller inserted this track rather than the listener
+   * choosing it (ADR-0005). The queue shows it differently and offers accept/reject —
+   * a suggestion the listener cannot identify as one cannot be judged by them or
+   * learned from.
+   */
+  suggested?: boolean;
 }
 

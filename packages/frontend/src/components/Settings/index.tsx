@@ -16,6 +16,7 @@ import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { ServerSettings } from './ServerSettings';
 import { ShuffleWeightSettings } from './ShuffleWeightSettings';
+import { RadioSettings } from './RadioSettings';
 import { isNativeApp } from '../../utils/platform';
 import { areAudioEffectsAvailable } from '../../player/audio/engineInstance';
 
@@ -100,6 +101,7 @@ export function SettingsPanel() {
           <div className="space-y-4">
             <PlaybackSettings />
             <ShuffleWeightSettings />
+            <RadioSettings />
             {areAudioEffectsAvailable() && <AudioEffectsSettings />}
           </div>
         </section>

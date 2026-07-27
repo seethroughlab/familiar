@@ -1,5 +1,6 @@
 export { default as api, getApiUrl, getApiOrigin, encodePathSegment } from './base';
 export * from './tracks';
+export * from './queue';
 export * from './library';
 export * from './playlists';
 export * from './integrations';

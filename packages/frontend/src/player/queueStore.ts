@@ -131,8 +131,9 @@ export interface QueueState {
 }
 
 export interface QueueActions {
-  addToQueue: (track: Track, insertIndex?: number, shuffleInsertPosition?: number) => void;
+  addToQueue: (track: Track, insertIndex?: number, shuffleInsertPosition?: number, options?: { suggested?: boolean }) => void;
   removeFromQueue: (queueId: string) => void;
+  acceptSuggestion: (queueId: string) => void;
   clearQueue: () => void;
   playTrack: (track: Track, options?: { reason?: AdvanceReason }) => void;
   playNext: (options?: { reason?: AdvanceReason }) => void | Promise<void>;
@@ -163,7 +164,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
   queueSource: null,
   isQueueHydrating: false,
 
-  addToQueue: (track, insertIndex, shuffleInsertPosition) => {
+  addToQueue: (track, insertIndex, shuffleInsertPosition, options) => {
     const connectivity = useConnectivityStore.getState();
     if (connectivity.offlineModeActive && !connectivity.offlineTrackIds.has(track.id)) {
       log.warn('addToQueue blocked by offline invariant', { trackId: track.id });
@@ -175,7 +176,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
 
     const insertAt = insertIndex ?? queue.length;
     const newQueue = [...queue];
-    newQueue.splice(insertAt, 0, { track, queueId: generateQueueId() });
+    newQueue.splice(insertAt, 0, { track, queueId: generateQueueId(), suggested: options?.suggested });
 
     const newQueueIndex = insertAt <= queueIndex ? queueIndex + 1 : queueIndex;
 
@@ -193,6 +194,22 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       queue: newQueue,
       queueIndex: newQueueIndex,
       shuffleOrder: newShuffleOrder,
+    });
+    persistCombinedState();
+  },
+
+  /**
+   * Keep a suggested track: clear the marker so the queue stops offering accept/reject.
+   * Acceptance is implicit in playing it, so nothing is reported here — a PlayEvent is
+   * already written when it plays (ADR-0004).
+   */
+  acceptSuggestion: (queueId) => {
+    const { queue } = get();
+    if (!queue.some((item) => item.queueId === queueId && item.suggested)) return;
+    set({
+      queue: queue.map((item) =>
+        item.queueId === queueId ? { ...item, suggested: false } : item
+      ),
     });
     persistCombinedState();
   },

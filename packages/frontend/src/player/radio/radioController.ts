@@ -1,0 +1,145 @@
+/**
+ * Radio controller — inserts tracks the listener is likely to enjoy into a playing queue
+ * (ADR-0005 decision points 6 and 8).
+ *
+ * Follows the shape of `player/ambient/AmbientCoordinator`: subscribe to queue position,
+ * ask the server to rank candidates, insert ahead of the play head. The ranking itself is
+ * entirely server-side — the same engine ambient uses, under the `RADIO` weight profile —
+ * so this file holds cadence and insertion policy only, no scoring.
+ *
+ * Cadence is every `INSERT_EVERY_N_TRACKS` (ADR decision point 8). Inserting on queue
+ * exhaustion was rejected: a library queue is a lazy reservoir over the whole collection
+ * and would effectively never empty, so the trigger would never fire.
+ */
+import { usePlayerStore } from '../playerStore';
+import { useConnectivityStore } from '../../stores/connectivityStore';
+import { queueApi } from '../../api/queue';
+import { useRadioStore } from '../../stores/radioStore';
+import { createLogger } from '../../utils/logger';
+
+const log = createLogger('Radio');
+
+/** Insert a suggestion every N track changes. Revisit once ADR-0004 data exists. */
+export const INSERT_EVERY_N_TRACKS = 4;
+
+/** How many recent tracks/artists to send so the server avoids repeating them. */
+const RECENT_WINDOW = 10;
+
+/**
+ * How far ahead to insert. 1 = immediately next.
+ *
+ * 2 leaves the listener's own next choice intact — a suggestion that displaces the very
+ * next track reads as the app overriding them, which is the opposite of the intent.
+ */
+const INSERT_OFFSET = 2;
+
+class RadioController {
+  private unsubscribe: (() => void) | null = null;
+  private tracksSinceInsert = 0;
+  private inFlight = false;
+  /** Suggestions already inserted, so a re-suggest doesn't stack duplicates. */
+  private inserted = new Set<string>();
+
+  start(): void {
+    if (this.unsubscribe) return;
+    log.info('Radio controller started');
+
+    let prevTrackId = usePlayerStore.getState().currentTrack?.id ?? null;
+
+    this.unsubscribe = usePlayerStore.subscribe(() => {
+      const trackId = usePlayerStore.getState().currentTrack?.id ?? null;
+      if (trackId === prevTrackId) return;
+      prevTrackId = trackId;
+      if (!trackId) return;
+
+      this.tracksSinceInsert += 1;
+      if (this.tracksSinceInsert >= INSERT_EVERY_N_TRACKS) {
+        void this.suggest();
+      }
+    });
+  }
+
+  stop(): void {
+    this.unsubscribe?.();
+    this.unsubscribe = null;
+    this.tracksSinceInsert = 0;
+    this.inFlight = false;
+    this.inserted.clear();
+    log.info('Radio controller stopped');
+  }
+
+  /** Reads the persisted opt-in. Radio is off until the listener turns it on. */
+  isEnabled(): boolean {
+    return useRadioStore.getState().enabled;
+  }
+
+  /** Ask for a suggestion and insert it. Safe to call directly (e.g. a "suggest now" action). */
+  async suggest(): Promise<void> {
+    if (!this.isEnabled() || this.inFlight) return;
+
+    const state = usePlayerStore.getState();
+    const current = state.currentTrack;
+    if (!current) return;
+
+    // Nothing to fetch with, and inserting a track that cannot stream is worse than
+    // inserting nothing.
+    if (useConnectivityStore.getState().offlineModeActive) return;
+
+    this.inFlight = true;
+    try {
+      const recent = state.queue
+        .slice(Math.max(0, state.queueIndex - RECENT_WINDOW), state.queueIndex + 1)
+        .map((item) => item.track);
+
+      const response = await queueApi.getSuggestions({
+        current_track_id: current.id,
+        recent_track_ids: Array.from(new Set(recent.map((t) => t.id))),
+        recent_artist_names: Array.from(
+          new Set(recent.map((t) => t.artist).filter((a): a is string => !!a))
+        ),
+        profile: 'radio',
+        limit: 5,
+      });
+
+      if (response.pool_collapsed || response.suggestions.length === 0) {
+        // Too few candidates to rank meaningfully. Stay quiet rather than insert
+        // something arbitrary, and try again after the next N tracks.
+        log.debug('No usable suggestion (pool_size %d)', response.pool_size);
+        this.tracksSinceInsert = 0;
+        return;
+      }
+
+      const pick = response.suggestions.find(
+        (s) => !this.inserted.has(s.track.id) && !this.isQueuedNearby(s.track.id)
+      );
+      if (!pick) {
+        this.tracksSinceInsert = 0;
+        return;
+      }
+
+      // Re-read: the queue may have moved while the request was in flight.
+      const fresh = usePlayerStore.getState();
+      const insertAt = Math.min(fresh.queueIndex + INSERT_OFFSET, fresh.queue.length);
+      fresh.addToQueue(pick.track, insertAt, undefined, { suggested: true });
+
+      this.inserted.add(pick.track.id);
+      this.tracksSinceInsert = 0;
+      log.info('Inserted suggestion "%s" at %d (score %s)', pick.track.title, insertAt, pick.score);
+    } catch (error) {
+      // A failed suggestion is not worth surfacing — the listener did not ask for one,
+      // and playback is unaffected. Retry naturally after the next N tracks.
+      log.warn('Suggestion request failed:', error);
+      this.tracksSinceInsert = 0;
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  /** Already sitting in the upcoming queue — suggesting it again would be noise. */
+  private isQueuedNearby(trackId: string): boolean {
+    const { queue, queueIndex } = usePlayerStore.getState();
+    return queue.slice(queueIndex, queueIndex + 20).some((item) => item.track.id === trackId);
+  }
+}
+
+export const radioController = new RadioController();

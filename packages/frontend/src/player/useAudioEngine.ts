@@ -13,6 +13,7 @@ import { log } from './audio/platform';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { useOutputStore } from '../stores/outputStore';
 import { prefetchService } from '../services/prefetchService';
+import { radioController } from './radio/radioController';
 import {
   getCrossfadeTrigger,
   getEffectiveCrossfadeDuration,
@@ -257,6 +258,14 @@ export function useAudioEngine() {
     if (!isInitialized) return;
     prefetchService.start();
     return () => prefetchService.stop();
+  }, [isInitialized]);
+
+  // Radio suggestions share the engine's lifecycle. Started but disabled by default —
+  // nothing is inserted until the listener turns it on (ADR-0005).
+  useEffect(() => {
+    if (!isInitialized) return;
+    radioController.start();
+    return () => radioController.stop();
   }, [isInitialized]);
 
   // --------------------------------------------------------------------------
