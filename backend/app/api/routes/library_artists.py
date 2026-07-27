@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError
+from app.api.schemas.artists import SimilarArtistInfo
 from app.db.models import Artist, ArtistAlias, Track, TrackAnalysis, TrackStatus
 from app.services.external_albums_helpers import normalize_artist_name
 from app.utils.time import utcnow
@@ -194,18 +195,6 @@ class ArtistTrack(BaseModel):
     track_number: int | None
     duration_seconds: float | None
     year: int | None
-
-
-class SimilarArtistInfo(BaseModel):
-    """Enriched similar artist with library status and external links."""
-
-    name: str
-    match_score: float  # 0-1 similarity from Last.fm
-    in_library: bool
-    track_count: int | None = None  # If in library
-    image_url: str | None = None
-    lastfm_url: str | None = None
-    bandcamp_url: str | None = None  # Search link for discovery
 
 
 class ArtistDetailResponse(BaseModel):

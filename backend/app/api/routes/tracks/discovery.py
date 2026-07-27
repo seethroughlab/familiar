@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 
 from app.api.deps import DbSession
 from app.api.exceptions import NotFoundError, TrackNotFoundError
+from app.api.schemas.artists import SimilarArtistInfo
 from app.db.models import Track, TrackAnalysis
 
 from . import TrackResponse
@@ -25,18 +26,6 @@ class AlbumGainResponse(BaseModel):
     album_gain_db: float | None = None
     album_peak: float | None = None
     track_count: int = 0
-
-
-class SimilarArtistInfo(BaseModel):
-    """Similar artist with library status and external links."""
-
-    name: str
-    match_score: float
-    in_library: bool
-    track_count: int | None = None
-    image_url: str | None = None
-    lastfm_url: str | None = None
-    bandcamp_url: str | None = None
 
 
 class TrackDiscoverResponse(BaseModel):

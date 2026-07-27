@@ -258,7 +258,11 @@ async def upload_avatar(
     return profile_to_response(profile, has_lastfm)
 
 
-@router.get("/{profile_id}/avatar")
+@router.get(
+    "/{profile_id}/avatar",
+    response_class=FileResponse,
+    responses={200: {"content": {"image/*": {}}, "description": "Profile avatar image."}},
+)
 async def get_avatar(
     profile_id: UUID,
     db: DbSession,

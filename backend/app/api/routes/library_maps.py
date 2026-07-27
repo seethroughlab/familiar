@@ -103,7 +103,16 @@ async def get_music_map(
     )
 
 
-@router.get("/map/stream")
+@router.get(
+    "/map/stream",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "Server-sent events reporting map build progress.",
+        }
+    },
+)
 async def get_music_map_stream(
     db: DbSession,
     entity_type: Literal["artists", "albums"] = "artists",
@@ -282,7 +291,16 @@ async def get_3d_music_map(
     )
 
 
-@router.get("/map/3d/stream")
+@router.get(
+    "/map/3d/stream",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "Server-sent events reporting 3D map build progress.",
+        }
+    },
+)
 async def get_3d_music_map_stream(
     db: DbSession,
     entity_type: Literal["artists", "albums"] = "artists",

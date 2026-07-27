@@ -411,7 +411,12 @@ async def get_tracks_batch(
     return ordered_tracks
 
 
-@router.get("/", response_model=TrackListResponse)
+# Registered twice on purpose — see the comment in tracks/__init__.py. The parent
+# router serves "" (/tracks) and this serves "/" (/tracks/), because the SPA catch-all
+# swallows FastAPI's redirect. They are one API operation, so only the parent
+# registration appears in the schema; otherwise a generated client would grow two
+# identical listTracks methods (ADR-0007).
+@router.get("/", response_model=TrackListResponse, include_in_schema=False)
 async def list_tracks(
     db: DbSession,
     profile: CurrentProfile,

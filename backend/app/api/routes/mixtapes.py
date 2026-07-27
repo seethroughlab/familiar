@@ -212,7 +212,16 @@ async def get_mixtape(
     return _serialize(mixtape, progress=progress)
 
 
-@router.get("/{mixtape_id}/download")
+@router.get(
+    "/{mixtape_id}/download",
+    response_class=FileResponse,
+    responses={
+        200: {
+            "content": {"application/zip": {}},
+            "description": "Mixtape bundle: audio, cover image and tracklist.",
+        }
+    },
+)
 async def download_mixtape(
     mixtape_id: UUID,
     db: DbSession,

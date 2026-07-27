@@ -3,6 +3,7 @@
 Centralising DTOs here breaks route-to-route import cycles.
 """
 
+from app.api.schemas.artists import SimilarArtistInfo
 from app.api.schemas.common import CancelResponse
 from app.api.schemas.tracks import (
     BatchTracksRequest,
@@ -16,6 +17,7 @@ from app.api.schemas.tracks import (
 __all__ = [
     "BatchTracksRequest",
     "CancelResponse",
+    "SimilarArtistInfo",
     "TrackDetailResponse",
     "TrackFeaturesResponse",
     "TrackIdsResponse",

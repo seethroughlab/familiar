@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -242,11 +243,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Background task manager stopped")
 
 
+def custom_generate_unique_id(route: APIRoute) -> str:
+    """Build a short, readable operationId from the route's tag and function name.
+
+    FastAPI's default derives the id from function name + path + method, producing
+    names up to 95 characters — `get_playlist_external_albums_api_v1_playlists__
+    playlist_id__recommendations_external_albums_get` — which a generated client turns
+    into an unusable method name (ADR-0007).
+
+    `{tag}_{name}` keeps them short and stable. Only three function names repeat across
+    the API (`list_tracks`, `update_track_metadata`, `get_stats`) and the tag prefix
+    separates all three. Uniqueness is not guaranteed by construction, so
+    `scripts/lint_openapi.py` asserts it.
+
+    Also improves auto-generated multipart body models, which FastAPI names after the
+    operationId (`Body_upload_avatar_api_v1_profiles__profile_id__avatar_post`).
+    """
+    tag = str(route.tags[0]).lower().replace(" ", "-") if route.tags else "root"
+    return f"{tag}_{route.name}"
+
+
 app = FastAPI(
     title="Familiar",
     description="LLM-powered local music player API",
     version=get_app_version(),
     lifespan=lifespan,
+    generate_unique_id_function=custom_generate_unique_id,
 )
 
 # Rate limiting

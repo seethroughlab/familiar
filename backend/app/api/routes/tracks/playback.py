@@ -12,7 +12,7 @@ promises to leave alone.
 """
 
 import logging
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -132,13 +132,24 @@ async def _get_track_or_404(db: DbSession, track_id: UUID) -> Track:
     return track
 
 
+class TopTrackStat(BaseModel):
+    """A track in the profile's most-played list."""
+
+    id: str
+    title: str | None = None
+    artist: str | None = None
+    play_count: int
+    total_play_seconds: float
+    last_played_at: str | None = None
+
+
 class ProfilePlayStatsResponse(BaseModel):
     """Profile play statistics."""
 
     total_plays: int
     total_play_seconds: float
     unique_tracks: int
-    top_tracks: list[dict[str, Any]]
+    top_tracks: list[TopTrackStat]
 
 
 @router.post("/{track_id}/played", response_model=PlayRecordResponse)
@@ -316,14 +327,14 @@ async def get_play_stats(
     unique_tracks = len(rows)
 
     top_tracks = [
-        {
-            "id": str(track.id),
-            "title": track.title,
-            "artist": track.artist,
-            "play_count": ph.play_count,
-            "total_play_seconds": ph.total_play_seconds,
-            "last_played_at": ph.last_played_at.isoformat() if ph.last_played_at else None,
-        }
+        TopTrackStat(
+            id=str(track.id),
+            title=track.title,
+            artist=track.artist,
+            play_count=ph.play_count,
+            total_play_seconds=ph.total_play_seconds,
+            last_played_at=ph.last_played_at.isoformat() if ph.last_played_at else None,
+        )
         for ph, track in rows[:limit]
     ]
 

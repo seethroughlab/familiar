@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint format backfill-artists
+.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi format backfill-artists
 
 # Install dependencies
 install:
@@ -33,6 +33,16 @@ test-contract:
 lint:
 	uv run ruff check .
 	uv run mypy app
+
+# Run the custom checks CI enforces (schema, migrations, profile contracts)
+lint-contracts:
+	uv run python scripts/lint_openapi.py
+	uv run python scripts/lint_migrations.py
+	uv run python scripts/lint_profile_contracts.py
+
+# Dump the OpenAPI schema for inspection or client generation
+openapi:
+	uv run python -c "import json; from app.main import app; print(json.dumps(app.openapi(), indent=2))"
 
 # Format code
 format:

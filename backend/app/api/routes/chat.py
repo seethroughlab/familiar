@@ -107,7 +107,16 @@ async def generate_sse_events(
     yield "data: [DONE]\n\n"
 
 
-@router.post("/stream")
+@router.post(
+    "/stream",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "Server-sent events carrying chat deltas and tool calls.",
+        }
+    },
+)
 @limiter.limit(CHAT_RATE_LIMIT)
 async def chat_stream(
     request: Request,

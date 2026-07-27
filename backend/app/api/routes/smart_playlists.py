@@ -56,7 +56,7 @@ class SmartPlaylistResponse(BaseModel):
     id: str
     name: str
     description: str | None
-    rules: list[dict[str, Any]]
+    rules: list[RuleSchema]
     match_mode: str
     order_by: str
     order_direction: str
@@ -287,7 +287,39 @@ async def convert_to_static(
     )
 
 
-@router.get("/fields/available")
+class RuleFieldInfo(BaseModel):
+    """A field a smart-playlist rule can be built against."""
+
+    name: str
+    type: str
+    description: str
+    # Analysis fields carry an inclusive [min, max] so the UI can render a slider.
+    # Omitted for string/date/boolean fields.
+    range: list[float] | None = None
+
+
+class RuleOperators(BaseModel):
+    """Operators valid for each field type."""
+
+    string: list[str]
+    number: list[str]
+    date: list[str]
+    boolean: list[str]
+    list: list[str]
+
+
+class AvailableFieldsResponse(BaseModel):
+    """Everything a client needs to build a smart-playlist rule."""
+
+    track_fields: list[RuleFieldInfo]
+    analysis_fields: list[RuleFieldInfo]
+    play_history_fields: list[RuleFieldInfo]
+    operators: RuleOperators
+    date_keywords: list[str]
+    relative_units: list[str]
+
+
+@router.get("/fields/available", response_model=AvailableFieldsResponse)
 async def get_available_fields() -> dict[str, Any]:
     """Get list of available fields and operators for building rules."""
     return {
