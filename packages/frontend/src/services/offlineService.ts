@@ -13,6 +13,7 @@ import { computeAlbumHash } from '../utils/albumHash';
 import { trackFetchError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 import { isNativeApp } from '../utils/platform';
+import { DownloadPausedError, isPlaybackActive } from './playbackGate';
 
 const log = createLogger('Offline');
 
@@ -256,6 +257,21 @@ async function downloadAndStoreAudio(
         loaded += value.length;
         chunksSinceLastSave++;
 
+        // Give the link back to playback. Checked per chunk rather than only between
+        // tracks because one file can hold the connection for ~40s — long enough to
+        // drain a playing track's buffer and surface as PIPELINE_ERROR_READ (#13).
+        // Cancelling the reader releases the bandwidth now; the bytes already fetched
+        // are saved just below and resumed via the Range request on the next attempt.
+        if (isPlaybackActive()) {
+          if (activityTimer) clearTimeout(activityTimer);
+          if (total > 0) {
+            await savePartialProgress(trackId, loaded, total, chunks);
+          }
+          log.info('Yielding download to playback at', loaded, 'of', total, 'bytes');
+          await reader.cancel().catch(() => {});
+          throw new DownloadPausedError();
+        }
+
         onProgress?.({
           loaded,
           total: total || loaded,
@@ -274,8 +290,9 @@ async function downloadAndStoreAudio(
       chunks.length = 0; // free constituent chunk Blobs before base64 encoding
     } catch (error) {
       if (activityTimer) clearTimeout(activityTimer);
-      // Save progress before throwing so we can resume later
-      if (chunks.length > existingChunks.length && total > 0) {
+      // Save progress before throwing so we can resume later. A pause has already
+      // saved, so don't write the whole chunk list a second time.
+      if (!(error instanceof DownloadPausedError) && chunks.length > existingChunks.length && total > 0) {
         log.info('Saving partial progress before error:', loaded, 'bytes');
         await savePartialProgress(trackId, loaded, total, chunks);
       }

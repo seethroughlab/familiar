@@ -4,6 +4,7 @@
  */
 import { create } from 'zustand';
 import * as offlineService from '../services/offlineService';
+import { DownloadPausedError, waitForPlaybackIdle } from '../services/playbackGate';
 import { db, type PersistedDownloadJob } from '../db';
 import { showSuccess, showError, showWarning } from './toastStore';
 import { createLogger } from '../utils/logger';
@@ -346,6 +347,12 @@ async function processNextJob() {
       break;
     }
 
+    // Downloads saturate the link, so hold off entirely while audio is playing —
+    // otherwise a large transfer starves the playing track and it dies with
+    // PIPELINE_ERROR_READ (#13). Resumes once playback has been stopped a few seconds.
+    await waitForPlaybackIdle(abortSignal);
+    if (abortSignal.aborted) break;
+
     const trackId = tracksToDownload[i];
 
     updateJob(nextJob.id, {
@@ -371,6 +378,13 @@ async function processNextJob() {
         });
       }
     } catch (error) {
+      if (error instanceof DownloadPausedError) {
+        // Not a failure: playback claimed the bandwidth mid-transfer. The bytes so far
+        // are saved as a partial, so retry this same track once playback settles.
+        log.info('Download yielded to playback, will resume:', trackId);
+        i--;
+        continue;
+      }
       if (!abortSignal.aborted) {
         log.error(`Failed to download track ${trackId}:`, error);
         failed++;
