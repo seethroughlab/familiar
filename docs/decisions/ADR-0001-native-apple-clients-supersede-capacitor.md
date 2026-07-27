@@ -12,6 +12,39 @@ Implementation:
   [ADR-0006](ADR-0006-offline-ranking-is-precomputed-server-side.md), and
   [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) are stable, per the execution order in
   `CLAUDE.md`.
+- **Readiness audit, 2026-07-27.** Measured what actually blocks starting `familiar-apple`, rather
+  than assuming the `CLAUDE.md` ordering is still accurate:
+
+  - **ADR-0007 is effectively clear.** All 50 operations on the lint's burn-down list are *outside*
+    the generated surface — management-surface endpoints per
+    [ADR-0002](ADR-0002-web-app-is-the-management-surface.md). The 143 in-scope operations across
+    nine tags are already fully typed. Phase 2 of that ADR (generating the Swift client) *is* the
+    native build, not a prerequisite for it.
+  - **`queue` was missing from the generated surface** and has been added. Radio and offline ranking
+    ([ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md),
+    [ADR-0006](ADR-0006-offline-ranking-is-precomputed-server-side.md)) are exactly what a native
+    client consumes — a generated client without them would be missing the headline feature. The lint
+    passes with the tag in scope and needed no new allowlist entries.
+  - **Decision point 2 understates what is portable.** It says `NativeAudioEngine.swift` (1,860 lines,
+    confirmed) moves intact. In fact **2,686 lines carry zero Capacitor references** and move as-is:
+    the engine, `CarPlay/RootTemplateBuilder.swift` (280), `CarPlay/CarPlayDataBridge.swift` (259),
+    `FamiliarAmbientSynth/AmbientSynthEngine.swift` (266) and `CarPlaySceneDelegate.swift` (21).
+    `NativeAudioEngine` imports only Accelerate, AVFoundation, Foundation and MediaPlayer, and is
+    already decoupled through a `NativeAudioEngineDelegate` protocol — the native app supplies a new
+    delegate instead of `FamiliarAudioPlugin`. No refactoring is required before the move.
+  - **The Capacitor coupling is confined to the adapter layer**, 697 lines to delete rather than
+    port: `FamiliarAudioPlugin.swift` (536, confirmed), `FamiliarAmbientSynthPlugin.swift` (87),
+    plus trivial shells in `AppDelegate` (61), `MainSceneDelegate` (40) and `ViewController` (13).
+  - **The Swift tests move too.** All four `AppTests` files (294 lines) import only `@testable import
+    App`, `MediaPlayer` and `XCTest`, so the native build starts with a test suite rather than none.
+  - **The only remaining barrier is [ADR-0003](ADR-0003-server-owns-the-playback-queue.md)**, still
+    `proposed`. Its `PlaybackSession` model was amended on the same date to add `queue_source` and
+    the lazy reservoir, without which a server-owned queue would reproduce the "playback ends at
+    track 50" bug on every client.
+  - **Open question, not decided here:** whether `outputs` (24 operations — WiiM, Sonos, AirPlay,
+    Chromecast) belongs in the generated surface. Casting is arguably a listening feature and
+    arguably management. It is out of scope today and left that way deliberately.
+
 - **Grandfathered past the freeze:** PR #3 (`refactor(carplay): in-place template updates instead of
   setRootTemplate spam`) was merged on 2026-07-26, after acceptance. It is a refactor, not a bug fix,
   so it does not satisfy the rule above; it was opened in May, well before this ADR, and landed by

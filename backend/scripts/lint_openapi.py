@@ -36,6 +36,9 @@ GENERATED_SURFACE = {
     "chat",
     "mixtapes",
     "ambient",
+    # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these
+    # directly — the whole point of ADR-0006 is that they carry no ranking code.
+    "queue",
 }
 
 # operationIds longer than this are unusable as generated method names. The
