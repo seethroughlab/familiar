@@ -513,7 +513,17 @@ export class WebAudioEngine implements AudioEngine {
   cancelCrossfade(): void {
     if (!this.crossfadeActive) return;
 
-    log.debug('cancelCrossfade');
+    // executeCrossfade optimistically points loadedTrackId at the next track, because
+    // the crossfade normally completes. When it is cancelled instead, the element still
+    // playing is the current one — so leaving loadedTrackId on the next track makes the
+    // engine claim a track it is not playing.
+    //
+    // That desync is permanent and fatal: the hook's 'ended' handler discards the event
+    // whenever engine.getLoadedTrackId() !== store.currentTrack.id, so the queue never
+    // advances again and playback dies silently until the listener picks a track by hand.
+    const currentTrackId = this.getCurrentElement()?.getAttribute('data-track-id') ?? null;
+    log.debug('cancelCrossfade', { restoringLoadedTrackId: currentTrackId });
+    this.loadedTrackId = currentTrackId;
 
     const currentGain = this.getCurrentGain();
     const nextGain = this.getNextGain();
