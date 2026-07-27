@@ -155,6 +155,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 "metrics_summary",
                 extra={
                     "requests_5m": req["total_requests"],
+                    "client_disconnects": req["client_disconnects"],
                     "error_rate": req["error_rate"],
                     "p50_ms": req["duration_p50_ms"],
                     "p95_ms": req["duration_p95_ms"],
