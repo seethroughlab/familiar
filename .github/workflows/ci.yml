@@ -45,6 +45,10 @@ jobs:
 
   macos-compose-integration:
     name: macOS Compose Integration
+    # Pull requests only, for the same NAS-contention reason as docker-build. Its
+    # keychain failure is environmental and it is already advisory, so running it on
+    # every merge adds a red check that means nothing.
+    if: github.event_name != 'push'
     runs-on: [self-hosted, macOS]
     timeout-minutes: 15
     # Advisory: the self-hosted macOS runner runs as a launchd service with
@@ -146,7 +150,10 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-          enable-cache: true
+          # Every job here runs on a self-hosted runner, whose uv cache already persists
+          # on local disk between runs — the hosted cache adds nothing and its post-job
+          # prune has been failing (exit 2), marking jobs red while all tests passed.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
@@ -170,7 +177,10 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-          enable-cache: true
+          # Every job here runs on a self-hosted runner, whose uv cache already persists
+          # on local disk between runs — the hosted cache adds nothing and its post-job
+          # prune has been failing (exit 2), marking jobs red while all tests passed.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
@@ -233,7 +243,10 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-          enable-cache: true
+          # Every job here runs on a self-hosted runner, whose uv cache already persists
+          # on local disk between runs — the hosted cache adds nothing and its post-job
+          # prune has been failing (exit 2), marking jobs red while all tests passed.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
@@ -315,7 +328,10 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-          enable-cache: true
+          # Every job here runs on a self-hosted runner, whose uv cache already persists
+          # on local disk between runs — the hosted cache adds nothing and its post-job
+          # prune has been failing (exit 2), marking jobs red while all tests passed.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
@@ -396,7 +412,10 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-          enable-cache: true
+          # Every job here runs on a self-hosted runner, whose uv cache already persists
+          # on local disk between runs — the hosted cache adds nothing and its post-job
+          # prune has been failing (exit 2), marking jobs red while all tests passed.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
@@ -581,6 +600,11 @@ jobs:
 
   docker-build:
     name: Docker Build
+    # Pull requests only. The self-hosted runner is the same machine that serves the
+    # music library, and a Docker build saturates its disks — during one, serving a 20MB
+    # track went from ~1.5s to ~40s and playback stalled outright. On a merge this would
+    # re-validate content the PR run already built, so the cost buys nothing.
+    if: github.event_name != 'push'
     runs-on: [self-hosted, Linux]
     timeout-minutes: 60
     # Advisory only: the self-hosted NAS runner's upstream connection is
@@ -631,6 +655,9 @@ jobs:
 
   e2e-test:
     name: E2E Tests (Playwright)
+    # Pull requests only — see docker-build. It also depends on docker-build, which does
+    # not run on push, so leaving it enabled would leave it permanently skipped anyway.
+    if: github.event_name != 'push'
     runs-on: [self-hosted, Linux]
     needs: [docker-build]
     # Advisory only: this job only runs when docker-build succeeds, and
@@ -672,7 +699,10 @@ jobs:
         uses: astral-sh/setup-uv@v4
         with:
           version: "latest"
-          enable-cache: true
+          # Every job here runs on a self-hosted runner, whose uv cache already persists
+          # on local disk between runs — the hosted cache adds nothing and its post-job
+          # prune has been failing (exit 2), marking jobs red while all tests passed.
+          enable-cache: false
 
       - name: Set up Python
         run: uv python install 3.12
