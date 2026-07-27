@@ -13,7 +13,6 @@ import { computeAlbumHash } from '../utils/albumHash';
 import { trackFetchError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 import { isNativeApp } from '../utils/platform';
-import { DownloadThrottle } from './playbackGate';
 
 const log = createLogger('Offline');
 
@@ -153,8 +152,6 @@ async function downloadAndStoreAudio(
   partial: PartialDownload | undefined,
   onProgress: DownloadProgressCallback | undefined,
   fs: FilesystemProvider | null,
-  throttle: DownloadThrottle,
-  onThrottleChange?: (throttling: boolean) => void,
 ): Promise<void> {
   const resumeFrom = partial?.bytesDownloaded || 0;
   const existingChunks: Blob[] = partial?.chunks || [];
@@ -258,13 +255,6 @@ async function downloadAndStoreAudio(
         chunks.push(new Blob([value]));
         loaded += value.length;
         chunksSinceLastSave++;
-
-        // Leave most of the link free while audio is playing. Paced per chunk rather
-        // than only between tracks because one file can hold the connection for ~40s —
-        // far longer than a track's buffer — which is how PIPELINE_ERROR_READ (#13)
-        // happened. No-ops when nothing is playing.
-        await throttle.pace();
-        onThrottleChange?.(throttle.throttling);
 
         onProgress?.({
           loaded,
@@ -374,11 +364,7 @@ async function downloadAndStoreAudio(
 export async function downloadTrackForOffline(
   trackId: string,
   onProgress?: DownloadProgressCallback,
-  onThrottleChange?: (throttling: boolean) => void
 ): Promise<void> {
-  // Paces this transfer against playback. Per-download, not shared.
-  const throttle = new DownloadThrottle();
-
   // Check if already downloaded
   const existing = await db.offlineTracks.get(trackId);
   if (existing) {
@@ -396,7 +382,7 @@ export async function downloadTrackForOffline(
     throw new Error('Native filesystem unavailable — cannot download track');
   }
 
-  await downloadAndStoreAudio(trackId, partial, onProgress, fs, throttle, onThrottleChange);
+  await downloadAndStoreAudio(trackId, partial, onProgress, fs);
   // blob is now out of scope — GC-eligible before the steps below
 
   await clearPartialDownload(trackId);

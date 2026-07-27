@@ -24,9 +24,6 @@ export interface DownloadJob {
   status: DownloadJobStatus;
   startedAt: Date;
   error?: string;
-  // Deliberately slowed to leave bandwidth for playback (see services/playbackGate).
-  // Surfaced so a throttled download doesn't look like a stalled one.
-  throttled?: boolean;
 }
 
 interface DownloadState {
@@ -358,20 +355,10 @@ async function processNextJob() {
 
     try {
       log.info('Downloading track', i + 1, 'of', tracksToDownload.length, ':', trackId);
-      await offlineService.downloadTrackForOffline(
-        trackId,
-        (progress) => {
-          // Use throttled update to avoid state update storms
-          throttledProgressUpdate(nextJob.id, progress.percentage);
-        },
-        // Surfaced in the UI so a deliberately slowed download doesn't read as a stall.
-        (throttling) => {
-          const job = useDownloadStore.getState().jobs.get(nextJob.id);
-          if (job && job.throttled !== throttling) {
-            updateJob(nextJob.id, { throttled: throttling });
-          }
-        }
-      );
+      await offlineService.downloadTrackForOffline(trackId, (progress) => {
+        // Use throttled update to avoid state update storms
+        throttledProgressUpdate(nextJob.id, progress.percentage);
+      });
 
       succeeded++;
       log.info('Track completed:', trackId);
