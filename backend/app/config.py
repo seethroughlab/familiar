@@ -135,10 +135,57 @@ GENERATIVE_ART_VERSION = 4
 #   v1: CLAP-based mood/genre/instrumentation/energy tags
 MOOD_TAGS_VERSION = 1
 
+# Where the kernel exposes this cgroup's CPU quota. Module-level so tests can point them
+# at synthetic files instead of depending on the host they run on.
+CGROUP_V2_CPU_MAX = Path("/sys/fs/cgroup/cpu.max")
+CGROUP_V1_CPU_QUOTA = Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us")
+CGROUP_V1_CPU_PERIOD = Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us")
+
+
+def _cgroup_cpu_quota() -> float | None:
+    """This cgroup's CPU quota in cores, or None if unlimited or not in a cgroup."""
+    try:
+        # cgroup v2: "<quota> <period>", where quota may be the literal "max".
+        if CGROUP_V2_CPU_MAX.exists():
+            quota_s, _, period_s = CGROUP_V2_CPU_MAX.read_text().strip().partition(" ")
+            if quota_s and quota_s != "max":
+                period = float(period_s)
+                if period > 0:
+                    return float(quota_s) / period
+
+        # cgroup v1: two files, with -1 meaning unlimited.
+        if CGROUP_V1_CPU_QUOTA.exists() and CGROUP_V1_CPU_PERIOD.exists():
+            quota = float(CGROUP_V1_CPU_QUOTA.read_text().strip())
+            period = float(CGROUP_V1_CPU_PERIOD.read_text().strip())
+            if quota > 0 and period > 0:
+                return quota / period
+    except (OSError, ValueError):
+        # An unreadable or unexpected /sys must not take the process down; the host
+        # count is a safe, if generous, answer.
+        pass
+    return None
+
+
+def available_cpu_count() -> int:
+    """CPUs this process can actually use, honouring the container's CPU quota.
+
+    ``os.cpu_count()`` reports the *host's* CPUs and knows nothing about cgroups. On the
+    NAS that is 8 against a 2.0-CPU container limit, so anything sized off it overshoots
+    by 4x — see ``adaptive_queue_limit``, which was returning its 500 ceiling regardless
+    of the real limit.
+
+    Never returns less than 1, and never more than the host physically has.
+    """
+    host = os.cpu_count() or 2
+    quota = _cgroup_cpu_quota()
+    if quota is None:
+        return max(1, host)
+    return max(1, min(host, int(quota)))
+
+
 def adaptive_queue_limit(base: int = 100) -> int:
-    """Scale queue burst by CPU count, clamped to [50, 500]."""
-    cpus = os.cpu_count() or 2
-    return max(50, min(cpus * base, 500))
+    """Scale queue burst by usable CPU count, clamped to [50, 500]."""
+    return max(50, min(available_cpu_count() * base, 500))
 
 
 # Supported audio formats

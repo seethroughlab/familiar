@@ -66,10 +66,21 @@ services:
     # Resource limits to prevent system overload during analysis
     # Note: CLAP embedding model requires ~4GB peak memory, so 6GB limit
     # provides headroom to prevent OOM kills during analysis
+    #
+    # The CPU limit covers three processes, not one: the API worker, the library-scan
+    # subprocess, and the analysis subprocess (both spawned via ProcessPoolExecutor).
+    # At 2.0 they contended with each other and with Postgres, and audio-stream p95
+    # went from ~50ms idle to ~1000ms during a sync (issue #13). Memory is not the
+    # constraint here — the 6G limit sits against ~650MB in use.
+    #
+    # NOTE: `scripts/deploy-dev.sh` does `docker cp` + `docker restart`, which preserves
+    # the container's existing HostConfig — it will NOT apply a change made here. To
+    # apply it to a running container without recreating it (and without disturbing the
+    # database):  docker update --cpus=6 familiar-api
     deploy:
       resources:
         limits:
-          cpus: '2.0'    # Max 2 CPU cores
+          cpus: '6.0'    # Max 6 CPU cores, leaving 2 for Postgres, Redis and the OS
           memory: 6G     # Max 6GB RAM (CLAP model needs ~4GB peak)
         reservations:
           cpus: '0.5'    # Guaranteed 0.5 cores
