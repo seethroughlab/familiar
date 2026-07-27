@@ -250,6 +250,41 @@ describe('usePlayTracking', () => {
         expect.objectContaining({ track_duration: 40, played_seconds: 10 }),
       );
     });
+
+    it('uses a never-played track OWN duration, not the previous track', async () => {
+      // Regression from real data: a track that failed to load reported the previous
+      // track's duration (75.5s instead of its own 374.5s), because the accumulate
+      // effect early-returns before it can update the duration ref.
+      const first = createMockTrack('first');
+      const broken = { ...createMockTrack('broken'), duration_seconds: 374 };
+      const { rerender } = renderHook(() => usePlayTracking());
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: first, isPlaying: true, duration: 75, currentTime: 0 });
+      });
+      rerender();
+      act(() => {
+        usePlayerStore.setState({ currentTime: 72 });
+      });
+      rerender();
+
+      // Advance to a track that never plays — no duration ever reported by the engine.
+      act(() => {
+        usePlayerStore.setState({ currentTrack: broken, currentTime: 0, isPlaying: false, _advanceReason: 'ended' });
+      });
+      rerender();
+      act(() => {
+        usePlayerStore.setState({ currentTrack: createMockTrack('third'), currentTime: 0, _advanceReason: 'error' });
+      });
+      rerender();
+      await flush();
+
+      expect(mockDeliver).toHaveBeenCalledWith(
+        'broken',
+        'skipped',
+        expect.objectContaining({ reason: 'error', track_duration: 374 }),
+      );
+    });
   });
 
   describe('context', () => {
