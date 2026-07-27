@@ -24,7 +24,31 @@ export interface QueueSuggestionsResponse {
   pool_collapsed: boolean;
 }
 
+export interface OfflineManifestRequest {
+  track_ids: string[];
+  neighbours?: number;
+}
+
+export interface OfflineManifestVariantResponse {
+  profile: string;
+  filter_preset: string;
+  entries: { track_id: string; neighbours: { track_id: string; score: number }[] }[];
+  seed_track_ids: string[];
+}
+
+export interface OfflineManifestResponse {
+  variants: OfflineManifestVariantResponse[];
+  track_count: number;
+}
+
 export const queueApi = {
+  getOfflineManifest: async (
+    request: OfflineManifestRequest
+  ): Promise<OfflineManifestResponse> => {
+    const { data } = await api.post('/queue/offline-manifest', request);
+    return data;
+  },
+
   getSuggestions: async (request: QueueSuggestionsRequest): Promise<QueueSuggestionsResponse> => {
     const { data } = await api.post('/queue/suggestions', request);
     return data;
