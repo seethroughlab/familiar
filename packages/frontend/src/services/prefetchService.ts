@@ -59,6 +59,10 @@ class PrefetchService {
   private unsubscribe: (() => void) | null = null;
   private downloadQueue: string[] = [];
   private isDownloading = false;
+  // Which tracks an audio element may still be reading from. Neither is "upcoming", and
+  // both must survive eviction — see `reconcile`.
+  private currentTrackId: string | null = null;
+  private previousTrackId: string | null = null;
 
   /**
    * Start the prefetch service — subscribes to playerStore changes.
@@ -121,9 +125,38 @@ class PrefetchService {
 
     const upcomingIds = usePlayerStore.getState().getUpcomingTrackIds(PREFETCH_COUNT);
 
-    // Evict entries not in the upcoming list
+    // A track an audio element may still be reading from must never be evicted.
+    //
+    // `getUpcomingTrackIds` counts from step 1, so the current track is by definition
+    // never "upcoming". The engine resolves its source through `getUrl()`
+    // (`WebAudioEngine.resolveTrackUrl`), so evicting the current track revokes the very
+    // blob URL the element is reading from, and that surfaces as
+    // `PIPELINE_ERROR_READ: FFmpegDemuxer: data source error` (issue #13).
+    //
+    // The delay is what made this hard to see. `URL.revokeObjectURL` does not abort a
+    // read already in flight; it only breaks *subsequent* fetches. A short track that
+    // buffered fully before the advance plays through fine, while a large one dies
+    // part-way when the element next reaches for data — so it looked intermittent and
+    // size-dependent, and it always followed a track change.
+    //
+    // The previous track is retained too: during a crossfade both elements read at once,
+    // and the instant the queue advances the outgoing track is neither current nor
+    // upcoming. Evicting it revokes a source still fading out — the "Crossfade failed,
+    // rolling back" case. Tracking advances *before* the retention set is built, so on
+    // the reconcile following a change `previousTrackId` is the track just stepped off.
+    const currentTrackId = usePlayerStore.getState().currentTrack?.id ?? null;
+    if (currentTrackId !== this.currentTrackId) {
+      this.previousTrackId = this.currentTrackId;
+      this.currentTrackId = currentTrackId;
+    }
+
+    const retained = new Set(upcomingIds);
+    if (this.currentTrackId) retained.add(this.currentTrackId);
+    if (this.previousTrackId) retained.add(this.previousTrackId);
+
+    // Evict entries that are neither being read nor coming up
     for (const [trackId, entry] of this.cache) {
-      if (!upcomingIds.includes(trackId)) {
+      if (!retained.has(trackId)) {
         this.evict(trackId, entry);
       }
     }
@@ -325,6 +358,10 @@ class PrefetchService {
     }
     this.cache.clear();
     this.downloadQueue = [];
+    // Nothing is playing once everything is evicted; stale retention would otherwise
+    // keep the next session's first reconcile from clearing a dead entry.
+    this.currentTrackId = null;
+    this.previousTrackId = null;
   }
 }
 
