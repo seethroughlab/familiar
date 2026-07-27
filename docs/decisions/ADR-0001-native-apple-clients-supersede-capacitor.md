@@ -41,9 +41,11 @@ Implementation:
     `proposed`. Its `PlaybackSession` model was amended on the same date to add `queue_source` and
     the lazy reservoir, without which a server-owned queue would reproduce the "playback ends at
     track 50" bug on every client.
-  - **Open question, not decided here:** whether `outputs` (24 operations — WiiM, Sonos, AirPlay,
-    Chromecast) belongs in the generated surface. Casting is arguably a listening feature and
-    arguably management. It is out of scope today and left that way deliberately.
+  - **`outputs` added to the generated surface** (24 operations — WiiM, Sonos, AirPlay,
+    Chromecast). Raised as an open question and decided the same day: casting is a listening
+    feature, not a management one — a native client that cannot send audio to speakers is missing
+    part of the listening path. The lint passes with it in scope and needed no new allowlist
+    entries, so those handlers were already typed.
 
 - **Grandfathered past the freeze:** PR #3 (`refactor(carplay): in-place template updates instead of
   setRootTemplate spam`) was merged on 2026-07-26, after acceptance. It is a refactor, not a bug fix,
