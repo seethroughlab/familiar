@@ -17,8 +17,25 @@ Implementation:
   with `reason=natural` resolving to `completed`, where ratio alone would have said `skipped`) and
   the error case resolving to `errored`. Probe rows were reverted afterwards; the table starts empty.
 - Phase 2 — client emission: advance-reason threading through `queueStore`, the `usePlayTracking`
-  rewrite, and the outbox `listen_event` type. Tracked separately; deliberately split so a DB
-  migration does not land together with changes to the player's most delicate code path.
+  rewrite, and the outbox `listen_event` type, on branch `feat/adr-0004-client-emission`.
+  Deliberately split from phase 1 so a DB migration did not land together with changes to the
+  player's most delicate code path.
+
+  Three additions the decision above did not anticipate:
+  - **A sixth reason, `system`, that emits nothing.** Offline queue rebuilds, hydration and profile
+    switches replace `currentTrack` without the listener acting; without it every reconnect would
+    log a phantom skip.
+  - **Error advances take three paths, not the two named in point 6.** Beyond the two `playNext()`
+    sites, `advanceToNextDownloadedTrack` goes through `jumpToQueueIndex` and a crossfade failure
+    rolls back via `setQueueByTrackId`.
+  - **The reason is written inside the same `setState` that changes `currentTrack`.** `playNext` has
+    five early-returns that change no track, so a reason set before the branch would leak into the
+    next advance.
+
+  Two latent bugs surfaced and were fixed: `PlayerBar`/`FullPlayer` used bare `onClick={playNext}`,
+  which would have passed React's `MouseEvent` into the options slot; and React Testing Library's
+  automatic cleanup was never running (no `globals: true`, no setup file), so hooks from earlier
+  tests stayed mounted and polluted assertions.
 
 ## Context
 
