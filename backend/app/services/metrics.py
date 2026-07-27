@@ -44,7 +44,7 @@ class MetricsCollector:
     """
 
     def __init__(self, max_requests: int = 2000):
-        self._requests: deque[tuple[float, str, str, int, float, int, str]] = deque(maxlen=max_requests)
+        self._requests: deque[tuple[float, str, str, int, float, int, str, bool]] = deque(maxlen=max_requests)
         self._gauges: dict[str, Any] = {}
         self._lock = threading.Lock()
 
@@ -56,35 +56,60 @@ class MetricsCollector:
         duration_ms: float,
         query_count: int = 0,
         outcome: str = OUTCOME_COMPLETED,
+        transfer: bool = False,
     ) -> None:
         """Record an HTTP request that has finished, however it finished.
 
-        ``outcome`` defaults to ``completed`` so existing positional call sites are
-        unaffected. It exists because a disconnect and a completion are not comparable
-        measurements: a client that aborts a stream after 40 seconds of listening
-        produces a 40000 ms "duration" that is listening time, not latency. Folding
-        those into the percentiles would make p95 meaningless — see ``get_snapshot``.
+        Both keyword arguments default to today's behaviour so existing positional call
+        sites are unaffected.
+
+        ``transfer`` marks a response whose body is audio or video. Its elapsed time is
+        how long the bytes took to move, not how long the server took to think — the
+        client reads at playback speed, or hangs up mid-track. Mixing that into the
+        latency percentiles makes them meaningless; see ``get_snapshot``.
         """
         with self._lock:
-            self._requests.append((time.time(), method, route, status_code, duration_ms, query_count, outcome))
+            self._requests.append(
+                (time.time(), method, route, status_code, duration_ms, query_count, outcome, transfer)
+            )
 
     def set_gauge(self, name: str, value: Any) -> None:
         """Set a named gauge value."""
         with self._lock:
             self._gauges[name] = value
 
+    @staticmethod
+    def _percentiles(durations: list[float]) -> tuple[float, float, float]:
+        """(p50, p95, p99) over a duration list, or zeroes if it is empty."""
+        if not durations:
+            return 0.0, 0.0, 0.0
+        s = sorted(durations)
+        n = len(s)
+        if n == 1:
+            return round(s[0], 2), round(s[0], 2), round(s[0], 2)
+        return (
+            round(s[n // 2], 2),
+            round(s[int(n * 0.95)], 2),
+            round(s[int(n * 0.99)], 2),
+        )
+
     def get_snapshot(self, window_seconds: int = 300) -> dict[str, Any]:
         """Get metrics snapshot for the given time window.
 
-        Client disconnects are counted (``client_disconnects``) but excluded from both
-        the latency percentiles and the error rate:
+        Two populations are kept apart, because folding them together produced a p95
+        that measured nothing:
 
-        - **Percentiles.** A disconnect's duration is how long the client stayed
-          connected, not how long the server took. Streams dominate that population, so
-          including them would swamp p95 with listening time.
-        - **Error rate.** Skipping a track aborts its stream. That is normal use, and
-          counting it as a server error makes the rate — and the alarm built on it in
-          ``check_pressure_alarms`` — mean nothing.
+        - **Transfers** (``audio/*``, ``video/*``) are reported under ``transfer_*``.
+          Their elapsed time is byte-movement, and a client that skips a track hangs up
+          mid-response — uvicorn's ``send`` then silently no-ops, so the request still
+          records as a clean 200 whose duration is simply how long the listener stayed.
+          One skipped track was enough to define ``duration_p95_ms`` for a whole
+          five-minute window. ``duration_*`` now covers API responses only and means
+          "how quickly does the server answer".
+        - **Client disconnects** are counted in ``client_disconnects`` and excluded from
+          the percentiles and the error rate. Skipping a track is normal use; counting it
+          as a server error would make the rate — and the alarm built on it in
+          ``check_pressure_alarms`` — meaningless.
         """
         cutoff = time.time() - window_seconds
         with self._lock:
@@ -95,10 +120,13 @@ class MetricsCollector:
             "window_seconds": window_seconds,
             "total_requests": 0,
             "client_disconnects": 0,
+            "transfer_requests": 0,
             "error_rate": 0.0,
             "duration_p50_ms": 0.0,
             "duration_p95_ms": 0.0,
             "duration_p99_ms": 0.0,
+            "transfer_p50_ms": 0.0,
+            "transfer_p95_ms": 0.0,
             "avg_queries_per_request": 0.0,
             "max_queries_per_request": 0,
             "top_routes": [],
@@ -108,45 +136,41 @@ class MetricsCollector:
 
         disconnects = [r for r in recent if r[6] == OUTCOME_CLIENT_DISCONNECT]
         served = [r for r in recent if r[6] != OUTCOME_CLIENT_DISCONNECT]
+        api = [r for r in served if not r[7]]
+        transfers = [r for r in served if r[7]]
 
-        query_counts = [qc for _, _, _, _, _, qc, _ in recent]
+        query_counts = [r[5] for r in recent]
 
-        # Count requests per route — over everything, since a route that only ever gets
-        # disconnected on is exactly what we want to see.
+        # Route counts cover everything — a route that only ever gets disconnected on is
+        # exactly what we want to see.
         route_counts: dict[str, int] = {}
-        for _, _, route, _, _, _, _ in recent:
-            route_counts[route] = route_counts.get(route, 0) + 1
+        for r in recent:
+            route_counts[r[2]] = route_counts.get(r[2], 0) + 1
         top_routes = sorted(route_counts.items(), key=lambda x: -x[1])[:10]
 
-        total = len(recent)
-        common = {
-            "window_seconds": window_seconds,
-            "total_requests": total,
-            "client_disconnects": len(disconnects),
-            "avg_queries_per_request": round(sum(query_counts) / total, 2),
-            "max_queries_per_request": max(query_counts) if query_counts else 0,
-            "top_routes": [{"route": r, "count": c} for r, c in top_routes],
-        }
+        api_p50, api_p95, api_p99 = self._percentiles([r[4] for r in api])
+        tx_p50, tx_p95, _ = self._percentiles([r[4] for r in transfers])
 
-        if not served:
-            # Everything in the window was a disconnect. There is no latency or error
-            # rate to report, but the disconnect count above is the interesting part.
-            return {
-                "request_metrics": {**empty, **common},
-                "background_gauges": gauges,
-            }
-
-        durations_sorted = sorted(dur for _, _, _, _, dur, _, _ in served)
-        n = len(durations_sorted)
-        error_count = sum(1 for _, _, _, status, _, _, _ in served if status >= 500)
+        # Error rate over served API requests. Transfers are excluded for the same
+        # reason as their durations: a 200 that the client walked away from is not a
+        # server outcome we can reason about.
+        error_count = sum(1 for r in api if r[3] >= 500)
 
         return {
             "request_metrics": {
-                **common,
-                "error_rate": round(error_count / n, 4),
-                "duration_p50_ms": round(durations_sorted[n // 2], 2),
-                "duration_p95_ms": round(durations_sorted[int(n * 0.95)], 2) if n > 1 else round(durations_sorted[0], 2),
-                "duration_p99_ms": round(durations_sorted[int(n * 0.99)], 2) if n > 1 else round(durations_sorted[0], 2),
+                "window_seconds": window_seconds,
+                "total_requests": len(recent),
+                "client_disconnects": len(disconnects),
+                "transfer_requests": len(transfers),
+                "error_rate": round(error_count / len(api), 4) if api else 0.0,
+                "duration_p50_ms": api_p50,
+                "duration_p95_ms": api_p95,
+                "duration_p99_ms": api_p99,
+                "transfer_p50_ms": tx_p50,
+                "transfer_p95_ms": tx_p95,
+                "avg_queries_per_request": round(sum(query_counts) / len(recent), 2),
+                "max_queries_per_request": max(query_counts) if query_counts else 0,
+                "top_routes": [{"route": r, "count": c} for r, c in top_routes],
             },
             "background_gauges": gauges,
         }

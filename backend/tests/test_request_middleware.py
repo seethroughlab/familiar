@@ -1,29 +1,31 @@
 """Tests for `RequestIDMiddleware` — specifically, the requests it cannot see.
 
 `main.py` awaited the downstream app with no `try`/`finally`, so the logging and
-`record_request` calls that follow it were skipped whenever the request did not return
-normally. Two ways that happens:
+`record_request` calls that follow it were skipped whenever an exception propagated.
+Starlette hoists the `@app.exception_handler(Exception)` catch-all into
+`ServerErrorMiddleware`, which sits *outside* `RequestIDMiddleware` — so unhandled
+exceptions went past it and were never recorded at all. The request log showed only
+successes. That is not a cosmetic gap: while diagnosing issue #13 I read "586 stream
+requests, zero non-2xx" off those logs and concluded the server was healthy. The logs
+could not have shown otherwise.
 
-- **Client disconnect.** Uvicorn raises `CancelledError` into the task when the socket
-  goes away. Every aborted audio stream — every skipped track — took this path.
-- **Unhandled exception.** Starlette hoists the `@app.exception_handler(Exception)`
-  catch-all into `ServerErrorMiddleware`, which sits *outside* `RequestIDMiddleware`, so
-  the exception propagates through the middleware before anything catches it.
+**A client disconnect does not take that path**, which is worth being explicit about
+because I first assumed it did. Uvicorn's `send` is:
 
-The result was that `metrics_summary` and the request log recorded only successes. That
-is not a cosmetic gap: while diagnosing issue #13 I read "586 stream requests, zero
-non-2xx" off those logs and concluded the server was healthy. The logs could not have
-shown otherwise. **These are the regression tests for that wrong conclusion.**
+    if self.disconnected:
+        return
 
-They drive the ASGI callable directly rather than through `TestClient`, because
-`TestClient` completes every request it starts — it cannot abort mid-body, which is the
-case that matters most.
+— a silent no-op. It raises nothing. `FileResponse` reads on to EOF, sending into a
+closed socket, and returns normally. So an aborted stream *is* recorded, as a clean 200
+whose duration is however long the listener stayed before skipping.
 
-The trap in the obvious fix has its own tests below (`TestDoesNotPoisonMetrics`): a bare
-`try`/`finally` would record an aborted 40-second stream as a *successful* 206 that took
-40000 ms, because `status_code` is set as soon as the response *starts*. That inflates
-p95 with what is really listening time and reports failures as successes — worse than
-recording nothing, since #15 depends on that p95 being trustworthy.
+That turned out to be the more damaging problem, and it is measured, not theorised: one
+aborted stream on the NAS logged `duration_ms: 1424.56`, and the p95 for the whole
+five-minute window was `1424.56`. **A single skipped track defined p95 for every other
+request.** Hence the transfer/API split in `TestTransfersDoNotDefinePercentiles`.
+
+These drive the ASGI callable directly rather than through `TestClient`, which completes
+every request it starts and so cannot express any of these cases.
 """
 
 import asyncio
@@ -41,7 +43,7 @@ class RecordingCollector(MetricsCollector):
         super().__init__()
         self.calls: list[dict] = []
 
-    def record_request(self, method, route, status_code, duration_ms, query_count=0, outcome="completed"):  # type: ignore[override]
+    def record_request(self, method, route, status_code, duration_ms, query_count=0, outcome="completed", transfer=False):  # type: ignore[override]
         self.calls.append({
             "method": method,
             "route": route,
@@ -49,8 +51,11 @@ class RecordingCollector(MetricsCollector):
             "duration_ms": duration_ms,
             "query_count": query_count,
             "outcome": outcome,
+            "transfer": transfer,
         })
-        super().record_request(method, route, status_code, duration_ms, query_count, outcome=outcome)
+        super().record_request(
+            method, route, status_code, duration_ms, query_count, outcome=outcome, transfer=transfer
+        )
 
 
 @pytest.fixture()
@@ -107,8 +112,22 @@ async def drive(downstream, path="/api/v1/thing"):
 # --- downstream apps ------------------------------------------------------------------
 
 async def ok_app(scope, receive, send):
-    await send({"type": "http.response.start", "status": 200, "headers": []})
+    await send({
+        "type": "http.response.start",
+        "status": 200,
+        "headers": [(b"content-type", b"application/json")],
+    })
     await send({"type": "http.response.body", "body": b"fine"})
+
+
+async def audio_app(scope, receive, send):
+    """What the client actually walks away from."""
+    await send({
+        "type": "http.response.start",
+        "status": 206,
+        "headers": [(b"content-type", b"audio/mpeg")],
+    })
+    await send({"type": "http.response.body", "body": b"...."})
 
 
 async def raising_app(scope, receive, send):
@@ -196,38 +215,109 @@ class TestUnhandledException:
         assert len(collector.calls) == 1
 
 
-class TestDoesNotPoisonMetrics:
-    """A bare try/finally would be worse than the bug. These pin down why."""
+class TestTransferClassification:
+    async def test_audio_response_is_marked_as_a_transfer(self, collector):
+        await drive(audio_app)
+        assert collector.calls[0]["transfer"] is True
 
+    async def test_json_response_is_not(self, collector):
+        await drive(ok_app)
+        assert collector.calls[0]["transfer"] is False
+
+    async def test_content_type_with_parameters_still_matches(self, collector):
+        async def app(scope, receive, send):
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"Content-Type", b"audio/mpeg; charset=binary")],
+            })
+            await send({"type": "http.response.body", "body": b""})
+
+        await drive(app)
+        assert collector.calls[0]["transfer"] is True
+
+    async def test_response_with_no_content_type_is_not_a_transfer(self, collector):
+        async def app(scope, receive, send):
+            await send({"type": "http.response.start", "status": 204, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+
+        await drive(app)
+        assert collector.calls[0]["transfer"] is False
+
+
+class TestTransfersDoNotDefinePercentiles:
+    """Measured, not theorised.
+
+    One stream aborted after ~1.4s on the NAS logged `duration_ms: 1424.56`, and the
+    p95 for the entire five-minute window came back as `1424.56` — a single skipped
+    track setting the latency figure for every other request in the window. Since #15
+    is judged on that p95 during a library sync, it has to mean something first.
+    """
+
+    def test_one_aborted_stream_does_not_set_p95(self):
+        c = MetricsCollector()
+        for _ in range(9):
+            c.record_request("GET", "/api/v1/thing", 200, 50.0)
+        # A listener who played 40s of a track and skipped: a clean 200, 40s elapsed.
+        c.record_request("GET", "/api/v1/tracks/{id}/stream", 200, 40000.0, transfer=True)
+
+        req = c.get_snapshot()["request_metrics"]
+
+        assert req["duration_p95_ms"] < 100, "listening time is not API latency"
+        assert req["transfer_p95_ms"] == 40000.0, "but it is still reported"
+        assert req["transfer_requests"] == 1
+
+    def test_transfers_do_not_move_the_error_rate(self):
+        c = MetricsCollector()
+        for _ in range(9):
+            c.record_request("GET", "/api/v1/thing", 200, 10.0)
+        c.record_request("GET", "/api/v1/tracks/{id}/stream", 200, 9000.0, transfer=True)
+
+        assert c.get_snapshot()["request_metrics"]["error_rate"] == 0.0
+
+    def test_a_window_of_only_transfers_reports_no_api_latency(self):
+        c = MetricsCollector()
+        c.record_request("GET", "/api/v1/tracks/{id}/stream", 200, 9000.0, transfer=True)
+
+        req = c.get_snapshot()["request_metrics"]
+        assert req["duration_p95_ms"] == 0.0
+        assert req["error_rate"] == 0.0
+        assert req["transfer_requests"] == 1
+        assert req["total_requests"] == 1
+
+    def test_transfers_still_appear_in_top_routes(self):
+        """Excluded from the percentiles, not hidden."""
+        c = MetricsCollector()
+        c.record_request("GET", "/api/v1/tracks/{id}/stream", 200, 9000.0, transfer=True)
+
+        routes = [r["route"] for r in c.get_snapshot()["request_metrics"]["top_routes"]]
+        assert "/api/v1/tracks/{id}/stream" in routes
+
+
+class TestDoesNotPoisonMetrics:
     def test_disconnects_are_excluded_from_percentiles(self):
         c = MetricsCollector()
         for _ in range(9):
             c.record_request("GET", "/api/v1/thing", 200, 50.0)
-        # One aborted stream that the user listened to for 40 seconds.
-        c.record_request("GET", "/api/v1/stream", 206, 40000.0, outcome="client_disconnect")
+        c.record_request("GET", "/api/v1/thing", 500, 40000.0, outcome="client_disconnect")
 
-        req = c.get_snapshot()["request_metrics"]
-
-        assert req["duration_p95_ms"] < 100, (
-            "a 40s listen recorded as latency would put p95 at 40000ms and make the "
-            "measurement for #15 meaningless"
-        )
+        assert c.get_snapshot()["request_metrics"]["duration_p95_ms"] < 100
 
     def test_disconnects_do_not_count_as_errors(self):
         """Skipping a track is normal use, not a server error."""
         c = MetricsCollector()
         for _ in range(9):
             c.record_request("GET", "/api/v1/thing", 200, 10.0)
-        c.record_request("GET", "/api/v1/stream", 206, 5000.0, outcome="client_disconnect")
+        c.record_request("GET", "/api/v1/thing", 500, 5000.0, outcome="client_disconnect")
 
         assert c.get_snapshot()["request_metrics"]["error_rate"] == 0.0
 
     def test_disconnects_are_counted_separately(self):
-        """Excluded from the error rate, but not thrown away — this is the #13 signal."""
+        """Excluded from the error rate, but not thrown away."""
         c = MetricsCollector()
         c.record_request("GET", "/api/v1/thing", 200, 10.0)
-        c.record_request("GET", "/api/v1/stream", 206, 5000.0, outcome="client_disconnect")
-        c.record_request("GET", "/api/v1/stream", 206, 5000.0, outcome="client_disconnect")
+        c.record_request("GET", "/api/v1/thing", 500, 5000.0, outcome="client_disconnect")
+        c.record_request("GET", "/api/v1/thing", 500, 5000.0, outcome="client_disconnect")
 
         req = c.get_snapshot()["request_metrics"]
         assert req["client_disconnects"] == 2
@@ -243,18 +333,22 @@ class TestDoesNotPoisonMetrics:
 
     def test_snapshot_with_only_disconnects_does_not_divide_by_zero(self):
         c = MetricsCollector()
-        c.record_request("GET", "/api/v1/stream", 206, 5000.0, outcome="client_disconnect")
+        c.record_request("GET", "/api/v1/thing", 500, 5000.0, outcome="client_disconnect")
 
         req = c.get_snapshot()["request_metrics"]
         assert req["error_rate"] == 0.0
         assert req["duration_p95_ms"] == 0.0
         assert req["client_disconnects"] == 1
 
-    def test_outcome_defaults_to_completed(self):
+    def test_keyword_args_default_to_todays_behaviour(self):
         """Existing call sites pass five positional args and must keep working."""
         c = MetricsCollector()
         c.record_request("GET", "/api/v1/thing", 200, 10.0, 3)
-        assert c.get_snapshot()["request_metrics"]["total_requests"] == 1
+
+        req = c.get_snapshot()["request_metrics"]
+        assert req["total_requests"] == 1
+        assert req["duration_p95_ms"] == 10.0  # counted as an API request
+        assert req["transfer_requests"] == 0
 
 
 class TestErrorResponsesCarryTheRequestID:
