@@ -25,7 +25,7 @@ vi.mock('../../stores/connectivityStore', () => ({
   ),
 }));
 
-import { radioController, INSERT_EVERY_N_TRACKS } from '../radio/radioController';
+import { radioController, INSERT_EVERY_N_TRACKS, INSERT_OFFSET } from '../radio/radioController';
 import { usePlayerStore } from '../playerStore';
 import { useRadioStore } from '../../stores/radioStore';
 import type { Track } from '../../types';
@@ -150,6 +150,57 @@ describe('insertion', () => {
     seedQueue(['a'], 0);
     await radioController.suggest();
     expect(usePlayerStore.getState().queue.map((i) => i.track.id)).toEqual(['a', 's1']);
+  });
+});
+
+describe('shuffle', () => {
+  // Found in use, not by these tests: with shuffle on, both playback and QueueView follow
+  // shuffleOrder rather than the queue array. addToQueue appends to that order unless
+  // given a position, so the suggestion landed last in play order — at index ~1719 of a
+  // favourites queue. Invisible at the bottom of a virtualised list, and never reached.
+  function seedShuffled(ids: string[], shuffleIndex: number) {
+    seedQueue(ids, 0);
+    usePlayerStore.setState({
+      shuffle: true,
+      shuffleOrder: ids.map((_, i) => i),
+      shuffleIndex,
+      currentTrack: track(ids[shuffleIndex]),
+      queueIndex: shuffleIndex,
+    });
+  }
+
+  it('places the suggestion just ahead in play order, not at the end', async () => {
+    seedShuffled(['a', 'b', 'c', 'd', 'e', 'f'], 1);
+
+    await radioController.suggest();
+
+    const { queue, shuffleOrder } = usePlayerStore.getState();
+    const playOrderIds = shuffleOrder.map((qi) => queue[qi]?.track.id);
+    const position = playOrderIds.indexOf('s1');
+
+    expect(position).toBeGreaterThan(-1);
+    expect(position).toBeLessThan(shuffleOrder.length - 1); // not dumped at the end
+    expect(position).toBe(1 + INSERT_OFFSET);
+  });
+
+  it('does not displace the next track in play order', async () => {
+    seedShuffled(['a', 'b', 'c', 'd', 'e', 'f'], 1);
+    const { queue: before, shuffleOrder: orderBefore } = usePlayerStore.getState();
+    const nextUpId = before[orderBefore[2]].track.id;
+
+    await radioController.suggest();
+
+    const { queue, shuffleOrder } = usePlayerStore.getState();
+    expect(queue[shuffleOrder[2]].track.id).toBe(nextUpId);
+  });
+
+  it('still inserts sensibly with shuffle off', async () => {
+    seedQueue(['a', 'b', 'c', 'd'], 1);
+    usePlayerStore.setState({ shuffle: false, shuffleOrder: [], shuffleIndex: -1 });
+
+    await radioController.suggest();
+
+    expect(usePlayerStore.getState().queue.map((i) => i.track.id)[3]).toBe('s1');
   });
 });
 

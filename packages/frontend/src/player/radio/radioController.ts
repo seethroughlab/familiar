@@ -31,7 +31,7 @@ const RECENT_WINDOW = 10;
  * 2 leaves the listener's own next choice intact — a suggestion that displaces the very
  * next track reads as the app overriding them, which is the opposite of the intent.
  */
-const INSERT_OFFSET = 2;
+export const INSERT_OFFSET = 2;
 
 class RadioController {
   private unsubscribe: (() => void) | null = null;
@@ -120,7 +120,16 @@ class RadioController {
       // Re-read: the queue may have moved while the request was in flight.
       const fresh = usePlayerStore.getState();
       const insertAt = Math.min(fresh.queueIndex + INSERT_OFFSET, fresh.queue.length);
-      fresh.addToQueue(pick.track, insertAt, undefined, { suggested: true });
+
+      // Under shuffle, both playback and the queue view follow `shuffleOrder`, not the
+      // queue array. Without an explicit position `addToQueue` appends to the end of that
+      // order, so a suggestion inserted "two ahead" in queue terms lands last in play
+      // order — invisible at the bottom of the list and never actually reached.
+      const shuffleInsertPosition = fresh.shuffle && fresh.shuffleOrder.length > 0
+        ? Math.min(fresh.shuffleIndex + INSERT_OFFSET, fresh.shuffleOrder.length)
+        : undefined;
+
+      fresh.addToQueue(pick.track, insertAt, shuffleInsertPosition, { suggested: true });
 
       this.inserted.add(pick.track.id);
       this.tracksSinceInsert = 0;
