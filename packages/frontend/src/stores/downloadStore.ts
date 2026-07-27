@@ -4,7 +4,6 @@
  */
 import { create } from 'zustand';
 import * as offlineService from '../services/offlineService';
-import { DownloadPausedError, waitForPlaybackIdle } from '../services/playbackGate';
 import { db, type PersistedDownloadJob } from '../db';
 import { showSuccess, showError, showWarning } from './toastStore';
 import { createLogger } from '../utils/logger';
@@ -25,6 +24,9 @@ export interface DownloadJob {
   status: DownloadJobStatus;
   startedAt: Date;
   error?: string;
+  // Deliberately slowed to leave bandwidth for playback (see services/playbackGate).
+  // Surfaced so a throttled download doesn't look like a stalled one.
+  throttled?: boolean;
 }
 
 interface DownloadState {
@@ -347,12 +349,6 @@ async function processNextJob() {
       break;
     }
 
-    // Downloads saturate the link, so hold off entirely while audio is playing —
-    // otherwise a large transfer starves the playing track and it dies with
-    // PIPELINE_ERROR_READ (#13). Resumes once playback has been stopped a few seconds.
-    await waitForPlaybackIdle(abortSignal);
-    if (abortSignal.aborted) break;
-
     const trackId = tracksToDownload[i];
 
     updateJob(nextJob.id, {
@@ -362,10 +358,20 @@ async function processNextJob() {
 
     try {
       log.info('Downloading track', i + 1, 'of', tracksToDownload.length, ':', trackId);
-      await offlineService.downloadTrackForOffline(trackId, (progress) => {
-        // Use throttled update to avoid state update storms
-        throttledProgressUpdate(nextJob.id, progress.percentage);
-      });
+      await offlineService.downloadTrackForOffline(
+        trackId,
+        (progress) => {
+          // Use throttled update to avoid state update storms
+          throttledProgressUpdate(nextJob.id, progress.percentage);
+        },
+        // Surfaced in the UI so a deliberately slowed download doesn't read as a stall.
+        (throttling) => {
+          const job = useDownloadStore.getState().jobs.get(nextJob.id);
+          if (job && job.throttled !== throttling) {
+            updateJob(nextJob.id, { throttled: throttling });
+          }
+        }
+      );
 
       succeeded++;
       log.info('Track completed:', trackId);
@@ -378,13 +384,6 @@ async function processNextJob() {
         });
       }
     } catch (error) {
-      if (error instanceof DownloadPausedError) {
-        // Not a failure: playback claimed the bandwidth mid-transfer. The bytes so far
-        // are saved as a partial, so retry this same track once playback settles.
-        log.info('Download yielded to playback, will resume:', trackId);
-        i--;
-        continue;
-      }
       if (!abortSignal.aborted) {
         log.error(`Failed to download track ${trackId}:`, error);
         failed++;
