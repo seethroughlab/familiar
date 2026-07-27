@@ -41,7 +41,7 @@ usePlayerStoreFacade.setState = (partial: Partial<PlayerState>) => {
   const playbackKeys = new Set<string>([
     'currentTrack', 'isPlaying', 'currentTime', 'duration', 'volume',
     'shuffle', 'repeat', 'consume', 'crossfadeState', 'nextTrackPreloaded',
-    'isLoadingAudio', 'isHydrated', '_circuitBreakerTimestamps',
+    'isLoadingAudio', 'isHydrated', '_circuitBreakerTimestamps', '_advanceReason',
   ]);
   const playbackPartial: Record<string, unknown> = {};
   const queuePartial: Record<string, unknown> = {};

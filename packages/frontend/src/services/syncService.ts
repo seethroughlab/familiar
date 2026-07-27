@@ -4,13 +4,15 @@
  */
 import { db, isIndexedDBAvailable, type PendingAction } from '../db';
 import { lastfmApi } from '../api/integrations';
-import { favoritesApi } from '../api/profiles';
+import { favoritesApi, playTrackingApi } from '../api/profiles';
+import type { ListenEventBody } from '../api/profiles';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { getSelectedProfileId } from './profileService';
 import { createLogger } from '../utils/logger';
 const log = createLogger('SyncService');
 
-type ActionType = 'scrobble' | 'now_playing' | 'favorite_toggle';
+// Mirrored by `PendingAction.type` in ../db — keep both in step.
+type ActionType = 'scrobble' | 'now_playing' | 'favorite_toggle' | 'listen_event';
 
 /**
  * Queue an action to be performed when online.
@@ -138,6 +140,9 @@ async function executeAction(action: PendingAction): Promise<void> {
     case 'favorite_toggle':
       await executeFavoriteToggle(action.profileId, action.payload as FavoriteTogglePayload);
       break;
+    case 'listen_event':
+      await executeListenEvent(action.profileId, action.payload as ListenEventPayload);
+      break;
     default:
       log.warn(`Unknown action type: ${action.type}`);
   }
@@ -156,6 +161,15 @@ interface FavoriteTogglePayload {
   trackId: string;
 }
 
+/** A listening event that could not be delivered when it happened (ADR-0004). */
+interface ListenEventPayload {
+  trackId: string;
+  kind: 'played' | 'skipped' | 'rejected';
+  body: ListenEventBody;
+  /** Only meaningful for `played`, which also bumps the play aggregate. */
+  durationSeconds?: number;
+}
+
 async function executeScrobble(_profileId: string, payload: ScrobblePayload): Promise<void> {
   await lastfmApi.scrobble(payload.trackId, parseInt(payload.timestamp));
 }
@@ -166,6 +180,56 @@ async function executeNowPlaying(_profileId: string, payload: NowPlayingPayload)
 
 async function executeFavoriteToggle(_profileId: string, payload: FavoriteTogglePayload): Promise<void> {
   await favoritesApi.toggle(payload.trackId);
+}
+
+async function executeListenEvent(_profileId: string, payload: ListenEventPayload): Promise<void> {
+  const { trackId, kind, body } = payload;
+  if (kind === 'played') {
+    await playTrackingApi.recordPlay(trackId, payload.durationSeconds, {
+      track_duration: body.track_duration,
+      completion_ratio: body.completion_ratio,
+      context: body.context,
+      source_track_id: body.source_track_id,
+    });
+    return;
+  }
+  if (kind === 'rejected') {
+    await playTrackingApi.recordRejection(trackId, body);
+    return;
+  }
+  await playTrackingApi.recordSkip(trackId, body);
+}
+
+/**
+ * Send a listening event, falling back to the outbox if it cannot be delivered.
+ *
+ * Unlike `useFavorites`, which only pre-checks `isOffline`, this also queues on a failed
+ * request. A 500 or a connection dropped mid-flight would otherwise discard taste data
+ * silently — and offline listening, where skipping is most frequent, is exactly when
+ * delivery is least reliable (ADR-0004 point 7).
+ *
+ * Never throws: a failed listening event must not disturb playback.
+ */
+export async function deliverListenEvent(
+  trackId: string,
+  kind: 'played' | 'skipped' | 'rejected',
+  body: ListenEventBody = {},
+  durationSeconds?: number,
+): Promise<void> {
+  const payload: ListenEventPayload = { trackId, kind, body, durationSeconds };
+
+  // Already offline — skip the request that is certain to fail.
+  if (useConnectivityStore.getState().offlineModeActive) {
+    await queueAction('listen_event', payload);
+    return;
+  }
+
+  try {
+    await executeListenEvent('', payload);
+  } catch (error) {
+    log.warn('Listening event failed, queueing for retry:', error);
+    await queueAction('listen_event', payload);
+  }
 }
 
 /**

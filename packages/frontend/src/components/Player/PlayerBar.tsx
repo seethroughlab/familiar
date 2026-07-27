@@ -321,7 +321,7 @@ export function PlayerBar({
             </div>
             <button
               data-testid="prev-track"
-              onClick={playPrevious}
+              onClick={() => playPrevious()}
               className={`p-2 rounded-full transition-colors ${hasTrack ? 'hover:bg-zinc-800' : 'text-zinc-600'}`}
               aria-label="Previous track"
               disabled={!hasTrack}
@@ -345,7 +345,7 @@ export function PlayerBar({
             </button>
             <button
               data-testid="next-track"
-              onClick={playNext}
+              onClick={() => playNext()}
               className={`p-2 rounded-full transition-colors ${hasTrack ? 'hover:bg-zinc-800' : 'text-zinc-600'}`}
               aria-label="Next track"
               disabled={!hasTrack}

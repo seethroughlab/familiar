@@ -72,7 +72,10 @@ export interface OfflineArtwork {
 export interface PendingAction {
   id?: number; // Auto-increment
   profileId: string; // Profile that queued this action
-  type: 'scrobble' | 'now_playing' | 'favorite_toggle';
+  // NOTE: mirrored by `ActionType` in services/syncService.ts — keep both in step.
+  // Adding a value needs no Dexie version bump: `type` is indexed, but an IndexedDB
+  // index constrains the key path, not the value domain, and `payload` is unindexed.
+  type: 'scrobble' | 'now_playing' | 'favorite_toggle' | 'listen_event';
   payload: unknown;
   createdAt: Date;
   retries: number;
