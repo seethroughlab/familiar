@@ -128,6 +128,14 @@ export function usePlayTracking() {
       lastTimeRef.current = 0;
     }
 
+    // Seed from the incoming track's own metadata. The accumulate effect refines this
+    // with the engine's reading once playback starts — but a track that never plays
+    // (a failed load, say) would otherwise report the PREVIOUS track's duration, since
+    // the accumulate effect early-returns before updating the ref.
+    if (previousId !== trackId) {
+      lastDurationRef.current = currentTrack?.duration_seconds ?? 0;
+    }
+
     lastTrackIdRef.current = trackId;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on track change
   }, [currentTrack?.id]);
