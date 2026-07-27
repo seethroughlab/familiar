@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ListMusic, ListX, GripVertical, X, Shuffle, Trash2, Music, Plus } from 'lucide-react';
+import { ListMusic, ListX, GripVertical, X, Shuffle, Trash2, Music, Plus, Check, ThumbsDown, Sparkles } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
+import { deliverListenEvent } from '../../services/syncService';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { useThemeStore } from '../../stores/themeStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -34,6 +35,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   );
   const clearQueue = usePlayerStore((s) => s.clearQueue);
   const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
+  const acceptSuggestion = usePlayerStore((s) => s.acceptSuggestion);
   const exitLazyMode = usePlayerStore((s) => s.exitLazyMode);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const toggleConsume = usePlayerStore((s) => s.toggleConsume);
@@ -198,6 +200,23 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   }, [jumpToQueueIndex]);
 
   // Handle removing a track from queue
+  /** Keep a suggestion: drop the marker so it stops offering accept/reject. */
+  const handleAcceptSuggestion = useCallback((queueId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    acceptSuggestion(queueId);
+  }, [acceptSuggestion]);
+
+  /**
+   * Reject a suggestion: remove it and report it, so the negative term in the ranker
+   * has something to learn from. Rejection is weighted more heavily than a skip because
+   * it is a stated judgement rather than an ambiguous one.
+   */
+  const handleRejectSuggestion = useCallback((queueId: string, trackId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    void deliverListenEvent(trackId, 'rejected', { context: 'radio' });
+    removeFromQueue(queueId);
+  }, [removeFromQueue]);
+
   const handleRemoveTrack = useCallback((queueId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     removeFromQueue(queueId);
@@ -236,6 +255,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
         .map((queueIdx) => ({
           track: queue[queueIdx]?.track,
           queueId: queue[queueIdx]?.queueId,
+          suggested: queue[queueIdx]?.suggested,
           isCurrent: queueIdx === queueIndex,
           actualQueueIndex: queueIdx,
         }))
@@ -243,6 +263,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
     : queue.map((item, index) => ({
         track: item.track,
         queueId: item.queueId,
+        suggested: item.suggested,
         isCurrent: index === queueIndex,
         actualQueueIndex: index,
       }));
@@ -364,7 +385,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const displayIndex = virtualRow.index;
               const item = displayTracks[displayIndex];
-              const { track, queueId, isCurrent, actualQueueIndex } = item;
+              const { track, queueId, suggested, isCurrent, actualQueueIndex } = item;
               const isDragged = draggedIndex === displayIndex;
               const isReorderTarget = dropTargetIndex === displayIndex && draggedIndex !== null;
               const isExtDropTarget = externalDropTargetIndex === displayIndex;
@@ -426,7 +447,15 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
 
                   {/* Track info */}
                   <div className="flex-1 min-w-0">
-                    <div className={`font-medium truncate ${isCurrent ? 'text-green-500' : ''}`}>
+                    <div className={`font-medium truncate flex items-center gap-1.5 ${isCurrent ? 'text-green-500' : ''}`}>
+                      {/* A suggestion the listener cannot identify as one cannot be
+                          evaluated by them or learned from (ADR-0005 point 7). */}
+                      {suggested && (
+                        <Sparkles
+                          className="w-3.5 h-3.5 flex-shrink-0 text-amber-400"
+                          aria-label="Suggested for you"
+                        />
+                      )}
                       {track.title || 'Unknown Title'}
                     </div>
                     <div className="text-sm text-zinc-500 truncate">
@@ -441,6 +470,29 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
                   <div className="text-sm text-zinc-500 flex-shrink-0">
                     {formatDuration(track.duration_seconds)}
                   </div>
+
+                  {/* Suggestion affordances — accept keeps it and drops the marker,
+                      reject removes it and reports a PlayEvent so the ranker learns
+                      (ADR-0004). Only a suggestion the listener can identify as one can
+                      be judged by them. */}
+                  {suggested && (
+                    <>
+                      <button
+                        onClick={(e) => handleAcceptSuggestion(queueId, e)}
+                        className="p-1.5 rounded-lg hover:bg-zinc-700/50"
+                        title="Keep this suggestion"
+                      >
+                        <Check className="w-4 h-4 text-zinc-400 hover:text-green-400" />
+                      </button>
+                      <button
+                        onClick={(e) => handleRejectSuggestion(queueId, track.id, e)}
+                        className="p-1.5 rounded-lg hover:bg-zinc-700/50"
+                        title="Not for me — remove and learn from it"
+                      >
+                        <ThumbsDown className="w-4 h-4 text-zinc-400 hover:text-red-400" />
+                      </button>
+                    </>
+                  )}
 
                   {/* Remove button */}
                   <button
