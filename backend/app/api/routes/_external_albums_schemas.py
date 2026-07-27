@@ -5,7 +5,6 @@ Used by:
 - ``library_discover.py`` for listening-profile recommendations (#2 in Discover)
 """
 
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -26,7 +25,8 @@ class ExternalAlbumResponse(BaseModel):
     local_album_match: bool
     dismissed: bool
     discovered_at: str
-    purchase_links: dict[str, Any]
+    # {store_name: {"url": ..., "label": ...}} from generate_release_search_urls()
+    purchase_links: dict[str, dict[str, str]]
 
 
 class ExternalAlbumsResponse(BaseModel):

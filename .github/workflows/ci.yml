@@ -187,6 +187,13 @@ jobs:
       - name: Lint profile contracts
         run: uv run python scripts/lint_profile_contracts.py
 
+      # Imports app.main, so it needs `uv sync --extra dev` above — it cannot move to
+      # the migration-lint job, which deliberately runs stdlib-only scripts. This job
+      # also runs on a bare checkout with no backend/static/, which matters: a built
+      # frontend adds SPA routes and changes the schema.
+      - name: Lint OpenAPI schema
+        run: uv run python scripts/lint_openapi.py
+
   backend-test-contract:
     name: Backend Test (Contract)
     runs-on: [self-hosted, Linux]

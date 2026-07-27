@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, UploadFile
@@ -61,7 +62,19 @@ class LyricsResponse(BaseModel):
     source: str
 
 
-@router.get("/{track_id}/stream")
+@router.get(
+    "/{track_id}/stream",
+    # Declare the real media type. Without this the schema claims application/json and a
+    # generated client would try to JSON-decode audio (ADR-0007). This endpoint is
+    # hand-written per platform; the schema only needs to describe it honestly.
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"audio/*": {}},
+            "description": "Audio stream. Supports HTTP range requests for seeking.",
+        }
+    },
+)
 async def stream_track(
     db: DbSession,
     track_id: UUID,
@@ -147,11 +160,20 @@ async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -
     return await stream_file(cached, request, "audio/flac")
 
 
-@router.post("/{track_id}/report-playback-error")
+class PlaybackErrorResponse(BaseModel):
+    """Outcome of reporting a playback error for a track."""
+
+    # 'retry' means a stale transcode was cleared and replaying may work;
+    # 'skip' means nothing could be repaired.
+    status: Literal["retry", "skip"]
+    reason: Literal["cache_cleared", "no_cache"]
+
+
+@router.post("/{track_id}/report-playback-error", response_model=PlaybackErrorResponse)
 async def report_playback_error(
     db: DbSession,
     track_id: UUID,
-) -> dict:
+) -> PlaybackErrorResponse:
     """Report a client-side playback/decode error for a track.
 
     Auto-repair has been removed. Returns a skip status.
@@ -179,13 +201,17 @@ async def report_playback_error(
 
     if cache_cleared:
         logger.info("Playback error reported for track %s (%s) — cache cleared, retry may help", track.title, file_path.name)
-        return {"status": "retry", "reason": "cache_cleared"}
+        return PlaybackErrorResponse(status="retry", reason="cache_cleared")
 
     logger.info("Playback error reported for track %s (%s) — skipped", track.title, file_path.name)
-    return {"status": "skip", "reason": "no_cache"}
+    return PlaybackErrorResponse(status="skip", reason="no_cache")
 
 
-@router.get("/{track_id}/artwork")
+@router.get(
+    "/{track_id}/artwork",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"image/*": {}}, "description": "Album artwork image."}},
+)
 async def get_track_artwork(
     db: DbSession,
     track_id: UUID,

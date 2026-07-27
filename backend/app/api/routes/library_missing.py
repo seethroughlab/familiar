@@ -43,12 +43,21 @@ class RelocateRequest(BaseModel):
     search_path: str
 
 
+class RelocatedTrack(BaseModel):
+    """A track whose file was found at a new path."""
+
+    id: str
+    title: str | None = None
+    old_path: str
+    new_path: str
+
+
 class RelocateResult(BaseModel):
     """Result of batch relocation."""
 
     found: int
     not_found: int
-    relocated_tracks: list[dict]
+    relocated_tracks: list[RelocatedTrack]
 
 
 class LocateRequest(BaseModel):
@@ -182,15 +191,18 @@ async def relocate_missing_tracks(
     for filename, track in missing_tracks.items():
         if filename in found_files:
             new_path = found_files[filename]
+            # Capture before mutating — reading track.file_path afterwards reported the
+            # new path as `old_path`, so both fields came back identical.
+            old_path = track.file_path
             track.file_path = str(new_path)
             track.status = TrackStatus.ACTIVE
             track.missing_since = None
-            relocated.append({
-                "id": str(track.id),
-                "title": track.title,
-                "old_path": track.file_path,
-                "new_path": str(new_path),
-            })
+            relocated.append(RelocatedTrack(
+                id=str(track.id),
+                title=track.title,
+                old_path=old_path,
+                new_path=str(new_path),
+            ))
 
     await db.commit()
 
