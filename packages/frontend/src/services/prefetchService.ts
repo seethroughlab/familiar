@@ -10,6 +10,7 @@
 import { usePlayerStore } from '../player/playerStore';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { isTrackOffline } from './offlineService';
+import { DownloadThrottle } from './playbackGate';
 import { getApiUrl } from '../api/base';
 import { isNativeApp } from '../utils/platform';
 import { createLogger } from '../utils/logger';
@@ -184,6 +185,50 @@ class PrefetchService {
   }
 
   /**
+   * Read a response body while leaving bandwidth for the track that is playing.
+   *
+   * `response.arrayBuffer()` pulls the whole file as fast as the link allows, which is
+   * how the prefetcher — the thing that exists to make playback smooth — became the
+   * thing breaking it. Measured: 10-24 MB prefetches saturating a ~850 KB/s link while
+   * the playing track needed 40 KB/s, producing PIPELINE_ERROR_READ and tracks that
+   * ended a second after starting (issue #13).
+   *
+   * Chunked so `DownloadThrottle` can pace it, exactly as the offline download queue
+   * does. Falls back to `arrayBuffer()` if the body isn't a readable stream.
+   */
+  private async readThrottled(response: Response, signal: AbortSignal): Promise<ArrayBuffer> {
+    if (!response.body) return response.arrayBuffer();
+
+    const reader = response.body.getReader();
+    const throttle = new DownloadThrottle();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+      // No-op when nothing is playing, so an idle device prefetches at full speed.
+      await throttle.pace(signal);
+      if (signal.aborted) {
+        // Evicted mid-transfer. Release the connection rather than finishing a
+        // download whose result is already going to be discarded.
+        await reader.cancel().catch(() => {});
+        throw new DOMException('Prefetch aborted', 'AbortError');
+      }
+    }
+
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return out.buffer;
+  }
+
+  /**
    * Download a single track to the prefetch cache.
    */
   private async downloadTrack(trackId: string): Promise<void> {
@@ -200,9 +245,10 @@ class PrefetchService {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const data = await response.arrayBuffer();
+      const data = await this.readThrottled(response, abortController.signal);
 
-      // Check if we were evicted during download
+      // Check if we were evicted during download. A throttled transfer takes longer,
+      // which widens this window rather than narrowing it.
       if (!this.cache.has(trackId) || this.cache.get(trackId) !== entry) return;
 
       if (isNativeApp()) {
