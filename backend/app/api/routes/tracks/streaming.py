@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.api.deps import DbSession
@@ -67,19 +67,25 @@ class LyricsResponse(BaseModel):
     # Declare the real media type. Without this the schema claims application/json and a
     # generated client would try to JSON-decode audio (ADR-0007). This endpoint is
     # hand-written per platform; the schema only needs to describe it honestly.
-    response_class=StreamingResponse,
+    response_class=FileResponse,
     responses={
         200: {
             "content": {"audio/*": {}},
-            "description": "Audio stream. Supports HTTP range requests for seeking.",
-        }
+            "description": "Whole audio file.",
+        },
+        # The usual response during playback, and previously undeclared.
+        206: {
+            "content": {"audio/*": {}},
+            "description": "Partial content for a Range request (seeking, buffering).",
+        },
+        416: {"description": "Requested range is not satisfiable."},
     },
 )
 async def stream_track(
     db: DbSession,
     track_id: UUID,
     request: Request,
-) -> StreamingResponse:
+) -> FileResponse:
     """Stream audio file with range request support for seeking."""
     from sqlalchemy import select
 
@@ -114,7 +120,7 @@ async def stream_track(
     return await stream_file(file_path, request, mime_type)
 
 
-async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -> StreamingResponse:
+async def _get_or_transcode(track_id: UUID, file_path: Path, request: Request) -> FileResponse:
     """Transcode audio to FLAC (cached to disk), then serve via stream_file().
 
     Caching to disk ensures the served file has complete FLAC headers (streaminfo +
