@@ -83,7 +83,9 @@ export function DownloadsDetail({ onBack: onBackProp }: Props) {
       format: null,
       analysis_version: 0,
     }));
-    setQueueByTrackId(queueTracks, clickedTrack.id);
+    // 'other': the union has no member for Downloads. Still better than null — a null
+    // source loses the listening-event context ADR-0005's ranking reads.
+    setQueueByTrackId(queueTracks, clickedTrack.id, { type: 'other' });
   }, [searchedTracks, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId]);
 
   const handleRemoveFromDownloads = async (trackId: string, e: React.MouseEvent) => {

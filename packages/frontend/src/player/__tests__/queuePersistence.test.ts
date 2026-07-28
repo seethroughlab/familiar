@@ -27,15 +27,12 @@ import { createMockTrack, mockConnectivityState } from './testHelpers';
 // mockLoadPlayerState` does) hits the temporal dead zone. Vitest swallows that and falls
 // back to the real module, so the mocks appear to do nothing and every test fails for a
 // reason unrelated to what it is testing.
-const { mockLoadPlayerState, mockSave } = vi.hoisted(() => ({
+const { mockLoadPlayerState, mockSave, mockFetchTracksBatched } = vi.hoisted(() => ({
   mockLoadPlayerState: vi.fn(() => Promise.resolve(null as unknown)),
   mockSave: vi.fn(),
-}));
-
-vi.mock('../persistence', () => ({
-  debouncedSavePlayerState: mockSave,
-  loadPlayerState: mockLoadPlayerState,
-  fetchTracksBatched: (ids: string[]) =>
+  // A vi.fn, not an inline arrow, so a test can hold the promise open and interleave a
+  // listener action with hydration — which is the whole point of the race below.
+  mockFetchTracksBatched: vi.fn((ids: string[]) =>
     Promise.resolve(ids.map((id) => ({
       id,
       title: `Track ${id}`,
@@ -43,7 +40,14 @@ vi.mock('../persistence', () => ({
       album: 'Test Album',
       duration_seconds: 180,
       file_path: `/music/${id}.mp3`,
-    }))),
+    })))
+  ),
+}));
+
+vi.mock('../persistence', () => ({
+  debouncedSavePlayerState: mockSave,
+  loadPlayerState: mockLoadPlayerState,
+  fetchTracksBatched: mockFetchTracksBatched,
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }));
 
@@ -134,6 +138,9 @@ function resetStores() {
 beforeEach(() => {
   resetStores();
   mockSave.mockClear();
+  // Cleared, or `untilFetching()` resolves from a previous test's call and the interleaved
+  // action lands before hydration has even reached the phase under test.
+  mockFetchTracksBatched.mockClear();
   mockGetBatch.mockReset();
   mockGetBatch.mockImplementation((batchIds: string[]) =>
     Promise.resolve(batchIds.map((id) => createMockTrack(id)))
@@ -362,6 +369,93 @@ describe('the offline round trip', () => {
     expect(useQueueStore.getState().logicalIndex).toBe(-1);
     // Cleared in storage too, or the next reload thinks it is still filtered.
     expect(mockSave.mock.calls.at(-1)?.[0].logicalTrackIds).toBeNull();
+  });
+});
+
+/**
+ * The reload race.
+ *
+ * `hydrate()` refetches the whole queue, which takes seconds on a large one. Starting a
+ * track before that finished used to get overridden: hydration completed and resumed the
+ * pre-reload track, several seconds in. The existing `currentTrack?.id !== existingTrackId`
+ * check could not catch it — it exists to skip a redundant write, and a listener-chosen
+ * track differs from the persisted one by definition, so it let exactly the wrong case
+ * through.
+ */
+describe('a listener acting mid-hydration', () => {
+  /**
+   * Hold the queue fetch open so an action can be interleaved, as it is in reality.
+   *
+   * The promise is built up front rather than inside the mock implementation: the executor
+   * only runs when the mock is called, so capturing `resolve` from in there leaves it
+   * unset at the moment the test wants to release it.
+   */
+  function deferFetch() {
+    let release: (tracks: unknown[]) => void = () => {};
+    const pending = new Promise((resolve) => { release = resolve as (t: unknown[]) => void; });
+    mockFetchTracksBatched.mockImplementationOnce(() => pending as Promise<never[]>);
+    return () => release(ids(50).map((id) => createMockTrack(id)));
+  }
+
+  /** Resolves once hydration has reached the queue fetch, i.e. past the current-track phase. */
+  const untilFetching = () =>
+    vi.waitFor(() => expect(mockFetchTracksBatched).toHaveBeenCalled());
+
+  it('does not override the track they started', async () => {
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    const finishFetch = deferFetch();
+
+    const hydrating = useQueueStore.getState().hydrate();
+    await untilFetching();
+    // They pick something while the queue is still loading.
+    usePlaybackStore.setState({ currentTrack: createMockTrack('their-choice'), isPlaying: true });
+    finishFetch();
+    await hydrating;
+
+    expect(usePlaybackStore.getState().currentTrack?.id).toBe('their-choice');
+  });
+
+  it('leaves their queue alone too, not just the track', async () => {
+    // Their choice usually arrives via setQueue, so restoring the persisted queue would
+    // strand them: their track playing against somebody else's queue.
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    const finishFetch = deferFetch();
+
+    const hydrating = useQueueStore.getState().hydrate();
+    await untilFetching();
+    useQueueStore.setState({
+      queue: [{ track: createMockTrack('their-choice'), queueId: 'q0' }],
+      queueIndex: 0,
+    });
+    usePlaybackStore.setState({ currentTrack: createMockTrack('their-choice') });
+    finishFetch();
+    await hydrating;
+
+    expect(useQueueStore.getState().queue.map((i) => i.track.id)).toEqual(['their-choice']);
+  });
+
+  it('still hydrates normally when they do not act', async () => {
+    // The guard must not break the ordinary reload, which is the common case.
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+
+    await useQueueStore.getState().hydrate();
+
+    expect(useQueueStore.getState().queue).toHaveLength(50);
+    expect(usePlaybackStore.getState().currentTrack?.id).toBe('t0');
+  });
+
+  it('clears the hydrating flag even when it abandons', async () => {
+    // Left set, the queue view would show a loading state forever.
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    const finishFetch = deferFetch();
+
+    const hydrating = useQueueStore.getState().hydrate();
+    await untilFetching();
+    usePlaybackStore.setState({ currentTrack: createMockTrack('their-choice') });
+    finishFetch();
+    await hydrating;
+
+    expect(useQueueStore.getState().isQueueHydrating).toBe(false);
   });
 });
 

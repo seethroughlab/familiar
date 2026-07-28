@@ -341,7 +341,7 @@ export function ChatPanel({ pendingMessage, onPendingMessageConsumed, onClose }:
           analysis_version: 0,
         }));
         if (tracks.length > 0) {
-          setQueue(tracks, 0);
+          setQueue(tracks, 0, { type: 'ephemeral' });
         }
         break;
       }
