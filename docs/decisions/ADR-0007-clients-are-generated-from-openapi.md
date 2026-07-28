@@ -16,8 +16,37 @@ Implementation:
   typed; `SimilarArtistInfo` de-duplicated into `app/api/schemas/artists.py`. The lint was verified
   to fail by deliberately adding an untyped in-scope handler.
 - Phase 2 — generating the Swift client — is not started, and waits on `familiar-apple`.
-- Burn-down remaining: 50 out-of-scope untyped operations and one collision-mangled schema name
-  (`ImportPreviewResponse`, declared in two modules), allowlisted in the lint.
+- Burn-down remaining: 50 untyped operations, all outside the generated surface, allowlisted in the
+  lint. The mangled-schema allowlist is now empty — see phase 1.5.
+- Phase 1.5 — the schema was made to describe the *contract*, not just response bodies, on branch
+  `feat/adr-0007-schema-contract`. Phase 1 had hardened bodies and stopped; three things a
+  generated client needs were still undescribed, and each would have made it wrong on its first
+  request:
+  - **The profile header did not appear in the schema at all.** `deps.py` reads `X-Profile-ID` off
+    the raw request, and a search for `Header(` across `app/api/` returned nothing, so FastAPI
+    emitted no parameter and no security scheme. This ADR's Context says "Authentication imposes no
+    complexity here" — true of the model, and beside the point, because generation consumes the
+    schema rather than the model. Now an `APIKeyHeader` depended on by both profile dependencies;
+    102 operations carry the requirement and behaviour is unchanged.
+  - **Errors were undocumented, and the one documented error was wrong.** Only 200 and FastAPI's
+    automatic 422 appeared, and that 422 described `HTTPValidationError` while the overridden
+    handler returns the Familiar envelope — so the single error shape a client would have modelled
+    is the one shape the server never sends. `ErrorEnvelope` is now a component, attached at the 32
+    `include_router` calls.
+  - **Control flow was invisible**, including the 409 that `PUT /queue/session` returns to mean
+    "resend the reservoir in full" ([ADR-0003](ADR-0003-server-owns-the-playback-queue.md) point 4).
+- Phase 1.6 — the surface was reconciled with ADR-0001's v1 scope, and three published facts turned
+  out to be stale. `ambient`, `mixtapes` and `outputs` were removed; that also restored the
+  invariant ADR-0001's readiness audit claimed, since the five allowlisted untyped operations that
+  had drifted *inside* the surface were all `outputs/zones/*`.
+
+  **The schema was also not deterministic.** Two modules declared `ImportPreviewResponse`, and
+  which one FastAPI fully qualified varied between runs — so consecutive builds produced different
+  schemas and a generated client would have had a type renamed under it. Renaming the
+  export-import twin to `ProfileImportPreviewResponse`, matching its sibling
+  `LibraryImportPreviewResponse`, removed the collision; the schema now hashes identically across
+  runs. This had to be found before pinning an artifact, and would not have been visible without
+  one.
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
 
@@ -70,10 +99,20 @@ Native clients consume a **generated** API client, not a hand-written one.
      inform the generator choice.
 
 2. **The generated surface is the native v1 listening path, not the whole API** — tags `tracks`,
-   `library`, `playlists`, `smart-playlists`, `profiles`, `favorites`, `chat`, `mixtapes`, `ambient`.
-   Management surfaces stay web-only under
+   `library`, `playlists`, `smart-playlists`, `profiles`, `favorites`, `chat` and `queue`: eight
+   tags, 108 operations. Management surfaces stay web-only under
    [ADR-0002](ADR-0002-web-app-is-the-management-surface.md) and will never need a Swift client,
    which is fortunate: they are where the untyped responses concentrate.
+
+   `ambient`, `mixtapes` and `outputs` are **not** generated, and the lint records why next to the
+   surface definition. The first two are out of v1 by
+   [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5; casting does not
+   appear in its point 4 scope. All three were in the surface for a time — see the phase 1.5 note
+   in the Implementation block.
+
+   `library` stays whole even though it mixes roughly 18 listening operations with 17 management
+   ones. Tags cannot express that split, and the cost of the extra 17 is dead generated code
+   rather than a defect.
 
 3. **Non-JSON endpoints must declare their real media type.** Excluding them is not enough. Seven
    endpoints — audio streaming, artwork, avatars, mixtape downloads and two SSE streams — declared

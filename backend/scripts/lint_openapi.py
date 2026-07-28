@@ -34,15 +34,26 @@ GENERATED_SURFACE = {
     "profiles",
     "favorites",
     "chat",
-    "mixtapes",
-    "ambient",
     # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these
     # directly — the whole point of ADR-0006 is that they carry no ranking code.
     "queue",
-    # Network audio outputs (WiiM, Sonos, AirPlay, Chromecast). Casting is a listening
-    # feature, not a management one — a native client needs to send audio to speakers.
-    "outputs",
 }
+
+# Tags deliberately NOT generated, with the reason. Recorded rather than merely absent,
+# because two of them were in the surface until this list existed.
+#
+#   ambient   — ADR-0001 point 5 puts ambient/generative mode out of v1, and it is iOS-only
+#               anyway (`ambientSynthBridge`: "Web never registers").
+#   mixtapes  — ADR-0001 point 5, same list.
+#   outputs   — casting does not appear in ADR-0001 point 4's v1 scope. Removing it also
+#               restores the invariant ADR-0001's readiness audit claimed: the five
+#               allowlisted untyped operations that were inside the surface are all
+#               `outputs/zones/*`, so every allowlisted entry is now genuinely out of scope.
+#
+# `library` stays whole despite mixing ~18 listening operations with ~17 management ones
+# (import, dedup, scan, review). Tag granularity cannot express that split, and the cost of
+# the extra 17 is dead generated code rather than a defect. Revisit if they resist typing.
+NOT_GENERATED = {"ambient", "mixtapes", "outputs"}
 
 # Error statuses every in-scope operation must declare, so a generated client can model
 # failures. 422 is the important one: FastAPI emits HTTPValidationError for it automatically,
@@ -136,10 +147,7 @@ ALLOWED_LOOSE_FIELDS = {
 
 # Schema names FastAPI had to fully qualify because two modules declare the same
 # model name. Ugly in a generated client; out of scope to fix here.
-ALLOWED_MANGLED_SCHEMAS = {
-    "app__api__routes__library_import__preview__ImportPreviewResponse",
-    "app__api__routes__export_import__profile__ImportPreviewResponse",
-}
+ALLOWED_MANGLED_SCHEMAS: set[str] = set()
 
 
 def _is_loose(schema: dict[str, Any]) -> bool:
