@@ -204,6 +204,29 @@ export interface PersistedPlayerState {
  */
 export type PersistedQueueSource = QueueSource;
 
+/**
+ * Precomputed offline ranking, one row per profile (ADR-0006).
+ *
+ * The client carries no scoring code: it looks a seed up in `variants` and picks the
+ * best neighbour it has not heard recently. `trackCount` and `generatedAt` exist so a
+ * manifest built for a different offline set can be recognised as stale — a silently
+ * out-of-date manifest degrades transition quality invisibly, which is the tradeoff
+ * ADR-0006 calls out.
+ */
+export interface OfflineManifest {
+  profileId: string;
+  variants: OfflineManifestVariant[];
+  trackCount: number;
+  generatedAt: Date;
+}
+
+export interface OfflineManifestVariant {
+  profile: string;
+  filter_preset: string;
+  entries: { track_id: string; neighbours: { track_id: string; score: number }[] }[];
+  seed_track_ids: string[];
+}
+
 // Track IndexedDB availability (can be disabled on iOS private browsing)
 let indexedDBAvailable: boolean | null = null;
 
@@ -253,6 +276,7 @@ export class FamiliarDB extends Dexie {
   downloadQueue!: Table<PersistedDownloadJob>;
   partialDownloads!: Table<PartialDownload>;
   remoteLogs!: Table<RemoteLogEntry>;
+  offlineManifests!: Table<OfflineManifest>;
 
   constructor() {
     super('FamiliarDB');
@@ -367,6 +391,26 @@ export class FamiliarDB extends Dexie {
       downloadQueue: 'id, status, updatedAt',
       partialDownloads: 'trackId, updatedAt',
       remoteLogs: '++id, level, createdAt',
+    });
+
+    // Version 11: offline ranking manifests (ADR-0006). A new table requires a version
+    // bump; adding optional fields to an existing record does not.
+    this.version(11).stores({
+      deviceProfile: 'id',
+      chatSessions: 'id, profileId, updatedAt',
+      cachedTracks: 'id, artist, album, cachedAt',
+      offlineTracks: 'id, cachedAt',
+      offlineArtwork: 'hash, cachedAt',
+      pendingActions: '++id, profileId, type, createdAt',
+      playerState: 'id',
+      cachedProfiles: 'id, cachedAt',
+      cachedPlaylists: 'id, cachedAt',
+      cachedSmartPlaylists: 'id, cachedAt',
+      cachedFavorites: 'profileId, cachedAt',
+      downloadQueue: 'id, status, updatedAt',
+      partialDownloads: 'trackId, updatedAt',
+      remoteLogs: '++id, level, createdAt',
+      offlineManifests: 'profileId, generatedAt',
     });
   }
 }

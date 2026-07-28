@@ -4,6 +4,7 @@ import { useAudioEngine } from '../player/useAudioEngine';
 import { useScrobbling } from './useScrobbling';
 import { usePlayTracking } from './usePlayTracking';
 import { initSyncListeners } from '../services/syncService';
+import { initOfflineManifestSync } from '../services/offlineManifestService';
 import { showSuccess, showWarning } from '../stores/toastStore';
 import { initRemoteLogging } from '../services/remoteLogService';
 import { usePlayerStore } from '../stores/playerStore';
@@ -37,6 +38,13 @@ export function useAppBootstrap({
   // Initialize offline sync listeners
   useEffect(() => {
     return initSyncListeners({ onSuccess: showSuccess, onWarning: showWarning });
+  }, []);
+
+  // Keep the offline ranking manifest current (ADR-0006). Rebuilds whenever the
+  // downloaded set changes — the device is online by definition when that happens,
+  // since the set only changes by downloading.
+  useEffect(() => {
+    return initOfflineManifestSync();
   }, []);
 
   // Initialize remote logging (captures frontend logs to backend)

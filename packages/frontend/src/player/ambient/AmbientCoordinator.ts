@@ -18,7 +18,12 @@ import { tracksApi } from '../../api';
 import { getAmbientSynthBridge } from './ambientSynthBridge';
 import { selectSnippetWindow } from './snippetSelection';
 import { computeDroneTarget, buildMotifRecipe } from './transitionRecipes';
-import { getOfflineCandidates, pickOfflineSurpriseSeed } from './offlineScoring';
+import {
+  getOfflineNeighbours,
+  pickOfflineSeed,
+  MIN_POOL_SIZE,
+} from '../../services/offlineManifestService';
+import { suggestSnippetWindow } from './offlineScoringHelpers';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { createLogger } from '../../utils/logger';
 import type { AudioEngine } from '../audio/types';
@@ -26,6 +31,7 @@ import type { EngineEvent } from '../audio/types';
 import type {
   AmbientCandidate,
   AmbientDescriptor,
+  FilterPreset,
   AmbientSnippet,
 } from './types';
 
@@ -93,11 +99,13 @@ class AmbientCoordinator {
       const isOffline = useConnectivityStore.getState().offlineModeActive;
 
       if (isOffline) {
-        // Offline: use client-side seed + scoring
+        // Offline: look the ranking up in the precomputed manifest (ADR-0006). No
+        // scoring happens on this client — the server ranked this exact set of
+        // downloaded tracks while we were online, using the same scorer it uses live.
         if (options.surpriseMe) {
-          const offlineSeed = await pickOfflineSurpriseSeed(filterPreset);
-          if (!offlineSeed) throw new Error('No suitable offline tracks for ambient mode');
-          seed = offlineSeed;
+          const seedId = await pickOfflineSeed({ filterPreset });
+          if (!seedId) throw new Error('No suitable offline tracks for ambient mode');
+          seed = await this.getDescriptorOfflineFallback(seedId);
         } else if (options.trackId) {
           // Use the ambient API descriptor endpoint (might fail offline)
           // Fall back to a basic descriptor
@@ -105,10 +113,13 @@ class AmbientCoordinator {
         } else {
           throw new Error('Offline ambient mode requires a track or Surprise Me');
         }
-        const result = await getOfflineCandidates(seed, filterPreset, store.controls.intensity, [], [], 10);
-        if (result.error) throw new Error(result.error);
-        initialCandidates = result.candidates;
-        store.setPoolInfo(result.poolSize, result.poolCollapsed);
+        initialCandidates = await this.lookupOfflineCandidates(seed, filterPreset, [], 10);
+        if (initialCandidates.length === 0) {
+          throw new Error(
+            `Need at least ${MIN_POOL_SIZE} downloaded tracks for offline ambient mode`
+          );
+        }
+        store.setPoolInfo(initialCandidates.length, initialCandidates.length < 5);
       } else {
         // Online: use backend API
         const response = await ambientApi.getSeed({
@@ -527,16 +538,13 @@ class AmbientCoordinator {
       let newCandidates: AmbientCandidate[];
 
       if (isOffline) {
-        const result = await getOfflineCandidates(
+        newCandidates = await this.lookupOfflineCandidates(
           current.descriptor,
           store.controls.filterPreset,
-          store.controls.intensity,
           recentTrackIds,
-          recentArtists,
           5,
         );
-        newCandidates = result.candidates;
-        store.setPoolInfo(result.poolSize, result.poolCollapsed);
+        store.setPoolInfo(newCandidates.length, newCandidates.length < 5);
       } else {
         const response = await ambientApi.getCandidates({
           current_track_id: current.descriptor.track_id,
@@ -584,6 +592,45 @@ class AmbientCoordinator {
       next: toInfo(upcoming),
       previous: toInfo(prev),
     });
+  }
+
+  /**
+   * Turn manifest neighbours into candidates (ADR-0006).
+   *
+   * The ranking is already done — this only resolves ids to descriptors and preserves the
+   * server's order. No scoring happens here, which is the whole point: there is no
+   * scorer on this client any more, on any platform.
+   */
+  private async lookupOfflineCandidates(
+    seed: AmbientDescriptor,
+    filterPreset: FilterPreset,
+    recentTrackIds: string[],
+    limit: number,
+  ): Promise<AmbientCandidate[]> {
+    const neighbours = await getOfflineNeighbours(seed.track_id, {
+      filterPreset,
+      recentTrackIds,
+      limit,
+    });
+
+    const candidates: AmbientCandidate[] = [];
+    for (const n of neighbours) {
+      // Descriptors come from cached metadata; features are absent offline, which is
+      // fine because nothing here reads them — the score is already decided.
+      const descriptor = await this.getDescriptorOfflineFallback(n.trackId);
+      const [startPct, endPct] = suggestSnippetWindow(
+        descriptor.duration_seconds,
+        descriptor.energy_shape,
+      );
+      candidates.push({
+        descriptor,
+        compatibility_score: n.score,
+        key_compatibility: 0.5, // not separately reported by the manifest
+        suggested_start_pct: startPct,
+        suggested_end_pct: endPct,
+      });
+    }
+    return candidates;
   }
 
   private async getDescriptorOfflineFallback(trackId: string): Promise<AmbientDescriptor> {
