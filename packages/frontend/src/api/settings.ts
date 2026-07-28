@@ -24,6 +24,8 @@ export interface AppSettingsResponse {
   openai_configured: boolean;
   acoustid_configured: boolean;
   // Community cache
+  /** Server-owned playback queue (ADR-0003). Session endpoints 503 while this is off. */
+  queue_sync_enabled: boolean;
   community_cache_enabled: boolean;
   community_cache_contribute: boolean;
   // Analysis settings
@@ -53,6 +55,7 @@ export interface AppSettingsUpdate {
   openai_chat_model?: string;
   openai_utility_model?: string;
   // Community cache
+  queue_sync_enabled?: boolean;
   community_cache_enabled?: boolean;
   community_cache_contribute?: boolean;
   // Analysis settings

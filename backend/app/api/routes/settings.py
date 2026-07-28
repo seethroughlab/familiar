@@ -58,6 +58,10 @@ class SettingsResponse(BaseModel):
     # External features
     external_features_enabled: bool
 
+    # Server-owned playback queue (ADR-0003). A rollout gate rather than a preference:
+    # clients also opt in per device, and this rejects session traffic when off.
+    queue_sync_enabled: bool
+
     # Community cache
     community_cache_enabled: bool
     community_cache_contribute: bool
@@ -106,6 +110,9 @@ class SettingsUpdateRequest(BaseModel):
 
     # External features
     external_features_enabled: bool | None = None
+
+    # Server-owned playback queue (ADR-0003)
+    queue_sync_enabled: bool | None = None
 
     # Community cache
     community_cache_enabled: bool | None = None
