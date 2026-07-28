@@ -291,7 +291,7 @@ class TestConflicts:
         from datetime import datetime, timedelta
 
         from app.api.routes.queue import MAX_CLOCK_SKEW
-        from app.utils.time import utcnow
+        from app.utils.time import to_naive_utc, utcnow
 
         _put(client, test_profile, track_ids=[str(uuid4())])
 
@@ -304,7 +304,10 @@ class TestConflicts:
         # What the clamp guarantees is that the skew does not *persist*: the stored time
         # is bounded to now + MAX_CLOCK_SKEW, so every other device is locked out for
         # minutes rather than for a year.
-        stored = datetime.fromisoformat(r.json()["updated_at"])
+        # `updated_at` now comes back as RFC 3339 with a Z, so fromisoformat yields an aware
+        # datetime — comparing it to a naive `utcnow()` raises the very TypeError that made every
+        # real write 500 before `to_naive_utc` existed. Normalise before comparing.
+        stored = to_naive_utc(datetime.fromisoformat(r.json()["updated_at"]))
         assert stored < utcnow() + MAX_CLOCK_SKEW + timedelta(seconds=5)
 
     async def test_the_archive_is_bounded(self, client, test_profile):
