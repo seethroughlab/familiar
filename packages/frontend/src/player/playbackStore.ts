@@ -64,6 +64,16 @@ export interface PlaybackState {
    * (several `playNext` branches return without changing the track).
    */
   _advanceReason: AdvanceReason;
+  /**
+   * Where to seek once the current track is loaded, or null.
+   *
+   * Setting `currentTime` alone only moves the transport display — the audio element
+   * still starts at 0 and the next `timeUpdate` overwrites the number, so a restored
+   * position reads as "shows 5:34, plays from 0:00". Loading is asynchronous, so the
+   * seek cannot happen at the moment the position is known; it is applied on `canplay`
+   * and cleared. Used when adopting another device's session (ADR-0003).
+   */
+  _pendingSeekSeconds: number | null;
 }
 
 export interface PlaybackActions {
@@ -100,6 +110,7 @@ export const usePlaybackStore = create<PlaybackState & PlaybackActions>((set, ge
   isHydrated: false,
   _circuitBreakerTimestamps: [],
   _advanceReason: 'user',
+  _pendingSeekSeconds: null,
 
   setCurrentTrack: (track) => {
     set({ currentTrack: track });

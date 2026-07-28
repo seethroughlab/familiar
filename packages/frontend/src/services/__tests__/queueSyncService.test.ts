@@ -66,7 +66,7 @@ vi.mock('../../player/audio/engineInstance', () => ({
 
 import { useQueueStore } from '../../player/queueStore';
 import { usePlaybackStore } from '../../player/playbackStore';
-import { initQueueSync, _resetQueueSyncState, isQueueSyncEnabled } from '../queueSyncService';
+import { initQueueSync, reconcileWithServer, _resetQueueSyncState, isQueueSyncEnabled } from '../queueSyncService';
 import { useQueueSyncStore } from '../../stores/queueSyncStore';
 
 const DEBOUNCE_MS = 2_000;
@@ -107,7 +107,7 @@ beforeEach(() => {
   });
   usePlaybackStore.setState({
     currentTrack: null, isPlaying: false, currentTime: 0, shuffle: false,
-    repeat: 'off', consume: false,
+    repeat: 'off', consume: false, _pendingSeekSeconds: null,
   });
 });
 
@@ -260,6 +260,47 @@ describe('the logical queue', () => {
 
     expect(lastPayload()?.shuffle_order).toEqual([]);
     expect(lastPayload()?.shuffle_index).toBe(-1);
+  });
+});
+
+describe('adopting another device session', () => {
+  const serverSession = (over = {}) => ({
+    track_ids: ['x1', 'x2', 'x3'], cursor: 1, shuffle_order: [], shuffle_index: -1,
+    shuffle: false, repeat: 'off' as const, consume: false, queue_source: null,
+    reservoir_ids: null, reservoir_cursor: -1, reservoir_hash: null,
+    position_seconds: 333.9, version: 6, updated_at: '2026-07-28T12:59:47Z',
+    superseded: false, ...over,
+  });
+
+  it('requests a seek rather than only moving the transport display', async () => {
+    // Setting currentTime alone makes it *show* 5:33 while the element plays from 0:00,
+    // and the first timeUpdate then overwrites the number. The engine has to be told.
+    mockGetSession.mockResolvedValue(serverSession());
+    stop = initQueueSync();
+
+    await reconcileWithServer();
+
+    expect(usePlaybackStore.getState()._pendingSeekSeconds).toBeCloseTo(333.9);
+  });
+
+  it('does not request a seek when the other device was at the start', async () => {
+    mockGetSession.mockResolvedValue(serverSession({ position_seconds: 0 }));
+    stop = initQueueSync();
+
+    await reconcileWithServer();
+
+    expect(usePlaybackStore.getState()._pendingSeekSeconds).toBeNull();
+  });
+
+  it('adopts the queue and cursor', async () => {
+    mockGetSession.mockResolvedValue(serverSession());
+    stop = initQueueSync();
+
+    await reconcileWithServer();
+
+    const q = useQueueStore.getState();
+    expect(q.queue.map((i) => i.track.id)).toEqual(['x1', 'x2', 'x3']);
+    expect(q.queueIndex).toBe(1);
   });
 });
 

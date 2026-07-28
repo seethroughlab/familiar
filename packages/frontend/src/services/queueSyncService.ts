@@ -180,6 +180,10 @@ async function adopt(session: PlaybackSessionResponse): Promise<void> {
     repeat: session.repeat,
     consume: session.consume,
     currentTime: session.position_seconds,
+    // The display alone is not enough: the element loads at 0 and the first `timeUpdate`
+    // overwrites the number, so the position has to be applied to the engine once the
+    // track is ready. `useAudioEngine` consumes this on `canplay`.
+    _pendingSeekSeconds: session.position_seconds > 0 ? session.position_seconds : null,
   });
   if (session.shuffle_order.length > 0) {
     useQueueStore.setState({
