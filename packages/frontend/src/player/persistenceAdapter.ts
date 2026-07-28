@@ -10,6 +10,8 @@ interface PersistableQueueState {
   queueSource: import('../db').PersistedQueueSource | null;
   lazyQueueIds: string[] | null;
   lazyQueueIndex: number;
+  logicalTrackIds: string[] | null;
+  logicalIndex: number;
 }
 
 let getQueueState: (() => PersistableQueueState) | null = null;
@@ -22,6 +24,8 @@ const EMPTY_QUEUE_STATE: PersistableQueueState = {
   queueSource: null,
   lazyQueueIds: null,
   lazyQueueIndex: -1,
+  logicalTrackIds: null,
+  logicalIndex: -1,
 };
 
 export function _setQueueStateGetter(fn: typeof getQueueState) {
@@ -46,6 +50,8 @@ export function persistCombinedState() {
     queueSource: queue.queueSource,
     lazyQueueIds: queue.lazyQueueIds,
     lazyQueueIndex: queue.lazyQueueIndex,
+    logicalTrackIds: queue.logicalTrackIds,
+    logicalIndex: queue.logicalIndex,
   });
 }
 

@@ -14,6 +14,7 @@ import { useConnectivityStore } from '../stores/connectivityStore';
 import { useOutputStore } from '../stores/outputStore';
 import { prefetchService } from '../services/prefetchService';
 import { radioController } from './radio/radioController';
+import { fetchTracksBatched } from './persistence';
 import {
   getCrossfadeTrigger,
   getEffectiveCrossfadeDuration,
@@ -94,6 +95,9 @@ export function useAudioEngine() {
   const { crossfadeDuration, crossfadeEnabled, normalizationEnabled, normalizationMode, normalizationTargetLufs, normalizationPreamp, normalizationPreventClipping } = useAudioSettingsStore();
   const offlineModeActive = useConnectivityStore((s) => s.offlineModeActive);
   const offlineTrackIds = useConnectivityStore((s) => s.offlineTrackIds);
+  // Subscribed so the restore effect re-runs when hydration populates the logical queue
+  // from IndexedDB, which happens after the effect's first pass.
+  const logicalTrackIds = usePlayerStore((s) => s.logicalTrackIds);
   const noteStreamLoadFailure = useConnectivityStore((s) => s.noteStreamLoadFailure);
   const noteStreamLoadSuccess = useConnectivityStore((s) => s.noteStreamLoadSuccess);
   const incrementConnectivityCounter = useConnectivityStore((s) => s.incrementCounter);
@@ -115,8 +119,11 @@ export function useAudioEngine() {
   // Queue transition flag — scoped to hook lifecycle (not module-level)
   const queueTransitionRef = useRef(false);
 
-  // Pre-offline queue snapshot — restored when connectivity recovers
-  const preOfflineQueueRef = useRef<{ tracks: Track[]; index: number; source: import('./playerStore.types').QueueSource | null } | null>(null);
+  // In-memory copy of the logical queue's tracks, so the ordinary restore — connectivity
+  // flapped within one session — needs no network. `queueStore.logicalTrackIds` is the
+  // durable record; this is only a cache. After a reload it is empty and the tracks are
+  // refetched from the persisted IDs, which is the case the old ref-only snapshot lost.
+  const logicalTracksCacheRef = useRef<Track[] | null>(null);
 
   // Album gain cache — scoped to hook lifecycle
   const albumGainCacheRef = useRef(new Map<string, { avgLufs: number; albumPeak: number | null }>());
@@ -315,7 +322,10 @@ export function useAudioEngine() {
             setCrossfadeState('idle');
             const prevTrack = state.history[state.history.length - 1];
             if (prevTrack) {
-              state.setQueueByTrackId(state.queue.map(q => q.track), prevTrack.id, state.queueSource ?? undefined, { reason: 'error' });
+              // preserveReservoir: this rebuilds the queue from itself only to move the
+              // cursor back, so it is not a queue replacement — dropping the reservoir
+              // here would leave a lazy queue stranded at the materialised window.
+              state.setQueueByTrackId(state.queue.map(q => q.track), prevTrack.id, state.queueSource ?? undefined, { reason: 'error', preserveReservoir: true });
             }
             setIsLoadingAudio(false);
             break;
@@ -503,55 +513,90 @@ export function useAudioEngine() {
     toggleFavorite,
   ]);
 
+  // Keep the playable queue in step with what is actually reachable: narrow it to
+  // downloaded tracks while offline, widen it back to the logical queue on reconnect
+  // (ADR-0003 point 5). `logicalTrackIds` is durable state rather than a ref, so the
+  // widening still works after a reload that happened while offline.
   useEffect(() => {
-    const state = usePlayerStore.getState();
+    let cancelled = false;
 
-    if (!offlineModeActive) {
-      // Restore pre-offline queue when connectivity recovers
-      const saved = preOfflineQueueRef.current;
-      if (saved && saved.tracks.length > 0) {
+    /** Widen back out to `logical`, whose tracks may need refetching after a reload. */
+    const widenTo = (logical: string[]) => {
+      const restore = (tracks: Track[]) => {
+        if (cancelled || tracks.length === 0) return;
+        const state = usePlayerStore.getState();
         const currentId = state.currentTrack?.id;
         const restoredIndex = currentId
-          ? saved.tracks.findIndex((t) => t.id === currentId)
-          : saved.index;
-        state.setQueue(saved.tracks, Math.max(0, restoredIndex), saved.source ?? undefined, { preservePlaybackState: true });
-        preOfflineQueueRef.current = null;
-      }
-      return;
-    }
-
-    if (state.queue.length === 0) return;
-
-    const allTracks = state.queue.map((item) => item.track);
-    const filteredTracks = allTracks.filter((track) => offlineTrackIds.has(track.id));
-    if (filteredTracks.length === allTracks.length) return;
-
-    // Save the full queue before filtering so we can restore on recovery
-    if (!preOfflineQueueRef.current) {
-      preOfflineQueueRef.current = {
-        tracks: allTracks,
-        index: state.queueIndex,
-        source: state.queueSource,
+          ? tracks.findIndex((track) => track.id === currentId)
+          : state.logicalIndex;
+        // preserveReservoir: a lazy queue is still lazy underneath the filter, and
+        // dropping the reservoir here would strand playback at the end of the
+        // materialised window.
+        state.setQueue(tracks, Math.max(0, restoredIndex), state.queueSource ?? undefined, {
+          preservePlaybackState: true,
+          preserveReservoir: true,
+        });
+        state.setLogicalQueue(null, -1);
+        logicalTracksCacheRef.current = null;
       };
+
+      const cached = logicalTracksCacheRef.current;
+      const cacheHit =
+        cached !== null &&
+        cached.length === logical.length &&
+        cached.every((track, i) => track.id === logical[i]);
+
+      if (cacheHit) {
+        restore(cached);
+      } else {
+        fetchTracksBatched(logical)
+          .then(restore)
+          .catch((error) => log.warn('Failed to restore logical queue:', error));
+      }
+    };
+
+    /** Narrow the queue down to `filteredTracks`, recording what it was first. */
+    const narrowTo = (allTracks: Track[], filteredTracks: Track[]) => {
+      const state = usePlayerStore.getState();
+
+      // Record the logical queue before narrowing, so reconnect has something to widen
+      // back to. Only on the first narrowing — a second pass would capture the already
+      // filtered queue and make the restore a no-op.
+      if (!state.logicalTrackIds) {
+        logicalTracksCacheRef.current = allTracks;
+        state.setLogicalQueue(allTracks.map((track) => track.id), state.queueIndex);
+      }
+
+      incrementConnectivityCounter('offline_queue_rebuild_count');
+      const currentId = state.currentTrack?.id;
+      const newIndex = currentId
+        ? filteredTracks.findIndex((track) => track.id === currentId)
+        : -1;
+
+      // preserveReservoir for the same reason as the widening path above.
+      state.setQueue(filteredTracks, Math.max(0, newIndex), state.queueSource ?? undefined, {
+        preservePlaybackState: true,
+        preserveReservoir: true,
+      });
+      if (filteredTracks.length === 0) {
+        setIsPlaying(false);
+        setIsLoadingAudio(false);
+      }
+    };
+
+    const state = usePlayerStore.getState();
+    if (!offlineModeActive) {
+      if (logicalTrackIds && logicalTrackIds.length > 0) widenTo(logicalTrackIds);
+    } else if (state.queue.length > 0) {
+      const allTracks = state.queue.map((item) => item.track);
+      const filteredTracks = allTracks.filter((track) => offlineTrackIds.has(track.id));
+      if (filteredTracks.length !== allTracks.length) narrowTo(allTracks, filteredTracks);
     }
 
-    incrementConnectivityCounter('offline_queue_rebuild_count');
-    const currentId = state.currentTrack?.id;
-    const newIndex = currentId
-      ? filteredTracks.findIndex((track) => track.id === currentId)
-      : -1;
-
-    if (newIndex >= 0) {
-      state.setQueue(filteredTracks, newIndex, state.queueSource ?? undefined, { preservePlaybackState: true });
-      return;
-    }
-
-    state.setQueue(filteredTracks, 0, state.queueSource ?? undefined, { preservePlaybackState: true });
-    if (filteredTracks.length === 0) {
-      setIsPlaying(false);
-      setIsLoadingAudio(false);
-    }
-  }, [offlineModeActive, offlineTrackIds, incrementConnectivityCounter, setIsLoadingAudio, setIsPlaying]);
+    return () => {
+      cancelled = true;
+    };
+  }, [offlineModeActive, offlineTrackIds, logicalTrackIds, incrementConnectivityCounter, setIsLoadingAudio, setIsPlaying]);
 
   // --------------------------------------------------------------------------
   // Effect: Update Media Session when track changes

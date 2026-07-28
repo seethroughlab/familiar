@@ -200,10 +200,12 @@ describe('playerPersistence', () => {
 
       const result = await loadPlayerState();
 
-      // `lazyQueueIds` is stitched in from the reservoir row, which is absent here.
-      expect(result).toEqual({ ...persisted, lazyQueueIds: null });
+      // `lazyQueueIds` and `logicalTrackIds` are stitched in from their own rows, both
+      // absent here.
+      expect(result).toEqual({ ...persisted, lazyQueueIds: null, logicalTrackIds: null });
       expect(mockPlayerState.get).toHaveBeenCalledWith('profile-123');
       expect(mockPlayerState.get).toHaveBeenCalledWith('profile-123::reservoir');
+      expect(mockPlayerState.get).toHaveBeenCalledWith('profile-123::logical');
     });
 
     it('should return null when no saved state', async () => {
@@ -255,9 +257,10 @@ describe('playerPersistence', () => {
 
       const result = await loadPlayerStateForProfile('other-profile');
 
-      expect(result).toEqual({ ...persisted, lazyQueueIds: null });
+      expect(result).toEqual({ ...persisted, lazyQueueIds: null, logicalTrackIds: null });
       expect(mockPlayerState.get).toHaveBeenCalledWith('other-profile');
       expect(mockPlayerState.get).toHaveBeenCalledWith('other-profile::reservoir');
+      expect(mockPlayerState.get).toHaveBeenCalledWith('other-profile::logical');
     });
 
     it('should return null when IndexedDB unavailable', async () => {
@@ -276,13 +279,14 @@ describe('playerPersistence', () => {
   });
 
   describe('clearPlayerState', () => {
-    it('should delete both rows for current profile', async () => {
+    it('should delete every row for current profile', async () => {
       await clearPlayerState();
 
-      // Including the reservoir, or a ~1 MB ID list outlives the state referencing it.
+      // Including both side rows, or a large ID list outlives the state referencing it.
       expect(mockPlayerState.bulkDelete).toHaveBeenCalledWith([
         'profile-123',
         'profile-123::reservoir',
+        'profile-123::logical',
       ]);
     });
 
