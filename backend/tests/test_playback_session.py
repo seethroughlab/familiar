@@ -143,6 +143,27 @@ class TestReadAndWrite:
         assert body["queue_source"]["filters"]["genre"] == "jazz"
         assert body["queue_source"]["filters"]["year_from"] == 1990
 
+    async def test_accepts_the_timestamp_format_browsers_actually_send(self, client, test_profile):
+        # `new Date().toISOString()` is Z-suffixed, which Pydantic parses as offset-aware.
+        # Comparing that against a naive `utcnow()` raises TypeError, so every real write
+        # 500'd while the whole suite passed — every other test here writes a naive
+        # timestamp, which no browser ever sends.
+        r = _put(client, test_profile, track_ids=[str(uuid4())],
+                 updated_at="2026-07-28T12:54:17.132Z")
+        assert r.status_code == 200, r.text
+
+    async def test_an_offset_aware_timestamp_still_resolves_conflicts(self, client, test_profile):
+        # Normalising must preserve the instant, not just strip the suffix: +02:00 is
+        # earlier in UTC than it looks, and getting that backwards would flip who wins.
+        current = [str(uuid4())]
+        _put(client, test_profile, track_ids=current, updated_at="2026-07-28T12:00:00Z")
+
+        # 12:30+02:00 is 10:30 UTC — older than the incumbent, so it must lose.
+        r = _put(client, test_profile, version=0, track_ids=[str(uuid4())],
+                 updated_at="2026-07-28T12:30:00+02:00")
+        assert r.json()["superseded"] is True
+        assert r.json()["track_ids"] == current
+
     async def test_a_sequential_write_bumps_the_version(self, client, test_profile):
         assert _put(client, test_profile, version=0).json()["version"] == 1
         assert _put(client, test_profile, version=1).json()["version"] == 2

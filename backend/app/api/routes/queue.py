@@ -41,7 +41,7 @@ from app.services.offline_manifest import (
     known_presets,
 )
 from app.services.ranking_profiles import AMBIENT, RADIO, get_profile
-from app.utils.time import utcnow
+from app.utils.time import to_naive_utc, utcnow
 
 router = APIRouter(prefix="/queue", tags=["queue"])
 
@@ -448,8 +448,10 @@ async def put_playback_session(
     session = await _load_session(db, profile.id)
     reservoir = _resolve_reservoir(body, session)
     # Clamp rather than reject: a skewed clock should lose conflicts, not fail writes.
+    # `to_naive_utc` is load-bearing — clients send `Z`-suffixed ISO timestamps, which
+    # Pydantic parses as offset-aware and cannot be compared with a naive `utcnow()`.
     now = utcnow()
-    client_time = min(body.updated_at or now, now + MAX_CLOCK_SKEW)
+    client_time = min(to_naive_utc(body.updated_at) or now, now + MAX_CLOCK_SKEW)
 
     if session is None:
         session = PlaybackSession(profile_id=profile.id, version=1)
