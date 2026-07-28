@@ -74,6 +74,12 @@ class AppSettings(BaseModel):
     community_cache_contribute: bool = False  # Contribute computed embeddings (opt-in)
     community_cache_url: str = "https://familiar-cache.fly.dev"  # Cache server URL
 
+    # Server-owned playback queue (ADR-0003). Off by default: this ships behind a flag and
+    # is proven in the web app before the native client depends on it. Rejecting writes
+    # when disabled is deliberate — a server that accepted them and did nothing visible
+    # would look like a client bug.
+    queue_sync_enabled: bool = False
+
     # Playlist generation mode
     # "library_only" - Only use local tracks (legacy behavior)
     # "suggest_missing" - Include local + suggest missing tracks user might acquire (DEFAULT)

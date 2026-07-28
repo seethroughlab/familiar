@@ -1,5 +1,6 @@
 import api from './base';
 import { getApiUrl } from './base';
+import type { RequestOptions } from './base';
 
 // Profile API
 export interface ProfileResponse {
@@ -117,8 +118,8 @@ export const favoritesApi = {
     return data;
   },
 
-  toggle: async (trackId: string): Promise<FavoriteStatusResponse> => {
-    const { data } = await api.post(`/favorites/${trackId}/toggle`);
+  toggle: async (trackId: string, options?: RequestOptions): Promise<FavoriteStatusResponse> => {
+    const { data } = await api.post(`/favorites/${trackId}/toggle`, undefined, options);
     return data;
   },
 
@@ -190,11 +191,12 @@ export const playTrackingApi = {
     trackId: string,
     durationSeconds?: number,
     detail?: Omit<ListenEventBody, 'played_seconds' | 'reason'>,
+    options?: RequestOptions,
   ): Promise<PlayRecordResponse> => {
     const { data } = await api.post(`/tracks/${trackId}/played`, {
       duration_seconds: durationSeconds,
       ...detail,
-    });
+    }, options);
     return data;
   },
 
@@ -205,8 +207,8 @@ export const playTrackingApi = {
    * backend derives the outcome, so a track abandoned at 95%, or a short one played in
    * full, comes back `completed` rather than `skipped`.
    */
-  recordSkip: async (trackId: string, body: ListenEventBody = {}): Promise<ListenEventResponse> => {
-    const { data } = await api.post(`/tracks/${trackId}/skipped`, body);
+  recordSkip: async (trackId: string, body: ListenEventBody = {}, options?: RequestOptions): Promise<ListenEventResponse> => {
+    const { data } = await api.post(`/tracks/${trackId}/skipped`, body, options);
     return data;
   },
 
@@ -214,8 +216,8 @@ export const playTrackingApi = {
    * Record an explicit thumbs-down — a stronger signal than a skip, and stored
    * distinctly. Intended for radio insertions (ADR-0005); no UI triggers it yet.
    */
-  recordRejection: async (trackId: string, body: ListenEventBody = {}): Promise<ListenEventResponse> => {
-    const { data } = await api.post(`/tracks/${trackId}/rejected`, body);
+  recordRejection: async (trackId: string, body: ListenEventBody = {}, options?: RequestOptions): Promise<ListenEventResponse> => {
+    const { data } = await api.post(`/tracks/${trackId}/rejected`, body, options);
     return data;
   },
 

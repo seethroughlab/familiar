@@ -6,13 +6,27 @@ import { db, isIndexedDBAvailable, type PendingAction } from '../db';
 import { lastfmApi } from '../api/integrations';
 import { favoritesApi, playTrackingApi } from '../api/profiles';
 import type { ListenEventBody } from '../api/profiles';
+import { queueApi, type PlaybackSessionResponse, type PlaybackSessionWrite } from '../api/queue';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { getSelectedProfileId } from './profileService';
 import { createLogger } from '../utils/logger';
 const log = createLogger('SyncService');
 
 // Mirrored by `PendingAction.type` in ../db — keep both in step.
-type ActionType = 'scrobble' | 'now_playing' | 'favorite_toggle' | 'listen_event';
+type ActionType = 'scrobble' | 'now_playing' | 'favorite_toggle' | 'listen_event' | 'queue_sync';
+
+/**
+ * Action types that hold *state* rather than an event.
+ *
+ * Two things follow. They are coalesced on enqueue — one row per profile, replaced in
+ * place — and they are never dropped for exceeding the retry limit: the local replica can
+ * always regenerate them, so discarding one would leave the server on a state no device
+ * ever held, which is exactly what ADR-0003's "nothing is destroyed" rules out.
+ */
+const COALESCED_ACTIONS: ReadonlySet<ActionType> = new Set(['queue_sync']);
+
+/** Pin a replayed request to the profile that queued it, not the one selected now. */
+const profileOptions = (profileId: string) => ({ headers: { 'X-Profile-ID': profileId } });
 
 /**
  * Queue an action to be performed when online.
@@ -42,6 +56,26 @@ export async function queueAction(
       createdAt: new Date(),
       retries: 0,
     };
+
+    if (COALESCED_ACTIONS.has(type)) {
+      // Replace this profile's existing row rather than appending. Only the newest state
+      // matters, so a reconnect sends one request instead of replaying every mutation
+      // since the connection dropped.
+      const existing = await db.pendingActions
+        .where('profileId')
+        .equals(profileId)
+        .filter((row) => row.type === type)
+        .first();
+      if (existing?.id !== undefined) {
+        await db.pendingActions.update(existing.id, {
+          payload,
+          createdAt: action.createdAt,
+          // Reset the count: this is fresh state, not another attempt at the old one.
+          retries: 0,
+        });
+        return;
+      }
+    }
 
     await db.pendingActions.add(action);
   } catch (error) {
@@ -80,13 +114,32 @@ export async function getPendingActions(): Promise<PendingAction[]> {
 }
 
 /**
+ * The drain in flight, if any.
+ *
+ * There are several triggers — the browser `online` event, the connectivity store's own
+ * recovery, `OfflineIndicator`'s effect and the manual button in settings — and nothing
+ * stopped two of them running at once, which double-delivers every pending action.
+ */
+let inFlight: Promise<{ processed: number; failed: number }> | null = null;
+
+/**
  * Process all pending actions.
  * Returns the number of successfully processed actions.
+ *
+ * Concurrent callers share the drain already running rather than starting a second one.
  */
 export async function processPendingActions(): Promise<{
   processed: number;
   failed: number;
 }> {
+  if (inFlight) return inFlight;
+  inFlight = drainPendingActions().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function drainPendingActions(): Promise<{ processed: number; failed: number }> {
   const idbAvailable = await isIndexedDBAvailable();
   if (!idbAvailable) return { processed: 0, failed: 0 };
 
@@ -112,8 +165,10 @@ export async function processPendingActions(): Promise<{
           retries: action.retries + 1,
         });
 
-        // Remove if too many retries
-        if (action.retries >= 3) {
+        // Remove if too many retries — but never for state-carrying actions. Dropping a
+        // scrobble loses one scrobble; dropping a queue leaves the server on a state no
+        // device ever held. The local replica re-enqueues on the next mutation anyway.
+        if (action.retries >= 3 && !COALESCED_ACTIONS.has(action.type)) {
           await db.pendingActions.delete(action.id!);
           failed++;
         }
@@ -143,6 +198,9 @@ async function executeAction(action: PendingAction): Promise<void> {
     case 'listen_event':
       await executeListenEvent(action.profileId, action.payload as ListenEventPayload);
       break;
+    case 'queue_sync':
+      await executeQueueSync(action.profileId, action.payload as QueueSyncPayload);
+      break;
     default:
       log.warn(`Unknown action type: ${action.type}`);
   }
@@ -170,34 +228,82 @@ interface ListenEventPayload {
   durationSeconds?: number;
 }
 
-async function executeScrobble(_profileId: string, payload: ScrobblePayload): Promise<void> {
-  await lastfmApi.scrobble(payload.trackId, parseInt(payload.timestamp));
+/** The durable queue, as this device last held it (ADR-0003). */
+type QueueSyncPayload = PlaybackSessionWrite;
+
+async function executeScrobble(profileId: string, payload: ScrobblePayload): Promise<void> {
+  await lastfmApi.scrobble(payload.trackId, parseInt(payload.timestamp), profileOptions(profileId));
 }
 
-async function executeNowPlaying(_profileId: string, payload: NowPlayingPayload): Promise<void> {
-  await lastfmApi.updateNowPlaying(payload.trackId);
+async function executeNowPlaying(profileId: string, payload: NowPlayingPayload): Promise<void> {
+  await lastfmApi.updateNowPlaying(payload.trackId, profileOptions(profileId));
 }
 
-async function executeFavoriteToggle(_profileId: string, payload: FavoriteTogglePayload): Promise<void> {
-  await favoritesApi.toggle(payload.trackId);
+async function executeFavoriteToggle(profileId: string, payload: FavoriteTogglePayload): Promise<void> {
+  await favoritesApi.toggle(payload.trackId, profileOptions(profileId));
 }
 
-async function executeListenEvent(_profileId: string, payload: ListenEventPayload): Promise<void> {
+async function executeListenEvent(profileId: string, payload: ListenEventPayload): Promise<void> {
   const { trackId, kind, body } = payload;
+  const options = profileId ? profileOptions(profileId) : undefined;
   if (kind === 'played') {
     await playTrackingApi.recordPlay(trackId, payload.durationSeconds, {
       track_duration: body.track_duration,
       completion_ratio: body.completion_ratio,
       context: body.context,
       source_track_id: body.source_track_id,
-    });
+    }, options);
     return;
   }
   if (kind === 'rejected') {
-    await playTrackingApi.recordRejection(trackId, body);
+    await playTrackingApi.recordRejection(trackId, body, options);
     return;
   }
-  await playTrackingApi.recordSkip(trackId, body);
+  await playTrackingApi.recordSkip(trackId, body, options);
+}
+
+/**
+ * Push the durable queue.
+ *
+ * A 409 means the reservoir hash the payload named is not the one the server holds, so
+ * the omitted `reservoir_ids` cannot be filled in. There is nothing to retry — the caller
+ * must resend with the reservoir in full — so this resolves rather than throwing, and
+ * leaves it to `queueSyncService` to re-enqueue a complete payload.
+ */
+async function executeQueueSync(profileId: string, payload: QueueSyncPayload): Promise<void> {
+  try {
+    const session = await queueApi.putSession(payload, profileOptions(profileId));
+    onSessionWritten?.(session);
+  } catch (error) {
+    if (isReservoirConflict(error)) {
+      log.info('Reservoir hash rejected; a full reservoir will be sent on the next sync');
+      onReservoirRejected?.();
+      return;
+    }
+    throw error;
+  }
+}
+
+function isReservoirConflict(error: unknown): boolean {
+  return (error as { response?: { status?: number } })?.response?.status === 409;
+}
+
+/**
+ * Callbacks owned by `queueSyncService`.
+ *
+ * Registered rather than imported: `queueSyncService` imports `queueAction` from here, so
+ * a direct import back would be a cycle. Same pattern the player uses for its persistence
+ * getter and the platform engine factory.
+ */
+let onSessionWritten: ((session: PlaybackSessionResponse) => void) | null = null;
+let onReservoirRejected: (() => void) | null = null;
+
+export function registerQueueSyncHandlers(handlers: {
+  onSessionWritten: (session: PlaybackSessionResponse) => void;
+  onReservoirRejected: () => void;
+}): void {
+  onSessionWritten = handlers.onSessionWritten;
+  onReservoirRejected = handlers.onReservoirRejected;
 }
 
 /**
@@ -273,6 +379,19 @@ export function initSyncListeners(notify?: SyncNotifications): () => void {
 
   window.addEventListener('online', handleOnline);
 
+  // Also drain on the connectivity store's own recovery. When the browser believes it is
+  // online but the backend is unreachable, `forcedOffline` latches and clears from a
+  // health probe — which emits no `online` event, so this path was previously covered
+  // only incidentally, by an effect in a mounted UI component.
+  let wasOffline = useConnectivityStore.getState().offlineModeActive;
+  const unsubscribe = useConnectivityStore.subscribe((state) => {
+    const isOffline = state.offlineModeActive;
+    if (wasOffline && !isOffline) {
+      handleOnline().catch(log.error);
+    }
+    wasOffline = isOffline;
+  });
+
   // Process any pending actions on startup if online
   if (useConnectivityStore.getState().browserOnline) {
     processPendingActions().catch(log.error);
@@ -281,5 +400,6 @@ export function initSyncListeners(notify?: SyncNotifications): () => void {
   // Return cleanup function
   return () => {
     window.removeEventListener('online', handleOnline);
+    unsubscribe();
   };
 }

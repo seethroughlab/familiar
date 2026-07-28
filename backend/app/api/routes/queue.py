@@ -22,11 +22,18 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, RequiredProfile
-from app.api.exceptions import ConflictError, NotFoundError, TrackNotFoundError, ValidationError
+from app.api.exceptions import (
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    TrackNotFoundError,
+    ValidationError,
+)
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import PlaybackSession, PlaybackSessionArchive, Track
 from app.db.models.profiles import PlaybackSessionPayload
 from app.services.ambient import get_candidates
+from app.services.app_settings import get_app_settings_service
 from app.services.offline_manifest import (
     DEFAULT_NEIGHBOURS,
     build_manifest,
@@ -377,6 +384,19 @@ def _to_response(session: PlaybackSession, *, superseded: bool = False) -> Playb
     )
 
 
+def _require_queue_sync_enabled() -> None:
+    """Reject session traffic unless the server has opted in.
+
+    ADR-0003 point 7 lands this behind a flag. Failing loudly beats accepting writes and
+    doing nothing with them — a silently-ignored queue looks like a client bug and would
+    be debugged on the wrong side.
+    """
+    if not get_app_settings_service().get().queue_sync_enabled:
+        raise ServiceUnavailableError(
+            "Playback queue sync is disabled on this server (queue_sync_enabled)."
+        )
+
+
 async def _load_session(db: DbSession, profile_id: UUID) -> PlaybackSession | None:
     return (
         await db.execute(
@@ -401,6 +421,7 @@ async def get_playback_session(
     starting state, not an error, and a client adopting it should not have to special-case
     a status code.
     """
+    _require_queue_sync_enabled()
     session = await _load_session(db, profile.id)
     if session is None:
         return PlaybackSessionResponse(version=0, updated_at=utcnow())
@@ -423,6 +444,7 @@ async def put_playback_session(
     archived, never dropped (ADR-0003 point 6). A losing write still gets the winning
     session back, so the client adopts rather than retries.
     """
+    _require_queue_sync_enabled()
     session = await _load_session(db, profile.id)
     reservoir = _resolve_reservoir(body, session)
     # Clamp rather than reject: a skewed clock should lose conflicts, not fail writes.
@@ -471,6 +493,7 @@ async def list_archived_sessions(
     profile: RequiredProfile,
 ) -> ArchivedSessionsResponse:
     """List queues that lost a conflict and can still be restored."""
+    _require_queue_sync_enabled()
     rows = (
         (
             await db.execute(
@@ -516,6 +539,7 @@ async def restore_archived_session(
     Symmetrical with the conflict rule: whatever is live now is archived in its place, so
     restoring cannot itself destroy a queue.
     """
+    _require_queue_sync_enabled()
     archived = (
         await db.execute(
             select(PlaybackSessionArchive).where(

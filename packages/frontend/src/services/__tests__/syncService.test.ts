@@ -12,6 +12,8 @@ const mockCount = vi.fn();
 const mockToArray = vi.fn();
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mockOrderBy = vi.fn((_key?: any) => ({ toArray: mockToArray }));
+// Backs the coalescing lookup: db.pendingActions.where('profileId').equals(id).filter(fn).first()
+const mockCoalesceFirst = vi.fn();
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 vi.mock('../../db', () => ({
@@ -23,6 +25,11 @@ vi.mock('../../db', () => ({
       clear: () => mockClear(),
       count: () => mockCount(),
       orderBy: (key: any) => mockOrderBy(key),
+      where: (_key: any) => ({
+        equals: (_value: any) => ({
+          filter: (_predicate: any) => ({ first: () => mockCoalesceFirst() }),
+        }),
+      }),
     },
   },
   isIndexedDBAvailable: vi.fn(() => Promise.resolve(true)),
@@ -73,11 +80,22 @@ vi.mock('../../api/profiles', () => ({
   playTrackingApi: mockPlayTrackingApi,
 }));
 
+const mockQueueApi = {
+  putSession: vi.fn(),
+};
+
+vi.mock('../../api/queue', () => ({
+  queueApi: mockQueueApi,
+}));
+
 const mockConnectivityState = { browserOnline: true, offlineModeActive: false };
+type ConnectivityListener = (state: { offlineModeActive: boolean }) => void;
+const mockSubscribe = vi.fn((_listener: ConnectivityListener) => () => {});
 
 vi.mock('../../stores/connectivityStore', () => ({
   useConnectivityStore: {
     getState: vi.fn(() => mockConnectivityState),
+    subscribe: (listener: ConnectivityListener) => mockSubscribe(listener),
   },
 }));
 
@@ -95,6 +113,8 @@ describe('syncService', () => {
     mockClear.mockResolvedValue(undefined);
     mockCount.mockResolvedValue(0);
     mockToArray.mockResolvedValue([]);
+    mockCoalesceFirst.mockResolvedValue(undefined);
+    mockQueueApi.putSession.mockResolvedValue({ version: 1, superseded: false });
     mockConnectivityState.offlineModeActive = false;
   });
 
@@ -289,7 +309,7 @@ describe('syncService', () => {
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(mockLastfmApi.scrobble).toHaveBeenCalledWith('track-1', expect.any(Number));
+      expect(mockLastfmApi.scrobble).toHaveBeenCalledWith('track-1', expect.any(Number), { headers: { 'X-Profile-ID': 'profile-123' } });
     });
 
     it('should dispatch now_playing action via lastfmApi', async () => {
@@ -303,7 +323,7 @@ describe('syncService', () => {
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(mockLastfmApi.updateNowPlaying).toHaveBeenCalledWith('track-1');
+      expect(mockLastfmApi.updateNowPlaying).toHaveBeenCalledWith('track-1', { headers: { 'X-Profile-ID': 'profile-123' } });
     });
 
     it('should dispatch favorite_toggle action via favoritesApi', async () => {
@@ -317,7 +337,7 @@ describe('syncService', () => {
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(mockFavoritesApi.toggle).toHaveBeenCalledWith('track-1');
+      expect(mockFavoritesApi.toggle).toHaveBeenCalledWith('track-1', { headers: { 'X-Profile-ID': 'profile-123' } });
     });
 
     it('should dispatch a queued listen_event skip via playTrackingApi', async () => {
@@ -336,6 +356,7 @@ describe('syncService', () => {
       expect(mockPlayTrackingApi.recordSkip).toHaveBeenCalledWith(
         'track-1',
         expect.objectContaining({ reason: 'user', played_seconds: 5 }),
+        { headers: { 'X-Profile-ID': 'profile-123' } },
       );
       expect(mockPlayTrackingApi.recordPlay).not.toHaveBeenCalled();
     });
@@ -352,7 +373,7 @@ describe('syncService', () => {
       const { processPendingActions } = await getModule();
       await processPendingActions();
 
-      expect(mockPlayTrackingApi.recordRejection).toHaveBeenCalledWith('track-2', expect.objectContaining({ context: 'radio' }));
+      expect(mockPlayTrackingApi.recordRejection).toHaveBeenCalledWith('track-2', expect.objectContaining({ context: 'radio' }), { headers: { 'X-Profile-ID': 'profile-123' } });
     });
   });
 
@@ -443,6 +464,158 @@ describe('syncService', () => {
 
       expect(removeEventListenerSpy).toHaveBeenCalledWith('online', expect.any(Function));
       removeEventListenerSpy.mockRestore();
+    });
+
+    it('also drains on the connectivity store recovering', async () => {
+      // The probe-driven forcedOffline -> reachable transition emits no browser 'online'
+      // event, so without this subscription that recovery was only covered incidentally
+      // by an effect in a mounted UI component.
+      const { initSyncListeners } = await getModule();
+      initSyncListeners();
+
+      expect(mockSubscribe).toHaveBeenCalledWith(expect.any(Function));
+
+      const listener = mockSubscribe.mock.calls[0][0];
+      mockToArray.mockResolvedValue([
+        { id: 1, profileId: 'profile-123', type: 'favorite_toggle', payload: { trackId: 't1' }, retries: 0 },
+      ]);
+
+      // Offline, then back: only the falling edge should drain.
+      listener({ offlineModeActive: true });
+      expect(mockFavoritesApi.toggle).not.toHaveBeenCalled();
+
+      listener({ offlineModeActive: false });
+      await vi.waitFor(() => expect(mockFavoritesApi.toggle).toHaveBeenCalled());
+    });
+  });
+
+  describe('queue_sync — state, not events', () => {
+    it('replaces an existing row for the profile instead of appending', async () => {
+      // A queue is state: appending one row per mutation would replay hundreds of stale
+      // queues on reconnect, all but the last of them pointless.
+      mockCoalesceFirst.mockResolvedValue({ id: 7, profileId: 'profile-123', type: 'queue_sync' });
+      const { queueAction } = await getModule();
+
+      await queueAction('queue_sync', { track_ids: ['a'], version: 3 });
+
+      expect(mockAdd).not.toHaveBeenCalled();
+      expect(mockUpdate).toHaveBeenCalledWith(
+        7,
+        expect.objectContaining({ payload: { track_ids: ['a'], version: 3 }, retries: 0 }),
+      );
+    });
+
+    it('adds a row when the profile has none yet', async () => {
+      mockCoalesceFirst.mockResolvedValue(undefined);
+      const { queueAction } = await getModule();
+
+      await queueAction('queue_sync', { track_ids: ['a'] });
+
+      expect(mockAdd).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'queue_sync', profileId: 'profile-123' }),
+      );
+    });
+
+    it('still appends event-shaped actions', async () => {
+      // Coalescing must not leak to scrobbles and listening events, each of which is a
+      // distinct thing that happened.
+      mockCoalesceFirst.mockResolvedValue({ id: 7, type: 'scrobble' });
+      const { queueAction } = await getModule();
+
+      await queueAction('scrobble', { trackId: 't1', timestamp: '123' });
+
+      expect(mockAdd).toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it('is never dropped for exceeding the retry limit', async () => {
+      // Dropping a scrobble loses a scrobble. Dropping this leaves the server on a state
+      // no device ever held, which ADR-0003 point 6 rules out.
+      mockToArray.mockResolvedValue([
+        { id: 1, profileId: 'profile-123', type: 'queue_sync', payload: {}, retries: 5 },
+      ]);
+      mockQueueApi.putSession.mockRejectedValue(new Error('boom'));
+      const { processPendingActions } = await getModule();
+
+      const result = await processPendingActions();
+
+      expect(mockDelete).not.toHaveBeenCalled();
+      expect(result.failed).toBe(0);
+      expect(mockUpdate).toHaveBeenCalledWith(1, { retries: 6 });
+    });
+
+    it('treats a rejected reservoir hash as handled rather than retryable', async () => {
+      // A 409 means the omitted reservoir cannot be filled in. Retrying the same payload
+      // would fail identically; the caller has to resend it in full.
+      mockToArray.mockResolvedValue([
+        { id: 1, profileId: 'profile-123', type: 'queue_sync', payload: {}, retries: 0 },
+      ]);
+      mockQueueApi.putSession.mockRejectedValue({ response: { status: 409 } });
+      const { processPendingActions } = await getModule();
+
+      const result = await processPendingActions();
+
+      expect(result.processed).toBe(1);
+      expect(mockDelete).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('replaying against the right profile', () => {
+    it('pins each action to the profile that queued it', async () => {
+      // The X-Profile-ID interceptor uses whichever profile is selected *now*, so before
+      // this an action queued under one profile replayed against another.
+      mockToArray.mockResolvedValue([
+        { id: 1, profileId: 'profile-abc', type: 'favorite_toggle', payload: { trackId: 't1' }, retries: 0 },
+      ]);
+      const { processPendingActions } = await getModule();
+
+      await processPendingActions();
+
+      expect(mockFavoritesApi.toggle).toHaveBeenCalledWith('t1', {
+        headers: { 'X-Profile-ID': 'profile-abc' },
+      });
+    });
+
+    it('pins a queue sync to the profile that queued it', async () => {
+      // The most important case: a queue delivered to the wrong profile would overwrite
+      // that profile's own queue.
+      mockToArray.mockResolvedValue([
+        { id: 1, profileId: 'profile-abc', type: 'queue_sync', payload: { track_ids: ['a'] }, retries: 0 },
+      ]);
+      const { processPendingActions } = await getModule();
+
+      await processPendingActions();
+
+      expect(mockQueueApi.putSession).toHaveBeenCalledWith(
+        { track_ids: ['a'] },
+        { headers: { 'X-Profile-ID': 'profile-abc' } },
+      );
+    });
+  });
+
+  describe('concurrent drains', () => {
+    it('runs a single drain when triggered twice at once', async () => {
+      // The 'online' handler, the connectivity subscription and OfflineIndicator's effect
+      // can all fire together; without a guard each action is delivered more than once.
+      mockToArray.mockResolvedValue([
+        { id: 1, profileId: 'profile-123', type: 'favorite_toggle', payload: { trackId: 't1' }, retries: 0 },
+      ]);
+      // Deferred up front: the mock is only reached after several awaits, so capturing
+      // `resolve` from inside the executor would still be unset when we call it.
+      let resolveToggle: () => void = () => {};
+      const inFlightToggle = new Promise<void>((resolve) => {
+        resolveToggle = resolve;
+      });
+      mockFavoritesApi.toggle.mockImplementation(() => inFlightToggle);
+      const { processPendingActions } = await getModule();
+
+      const first = processPendingActions();
+      const second = processPendingActions();
+      await vi.waitFor(() => expect(mockFavoritesApi.toggle).toHaveBeenCalled());
+      resolveToggle();
+      await Promise.all([first, second]);
+
+      expect(mockFavoritesApi.toggle).toHaveBeenCalledTimes(1);
     });
   });
 });

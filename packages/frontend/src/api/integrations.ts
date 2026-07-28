@@ -1,5 +1,6 @@
 import api from './base';
 import { getApiUrl } from './base';
+import type { RequestOptions } from './base';
 
 export interface VideoSearchResult {
   video_id: string;
@@ -76,16 +77,16 @@ export const lastfmApi = {
     return data;
   },
 
-  updateNowPlaying: async (trackId: string): Promise<{ status: string; message: string }> => {
-    const { data } = await api.post('/lastfm/now-playing', { track_id: trackId });
+  updateNowPlaying: async (trackId: string, options?: RequestOptions): Promise<{ status: string; message: string }> => {
+    const { data } = await api.post('/lastfm/now-playing', { track_id: trackId }, options);
     return data;
   },
 
-  scrobble: async (trackId: string, timestamp?: number): Promise<{ status: string; message: string }> => {
+  scrobble: async (trackId: string, timestamp?: number, options?: RequestOptions): Promise<{ status: string; message: string }> => {
     const { data } = await api.post('/lastfm/scrobble', {
       track_id: trackId,
       timestamp,
-    });
+    }, options);
     return data;
   },
 };

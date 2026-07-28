@@ -4,6 +4,7 @@
  */
 
 import api from './base';
+import type { RequestOptions } from './base';
 import type { Track } from '../types';
 import type { QueueSource } from '../player/playerStore.types';
 
@@ -114,8 +115,11 @@ export const queueApi = {
    * Rejects with a 409 when `reservoir_ids` was omitted but the named hash does not match
    * what the server holds; the caller should resend with the reservoir in full.
    */
-  putSession: async (session: PlaybackSessionWrite): Promise<PlaybackSessionResponse> => {
-    const { data } = await api.put('/queue/session', session);
+  putSession: async (
+    session: PlaybackSessionWrite,
+    options?: RequestOptions,
+  ): Promise<PlaybackSessionResponse> => {
+    const { data } = await api.put('/queue/session', session, options);
     return data;
   },
 

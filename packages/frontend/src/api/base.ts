@@ -165,6 +165,12 @@ export function encodePathSegment(value: string): string {
 
 // Add X-Profile-ID header to all requests (if a profile is selected)
 api.interceptors.request.use(async (config) => {
+  // An explicitly-supplied profile wins. The offline outbox replays actions against the
+  // profile that queued them, which is not necessarily the one selected now — before this,
+  // switching profiles while actions were pending sent them all to the wrong profile.
+  if (config.headers['X-Profile-ID']) {
+    return config;
+  }
   try {
     const profileId = await _profileProvider?.getSelectedProfileId();
     if (profileId) {
@@ -176,6 +182,13 @@ api.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+/**
+ * Extra per-request options. Narrow to `headers` on purpose: the only caller is the
+ * outbox pinning a replay to the profile that queued it, and a full `AxiosRequestConfig`
+ * would invite callers to override things like `baseURL` or interceptor-managed fields.
+ */
+export type RequestOptions = { headers?: Record<string, string> };
 
 // Handle 401 errors and track all API errors for debugging
 api.interceptors.response.use(

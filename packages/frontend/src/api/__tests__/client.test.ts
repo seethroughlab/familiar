@@ -364,7 +364,13 @@ describe('favoritesApi', () => {
 
       const result = await favoritesApi.toggle('track-123')
 
-      expect(mockApiInstance.post).toHaveBeenCalledWith('/favorites/track-123/toggle')
+      // No body, and no per-request options unless the outbox supplies them to pin the
+      // replay to the profile that queued it.
+      expect(mockApiInstance.post).toHaveBeenCalledWith(
+        '/favorites/track-123/toggle',
+        undefined,
+        undefined,
+      )
       expect(result.is_favorite).toBe(true)
     })
   })

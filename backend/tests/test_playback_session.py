@@ -30,6 +30,43 @@ pytestmark = pytest.mark.asyncio
 SESSION_URL = "/api/v1/queue/session"
 
 
+@pytest.fixture(autouse=True)
+def queue_sync_flag(monkeypatch):
+    """Control the server-side flag in-process, defaulting it on.
+
+    It ships off (ADR-0003 point 7), so without this every request here would be a 503.
+    Patching the accessor rather than calling `update()`: `get()` reloads from disk on
+    every call, so mutating the returned model does nothing, and `update()` would write
+    to the developer's real `data/settings.json`.
+    """
+    from app.services.app_settings import AppSettingsService
+
+    state = {"enabled": True}
+    original = AppSettingsService.get
+
+    def patched(self):
+        settings = original(self)
+        settings.queue_sync_enabled = state["enabled"]
+        return settings
+
+    monkeypatch.setattr(AppSettingsService, "get", patched)
+    return state
+
+
+class TestFlag:
+    async def test_the_endpoints_are_off_when_the_flag_is(
+        self, client, test_profile, queue_sync_flag
+    ):
+        queue_sync_flag["enabled"] = False
+        # 503 rather than silently accepting: a server that took writes and did nothing
+        # with them would look like a client bug and be debugged on the wrong side.
+        assert _get(client, test_profile).status_code == 503
+        assert _put(client, test_profile).status_code == 503
+        assert client.get(
+            f"{SESSION_URL}/archive", headers=make_profile_headers(test_profile)
+        ).status_code == 503
+
+
 def _body(**overrides):
     """A minimal valid session write."""
     body = {

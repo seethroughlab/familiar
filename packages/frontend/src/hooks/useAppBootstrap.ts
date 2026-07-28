@@ -5,6 +5,7 @@ import { useScrobbling } from './useScrobbling';
 import { usePlayTracking } from './usePlayTracking';
 import { initSyncListeners } from '../services/syncService';
 import { initOfflineManifestSync } from '../services/offlineManifestService';
+import { initQueueSync, reconcileWithServer } from '../services/queueSyncService';
 import { showSuccess, showWarning } from '../stores/toastStore';
 import { initRemoteLogging } from '../services/remoteLogService';
 import { usePlayerStore } from '../stores/playerStore';
@@ -45,6 +46,18 @@ export function useAppBootstrap({
   // since the set only changes by downloading.
   useEffect(() => {
     return initOfflineManifestSync();
+  }, []);
+
+  // Mirror the playback queue to the server (ADR-0003), behind a per-device flag.
+  // Reconciliation runs after hydration has already restored the local queue, so the
+  // listener never waits on the network to see their queue — the server's copy only
+  // replaces it when it is genuinely newer, which is the cross-device handoff.
+  useEffect(() => {
+    const stop = initQueueSync();
+    reconcileWithServer().catch(() => {
+      // Non-fatal: the local replica is authoritative for playback either way.
+    });
+    return stop;
   }, []);
 
   // Initialize remote logging (captures frontend logs to backend)

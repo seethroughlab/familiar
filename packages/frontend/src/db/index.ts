@@ -76,7 +76,10 @@ export interface PendingAction {
   // NOTE: mirrored by `ActionType` in services/syncService.ts — keep both in step.
   // Adding a value needs no Dexie version bump: `type` is indexed, but an IndexedDB
   // index constrains the key path, not the value domain, and `payload` is unindexed.
-  type: 'scrobble' | 'now_playing' | 'favorite_toggle' | 'listen_event';
+  // `queue_sync` is coalesced rather than appended: at most one row per profile, its
+  // payload replaced in place. A queue is state, not an event — appending a snapshot per
+  // mutation would replay hundreds of stale queues on reconnect (ADR-0003 point 3).
+  type: 'scrobble' | 'now_playing' | 'favorite_toggle' | 'listen_event' | 'queue_sync';
   payload: unknown;
   createdAt: Date;
   retries: number;
