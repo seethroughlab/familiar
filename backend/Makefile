@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi format backfill-artists
+.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check format backfill-artists
 
 # Install dependencies
 install:
@@ -40,9 +40,14 @@ lint-contracts:
 	uv run python scripts/lint_migrations.py
 	uv run python scripts/lint_profile_contracts.py
 
-# Dump the OpenAPI schema for inspection or client generation
+# Write backend/openapi.json — the artifact familiar-apple generates its Swift client from.
+# Regenerate and commit whenever the API changes; CI fails if it is stale.
 openapi:
-	uv run python -c "import json; from app.main import app; print(json.dumps(app.openapi(), indent=2))"
+	uv run python scripts/dump_openapi.py
+
+# Fail if the committed schema no longer matches the app (CI gate).
+openapi-check:
+	uv run python scripts/dump_openapi.py --check
 
 # Format code
 format:

@@ -29,6 +29,7 @@ from app.api.exceptions import (
     TrackNotFoundError,
     ValidationError,
 )
+from app.api.schemas.common import UTCDateTime, error_responses
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import PlaybackSession, PlaybackSessionArchive, Track
 from app.db.models.profiles import PlaybackSessionPayload
@@ -209,7 +210,7 @@ class PlaybackSessionResponse(PlaybackSessionBody):
     """
 
     version: int
-    updated_at: datetime
+    updated_at: UTCDateTime
     # True when this response is the *other* device's queue because the write lost.
     superseded: bool = False
 
@@ -222,8 +223,8 @@ class ArchivedSessionResponse(BaseModel):
     cursor: int
     queue_source: QueueSource | None
     position_seconds: float
-    superseded_at: datetime
-    archived_at: datetime
+    superseded_at: UTCDateTime
+    archived_at: UTCDateTime
 
 
 class ArchivedSessionsResponse(BaseModel):
@@ -428,7 +429,16 @@ async def get_playback_session(
     return _to_response(session)
 
 
-@router.put("/session", response_model=PlaybackSessionResponse, operation_id="putPlaybackSession")
+@router.put(
+    "/session",
+    response_model=PlaybackSessionResponse,
+    operation_id="putPlaybackSession",
+    # 409 is control flow here, not an error condition: it means the client named a reservoir
+    # hash the server does not hold and must resend `reservoir_ids` in full. A client that cannot
+    # discover that from the schema will treat it as a generic failure and stop syncing
+    # (ADR-0003 point 4).
+    responses=error_responses(409),
+)
 async def put_playback_session(
     body: PlaybackSessionWrite,
     db: DbSession,

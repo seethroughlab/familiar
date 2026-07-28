@@ -4,6 +4,8 @@ Status: accepted
 
 Date: 2026-07-26
 
+Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
+
 Implementation:
 - Decision points 1–4 and 6 were revised before acceptance, after measuring the live schema. The
   original point 1 said "Swift now, for the `familiar-apple` repo", which contradicts
@@ -15,11 +17,66 @@ Implementation:
   advertising `application/json` for audio, images, zips and SSE; two handlers and four model fields
   typed; `SimilarArtistInfo` de-duplicated into `app/api/schemas/artists.py`. The lint was verified
   to fail by deliberately adding an untyped in-scope handler.
-- Phase 2 — generating the Swift client — is not started, and waits on `familiar-apple`.
-- Burn-down remaining: 50 out-of-scope untyped operations and one collision-mangled schema name
-  (`ImportPreviewResponse`, declared in two modules), allowlisted in the lint.
+- Phase 1.5 — the schema was made to describe the *contract*, not just response bodies, on branch
+  `feat/adr-0007-schema-contract`. Phase 1 had hardened bodies and stopped; three things a
+  generated client needs were still undescribed, and each would have made it wrong on its first
+  request:
+  - **The profile header did not appear in the schema at all.** `deps.py` reads `X-Profile-ID` off
+    the raw request, and a search for `Header(` across `app/api/` returned nothing, so FastAPI
+    emitted no parameter and no security scheme. This ADR's Context says "Authentication imposes no
+    complexity here" — true of the model, and beside the point, because generation consumes the
+    schema rather than the model. Now an `APIKeyHeader` depended on by both profile dependencies;
+    102 operations carry the requirement and behaviour is unchanged.
+  - **Errors were undocumented, and the one documented error was wrong.** Only 200 and FastAPI's
+    automatic 422 appeared, and that 422 described `HTTPValidationError` while the overridden
+    handler returns the Familiar envelope — so the single error shape a client would have modelled
+    is the one shape the server never sends. `ErrorEnvelope` is now a component, attached at the 32
+    `include_router` calls.
+  - **Control flow was invisible**, including the 409 that `PUT /queue/session` returns to mean
+    "resend the reservoir in full" ([ADR-0003](ADR-0003-server-owns-the-playback-queue.md) point 4).
+- Phase 1.6 — the surface was reconciled with ADR-0001's v1 scope, and three published facts turned
+  out to be stale. `ambient`, `mixtapes` and `outputs` were removed; that also restored the
+  invariant ADR-0001's readiness audit claimed, since the five allowlisted untyped operations that
+  had drifted *inside* the surface were all `outputs/zones/*`.
 
-Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
+  **The schema was also not deterministic.** Two modules declared `ImportPreviewResponse`, and
+  which one FastAPI fully qualified varied between runs — so consecutive builds produced different
+  schemas and a generated client would have had a type renamed under it. Renaming the
+  export-import twin to `ProfileImportPreviewResponse`, matching its sibling
+  `LibraryImportPreviewResponse`, removed the collision; the schema now hashes identically across
+  runs. This had to be found before pinning an artifact, and would not have been visible without
+  one.
+
+- Phase 2 — **the generator is swift-openapi-generator**, resolving the first follow-up below. It
+  runs as a SwiftPM build plugin in `familiar-apple`, so no generated Swift is committed and a
+  backend change surfaces as a compile error. The schema is pinned to `backend/openapi.json` by
+  `scripts/dump_openapi.py`, with `make openapi-check` failing in CI if it drifts — a separate
+  repo with a different toolchain cannot import the app the way the lint does.
+
+  Proven on one tag first (`favorites`, seven operations) against the live NAS rather than
+  designed in the abstract. Three defects surfaced that no amount of planning would have found,
+  and all three were invisible from the Python side:
+
+  - **35% of the schema would have been silently dropped.** The generator discards any property
+    whose `anyOf` contains a bare `{"type": "null"}` — exactly how Pydantic v2 spells `X | None`.
+    487 of 1,374 properties, including `title`, `artist` and `duration_seconds`. The client
+    compiled and looked complete. `dump_openapi.py` now normalises those to the canonical 3.1
+    form.
+  - **Timestamps were not RFC 3339.** Naive UTC datetimes serialised without an offset, because
+    the columns are TIMESTAMP WITHOUT TIME ZONE. Swift rejected them; **JavaScript accepted them
+    and parsed them as local time**, so the web app had been displaying every server timestamp
+    shifted by the viewer's UTC offset for as long as those fields existed. Fixed at the API
+    boundary with `to_rfc3339` and a `UTCDateTime` annotated type.
+  - **Foundation is stricter than RFC 3339.** Neither of its ISO-8601 option sets accepts both
+    fractional and whole-second timestamps, so the client carries a small transcoder. That one is
+    a client accommodation, not a server defect.
+
+  The second follow-up — verifying against the profile-header pattern and the error envelope — is
+  what the slice tests assert, and both required phase 1.5 to exist first.
+- Widening from eight tags to the remaining 108 operations is now a config change, not a design
+  question.
+- Burn-down remaining: 50 untyped operations, all outside the generated surface, allowlisted in the
+  lint. The mangled-schema allowlist is now empty — see phase 1.5.
 
 ## Context
 
@@ -70,10 +127,20 @@ Native clients consume a **generated** API client, not a hand-written one.
      inform the generator choice.
 
 2. **The generated surface is the native v1 listening path, not the whole API** — tags `tracks`,
-   `library`, `playlists`, `smart-playlists`, `profiles`, `favorites`, `chat`, `mixtapes`, `ambient`.
-   Management surfaces stay web-only under
+   `library`, `playlists`, `smart-playlists`, `profiles`, `favorites`, `chat` and `queue`: eight
+   tags, 108 operations. Management surfaces stay web-only under
    [ADR-0002](ADR-0002-web-app-is-the-management-surface.md) and will never need a Swift client,
    which is fortunate: they are where the untyped responses concentrate.
+
+   `ambient`, `mixtapes` and `outputs` are **not** generated, and the lint records why next to the
+   surface definition. The first two are out of v1 by
+   [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5; casting does not
+   appear in its point 4 scope. All three were in the surface for a time — see the phase 1.5 note
+   in the Implementation block.
+
+   `library` stays whole even though it mixes roughly 18 listening operations with 17 management
+   ones. Tags cannot express that split, and the cost of the extra 17 is dead generated code
+   rather than a defect.
 
 3. **Non-JSON endpoints must declare their real media type.** Excluding them is not enough. Seven
    endpoints — audio streaming, artwork, avatars, mixtape downloads and two SSE streams — declared
@@ -134,7 +201,11 @@ Native clients consume a **generated** API client, not a hand-written one.
 - **Tradeoff:** A generator dependency and build step enter the toolchain.
 - **Tradeoff:** Two API client styles coexist — generated on native, hand-written on web — until and
   unless the web client migrates.
-- **Follow-up:** Choose the Swift generator and verify its output against the profile-header
-  interceptor pattern and the normalised error envelope.
+- **Resolved:** ~~Choose the Swift generator and verify its output against the profile-header
+  interceptor pattern and the normalised error envelope~~ — swift-openapi-generator, verified
+  against a live server on the `favorites` slice. See the Implementation block.
+- **Follow-up:** The 49 timestamp fields still declared as plain `string` rather than
+  `format: date-time` now carry a `Z`, but a generated client models them as strings. Typing them
+  would let clients decode dates, at the cost of a wire-compatible schema change.
 - **Follow-up:** Audit for other loosely typed handlers beyond the four named here; the list came
   from a survey, not an exhaustive pass.

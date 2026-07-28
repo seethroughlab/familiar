@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.api.deps import CurrentProfile, DbSession
 from app.config import FEATURES_VERSION, get_app_version
-from app.utils.time import utcnow
+from app.utils.time import to_rfc3339, utcnow
 
 router = APIRouter(tags=["diagnostics"])
 
@@ -177,8 +177,8 @@ async def export_diagnostics(db: DbSession) -> DiagnosticsExport:
                 "level": row.level,
                 "namespace": row.namespace,
                 "message": row.message,
-                "client_ts": row.client_ts.isoformat() if row.client_ts else None,
-                "server_ts": row.server_ts.isoformat() if row.server_ts else None,
+                "client_ts": to_rfc3339(row.client_ts) if row.client_ts else None,
+                "server_ts": to_rfc3339(row.server_ts) if row.server_ts else None,
                 "context": row.context,
             })
     except Exception as e:
@@ -326,7 +326,7 @@ async def query_frontend_logs(
     if format == "text":
         lines = []
         for row in rows:
-            ts = row.client_ts.isoformat() if row.client_ts else "?"
+            ts = to_rfc3339(row.client_ts) if row.client_ts else "?"
             lines.append(f"{ts} {row.level.upper():5s} [{row.namespace}] {row.message}")
         return PlainTextResponse("\n".join(lines))
 
@@ -338,8 +338,8 @@ async def query_frontend_logs(
             "namespace": row.namespace,
             "message": row.message,
             "context": row.context,
-            "client_ts": row.client_ts.isoformat() if row.client_ts else None,
-            "server_ts": row.server_ts.isoformat() if row.server_ts else None,
+            "client_ts": to_rfc3339(row.client_ts) if row.client_ts else None,
+            "server_ts": to_rfc3339(row.server_ts) if row.server_ts else None,
         })
 
     return FrontendLogQueryResponse(entries=entries, total=total)

@@ -62,6 +62,7 @@ from app.api.routes import (
     videos,
 )
 from app.api.routes import settings as settings_routes
+from app.api.schemas.common import error_responses
 from app.config import AUDIO_EXTENSIONS, MUSIC_LIBRARY_PATH, get_app_version
 from app.config import settings as app_config
 from app.logging_config import get_logger, setup_logging
@@ -457,40 +458,48 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         request_id=request_id,
     )
 
-# Include routers
+# Include routers.
+#
+# `DEFAULT_ERROR_RESPONSES` is attached to every router rather than to 260 individual routes
+# (ADR-0007). Without it the schema documents only 200 and FastAPI's automatic 422 — and that 422
+# is the wrong shape, since `validation_exception_handler` below emits the Familiar envelope
+# instead. Declaring 422 explicitly replaces FastAPI's `HTTPValidationError` with the shape the
+# server actually sends. Routes add their own statuses on top where one is real control flow.
+DEFAULT_ERROR_RESPONSES = error_responses(400, 401, 404, 422, 500)
+
 app.include_router(health.router, prefix="/api/v1")
-app.include_router(tracks.router, prefix="/api/v1")
-app.include_router(library.router, prefix="/api/v1")
-app.include_router(chat.router, prefix="/api/v1")
-app.include_router(videos.router, prefix="/api/v1")
-app.include_router(lastfm.router, prefix="/api/v1")
-app.include_router(settings_routes.router, prefix="/api/v1")
-app.include_router(smart_playlists.router, prefix="/api/v1")
-app.include_router(playlists.router, prefix="/api/v1")
-app.include_router(mixtapes.router, prefix="/api/v1")
-app.include_router(profiles.router, prefix="/api/v1")
-app.include_router(favorites.router, prefix="/api/v1")
-app.include_router(organizer.router, prefix="/api/v1")
-app.include_router(proposed_changes.router, prefix="/api/v1")
-app.include_router(bandcamp.router, prefix="/api/v1")
-app.include_router(outputs.router, prefix="/api/v1")
-app.include_router(artwork.router, prefix="/api/v1")
-app.include_router(background.router, prefix="/api/v1")
-app.include_router(diagnostics.router, prefix="/api/v1")
-app.include_router(export_import.router, prefix="/api/v1")
-app.include_router(s3_backup.router, prefix="/api/v1")
-app.include_router(analysis.router, prefix="/api/v1")
-app.include_router(download.router, prefix="/api/v1")
-app.include_router(updates.router, prefix="/api/v1")
-app.include_router(spotify_import.router, prefix="/api/v1")
-app.include_router(ambient.router, prefix="/api/v1")
-app.include_router(queue.router, prefix="/api/v1")
-app.include_router(external_albums.router, prefix="/api/v1")
-app.include_router(new_releases.router, prefix="/api/v1")
-app.include_router(admin_artists.router, prefix="/api/v1")
-app.include_router(pending_review.group_router, prefix="/api/v1")
-app.include_router(pending_review.bulk_router, prefix="/api/v1")
-app.include_router(pending_review.router, prefix="/api/v1")
+app.include_router(tracks.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(library.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(chat.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(videos.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(lastfm.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(settings_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(smart_playlists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(playlists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(mixtapes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(profiles.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(favorites.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(organizer.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(proposed_changes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(bandcamp.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(outputs.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(artwork.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(background.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(diagnostics.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(export_import.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(s3_backup.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(analysis.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(download.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(updates.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(spotify_import.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(ambient.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(external_albums.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(new_releases.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(admin_artists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(pending_review.group_router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(pending_review.bulk_router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(pending_review.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 
 
 # Serve frontend static files in production

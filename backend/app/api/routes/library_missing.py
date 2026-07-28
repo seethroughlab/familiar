@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.api.deps import DbSession
 from app.api.exceptions import InvalidPathError, TrackNotFoundError, ValidationError
 from app.db.models import Track, TrackStatus
+from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,7 @@ async def get_missing_tracks(db: DbSession) -> MissingTracksResponse:
                 album=track.album,
                 file_path=track.file_path,
                 status=track.status.value,
-                missing_since=track.missing_since.isoformat() if track.missing_since else None,
+                missing_since=to_rfc3339(track.missing_since) if track.missing_since else None,
                 days_missing=days_missing,
             )
         )

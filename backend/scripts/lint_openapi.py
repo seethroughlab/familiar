@@ -34,15 +34,36 @@ GENERATED_SURFACE = {
     "profiles",
     "favorites",
     "chat",
-    "mixtapes",
-    "ambient",
     # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these
     # directly — the whole point of ADR-0006 is that they carry no ranking code.
     "queue",
-    # Network audio outputs (WiiM, Sonos, AirPlay, Chromecast). Casting is a listening
-    # feature, not a management one — a native client needs to send audio to speakers.
-    "outputs",
 }
+
+# Tags deliberately NOT generated, with the reason. Recorded rather than merely absent,
+# because two of them were in the surface until this list existed.
+#
+#   ambient   — ADR-0001 point 5 puts ambient/generative mode out of v1, and it is iOS-only
+#               anyway (`ambientSynthBridge`: "Web never registers").
+#   mixtapes  — ADR-0001 point 5, same list.
+#   outputs   — casting does not appear in ADR-0001 point 4's v1 scope. Removing it also
+#               restores the invariant ADR-0001's readiness audit claimed: the five
+#               allowlisted untyped operations that were inside the surface are all
+#               `outputs/zones/*`, so every allowlisted entry is now genuinely out of scope.
+#
+# `library` stays whole despite mixing ~18 listening operations with ~17 management ones
+# (import, dedup, scan, review). Tag granularity cannot express that split, and the cost of
+# the extra 17 is dead generated code rather than a defect. Revisit if they resist typing.
+NOT_GENERATED = {"ambient", "mixtapes", "outputs"}
+
+# Error statuses every in-scope operation must declare, so a generated client can model
+# failures. 422 is the important one: FastAPI emits HTTPValidationError for it automatically,
+# but the handler is overridden to return the Familiar envelope, so the shape FastAPI documents
+# is the one shape the server never sends.
+REQUIRED_ERROR_RESPONSES = ("401", "404", "422", "500")
+
+# Floor for operations declaring the ProfileHeader scheme. Deliberately loose — it exists to
+# catch the requirement disappearing entirely, not to pin an exact number.
+MIN_SECURED_OPERATIONS = 50
 
 # operationIds longer than this are unusable as generated method names. The
 # default FastAPI scheme produced names up to 95 characters before ADR-0007.
@@ -126,10 +147,7 @@ ALLOWED_LOOSE_FIELDS = {
 
 # Schema names FastAPI had to fully qualify because two modules declare the same
 # model name. Ugly in a generated client; out of scope to fix here.
-ALLOWED_MANGLED_SCHEMAS = {
-    "app__api__routes__library_import__preview__ImportPreviewResponse",
-    "app__api__routes__export_import__profile__ImportPreviewResponse",
-}
+ALLOWED_MANGLED_SCHEMAS: set[str] = set()
 
 
 def _is_loose(schema: dict[str, Any]) -> bool:
@@ -182,6 +200,37 @@ def _success_response(operation: dict[str, Any]) -> dict[str, Any] | None:
 def lint_openapi(schema: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     components = schema.get("components", {}).get("schemas", {})
+
+    # The profile header must reach the schema. It is the only authentication there is, and it is
+    # supplied by a dependency rather than a route signature — so deleting `Depends(profile_header)`
+    # in deps.py would silently strip every security requirement and leave a generated client with
+    # no way to authenticate, while every test still passed (ADR-0007).
+    security_schemes = schema.get("components", {}).get("securitySchemes", {})
+    if "ProfileHeader" not in security_schemes:
+        errors.append(
+            "components.securitySchemes.ProfileHeader is missing — a generated client has no way "
+            "to send X-Profile-ID. Check `profile_header` is still depended on in app/api/deps.py."
+        )
+    else:
+        secured = sum(
+            1
+            for methods in schema.get("paths", {}).values()
+            for operation in methods.values()
+            if isinstance(operation, dict) and operation.get("security")
+        )
+        # A floor, not an exact count: the point is to catch the requirement vanishing wholesale,
+        # not to pin a number that legitimate route changes would churn.
+        if secured < MIN_SECURED_OPERATIONS:
+            errors.append(
+                f"only {secured} operations declare ProfileHeader (expected at least "
+                f"{MIN_SECURED_OPERATIONS}) — the dependency has probably been detached."
+            )
+
+    if "ErrorEnvelope" not in components:
+        errors.append(
+            "components.schemas.ErrorEnvelope is missing — every error funnels through "
+            "create_error_response, and a client that cannot model it decodes failures wrong."
+        )
     seen_operation_ids: dict[str, str] = {}
     in_scope_schemas: set[str] = set()
 
@@ -207,6 +256,41 @@ def lint_openapi(schema: dict[str, Any]) -> list[str]:
 
             if not tags and path.startswith("/api/"):
                 errors.append(f"{where}: no tag — generated clients group by tag")
+
+            # The error envelope must be declared, or a generated client models only 200 and
+            # decodes every failure wrong. Checked in-scope only: out-of-scope operations are
+            # never generated, and requiring it everywhere would be noise.
+            #
+            # 422 matters most. FastAPI emits `HTTPValidationError` for it automatically, but
+            # `validation_exception_handler` overrides the response to the Familiar envelope — so
+            # the one error shape a client would otherwise model is the one never sent.
+            if in_scope:
+                responses = operation.get("responses") or {}
+                missing = [
+                    code for code in REQUIRED_ERROR_RESPONSES if code not in responses
+                ]
+                if missing:
+                    errors.append(
+                        f"{where}: does not declare {missing} — a generated client cannot "
+                        "model errors it is never told about. Attach "
+                        "`error_responses(...)` (usually via the router)."
+                    )
+                for code, resp in responses.items():
+                    # Error statuses only. 201/202 are successes with their own models.
+                    if not (code.isdigit() and int(code) >= 400) or not isinstance(resp, dict):
+                        continue
+                    ref = (
+                        (resp.get("content") or {})
+                        .get("application/json", {})
+                        .get("schema", {})
+                        .get("$ref", "")
+                    )
+                    if ref and not ref.endswith("/ErrorEnvelope"):
+                        errors.append(
+                            f"{where}: {code} does not use ErrorEnvelope ({ref}) — "
+                            "every error funnels through create_error_response"
+                        )
+
 
             response = _success_response(operation)
             if response is None:

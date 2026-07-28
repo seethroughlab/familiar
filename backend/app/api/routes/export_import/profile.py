@@ -42,8 +42,15 @@ class ExportRequest(BaseModel):
     )
 
 
-class ImportPreviewResponse(BaseModel):
-    """Response from import preview."""
+class ProfileImportPreviewResponse(BaseModel):
+    """Response from profile import preview.
+
+    Named for its module rather than `ImportPreviewResponse` because
+    `library_import/preview.py` declares a different model under that name. FastAPI resolved
+    the collision by fully qualifying one of them — and *which* one was not stable between
+    runs, so the schema differed build to build and a generated client would have had a type
+    renamed under it. Matches the sibling `LibraryImportPreviewResponse` in this package.
+    """
 
     session_id: str
     summary: dict[str, int]
@@ -129,12 +136,12 @@ async def export_profile_data(
 # ============================================================================
 
 
-@router.post("/import/preview", response_model=ImportPreviewResponse)
+@router.post("/import/preview", response_model=ProfileImportPreviewResponse)
 async def preview_import(
     db: DbSession,
     profile: RequiredProfile,
     file: UploadFile = File(...),
-) -> ImportPreviewResponse:
+) -> ProfileImportPreviewResponse:
     """Preview an import file and get matching statistics.
 
     Upload a Familiar export JSON file to see:
@@ -171,7 +178,7 @@ async def preview_import(
     service = ImportService(db)
     session_id, preview = await service.preview_import(import_data)
 
-    return ImportPreviewResponse(
+    return ProfileImportPreviewResponse(
         session_id=preview["session_id"],
         summary=preview["summary"],
         matching=preview["matching"],

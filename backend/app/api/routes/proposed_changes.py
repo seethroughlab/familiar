@@ -20,6 +20,7 @@ from app.services.proposed_changes import (
     ChangeStats,
     ProposedChangesService,
 )
+from app.utils.time import to_rfc3339
 
 router = APIRouter(prefix="/proposed-changes", tags=["Proposed Changes"])
 
@@ -124,8 +125,8 @@ def _change_to_response(
         reason=change.reason,
         scope=change.scope.value if hasattr(change.scope, "value") else change.scope,
         status=change.status.value if hasattr(change.status, "value") else change.status,
-        created_at=change.created_at.isoformat() if change.created_at else None,
-        applied_at=change.applied_at.isoformat() if change.applied_at else None,
+        created_at=to_rfc3339(change.created_at) if change.created_at else None,
+        applied_at=to_rfc3339(change.applied_at) if change.applied_at else None,
         target_description=target_description,
     )
 

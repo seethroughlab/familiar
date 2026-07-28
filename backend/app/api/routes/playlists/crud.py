@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import PlaylistNotFoundError
 from app.db.models import Playlist, PlaylistTrack, ProfilePlayHistory, Track
+from app.utils.time import to_rfc3339
 
 router = APIRouter()
 
@@ -142,8 +143,8 @@ async def list_playlists(
             generation_prompt=playlist.generation_prompt,
             track_count=total_count,
             auto_download=playlist.auto_download,
-            created_at=playlist.created_at.isoformat(),
-            updated_at=playlist.updated_at.isoformat(),
+            created_at=to_rfc3339(playlist.created_at),
+            updated_at=to_rfc3339(playlist.updated_at),
         ))
 
     return responses
@@ -225,8 +226,8 @@ async def create_playlist(
         generation_prompt=playlist.generation_prompt,
         tracks=tracks_added,
         auto_download=playlist.auto_download,
-        created_at=playlist.created_at.isoformat(),
-        updated_at=playlist.updated_at.isoformat(),
+        created_at=to_rfc3339(playlist.created_at),
+        updated_at=to_rfc3339(playlist.updated_at),
     )
 
 
@@ -288,7 +289,7 @@ async def get_playlist(
                 album_artist=pt.track.album_artist,
                 album_type=pt.track.album_type.value if pt.track.album_type else None,
                 analysis_version=pt.track.analysis_version,
-                last_played_at=ph.last_played_at.isoformat() if ph and ph.last_played_at else None,
+                last_played_at=to_rfc3339(ph.last_played_at) if ph and ph.last_played_at else None,
                 play_count=ph.play_count if ph else None,
             ))
 
@@ -300,8 +301,8 @@ async def get_playlist(
         generation_prompt=playlist.generation_prompt,
         tracks=tracks,
         auto_download=playlist.auto_download,
-        created_at=playlist.created_at.isoformat(),
-        updated_at=playlist.updated_at.isoformat(),
+        created_at=to_rfc3339(playlist.created_at),
+        updated_at=to_rfc3339(playlist.updated_at),
     )
 
 
@@ -342,8 +343,8 @@ async def update_playlist(
         generation_prompt=playlist.generation_prompt,
         track_count=track_count,
         auto_download=playlist.auto_download,
-        created_at=playlist.created_at.isoformat(),
-        updated_at=playlist.updated_at.isoformat(),
+        created_at=to_rfc3339(playlist.created_at),
+        updated_at=to_rfc3339(playlist.updated_at),
     )
 
 

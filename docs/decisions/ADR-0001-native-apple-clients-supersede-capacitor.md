@@ -15,11 +15,17 @@ Implementation:
 - **Readiness audit, 2026-07-27.** Measured what actually blocks starting `familiar-apple`, rather
   than assuming the `CLAUDE.md` ordering is still accurate:
 
-  - **ADR-0007 is effectively clear.** All 50 operations on the lint's burn-down list are *outside*
-    the generated surface — management-surface endpoints per
-    [ADR-0002](ADR-0002-web-app-is-the-management-surface.md). The 143 in-scope operations across
-    nine tags are already fully typed. Phase 2 of that ADR (generating the Swift client) *is* the
-    native build, not a prerequisite for it.
+  - **ADR-0007 was less clear than this audit recorded**, and the audit itself caused part of the
+    drift. It stated that all 50 operations on the lint's burn-down list were outside the generated
+    surface and that "the 143 in-scope operations across nine tags are already fully typed". Adding
+    `queue` and `outputs` to the surface in the same pass pulled five allowlisted untyped
+    operations *inside* it, so neither claim held once written. Corrected during ADR-0007 phase 1.6:
+    the surface is eight tags and 108 operations, and every allowlisted entry is genuinely out of
+    scope again.
+
+    Phase 2 (generating the Swift client) *is* the native build rather than a prerequisite for it —
+    but phase 1 had described response bodies only, leaving the profile header, the error envelope
+    and the real status codes out of the schema entirely. Those are fixed in phase 1.5.
   - **`queue` was missing from the generated surface** and has been added. Radio and offline ranking
     ([ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md),
     [ADR-0006](ADR-0006-offline-ranking-is-precomputed-server-side.md)) are exactly what a native

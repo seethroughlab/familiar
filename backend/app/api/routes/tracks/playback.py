@@ -22,7 +22,7 @@ from sqlalchemy import select
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
 from app.db.models import PlayEvent, ProfilePlayHistory, Track
-from app.utils.time import utcnow
+from app.utils.time import to_rfc3339, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -333,7 +333,7 @@ async def get_play_stats(
             artist=track.artist,
             play_count=ph.play_count,
             total_play_seconds=ph.total_play_seconds,
-            last_played_at=ph.last_played_at.isoformat() if ph.last_played_at else None,
+            last_played_at=to_rfc3339(ph.last_played_at) if ph.last_played_at else None,
         )
         for ph, track in rows[:limit]
     ]

@@ -29,6 +29,7 @@ from app.services.mixtape_export import (
     run_mixtape_export,
 )
 from app.services.smart_playlists import SmartPlaylistService
+from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -78,8 +79,8 @@ def _serialize(mt: MixTape, progress: dict[str, Any] | None = None) -> MixTapeRe
         error_message=mt.error_message,
         duration_seconds=mt.duration_seconds,
         file_size_bytes=mt.file_size_bytes,
-        created_at=mt.created_at.isoformat() if mt.created_at else "",
-        completed_at=mt.completed_at.isoformat() if mt.completed_at else None,
+        created_at=to_rfc3339(mt.created_at) if mt.created_at else "",
+        completed_at=to_rfc3339(mt.completed_at) if mt.completed_at else None,
         progress=progress,
     )
 
