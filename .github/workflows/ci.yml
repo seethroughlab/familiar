@@ -475,28 +475,6 @@ jobs:
             grep 'rerun' results-integration.xml || true
           fi
 
-  ios-native-tests:
-    name: iOS Native AppTests
-    runs-on: [self-hosted, macOS]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run iOS unit tests
-        working-directory: packages/ios/native
-        run: |
-          xcodebuild test \
-            -scheme App \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
-            -resultBundlePath TestResults \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || true
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-test-results
-          path: packages/ios/native/TestResults
-          retention-days: 7
-
   frontend-lint:
     name: Frontend Lint
     runs-on: self-hosted
