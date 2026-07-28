@@ -12,6 +12,7 @@ import {
   type CachedTrack,
 } from '../db';
 import type { PlaylistDetail, SmartPlaylist } from '../api';
+import type { Track } from '../types';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('PlaylistCache');
@@ -387,6 +388,35 @@ export async function getFavoritesCacheInfo(): Promise<{
  * Resolve track IDs to cached track metadata.
  * Returns tracks in the same order as the input IDs.
  */
+/**
+ * Widen a cached track into the `Track` the player works in.
+ *
+ * Cached metadata is deliberately narrower than `Track` — it carries no `file_path`,
+ * `format` or analysis. Those come back as empty/zero rather than being faked: offline
+ * playback resolves audio through `offlineService` by id, and nothing offline reads
+ * analysis features.
+ *
+ * `useFavorites` does this same mapping inline; it can move onto this when next touched.
+ */
+export function cachedTrackToTrack(cached: CachedTrack): Track {
+  return {
+    id: cached.id,
+    file_path: '',
+    title: cached.title || null,
+    artist: cached.artist || null,
+    album: cached.album || null,
+    album_artist: cached.albumArtist ?? null,
+    album_type: 'album',
+    track_number: cached.trackNumber ?? null,
+    disc_number: cached.discNumber ?? null,
+    year: cached.year ?? null,
+    genre: cached.genre ?? null,
+    duration_seconds: cached.durationSeconds ?? null,
+    format: null,
+    analysis_version: 0,
+  };
+}
+
 export async function resolveTrackIds(
   trackIds: string[]
 ): Promise<CachedTrack[]> {

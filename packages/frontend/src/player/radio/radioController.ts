@@ -3,9 +3,15 @@
  * (ADR-0005 decision points 6 and 8).
  *
  * Follows the shape of `player/ambient/AmbientCoordinator`: subscribe to queue position,
- * ask the server to rank candidates, insert ahead of the play head. The ranking itself is
- * entirely server-side — the same engine ambient uses, under the `RADIO` weight profile —
- * so this file holds cadence and insertion policy only, no scoring.
+ * rank candidates, insert ahead of the play head. The ranking itself is entirely
+ * server-side — the same engine ambient uses, under the `RADIO` weight profile — so this
+ * file holds cadence and insertion policy only, no scoring.
+ *
+ * That holds offline too. Rather than going quiet, the offline path looks the ranking up
+ * in the precomputed manifest (ADR-0006), which the server built from the downloaded set
+ * using the identical scorer. So an offline suggestion is the same suggestion the online
+ * path would make over that set, not a degraded approximation — and there is still no
+ * scoring code on any client.
  *
  * Cadence is every `INSERT_EVERY_N_TRACKS` (ADR decision point 8). Inserting on queue
  * exhaustion was rejected: a library queue is a lazy reservoir over the whole collection
@@ -15,9 +21,18 @@ import { usePlayerStore } from '../playerStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { queueApi } from '../../api/queue';
 import { useRadioStore } from '../../stores/radioStore';
+import { getOfflineNeighbours } from '../../services/offlineManifestService';
+import { cachedTrackToTrack, resolveTrackIds } from '../../services/playlistCache';
+import type { Track } from '../../types';
 import { createLogger } from '../../utils/logger';
 
 const log = createLogger('Radio');
+
+/** A track worth inserting, and how well it scored. Same shape online and offline. */
+interface Candidate {
+  track: Track;
+  score: number;
+}
 
 /** Insert a suggestion every N track changes. Revisit once ADR-0004 data exists. */
 export const INSERT_EVERY_N_TRACKS = 4;
@@ -81,35 +96,25 @@ class RadioController {
     const current = state.currentTrack;
     if (!current) return;
 
-    // Nothing to fetch with, and inserting a track that cannot stream is worse than
-    // inserting nothing.
-    if (useConnectivityStore.getState().offlineModeActive) return;
-
     this.inFlight = true;
     try {
       const recent = state.queue
         .slice(Math.max(0, state.queueIndex - RECENT_WINDOW), state.queueIndex + 1)
         .map((item) => item.track);
+      const recentTrackIds = Array.from(new Set(recent.map((t) => t.id)));
 
-      const response = await queueApi.getSuggestions({
-        current_track_id: current.id,
-        recent_track_ids: Array.from(new Set(recent.map((t) => t.id))),
-        recent_artist_names: Array.from(
-          new Set(recent.map((t) => t.artist).filter((a): a is string => !!a))
-        ),
-        profile: 'radio',
-        limit: 5,
-      });
+      const candidates = useConnectivityStore.getState().offlineModeActive
+        ? await this.offlineCandidates(current.id, recentTrackIds)
+        : await this.onlineCandidates(current.id, recent, recentTrackIds);
 
-      if (response.pool_collapsed || response.suggestions.length === 0) {
-        // Too few candidates to rank meaningfully. Stay quiet rather than insert
-        // something arbitrary, and try again after the next N tracks.
-        log.debug('No usable suggestion (pool_size %d)', response.pool_size);
+      if (candidates.length === 0) {
+        // Too few candidates to rank meaningfully, or nothing downloaded to draw from.
+        // Stay quiet rather than insert something arbitrary; retry after the next N.
         this.tracksSinceInsert = 0;
         return;
       }
 
-      const pick = response.suggestions.find(
+      const pick = candidates.find(
         (s) => !this.inserted.has(s.track.id) && !this.isQueuedNearby(s.track.id)
       );
       if (!pick) {
@@ -142,6 +147,78 @@ class RadioController {
     } finally {
       this.inFlight = false;
     }
+  }
+
+  /** Rank against the whole library, server-side. */
+  private async onlineCandidates(
+    currentTrackId: string,
+    recent: Track[],
+    recentTrackIds: string[],
+  ): Promise<Candidate[]> {
+    const response = await queueApi.getSuggestions({
+      current_track_id: currentTrackId,
+      recent_track_ids: recentTrackIds,
+      recent_artist_names: Array.from(
+        new Set(recent.map((t) => t.artist).filter((a): a is string => !!a))
+      ),
+      profile: 'radio',
+      limit: 5,
+    });
+
+    if (response.pool_collapsed) {
+      log.debug('No usable suggestion (pool_size %d)', response.pool_size);
+      return [];
+    }
+    return response.suggestions.map((s) => ({ track: s.track, score: s.score }));
+  }
+
+  /**
+   * Look the ranking up in the precomputed manifest (ADR-0006).
+   *
+   * No scoring happens here and none ever should — the server ranked the downloaded set
+   * against itself using the same `score_candidate()` the online path uses, so an offline
+   * suggestion is the same suggestion, not an approximation of one. This resolves ids to
+   * tracks and preserves the server's order.
+   *
+   * The `radio` variant has been generated since ADR-0006 landed and, until now, was
+   * consumed by nothing.
+   */
+  private async offlineCandidates(
+    currentTrackId: string,
+    recentTrackIds: string[],
+  ): Promise<Candidate[]> {
+    const neighbours = await getOfflineNeighbours(currentTrackId, {
+      profile: 'radio',
+      // Radio has no preset control; the server emits its variant under 'all'.
+      filterPreset: 'all',
+      recentTrackIds,
+      limit: 5,
+    });
+    if (neighbours.length === 0) {
+      // Either no manifest yet, or it does not know this seed — a track downloaded since
+      // the last refresh is not usable as a seed until then (ADR-0006 accepts this).
+      log.debug('No offline neighbours for %s', currentTrackId);
+      return [];
+    }
+
+    // Filter against what is *actually downloaded* right now, not merely what the manifest
+    // was built from. The manifest goes stale when a track is removed, and suggesting a
+    // track whose audio is absent is the failure mode ADR-0006 flagged in `offlineScoring`
+    // (it read `cachedTracks` — metadata — rather than `offlineTracks`). `addToQueue`
+    // enforces the same invariant and would silently drop the insert, leaving this
+    // controller's `inserted` bookkeeping out of step with the queue.
+    const downloaded = useConnectivityStore.getState().offlineTrackIds;
+    const playable = neighbours.filter((n) => downloaded.has(n.trackId));
+    if (playable.length === 0) return [];
+
+    const scoreById = new Map(playable.map((n) => [n.trackId, n.score]));
+    const cached = await resolveTrackIds(playable.map((n) => n.trackId));
+
+    // resolveTrackIds preserves the requested order, which is the server's ranking.
+    return cached.map((track) => ({
+      track: cachedTrackToTrack(track),
+      score: scoreById.get(track.id) ?? 0,
+    }));
   }
 
   /** Already sitting in the upcoming queue — suggesting it again would be noise. */
