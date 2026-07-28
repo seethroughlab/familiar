@@ -18,6 +18,38 @@ Implementation:
   involved; (2) `PlaybackSession`, migration and endpoints; (3) client sync behind a flag. Phase 1 is
   deliberately separate — it fixes existing data loss, and without it phase 3 would upload an
   offline-filtered queue and overwrite the logical one on every other device.
+- Phase 1 — the logical/playable split, on branch `feat/adr-0003-logical-queue`.
+  `logicalTrackIds` / `logicalIndex` on `queueStore`, persisted to a third row
+  (`<profile>::logical`) with the same reference-equality dirty check the reservoir uses;
+  `preserveReservoir` on `setQueue` / `setQueueByTrackId`, used by the narrowing, the widening and
+  the crossfade-error rollback, all three of which rebuild a view of a still-lazy queue rather than
+  replacing it. `useAudioEngine` keeps an in-memory track cache so the same-session restore needs no
+  network and refetches only after a reload. Also fixed `exitLazyMode`, the one mutation of persisted
+  fields that never called `persistCombinedState`, so the reservoir it cleared in memory stayed in
+  IndexedDB and the next reload put the queue back into lazy mode. 16 tests; the reservoir assertion
+  was checked against a deliberately reverted fix.
+- Phase 2 — `PlaybackSession`, on branch `feat/adr-0003-playback-session`. Both tables share a
+  `PlaybackSessionPayload` mixin so an archived row can replace a live one field for field. Two bugs
+  surfaced while writing the tests: `_trim_archive` queried before flushing, and because sessions are
+  created with `autoflush=False` the archive settled one entry *above* the limit permanently; and
+  `archived_at` defaults to `now()`, which is transaction time in PostgreSQL and can tie, so the
+  ordering needed an `id` tiebreaker. 27 tests.
+
+  One thing the decision did not anticipate: **`version` is what separates an ordinary write from a
+  conflict.** Resolving purely on `updated_at` would archive the loser of *every* write, so a single
+  device advancing its own queue would fill the archive with its own history within minutes. A write
+  whose base version matches simply overwrites; only a stale base counts as divergence.
+- Phase 3 — client sync, on branch `feat/adr-0003-queue-sync`. Behind `familiar:queueSync` per device
+  plus `queue_sync_enabled` server-side. Sync is driven by a structural signature with a 2 s trailing
+  debounce, not by `persistCombinedState` — that funnel is the obvious seam and the wrong one, since
+  it also fires on every position tick. Three latent outbox bugs were fixed as preconditions, all
+  predating this ADR: `executeAction` ignored the captured `profileId`, there was no in-flight guard
+  on the drain, and the drain never ran on the connectivity store's probe-driven recovery. 21 tests.
+
+  The first version of the "never upload the narrowed queue" test was vacuous — narrowing an
+  already-synced queue changes nothing structurally, so no second sync fires and the assertion read
+  the earlier payload. Recorded because the same shape of mistake is easy to repeat against a
+  debounced, signature-driven service.
 
 ## Context
 

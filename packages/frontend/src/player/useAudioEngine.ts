@@ -406,6 +406,18 @@ export function useAudioEngine() {
           break;
 
         case 'canplay': {
+          // Apply a restored position before playing, so an adopted session resumes where
+          // the other device was rather than restarting the track. Seeking earlier is not
+          // possible — the element is not loaded yet — and setting `currentTime` in the
+          // store only moves the display.
+          const pendingSeek = usePlayerStore.getState()._pendingSeekSeconds;
+          if (pendingSeek != null) {
+            usePlayerStore.setState({ _pendingSeekSeconds: null });
+            if (pendingSeek > 0) {
+              engine.seek(pendingSeek);
+              setCurrentTime(pendingSeek);
+            }
+          }
           if (usePlayerStore.getState().isPlaying) {
             engine.play().catch(err => {
               if ((err as { name?: string })?.name !== 'AbortError') {

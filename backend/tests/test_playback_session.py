@@ -30,6 +30,43 @@ pytestmark = pytest.mark.asyncio
 SESSION_URL = "/api/v1/queue/session"
 
 
+@pytest.fixture(autouse=True)
+def queue_sync_flag(monkeypatch):
+    """Control the server-side flag in-process, defaulting it on.
+
+    It ships off (ADR-0003 point 7), so without this every request here would be a 503.
+    Patching the accessor rather than calling `update()`: `get()` reloads from disk on
+    every call, so mutating the returned model does nothing, and `update()` would write
+    to the developer's real `data/settings.json`.
+    """
+    from app.services.app_settings import AppSettingsService
+
+    state = {"enabled": True}
+    original = AppSettingsService.get
+
+    def patched(self):
+        settings = original(self)
+        settings.queue_sync_enabled = state["enabled"]
+        return settings
+
+    monkeypatch.setattr(AppSettingsService, "get", patched)
+    return state
+
+
+class TestFlag:
+    async def test_the_endpoints_are_off_when_the_flag_is(
+        self, client, test_profile, queue_sync_flag
+    ):
+        queue_sync_flag["enabled"] = False
+        # 503 rather than silently accepting: a server that took writes and did nothing
+        # with them would look like a client bug and be debugged on the wrong side.
+        assert _get(client, test_profile).status_code == 503
+        assert _put(client, test_profile).status_code == 503
+        assert client.get(
+            f"{SESSION_URL}/archive", headers=make_profile_headers(test_profile)
+        ).status_code == 503
+
+
 def _body(**overrides):
     """A minimal valid session write."""
     body = {
@@ -105,6 +142,27 @@ class TestReadAndWrite:
         # The library filters have to survive intact — toggleShuffle replays them verbatim.
         assert body["queue_source"]["filters"]["genre"] == "jazz"
         assert body["queue_source"]["filters"]["year_from"] == 1990
+
+    async def test_accepts_the_timestamp_format_browsers_actually_send(self, client, test_profile):
+        # `new Date().toISOString()` is Z-suffixed, which Pydantic parses as offset-aware.
+        # Comparing that against a naive `utcnow()` raises TypeError, so every real write
+        # 500'd while the whole suite passed — every other test here writes a naive
+        # timestamp, which no browser ever sends.
+        r = _put(client, test_profile, track_ids=[str(uuid4())],
+                 updated_at="2026-07-28T12:54:17.132Z")
+        assert r.status_code == 200, r.text
+
+    async def test_an_offset_aware_timestamp_still_resolves_conflicts(self, client, test_profile):
+        # Normalising must preserve the instant, not just strip the suffix: +02:00 is
+        # earlier in UTC than it looks, and getting that backwards would flip who wins.
+        current = [str(uuid4())]
+        _put(client, test_profile, track_ids=current, updated_at="2026-07-28T12:00:00Z")
+
+        # 12:30+02:00 is 10:30 UTC — older than the incumbent, so it must lose.
+        r = _put(client, test_profile, version=0, track_ids=[str(uuid4())],
+                 updated_at="2026-07-28T12:30:00+02:00")
+        assert r.json()["superseded"] is True
+        assert r.json()["track_ids"] == current
 
     async def test_a_sequential_write_bumps_the_version(self, client, test_profile):
         assert _put(client, test_profile, version=0).json()["version"] == 1
