@@ -17,6 +17,7 @@ import { CommunityCache } from './CommunityCache';
 import { ServerSettings } from './ServerSettings';
 import { ShuffleWeightSettings } from './ShuffleWeightSettings';
 import { RadioSettings } from './RadioSettings';
+import { QueueSyncSettings } from './QueueSyncSettings';
 import { isNativeApp } from '../../utils/platform';
 import { areAudioEffectsAvailable } from '../../player/audio/engineInstance';
 
@@ -121,6 +122,7 @@ export function SettingsPanel() {
           </h3>
           <div className="space-y-4">
             <OfflineSettings />
+            <QueueSyncSettings />
           </div>
         </section>
 

@@ -6,6 +6,7 @@ import { usePlayTracking } from './usePlayTracking';
 import { initSyncListeners } from '../services/syncService';
 import { initOfflineManifestSync } from '../services/offlineManifestService';
 import { initQueueSync, reconcileWithServer } from '../services/queueSyncService';
+import { useQueueSyncStore } from '../stores/queueSyncStore';
 import { showSuccess, showWarning } from '../stores/toastStore';
 import { initRemoteLogging } from '../services/remoteLogService';
 import { usePlayerStore } from '../stores/playerStore';
@@ -31,6 +32,8 @@ export function useAppBootstrap({
   setShowFullPlayer,
   closeRightPanel,
 }: AppBootstrapDeps): void {
+  const queueSyncEnabled = useQueueSyncStore((s) => s.enabled);
+
   // Initialize Audio Engine
   useAudioEngine();
   useScrobbling();
@@ -52,13 +55,17 @@ export function useAppBootstrap({
   // Reconciliation runs after hydration has already restored the local queue, so the
   // listener never waits on the network to see their queue — the server's copy only
   // replaces it when it is genuinely newer, which is the cross-device handoff.
+  //
+  // Keyed on the flag so toggling it in Settings starts or stops syncing immediately;
+  // without the dependency, turning it on would appear to do nothing until a reload.
   useEffect(() => {
+    if (!queueSyncEnabled) return;
     const stop = initQueueSync();
     reconcileWithServer().catch(() => {
       // Non-fatal: the local replica is authoritative for playback either way.
     });
     return stop;
-  }, []);
+  }, [queueSyncEnabled]);
 
   // Initialize remote logging (captures frontend logs to backend)
   useEffect(() => {

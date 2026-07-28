@@ -67,6 +67,7 @@ vi.mock('../../player/audio/engineInstance', () => ({
 import { useQueueStore } from '../../player/queueStore';
 import { usePlaybackStore } from '../../player/playbackStore';
 import { initQueueSync, _resetQueueSyncState, isQueueSyncEnabled } from '../queueSyncService';
+import { useQueueSyncStore } from '../../stores/queueSyncStore';
 
 const DEBOUNCE_MS = 2_000;
 
@@ -97,7 +98,7 @@ beforeEach(() => {
   mockQueueAction.mockClear();
   mockProcessPending.mockClear();
   mockGetSession.mockReset();
-  localStorage.setItem('familiar:queueSync', '1');
+  useQueueSyncStore.setState({ enabled: true });
   mockConnectivityState.offlineModeActive = false;
   useQueueStore.setState({
     queue: [], queueIndex: -1, history: [], shuffleOrder: [], shuffleIndex: -1,
@@ -114,17 +115,17 @@ afterEach(() => {
   stop();
   stop = () => {};
   vi.useRealTimers();
-  localStorage.removeItem('familiar:queueSync');
+  useQueueSyncStore.setState({ enabled: false });
 });
 
 describe('the flag', () => {
   it('is off unless explicitly set', () => {
-    localStorage.removeItem('familiar:queueSync');
+    useQueueSyncStore.setState({ enabled: false });
     expect(isQueueSyncEnabled()).toBe(false);
   });
 
   it('makes initQueueSync a no-op when off', () => {
-    localStorage.removeItem('familiar:queueSync');
+    useQueueSyncStore.setState({ enabled: false });
     stop = initQueueSync();
 
     seedQueue(['a', 'b']);

@@ -25,6 +25,7 @@
 import { useQueueStore } from '../player/queueStore';
 import { usePlaybackStore } from '../player/playbackStore';
 import { useConnectivityStore } from '../stores/connectivityStore';
+import { useQueueSyncStore } from '../stores/queueSyncStore';
 import { queueApi, type PlaybackSessionResponse, type PlaybackSessionWrite } from '../api/queue';
 import { fetchTracksBatched } from '../player/persistence';
 import { processPendingActions, queueAction, registerQueueSyncHandlers } from './syncService';
@@ -38,20 +39,13 @@ const STRUCTURAL_DEBOUNCE_MS = 2_000;
 /** Position is coarse on purpose: it only needs to be roughly right for a handoff. */
 const POSITION_INTERVAL_MS = 15_000;
 
-const FLAG_KEY = 'familiar:queueSync';
-
 /**
  * Per-device opt-in, so the rollout can be staged before the native client depends on it
- * (ADR-0003 point 7). Read through a function rather than cached at module load so a
- * test — or a developer in the console — can flip it without a reload.
+ * (ADR-0003 point 7). Read through a function rather than cached at module load, so
+ * toggling it in Settings takes effect without a reload.
  */
 export function isQueueSyncEnabled(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(FLAG_KEY) === '1';
-  } catch {
-    // Safari private browsing throws on localStorage access.
-    return false;
-  }
+  return useQueueSyncStore.getState().enabled;
 }
 
 /** What the server last told us it holds. Drives the version on the next write. */
