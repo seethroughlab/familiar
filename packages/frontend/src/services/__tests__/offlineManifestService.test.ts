@@ -14,7 +14,7 @@
  * than throws. Offline ambient getting worse is acceptable; offline ambient crashing is
  * not, and it would happen exactly when the listener has no way to recover.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const { mockGetManifest, mockGetOfflineTrackIds, mockGetProfileId, store } = vi.hoisted(() => ({
   mockGetManifest: vi.fn(),
@@ -44,7 +44,9 @@ vi.mock('../../api/queue', () => ({ queueApi: { getOfflineManifest: mockGetManif
 
 import {
   MIN_POOL_SIZE,
+  REFRESH_DEBOUNCE_MS,
   getOfflineNeighbours,
+  initOfflineManifestSync,
   pickOfflineSeed,
   refreshManifest,
 } from '../offlineManifestService';
@@ -191,5 +193,48 @@ describe('refresh', () => {
 
     await expect(refreshManifest()).resolves.toBeUndefined();
     expect(store.has(PROFILE)).toBe(true);
+  });
+});
+
+
+describe('refresh is debounced', () => {
+  // Found in use: `offline-tracks-updated` fires once per completed download, so a
+  // 1,573-track job triggered a rebuild per track. Measured 17 rebuilds in 15 minutes,
+  // 21s of server time, and the cost per rebuild grows with the set.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockGetOfflineTrackIds.mockResolvedValue(Array.from({ length: 12 }, (_, i) => `t${i}`));
+    mockGetManifest.mockResolvedValue({ variants: [], track_count: 12 });
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it('collapses a burst of downloads into one rebuild', async () => {
+    const stop = initOfflineManifestSync();
+    await vi.advanceTimersByTimeAsync(0);
+    mockGetManifest.mockClear(); // ignore the eager refresh at startup
+
+    for (let i = 0; i < 50; i++) {
+      window.dispatchEvent(new CustomEvent('offline-tracks-updated'));
+      await vi.advanceTimersByTimeAsync(200); // downloads land faster than the window
+    }
+    expect(mockGetManifest).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 100);
+    expect(mockGetManifest).toHaveBeenCalledTimes(1);
+
+    stop();
+  });
+
+  it('cancels a pending rebuild on teardown', async () => {
+    const stop = initOfflineManifestSync();
+    await vi.advanceTimersByTimeAsync(0);
+    mockGetManifest.mockClear();
+
+    window.dispatchEvent(new CustomEvent('offline-tracks-updated'));
+    stop();
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 100);
+
+    expect(mockGetManifest).not.toHaveBeenCalled();
   });
 });
