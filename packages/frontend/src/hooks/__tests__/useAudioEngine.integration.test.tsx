@@ -172,10 +172,12 @@ vi.mock('../../player/audioSettingsStore', () => ({
   }),
 }));
 
+const mockFetchTracksBatched = vi.hoisted(() => vi.fn(async (_ids: string[]) => [] as unknown[]));
+
 vi.mock('../../player/persistence', () => ({
   debouncedSavePlayerState: vi.fn(),
   loadPlayerState: vi.fn(async () => null),
-  fetchTracksBatched: vi.fn(async () => []),
+  fetchTracksBatched: mockFetchTracksBatched,
   migrateOldPlayerState: vi.fn(async () => {}),
 }));
 
@@ -227,7 +229,11 @@ describe('useAudioEngine + playerStore integration parity', () => {
       isLoadingAudio: false,
       isHydrated: true,
       isQueueHydrating: false,
+      logicalTrackIds: null,
+      logicalIndex: -1,
     });
+    mockFetchTracksBatched.mockReset();
+    mockFetchTracksBatched.mockImplementation(async (ids: string[]) => ids.map((id) => makeTrack(id)));
   });
 
   it('auto-advances exactly one track on ended event', async () => {
@@ -522,7 +528,11 @@ describe('continuous play reliability', () => {
       isLoadingAudio: false,
       isHydrated: true,
       isQueueHydrating: false,
+      logicalTrackIds: null,
+      logicalIndex: -1,
     });
+    mockFetchTracksBatched.mockReset();
+    mockFetchTracksBatched.mockImplementation(async (ids: string[]) => ids.map((id) => makeTrack(id)));
   });
 
   it('calls engine.load and engine.play for the next track after ended', async () => {
@@ -632,5 +642,130 @@ describe('continuous play reliability', () => {
       mockEngine.__emit({ type: 'canplay' });
     });
     expect(mockEngine.play).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The offline queue round trip (ADR-0003 point 5).
+   *
+   * The narrowing effect used to keep the pre-filter queue in a React ref, so the logical
+   * queue existed nowhere durable. These tests drive the real effect rather than the store
+   * helpers, because the ref was the bug — the store was never the problem.
+   */
+  describe('offline queue narrowing and restore', () => {
+    /**
+     * Flip connectivity and let the hook observe it.
+     *
+     * The connectivity mock is a plain function over a mutable object, not a real store, so
+     * writing to it notifies nobody — the change is only picked up on the next render.
+     * `rerender` supplies that render, standing in for the subscription the real store has.
+     */
+    async function setConnectivity(
+      rerender: () => void,
+      next: { offlineModeActive: boolean; offlineTrackIds?: Set<string> },
+    ) {
+      mockConnectivityStore.setState(next);
+      await act(async () => {
+        rerender();
+      });
+    }
+
+    /** A three-track lazy library queue with only 'a' downloaded. */
+    function seedPartlyDownloadedQueue() {
+      const tracks = ['a', 'b', 'c'].map((id) => makeTrack(id));
+      usePlayerStore.setState({
+        queue: tracks.map((track, i) => ({ track, queueId: `q${i}` })),
+        queueIndex: 0,
+        currentTrack: tracks[0],
+        queueSource: { type: 'library' },
+        lazyQueueIds: ['a', 'b', 'c', 'd', 'e'],
+        lazyQueueIndex: 3,
+      });
+      return tracks;
+    }
+
+    it('records the logical queue and keeps the reservoir when narrowing', async () => {
+      seedPartlyDownloadedQueue();
+      const { rerender } = renderHook(() => useAudioEngine());
+      await act(async () => {});
+
+      await setConnectivity(rerender, {
+        offlineModeActive: true,
+        offlineTrackIds: new Set(['a']),
+      });
+
+      const s = usePlayerStore.getState();
+      expect(s.queue.map((i) => i.track.id)).toEqual(['a']);
+      // Durable, not a ref — this is what a reload used to destroy.
+      expect(s.logicalTrackIds).toEqual(['a', 'b', 'c']);
+      // And the queue is still lazy, so reconnecting does not strand it at the window.
+      expect(s.lazyQueueIds).toEqual(['a', 'b', 'c', 'd', 'e']);
+      expect(s.lazyQueueIndex).toBe(3);
+    });
+
+    it('widens back to the logical queue when connectivity returns', async () => {
+      seedPartlyDownloadedQueue();
+      const { rerender } = renderHook(() => useAudioEngine());
+      await act(async () => {});
+
+      await setConnectivity(rerender, {
+        offlineModeActive: true,
+        offlineTrackIds: new Set(['a']),
+      });
+      expect(usePlayerStore.getState().queue).toHaveLength(1);
+
+      await setConnectivity(rerender, { offlineModeActive: false });
+
+      const s = usePlayerStore.getState();
+      expect(s.queue.map((i) => i.track.id)).toEqual(['a', 'b', 'c']);
+      expect(s.logicalTrackIds).toBeNull();
+      // Same session, so the in-memory cache served it — no refetch needed.
+      expect(mockFetchTracksBatched).not.toHaveBeenCalled();
+    });
+
+    it('refetches the logical queue when the cache is empty, as after a reload', async () => {
+      // The headline fix: previously the pre-filter queue lived only in a ref, so a reload
+      // while offline lost it and reconnecting left the queue permanently narrowed.
+      const tracks = ['a', 'b', 'c'].map((id) => makeTrack(id));
+      usePlayerStore.setState({
+        queue: [{ track: tracks[0], queueId: 'q0' }],
+        queueIndex: 0,
+        currentTrack: tracks[0],
+        queueSource: { type: 'library' },
+        // As hydrate() would restore it: narrowed queue, logical queue intact, no cache.
+        logicalTrackIds: ['a', 'b', 'c'],
+        logicalIndex: 0,
+      });
+      mockConnectivityStore.setState({
+        offlineModeActive: true,
+        offlineTrackIds: new Set(['a']),
+      });
+
+      const { rerender } = renderHook(() => useAudioEngine());
+      await act(async () => {});
+
+      await setConnectivity(rerender, { offlineModeActive: false });
+      await act(async () => {});
+
+      expect(mockFetchTracksBatched).toHaveBeenCalledWith(['a', 'b', 'c']);
+      const s = usePlayerStore.getState();
+      expect(s.queue.map((i) => i.track.id)).toEqual(['a', 'b', 'c']);
+      expect(s.logicalTrackIds).toBeNull();
+    });
+
+    it('does not narrow when every queued track is downloaded', async () => {
+      seedPartlyDownloadedQueue();
+      const { rerender } = renderHook(() => useAudioEngine());
+      await act(async () => {});
+
+      await setConnectivity(rerender, {
+        offlineModeActive: true,
+        offlineTrackIds: new Set(['a', 'b', 'c']),
+      });
+
+      const s = usePlayerStore.getState();
+      expect(s.queue).toHaveLength(3);
+      // No narrowing happened, so there is no logical queue to restore later.
+      expect(s.logicalTrackIds).toBeNull();
+    });
   });
 });

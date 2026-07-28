@@ -192,6 +192,15 @@ export interface PersistedPlayerState {
   lazyQueueIds?: string[] | null;
   lazyQueueIndex?: number;
 
+  // The logical queue behind an offline-filtered one (ADR-0003 point 5). `queueTrackIds`
+  // above holds what is *playable*; while offline that is only the downloaded subset, so
+  // without these a reload discarded the rest of the queue permanently — the pre-filter
+  // list existed solely in a React ref. Like the reservoir, the ID list lives in its own
+  // row and only the cursor is stored here. Optional, so older records load as `undefined`
+  // and simply mean "not filtered" — no Dexie version bump needed.
+  logicalTrackIds?: string[] | null;
+  logicalIndex?: number;
+
   updatedAt: Date;
 }
 

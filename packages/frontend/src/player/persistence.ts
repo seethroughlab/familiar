@@ -31,21 +31,25 @@ export interface PersistablePlayerState {
   queueSource?: PersistedQueueSource | null;
   lazyQueueIds?: string[] | null;
   lazyQueueIndex?: number;
+  logicalTrackIds?: string[] | null;
+  logicalIndex?: number;
 }
 
 /**
- * Key for a profile's lazy reservoir, stored as its own row in the same table.
+ * Keys for the two large ID lists that hang off a profile's player state, each stored as
+ * its own row in the same table.
  *
- * The reservoir is the one field here that is both large and rarely changing. For a full
- * library it is ~26k UUIDs (~1 MB), but it only changes on `setLazyQueue`, `toggleShuffle`
- * and a refill. Meanwhile `setCurrentTime` persists on every tick, throttled to 500ms —
- * so keeping the reservoir in the main record would rewrite that megabyte twice a second
- * for the whole of playback. The clone cost is negligible (~0.9ms measured), but the
- * sustained ~2 MB/s of flash writes is not, particularly on iOS.
+ * Both are large and rarely changing. The reservoir for a full library is ~26k UUIDs
+ * (~1 MB) and only changes on `setLazyQueue`, `toggleShuffle` and a refill; the logical
+ * queue changes only when connectivity flips. Meanwhile `setCurrentTime` persists on every
+ * tick, throttled to 500ms — so keeping either in the main record would rewrite that bulk
+ * twice a second for the whole of playback. The clone cost is negligible (~0.9ms measured),
+ * but the sustained ~2 MB/s of flash writes is not, particularly on iOS.
  *
- * `playerState` is keyed on `id` alone, so a second row costs no schema change.
+ * `playerState` is keyed on `id` alone, so extra rows cost no schema change.
  */
 const reservoirKey = (profileId: string) => `${profileId}::reservoir`;
+const logicalQueueKey = (profileId: string) => `${profileId}::logical`;
 
 interface ReservoirRecord {
   id: string;
@@ -54,34 +58,72 @@ interface ReservoirRecord {
   updatedAt: Date;
 }
 
-// Last reservoir written, per profile, so unchanged ones can be skipped. Compared by
-// reference: the store replaces the array wholesale whenever it changes.
-const lastWrittenReservoir = new Map<string, string[] | null>();
+interface LogicalQueueRecord {
+  id: string;
+  logicalTrackIds: string[] | null;
+  logicalIndex: number;
+  updatedAt: Date;
+}
 
-async function saveReservoir(
-  profileId: string,
+// Last list written per row key, so unchanged ones can be skipped. Compared by reference:
+// the store replaces these arrays wholesale whenever they change.
+const lastWrittenSideList = new Map<string, string[] | null>();
+
+/**
+ * Write one of the side rows, skipping the write when the list has not been replaced.
+ *
+ * `buildRow` keeps each row's field names as they are on disk rather than normalising them,
+ * so records written before this helper existed still load.
+ */
+async function saveSideList(
+  key: string,
   ids: string[] | null,
-  index: number
+  buildRow: (ids: string[]) => Record<string, unknown>
 ): Promise<void> {
-  if (lastWrittenReservoir.get(profileId) === ids) return;
-  lastWrittenReservoir.set(profileId, ids);
+  if (lastWrittenSideList.get(key) === ids) return;
+  lastWrittenSideList.set(key, ids);
 
-  const key = reservoirKey(profileId);
   if (!ids || ids.length === 0) {
     await db.playerState.delete(key);
     return;
   }
   await db.playerState.put({
     id: key,
-    lazyQueueIds: ids,
-    lazyQueueIndex: index,
+    ...buildRow(ids),
     updatedAt: new Date(),
   } as unknown as PersistedPlayerState);
+}
+
+async function saveReservoir(
+  profileId: string,
+  ids: string[] | null,
+  index: number
+): Promise<void> {
+  await saveSideList(reservoirKey(profileId), ids, (list) => ({
+    lazyQueueIds: list,
+    lazyQueueIndex: index,
+  }));
+}
+
+async function saveLogicalQueue(
+  profileId: string,
+  ids: string[] | null,
+  index: number
+): Promise<void> {
+  await saveSideList(logicalQueueKey(profileId), ids, (list) => ({
+    logicalTrackIds: list,
+    logicalIndex: index,
+  }));
 }
 
 async function loadReservoir(profileId: string): Promise<ReservoirRecord | null> {
   const row = await db.playerState.get(reservoirKey(profileId));
   return (row as unknown as ReservoirRecord) ?? null;
+}
+
+async function loadLogicalQueue(profileId: string): Promise<LogicalQueueRecord | null> {
+  const row = await db.playerState.get(logicalQueueKey(profileId));
+  return (row as unknown as LogicalQueueRecord) ?? null;
 }
 
 /**
@@ -110,14 +152,16 @@ export async function savePlayerState(state: PersistablePlayerState): Promise<vo
       shuffleIndex: state.shuffleIndex,
       currentTime: state.currentTime,
       queueSource: state.queueSource ?? null,
-      // The reservoir itself lives in its own row; the cursor into it is small and
-      // changes with the queue, so it stays here.
+      // The reservoir and logical-queue lists live in their own rows; the cursors into
+      // them are small and change with the queue, so they stay here.
       lazyQueueIndex: state.lazyQueueIndex ?? -1,
+      logicalIndex: state.logicalIndex ?? -1,
       updatedAt: new Date(),
     };
 
     await db.playerState.put(persistedState);
     await saveReservoir(profileId, state.lazyQueueIds ?? null, state.lazyQueueIndex ?? -1);
+    await saveLogicalQueue(profileId, state.logicalTrackIds ?? null, state.logicalIndex ?? -1);
   } catch (error) {
     log.warn('Failed to save player state:', error);
   }
@@ -126,8 +170,16 @@ export async function savePlayerState(state: PersistablePlayerState): Promise<vo
 async function readPlayerState(profileId: string): Promise<PersistedPlayerState | null> {
   const state = await db.playerState.get(profileId);
   if (!state) return null;
-  const reservoir = await loadReservoir(profileId);
-  return { ...state, lazyQueueIds: reservoir?.lazyQueueIds ?? null };
+  // In parallel: this is on the hydration path, and first paint waits on it.
+  const [reservoir, logical] = await Promise.all([
+    loadReservoir(profileId),
+    loadLogicalQueue(profileId),
+  ]);
+  return {
+    ...state,
+    lazyQueueIds: reservoir?.lazyQueueIds ?? null,
+    logicalTrackIds: logical?.logicalTrackIds ?? null,
+  };
 }
 
 /**
@@ -227,9 +279,12 @@ export async function clearPlayerState(): Promise<void> {
   }
 
   try {
-    // Both rows, or the reservoir outlives the state that referenced it.
-    await db.playerState.bulkDelete([profileId, reservoirKey(profileId)]);
-    lastWrittenReservoir.delete(profileId);
+    // Every row, or a side list outlives the state that referenced it.
+    const reservoir = reservoirKey(profileId);
+    const logical = logicalQueueKey(profileId);
+    await db.playerState.bulkDelete([profileId, reservoir, logical]);
+    lastWrittenSideList.delete(reservoir);
+    lastWrittenSideList.delete(logical);
   } catch (error) {
     log.warn('Failed to clear player state:', error);
   }

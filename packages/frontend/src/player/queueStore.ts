@@ -67,6 +67,25 @@ function restoreReservoir(
   return { lazyQueueIds: ids, lazyQueueIndex: index };
 }
 
+/**
+ * Validate a persisted logical queue before trusting it.
+ *
+ * An out-of-range cursor is recoverable here in a way the reservoir's is not: the index only
+ * decides where playback resumes within the restored queue, so it is clamped rather than
+ * causing the whole logical queue to be discarded. Losing the list would mean losing the
+ * full queue on reconnect, which is the failure this field exists to prevent.
+ */
+function restoreLogicalQueue(
+  ids: string[] | null | undefined,
+  index: number | undefined
+): { logicalTrackIds: string[] | null; logicalIndex: number } {
+  if (!ids || ids.length === 0) return { logicalTrackIds: null, logicalIndex: -1 };
+  const resolved = typeof index === 'number' && index >= 0
+    ? Math.min(index, ids.length - 1)
+    : -1;
+  return { logicalTrackIds: ids, logicalIndex: resolved };
+}
+
 const refillFromReservoir = async () => {
   if (isRefilling) return;
 
@@ -128,6 +147,22 @@ export interface QueueState {
   lazyQueueIndex: number;
   queueSource: QueueSource | null;
   isQueueHydrating: boolean;
+
+  /**
+   * The *logical* queue, when `queue` is currently a filtered view of it (ADR-0003 point 5).
+   *
+   * `null` means `queue` **is** the logical queue — the normal case. It becomes non-null only
+   * while offline, when the queue has been narrowed to downloaded tracks, and holds the track
+   * IDs from before that filtering.
+   *
+   * This used to be a React ref in `useAudioEngine`, which meant a reload while offline lost
+   * the full queue for good: the ref was gone and the only persisted copy was the filtered
+   * one. Keeping it in the store puts it through the normal persistence path, so the logical
+   * queue survives a reload and can still be restored on reconnect.
+   */
+  logicalTrackIds: string[] | null;
+  /** Cursor into `logicalTrackIds`; -1 when there is no logical queue or no current track. */
+  logicalIndex: number;
 }
 
 export interface QueueActions {
@@ -138,8 +173,9 @@ export interface QueueActions {
   playTrack: (track: Track, options?: { reason?: AdvanceReason }) => void;
   playNext: (options?: { reason?: AdvanceReason }) => void | Promise<void>;
   playPrevious: (options?: { reason?: AdvanceReason }) => void;
-  setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason }) => void;
-  setQueueByTrackId: (tracks: Track[], trackId: string, source?: QueueSource, options?: { reason?: AdvanceReason }) => void;
+  setQueue: (tracks: Track[], startIndex?: number, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason; preserveReservoir?: boolean }) => void;
+  setLogicalQueue: (trackIds: string[] | null, index: number) => void;
+  setQueueByTrackId: (tracks: Track[], trackId: string, source?: QueueSource, options?: { reason?: AdvanceReason; preserveReservoir?: boolean }) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   reorderShuffleOrder: (fromIndex: number, toIndex: number) => void;
   jumpToQueueIndex: (index: number, options?: { reason?: AdvanceReason }) => void;
@@ -163,6 +199,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
   lazyQueueIndex: -1,
   queueSource: null,
   isQueueHydrating: false,
+  logicalTrackIds: null,
+  logicalIndex: -1,
 
   addToQueue: (track, insertIndex, shuffleInsertPosition, options) => {
     const connectivity = useConnectivityStore.getState();
@@ -466,7 +504,7 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     }
   },
 
-  setQueue: (tracks, startIndex = 0, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason }) => {
+  setQueue: (tracks, startIndex = 0, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason; preserveReservoir?: boolean }) => {
     // Callers are queue rebuilds, hydration and profile switches — not listener actions.
     const reason = normalizeAdvanceReason(options?.reason ?? 'system');
     const requestedTrackId = tracks[startIndex]?.id;
@@ -509,13 +547,20 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       shuffleIndex = 0;
     }
 
+    // Replacing the queue normally ends lazy mode — the new tracks are the whole queue.
+    // The offline filter and its restore are the exceptions: they are re-materialising a
+    // view of a queue that is still lazy underneath, so dropping the reservoir there would
+    // silently truncate playback at the end of the ~50-track window (ADR-0003 point 5).
+    const reservoirFields = options?.preserveReservoir
+      ? {}
+      : { lazyQueueIds: null, lazyQueueIndex: -1 };
+
     set({
       queue: queueItems,
       queueIndex: finalStartIndex,
       shuffleOrder,
       shuffleIndex,
-      lazyQueueIds: null,
-      lazyQueueIndex: -1,
+      ...reservoirFields,
       queueSource: source || null,
     });
     usePlaybackStore.setState({
@@ -528,8 +573,9 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     persistCombinedState();
   },
 
-  setQueueByTrackId: (tracks, trackId, source?: QueueSource, options?: { reason?: AdvanceReason }) => {
+  setQueueByTrackId: (tracks, trackId, source?: QueueSource, options?: { reason?: AdvanceReason; preserveReservoir?: boolean }) => {
     const reason = normalizeAdvanceReason(options?.reason ?? 'system');
+    const preserveReservoir = options?.preserveReservoir;
     const offlineModeActive = useConnectivityStore.getState().offlineModeActive;
     const queueTracks = enforceOfflineQueueInvariant(tracks);
     const resolvedIndex = queueTracks.findIndex((track) => track.id === trackId);
@@ -552,10 +598,10 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
         });
         return;
       }
-      get().setQueue(queueTracks, 0, source, { reason });
+      get().setQueue(queueTracks, 0, source, { reason, preserveReservoir });
       return;
     }
-    get().setQueue(queueTracks, resolvedIndex, source, { reason });
+    get().setQueue(queueTracks, resolvedIndex, source, { reason, preserveReservoir });
   },
 
   reorderQueue: (fromIndex: number, toIndex: number) => {
@@ -732,8 +778,26 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
     }
   },
 
+  /**
+   * Record (or clear) the logical queue behind an offline-filtered one.
+   *
+   * Called by the offline rebuild in `useAudioEngine` with the pre-filter IDs, and again
+   * with `null` once the full queue has been restored on reconnect.
+   */
+  setLogicalQueue: (trackIds, index) => {
+    const normalized = trackIds && trackIds.length > 0 ? trackIds : null;
+    set({
+      logicalTrackIds: normalized,
+      logicalIndex: normalized ? index : -1,
+    });
+    persistCombinedState();
+  },
+
   exitLazyMode: () => {
+    // Persist: this clears fields that are part of the persisted record, so without a write
+    // the reservoir stayed in IndexedDB and a reload put the queue back into lazy mode.
     set({ lazyQueueIds: null, lazyQueueIndex: -1, queueSource: null });
+    persistCombinedState();
   },
 
   getNextTrack: () => {
@@ -990,10 +1054,14 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       // Without the reservoir, `refillFromReservoir` bails at its first guard and the
       // queue never grows past the materialised window — playback just stops at track
       // ~50 with no error. Both were dropped on every reload.
+      // The logical queue is restored too, so a session that was offline-filtered when the
+      // app closed can still be widened back to the full queue on reconnect. Before this,
+      // that list lived only in a React ref and a reload discarded it for good.
       set({
         isQueueHydrating: persisted.queueTrackIds.length > 0,
         queueSource: persisted.queueSource ?? null,
         ...restoreReservoir(persisted.lazyQueueIds, persisted.lazyQueueIndex),
+        ...restoreLogicalQueue(persisted.logicalTrackIds, persisted.logicalIndex),
       });
 
       if (persisted.queueTrackIds.length === 0) return;
@@ -1058,6 +1126,8 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       lazyQueueIndex: -1,
       queueSource: null,
       isQueueHydrating: false,
+      logicalTrackIds: null,
+      logicalIndex: -1,
     });
     usePlaybackStore.setState({
       currentTrack: null,
@@ -1088,5 +1158,7 @@ _setQueueStateGetter(() => {
     queueSource: s.queueSource,
     lazyQueueIds: s.lazyQueueIds,
     lazyQueueIndex: s.lazyQueueIndex,
+    logicalTrackIds: s.logicalTrackIds,
+    logicalIndex: s.logicalIndex,
   };
 });

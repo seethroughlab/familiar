@@ -124,6 +124,8 @@ function resetStores() {
     lazyQueueIndex: -1,
     queueSource: null,
     isQueueHydrating: false,
+    logicalTrackIds: null,
+    logicalIndex: -1,
   });
   mockConnectivityState.offlineModeActive = false;
   mockConnectivityState.offlineTrackIds = new Set<string>();
@@ -169,6 +171,20 @@ describe('saving', () => {
 
     const saved = mockSave.mock.calls.at(-1)![0];
     expect(saved.lazyQueueIndex).toBeGreaterThan(50);
+  });
+
+  it('writes when exitLazyMode ends lazy mode', async () => {
+    await useQueueStore.getState().setLazyQueue(ids(200), { type: 'library' });
+    mockSave.mockClear();
+
+    useQueueStore.getState().exitLazyMode();
+
+    // exitLazyMode clears persisted fields but used not to save, so the reservoir stayed
+    // in IndexedDB and the next reload put the queue straight back into lazy mode.
+    expect(mockSave).toHaveBeenCalled();
+    const saved = mockSave.mock.calls.at(-1)![0];
+    expect(saved.lazyQueueIds).toBeNull();
+    expect(saved.queueSource).toBeNull();
   });
 });
 
@@ -219,6 +235,133 @@ describe('hydrating', () => {
     expect(mockGetIds).toHaveBeenCalled();
     // The library filters have to survive too, or the reshuffle spans the wrong set.
     expect(mockGetIds.mock.calls[0][0]).toMatchObject({ genre: 'jazz' });
+  });
+});
+
+/**
+ * The offline round trip (ADR-0003 point 5).
+ *
+ * Narrowing the queue to downloaded tracks used to go through a plain `setQueue`, which
+ * replaces the queue *and* nulls the reservoir, with the pre-filter queue kept only in a
+ * React ref inside `useAudioEngine`. Two things broke, and neither surfaced as an error:
+ * a reload while offline lost the full queue for good, and reconnecting produced a
+ * non-lazy queue that stopped dead at the end of the materialised window.
+ */
+describe('the offline round trip', () => {
+  /** Narrow to `keep`, the way the offline rebuild effect does. */
+  function narrowTo(keep: string[]) {
+    const s = useQueueStore.getState();
+    const all = s.queue.map((item) => item.track);
+    s.setLogicalQueue(all.map((t) => t.id), s.queueIndex);
+    s.setQueue(
+      all.filter((t) => keep.includes(t.id)),
+      0,
+      s.queueSource ?? undefined,
+      { preservePlaybackState: true, preserveReservoir: true },
+    );
+  }
+
+  it('keeps the reservoir when the queue is narrowed for offline playback', async () => {
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    await useQueueStore.getState().hydrate();
+
+    narrowTo(['t0', 't1', 't2']);
+
+    const s = useQueueStore.getState();
+    expect(s.queue).toHaveLength(3);
+    // The reservoir is what makes the queue lazy; losing it here is what stranded
+    // playback at the window after reconnecting.
+    expect(s.lazyQueueIds).toHaveLength(200);
+    expect(s.lazyQueueIndex).toBe(50);
+  });
+
+  it('still ends lazy mode for a genuine queue replacement', async () => {
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    await useQueueStore.getState().hydrate();
+
+    // No preserveReservoir: this is a real replacement, e.g. playing an album.
+    useQueueStore.getState().setQueue([createMockTrack('album-1')], 0, { type: 'album', id: 'a1' });
+
+    expect(useQueueStore.getState().lazyQueueIds).toBeNull();
+  });
+
+  it('records the logical queue so reconnecting can widen back out', async () => {
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    await useQueueStore.getState().hydrate();
+
+    narrowTo(['t0', 't1']);
+
+    expect(useQueueStore.getState().logicalTrackIds).toHaveLength(50);
+    expect(useQueueStore.getState().logicalIndex).toBe(0);
+  });
+
+  it('persists the logical queue, so a reload while offline does not lose it', async () => {
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    await useQueueStore.getState().hydrate();
+    mockSave.mockClear();
+
+    narrowTo(['t0', 't1']);
+
+    // The whole point: it reaches the persistence layer rather than living in a ref.
+    const written = mockSave.mock.calls.at(-1)?.[0];
+    expect(written.logicalTrackIds).toHaveLength(50);
+  });
+
+  it('restores the logical queue on hydrate, so a reload while offline can still recover', async () => {
+    const persisted = persistedLazyQueue(200, 50);
+    // As written while offline: only two tracks playable, the other 48 still logical.
+    const record = {
+      ...persisted,
+      queueTrackIds: ['t0', 't1'],
+      logicalTrackIds: ids(50),
+      logicalIndex: 0,
+    };
+    mockLoadPlayerState.mockResolvedValue(record);
+
+    await useQueueStore.getState().hydrate();
+
+    const s = useQueueStore.getState();
+    expect(s.queue).toHaveLength(2);
+    expect(s.logicalTrackIds).toHaveLength(50);
+  });
+
+  it('keeps playing past the window after an offline round trip', async () => {
+    // The user-visible bug: go offline, come back, and playback ends at track ~50.
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    await useQueueStore.getState().hydrate();
+
+    narrowTo(['t0', 't1', 't2']);
+
+    // Reconnect: widen back to the logical queue, as the restore path does.
+    const logical = useQueueStore.getState().logicalTrackIds!;
+    useQueueStore.getState().setQueue(
+      logical.map((id) => createMockTrack(id)),
+      0,
+      { type: 'library', filters: { genre: 'jazz' } },
+      { preservePlaybackState: true, preserveReservoir: true },
+    );
+    useQueueStore.getState().setLogicalQueue(null, -1);
+
+    useQueueStore.setState({ queueIndex: 45 });
+    await useQueueStore.getState().playNext();
+
+    await vi.waitFor(() => {
+      expect(useQueueStore.getState().queue.length).toBeGreaterThan(50);
+    });
+  });
+
+  it('clears the logical queue once the full queue is back', async () => {
+    mockLoadPlayerState.mockResolvedValue(persistedLazyQueue(200, 50));
+    await useQueueStore.getState().hydrate();
+    narrowTo(['t0']);
+    mockSave.mockClear();
+
+    useQueueStore.getState().setLogicalQueue(null, -1);
+
+    expect(useQueueStore.getState().logicalTrackIds).toBeNull();
+    expect(useQueueStore.getState().logicalIndex).toBe(-1);
+    // Cleared in storage too, or the next reload thinks it is still filtered.
+    expect(mockSave.mock.calls.at(-1)?.[0].logicalTrackIds).toBeNull();
   });
 });
 
