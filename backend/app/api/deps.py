@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request
+from fastapi.security import APIKeyHeader
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import async_session_maker
@@ -12,6 +13,28 @@ from app.utils.time import utcnow
 
 if TYPE_CHECKING:
     from app.db.models import Profile
+
+
+# The profile header, declared so it reaches the OpenAPI schema (ADR-0007).
+#
+# Both dependencies below read the header off the raw request and always did. That works at
+# runtime and is invisible to the schema: FastAPI only emits a parameter or security scheme for
+# things declared as such, so a generated client got methods with no way to pass a profile and no
+# hint that the call would 401. ADR-0007's Context called auth "no complexity", which is true of
+# the model and beside the point — generation consumes the schema, not the model.
+#
+# `auto_error=False` is load-bearing: FastAPI must not reject the request itself, because the two
+# dependencies have different and deliberate behaviours for a missing header (None vs 401) and the
+# error envelope is normalised centrally in main.py.
+profile_header = APIKeyHeader(
+    name="X-Profile-ID",
+    auto_error=False,
+    scheme_name="ProfileHeader",
+    description=(
+        "Profile identity. Obtain one from POST /api/v1/profiles/register. "
+        "Optional on some endpoints, required on most; see each operation."
+    ),
+)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -30,6 +53,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 async def get_current_profile(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    _header: str | None = Depends(profile_header),
 ) -> "Profile | None":
     """Get profile from X-Profile-ID header.
 
@@ -39,6 +63,10 @@ async def get_current_profile(
 
     For backwards compatibility, if no header is provided, returns None
     allowing routes to fall back to legacy behavior.
+
+    `_header` is unused deliberately: depending on `profile_header` is what puts the security
+    requirement on every operation using this dependency. The value is still read from the raw
+    request below so the behaviour is byte-for-byte what it was.
     """
     from app.db.models import Profile
 
@@ -65,11 +93,14 @@ async def get_current_profile(
 async def require_profile(
     request: Request,
     db: AsyncSession = Depends(get_db),
+    _header: str | None = Depends(profile_header),
 ) -> "Profile":
     """Require a valid profile from X-Profile-ID header.
 
     Unlike get_current_profile, this raises an error if no profile is provided.
     Use this for endpoints that require a profile.
+
+    See `get_current_profile` for why `_header` is depended on but unused.
     """
     from app.db.models import Profile
 
