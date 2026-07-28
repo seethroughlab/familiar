@@ -6,6 +6,22 @@ Date: 2026-07-26
 
 Extends [ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md).
 
+Implementation:
+- Backend and client landed together: `services/offline_manifest.py`, `POST /queue/offline-manifest`,
+  `services/offlineManifestService.ts` and the `offlineManifests` Dexie table, with ambient consuming
+  the manifest via `AmbientCoordinator.lookupOfflineCandidates`.
+- **The `radio` variant was generated but consumed by nothing** until offline radio landed on branch
+  `feat/offline-radio`. `radioController` returned early whenever `offlineModeActive` was set, so
+  radio simply went quiet in airplane mode while the server was already computing and shipping the
+  ranking it needed. It now looks the seed up in that variant. No new ADR: this implements decision
+  points 2 and 5 rather than deciding anything.
+- That matters more than it first appears, because ambient — the manifest's only other consumer — is
+  **iOS-only** (`ambientSynthBridge`: "Web never registers"). Until this, the whole ADR had no effect
+  in the web app at all.
+- The offline path filters neighbours against `connectivityStore.offlineTrackIds` rather than
+  trusting the manifest, since the manifest goes stale when a download is removed. That is the same
+  failure class as the `db.cachedTracks` follow-up below — metadata present, audio absent.
+
 ## Context
 
 [ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md) puts candidate ranking on the

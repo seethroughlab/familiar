@@ -12,12 +12,27 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { mockGetSuggestions, connectivityState } = vi.hoisted(() => ({
-  mockGetSuggestions: vi.fn(),
-  connectivityState: { offlineModeActive: false, offlineTrackIds: new Set<string>() },
-}));
+const { mockGetSuggestions, mockGetOfflineNeighbours, mockResolveTrackIds, connectivityState } =
+  vi.hoisted(() => ({
+    mockGetSuggestions: vi.fn(),
+    mockGetOfflineNeighbours: vi.fn(),
+    mockResolveTrackIds: vi.fn(),
+    connectivityState: { offlineModeActive: false, offlineTrackIds: new Set<string>() },
+  }));
 
 vi.mock('../../api/queue', () => ({ queueApi: { getSuggestions: mockGetSuggestions } }));
+vi.mock('../../services/offlineManifestService', () => ({
+  getOfflineNeighbours: mockGetOfflineNeighbours,
+}));
+vi.mock('../../services/playlistCache', () => ({
+  resolveTrackIds: mockResolveTrackIds,
+  // The real converter is trivial and its field mapping is what we want to exercise.
+  cachedTrackToTrack: (c: { id: string; title: string }) => ({
+    id: c.id, title: c.title, artist: null, album: null, album_artist: null,
+    album_type: 'album', track_number: null, disc_number: null, year: null,
+    genre: null, duration_seconds: null, format: null, file_path: '', analysis_version: 0,
+  }),
+}));
 vi.mock('../../stores/connectivityStore', () => ({
   useConnectivityStore: Object.assign(
     (sel: (s: typeof connectivityState) => unknown) => sel(connectivityState),
@@ -49,7 +64,14 @@ function seedQueue(ids: string[], index = 0) {
 beforeEach(() => {
   mockGetSuggestions.mockReset();
   mockGetSuggestions.mockResolvedValue({ suggestions: [suggestion('s1')], pool_size: 50, pool_collapsed: false });
+  mockGetOfflineNeighbours.mockReset();
+  mockGetOfflineNeighbours.mockResolvedValue([]);
+  mockResolveTrackIds.mockReset();
+  mockResolveTrackIds.mockImplementation((ids: string[]) =>
+    Promise.resolve(ids.map((id) => ({ id, title: `Track ${id}` })))
+  );
   connectivityState.offlineModeActive = false;
+  connectivityState.offlineTrackIds = new Set<string>();
   radioController.stop();
   useRadioStore.setState({ enabled: true });
   seedQueue(['a', 'b', 'c', 'd', 'e', 'f']);
@@ -72,11 +94,22 @@ describe('staying quiet', () => {
     expect(usePlayerStore.getState().queue.length).toBe(before);
   });
 
-  it('does not insert while offline', async () => {
-    // A suggestion that cannot stream is worse than no suggestion.
+  it('never asks the server while offline', async () => {
     connectivityState.offlineModeActive = true;
     await radioController.suggest();
     expect(mockGetSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('does not insert while offline when the manifest knows nothing', async () => {
+    // No manifest yet, or a seed downloaded since the last refresh. A suggestion that
+    // cannot stream is worse than no suggestion.
+    connectivityState.offlineModeActive = true;
+    mockGetOfflineNeighbours.mockResolvedValue([]);
+    const before = usePlayerStore.getState().queue.length;
+
+    await radioController.suggest();
+
+    expect(usePlayerStore.getState().queue.length).toBe(before);
   });
 
   it('does not insert without a current track', async () => {
@@ -249,5 +282,102 @@ describe('accepting and rejecting', () => {
     usePlayerStore.getState().removeFromQueue(item.queueId);
 
     expect(usePlayerStore.getState().queue.find((i) => i.track.id === 's1')).toBeUndefined();
+  });
+});
+
+/**
+ * Offline radio (ADR-0006).
+ *
+ * The server generates a `radio` variant of the offline manifest and, until this, nothing
+ * consumed it — radio simply went quiet in airplane mode. The ranking is still entirely
+ * server-side: these assert that the client does lookup and ordering, never scoring, and
+ * that it refuses to suggest a track whose audio is not actually on the device.
+ */
+describe('offline', () => {
+  beforeEach(() => {
+    connectivityState.offlineModeActive = true;
+    connectivityState.offlineTrackIds = new Set(['n1', 'n2', 'n3']);
+  });
+
+  it('suggests from the manifest instead of going quiet', async () => {
+    mockGetOfflineNeighbours.mockResolvedValue([{ trackId: 'n1', score: 0.88 }]);
+
+    await radioController.suggest();
+
+    expect(usePlayerStore.getState().queue.some((i) => i.track.id === 'n1')).toBe(true);
+    expect(mockGetSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('asks for the radio variant, not ambient', async () => {
+    // Weight profile is what makes a suggestion radio-shaped rather than ambient-shaped.
+    mockGetOfflineNeighbours.mockResolvedValue([{ trackId: 'n1', score: 0.8 }]);
+
+    await radioController.suggest();
+
+    expect(mockGetOfflineNeighbours).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ profile: 'radio', filterPreset: 'all' })
+    );
+  });
+
+  it('preserves the manifest order rather than re-ranking', async () => {
+    // There is no scorer on this client, so "best" can only mean "first as sent".
+    mockGetOfflineNeighbours.mockResolvedValue([
+      { trackId: 'n2', score: 0.4 },
+      { trackId: 'n1', score: 0.9 },
+    ]);
+
+    await radioController.suggest();
+
+    expect(usePlayerStore.getState().queue.some((i) => i.track.id === 'n2')).toBe(true);
+    expect(usePlayerStore.getState().queue.some((i) => i.track.id === 'n1')).toBe(false);
+  });
+
+  it('refuses a neighbour whose audio is not downloaded', async () => {
+    // The manifest goes stale when a track is removed. Suggesting metadata-only tracks is
+    // the exact bug ADR-0006 flagged in offlineScoring (cachedTracks vs offlineTracks),
+    // and addToQueue would silently drop it anyway.
+    connectivityState.offlineTrackIds = new Set(['n2']);
+    mockGetOfflineNeighbours.mockResolvedValue([
+      { trackId: 'n1', score: 0.9 },
+      { trackId: 'n2', score: 0.5 },
+    ]);
+
+    await radioController.suggest();
+
+    const queue = usePlayerStore.getState().queue;
+    expect(queue.some((i) => i.track.id === 'n1')).toBe(false);
+    expect(queue.some((i) => i.track.id === 'n2')).toBe(true);
+  });
+
+  it('stays quiet when nothing in the manifest is downloaded', async () => {
+    connectivityState.offlineTrackIds = new Set<string>();
+    mockGetOfflineNeighbours.mockResolvedValue([{ trackId: 'n1', score: 0.9 }]);
+    const before = usePlayerStore.getState().queue.length;
+
+    await radioController.suggest();
+
+    expect(usePlayerStore.getState().queue.length).toBe(before);
+    // Nothing playable, so no point resolving metadata for it.
+    expect(mockResolveTrackIds).not.toHaveBeenCalled();
+  });
+
+  it('marks an offline suggestion the same as an online one', async () => {
+    mockGetOfflineNeighbours.mockResolvedValue([{ trackId: 'n1', score: 0.88 }]);
+
+    await radioController.suggest();
+
+    const item = usePlayerStore.getState().queue.find((i) => i.track.id === 'n1');
+    expect(item?.suggested).toBe(true);
+  });
+
+  it('passes recent tracks so the manifest lookup can skip them', async () => {
+    seedQueue(['a', 'b', 'c'], 2);
+    mockGetOfflineNeighbours.mockResolvedValue([{ trackId: 'n1', score: 0.9 }]);
+
+    await radioController.suggest();
+
+    const opts = mockGetOfflineNeighbours.mock.calls[0][1];
+    expect(opts.recentTrackIds).toEqual(expect.arrayContaining(['a', 'b', 'c']));
   });
 });
