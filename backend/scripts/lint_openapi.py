@@ -36,6 +36,12 @@ GENERATED_SURFACE = {
     "chat",
     "mixtapes",
     "ambient",
+    # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these
+    # directly — the whole point of ADR-0006 is that they carry no ranking code.
+    "queue",
+    # Network audio outputs (WiiM, Sonos, AirPlay, Chromecast). Casting is a listening
+    # feature, not a management one — a native client needs to send audio to speakers.
+    "outputs",
 }
 
 # operationIds longer than this are unusable as generated method names. The
