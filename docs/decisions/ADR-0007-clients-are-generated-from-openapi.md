@@ -15,7 +15,34 @@ Implementation:
   advertising `application/json` for audio, images, zips and SSE; two handlers and four model fields
   typed; `SimilarArtistInfo` de-duplicated into `app/api/schemas/artists.py`. The lint was verified
   to fail by deliberately adding an untyped in-scope handler.
-- Phase 2 — generating the Swift client — is not started, and waits on `familiar-apple`.
+- Phase 2 — **the generator is swift-openapi-generator**, resolving the first follow-up below. It
+  runs as a SwiftPM build plugin in `familiar-apple`, so no generated Swift is committed and a
+  backend change surfaces as a compile error. The schema is pinned to `backend/openapi.json` by
+  `scripts/dump_openapi.py`, with `make openapi-check` failing in CI if it drifts — a separate
+  repo with a different toolchain cannot import the app the way the lint does.
+
+  Proven on one tag first (`favorites`, seven operations) against the live NAS rather than
+  designed in the abstract. Three defects surfaced that no amount of planning would have found,
+  and all three were invisible from the Python side:
+
+  - **35% of the schema would have been silently dropped.** The generator discards any property
+    whose `anyOf` contains a bare `{"type": "null"}` — exactly how Pydantic v2 spells `X | None`.
+    487 of 1,374 properties, including `title`, `artist` and `duration_seconds`. The client
+    compiled and looked complete. `dump_openapi.py` now normalises those to the canonical 3.1
+    form.
+  - **Timestamps were not RFC 3339.** Naive UTC datetimes serialised without an offset, because
+    the columns are TIMESTAMP WITHOUT TIME ZONE. Swift rejected them; **JavaScript accepted them
+    and parsed them as local time**, so the web app had been displaying every server timestamp
+    shifted by the viewer's UTC offset for as long as those fields existed. Fixed at the API
+    boundary with `to_rfc3339` and a `UTCDateTime` annotated type.
+  - **Foundation is stricter than RFC 3339.** Neither of its ISO-8601 option sets accepts both
+    fractional and whole-second timestamps, so the client carries a small transcoder. That one is
+    a client accommodation, not a server defect.
+
+  The second follow-up — verifying against the profile-header pattern and the error envelope — is
+  what the slice tests assert, and both required phase 1.5 to exist first.
+- Widening from eight tags to the remaining 108 operations is now a config change, not a design
+  question.
 - Burn-down remaining: 50 untyped operations, all outside the generated surface, allowlisted in the
   lint. The mangled-schema allowlist is now empty — see phase 1.5.
 - Phase 1.5 — the schema was made to describe the *contract*, not just response bodies, on branch
@@ -173,7 +200,11 @@ Native clients consume a **generated** API client, not a hand-written one.
 - **Tradeoff:** A generator dependency and build step enter the toolchain.
 - **Tradeoff:** Two API client styles coexist — generated on native, hand-written on web — until and
   unless the web client migrates.
-- **Follow-up:** Choose the Swift generator and verify its output against the profile-header
-  interceptor pattern and the normalised error envelope.
+- **Resolved:** ~~Choose the Swift generator and verify its output against the profile-header
+  interceptor pattern and the normalised error envelope~~ — swift-openapi-generator, verified
+  against a live server on the `favorites` slice. See the Implementation block.
+- **Follow-up:** The 49 timestamp fields still declared as plain `string` rather than
+  `format: date-time` now carry a `Z`, but a generated client models them as strings. Typing them
+  would let clients decode dates, at the cost of a wire-compatible schema change.
 - **Follow-up:** Audit for other loosely typed handlers beyond the four named here; the list came
   from a survey, not an exhaustive pass.
