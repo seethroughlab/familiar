@@ -17,6 +17,7 @@ from app.services.track_analysis import (
     generate_comparative_report,
     generate_report,
 )
+from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ async def get_analysis(track_id: UUID, db: DbSession):
         "midi_path": analysis.midi_path,
         "has_melodic": analysis.has_melodic,
         "melodic_version": analysis.melodic_version,
-        "created_at": analysis.created_at.isoformat() if analysis.created_at else None,
+        "created_at": to_rfc3339(analysis.created_at) if analysis.created_at else None,
     }
 
 

@@ -29,7 +29,7 @@ from app.api.exceptions import (
     TrackNotFoundError,
     ValidationError,
 )
-from app.api.schemas.common import error_responses
+from app.api.schemas.common import UTCDateTime, error_responses
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import PlaybackSession, PlaybackSessionArchive, Track
 from app.db.models.profiles import PlaybackSessionPayload
@@ -210,7 +210,7 @@ class PlaybackSessionResponse(PlaybackSessionBody):
     """
 
     version: int
-    updated_at: datetime
+    updated_at: UTCDateTime
     # True when this response is the *other* device's queue because the write lost.
     superseded: bool = False
 
@@ -223,8 +223,8 @@ class ArchivedSessionResponse(BaseModel):
     cursor: int
     queue_source: QueueSource | None
     position_seconds: float
-    superseded_at: datetime
-    archived_at: datetime
+    superseded_at: UTCDateTime
+    archived_at: UTCDateTime
 
 
 class ArchivedSessionsResponse(BaseModel):

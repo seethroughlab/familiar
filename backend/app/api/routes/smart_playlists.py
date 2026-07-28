@@ -13,6 +13,7 @@ from app.api.exceptions import NotFoundError, ValidationError, sanitize_error_fo
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import ProfilePlayHistory
 from app.services.smart_playlists import SmartPlaylistService
+from app.utils.time import to_rfc3339
 
 router = APIRouter(prefix="/smart-playlists", tags=["smart-playlists"])
 
@@ -88,10 +89,10 @@ def playlist_to_response(playlist: Any) -> SmartPlaylistResponse:
         order_direction=playlist.order_direction,
         max_tracks=playlist.max_tracks,
         cached_track_count=playlist.cached_track_count,
-        last_refreshed_at=playlist.last_refreshed_at.isoformat() if playlist.last_refreshed_at else None,
+        last_refreshed_at=to_rfc3339(playlist.last_refreshed_at) if playlist.last_refreshed_at else None,
         auto_download=playlist.auto_download,
-        created_at=playlist.created_at.isoformat(),
-        updated_at=playlist.updated_at.isoformat(),
+        created_at=to_rfc3339(playlist.created_at),
+        updated_at=to_rfc3339(playlist.updated_at),
     )
 
 

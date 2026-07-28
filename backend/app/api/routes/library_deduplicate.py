@@ -12,6 +12,7 @@ from app.api.deps import DbSession
 from app.db.models import Track
 from app.services.normalize import normalize_for_duplicate_matching
 from app.services.quality import QualityScore, calculate_quality_score
+from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ def _track_info(track: Track) -> TrackInfo:
         quality=qs.format_string(),
         format_tier=qs.format_tier.value,
         metadata_completeness=_metadata_completeness(track),
-        created_at=track.created_at.isoformat() if track.created_at else "",
+        created_at=to_rfc3339(track.created_at) if track.created_at else "",
     )
 
 

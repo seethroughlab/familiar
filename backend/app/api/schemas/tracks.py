@@ -1,9 +1,10 @@
 """Track-related Pydantic schemas shared across route modules."""
 
-from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+from app.api.schemas.common import UTCDateTime
 
 
 class TrackFeaturesResponse(BaseModel):
@@ -46,7 +47,7 @@ class TrackResponse(BaseModel):
     analysis_version: int
     features: TrackFeaturesResponse | None = None
     # Play history (profile-specific, populated when profile header is present)
-    last_played_at: datetime | None = None
+    last_played_at: UTCDateTime | None = None
     play_count: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

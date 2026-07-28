@@ -17,6 +17,7 @@ from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError, ValidationError
 from app.db.models import SpotifyImport
 from app.services.spotify_import import SpotifyImportService
+from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,7 @@ def _serialize_import(import_) -> dict:
     return {
         "id": str(import_.id),
         "profile_id": str(import_.profile_id),
-        "imported_at": import_.imported_at.isoformat(),
+        "imported_at": to_rfc3339(import_.imported_at),
         "spotify_username": import_.spotify_username,
         "favorites": import_.favorites,
         "playlists": import_.playlists,
@@ -290,5 +291,5 @@ async def get_spotify_stats(
         total_unmatched=summary.get("total_unmatched"),
         match_rate=summary.get("match_rate"),
         matching_status=summary.get("matching_status", "unknown"),
-        imported_at=imported_at.isoformat(),
+        imported_at=to_rfc3339(imported_at),
     )
