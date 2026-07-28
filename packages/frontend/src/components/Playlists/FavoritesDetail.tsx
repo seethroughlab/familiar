@@ -117,7 +117,8 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
       return;
     }
 
-    setQueueByTrackId(items.map(getTrack), trackForItem.id);
+    // 'other': the union has no member for Favorites. See DownloadsDetail.
+    setQueueByTrackId(items.map(getTrack), trackForItem.id, { type: 'other' });
   }, [filteredFavorites, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId]);
 
   const totalDuration = favorites.reduce(

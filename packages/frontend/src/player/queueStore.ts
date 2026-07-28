@@ -1097,6 +1097,27 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
       const clampedShuffleOrder = (persisted.shuffleOrder || []).filter(i => i < queue.length);
 
       const existingTrackId = usePlaybackStore.getState().currentTrack?.id;
+
+      // Hydration is asynchronous — refetching a large queue takes seconds. If the
+      // listener started something in the meantime, their choice wins: applying the
+      // persisted queue now would stop the track they just picked and resume the one from
+      // before the reload, several seconds in. Phase 1b already set `currentTrack` from
+      // the persisted id, so anything else playing means they acted.
+      //
+      // The `currentTrack?.id !== existingTrackId` check below cannot cover this — it was
+      // written to skip a redundant write, and a listener-chosen track differs from the
+      // persisted one by definition, so it lets exactly the wrong case through.
+      const listenerTookOver =
+        existingTrackId != null && existingTrackId !== persisted.currentTrackId;
+      if (listenerTookOver) {
+        log.info('Hydration abandoned — listener started playing before it finished', {
+          playing: existingTrackId,
+          persisted: persisted.currentTrackId,
+        });
+        set({ isQueueHydrating: false });
+        return;
+      }
+
       set({
         queue,
         queueIndex: clampedQueueIndex,

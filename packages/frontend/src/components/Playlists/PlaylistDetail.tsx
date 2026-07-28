@@ -200,7 +200,7 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
       try {
         const response = await tracksApi.list({ artist: item.name, page_size: 50 });
         if (response.items.length > 0) {
-          setQueue(response.items, 0);
+          setQueue(response.items, 0, { type: 'artist', id: item.name });
         }
       } catch (error) {
         log.error('Failed to fetch artist tracks:', error);
