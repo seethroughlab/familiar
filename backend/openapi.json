@@ -4941,6 +4941,14 @@
               "null"
             ]
           },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "track_duration": {
             "title": "Track Duration",
             "type": [
@@ -6612,6 +6620,14 @@
           "source_track_id": {
             "format": "uuid",
             "title": "Source Track Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
             "type": [
               "string",
               "null"
