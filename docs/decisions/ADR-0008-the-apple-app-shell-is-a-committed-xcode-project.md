@@ -67,12 +67,20 @@ for.
 2. **Source folders are synchronized groups**, so the project file records targets, settings and
    schemes but never file membership. A pull request that adds a screen touches only Swift.
 
-3. **One multiplatform application target**, not one per platform. This refines ADR-0001 point 1's
-   "two targets" and does not reverse its intent: that point exists to say macOS and iOS are *not
-   split*, and a single target is the strongest available form of that. Platform differences are
-   expressed as SDK-conditional build settings — `CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]` for the
-   CarPlay entitlement, hardened runtime for macOS — rather than as duplicated target
-   configuration that has to be kept in step by hand.
+3. **Two application targets, one per platform**, as ADR-0001 point 1 says. They share
+   `FamiliarKit`, `FamiliarAPI` and the SwiftUI layer; what differs is capability configuration,
+   and that difference is made explicit rather than conditional.
+
+   The deciding factor is CarPlay. It is in v1 scope (ADR-0001 point 4), and its requirements are
+   unforgiving in a specific way: the scene manifest and the entitlement must both be present, and
+   a partial configuration does not degrade — it black-screens the app on launch. That failure is
+   worth being able to see in one place, attached to the target it belongs to, rather than
+   assembled mentally from SDK-conditional settings scattered across a shared configuration.
+
+   The cost is real and is accepted knowingly: every shared build setting exists twice, and the
+   failure mode of duplication is silent drift between platforms rather than a build error.
+   Decision point 5's per-platform CI builds are the mitigation — drift that changes behaviour
+   shows up as a failing build on the platform that drifted.
 
 4. **`Info.plist` and entitlements live outside the synchronized folders**, in a `Support/`
    directory, for the collision reason above.
@@ -99,12 +107,16 @@ for.
   package and one app. It is not installed, so adopting it is a genuine new dependency for both the
   developer and the runner.
 
-- **Two application targets, one per platform.** Rejected for now, and the closest call here. It is
-  the conventional shape and makes divergent capabilities obvious, which matters because CarPlay's
-  scene manifest and entitlement are unforgiving. But it duplicates every build setting, and the
-  failure mode of duplication is silent drift between platforms. SDK-conditional settings cover the
-  divergence that actually exists. Revisit if the conditionals become harder to read than two
-  targets would be — this is a refactor, not a one-way door.
+- **One multiplatform application target**, with `supportedDestinations: [iOS, macOS]` and platform
+  differences expressed as SDK-conditional build settings. Rejected, and the closest call here —
+  the proof-of-concept used exactly this shape and both platforms built, so it is known to work.
+  It has the better story on shared settings: they exist once and cannot drift.
+
+  Rejected because the divergence that matters is capabilities, not settings, and conditionals hide
+  capabilities. `CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]` is a correct way to attach the CarPlay
+  entitlement and a poor way to *notice* it is attached. Given that a partially-configured CarPlay
+  app black-screens rather than degrading, legibility won over non-duplication. This is a refactor
+  rather than a one-way door in either direction.
 
 - **Stay SwiftPM-only and defer the shell.** Rejected. It is what the repo does today, and it is
   why there is nothing to run. Every remaining v1 item is UI inside an application.
@@ -115,17 +127,18 @@ for.
   Xcode. What is reviewed is what is built.
 - **Positive:** the churn and merge-conflict cost that motivates project generators is measured to
   be absent, not assumed away.
-- **Positive:** one target means a platform difference has to be written down deliberately as a
-  conditional, rather than arising from two configurations drifting.
+- **Positive:** per-platform capabilities are visible where they apply. CarPlay's entitlement and
+  scene manifest sit on the iOS target and nowhere else.
 - **Tradeoff:** `project.pbxproj` is still a generated-looking file under version control. Changes
   to *settings* remain awkward to review even though changes to *files* no longer appear. The
   mitigation is that settings change rarely.
 - **Tradeoff:** synchronized groups require Xcode 16 or newer. That is not a real constraint at
   Xcode 26.5, but it does mean the project cannot be opened by a much older Xcode at all, rather
   than opening with warnings.
-- **Tradeoff:** a single target makes per-platform capabilities less visible than two targets would.
-  If CarPlay's requirements prove awkward under conditionals, decision point 3 is the thing to
-  revisit first.
+- **Tradeoff:** every shared build setting exists twice, and two configurations drift silently
+  rather than failing. Point 5's per-platform CI builds catch drift that changes behaviour; drift
+  that does not — a stale comment, a diverged version string — will need noticing by eye. If the
+  duplication becomes the larger problem, decision point 3 is the thing to revisit.
 - **Follow-up:** app icons, launch assets and the bundle identifier still need deciding. The
   Capacitor app ships as `com.familiar.player`; whether the native app reuses that identifier —
   taking over the existing TestFlight record and its installed base — or takes a new one is a
