@@ -46,6 +46,26 @@ Implementation:
   `LibraryImportPreviewResponse`, removed the collision; the schema now hashes identically across
   runs. This had to be found before pinning an artifact, and would not have been visible without
   one.
+- Phase 2 — `favorites` generated alone first, deliberately, to choose a generator against something
+  real. **swift-openapi-generator** was chosen and held up: the profile header goes through a
+  `ClientMiddleware` and the envelope arrives as typed cases, which are the two things this ADR's
+  follow-up asked to verify. Two defects were only visible against a live server, and neither
+  showed up as a compile failure:
+  - **35% of the schema's properties were silently dropped.** The generator discards a property
+    whose `anyOf` contains a bare `{"type": "null"}` — which is exactly how Pydantic spells
+    `X | None` — so `title`, `artist` and `duration_seconds` vanished while the client compiled
+    clean. `dump_openapi.py` now normalises those to `type: [X, "null"]`.
+  - **Every timestamp failed to decode.** Naive `isoformat()` output is not RFC 3339, so a strict
+    decoder rejects it. Fixing it server-side also fixed a live web bug: JavaScript had been
+    parsing the same values as *local* time and displaying every server timestamp four hours off.
+- Phase 2 (widened) — the surface went from one tag to all eight on `familiar-apple` branch
+  `feat/widen-generated-surface`, which was a config change plus a schema copy, as the
+  "filter the generation, not the schema" split intended. **108 operations, 20,335 lines, no schema
+  warnings**, with every in-tag operation verified present by name rather than assumed from a
+  successful compile. Widening also surfaced two more defects in what ADR-0003 phase 2 shipped:
+  four hand-set `operation_id`s that bypassed the naming convention, and an undeclared 503 on the
+  flag-gated session endpoints that left a generated client no case to branch on when queue sync is
+  simply off.
 
 - Phase 2 — **the generator is swift-openapi-generator**, resolving the first follow-up below. It
   runs as a SwiftPM build plugin in `familiar-apple`, so no generated Swift is committed and a
