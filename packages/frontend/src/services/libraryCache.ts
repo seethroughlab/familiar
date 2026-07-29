@@ -6,17 +6,53 @@ import api from '../api/base';
 import type { Track, TrackListResponse } from '../types';
 
 /**
+ * The `/tracks` page size cap (`page_size` is declared `le=200` server-side).
+ *
+ * This used to request `{ limit: 10000 }`, which is not a parameter that endpoint accepts —
+ * FastAPI ignores unknown query params, so the default page size applied and "cache the whole
+ * library" cached 50 tracks of 26,396. Paging is not optional here: no single request can
+ * return the library.
+ */
+const PAGE_SIZE = 200;
+
+/** Refuses to run away if the server keeps returning full pages. 200k tracks. */
+const MAX_PAGES = 1000;
+
+/**
  * Cache the entire library from the API.
+ *
+ * Fails rather than returning a partial cache: a cache that silently holds part of the library
+ * is indistinguishable from a working one, which is how the `limit` bug survived.
  */
 export async function cacheLibrary(): Promise<{
   cached: number;
 }> {
-  // Fetch all tracks from API
-  const { data } = await api.get('/tracks', { params: { limit: 10000 } });
-  const tracks = data.items || data.tracks || data;
+  const tracks: Record<string, unknown>[] = [];
 
-  if (!Array.isArray(tracks)) {
-    throw new Error('Invalid response format');
+  for (let page = 1; ; page += 1) {
+    const { data } = await api.get('/tracks', {
+      params: { page, page_size: PAGE_SIZE },
+    });
+    const items = data?.items || data?.tracks || data;
+
+    if (!Array.isArray(items)) {
+      throw new Error('Invalid response format');
+    }
+
+    tracks.push(...items);
+
+    const total = typeof data?.total === 'number' ? data.total : null;
+    // A short page is the end. `total` is a second signal, not the only one — a response
+    // without it (or a stale one) must still terminate.
+    if (items.length < PAGE_SIZE || (total !== null && tracks.length >= total)) {
+      break;
+    }
+
+    if (page >= MAX_PAGES) {
+      throw new Error(
+        `Library cache aborted after ${MAX_PAGES} pages (${tracks.length} tracks)`
+      );
+    }
   }
 
   const now = new Date();

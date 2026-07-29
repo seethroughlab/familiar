@@ -257,3 +257,56 @@ async def test_listen_event_timestamp_cannot_be_in_the_future(
     )
     assert stored is not None
     assert stored.started_at <= datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=5)
+
+
+@pytest_asyncio.fixture
+async def tie_group(async_db: AsyncSession) -> tuple[str, list[str]]:
+    """Six tracks that share an ordering key: one artist, one album, no track numbers.
+
+    `insert_test_track` leaves `track_number` NULL, which is exactly the shape that ties in the
+    real library — 1,724 active rows have no track number and 2,846 sit in a tie group of
+    (artist, album, track_number).
+    """
+    artist = f"Tie Group {uuid4().hex[:8]}"
+    tracks = [
+        await insert_test_track(
+            async_db, title=f"Tied {i}", artist=artist, album="Tied Album"
+        )
+        for i in range(6)
+    ]
+    await async_db.commit()
+    return artist, [str(track.id) for track in tracks]
+
+
+@pytest.mark.asyncio
+async def test_paging_a_tie_group_returns_every_track_exactly_once(
+    client: TestClient, tie_group: tuple[str, list[str]]
+) -> None:
+    """Paging the whole library must not repeat or skip rows that tie on the sort key.
+
+    `ORDER BY artist, album, track_number` is not a unique ordering, and OFFSET paging over a
+    non-unique order is free to return a row twice or never — which silently omits tracks from
+    anything that pages the library, such as the offline cache. `Track.id` is appended to make
+    the order total.
+
+    Honest about its power: the pre-fix failure was nondeterministic, so this asserts the
+    invariant rather than reliably reproducing the old bug. It fails for good on any future
+    change that drops the tiebreaker only if the planner happens to reorder — which is the same
+    reason the tiebreaker belongs in the query rather than in a test's luck.
+    """
+    artist, expected = tie_group
+
+    seen: list[str] = []
+    for page in range(1, 6):
+        response = client.get(
+            "/api/v1/tracks",
+            params={"artist": artist, "page": page, "page_size": 2},
+        )
+        assert response.status_code == 200, response.text
+        items = response.json()["items"]
+        if not items:
+            break
+        seen.extend(item["id"] for item in items)
+
+    assert len(seen) == len(set(seen)), "OFFSET paging returned the same row twice"
+    assert sorted(seen) == sorted(expected), "paging did not cover every track exactly once"

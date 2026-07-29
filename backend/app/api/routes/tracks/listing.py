@@ -206,20 +206,23 @@ async def list_track_ids(
                     (ProfilePlayHistory.profile_id == profile.id),
                 )
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number, Track.id)
             else:
-                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number, Track.id)
         else:
             if not has_feature_filter:
                 query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             sort_col_attr = getattr(TrackAnalysis, sort_by, None)
             sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number, Track.id)
             else:
-                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number, Track.id)
     else:
-        query = query.order_by(Track.artist, Track.album, Track.track_number)
+        # `Track.id` last for the same reason as `list_tracks`, so this endpoint's order and the
+        # paged list's order are the same total order rather than two orders that agree on ties
+        # by luck.
+        query = query.order_by(Track.artist, Track.album, Track.track_number, Track.id)
 
     result = await db.execute(query)
     track_ids = [str(row[0]) for row in result.all()]
@@ -389,20 +392,24 @@ async def list_tracks(
                     (ProfilePlayHistory.profile_id == profile.id)
                 )
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number, Track.id)
             else:
-                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number, Track.id)
         else:
             if not has_feature_filter:
                 query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
             sort_col_attr = getattr(TrackAnalysis, sort_by, None)
             sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number, Track.id)
             else:
-                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number)
+                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number, Track.id)
     else:
-        query = query.order_by(Track.artist, Track.album, Track.track_number)
+        # `Track.id` last so the total order is unique. Without it, 866 tie groups covering
+        # 2,846 rows share an ordering key, and OFFSET paging over a non-unique order may
+        # repeat or skip rows between pages — silently omitting tracks from anything that
+        # pages the whole library.
+        query = query.order_by(Track.artist, Track.album, Track.track_number, Track.id)
 
     query = query.offset((page - 1) * page_size).limit(page_size)
 
@@ -552,19 +559,22 @@ async def get_track_index(
                     (ProfilePlayHistory.profile_id == profile.id),
                 )
             if sort_order == 'desc':
-                order_clauses = [nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number]
+                order_clauses = [nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number, Track.id]
             else:
-                order_clauses = [nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number]
+                order_clauses = [nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number, Track.id]
         else:
             needs_analysis_join = not has_feature_filter
             sort_col_attr = getattr(TrackAnalysis, sort_by, None)
             sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
             if sort_order == 'desc':
-                order_clauses = [nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number]
+                order_clauses = [nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number, Track.id]
             else:
-                order_clauses = [nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number]
+                order_clauses = [nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number, Track.id]
     else:
-        order_clauses = [Track.artist, Track.album, Track.track_number]
+        # Must match `list_tracks` exactly, `Track.id` tiebreaker included: this endpoint reports
+        # a track's row number in that same ordering, so any divergence returns an index the
+        # paged list does not agree with.
+        order_clauses = [Track.artist, Track.album, Track.track_number, Track.id]
 
     if needs_analysis_join:
         base_query = base_query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)

@@ -144,6 +144,60 @@ describe('libraryCache', () => {
       );
     });
 
+    // The bug these two guard: cacheLibrary used to pass `{ limit: 10000 }`, which `/tracks`
+    // does not accept, so the server's default page size applied and the "whole library" cache
+    // held 50 tracks of 26,396. A single-page fixture cannot catch that — only a fixture with
+    // more tracks than one page can.
+    it('should page through the whole library rather than stopping at the first page', async () => {
+      const page = (count: number, from: number) =>
+        Array.from({ length: count }, (_, i) => ({
+          id: `t${from + i}`,
+          title: `Song ${from + i}`,
+          artist: 'Artist A',
+          album: 'Album X',
+          album_artist: null,
+          genre: null,
+          year: null,
+          duration_seconds: null,
+          track_number: null,
+          disc_number: null,
+        }));
+
+      mockApiGet
+        .mockResolvedValueOnce({ data: { items: page(200, 0), total: 450 } })
+        .mockResolvedValueOnce({ data: { items: page(200, 200), total: 450 } })
+        .mockResolvedValueOnce({ data: { items: page(50, 400), total: 450 } });
+
+      const result = await cacheLibrary();
+
+      expect(result).toEqual({ cached: 450 });
+      expect(mockApiGet).toHaveBeenCalledTimes(3);
+      expect(mockApiGet).toHaveBeenNthCalledWith(1, '/tracks', {
+        params: { page: 1, page_size: 200 },
+      });
+      expect(mockApiGet).toHaveBeenNthCalledWith(3, '/tracks', {
+        params: { page: 3, page_size: 200 },
+      });
+      // The last track of the last page reached IndexedDB, not just the first page's.
+      expect(mockCachedTracks.bulkPut).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ id: 't449' })])
+      );
+    });
+
+    it('should stop once total is reached even when every page comes back full', async () => {
+      const page = (count: number, from: number) =>
+        Array.from({ length: count }, (_, i) => ({ id: `t${from + i}` }));
+
+      mockApiGet
+        .mockResolvedValueOnce({ data: { items: page(200, 0), total: 400 } })
+        .mockResolvedValueOnce({ data: { items: page(200, 200), total: 400 } });
+
+      const result = await cacheLibrary();
+
+      expect(result).toEqual({ cached: 400 });
+      expect(mockApiGet).toHaveBeenCalledTimes(2);
+    });
+
     it('should throw when API request fails', async () => {
       mockApiGet.mockRejectedValueOnce(new Error('Request failed with status code 500'));
 
