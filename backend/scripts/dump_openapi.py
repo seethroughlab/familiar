@@ -75,6 +75,16 @@ def _normalise_nullable(node: Any, required: list[str] | None = None, key: str |
                 node = {**rest, **other}
                 if required is not None and key is not None and key in required:
                     required.remove(key)
+            elif not other:
+                # `anyOf: [{}, null]` — a deliberately free-form value, which Pydantic emits for
+                # `Any | None`. The empty member means "any JSON", so the union collapses to it.
+                # Without this the property is dropped like any other unhandled null member, and
+                # "deliberately loose" quietly becomes "absent": `RuleSchema.value` vanished, so a
+                # generated client could describe a smart-playlist rule's field and operator but
+                # not what to compare against.
+                node = rest
+                if required is not None and key is not None and key in required:
+                    required.remove(key)
 
     properties = node.get("properties")
     if isinstance(properties, dict):

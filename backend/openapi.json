@@ -8033,12 +8033,6 @@
             "type": "string"
           },
           "value": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ],
             "description": "Value to compare against",
             "title": "Value"
           }
