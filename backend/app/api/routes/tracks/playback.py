@@ -12,6 +12,7 @@ promises to leave alone.
 """
 
 import logging
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -22,7 +23,7 @@ from sqlalchemy import select
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
 from app.db.models import PlayEvent, ProfilePlayHistory, Track
-from app.utils.time import to_rfc3339, utcnow
+from app.utils.time import to_naive_utc, to_rfc3339, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ class PlayRecordRequest(BaseModel):
     completion_ratio: float | None = None
     context: PlayContext | None = None
     source_track_id: UUID | None = None
+    # When the listening actually happened. Omitted by clients that post immediately; supplied by
+    # clients replaying a queue built while offline, which is exactly when the arrival time is
+    # wrong. ADR-0004 point 7 expects events to survive being offline, and an event that reports
+    # the moment it was finally uploaded misdates the only listening that needed queueing.
+    started_at: datetime | None = None
 
 
 class PlayRecordResponse(BaseModel):
@@ -85,6 +91,11 @@ class ListenEventRequest(BaseModel):
     # The track this one was suggested from, for radio insertions.
     source_track_id: UUID | None = None
     reason: StopReason = "user"
+    # When the listening actually happened. Omitted by clients that post immediately; supplied by
+    # clients replaying a queue built while offline, which is exactly when the arrival time is
+    # wrong. ADR-0004 point 7 expects events to survive being offline, and an event that reports
+    # the moment it was finally uploaded misdates the only listening that needed queueing.
+    started_at: datetime | None = None
 
 
 class ListenEventResponse(BaseModel):
@@ -112,17 +123,29 @@ def _resolve_completion_ratio(
     return max(0.0, min(1.0, played_seconds / track_duration))
 
 
+def _resolve_started_at(supplied: datetime | None) -> datetime:
+    """When the listening happened, trusting the client only as far as is safe.
+
+    Normalised to naive UTC because the column is TIMESTAMP WITHOUT TIME ZONE and a browser or
+    Swift client sends an offset-aware value — comparing the two raises, which is how the queue
+    session endpoints returned 500 on their first real request.
+
+    Clamped to now: a device with a fast clock would otherwise write events into the future, where
+    every "recent listening" window would keep finding them.
+    """
+    now = utcnow()
+    if supplied is None:
+        return now
+    return min(to_naive_utc(supplied) or now, now)
+
+
 def _derive_outcome(reason: StopReason, completion_ratio: float) -> str:
     """Map a stop reason plus completion to a PlayEvent outcome."""
     if reason == "error":
         return OUTCOME_ERRORED
     if reason == "natural":
         return OUTCOME_COMPLETED
-    return (
-        OUTCOME_COMPLETED
-        if completion_ratio >= COMPLETION_RATIO_THRESHOLD
-        else OUTCOME_SKIPPED
-    )
+    return OUTCOME_COMPLETED if completion_ratio >= COMPLETION_RATIO_THRESHOLD else OUTCOME_SKIPPED
 
 
 async def _get_track_or_404(db: DbSession, track_id: UUID) -> Track:
@@ -194,7 +217,9 @@ async def record_play(
             track_id=track_id,
             play_count=1,
             last_played_at=utcnow(),
-            total_play_seconds=request.duration_seconds if request and request.duration_seconds else 0.0,
+            total_play_seconds=request.duration_seconds
+            if request and request.duration_seconds
+            else 0.0,
         )
         db.add(play_history)
 
@@ -206,7 +231,7 @@ async def record_play(
             profile_id=profile.id,
             track_id=track_id,
             source_track_id=request.source_track_id if request else None,
-            started_at=utcnow(),
+            started_at=_resolve_started_at(request.started_at if request else None),
             played_seconds=played_seconds or 0.0,
             track_duration=request.track_duration if request else None,
             completion_ratio=_resolve_completion_ratio(
@@ -254,7 +279,7 @@ async def _record_listen_event(
             profile_id=profile_id,
             track_id=track_id,
             source_track_id=body.source_track_id,
-            started_at=utcnow(),
+            started_at=_resolve_started_at(body.started_at),
             played_seconds=body.played_seconds or 0.0,
             track_duration=body.track_duration,
             completion_ratio=completion_ratio,
@@ -301,9 +326,7 @@ async def record_rejection(
     A deliberate rejection is a stronger signal than a skip and is stored distinctly.
     ProfilePlayHistory is not modified.
     """
-    return await _record_listen_event(
-        db, profile.id, track_id, request, outcome=OUTCOME_REJECTED
-    )
+    return await _record_listen_event(db, profile.id, track_id, request, outcome=OUTCOME_REJECTED)
 
 
 @router.get("/stats/plays", response_model=ProfilePlayStatsResponse)
