@@ -50,6 +50,38 @@ Implementation:
   already-synced queue changes nothing structurally, so no second sync fires and the assertion read
   the earlier payload. Recorded because the same shape of mistake is easy to repeat against a
   debounced, signature-driven service.
+- Phase 4 — the Swift client adopts, on `familiar-apple` branch `feat/adopt-server-queue`. Read-only
+  by decision: the player has no `shuffle`, `repeat`, `consume` or reservoir concept, and a write
+  would flatten a 1,732-track shuffled queue the web client was actively using. Handoff is the value;
+  two-way sync waits for those concepts to exist natively.
+
+  **Shuffle is consumed as order rather than reimplemented as a mode.** `shuffle_order` is a
+  permutation and names the same track as `cursor`, so a reader can flatten the session into a
+  linear play order and skip shuffle bookkeeping entirely. This is the one observation that made the
+  phase tractable instead of a port of `queueStore.ts`.
+
+  **The adopted queue is full-length immediately; only metadata is windowed.** A stream URL needs
+  only a track id, so every slot is playable at once and titles arrive in 50-track batches (the
+  `/tracks/batch` cap) around the cursor. A materialised window was rejected: each extension mutates
+  the array the engine's auto-advance callback is searching, and a window that fails to extend
+  reproduces point 1's silent "playback ends at the 50th track" exactly.
+
+  Two client bugs were latent until a server queue arrived, because **a real session repeats
+  tracks** and a library-page queue cannot: SwiftUI rows keyed by track id, and three
+  `firstIndex(where:)` lookups that resolved a duplicate to the earlier copy and looped between the
+  two. Also fixed on the way: `duration` stayed 0 until the first timer tick, so a seek issued
+  straight after a load — which is what resuming does — was silently swallowed.
+
+  An invariant needed correcting mid-implementation: `shuffle_order[shuffle_index] == cursor` holds
+  as *tracks*, not as *indices*. Asserting index equality failed against a healthy live session
+  where both indices named the same repeated track.
+
+  **Divergences this phase accepts, so they are not later filed as bugs:** `repeat` and `consume` are
+  read and discarded, so a `repeat: one` session advances on the native client; the reservoir is not
+  consumed, so an adopted queue ends where the web client's materialised list ends; and a resumed
+  handoff under-reports `completion_ratio`, because seeding played-time with the adopted position
+  would overstate what that device heard and double-count what the web client already reported.
+  93 tests.
 
 ## Context
 
