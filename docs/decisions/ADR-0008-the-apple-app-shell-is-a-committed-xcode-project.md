@@ -1,6 +1,6 @@
 # ADR-0008: The Apple App Shell Is a Committed Xcode Project
 
-Status: proposed
+Status: accepted
 Date: 2026-07-28
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md)
