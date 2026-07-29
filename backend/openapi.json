@@ -26706,7 +26706,7 @@
     "/api/v1/queue/session": {
       "get": {
         "description": "Return this profile's durable queue.\n\nAn empty session rather than a 404 when there is none: \"no queue yet\" is the ordinary\nstarting state, not an error, and a client adopting it should not have to special-case\na status code.",
-        "operationId": "getPlaybackSession",
+        "operationId": "queue_get_playback_session",
         "responses": {
           "200": {
             "content": {
@@ -26767,6 +26767,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -26781,7 +26791,7 @@
       },
       "put": {
         "description": "Upsert this profile's durable queue.\n\nOrdinary case: the client's `version` matches what is stored, so this is the next step\nin one device's own history and simply overwrites.\n\nConflict case: the client wrote from a stale version, meaning two devices diverged \u2014\ntypically because one was offline. The later `updated_at` wins and the loser is\narchived, never dropped (ADR-0003 point 6). A losing write still gets the winning\nsession back, so the client adopts rather than retries.",
-        "operationId": "putPlaybackSession",
+        "operationId": "queue_put_playback_session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -26862,6 +26872,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -26878,7 +26898,7 @@
     "/api/v1/queue/session/archive": {
       "get": {
         "description": "List queues that lost a conflict and can still be restored.",
-        "operationId": "listArchivedPlaybackSessions",
+        "operationId": "queue_list_archived_sessions",
         "responses": {
           "200": {
             "content": {
@@ -26939,6 +26959,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "security": [
@@ -26955,7 +26985,7 @@
     "/api/v1/queue/session/archive/{archive_id}/restore": {
       "post": {
         "description": "Make an archived queue current again.\n\nSymmetrical with the conflict rule: whatever is live now is archived in its place, so\nrestoring cannot itself destroy a queue.",
-        "operationId": "restoreArchivedPlaybackSession",
+        "operationId": "queue_restore_archived_session",
         "parameters": [
           {
             "in": "path",
@@ -27028,6 +27058,16 @@
               }
             },
             "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "security": [

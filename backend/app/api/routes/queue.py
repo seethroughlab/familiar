@@ -303,7 +303,9 @@ def _apply(
     row.shuffle = body.shuffle
     row.repeat = body.repeat
     row.consume = body.consume
-    row.queue_source = body.queue_source.model_dump(exclude_none=True) if body.queue_source else None
+    row.queue_source = (
+        body.queue_source.model_dump(exclude_none=True) if body.queue_source else None
+    )
     row.reservoir_ids, row.reservoir_hash = reservoir
     row.reservoir_cursor = body.reservoir_cursor
     row.position_seconds = body.position_seconds
@@ -327,9 +329,7 @@ def _copy_payload(src: PlaybackSessionPayload, dst: PlaybackSessionPayload) -> N
 
 def _archive(db: DbSession, session: PlaybackSession) -> None:
     """Retain a superseded queue. ADR-0003 point 6: the loser is never destroyed."""
-    row = PlaybackSessionArchive(
-        profile_id=session.profile_id, superseded_at=session.updated_at
-    )
+    row = PlaybackSessionArchive(profile_id=session.profile_id, superseded_at=session.updated_at)
     _copy_payload(session, row)
     db.add(row)
 
@@ -360,9 +360,7 @@ async def _trim_archive(db: DbSession, profile_id: UUID) -> None:
         .all()
     )
     if stale:
-        await db.execute(
-            delete(PlaybackSessionArchive).where(PlaybackSessionArchive.id.in_(stale))
-        )
+        await db.execute(delete(PlaybackSessionArchive).where(PlaybackSessionArchive.id.in_(stale)))
 
 
 def _to_response(session: PlaybackSession, *, superseded: bool = False) -> PlaybackSessionResponse:
@@ -374,7 +372,9 @@ def _to_response(session: PlaybackSession, *, superseded: bool = False) -> Playb
         shuffle=session.shuffle,
         repeat=session.repeat,  # type: ignore[arg-type]
         consume=session.consume,
-        queue_source=QueueSource.model_validate(session.queue_source) if session.queue_source else None,
+        queue_source=QueueSource.model_validate(session.queue_source)
+        if session.queue_source
+        else None,
         reservoir_ids=[UUID(i) for i in session.reservoir_ids] if session.reservoir_ids else None,
         reservoir_cursor=session.reservoir_cursor,
         reservoir_hash=session.reservoir_hash,
@@ -400,9 +400,7 @@ def _require_queue_sync_enabled() -> None:
 
 async def _load_session(db: DbSession, profile_id: UUID) -> PlaybackSession | None:
     return (
-        await db.execute(
-            select(PlaybackSession).where(PlaybackSession.profile_id == profile_id)
-        )
+        await db.execute(select(PlaybackSession).where(PlaybackSession.profile_id == profile_id))
     ).scalar_one_or_none()
 
 
@@ -411,7 +409,15 @@ async def _load_session(db: DbSession, profile_id: UUID) -> PlaybackSession | No
 # ============================================================================
 
 
-@router.get("/session", response_model=PlaybackSessionResponse, operation_id="getPlaybackSession")
+@router.get(
+    "/session",
+    response_model=PlaybackSessionResponse,
+    # 503 is control flow too: these four are gated behind `queue_sync_enabled`, so "the server
+    # does not do this" is an ordinary answer a client must expect on its very first call, not a
+    # server fault. Undeclared, a generated client has no case to branch on and reports an
+    # unexpected response for the flag simply being off.
+    responses=error_responses(503),
+)
 async def get_playback_session(
     db: DbSession,
     profile: RequiredProfile,
@@ -432,12 +438,11 @@ async def get_playback_session(
 @router.put(
     "/session",
     response_model=PlaybackSessionResponse,
-    operation_id="putPlaybackSession",
     # 409 is control flow here, not an error condition: it means the client named a reservoir
     # hash the server does not hold and must resend `reservoir_ids` in full. A client that cannot
     # discover that from the schema will treat it as a generic failure and stop syncing
     # (ADR-0003 point 4).
-    responses=error_responses(409),
+    responses=error_responses(409, 503),
 )
 async def put_playback_session(
     body: PlaybackSessionWrite,
@@ -498,7 +503,7 @@ async def put_playback_session(
 @router.get(
     "/session/archive",
     response_model=ArchivedSessionsResponse,
-    operation_id="listArchivedPlaybackSessions",
+    responses=error_responses(503),
 )
 async def list_archived_sessions(
     db: DbSession,
@@ -526,7 +531,9 @@ async def list_archived_sessions(
                 id=row.id,
                 track_ids=[UUID(i) for i in row.track_ids],
                 cursor=row.cursor,
-                queue_source=QueueSource.model_validate(row.queue_source) if row.queue_source else None,
+                queue_source=QueueSource.model_validate(row.queue_source)
+                if row.queue_source
+                else None,
                 position_seconds=row.position_seconds,
                 superseded_at=row.superseded_at,
                 archived_at=row.archived_at,
@@ -539,7 +546,7 @@ async def list_archived_sessions(
 @router.post(
     "/session/archive/{archive_id}/restore",
     response_model=PlaybackSessionResponse,
-    operation_id="restoreArchivedPlaybackSession",
+    responses=error_responses(404, 503),
 )
 async def restore_archived_session(
     archive_id: UUID,
@@ -575,9 +582,7 @@ async def restore_archived_session(
     session.updated_at = utcnow()
 
     # The restored queue is live now, so it is no longer an archive entry.
-    await db.execute(
-        delete(PlaybackSessionArchive).where(PlaybackSessionArchive.id == archive_id)
-    )
+    await db.execute(delete(PlaybackSessionArchive).where(PlaybackSessionArchive.id == archive_id))
     await _trim_archive(db, profile.id)
     await db.commit()
     await db.refresh(session)
@@ -609,7 +614,9 @@ async def suggestions(
     if not candidates:
         # An unanalyzed or unknown seed collapses the pool rather than erroring, which is
         # ambient's existing contract; preserve it so the client can just not insert.
-        return SuggestionsResponse(suggestions=[], pool_size=pool_size, pool_collapsed=pool_collapsed)
+        return SuggestionsResponse(
+            suggestions=[], pool_size=pool_size, pool_collapsed=pool_collapsed
+        )
 
     # The ranker works in descriptors, so fetch the tracks themselves for the handful
     # that survived — the client inserts tracks, not descriptors. `analyses` is eagerly
@@ -618,9 +625,7 @@ async def suggestions(
     tracks = (
         (
             await db.execute(
-                select(Track)
-                .options(selectinload(Track.analyses))
-                .where(Track.id.in_(ordered_ids))
+                select(Track).options(selectinload(Track.analyses)).where(Track.id.in_(ordered_ids))
             )
         )
         .scalars()
