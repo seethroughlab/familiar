@@ -47,11 +47,19 @@ Implementation:
     `proposed`. Its `PlaybackSession` model was amended on the same date to add `queue_source` and
     the lazy reservoir, without which a server-owned queue would reproduce the "playback ends at
     track 50" bug on every client.
-  - **`outputs` added to the generated surface** (24 operations — WiiM, Sonos, AirPlay,
-    Chromecast). Raised as an open question and decided the same day: casting is a listening
-    feature, not a management one — a native client that cannot send audio to speakers is missing
-    part of the listening path. The lint passes with it in scope and needed no new allowlist
-    entries, so those handlers were already typed.
+  - **`outputs` was added to the generated surface, and removed again the next day.** ~~24
+    operations — WiiM, Sonos, AirPlay, Chromecast — on the reasoning that casting is a listening
+    feature rather than a management one, so a native client that cannot send audio to speakers is
+    missing part of the listening path.~~ Reversed on 2026-07-28 in ADR-0007 phase 1.6
+    (`ffb9251`): casting does not appear in decision point 4's v1 scope list at all, so adding it
+    widened the surface past what this ADR scopes. Removing it also restored the invariant this
+    audit had claimed but broken — all five allowlisted untyped operations that the widening pulled
+    inside the surface were `outputs/zones/*`. The reason now lives beside the surface itself:
+    `NOT_GENERATED = {"ambient", "mixtapes", "outputs"}` in `backend/scripts/lint_openapi.py:56`,
+    matching the eight tags in `familiar-apple`'s `openapi-generator-config.yaml`. That commit
+    corrected the ADR-0007 bullet above but left this one stale; it is corrected here on 2026-07-29.
+    Casting on the native client is a live question for whenever it enters scope, not a settled
+    inclusion.
 
 - **Grandfathered past the freeze:** PR #3 (`refactor(carplay): in-place template updates instead of
   setRootTemplate spam`) was merged on 2026-07-26, after acceptance. It is a refactor, not a bug fix,
