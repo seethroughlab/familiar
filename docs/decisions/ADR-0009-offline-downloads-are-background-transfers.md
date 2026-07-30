@@ -16,6 +16,55 @@ Implementation:
   Phase 1 is deliberately first and deliberately alone: it is the whole data model, it is pure
   logic, and `swift test` can see it — the later phases are where the app target and its
   untestable seams start.
+- Phase 1 — the store and its index, on `familiar-apple` branch `feat/adr-0009-download-store`.
+  `DownloadStore` is an actor over a directory and a `Codable` index: playback asks it for a URL on
+  the main actor while a delegate hands it files from a background queue, and the index must not be
+  interleaved. File names are stored **relative**, never absolute, because iOS moves an app's
+  container between runs — a path recorded today names a directory that will not exist tomorrow.
+  Reconciliation lets the disk win, and the two directions are not equal: an entry with no file
+  makes the app offer a track it cannot play, which is the "metadata present, audio absent" failure
+  ADR-0006 documents in the web client; a file with no entry is merely wasted space. 14 tests.
+
+  Point 3 anticipated coalescing the index write during bulk downloads. There was no bulk writer
+  until phase 2, and a debounce with nothing to debounce is untestable speculation, so it writes per
+  mutation with the reason recorded beside it.
+- Phase 2 — the background session, on `familiar-apple` branch
+  `feat/adr-0009-background-downloads`. `DownloadManager` owns a background `URLSession` and files
+  finished transfers into phase 1's store. Only completed files reach it, per point 1: `URLSession`
+  already owns in-flight state durably, and a second record would disagree after a crash. The
+  finished file is moved **synchronously in the delegate callback**, because the system deletes it
+  the moment that method returns. 179 tests.
+
+  **The claim [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) rests on is now
+  demonstrated rather than argued** — its rejection of renovating the PWA is that a WebView "cannot
+  deliver background downloads on iOS", and until 2026-07-30 that had only ever been exercised in
+  the foreground. On a physical iPhone: three tracks queued (266/178/106 MB), the app backgrounded
+  after 13 seconds and `SIGKILL`ed 62 seconds later, with a probe writing one heartbeat line per
+  second. The heartbeat matters — this app declares `UIBackgroundModes: audio`, so without it
+  "the download continued after backgrounding" is equally consistent with the app never having
+  stopped running. Its last line landed one second after the app lost the foreground. Then ~170 MB
+  arrived before the kill (transfers continue while **suspended**), ~130 MB more arrived after it
+  with no Familiar process on the device (they survive **termination**), and a new pid appeared
+  unprompted to file all three at full size — the system **relaunches the app to deliver results**,
+  exercising `handleEventsForBackgroundURLSession` → `resumeExistingTasks` → the delegate, a path
+  that exists only after termination.
+
+  **That test found a bug that lives only in the path being proved.** All three were filed with no
+  title and no artist: `taskDescription` carried just the track id, and after a relaunch it is the
+  only thing left, since the in-memory request map belongs to a process that no longer exists. A
+  comment claiming the metadata was "repaired the next time the track is seen in a list" described a
+  repair that did not exist. That defeats **point 3** — an entry needing `/tracks/{id}` to render
+  its own title is not offline-capable — in exactly the case downloads exist for, and no foreground
+  test could have caught it, because in the foreground the map is still populated. The fix carries
+  the metadata as JSON in the same string, preserving point 1's reason for choosing
+  `taskDescription` at all: no side file to fall out of step with session state the app does not
+  own. Three delegate callbacks had been reading that string *as* the track id, so changing its
+  format without routing them through the decoder would have mis-keyed every one.
+
+  The Simulator cost a day first: background transfers do not run there, and the failure reads as
+  broken wiring. `print` does not reach the unified log there either. The macOS app is the cheap way
+  to separate "my code is wrong" from "this environment cannot do it"; the phone is the only way to
+  prove the rest.
 
 ## Context
 
