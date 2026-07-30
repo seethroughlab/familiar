@@ -61,6 +61,30 @@ Implementation:
     Casting on the native client is a live question for whenever it enters scope, not a settled
     inclusion.
 
+- **The "trivial shells" were not all trivial — audit, 2026-07-30.** Decision point 3 deletes the
+  Capacitor bridge rather than porting it, and the readiness audit above listed the collateral as
+  "trivial shells in `AppDelegate` (61), `MainSceneDelegate` (40) and `ViewController` (13)". That
+  characterisation cost a real bug: with the phone's ring/silent switch on, the native app played
+  nothing, because `AVAudioSession` was never given a category and its default obeys the switch.
+
+  The configuration had lived in `packages/ios/native/App/AppDelegate.swift:14-19` — `setCategory(.playback)`
+  and `setActive(true)` — one of the two non-boilerplate things in that file. The engine never set it
+  because something else always had, and the something else was on the "trivial" list. Fixed in
+  `familiar-apple` by configuring the session in `NativeAudioEngine` itself, where it belongs.
+
+  **The claim about the bridge proper survives the audit.** `FamiliarAudioPlugin.swift` contains zero
+  references to `AVAudioSession`, `MPNowPlayingInfoCenter` or `MPRemoteCommandCenter` across its 46
+  methods: it really is marshalling, and deleting it really did cost nothing. The error was in the
+  *inventory of what else went with it*, not in the judgement about the bridge.
+
+  The file's other non-boilerplate line, `application.beginReceivingRemoteControlEvents()`, is
+  deliberately **not** carried over: it is the pre-`MPRemoteCommandCenter` API, and the engine
+  registers command-centre targets directly (`NativeAudioEngine.swift:1597`), which supersedes it.
+
+  The general lesson, worth more than the fix: "delete rather than port" is safe for a layer that
+  only translates, and the risk sits in whatever *else* shared that layer's file. Auditing by asking
+  "what does this file do besides marshalling" would have caught this before a listener did.
+
 - **Grandfathered past the freeze:** PR #3 (`refactor(carplay): in-place template updates instead of
   setRootTemplate spam`) was merged on 2026-07-26, after acceptance. It is a refactor, not a bug fix,
   so it does not satisfy the rule above; it was opened in May, well before this ADR, and landed by
