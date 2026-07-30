@@ -65,6 +65,32 @@ Implementation:
   broken wiring. `print` does not reach the unified log there either. The macOS app is the cheap way
   to separate "my code is wrong" from "this environment cannot do it"; the phone is the only way to
   prove the rest.
+- Phase 3 — play from disk, on `familiar-apple` branch `feat/adr-0009-play-from-disk`.
+  `PlaybackSource` prefers the downloaded file and falls back to the stream, resolved **per load**
+  rather than when the queue is built: a library queue is 26,396 entries, and an entry resolved at
+  queue time is stale the moment its download finishes. `load(url:)` gained the `file://` routing
+  the auto-advance path already had. 12 tests, 195 total.
+
+  Point 5 says "play time asks the store first", and *play time* turned out to be three places, not
+  one. Beyond the obvious load, the engine hands over to its **pending next** track by itself when
+  the current one ends without going back through the load path — so a track resolved only at load
+  time streams on auto-advance, the one moment nobody is watching. And the lock screen's **previous**
+  button never returns through `previous()`; the engine loads `pendingPreviousUrl` directly. A
+  resolver placed only at the load call would have been correct on the surface a listener is
+  watching and wrong on both of the ones they are not.
+
+  **The failure that made this need a device.** `AVAudioFile` refused every download with
+  `avfaudio error 2003334207`. Both load paths turned a URL string into a path with
+  `replacingOccurrences(of: "file://", with: "")`, which strips the scheme and leaves the
+  percent-encoding — and point 2 put downloads under `Application Support`, so the path opened
+  contained a literal `Application%20Support`. The lesson is in the *reporting*: a nonexistent
+  directory surfaced as a **decode** error, which reads as a corrupt download and sends you to
+  inspect the file rather than the path. The bug predated this phase and was invisible to the suite,
+  because nothing in `swift test` opens a real file under a real container path.
+
+  Verified by playing a downloaded track whose stream URL pointed at a closed port, so a successful
+  load could only have come from disk — no need to take the device offline, and no way for a cached
+  response to muddy the result.
 
 ## Context
 
