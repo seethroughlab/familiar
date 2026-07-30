@@ -27,7 +27,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.api.exceptions import FamiliarError
+from app.api.exceptions import FamiliarError, NotFoundError
 from app.api.ratelimit import limiter
 from app.api.routes import (
     admin_artists,
@@ -505,6 +505,34 @@ app.include_router(pending_review.router, prefix="/api/v1", responses=DEFAULT_ER
 # Serve frontend static files in production
 # The static folder is created during Docker build
 STATIC_DIR = Path(__file__).parent.parent / "static"
+
+# Prefixes the single-page app must never swallow. A miss inside these belongs to the API, and the
+# answer to it is a 404 rather than an HTML document.
+NON_SPA_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "health")
+
+
+async def spa_fallback(full_path: str) -> FileResponse:
+    """Serve index.html for SPA routing (catches all non-API routes).
+
+    **Raises rather than returns** for an unmatched API path. Returning `{"detail": "Not found"}`
+    made FastAPI serialise it as a normal response body with **HTTP 200**, so every mistyped,
+    renamed or unaddressable `/api/` route answered success-shaped. A generated client
+    ([ADR-0007](../../docs/decisions/ADR-0007-clients-are-generated-from-openapi.md)) then failed
+    while *decoding* a 200 instead of handling a typed 404, and route drift stayed invisible.
+
+    Found while building the Apple client's artist pages: the detail endpoints are path-keyed, and
+    the 79 artists whose names contain a slash produced exactly this — HTTP 200, undecodable body.
+
+    Defined at module scope, and registered below only when `static/` exists, so it is importable by
+    a test. As a closure inside that `if` it was unreachable from the suite, which is why a bug this
+    visible in production survived: tests run without a static directory, where FastAPI's own 404
+    applies and the handler never runs at all.
+    """
+    if full_path.startswith(NON_SPA_PREFIXES):
+        raise NotFoundError("Not found")
+    return FileResponse(STATIC_DIR / "index.html")
+
+
 if STATIC_DIR.exists():
     # Serve static assets
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
@@ -534,13 +562,7 @@ if STATIC_DIR.exists():
         return FileResponse(STATIC_DIR / "index.html")
 
     # SPA fallback - serve index.html for all non-API routes
-    @app.get("/{full_path:path}", response_model=None)
-    async def spa_fallback(full_path: str) -> FileResponse | dict[str, Any]:
-        """Serve index.html for SPA routing (catches all non-API routes)."""
-        # Don't catch API or docs routes
-        if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "health")):
-            return {"detail": "Not found"}
-        return FileResponse(STATIC_DIR / "index.html")
+    app.get("/{full_path:path}", response_model=None)(spa_fallback)
 else:
     # Development mode - just show API info
     @app.get("/")
