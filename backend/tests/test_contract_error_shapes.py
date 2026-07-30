@@ -94,3 +94,52 @@ def test_chat_invalid_profile_header_error_shape(client: TestClient) -> None:
     )
     assert_error_shape(response, status_code=400)
     assert response.json()["message"] == "Invalid profile ID format"
+
+
+# The SPA fallback only exists in production, where `backend/static/` is created during the Docker
+# build. The suite runs without it, so the route below is never registered and FastAPI's own 404
+# answers instead — which is exactly why the defect these two guard survived unseen.
+#
+# They call the handler directly for that reason. Going through `client` would assert the behaviour
+# of a route that is not mounted, and pass whatever the handler did.
+
+
+async def test_spa_fallback_raises_for_unmatched_api_paths() -> None:
+    """An unmatched `/api/` path must 404, not 200.
+
+    It used to `return {"detail": "Not found"}`, which FastAPI serialises as an ordinary body with
+    **HTTP 200**. Every mistyped or renamed API route therefore answered success-shaped, and a
+    generated client (ADR-0007) failed while decoding a 200 rather than handling a typed 404.
+
+    Found through the Apple client's artist pages: `/library/artists/{artist_name}` is path-keyed,
+    and the 79 artists whose names contain a slash produced precisely this.
+    """
+    import pytest
+
+    from app.api.exceptions import NotFoundError
+    from app.main import spa_fallback
+
+    for path in (
+        "api/v1/nope",
+        "api/v1/library/artists/Kruder/Dorfmeister",
+        "docs/nope",
+        "openapi.json/nope",
+        "health/nope",
+    ):
+        with pytest.raises(NotFoundError) as caught:
+            await spa_fallback(path)
+        assert caught.value.status_code == 404
+
+
+async def test_spa_fallback_still_serves_the_app_for_client_routes() -> None:
+    """Everything that is not the API is still the single-page app.
+
+    The counterpart to the test above: raising for too much would turn every client-side route into
+    a 404 and take the web app down.
+    """
+    from fastapi.responses import FileResponse
+
+    from app.main import spa_fallback
+
+    for path in ("", "library", "playlists/abc", "settings/audio"):
+        assert isinstance(await spa_fallback(path), FileResponse)
