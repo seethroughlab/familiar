@@ -1,10 +1,21 @@
 # ADR-0009: Offline Downloads Are Background Transfers to a File Store
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-29
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md)
+
+Implementation:
+- Accepted 2026-07-30.
+- Execution order, each phase its own branch: (1) `DownloadStore` and its index in `FamiliarKit`,
+  no networking and no UI; (2) the background `URLSession` and its delegate; (3) play-time
+  resolution, including the `file://` routing `load(url:)` still lacks; (4) the download and
+  storage UI; (5) posting the offline set to
+  [ADR-0006](ADR-0006-offline-ranking-is-precomputed-server-side.md)'s manifest endpoint.
+  Phase 1 is deliberately first and deliberately alone: it is the whole data model, it is pure
+  logic, and `swift test` can see it — the later phases are where the app target and its
+  untestable seams start.
 
 ## Context
 
