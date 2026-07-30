@@ -85,6 +85,14 @@ Implementation:
   only translates, and the risk sits in whatever *else* shared that layer's file. Auditing by asking
   "what does this file do besides marshalling" would have caught this before a listener did.
 
+- **The load-bearing claim is now demonstrated, 2026-07-30.** This decision rejects renovating the
+  PWA because it "cannot deliver background downloads on iOS" — the strongest of the three reported
+  symptoms, and the argument the whole programme leans on hardest. It was still an argument until
+  [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md) phase 2 was tested on a
+  physical iPhone: transfers continued while the app was suspended, survived `SIGKILL`, and the
+  system relaunched the app to deliver them. Evidence and method are recorded under that ADR's
+  phase 2 rather than duplicated here.
+
 - **Grandfathered past the freeze:** PR #3 (`refactor(carplay): in-place template updates instead of
   setRootTemplate spam`) was merged on 2026-07-26, after acceptance. It is a refactor, not a bug fix,
   so it does not satisfy the rule above; it was opened in May, well before this ADR, and landed by
