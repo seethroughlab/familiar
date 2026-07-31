@@ -91,6 +91,37 @@ Implementation:
   Verified by playing a downloaded track whose stream URL pointed at a closed port, so a successful
   load could only have come from disk — no need to take the device offline, and no way for a cached
   response to muddy the result.
+- Phase 4 — the download and storage UI, on `familiar-apple` branch `feat/adr-0009-download-ui`.
+  Phases 1–3 were only ever exercised by a probe, because there was no way for a person to start a
+  download; this makes the previous three reachable. A track row's context menu offers Download /
+  Stop downloading / Remove download, and album, artist and playlist screens get a Download button
+  beside Play and Shuffle — long-pressing thirteen rows in turn reaches the same place and nobody
+  would do it. The manager skips what is already downloaded or in flight, so pressing twice is
+  harmless and a partly-downloaded album finishes rather than restarting. The Downloads screen is
+  newest first, with per-row size, `StorageText`'s "3 tracks · 22.5 MB" header, swipe to remove and
+  a confirmed Remove all: **point 10 keeps automatic eviction out, so this screen is the only way
+  anything leaves.** 211 tests, up from 195.
+
+  **Flipping `isDiscretionary` to `true` changed the UI, not just the transfer.** It matches what
+  its own comment had always argued — the system waits for wifi and power, so an album queued for a
+  flight does not quietly spend a cellular allowance nobody offered. That makes "I tapped Download
+  and nothing happened" a *real state* rather than a bug, which a spinner would have misreported as
+  progress. The waiting badge is therefore a clock labelled "Waiting for Wi-Fi", and the empty
+  Downloads screen says so in a sentence. A correctness change to a background flag is a wording
+  change on screen.
+
+  Phase 2's own index carried the defect point 3 exists to prevent: `DownloadMetadata` stored `""`
+  for an untagged field, and a row rendered with a size and no name. Fixed at the type —
+  `fromTags` puts every field through `presence`, so absent stays nil and the row renders
+  "Untitled". `StorageText`, `fromTags` and the two queue commands live in `FamiliarKit`, because
+  `swift test` cannot see the app target.
+
+  **Where Downloads is reached from was implementation, not a decided point.** Point 9 makes the
+  downloads list the offline browse surface and says nothing about how it is opened; phase 4 put it
+  in the toolbar as its own button, reasoning that burying the one screen that works with no server
+  is wrong for the moment it exists for.
+  [ADR-0012](ADR-0012-favorites-are-a-collection-not-a-library-section.md) later moves it under a
+  Collections entry it shares with Favorites, and supersedes nothing in doing so.
 
 ## Context
 
