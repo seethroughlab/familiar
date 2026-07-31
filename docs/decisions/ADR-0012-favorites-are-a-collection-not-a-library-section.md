@@ -15,6 +15,47 @@ Implementation:
   was: it is where the decisions live — the optimistic toggle, the membership set, the local
   filter — and `swift test` cannot see the app target, so anything left there ships unpinned. The
   four stores already stranded in `App/Shared` are the argument.
+- All four phases landed together on `familiar-apple` branch `feat/adr-0012-favorites-store`
+  (PR #24), one commit each rather than one branch each. Recorded because the line above says
+  otherwise: the phases were small and strictly sequential, and splitting them across four PRs
+  would have bought review granularity the commits already carry.
+- Phase 1 — the collection and its membership set. `FavoritesSource` is the seam the app's
+  generated-client half plugs into; `FavoritesStore` is every decision this ADR made. Two things the
+  tests pin that the ADR only implies: a server disagreeing with the optimistic guess wins
+  **silently**, because another device getting there first is not an outage; and a reload landing
+  mid-toggle is newer than anything the toggle could reconcile to, so a generation guard drops the
+  toggle's answer rather than writing it over the top. `FavoriteTrack` is a plain value because
+  `FavoriteTrackResponse` is a *separate struct* from `TrackResponse` with no protocol between them
+  — a row view written against one will not accept the other. 233 tests, up from 218.
+- Phase 2 — `ServerFavoritesSource` and the Collections group. `/toggle` rather than `POST` plus
+  `DELETE`: one round trip instead of a read to choose a verb, and it sidesteps that
+  `favoritesAddFavorite` returns `.created` rather than `.ok`. Adding the two routes broke
+  `DetailStore`'s exhaustive switch, which is the switch doing its job — the collections read state
+  the app already holds and must never ask the server for a route.
+- Phase 3 — the row indicator and the menu entry, in the slot the menu's documented ordering leaves
+  between navigation and downloads. Unlike "Go to album" the entry is present on every row, because
+  it applies either way; the label carries the direction.
+- Phase 4 — the full player and the lock screen. **Point 8 reads like it adds a control; it fixes
+  one.** `likeCommand` had been enabled and titled "Favorite" since the Capacitor port: pressing it
+  flipped the engine's own glyph, called `audioEngineFavoriteToggled`, and reached an empty stub —
+  while `updateNowPlayingInfo`'s `isFavorite` parameter was supplied by neither caller, so it
+  published `false` for every track ever played. The control looked like it worked and did nothing,
+  and the suite's only remote-command test asserted that next and previous were enabled.
+
+  **A test caught a real bug in the first attempt at it.** `refreshFavoriteState` went through the
+  engine's `updateFavoriteState`, which looks like the narrower fit and guards on the engine's
+  `currentTrackId` — unset while a track is *armed*, adopted from another device and not yet played
+  ([ADR-0003](ADR-0003-server-owns-the-playback-queue.md)). Armed tracks do publish now-playing
+  metadata, so that path left an adopted track's heart permanently stale in the one state a handoff
+  always lands in. 241 tests.
+- Verified against the real library rather than a fixture: `total` is 1,719 and one request returns
+  all 1,719 rows, `features` is null on every one, and the rows arrive `favorited_at` descending
+  without the client sorting. `FavoritesSliceTests` passes against the same server.
+- Verified on an iPhone 13 Pro, 2026-07-31: the Collections group and its counts, hearts already
+  drawn on the library list before the favourites screen is opened, filtering that reaches the far
+  end of the collection, the row menu's flip, and **the lock-screen round trip** — which is the one
+  path nothing in `swift test` can reach, and the one that had been silently discarding presses
+  since the Capacitor port.
 
 ## Context
 
@@ -85,8 +126,8 @@ the shape of the work.**
    affordable here rather than merely tolerable — `list_favorites`
    (`backend/app/api/routes/favorites.py:64-68`) bounds `limit` at nothing, and its rows carry no
    analysis features, because `features` hangs off `TrackAnalysis` rather than `Track` and so
-   serialises as null. 1,719 rows is one response of a few hundred kilobytes. The web client has
-   always done exactly this (`favoritesApi.list(10000, 0)`,
+   serialises as null. Measured against the real library: 1,719 rows is **880 KB in 0.29s**. The web
+   client has always done exactly this (`favoritesApi.list(10000, 0)`,
    `packages/frontend/src/hooks/useFavorites.ts:48`). If the list grows past what that comfortably
    supports, the fix is a `search` parameter on the endpoint, not a client-side index.
 
