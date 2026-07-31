@@ -4,7 +4,7 @@ Status: proposed
 
 Date: 2026-07-30
 
-Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md)
+Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
 
 ## Context
 
@@ -61,20 +61,32 @@ the shape of the work.**
    point — ADR-0009 point 9 makes the downloads list the offline browse surface but says nothing
    about how it is reached — so this supersedes nothing.
 
-2. **`FavoritesStore` is its own type**, paging by `limit`/`offset` against
-   `favorites_list_favorites`, sorted by `favorited_at` descending. It does not share code with
-   `LibraryStore` beyond the cancellation guard every store now needs
-   (`NetworkFailure.isCancellation`).
+2. **`FavoritesStore` is its own type**, reading `favorites_list_favorites` — which pages by
+   `limit`/`offset` and returns rows the server has already sorted by `favorited_at` descending. It
+   does not share code with `LibraryStore` beyond the cancellation guard every store now needs
+   (`NetworkFailure.isCancellation`). The client preserves response order rather than re-sorting:
+   `favorited_at` is declared `{"type": "string", "default": ""}` with no `format: date-time`, so it
+   arrives as a string, and parsing one to recover an order the server already applied is work that
+   can only introduce disagreement.
 
-3. **Filtering is local, because the endpoint offers none.** 1,719 rows against no `search`
-   parameter is the same situation `PlaylistsListView` already handles by filtering in the view. If
-   the list grows past what that comfortably supports, the fix is a `search` parameter on the
-   endpoint, not a client-side index.
+3. **The collection loads whole, in one request, and filtering is local.** The endpoint offers no
+   `search` parameter, and a search box that filtered only the pages already fetched would look like
+   a server bug: tracks outside the current window would silently not exist. Loading whole is
+   affordable here rather than merely tolerable — `list_favorites`
+   (`backend/app/api/routes/favorites.py:64-68`) bounds `limit` at nothing, and its rows carry no
+   analysis features, because `features` hangs off `TrackAnalysis` rather than `Track` and so
+   serialises as null. 1,719 rows is one response of a few hundred kilobytes. The web client has
+   always done exactly this (`favoritesApi.list(10000, 0)`,
+   `packages/frontend/src/hooks/useFavorites.ts:48`). If the list grows past what that comfortably
+   supports, the fix is a `search` parameter on the endpoint, not a client-side index.
 
-4. **Membership is answered by a set held on the device, not by a request per row.** A track row
-   needs to know whether it is a favourite in order to draw the heart, and `/favorites/{track_id}`
-   per visible row would be fifty requests per screen of library. The favourite ids are fetched once
-   and kept, the same shape as `Downloads.downloadedIDs` from ADR-0009 phase 4.
+4. **Membership is answered by a complete id snapshot held on the device, not by a request per row.**
+   A track row needs to know whether it is a favourite in order to draw the heart, and
+   `/favorites/{track_id}` per visible row would be fifty requests per screen of library. The set is
+   derived from the single response point 3 describes and then kept, the same shape as
+   `Downloads.downloadedIDs` from ADR-0009 phase 4. A partial page cache is not a membership source;
+   it would make hearts lie for tracks outside the fetched window — which is the second reason the
+   collection is loaded whole, and the one that would still hold if it were not cheap.
 
 5. **Toggling is optimistic, and reconciles from the response.** The heart flips immediately and the
    set is corrected by what `/toggle` returns. A favourite is a low-stakes, high-frequency action;
@@ -82,10 +94,12 @@ the shape of the work.**
    briefly wrong costs nothing that a corrected set does not fix.
 
 6. **The favourite action appears in the track row menu**, alongside the queue, navigation and
-   download entries added in ADR-0009 phase 4 — not as a per-row heart button. A library list is
-   mostly tracks that are not favourites, and a control on every row drowns the titles, which is the
-   same reasoning that keeps the download badge invisible until there is something to show. A heart
-   *indicator* on rows that are favourites is not a control and does not have this problem.
+   download entries added in ADR-0009 phase 4 — not as a per-row heart button. This deliberately
+   diverges from the web track list, which has more horizontal room and already carries row-level
+   controls. On the native phone layout a library list is mostly tracks that are not favourites, and a
+   control on every row drowns the titles, which is the same reasoning that keeps the download badge
+   invisible until there is something to show. A heart *indicator* on rows that are favourites is not
+   a control and does not have this problem.
 
 7. **v1 does not implement `/favorites/auto-download`.** ADR-0009 point 6 defers auto-download
    intent entirely — including `profile.settings["favorites_auto_download"]` by name — on the
@@ -117,10 +131,18 @@ the shape of the work.**
   paging, envelope, schema and sort. The shared-store version would be a sequence of conditionals
   around four unrelated behaviours.
 
+- **Paging the list, and draining pages to build the id set.** Rejected — and it is what this ADR
+  said in draft, which is why it is recorded here rather than left out. It is the right shape for
+  `/tracks`, where 26,396 rows make one request absurd, and the wrong one for an endpoint with no
+  `limit` cap and no analysis features in its rows. It would also have meant two loading modes over
+  one endpoint — paged for the list, exhaustive for the membership set — and a filter that could not
+  be offered until the second finished. Worth revisiting only if the endpoint grows a cap.
+
 - **A per-row heart button in library lists.** Rejected. Every row would carry a control that is
   inert on the large majority of them, and the row is already carrying a download badge, a duration
-  and a title that truncates on a phone. The context menu is where an action that applies to a
-  minority of rows belongs, and phase 4 already established that pattern.
+  and a title that truncates on a phone. The web client accepts this cost in its denser table/card
+  layouts; the native client does not have to copy it. The context menu is where an action that
+  applies to a minority of rows belongs, and phase 4 already established that pattern.
 
 - **Fetching favourite status per row on demand.** Rejected. It is a request per visible row, it
   makes scrolling a library issue dozens of requests, and it fails exactly when the collection is
@@ -144,8 +166,11 @@ the shape of the work.**
 - **Tradeoff:** Favouriting behaves differently on the two clients until auto-download is decided —
   the web client downloads, the native one does not. Recorded in decision point 7 rather than left
   to be discovered.
-- **Tradeoff:** Local filtering over 1,719 rows is fine and will not stay fine forever. The
-  threshold is the endpoint's, not the client's.
+- **Tradeoff:** Loading the collection whole, and filtering it locally, is fine at 1,719 rows and
+  will not stay fine forever. It is the same unbounded request the web client already makes, and it
+  will degrade the same way — gradually, with no failure to notice. The threshold is the endpoint's,
+  not the client's: the fix is a `search` parameter, at which point both clients stop fetching
+  everything.
 - **Follow-up:** Auto-download intent, which ADR-0009 point 6 defers and this ADR declines to
   revisit. It needs a background refresh path and a policy for intent that changed while the device
   was away.
