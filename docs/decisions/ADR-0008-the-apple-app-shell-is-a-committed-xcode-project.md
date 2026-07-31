@@ -139,10 +139,36 @@ for.
   rather than failing. Point 5's per-platform CI builds catch drift that changes behaviour; drift
   that does not — a stale comment, a diverged version string — will need noticing by eye. If the
   duplication becomes the larger problem, decision point 3 is the thing to revisit.
-- **Follow-up:** app icons, launch assets and the bundle identifier still need deciding. The
-  Capacitor app ships as `com.familiar.player`; whether the native app reuses that identifier —
-  taking over the existing TestFlight record and its installed base — or takes a new one is a
-  release-management decision that belongs with whoever holds the App Store Connect account.
+- **Follow-up, resolved 2026-07-31:** the native app **takes over `com.familiar.player`**, the
+  Capacitor app's identifier, rather than keeping `com.familiar.native`. Decided by the account
+  holder, as this follow-up asked.
+
+  **CarPlay forced the question rather than release management raising it.** Apple grants
+  `com.apple.developer.carplay-audio` per App ID, and it is granted on `com.familiar.player`.
+  Declaring it under `com.familiar.native` fails to sign with *"Entitlement
+  com.apple.developer.carplay-audio not found and could not be included in profile. This likely is
+  not a valid entitlement and should be removed from your entitlements file"* — which reads as
+  "Apple never approved this" and actually means "not on this App ID". Worth recording, because the
+  message sends you to the wrong place: the approval was real and had been granted weeks earlier.
+
+  Two consequences, both real:
+
+  1. **Versions had to move.** App Store Connect knows the identifier at 1.1 (12); the native app
+     was at 0.1.0 (1), and a lower build under a known identifier is rejected outright. It is now
+     **1.2 (13)**. The build number is forced; the marketing version is a judgement, and the
+     judgement is that the identifier's version line stays continuous. A major bump would advertise
+     a discontinuity to anyone reading the release channel, and the release channel does not have
+     one — whatever is true of the code underneath.
+  2. **It retires the Capacitor app in practice, ahead of the parity condition
+     [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 6 sets.** That point
+     retires `packages/ios` once the native client reaches v1 parity, and it has not — the
+     Capacitor build is still the only one with AI chat/discovery. Two apps cannot share an
+     identifier on one device, so installing the native app removes it. The parity condition was
+     about *when it is safe to stop maintaining* the old app; the identifier takeover is about
+     *which app owns the release channel*, and the second turned out to arrive first. ADR-0001
+     point 6 is not superseded, but it no longer describes the order things happen in.
+
+  App icons and launch assets from the original follow-up are still open.
 - **Follow-up:** Swift 6 language mode remains deferred per the note in `Package.swift`. The app
   target should not adopt it ahead of `FamiliarKit`, or the two halves of the same build would sit
   in different concurrency models.
