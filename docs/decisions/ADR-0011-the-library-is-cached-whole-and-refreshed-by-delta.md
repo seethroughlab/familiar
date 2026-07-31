@@ -2,7 +2,7 @@
 
 Status: proposed
 
-Date: 2026-07-29
+Date: 2026-07-31
 
 Extends [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md)
 
@@ -15,39 +15,52 @@ Apple client can play what it has downloaded but cannot navigate to it the way i
 also named this as the decision that settles whether its `Codable` index becomes SQLite, which is
 why it wants deciding before that index acquires dependents.
 
-Everything below was measured against the live library on 2026-07-29 rather than estimated.
+Everything below was measured against the live library rather than estimated, and re-measured on
+2026-07-31 before proposing.
 
 | Fact | Value |
 |---|---|
 | Tracks | 26,396 active (26,462 rows, 66 inactive) |
-| Full `TrackResponse` | 496 B/track → **12.5 MB** for the library |
-| Ten-field browse subset | 271 B/track → 6.8 MB |
+| Full `TrackResponse` | 499 B/track → **13.2 MB** for the library |
+| Ten-field browse subset | 271 B/track → 7.1 MB |
 | Requests at the endpoint's `page_size` cap of 200 | **132** |
 | Albums | 3,925 from `/library/albums`, 3,871 from `/library/stats` |
 | Artists | 3,475 from `/library/artists`, 3,662 from `/library/stats` |
 | `tracks.updated_at` churn | 510 rows in 24 h, 580 in 30 days, 52 distinct update days |
 
-**The precedent for this is broken, and finding that out is the most valuable thing in this ADR.**
-`services/libraryCache.ts` is 596 lines whose entry point requests the library like this
-(`libraryCache.ts:15`):
+**The precedent for this was broken, and finding that out is what this ADR is for — but the bug
+itself has since been fixed, so read it as history rather than as a live defect.** When this was
+drafted on 2026-07-29, `services/libraryCache.ts` requested the library like this:
 
 ```ts
 const { data } = await api.get('/tracks', { params: { limit: 10000 } });
 ```
 
 `limit` is not a parameter of that endpoint. `page_size` is, capped at `le=200`
-(`backend/app/api/routes/tracks/listing.py:295`), and FastAPI ignores unrecognised query parameters,
-so the default page size applies. Verified against the live server: `GET /api/v1/tracks?limit=10000`
-returns **50 items** with `page_size: 50` and `total: 26396`. The "cache library for offline
-browsing" action in `components/Settings/OfflineSettings.tsx:75` has been caching **50 tracks of
-26,396**, and nothing caught it because a 50-track offline library looks like a feature that works
-rather than one that is broken. Porting this design to Swift would have ported the shape of the
-defect along with it.
+(`backend/app/api/routes/tracks/listing.py:298`), and FastAPI ignores unrecognised query parameters,
+so the default page size applied: `GET /api/v1/tracks?limit=10000` returned **50 items** with
+`page_size: 50` and `total: 26396`. The "cache library for offline browsing" action had been caching
+**50 tracks of 26,396**, and nothing caught it because a 50-track offline library looks like a
+feature that works rather than one that is broken.
+
+It was fixed independently on 2026-07-30 (`5d7d1fb`, "cache the whole library, not the first page of
+it", #46): the service now pages at 200 with a runaway guard, fails rather than returning a partial
+cache, and carries a test asserting a cache larger than one page.
+
+**The lesson survives the fix, which is why this stays in the record.** The argument for writing this
+ADR was never "the web client has a bug" — it was that porting that design to Swift would have
+ported the *shape* of the defect, and a cache that silently holds part of a collection is
+indistinguishable from a working one. That is the same failure mode
+[ADR-0012](ADR-0012-favorites-are-a-collection-not-a-library-section.md) point 3 rejects for
+favourites, and the reason decision point 1 below caches the library whole rather than a working set.
+What the fix removes is the *urgency*, not the reasoning: the web client's cache is now a flat track
+list with no albums, no artists, no fingerprint and no refresh path beyond clear-and-refetch, and
+those absences are what the decisions below are actually about.
 
 **There is no delta endpoint, and `updated_at` is not yet a usable cursor.** `list_tracks` takes no
 `since` parameter and `TrackResponse` does not expose `updated_at`, so a full 132-request re-fetch is
 the only refresh available today. The column itself is promising — `tracks.updated_at` carries
-`onupdate=func.now()` (`backend/app/db/models/tracks.py:113-115`) and its churn is low: 510 rows moved
+`onupdate=func.now()` (`backend/app/db/models/tracks.py:112-114`) and its churn is low: 510 rows moved
 in the last 24 hours and 580 in 30 days, so a delta would carry hundreds of rows instead of 26,396.
 But the scanner's bulk upsert lists 23 columns explicitly in its `set_` clause and `updated_at` is
 not among them (`backend/app/services/scanner.py:721-744`), and SQLAlchemy does not apply column
@@ -73,7 +86,7 @@ exists to prevent.
 
 **Search, by contrast, is genuinely reproducible.** The server's is a case-insensitive substring
 match across exactly three columns — `Track.title.ilike | Track.artist.ilike | Track.album.ilike`
-(`listing.py:330-335`) — with no ranking and no relevance ordering. A local scan over the same three
+(`listing.py:88-90`) — with no ranking and no relevance ordering. A local scan over the same three
 fields is not an approximation of it; it is the same predicate. This is the distinction ADR-0006 turns
 on: reimplementing a *scoring function* on four clients guarantees drift, while reimplementing
 `contains` does not.
@@ -82,13 +95,13 @@ on: reimplementing a *scoring function* on four clients guarantees drift, while 
 
 The client caches the library whole, refreshes it by delta, and never derives what the server groups.
 
-1. **The whole library is cached, not a working set.** 12.5 MB and 132 requests against a 26,396-track
+1. **The whole library is cached, not a working set.** 13.2 MB and 132 requests against a 26,396-track
    library, once. A working-set cache would need an eviction policy, a prefetch heuristic, and a
    story for what happens when the listener scrolls past its edge offline — all to save single-digit
    megabytes.
 
 2. **Cache `TrackResponse` as generated, not a hand-picked projection.** The ten-field subset the web
-   client keeps saves 5.7 MB and costs a running decision about which fields matter; ADR-0007 makes
+   client keeps saves 6.0 MB and costs a running decision about which fields matter; ADR-0007 makes
    the full type generated, so caching it whole means a schema change reaches the cache by
    recompiling rather than by remembering to add a field.
 
@@ -133,14 +146,15 @@ The client caches the library whole, refreshes it by delta, and never derives wh
 
 ## Alternatives Considered
 
-- **Fix `libraryCache.ts` and port its design.** Rejected as the design, though the bug should be
-  fixed on its own merits regardless of this ADR. Its cache is a flat track list with no albums, no
-  artists, no fingerprint and no refresh path beyond clear-and-refetch, and its search is
-  `toArray()` followed by a JavaScript filter over every row. The Apple client needs the grouped
-  collections and a staleness check, neither of which that design has.
+- **Port `libraryCache.ts`'s design, now that its paging bug is fixed.** Rejected, and the fix is
+  what makes this the honest version of the question — the design can now be judged on its merits
+  rather than on a defect. Its cache is a flat track list with no albums, no artists, no fingerprint
+  and no refresh path beyond clear-and-refetch, and its search is `toArray()` followed by a
+  JavaScript filter over every row. The Apple client needs the grouped collections and a staleness
+  check, and neither is something that design could grow without becoming this one.
 - **Cache a working set — recently played, favourites, downloads and their albums.** Rejected. It
   trades 5–10 MB for an eviction policy, a prefetch heuristic and an "offline edge" the listener
-  discovers by scrolling into it. The whole library costing 12.5 MB is what makes this easy, and that
+  discovers by scrolling into it. The whole library costing 13.2 MB is what makes this easy, and that
   number was measured before choosing.
 - **Derive albums and artists from cached tracks.** Rejected, per Context: artist enrichment is not
   derivable at all, albums have no id, and the grouping would be a second implementation that must
@@ -166,8 +180,9 @@ The client caches the library whole, refreshes it by delta, and never derives wh
 
 - **Positive:** Offline browse becomes real rather than nominal, and the downloads ADR-0009 delivers
   become reachable through the same navigation used online.
-- **Positive:** The Swift client's cache will hold 26,396 tracks where the web client's holds 50.
-  That gap is the reason to write this down: the shipped web behaviour would have been the model.
+- **Positive:** Both clients will cache the whole library rather than a page of it. That was the gap
+  this ADR was written to stop the Swift client inheriting; the web half of it closed independently
+  in #46, which is the outcome the ADR wanted and not evidence it was unnecessary.
 - **Positive:** The delta cursor makes an ordinary refresh hundreds of rows rather than 26,396 —
   measured at 510 rows over the last 24 hours and 580 over 30 days.
 - **Positive:** ADR-0009's storage question is answered with a reason, so the download index and the
@@ -178,15 +193,12 @@ The client caches the library whole, refreshes it by delta, and never derives wh
   now.
 - **Tradeoff:** The cache holds the full `TrackResponse`, so it grows with the schema. A field added
   for one client's benefit costs every cached row on every client.
-- **Tradeoff:** Holding the library in memory is 12.5 MB as JSON but more once decoded into Swift
+- **Tradeoff:** Holding the library in memory is 13.2 MB as JSON but more once decoded into Swift
   strings, and the iOS floor is a 15.0-era device. That footprint should be measured before shipping,
   not assumed comfortable.
 - **Tradeoff:** A profile-scoped part and a library-scoped part in one cache is a distinction that
   invites bugs at profile switch, in the same family as the pinned/cached distinction
   [ADR-0010](ADR-0010-played-bytes-are-cached-downloads-are-pinned.md) introduces.
-- **Follow-up:** Fix `libraryCache.ts:15` on the web client independently of this ADR. It is a
-  one-word change with a real user-facing effect, and it should carry a test that asserts a cache
-  larger than one page.
 - **Follow-up:** Measure the decoded in-memory footprint of 26,396 cached tracks on an iOS 15-era
   device, and revisit decision point 4 if it is uncomfortable.
 - **Follow-up:** Decide whether artwork for cached albums and artists is fetched eagerly, lazily, or
