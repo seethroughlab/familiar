@@ -50,8 +50,12 @@ Implementation:
   always lands in. 241 tests.
 - Verified against the real library rather than a fixture: `total` is 1,719 and one request returns
   all 1,719 rows, `features` is null on every one, and the rows arrive `favorited_at` descending
-  without the client sorting. `FavoritesSliceTests` passes against the same server. Not yet
-  exercised on a device — the lock-screen round trip is the one path no test covers.
+  without the client sorting. `FavoritesSliceTests` passes against the same server.
+- Verified on an iPhone 13 Pro, 2026-07-31: the Collections group and its counts, hearts already
+  drawn on the library list before the favourites screen is opened, filtering that reaches the far
+  end of the collection, the row menu's flip, and **the lock-screen round trip** — which is the one
+  path nothing in `swift test` can reach, and the one that had been silently discarding presses
+  since the Capacitor port.
 
 ## Context
 
