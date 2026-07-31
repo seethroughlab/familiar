@@ -155,8 +155,10 @@ for.
 
   1. **Versions had to move.** App Store Connect knows the identifier at 1.1 (12); the native app
      was at 0.1.0 (1), and a lower build under a known identifier is rejected outright. It is now
-     2.0 (13) — a major bump because it is the same identity carrying an entirely different
-     application, not because 2.0 was earned.
+     **1.2 (13)**. The build number is forced; the marketing version is a judgement, and the
+     judgement is that the identifier's version line stays continuous. A major bump would advertise
+     a discontinuity to anyone reading the release channel, and the release channel does not have
+     one — whatever is true of the code underneath.
   2. **It retires the Capacitor app in practice, ahead of the parity condition
      [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 6 sets.** That point
      retires `packages/ios` once the native client reaches v1 parity, and it has not — the
