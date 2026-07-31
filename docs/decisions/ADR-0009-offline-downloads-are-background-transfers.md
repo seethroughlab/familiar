@@ -333,10 +333,22 @@ prefers that file at play time.
   [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md)) so a download can be sized before it
   starts and an album's cost shown before it is committed to.
 - **Follow-up:** Decide whether `/stream` gains a way to serve original bytes, per decision point 8.
-- **Follow-up:** Artwork offline. The engine fetches now-playing artwork by URL; a downloaded track
-  played in airplane mode currently shows none. The web client caches artwork blobs; the Apple
-  client needs an equivalent, and it is small enough to fold into the store rather than deserving an
-  ADR.
+- **Follow-up:** Artwork. **Corrected 2026-07-31 — this follow-up was written from a wrong premise
+  and understates the work.** It said the engine fetches now-playing artwork by URL and only a
+  downloaded track played in airplane mode shows none. In fact the native client shows **no artwork
+  anywhere**: not in the full player, the now-playing bar, the queue, or on the lock screen, online
+  or off. `NativeAudioEngine.updateNowPlayingArtwork` exists, but its only caller is
+  `loadAndPlayPendingTrack` — a Capacitor-era path `FamiliarPlayer` never takes — so the URL is
+  never supplied and `MPNowPlayingInfoCenter` never receives an image. Same shape as the
+  `likeCommand` defect [ADR-0012](ADR-0012-favorites-are-a-collection-not-a-library-section.md)
+  point 8 fixed: an engine API carried over intact from the port, wired to nothing.
+
+  The judgement that this needs no ADR still stands — it is wiring an API that already exists, plus
+  caching blobs beside the downloads, which is implementation inside this ADR's direction. What
+  changes is the size: the online case has to be built too, not just the offline one. Sources are
+  `GET /tracks/{track_id}/artwork` and `GET /artwork/{album_hash}/{size}`, both already generated,
+  and the downloaded files carry embedded `APIC` art of their own — verified on a real one — which
+  is the only source that works with no server at all.
 - **Follow-up:** Auto-download intent (decision point 6), once explicit downloads are proven.
 - **Follow-up:** An opportunistic cache of what was played. Because the engine already writes the
   complete file to `NSTemporaryDirectory()` and then deletes it, keeping it under a size policy is a
