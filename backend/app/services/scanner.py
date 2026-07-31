@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AUDIO_EXTENSIONS, settings
@@ -719,6 +719,17 @@ class LibraryScanner:
         upsert_stmt = insert_stmt.on_conflict_do_update(
             index_elements=["file_path"],
             set_={
+                # `Track.updated_at` carries `onupdate=func.now()`, and SQLAlchemy applies that to
+                # ORM flushes and Core `update()` — but *not* to an `on_conflict_do_update` `set_`
+                # clause, which is emitted verbatim. So this branch rewrote 22 columns and left the
+                # timestamp reading whenever the row was last touched by some other path.
+                #
+                # Narrow, but real: this branch fires only when two scans race on the same
+                # `file_path`, since the ordinary rescan goes through `_update_track` and is a plain
+                # ORM update. It matters because the timestamp is the cursor an incremental client
+                # would page from — a row whose tags changed but whose `updated_at` did not is
+                # invisible to a delta, and invisible in the silent direction.
+                "updated_at": func.now(),
                 "file_hash": insert_stmt.excluded.file_hash,
                 "file_size": insert_stmt.excluded.file_size,
                 "file_modified_at": insert_stmt.excluded.file_modified_at,
@@ -763,7 +774,7 @@ class LibraryScanner:
         Uses case-insensitive album matching to handle variations like
         "Alice In Ultraland" vs "Alice in Ultraland".
         """
-        from sqlalchemy import func, update
+        from sqlalchemy import update
 
         # Find albums with multiple artists (compilation candidates)
         # Only consider tracks where album_artist is not already set

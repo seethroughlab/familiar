@@ -26,8 +26,10 @@ Audio fixtures structure:
       epic_boss_battle.mp3
 """
 
+import asyncio
 import shutil
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -696,3 +698,120 @@ class TestConcurrentSyncPrevention:
         finally:
             r.delete("familiar:sync:lock")
             r.delete("familiar:sync:progress")
+
+
+@pytest.mark.asyncio(loop_scope="function")
+class TestUpdatedAtCursor:
+    """`tracks.updated_at` as a cursor an incremental client could page from.
+
+    Nothing consumes it yet — `TrackResponse` does not expose it and `list_tracks` takes no `since`
+    parameter — but ADR-0011 proposes both, and a cursor that fails to move is wrong in the silent
+    direction: the row is simply absent from the delta, and the client cannot tell.
+
+    The rescan path is a plain ORM update (`_update_track`), so SQLAlchemy applies the column's
+    `onupdate=func.now()`. That is the behaviour these tests pin, because it is load-bearing for a
+    design that does not exist yet and would otherwise be easy to break by "optimising" the rescan
+    into a bulk statement.
+    """
+
+    async def _read_fresh(self):
+        """Read the row on its own engine, so no session snapshot or identity map can answer."""
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        from app.config import settings
+
+        engine = create_async_engine(settings.database_url, echo=False)
+        async with engine.connect() as conn:
+            row = (
+                await conn.execute(text("SELECT title, updated_at FROM tracks LIMIT 1"))
+            ).one()
+        await engine.dispose()
+        return row[0], row[1]
+
+    async def test_retagging_a_file_moves_updated_at(self, clean_db):
+        """A tag change is exactly the edit a delta must not miss."""
+        from mutagen.easyid3 import EasyID3
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            target = tmp_path / "track.mp3"
+            shutil.copy(FIXTURES_DIR / "electronic_short.mp3", target)
+
+            await LibraryScanner(clean_db).scan(tmp_path)
+            await clean_db.commit()
+            _, before = await self._read_fresh()
+
+            # Wide enough that the second timestamp cannot be confused for the first, and wide
+            # enough to survive a slow CI runner.
+            await asyncio.sleep(2.0)
+
+            tags = EasyID3(target)
+            tags["title"] = "Retagged By The Test"
+            tags.save()
+
+            clean_db.expire_all()
+            await LibraryScanner(clean_db).scan(tmp_path)
+            await clean_db.commit()
+            title, after = await self._read_fresh()
+
+            assert title == "Retagged By The Test", "the rescan did not pick up the new tag"
+            assert after > before + timedelta(seconds=1.5), (
+                f"updated_at did not move with the retag ({before} -> {after}); "
+                "a delta cursor built on it would silently skip this row"
+            )
+
+    async def test_the_upsert_conflict_branch_moves_updated_at(self, clean_db):
+        """The race path: two scans reaching the same `file_path` at once.
+
+        `_create_track`'s `on_conflict_do_update` is emitted verbatim, so unlike the ORM rescan it
+        gets no `onupdate` applied for free — the timestamp has to be in the `set_` clause. Reached
+        by calling `_create_track` twice, which is what the race produces.
+        """
+        from app.utils.time import utcnow
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            target = tmp_path / "track.mp3"
+            shutil.copy(FIXTURES_DIR / "electronic_short.mp3", target)
+
+            scanner = LibraryScanner(clean_db)
+            await scanner._create_track(target, "hash-one", utcnow(), 1234)
+            await clean_db.commit()
+            _, before = await self._read_fresh()
+
+            await asyncio.sleep(2.0)
+
+            # Same path, second writer: takes the conflict branch rather than inserting.
+            clean_db.expire_all()
+            await scanner._create_track(target, "hash-two", utcnow(), 5678)
+            await clean_db.commit()
+            _, after = await self._read_fresh()
+
+            assert after > before + timedelta(seconds=1.5), (
+                f"the conflict branch left updated_at at {before} (now {after}); "
+                "`set_` is emitted verbatim, so the timestamp must be listed in it"
+            )
+
+    async def test_an_unchanged_rescan_leaves_updated_at_alone(self, clean_db):
+        """The other half: a cursor that moves for every scan carries the whole library every time."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            shutil.copy(FIXTURES_DIR / "electronic_short.mp3", tmp_path / "track.mp3")
+
+            await LibraryScanner(clean_db).scan(tmp_path)
+            await clean_db.commit()
+            _, before = await self._read_fresh()
+
+            await asyncio.sleep(1.0)
+
+            clean_db.expire_all()
+            results = await LibraryScanner(clean_db).scan(tmp_path)
+            await clean_db.commit()
+            _, after = await self._read_fresh()
+
+            assert results["unchanged"] == 1
+            assert after == before, (
+                f"an unchanged rescan moved updated_at ({before} -> {after}); "
+                "every delta would then return the entire library"
+            )
