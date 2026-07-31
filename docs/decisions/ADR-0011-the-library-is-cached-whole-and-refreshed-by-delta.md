@@ -62,11 +62,25 @@ those absences are what the decisions below are actually about.
 the only refresh available today. The column itself is promising — `tracks.updated_at` carries
 `onupdate=func.now()` (`backend/app/db/models/tracks.py:112-114`) and its churn is low: 510 rows moved
 in the last 24 hours and 580 in 30 days, so a delta would carry hundreds of rows instead of 26,396.
-But the scanner's bulk upsert lists 23 columns explicitly in its `set_` clause and `updated_at` is
-not among them (`backend/app/services/scanner.py:721-744`), and SQLAlchemy does not apply column
-`onupdate` defaults to an `on_conflict_do_update` `set_` clause. So a rescan that changes a track's
-tags leaves the timestamp untouched: the cursor is unreliable in exactly the direction that matters
-most, and it is cheap to fix.
+**A second premise here was wrong, and it was wrong in the flattering direction — it made the work
+look bigger than it is.** This ADR was drafted claiming that a rescan changing a track's tags leaves
+`updated_at` untouched, because the scanner's upsert omits it from an `on_conflict_do_update` `set_`
+clause that SQLAlchemy emits verbatim. The `set_` clause really did omit it, and it really is
+emitted verbatim — but that upsert is in `_create_track`, the **new-track** path, whose conflict
+branch is reached only when two scans race on the same `file_path`. An ordinary rescan goes through
+`_update_track`, which is plain ORM attribute assignment, so `onupdate` applies and the timestamp
+moves.
+
+Settled by measurement rather than by reading the code, which is the only reason it was caught: the
+first two attempts at that measurement both reported a false positive, because `expire_on_commit=False`
+means the in-memory attribute can be older than the row it came from. Reading the row back on a
+separate connection showed the timestamp advancing exactly when the rescan ran.
+
+**So the cursor is sound today, and the correction makes this ADR cheaper rather than more
+expensive.** The race-path omission was fixed separately, along with three tests that pin what a
+delta would rest on and none of which existed: a retag moves `updated_at`, an unchanged rescan does
+*not* — otherwise every delta carries the whole library — and the conflict branch moves it too. That
+leaves two backend prerequisites below rather than three.
 
 **`/library/stats` cannot serve as the staleness fingerprint**, which is the obvious thing to reach
 for and the reason to look closely. It counts every `Track` row (`library.py:50-59`) while `/tracks`
@@ -122,10 +136,11 @@ The client caches the library whole, refreshes it by delta, and never derives wh
    "is my cache stale". Explicitly not `/library/stats`, for the reasons in Context.
 
 6. **Refresh is full the first time and delta afterwards**, once the backend carries it: expose
-   `updated_at` on `TrackResponse`, add an `updated_since` parameter to `list_tracks`, and add
-   `updated_at` to the scanner's upsert `set_` clause so a tag change actually moves it. Those are
+   `updated_at` on `TrackResponse`, and add an `updated_since` parameter to `list_tracks`. Both are
    backend changes under [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) and are
-   prerequisites for the delta, not follow-ups to it.
+   prerequisites for the delta, not follow-ups to it. The third prerequisite this ADR was drafted
+   with — making the scanner move `updated_at` — turned out to be already satisfied on the path that
+   matters, and the narrow race-path gap has since been closed with tests.
 
 7. **The delta carries removals rather than needing a separate reconcile.** A cursor query cannot see
    a deleted row, but Familiar does not delete tracks — it sets `status` away from active, 66 rows
@@ -187,10 +202,10 @@ The client caches the library whole, refreshes it by delta, and never derives wh
   measured at 510 rows over the last 24 hours and 580 over 30 days.
 - **Positive:** ADR-0009's storage question is answered with a reason, so the download index and the
   library cache stay one mechanism instead of two.
-- **Tradeoff:** Three backend changes are prerequisites, not optional: `updated_at` exposed on
-  `TrackResponse`, `updated_since` on the listing endpoint, and `updated_at` added to the scanner's
-  upsert. The last is a correctness fix the web client also benefits from and nobody has needed until
-  now.
+- **Tradeoff:** Two backend changes are prerequisites, not optional: `updated_at` exposed on
+  `TrackResponse`, and `updated_since` on the listing endpoint. It was three when this was drafted;
+  the third rested on a misreading of which code path a rescan takes, and the tests written while
+  checking it now pin the cursor behaviour the other two depend on.
 - **Tradeoff:** The cache holds the full `TrackResponse`, so it grows with the schema. A field added
   for one client's benefit costs every cached row on every client.
 - **Tradeoff:** Holding the library in memory is 13.2 MB as JSON but more once decoded into Swift
