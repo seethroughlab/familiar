@@ -1,10 +1,20 @@
 # ADR-0012: Favorites Are a Collection, Not a Library Section
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-30
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
+
+Implementation:
+- Accepted 2026-07-30.
+- Execution order, each phase its own branch: (1) `FavoritesSource` and `FavoritesStore` in
+  `FamiliarKit`, no networking and no UI; (2) the generated-client half and the Collections group;
+  (3) the row indicator and the menu entry; (4) the full player and the lock screen.
+  Phase 1 is first and alone for the reason [ADR-0009](ADR-0009-offline-downloads-are-background-transfers.md)'s
+  was: it is where the decisions live — the optimistic toggle, the membership set, the local
+  filter — and `swift test` cannot see the app target, so anything left there ships unpinned. The
+  four stores already stranded in `App/Shared` are the argument.
 
 ## Context
 
