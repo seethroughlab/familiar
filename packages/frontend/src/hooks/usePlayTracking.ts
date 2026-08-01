@@ -9,7 +9,6 @@ const log = createLogger('PlayTracking');
 
 /** Reaching the scrobble threshold is what counts as a play. */
 const MIN_PLAY_SECONDS = 30;
-const MAX_PLAY_SECONDS = 4 * 60;
 
 /**
  * Map the client's advance reason onto the backend's `StopReason` (ADR-0004).
@@ -33,6 +32,21 @@ function toStopReason(reason: AdvanceReason): ListenStopReason | null {
   }
 }
 
+/**
+ * The share of the track that was heard, or undefined when the duration is unknown.
+ *
+ * Clamped, because the two figures come from different places: played time is accumulated
+ * from the engine's clock while the duration is track metadata, and a track that loops or
+ * whose tag understates its length can produce more played seconds than the track is long.
+ * The server clamps too, but sending 1.1 makes every stored figure a question about which
+ * end did the clamping — and the native client (`PlaybackReport.completionRatio`) has
+ * always clamped, so this is the two clients agreeing rather than a new rule.
+ */
+function completionRatio(playedSeconds: number, durationSeconds: number): number | undefined {
+  if (!durationSeconds) return undefined;
+  return Math.min(Math.max(playedSeconds / durationSeconds, 0), 1);
+}
+
 /** Queue source types line up with the backend's PlayContext, apart from 'library'. */
 function toContext(sourceType: string | undefined): ListenContext | undefined {
   if (!sourceType) return undefined;
@@ -46,8 +60,7 @@ function toContext(sourceType: string | undefined): ListenContext | undefined {
  * Track listening and report it to the backend.
  *
  * Two things are recorded:
- *  - a **play**, on the Last.fm rule — ≥30s listened AND ≥min(half the track, 4 min).
- *    This bumps ProfilePlayHistory and is unchanged from before.
+ *  - a **play**, once ≥30s has been listened to. This bumps ProfilePlayHistory.
  *  - a **listening event** for every track the listener moves on from, including short
  *    skips, which previously produced no API call at all. This is the negative signal
  *    ADR-0005's radio needs, and it only accumulates in real time.
@@ -55,6 +68,21 @@ function toContext(sourceType: string | undefined): ListenContext | undefined {
  * The outcome is derived server-side from the stop reason plus completion ratio, so a
  * crossfade (which advances early, around 0.9) is not mistaken for a skip and a failed
  * load is never mistaken for dislike.
+ *
+ * **Reported when the track is done with, not partway through — and that is the whole
+ * point.** This used to deliver the play the moment listening crossed
+ * `min(duration / 2, 4 min)`, sending `completion_ratio` as measured *at that instant*.
+ * Nothing ever revised it, so every web play landed with a ratio of almost exactly 0.5
+ * whether the listener heard half the track or all of it. Measured on the live database
+ * on 2026-08-01: **289 of 357 completed events sat in the 0.5–0.6 bucket**, against native
+ * client rows correctly reading 0.95–1.00. Completion is the taste signal ADR-0005 ranks
+ * on, and a constant carries none — so a month of "accumulating data" would have been a
+ * month of noise.
+ *
+ * Nothing changes about *which* plays count. The early delivery only decided *when*: a
+ * play short of the half mark but past 30s was already reported on track change, by the
+ * same rule that now reports all of them. The Last.fm half/4-minute threshold turned out
+ * to gate nothing, which is why it is gone rather than merely moved.
  */
 export function usePlayTracking() {
   const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore(
@@ -100,14 +128,16 @@ export function usePlayTracking() {
         // Already counted as a play; nothing further to say about it.
         log.debug('outgoing track already recorded as a play', { previousId });
       } else if (playedSeconds >= MIN_PLAY_SECONDS) {
-        // Partial play past the minimum but short of the scrobble threshold. Counts
-        // toward the aggregate, exactly as it did before.
+        // A play, reported now that the final figure is known. Marked as recorded for the
+        // same reason the threshold delivery used to be: so a crossfade rollback cannot
+        // report the same listen twice.
+        recordedTrackRef.current = previousId;
         void deliverListenEvent(
           previousId,
           'played',
           {
             track_duration: outgoingDuration || undefined,
-            completion_ratio: outgoingDuration ? playedSeconds / outgoingDuration : undefined,
+            completion_ratio: completionRatio(playedSeconds, outgoingDuration),
             context,
           },
           playedSeconds,
@@ -175,30 +205,55 @@ export function usePlayTracking() {
       recordedTrackRef.current = null;
     }
 
-    const recordThreshold = Math.min(duration / 2, MAX_PLAY_SECONDS);
-
-    if (accumulatedTimeRef.current < MIN_PLAY_SECONDS) return;
-
-    if (accumulatedTimeRef.current >= recordThreshold) {
-      recordedTrackRef.current = currentTrack.id;
-      const played = accumulatedTimeRef.current;
-      const { queueSource } = usePlayerStore.getState();
-
-      deliverListenEvent(
-        currentTrack.id,
-        'played',
-        {
-          track_duration: duration,
-          completion_ratio: duration ? played / duration : undefined,
-          context: toContext(queueSource?.type),
-        },
-        played,
-      ).catch((err) => {
-        // Reset so we can retry on the next threshold check
-        log.error('Failed to record play:', err);
-        recordedTrackRef.current = null;
-      });
-    }
+    // Nothing is delivered here. The play is reported when the track is done with, where
+    // the completion ratio is final — see this hook's own note on why.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when track ID changes, not object reference
   }, [currentTrack?.id, currentTime, duration, isPlaying]);
+
+  // Report the track in progress if the page goes away before it is finished with.
+  //
+  // The cost of reporting at the end rather than partway through: closing the tab mid-track
+  // used to still count the play, because it had already been sent at the halfway mark.
+  // This restores that without restoring the frozen ratio — the figures here are whatever
+  // has actually been heard.
+  //
+  // Best effort, and honestly so. `pagehide` gives the request a chance to leave and the
+  // IndexedDB fallback a chance to catch it, but a browser tearing the page down owes
+  // neither of them anything. `visibilitychange` is the one that actually fires on mobile,
+  // where tabs are discarded without warning; marking the track recorded keeps a later
+  // track change from reporting the same listen twice if the page survives after all.
+  useEffect(() => {
+    const flush = () => {
+      const trackId = currentTrackIdRef.current;
+      const playedSeconds = accumulatedTimeRef.current;
+      if (!trackId || playedSeconds < MIN_PLAY_SECONDS) return;
+      if (recordedTrackRef.current === trackId) return;
+
+      const outgoingDuration = lastDurationRef.current;
+      const { queueSource } = usePlayerStore.getState();
+      recordedTrackRef.current = trackId;
+
+      void deliverListenEvent(
+        trackId,
+        'played',
+        {
+          track_duration: outgoingDuration || undefined,
+          completion_ratio: completionRatio(playedSeconds, outgoingDuration),
+          context: toContext(queueSource?.type),
+        },
+        playedSeconds,
+      );
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
 }

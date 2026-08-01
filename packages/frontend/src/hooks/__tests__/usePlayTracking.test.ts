@@ -129,8 +129,9 @@ describe('usePlayTracking', () => {
       expect(plays).toHaveLength(0);
     });
 
-    it('records a play once the threshold is reached', async () => {
+    it('records a play when the track is done with, not partway through', async () => {
       const track = createMockTrack('track-2');
+      const next = createMockTrack('track-2b');
       const { rerender } = renderHook(() => usePlayTracking());
 
       act(() => {
@@ -141,6 +142,15 @@ describe('usePlayTracking', () => {
         usePlayerStore.setState({ currentTime: 95 });
       });
       rerender();
+      await flush();
+
+      // Past half the track, which used to be enough to send it. Nothing goes yet.
+      expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(0);
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: next, currentTime: 0, _advanceReason: 'ended' });
+      });
+      rerender();
 
       await waitFor(() => {
         expect(mockDeliver).toHaveBeenCalledWith(
@@ -149,6 +159,42 @@ describe('usePlayTracking', () => {
           expect.objectContaining({ track_duration: 180 }),
           expect.any(Number),
         );
+      }, { timeout: 2000 });
+    });
+
+    /**
+     * The defect this hook's note describes, pinned.
+     *
+     * Delivering at the halfway mark froze `completion_ratio` at ~0.5 for every web play
+     * regardless of how much was really heard — 289 of 357 completed rows on the live
+     * database sat in the 0.5–0.6 bucket. Completion is what ADR-0005 ranks on, so a
+     * constant made the whole signal worthless. A track heard almost to the end must
+     * report almost 1.
+     */
+    it('reports the ratio of the whole listen, not the moment it passed half', async () => {
+      const track = createMockTrack('track-full');
+      const next = createMockTrack('track-full-b');
+      const { rerender } = renderHook(() => usePlayTracking());
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: track, isPlaying: true, duration: 180, currentTime: 0 });
+      });
+      rerender();
+      // Straight past the old halfway trigger and on to the end of the track.
+      act(() => { usePlayerStore.setState({ currentTime: 90 }); });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 178 }); });
+      rerender();
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: next, currentTime: 0, _advanceReason: 'ended' });
+      });
+      rerender();
+
+      await waitFor(() => {
+        const play = mockDeliver.mock.calls.find((c) => c[0] === 'track-full' && c[1] === 'played');
+        expect(play).toBeDefined();
+        expect((play![2] as { completion_ratio?: number }).completion_ratio).toBeCloseTo(0.99, 2);
       }, { timeout: 2000 });
     });
 
@@ -299,22 +345,20 @@ describe('usePlayTracking', () => {
       const b = { ...createMockTrack('track-b'), duration_seconds: 374 };
       const { rerender } = renderHook(() => usePlayTracking());
 
-      // A plays past its threshold and is recorded.
+      // A plays, then the crossfade advances to B — which is where A is recorded.
       act(() => {
         usePlayerStore.setState({ currentTrack: a, isPlaying: true, duration: 75, currentTime: 0 });
       });
       rerender();
       act(() => { usePlayerStore.setState({ currentTime: 40 }); });
       rerender();
-      await waitFor(() => {
-        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
-      });
-
-      // Crossfade advances to B...
       act(() => {
         usePlayerStore.setState({ currentTrack: b, currentTime: 0, _advanceReason: 'crossfade' });
       });
       rerender();
+      await waitFor(() => {
+        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
+      });
       // ...then fails, rolling straight back to A having played none of B.
       act(() => {
         usePlayerStore.setState({ currentTrack: a, currentTime: 40, _advanceReason: 'error' });
@@ -334,41 +378,85 @@ describe('usePlayTracking', () => {
     it('still records a genuine replay after another track was listened to', async () => {
       const a = createMockTrack('track-a');
       const b = createMockTrack('track-b');
+      const c = createMockTrack('track-c');
       const { rerender } = renderHook(() => usePlayTracking());
 
+      // A plays, then B — which records A.
       act(() => {
         usePlayerStore.setState({ currentTrack: a, isPlaying: true, duration: 180, currentTime: 0 });
       });
       rerender();
       act(() => { usePlayerStore.setState({ currentTime: 95 }); });
       rerender();
-      await waitFor(() => {
-        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
-      });
-
-      // B genuinely plays through.
       act(() => {
         usePlayerStore.setState({ currentTrack: b, currentTime: 0, _advanceReason: 'ended' });
       });
       rerender();
+      await waitFor(() => {
+        expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(1);
+      });
+
+      // B genuinely plays through, then back to A — which records B and, because a
+      // different track was really listened to, frees A to be recorded again.
       act(() => { usePlayerStore.setState({ currentTime: 95 }); });
+      rerender();
+      act(() => {
+        usePlayerStore.setState({ currentTrack: a, currentTime: 0, _advanceReason: 'user' });
+      });
       rerender();
       await waitFor(() => {
         expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(2);
       });
 
-      // Returning to A is a real replay and must count.
-      act(() => {
-        usePlayerStore.setState({ currentTrack: a, currentTime: 0, _advanceReason: 'user' });
-      });
-      rerender();
+      // The replay of A is a real listen and must count on the way out of it.
       act(() => { usePlayerStore.setState({ currentTime: 95 }); });
+      rerender();
+      act(() => {
+        usePlayerStore.setState({ currentTrack: c, currentTime: 0, _advanceReason: 'ended' });
+      });
       rerender();
 
       await waitFor(() => {
-        const plays = mockDeliver.mock.calls.filter((c) => c[1] === 'played' && c[0] === 'track-a');
+        const plays = mockDeliver.mock.calls.filter((call) => call[1] === 'played' && call[0] === 'track-a');
         expect(plays).toHaveLength(2);
       });
+    });
+
+    /**
+     * The durability the old halfway delivery was quietly providing: close the tab
+     * mid-track and the play still counted, because it had already been sent. Reporting
+     * at the end would have lost that silently, so it is restored here — best effort, but
+     * with the ratio that was actually heard rather than a frozen one.
+     */
+    it('reports the track in progress when the page goes away', async () => {
+      const track = createMockTrack('track-hide');
+      const { rerender } = renderHook(() => usePlayTracking());
+
+      act(() => {
+        usePlayerStore.setState({ currentTrack: track, isPlaying: true, duration: 180, currentTime: 0 });
+      });
+      rerender();
+      act(() => { usePlayerStore.setState({ currentTime: 120 }); });
+      rerender();
+      await flush();
+      expect(mockDeliver.mock.calls.filter((c) => c[1] === 'played')).toHaveLength(0);
+
+      act(() => { window.dispatchEvent(new Event('pagehide')); });
+      await flush();
+
+      const play = mockDeliver.mock.calls.find((c) => c[0] === 'track-hide' && c[1] === 'played');
+      expect(play).toBeDefined();
+      expect((play![2] as { completion_ratio?: number }).completion_ratio).toBeCloseTo(0.667, 2);
+
+      // And it must not be reported a second time if the page survives and the track
+      // is later advanced past.
+      act(() => {
+        usePlayerStore.setState({ currentTrack: createMockTrack('track-after'), currentTime: 0, _advanceReason: 'ended' });
+      });
+      rerender();
+      await flush();
+
+      expect(mockDeliver.mock.calls.filter((c) => c[0] === 'track-hide' && c[1] === 'played')).toHaveLength(1);
     });
   });
 
