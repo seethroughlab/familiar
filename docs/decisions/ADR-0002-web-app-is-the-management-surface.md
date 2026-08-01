@@ -1,6 +1,6 @@
 # ADR-0002: The Web App Is the Management Surface
 
-Status: accepted
+Status: superseded by [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md)
 
 Date: 2026-07-26
 

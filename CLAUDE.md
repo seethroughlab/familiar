@@ -68,6 +68,19 @@ ranking engine, precomputed offline ranking, and OpenAPI-generated clients.
 The ordering principle: **server-side work that every client inherits comes before client work**, and
 anything that accumulates data over time starts as early as possible.
 
+**`ADR-0013`–`ADR-0016` bring management surfaces to the Mac app** (proposed 2026-08-01). `0013`
+supersedes `0002`: macOS becomes a management surface alongside the web app, which keeps everything;
+iOS stays the listening path. Their own order:
+
+| # | ADR | Why here |
+|---|---|---|
+| 1 | `0013` | Framing only, and the one that supersedes. Nothing else is coherent without it. |
+| 2 | `0014` | Widens the generated surface to eleven tags. Cheap, and unblocks pending review, proposed changes and mixtapes. |
+| 3 | `0015`, `0016` | Independent of each other. `0015` exposes five effects the engine already has; `0016` decides embed-vs-native and covers Discover and Music Map. |
+
+Smart playlist CRUD and the album/artist grids need no ADR — ordinary work inside `0013`'s direction,
+and both depend on nothing, so they are the fastest visible wins once `0013` is accepted.
+
 ## Key Directories
 
 ```
