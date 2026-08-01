@@ -1,10 +1,22 @@
 # ADR-0016: Embedded Web Surfaces on the Mac
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-01
 
 Extends [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
+
+Implementation:
+- Accepted 2026-08-01. One citation in the proposed draft was corrected against the repo before
+  acceptance rather than after: Discover's **2,943 lines across 26 files** is right, but it is not
+  all in `packages/frontend/src/components/Discovery/`. That directory holds 22 files and 2,458
+  lines; the remaining 4 files and 485 lines are in
+  `packages/frontend/src/components/Library/browsers/DiscoverBrowser/`. The size that decided
+  point 2 is unchanged — the address was incomplete, not the measurement.
+- The other figures were re-checked and hold: `VibeMap.tsx` is 690 lines,
+  `library_maps.py` caps at 200 and 500 on lines 58 and 73, and `packages/web/src/main.tsx:14` is
+  the unconditional `registerEngineFactory` call that point 4 exists to contain.
+- Music Map first, being independent of the embedding half and much the lower risk of the two.
 
 ## Context
 
@@ -18,6 +30,12 @@ Measured on 2026-08-01:
 |---|---|---|
 | Discover | **2,943 lines across 26 files** (`packages/frontend/src/components/Discovery/`) | ordinary React |
 | Music Map | **690 lines in one file** (`…/Library/browsers/VibeMap/VibeMap.tsx`) | Canvas 2D |
+
+Discover's row is two directories, not one, and the row above understated that: 22 files and 2,458
+lines in `components/Discovery/`, plus 4 files and 485 lines in
+`components/Library/browsers/DiscoverBrowser/`. Corrected here rather than quietly, because anyone
+checking the figure would otherwise find 2,458 at the address given and conclude the ADR was wrong
+about the size — when it is the split that was missing.
 
 Discover is also the surface most likely to keep moving: it aggregates external sources, and its shape
 follows what those sources make available. A native rebuild is a second implementation to change every
