@@ -1,10 +1,17 @@
 # ADR-0013: The Mac Is a Management Surface Too
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-01
 
 Supersedes [ADR-0002](ADR-0002-web-app-is-the-management-surface.md).
+
+Implementation:
+- Accepted 2026-08-01, alongside [ADR-0015](ADR-0015-audio-effects-are-exposed-not-rebuilt.md), which
+  is the first piece of work to inherit from it. `ADR-0014` and `ADR-0016` remain `proposed` — they
+  are approved separately, when the features they govern are started.
+- The album and artist grids shipped before this was accepted and deliberately did not wait on it:
+  library browse is in ADR-0001 point 4's v1 scope, so it was never a management surface.
 
 ## Context
 
