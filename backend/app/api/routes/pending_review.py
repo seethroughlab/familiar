@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,40 @@ _REVIEW_STATUSES = {
 # ============================================================================
 
 
+class TrackQuality(BaseModel):
+    """A track's measured quality, as `QualityScore.to_dict()` writes it.
+
+    Typed for ADR-0014: this tag joined the generated Swift surface, and ADR-0007 does not allow
+    an operation in it to hand over an untyped object. Every field is optional because the values
+    are read back out of a JSONB column that predates this model — a row written by an older
+    scanner must still deserialise rather than fail the request.
+    """
+
+    format_tier: int | None = None
+    format_tier_name: str | None = None
+    bitrate: int | None = None
+    sample_rate: int | None = None
+    bit_depth: int | None = None
+    is_lossless: bool | None = None
+    bitrate_mode: str | None = None
+
+
+class ReviewInfo(BaseModel):
+    """Why a track is waiting for review — always a duplicate, currently.
+
+    Written by `detect_duplicate_for_track` and stored in `Track.review_info`. Optional throughout
+    for the same reason as `TrackQuality`: the column holds whatever earlier versions wrote.
+    """
+
+    duplicate_of: str | None = None
+    duplicate_info: str | None = None
+    duplicate_match_type: str | None = None
+    trump_status: str | None = None
+    trump_reason: str | None = None
+    incoming_quality: TrackQuality | None = None
+    existing_quality: TrackQuality | None = None
+
+
 class PendingTrackResponse(BaseModel):
     """A pending track with review_info."""
     id: str
@@ -53,7 +88,7 @@ class PendingTrackResponse(BaseModel):
     bitrate_mode: str | None
     codec: str | None
     created_at: str
-    review_info: dict[str, Any] | None
+    review_info: ReviewInfo | None
 
 
 class PendingGroupResponse(BaseModel):
@@ -147,6 +182,28 @@ def _folder_name(folder_path: str) -> str:
     return PurePosixPath(folder_path).name
 
 
+def _to_review_info(raw: dict[str, Any] | None) -> ReviewInfo | None:
+    """Read `Track.review_info` out of its JSONB column.
+
+    `None` and `{}` mean different things and both are real: the scanner writes `{}` deliberately —
+    "default to {} so recovery knows it was pending" — for a track awaiting review that has no
+    duplicate. So this only collapses a genuine `None`.
+
+    A row whose shape this model does not describe is logged and dropped rather than raised. The
+    column predates the model, and a track from an older scanner is still reviewable; losing the
+    explanation is a far better outcome than a 500 that hides the whole queue.
+    """
+    if raw is None:
+        return None
+    try:
+        return ReviewInfo.model_validate(raw)
+    # Aliased: `app.api.exceptions` exports a `ValidationError` too, and it is imported below —
+    # an unaliased `except ValidationError` here would catch that one and never Pydantic's.
+    except PydanticValidationError:
+        logger.warning("Unreadable review_info, showing the track without it: %r", raw)
+        return None
+
+
 def _track_to_response(track: Track) -> PendingTrackResponse:
     return PendingTrackResponse(
         id=str(track.id),
@@ -167,7 +224,7 @@ def _track_to_response(track: Track) -> PendingTrackResponse:
         bitrate_mode=track.bitrate_mode,
         codec=track.codec,
         created_at=to_rfc3339(track.created_at),
-        review_info=track.review_info,
+        review_info=_to_review_info(track.review_info),
     )
 
 

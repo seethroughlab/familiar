@@ -1,11 +1,22 @@
 # ADR-0014: The Generated Surface Widens to Management
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-01
 
 Extends [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md).
 Depends on [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
+
+Implementation:
+- Accepted and executed 2026-08-01. Eleven tags; **33 operations** added to the generated client.
+  `Proposed Changes` renamed to `proposed-changes` first, before anything generated from it.
+- Point 6 earned its place immediately. The lint refused the widened surface over
+  `PendingTrackResponse.review_info`, a bare `dict[str, Any]` that would have generated as `Any`.
+  It was typed rather than allowlisted, as that point requires — `ReviewInfo` and `TrackQuality` in
+  `backend/app/api/routes/pending_review.py`, every field optional because the values are read back
+  out of a JSONB column older than the model and a row written by an earlier scanner must still
+  deserialise. `reviewInfo` now generates as `Components.Schemas.ReviewInfo`.
+- Backend: 64 tests over the three tags pass. Swift: 378 tests, both targets building.
 
 ## Context
 
