@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -181,6 +182,28 @@ def _folder_name(folder_path: str) -> str:
     return PurePosixPath(folder_path).name
 
 
+def _to_review_info(raw: dict[str, Any] | None) -> ReviewInfo | None:
+    """Read `Track.review_info` out of its JSONB column.
+
+    `None` and `{}` mean different things and both are real: the scanner writes `{}` deliberately —
+    "default to {} so recovery knows it was pending" — for a track awaiting review that has no
+    duplicate. So this only collapses a genuine `None`.
+
+    A row whose shape this model does not describe is logged and dropped rather than raised. The
+    column predates the model, and a track from an older scanner is still reviewable; losing the
+    explanation is a far better outcome than a 500 that hides the whole queue.
+    """
+    if raw is None:
+        return None
+    try:
+        return ReviewInfo.model_validate(raw)
+    # Aliased: `app.api.exceptions` exports a `ValidationError` too, and it is imported below —
+    # an unaliased `except ValidationError` here would catch that one and never Pydantic's.
+    except PydanticValidationError:
+        logger.warning("Unreadable review_info, showing the track without it: %r", raw)
+        return None
+
+
 def _track_to_response(track: Track) -> PendingTrackResponse:
     return PendingTrackResponse(
         id=str(track.id),
@@ -201,7 +224,7 @@ def _track_to_response(track: Track) -> PendingTrackResponse:
         bitrate_mode=track.bitrate_mode,
         codec=track.codec,
         created_at=to_rfc3339(track.created_at),
-        review_info=track.review_info,
+        review_info=_to_review_info(track.review_info),
     )
 
 
