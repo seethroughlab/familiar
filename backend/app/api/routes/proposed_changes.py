@@ -22,7 +22,11 @@ from app.services.proposed_changes import (
 )
 from app.utils.time import to_rfc3339
 
-router = APIRouter(prefix="/proposed-changes", tags=["Proposed Changes"])
+# Tag is kebab-case like every other one in the schema. It was "Proposed Changes" — the only tag
+# with a space and capitals — until ADR-0014 brought it into the generated Swift surface, where an
+# inconsistent tag produces one oddly-named thing nobody later understands. Renamed before anything
+# generated from it rather than after.
+router = APIRouter(prefix="/proposed-changes", tags=["proposed-changes"])
 
 
 # ============================================================================

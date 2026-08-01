@@ -33,6 +33,40 @@ _REVIEW_STATUSES = {
 # ============================================================================
 
 
+class TrackQuality(BaseModel):
+    """A track's measured quality, as `QualityScore.to_dict()` writes it.
+
+    Typed for ADR-0014: this tag joined the generated Swift surface, and ADR-0007 does not allow
+    an operation in it to hand over an untyped object. Every field is optional because the values
+    are read back out of a JSONB column that predates this model — a row written by an older
+    scanner must still deserialise rather than fail the request.
+    """
+
+    format_tier: int | None = None
+    format_tier_name: str | None = None
+    bitrate: int | None = None
+    sample_rate: int | None = None
+    bit_depth: int | None = None
+    is_lossless: bool | None = None
+    bitrate_mode: str | None = None
+
+
+class ReviewInfo(BaseModel):
+    """Why a track is waiting for review — always a duplicate, currently.
+
+    Written by `detect_duplicate_for_track` and stored in `Track.review_info`. Optional throughout
+    for the same reason as `TrackQuality`: the column holds whatever earlier versions wrote.
+    """
+
+    duplicate_of: str | None = None
+    duplicate_info: str | None = None
+    duplicate_match_type: str | None = None
+    trump_status: str | None = None
+    trump_reason: str | None = None
+    incoming_quality: TrackQuality | None = None
+    existing_quality: TrackQuality | None = None
+
+
 class PendingTrackResponse(BaseModel):
     """A pending track with review_info."""
     id: str
@@ -53,7 +87,7 @@ class PendingTrackResponse(BaseModel):
     bitrate_mode: str | None
     codec: str | None
     created_at: str
-    review_info: dict[str, Any] | None
+    review_info: ReviewInfo | None
 
 
 class PendingGroupResponse(BaseModel):

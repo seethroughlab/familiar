@@ -6472,12 +6472,7 @@
             "type": "string"
           },
           "review_info": {
-            "additionalProperties": true,
-            "title": "Review Info",
-            "type": [
-              "object",
-              "null"
-            ]
+            "$ref": "#/components/schemas/ReviewInfo"
           },
           "sample_rate": {
             "title": "Sample Rate",
@@ -6526,8 +6521,7 @@
           "bitrate",
           "bitrate_mode",
           "codec",
-          "created_at",
-          "review_info"
+          "created_at"
         ],
         "title": "PendingTrackResponse",
         "type": "object"
@@ -7950,6 +7944,54 @@
           }
         },
         "title": "RestoreRequest",
+        "type": "object"
+      },
+      "ReviewInfo": {
+        "description": "Why a track is waiting for review \u2014 always a duplicate, currently.\n\nWritten by `detect_duplicate_for_track` and stored in `Track.review_info`. Optional throughout\nfor the same reason as `TrackQuality`: the column holds whatever earlier versions wrote.",
+        "properties": {
+          "duplicate_info": {
+            "title": "Duplicate Info",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duplicate_match_type": {
+            "title": "Duplicate Match Type",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duplicate_of": {
+            "title": "Duplicate Of",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "existing_quality": {
+            "$ref": "#/components/schemas/TrackQuality"
+          },
+          "incoming_quality": {
+            "$ref": "#/components/schemas/TrackQuality"
+          },
+          "trump_reason": {
+            "title": "Trump Reason",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trump_status": {
+            "title": "Trump Status",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "ReviewInfo",
         "type": "object"
       },
       "RuleFieldInfo": {
@@ -10375,6 +10417,62 @@
           }
         },
         "title": "TrackMetadataUpdateRequest",
+        "type": "object"
+      },
+      "TrackQuality": {
+        "description": "A track's measured quality, as `QualityScore.to_dict()` writes it.\n\nTyped for ADR-0014: this tag joined the generated Swift surface, and ADR-0007 does not allow\nan operation in it to hand over an untyped object. Every field is optional because the values\nare read back out of a JSONB column that predates this model \u2014 a row written by an older\nscanner must still deserialise rather than fail the request.",
+        "properties": {
+          "bit_depth": {
+            "title": "Bit Depth",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bitrate": {
+            "title": "Bitrate",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bitrate_mode": {
+            "title": "Bitrate Mode",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "format_tier": {
+            "title": "Format Tier",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "format_tier_name": {
+            "title": "Format Tier Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_lossless": {
+            "title": "Is Lossless",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "sample_rate": {
+            "title": "Sample Rate",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "title": "TrackQuality",
         "type": "object"
       },
       "TrackResponse": {
@@ -25720,7 +25818,7 @@
         },
         "summary": "List Changes",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       },
       "post": {
@@ -25800,7 +25898,7 @@
         },
         "summary": "Create Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -25886,7 +25984,7 @@
         },
         "summary": "Batch Apply",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -25962,7 +26060,7 @@
         },
         "summary": "Scan For Proposals",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26034,7 +26132,7 @@
         },
         "summary": "Get Stats",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26122,7 +26220,7 @@
         },
         "summary": "Get Track Changes",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26210,7 +26308,7 @@
         },
         "summary": "Delete Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       },
       "get": {
@@ -26292,7 +26390,7 @@
         },
         "summary": "Get Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26376,7 +26474,7 @@
         },
         "summary": "Apply Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26460,7 +26558,7 @@
         },
         "summary": "Preview Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26544,7 +26642,7 @@
         },
         "summary": "Reject Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },
@@ -26628,7 +26726,7 @@
         },
         "summary": "Undo Change",
         "tags": [
-          "Proposed Changes"
+          "proposed-changes"
         ]
       }
     },

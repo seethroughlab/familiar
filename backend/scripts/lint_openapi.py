@@ -37,6 +37,12 @@ GENERATED_SURFACE = {
     # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these
     # directly — the whole point of ADR-0006 is that they carry no ranking code.
     "queue",
+    # Management surfaces the Mac app now has (ADR-0013, generated per ADR-0014). Not on
+    # iOS, which ADR-0013 point 2 keeps on the listening path — but the generated client is
+    # shared by both targets, so iOS compiles these and never calls them.
+    "pending-review",
+    "proposed-changes",
+    "mixtapes",
 }
 
 # Tags deliberately NOT generated, with the reason. Recorded rather than merely absent,
@@ -44,16 +50,19 @@ GENERATED_SURFACE = {
 #
 #   ambient   — ADR-0001 point 5 puts ambient/generative mode out of v1, and it is iOS-only
 #               anyway (`ambientSynthBridge`: "Web never registers").
-#   mixtapes  — ADR-0001 point 5, same list.
 #   outputs   — casting does not appear in ADR-0001 point 4's v1 scope. Removing it also
 #               restores the invariant ADR-0001's readiness audit claimed: the five
 #               allowlisted untyped operations that were inside the surface are all
 #               `outputs/zones/*`, so every allowlisted entry is now genuinely out of scope.
 #
+# `mixtapes` left this set in ADR-0014. It was here under ADR-0001 point 5, which ADR-0013
+# revisited: the Mac is a management surface now, and mixtapes are one of the things it gained.
+#
 # `library` stays whole despite mixing ~18 listening operations with ~17 management ones
 # (import, dedup, scan, review). Tag granularity cannot express that split, and the cost of
-# the extra 17 is dead generated code rather than a defect. Revisit if they resist typing.
-NOT_GENERATED = {"ambient", "mixtapes", "outputs"}
+# the extra 17 was dead generated code rather than a defect — under ADR-0013 those 17 stop
+# being dead, since the review surfaces need them.
+NOT_GENERATED = {"ambient", "outputs"}
 
 # Error statuses every in-scope operation must declare, so a generated client can model
 # failures. 422 is the important one: FastAPI emits HTTPValidationError for it automatically,
