@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ScrollContainerContext } from '../../hooks/useScrollContainer';
 import type { BrowserProps, LibraryFilters } from '../Library/types';
-import { postPlayIntent } from '../../services/embedBridge';
+import { postNavigateIntent, postPlayIntent } from '../../services/embedBridge';
 
 // Imported directly rather than through `browsers/index.ts`, which registers all nine and would pull
 // the track list, the album grid and the Music Map into a bundle that shows none of them.
@@ -30,6 +30,14 @@ export function EmbedDiscover() {
     postPlayIntent({ trackIds: [trackId], startingAt: trackId });
   }, []);
 
+  const handleGoToArtist = useCallback((artistName: string) => {
+    postNavigateIntent({ to: 'artist', artist: artistName });
+  }, []);
+
+  const handleGoToAlbum = useCallback((artistName: string, albumName: string) => {
+    postNavigateIntent({ to: 'album', artist: artistName, album: albumName });
+  }, []);
+
   const props: BrowserProps = {
     tracks: [],
     artists: [],
@@ -42,11 +50,14 @@ export function EmbedDiscover() {
     onSelectAll: noop,
     onClearSelection: noop,
 
-    // Navigation is the open question ADR-0017 leaves as a follow-up: this surface renders Discover
-    // and has nowhere else to go, so these are inert rather than routes to blank screens. The router
-    // in `renderEmbed` sends any internal navigation back here for the same reason.
-    onGoToArtist: noop,
-    onGoToAlbum: noop,
+    // Handed to the *app*, not followed in the page (ADR-0020). The native artist and album screens
+    // already exist and are better than a web equivalent inside a web view; these links were the
+    // only route into them that did nothing.
+    onGoToArtist: handleGoToArtist,
+    onGoToAlbum: handleGoToAlbum,
+    // Still inert, and named as such by ADR-0020 point 4: these open *lists* — a year, a genre, a
+    // mood region — and the native app has no screen for any of them. A message that leads nowhere
+    // on the other side would be worse than a link that does nothing.
     onGoToYear: noop,
     onGoToYearRange: noop,
     onGoToGenre: noop,
