@@ -81,9 +81,7 @@ everything; iOS stays the listening path. Their own order:
 Smart playlist CRUD and the album/artist grids need no ADR — ordinary work inside `0013`'s direction,
 and both depend on nothing, so they were the fastest visible wins once `0013` was accepted.
 
-**`ADR-0018`–`ADR-0019` bring the Mac's arrangement to the phone.** `0018` is **accepted and
-shipped**; `0019` is **accepted in principle but still `proposed` and unbuilt** — it is the phone's
-Discover row, and the list ships without it. `0018`
+**`ADR-0018`–`ADR-0019` bring the Mac's arrangement to the phone, both accepted and shipped.** `0018`
 replaces the segmented picker and the Collections screen with one root list of destinations; `0019`
 opens that list's Discover row onto the same embedded surface the Mac uses. Neither reverses
 `ADR-0013` point 2 — every destination involved is a way of finding something to play, and the

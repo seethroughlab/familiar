@@ -1,11 +1,25 @@
 # ADR-0019: The Embedded Surface Comes to the Phone
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-02
 
 Extends [ADR-0016](ADR-0016-embedded-web-surfaces-on-the-mac.md) and
 [ADR-0017](ADR-0017-the-embedded-surface-gets-a-null-audio-engine.md).
+
+Implementation:
+- Accepted 2026-08-02, shipped on `familiar-apple` `feat/embed-discover-phone`. Point 3 held: the
+  representable was the only new code of substance. `EmbedIntent`, the marker check and the
+  navigation policy were already in shared code, so the phone inherited the fixes the Mac had just
+  been through — including the two the Mac found the hard way, a bridge wired to a prop nothing
+  called and `target="_blank"` links with no `WKUIDelegate`.
+- The two platform halves are a `UIViewRepresentable` beside the `NSViewRepresentable`, over one
+  shared coordinator. The web view's own setup — handler name, delegates, back-forward gesture off —
+  moved into that coordinator rather than being copied into both, which is where two representables
+  would otherwise drift.
+- `allowsBackForwardNavigationGestures` stays off on the phone for a second reason the Mac did not
+  have: it would fight the system's own edge-swipe.
+- Discover sits under Library in the phone's root list (ADR-0018), not in a section of its own.
 
 ## Context
 
