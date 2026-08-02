@@ -37,6 +37,57 @@ logger = logging.getLogger(__name__)
 DISCOVERY_CONTEXT = "artist_new_release"
 
 
+
+# How far ahead of today a release date can be before it is certainly wrong.
+#
+# Generous on purpose. MusicBrainz legitimately carries announced future releases — an album due in
+# three months is real and should appear. Nothing, though, is released more than a year out, so this
+# only catches data that cannot be true.
+MAX_RELEASE_DATE_LOOKAHEAD = timedelta(days=366)
+
+
+def plausible_release_date(
+    value: datetime | None, *, now: datetime | None = None
+) -> datetime | None:
+    """A release date, or `None` when the source gave one that cannot be true.
+
+    **This exists because two of 589 cached releases claimed 2913 and 2209**, both year-only dates
+    from MusicBrainz where someone typed a digit wrong. They parse cleanly — `2913-01-01` is valid
+    ISO — so nothing rejected them, and because this list is ordered by date descending they sorted
+    *above every real release*. The two most prominent cards in Discover were the two worst rows in
+    the table.
+
+    Returning `None` rather than dropping the release keeps the album discoverable — these are real
+    compilations with a typo attached — while removing the claim that is wrong. The query orders
+    `nullslast`, so a release with no trustworthy date stops leading a list called "new releases".
+
+    Only the future bound is checked. An old first-release date is a different question: a reissue
+    can legitimately carry one, and deciding what that means for this feature is not this function's
+    business.
+    """
+    if value is None:
+        return None
+
+    # Written out rather than folded into a conditional expression: the aware/naive distinction
+    # decides whether the subtraction below raises, and `a or b if c else d` binds in a way that
+    # reads as the opposite of what it does.
+    if now is not None:
+        reference = now
+    elif value.tzinfo is not None:
+        reference = datetime.now(tz=value.tzinfo)
+    else:
+        reference = datetime.now()
+
+    # The stored column is naive and a caller's `now` may not be. Comparing the two raises, and a
+    # crash in a background sync is a worse outcome than trusting one odd date.
+    if (value.tzinfo is None) != (reference.tzinfo is None):
+        return value
+
+    if value - reference > MAX_RELEASE_DATE_LOOKAHEAD:
+        return None
+    return value
+
+
 class NewReleasesService:
     """Service for discovering new releases from artists in the user's library."""
 
