@@ -1,11 +1,26 @@
 # ADR-0020: The Embedded Surface Can Ask the App to Navigate
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-02
 
 Extends [ADR-0016](ADR-0016-embedded-web-surfaces-on-the-mac.md) and
 [ADR-0017](ADR-0017-the-embedded-surface-gets-a-null-audio-engine.md).
+
+Implementation:
+- Accepted 2026-08-02. Page half on `familiar` #73, native half on `familiar-apple` #49. Artist and
+  album links open the app's own screens; confirmed working in use.
+- **Point 5's "a missed intent must be inert" was tested for real, by a miss.** `EmbedDiscover`
+  wired the bridge to the `onPlayTrack` prop, and `DiscoverTrackList` never calls it — it drives
+  `usePlayerStore.setQueueByTrackId` directly. So pressing a track in "Unheard in Your Library"
+  posted nothing, and the null engine correctly made no sound. The failure was silent rather than
+  loud, exactly as designed; what was missing is that nothing told the page, so the row spun
+  forever. Fixed in `familiar` #74 by intercepting at the store — where every play path converges —
+  rather than at a prop that can be missed.
+- Purchase links opened nothing until `familiar-apple` #52: `target="_blank"` needs a `WKUIDelegate`
+  and there was none. That fix also added a navigation policy, without which an external link with
+  no target would have navigated the embed itself away with no way back.
+- Point 4's excluded targets (year, genre, mood) remain inert, as decided.
 
 ## Context
 

@@ -1,10 +1,27 @@
 # ADR-0021: Track Lists on the Mac Are Sortable Tables
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-02
 
 Extends [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
+
+Implementation:
+- Accepted 2026-08-02. Server half on `familiar` #72, the Tracks table on `familiar-apple` #50.
+  Point 2's floor bump to macOS 14 shipped with it; iOS is untouched at 15.
+- Point 4's `playCount` and `dateAdded` are live and verified against the real library — sorting by
+  plays descending returns 42, 38, 35. A latent defect was fixed alongside: the play-history join
+  was added only for `lastPlayed` *and* only when a profile existed, while the ordering column was
+  applied regardless, so sorting by it without a profile would have had SQLAlchemy invent a cross
+  join against every row of `profile_play_history`.
+- **Two columns are deliberately absent, both built and then removed after seeing them render.**
+  `dateAdded` sorts but `TrackResponse` carries no `created_at`; the audio features are on the
+  response only when `include_features` is set, which this list does not request. A column that
+  renders blank on every row while its header sorts is worse than an absent one — it reads as "the
+  library has no tempo data". Filling them is a schema change and a query change respectively.
+- Point 7's rollout to the other six lists has not happened yet; only Tracks is a `Table`. They hold
+  their rows whole, so they sort on-device and need none of the store work Tracks required.
+- Not yet exercised: clicking a header. The server round-trip is untested in the running app.
 
 ## Context
 
