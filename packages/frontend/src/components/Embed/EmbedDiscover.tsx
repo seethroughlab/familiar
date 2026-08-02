@@ -1,5 +1,6 @@
-import { lazy, Suspense, useCallback } from 'react';
+import { lazy, Suspense, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
+import { ScrollContainerContext } from '../../hooks/useScrollContainer';
 import type { BrowserProps, LibraryFilters } from '../Library/types';
 import { postPlayIntent } from '../../services/embedBridge';
 
@@ -17,6 +18,8 @@ const DiscoverBrowser = lazy(() => import('../Library/browsers/DiscoverBrowser/D
  * main risk of embedding at all.
  */
 export function EmbedDiscover() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   /**
    * A play button in Discover posts to the native player and does nothing else.
    *
@@ -62,10 +65,27 @@ export function EmbedDiscover() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100">
-      <Suspense fallback={<EmbedLoading />}>
-        <DiscoverBrowser {...props} />
-      </Suspense>
+    // **A real scroll container, and a bounded one.** `PlaylistTrackList` virtualises its rows
+    // against whichever element `useScrollContainer` hands it, falling back to its own
+    // `flex-1 min-h-0 overflow-y-auto` wrapper when there is no provider. Neither worked here: the
+    // embed had no provider *and* no height-bounded flex column, so the fallback measured zero and
+    // the virtualiser rendered zero rows. "Unheard in Your Library" and "Deep Cuts" drew their
+    // headers, their counts, and nothing else — not even the empty message, because the lists were
+    // not empty.
+    //
+    // The card grids above them were unaffected, which is what made it look like a data problem
+    // rather than a layout one.
+    //
+    // `h-screen` + `flex flex-col` gives the definite height the chain needs, and providing the
+    // context makes the embedded page scroll as one surface, exactly as `AppShell` does for the app.
+    <div className="h-screen flex flex-col bg-zinc-900 text-zinc-100">
+      <ScrollContainerContext.Provider value={scrollRef}>
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+          <Suspense fallback={<EmbedLoading />}>
+            <DiscoverBrowser {...props} />
+          </Suspense>
+        </div>
+      </ScrollContainerContext.Provider>
     </div>
   );
 }
