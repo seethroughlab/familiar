@@ -156,6 +156,7 @@ async def _check_artist_against_musicbrainz(
         get_artist_releases_recent,
         search_artist,
     )
+    from app.services.new_releases import plausible_release_date
 
     mb_id_to_use = mb_artist_id
     releases_for_artist: list[dict[str, Any]] = []
@@ -206,6 +207,11 @@ async def _check_artist_against_musicbrainz(
                 release_date = datetime.fromisoformat(raw_date)
             except Exception:
                 release_date = None
+
+        # A date that cannot be true is worse than no date here, because this list is ordered by
+        # date descending — a release claiming 2913 sorts above everything real. See
+        # `plausible_release_date`; two rows in the live cache did exactly that.
+        release_date = plausible_release_date(release_date)
 
         saved = await service.save_discovered_release(
             artist_name=artist_name,
