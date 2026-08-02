@@ -25,6 +25,24 @@ export interface PlayIntent {
 export const BRIDGE_HANDLER = 'familiar';
 
 /**
+ * The marker `embed.html` carries so a native host can tell this document from the app's.
+ *
+ * Load-bearing rather than cosmetic. A server built before the `/embed` route existed answers that
+ * path from its single-page-app fallback — HTTP 200, `index.html`, the whole web app with
+ * `WebAudioEngine` registered. A native host that trusted the URL would embed the very thing
+ * ADR-0016 point 4 forbids, and nothing would look wrong: the page would just play audio itself and
+ * never use the bridge.
+ */
+export const SURFACE_MARKER = 'embed';
+export const SURFACE_META_NAME = 'familiar-surface';
+
+/** Whether the document currently loaded is the embedded surface. */
+export function isEmbedSurfaceDocument(doc: Document = document): boolean {
+  const meta = doc.querySelector(`meta[name="${SURFACE_META_NAME}"]`);
+  return meta?.getAttribute('content') === SURFACE_MARKER;
+}
+
+/**
  * The profile this surface acts as, taken from the URL and nowhere else (ADR-0016 point 6).
  *
  * The native app appends `?profile=…` when it points its web view here. Reading it from the query

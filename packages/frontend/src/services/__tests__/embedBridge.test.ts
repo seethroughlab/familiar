@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { isEmbedded, postPlayIntent, profileFromURL, BRIDGE_HANDLER, type PlayIntent } from '../embedBridge';
+import {
+  isEmbedded,
+  postPlayIntent,
+  profileFromURL,
+  isEmbedSurfaceDocument,
+  BRIDGE_HANDLER,
+  type PlayIntent,
+} from '../embedBridge';
 
 /**
  * The seam ADR-0016 names as the main risk of embedding: two clients that were independent now share
@@ -111,5 +118,33 @@ describe('profileFromURL', () => {
 
   it('handles ids that need decoding', () => {
     expect(profileFromURL('?profile=a%20b')).toBe('a b');
+  });
+});
+
+/**
+ * The check that stops a native host embedding the wrong document.
+ *
+ * A server predating the `/embed` route answers it from the SPA fallback: HTTP 200, `index.html`,
+ * the full app with `WebAudioEngine` registered. Verified against the live server on 2026-08-01 —
+ * `/embed` returned 200 and `<title>Familiar</title>`. A host that trusted the URL would embed
+ * exactly what ADR-0016 point 4 forbids, and nothing would look wrong.
+ */
+describe('isEmbedSurfaceDocument', () => {
+  function docWith(head: string): Document {
+    return new DOMParser().parseFromString(`<html><head>${head}</head><body></body></html>`, 'text/html');
+  }
+
+  it('recognises the embedded surface', () => {
+    expect(isEmbedSurfaceDocument(docWith('<meta name="familiar-surface" content="embed">'))).toBe(true);
+  });
+
+  it('rejects the app served in its place', () => {
+    // What the live server returns for /embed today, reduced to its head.
+    expect(isEmbedSurfaceDocument(docWith('<title>Familiar</title>'))).toBe(false);
+  });
+
+  it('rejects a marker with the wrong value', () => {
+    expect(isEmbedSurfaceDocument(docWith('<meta name="familiar-surface" content="app">'))).toBe(false);
+    expect(isEmbedSurfaceDocument(docWith('<meta name="familiar-surface">'))).toBe(false);
   });
 });

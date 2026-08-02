@@ -6,6 +6,14 @@
     <meta name="theme-color" content="#18181b" />
     <meta name="description" content="Familiar — embedded discovery surface" />
 
+    <!-- How the native host proves it got *this* document and not the app.
+         A server built before this existed has no `/embed` route, and its single-page-app fallback
+         answers that path with `index.html` — HTTP 200, the full web app, `WebAudioEngine` and all.
+         That is the one thing ADR-0016 point 4 exists to prevent, and it would happen silently: the
+         page would play audio itself and the bridge would simply never be used.
+         So the native side reads this marker after load and refuses anything without it. -->
+    <meta name="familiar-surface" content="embed" />
+
     <!-- Deliberately no manifest and no apple-itunes-app banner: this document is only ever loaded
          inside the Mac app's web view (ADR-0016), where an install prompt or a "get the app"
          banner would be advertising the app to itself. -->
