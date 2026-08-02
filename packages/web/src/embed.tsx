@@ -1,5 +1,7 @@
 import '@familiar/frontend/src/index.css';
 import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
+import { registerPlaybackInterceptor } from '@familiar/frontend/src/player/playbackInterceptor';
+import { postPlayIntent } from '@familiar/frontend/src/services/embedBridge';
 import { renderEmbed } from '@familiar/frontend/src/renderEmbed';
 import { NullAudioEngine } from './NullAudioEngine';
 
@@ -24,5 +26,17 @@ registerEngineFactory(() => new NullAudioEngine(), {
   visualizer: false,
   effects: 'none',
 });
+
+// Every play path in the app converges on the queue store, so this is where the surface hands
+// playback to the native player — not at a prop.
+//
+// The prop wiring in `EmbedDiscover` was not enough and this is the record of why:
+// `DiscoverTrackList` never calls `onPlayTrack`, it calls `setQueueByTrackId`. Pressing a track in
+// "Unheard in Your Library" therefore posted no intent, set a local queue, and handed it to the
+// null engine — which correctly made no sound, and left the row spinning forever waiting for a load
+// that would never report. Silence was right; the spinner was the bug.
+registerPlaybackInterceptor(({ tracks, startingAt }) =>
+    postPlayIntent({ trackIds: tracks.map((t) => t.id), startingAt })
+);
 
 renderEmbed();

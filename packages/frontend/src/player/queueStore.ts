@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Track, QueueItem } from '../types';
 import { usePlaybackStore, normalizeAdvanceReason } from './playbackStore';
+import { interceptPlayback } from './playbackInterceptor';
 import type { AdvanceReason } from './playbackStore';
 import { persistCombinedState, _setQueueStateGetter } from './persistenceAdapter';
 import {
@@ -292,6 +293,9 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
   },
 
   playTrack: (track, options) => {
+    // A host may own playback (the embedded surface hands it to the native player, ADR-0016
+    // point 5). No-op in an ordinary browser and on iOS, where nothing registers.
+    if (interceptPlayback([track], track.id)) return;
     const reason = normalizeAdvanceReason(options?.reason);
     log.info('playTrack', { id: track.id, title: track.title });
     const currentTrack = usePlaybackStore.getState().currentTrack;
@@ -505,6 +509,10 @@ export const useQueueStore = create<QueueState & QueueActions>((set, get) => ({
   },
 
   setQueue: (tracks, startIndex = 0, source?: QueueSource, options?: { preservePlaybackState?: boolean; reason?: AdvanceReason; preserveReservoir?: boolean }) => {
+    // The funnel: `setQueueByTrackId` and every "play this list from here" path arrive here, which
+    // is why the host is offered the request at this point rather than at each call site. One of
+    // those call sites is `DiscoverTrackList`, which never touches the `onPlayTrack` prop.
+    if (interceptPlayback(tracks, tracks[startIndex]?.id)) return;
     // Callers are queue rebuilds, hydration and profile switches — not listener actions.
     const reason = normalizeAdvanceReason(options?.reason ?? 'system');
     const requestedTrackId = tracks[startIndex]?.id;
