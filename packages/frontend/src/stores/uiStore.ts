@@ -24,6 +24,15 @@ interface UIState {
   setSidebarCollapsed: (collapsed: boolean) => void;
   setShowFullPlayer: (show: boolean) => void;
   /** Set a pending chat message and open the chat panel */
+  /**
+   * Whether this surface has somewhere for `triggerChat` to go.
+   *
+   * True everywhere `AppShell` renders the right panel — which is the web app. The embedded
+   * surface (ADR-0016) mounts Discover without a shell, so a chat message set here would be
+   * observed by nothing: the prompt would look pressable and do nothing at all.
+   */
+  chatSurfaceAvailable: boolean;
+  setChatSurfaceAvailable: (available: boolean) => void;
   triggerChat: (message: string) => void;
   /** Read and clear the pending chat message */
   consumePendingChatMessage: () => string | null;
@@ -53,6 +62,8 @@ export const useUIStore = create<UIState>()(
       setShowSettings: (show) => set({ showSettings: show }),
       setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
       setShowFullPlayer: (show) => set({ showFullPlayer: show }),
+      chatSurfaceAvailable: true,
+      setChatSurfaceAvailable: (available) => set({ chatSurfaceAvailable: available }),
       triggerChat: (message) => set({ pendingChatMessage: message, rightPanel: 'chat' }),
       consumePendingChatMessage: () => {
         const msg = get().pendingChatMessage;

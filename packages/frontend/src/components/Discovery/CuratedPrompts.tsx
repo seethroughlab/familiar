@@ -35,6 +35,19 @@ interface CuratedPromptsProps {
 }
 
 export function CuratedPrompts({ prompts, loading, onRefresh }: CuratedPromptsProps) {
+  /**
+   * A prompt is a message for the chat and nothing else — there is no other way to act on
+   * "What IDM gems am I sleeping on?". So on a surface with no chat, every card here is dead:
+   * `triggerChat` sets `rightPanel: 'chat'`, only `AppShell` renders that panel, and the embedded
+   * Discover (ADR-0016/0017) deliberately mounts without a shell. Pressing one did nothing at all.
+   *
+   * Hidden rather than disabled, and rather than given a destination. The native app has no chat
+   * surface to bridge to, and building one would contradict a deliberate call that chat is the
+   * lower-value half of Familiar. A section of suggestions that cannot be taken up is worse than
+   * no section.
+   */
+  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
+  if (!chatAvailable) return null;
   if (!loading && prompts.length === 0) return null;
 
   const handleClick = (prompt: CuratedPrompt) => {
