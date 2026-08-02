@@ -29,6 +29,7 @@ from . import (
     TrackIdsResponse,
     TrackListResponse,
     TrackResponse,
+    apply_track_sort,
 )
 
 router = APIRouter()
@@ -196,28 +197,16 @@ async def list_track_ids(
     # --- Standard shuffle/sort path ---
     if shuffle:
         query = query.order_by(func.random())
-    elif sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
-        if sort_by in SORT_FIELD_MAP:
-            sort_col = SORT_FIELD_MAP[sort_by]
-            if sort_by == 'lastPlayed' and profile:
-                query = query.outerjoin(
-                    ProfilePlayHistory,
-                    (ProfilePlayHistory.track_id == Track.id) &
-                    (ProfilePlayHistory.profile_id == profile.id),
-                )
-            if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number, Track.id)
-            else:
-                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number, Track.id)
-        else:
-            if not has_feature_filter:
-                query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            sort_col_attr = getattr(TrackAnalysis, sort_by, None)
-            sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
-            if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number, Track.id)
-            else:
-                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number, Track.id)
+    elif (
+        sorted_query := apply_track_sort(
+            query,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            profile=profile,
+            has_feature_filter=has_feature_filter,
+        )
+    ) is not None:
+        query = sorted_query
     else:
         # `Track.id` last for the same reason as `list_tracks`, so this endpoint's order and the
         # paged list's order are the same total order rather than two orders that agree on ties
@@ -382,28 +371,16 @@ async def list_tracks(
     total = await db.scalar(count_query) or 0
 
     # Apply ordering
-    if sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
-        if sort_by in SORT_FIELD_MAP:
-            sort_col = SORT_FIELD_MAP[sort_by]
-            if sort_by == 'lastPlayed' and profile:
-                query = query.outerjoin(
-                    ProfilePlayHistory,
-                    (ProfilePlayHistory.track_id == Track.id) &
-                    (ProfilePlayHistory.profile_id == profile.id)
-                )
-            if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number, Track.id)
-            else:
-                query = query.order_by(nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number, Track.id)
-        else:
-            if not has_feature_filter:
-                query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
-            sort_col_attr = getattr(TrackAnalysis, sort_by, None)
-            sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
-            if sort_order == 'desc':
-                query = query.order_by(nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number, Track.id)
-            else:
-                query = query.order_by(nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number, Track.id)
+    if (
+        sorted_query := apply_track_sort(
+            query,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            profile=profile,
+            has_feature_filter=has_feature_filter,
+        )
+    ) is not None:
+        query = sorted_query
     else:
         # `Track.id` last so the total order is unique. Without it, 866 tie groups covering
         # 2,846 rows share an ordering key, and OFFSET paging over a non-unique order may
