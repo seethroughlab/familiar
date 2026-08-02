@@ -180,8 +180,8 @@ async def test_embed_route_404s_when_the_build_predates_it() -> None:
     """
     import pytest
 
-    from app.api.exceptions import NotFoundError
     from app import main
+    from app.api.exceptions import NotFoundError
 
     with pytest.raises(NotFoundError) as caught:
         await main.serve_embed()
