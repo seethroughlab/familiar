@@ -11,7 +11,14 @@ declare const __BUILD_TIME__: string;
 console.log(`[App] Build: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev'}`);
 
 // Register Web Audio engine
-registerEngineFactory(() => new WebAudioEngine());
+// Capabilities are declared here as well as on the engine, so that asking what audio can do never
+// builds an audio graph — see `engineInstance.ts`. They are checked against the real engine the
+// first time one is constructed.
+registerEngineFactory(() => new WebAudioEngine(), {
+  crossfade: true,
+  visualizer: true,
+  effects: 'web',
+});
 
 // Global handler for unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
