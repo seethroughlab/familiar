@@ -44,6 +44,18 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // Service worker update check (web only — no SW in native apps)
 if ('serviceWorker' in navigator) {
+  // Registered here rather than by the PWA plugin's injected script. That injection is per-*build*
+  // and not per-entry, so it also landed in `embed.html` — and the embedded surface is the one
+  // document that must not have a worker (see `vite.config.ts`).
+  //
+  // Registered directly rather than through `virtual:pwa-register`, which pulls in `workbox-window`
+  // — a dependency this app does not have and does not need for this. The generated worker already
+  // carries `skipWaiting` and `clientsClaim` (`registerType: 'autoUpdate'`), and the reload that
+  // follows from them is handled below, by hand, and has been since before this change.
+  navigator.serviceWorker.register('/sw.js').catch((error) => {
+    log.error('SW: registration failed', error);
+  });
+
   // With registerType: 'autoUpdate' a new SW activates in the background, but an
   // already-open page (especially a docked PWA) keeps running the old in-memory
   // bundle until it's reloaded. Reload once the new SW takes control so deploys
