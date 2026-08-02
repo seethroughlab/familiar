@@ -511,6 +511,28 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 NON_SPA_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "health")
 
 
+async def serve_embed() -> FileResponse:
+    """Serve the embedded surface's own document (ADR-0017).
+
+    A second entry point, not a route inside the single-page app. The Mac app points a `WKWebView`
+    here (ADR-0016 point 2), and the document it gets registers a **null audio engine** — so a play
+    path the bridge fails to intercept is inert rather than a second `WebAudioEngine` competing for
+    the audio session. Serving `index.html` here instead would hand the web view the full app,
+    engine and all, which is the one thing this must not do.
+
+    Defined at module scope for the reason `spa_fallback` records below: as a closure inside the
+    `if STATIC_DIR.exists()` block it would be unreachable from the suite, and that is how a bug this
+    visible survived once already.
+    """
+    embed = STATIC_DIR / "embed.html"
+    if not embed.exists():
+        # A server built before this existed. A typed 404 is better than a `FileResponse` for a
+        # missing path, which surfaces as a 500 with a stack trace in the log and nothing useful in
+        # the web view.
+        raise NotFoundError("This server has no embedded surface build.")
+    return FileResponse(embed)
+
+
 async def spa_fallback(full_path: str) -> FileResponse:
     """Serve index.html for SPA routing (catches all non-API routes).
 
@@ -560,6 +582,10 @@ if STATIC_DIR.exists():
     async def serve_root() -> FileResponse:
         """Serve index.html for root path."""
         return FileResponse(STATIC_DIR / "index.html")
+
+    # Registered before the catch-all below, which would otherwise swallow it and hand the web view
+    # the full app.
+    app.get("/embed", response_model=None)(serve_embed)
 
     # SPA fallback - serve index.html for all non-API routes
     app.get("/{full_path:path}", response_model=None)(spa_fallback)

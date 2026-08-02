@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#18181b" />
+    <meta name="description" content="Familiar — embedded discovery surface" />
+
+    <!-- Deliberately no manifest and no apple-itunes-app banner: this document is only ever loaded
+         inside the Mac app's web view (ADR-0016), where an install prompt or a "get the app"
+         banner would be advertising the app to itself. -->
+    <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+
+    <title>Discover</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/embed.tsx"></script>
+  </body>
+</html>

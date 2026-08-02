@@ -1,10 +1,24 @@
 # ADR-0017: The Embedded Surface Gets a Null Audio Engine
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-01
 
 Extends [ADR-0016](ADR-0016-embedded-web-surfaces-on-the-mac.md).
+
+Implementation:
+- Accepted 2026-08-01, together with its web-side half, on `feat/embed-entry-point`. Points 1, 2, 4,
+  6 and 7 are shipped: `packages/web/embed.html` and `src/embed.tsx` register `NullAudioEngine`
+  beside `WebAudioEngine`, `renderEmbed.tsx` mounts Discover with the providers it needs and nothing
+  else, and the server serves the document at `/embed` (`serve_embed` in `backend/app/main.py`).
+- Its first follow-up was done *before* acceptance rather than after, and changed the argument for
+  this ADR rather than the decision — see the Context section on what the fix did and what survived
+  it.
+- Point 5's bridge exists only on the page side so far: `services/embedBridge.ts` posts the play
+  intent, and nothing receives it yet. That is deliberate — the intent being dropped is the correct
+  failure until the Swift half lands, and it is the exact case the null engine makes inert.
+- Not yet built: the `WKWebView` host, the `WKScriptMessageHandler` that receives the intent, and
+  points 3's native "unavailable" state — all of them `familiar-apple` work under ADR-0016.
 
 ## Context
 
