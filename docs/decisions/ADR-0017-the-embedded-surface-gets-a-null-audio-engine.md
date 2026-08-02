@@ -17,7 +17,8 @@ constructed.**"*
 says so.** The reasoning was: a second engine is dangerous, playing audio is what constructs one,
 therefore forbidding playback prevents construction. The middle step is false.
 
-Traced on 2026-08-01:
+Traced on 2026-08-01. **This table describes the code as it stood when the finding was made**; the
+section after it records what changed:
 
 | step | file | what actually happens |
 |---|---|---|
@@ -48,17 +49,50 @@ point 4 to the letter — browse-only, every play intent posted to the native si
 holding the second engine that point 4 exists to prevent, and the failure is silent: two contexts
 compete for the output device with nothing on screen to suggest why.
 
+### That finding has since been fixed, and this ADR survives it
+
+Recorded rather than rewritten, because the reasoning above is why anyone looked.
+
+The capability helpers no longer construct anything. Capabilities are registered beside the factory,
+the live-node getters return only an engine that already exists, and `getEngine()` is now reached
+only from `useAudioEngine`, `useAudioControls`, `queueStore`, `useKeyboardShortcuts` and
+`AmbientCoordinator` — all genuinely playback. That was this ADR's own first follow-up, done early
+precisely because fixing a cause beats routing around it.
+
+So ADR-0016 point 4's premise is now **true**: nothing but playing constructs an engine. The question
+that leaves is whether a null engine is still wanted, and the answer is yes — for a reason the
+original draft did not lean on.
+
+**Discover plays music.** It is not a browse-only surface that happens to sit next to one:
+
+- `components/Discovery/DiscoverTrackList.tsx:14` takes `setQueueByTrackId` from `playerStore` and
+  wires it to a row's `onPlay` (line 82).
+- `components/Library/browsers/DiscoverBrowser/DiscoverBrowser.tsx:116` calls
+  `onPlayTrack(item.playbackContext.trackId)`.
+
+Those paths run through `playerStore` into `queueStore` and `useAudioControls`, both of which call
+`getEngine()`. So an embedded Discover has real construction paths — pressing play in it builds a
+`WebAudioEngine` — and ADR-0016 points 4 and 5 exist to intercept exactly those and hand them to the
+native player over the bridge.
+
+The argument for the null engine is therefore no longer "a stray question builds an engine". It is
+narrower and sturdier: **the bridge has to catch every play path in a 2,943-line surface, and a
+missed one must be inert rather than a second engine.** A guarantee that depends on complete
+interception is a guarantee that degrades as Discover changes; a guarantee that there is nothing to
+construct does not.
+
 ADR-0016 named the remedy without knowing it was one. Its final Follow-up asks whether the embedded
 page should be *"a purpose-built route that renders only Discover, rather than the full web app with
 everything else hidden,"* noting the narrower route is "safer against point 4." It is more than
 safer: it is the only version of point 4 that holds.
 
-**But a narrow route alone is not enough either, and the same trace says why.** Registering nothing
-does not make construction impossible — it makes `createEngine()` *throw* (step 2). A stray
-capability check would then crash the page instead of constructing an engine, which trades a silent
-failure for a loud one **inside a `WKWebView`**, where ADR-0016 already observes a defect "would be
-far harder to diagnose." The engine must be absent in a way that answers questions rather than one
-that raises.
+**But a narrow route alone is not enough either, and step 2 says why.** Registering nothing does not
+make construction impossible — it makes `createEngine()` *throw*. Since the fix above, a capability
+question no longer reaches it, so what would throw is a **play path**: pressing play on a Discover
+row in an embedded page with no engine registered would raise, **inside a `WKWebView`**, where
+ADR-0016 already observes a defect "would be far harder to diagnose". That trades a silent second
+engine for a loud crash, when the behaviour actually wanted is *nothing happening*. The engine must
+be absent in a way that answers rather than one that raises.
 
 For sizing: `AudioEngine` in `packages/frontend/src/player/audio/types.ts` declares 30 members —
 **15 required and 15 optional** — so a complete null implementation is 15 no-ops and nothing else.
@@ -78,10 +112,10 @@ that returns `static/index.html` for every non-API path (`backend/app/main.py:51
    `null`s from its getters, and ignores every command. It omits all optional members. It never
    constructs an `AudioContext`.
 
-3. **This replaces "must never play" as the mechanism, and keeps it as the intent.** ADR-0016 point 4
-   is not reversed — the goal is unchanged and this ADR does not supersede it. What changes is that
-   the guarantee stops depending on every current and future component avoiding a capability check,
-   and starts depending on there being nothing to construct.
+3. **This backs up "must never play" rather than replacing it.** ADR-0016 point 4 is not reversed —
+   the goal is unchanged and this ADR does not supersede it. What changes is that the guarantee
+   stops depending on the bridge intercepting every play path in a surface that keeps moving, and
+   starts depending on there being nothing to construct if one is missed.
 
 4. **A capability check on the embedded surface must answer, never throw.** Registering no factory is
    rejected for this reason, and so is throwing from the null engine's methods.
@@ -113,11 +147,11 @@ four capability calls, and any of them constructs the engine whether or not the 
 to a user. It also leaves the guarantee dependent on every future change to a 2,943-line surface
 remembering a rule enforced nowhere.
 
-**Strip the capability calls out of the shared components instead.** Attacks the real cause — a
-question about capabilities should not construct the thing it asks about — and would benefit the web
-app too. Rejected as the wrong size for this: it is a refactor across Settings, FullPlayer and
-DebugSettings, in service of a Mac feature, and it would leave the invariant resting on nobody
-reintroducing the pattern. Worth doing on its own merits later; recorded as a Follow-up.
+**Separate capability queries from engine construction.** Attacks the real cause of the original
+finding — a question about capabilities should not build the thing it asks about — and benefits the
+web app too. **Not rejected: done**, before this ADR was accepted, and recorded above. It removes the
+accidental construction paths but not the deliberate ones, which is why the decision here still
+stands rather than being withdrawn.
 
 **Make `getEngine()` return a null engine whenever no factory is registered, in `@familiar/frontend`.**
 Fixes it for every caller at once and needs no new entry point. Rejected because it makes a missing
@@ -134,7 +168,8 @@ is the same object with a note attached.
 ## Consequences
 
 - **Positive:** ADR-0016 point 4 becomes structural. The embedded page cannot construct a second
-  engine, rather than being required not to.
+  engine, rather than being required not to — and in particular it does not depend on the bridge
+  catching every play affordance Discover grows.
 - **Positive:** The failure mode of a mistake is inert rather than loud or silent — a missed play
   intent does nothing audible, instead of crashing a web view or opening a competing `AudioContext`.
 - **Positive:** The embedded bundle is smaller, since it pulls in neither `WebAudioEngine` nor the
@@ -146,10 +181,10 @@ is the same object with a note attached.
 - **Tradeoff:** Discover no longer stays current *entirely* for free. A change to how the app boots
   now has two entry points to pass through, which is a smaller version of the duplication ADR-0016
   rejected a native rebuild to avoid — but two `main.tsx` files rather than 26 components.
+- **Tradeoff:** Playing from an embedded Discover is silent until the bridge is wired. That is the
+  correct failure — an unbridged play intent should do nothing rather than start a second engine —
+  but it means the bridge is not optional for the surface to be *useful*, only for it to be *safe*.
 - **Tradeoff:** The null engine is code that exists to do nothing, and will look like dead code to
   anyone who finds it without this ADR. Its own comment should point here.
-- **Follow-up:** Consider separating capability queries from engine construction in
-  `engineInstance.ts`, so asking whether effects are available does not build an engine on any
-  platform. That is the underlying defect; this ADR routes around it rather than fixing it.
 - **Follow-up:** Decide what the embedded entry point renders beyond Discover, if anything. This ADR
   fixes how it boots, not what is on it.
