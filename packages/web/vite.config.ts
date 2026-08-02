@@ -47,6 +47,13 @@ export default defineConfig({
     // Skip PWA/service worker for Capacitor builds — native app doesn't need it
     ...(!isCapacitorBuild ? [VitePWA({
       registerType: 'autoUpdate',
+      // Registered by hand in `main.tsx` rather than injected, because injection is per-*build*
+      // and not per-entry: the plugin puts `registerSW.js` into every HTML document it emits,
+      // which silently included `embed.html`. The embedded surface must not register a service
+      // worker — it runs inside a `WKWebView` in the Mac app, where a worker would serve that
+      // window cached assets on a schedule nobody watching could see, and ADR-0017 gives it its
+      // own entry point precisely so it shares nothing it does not need.
+      injectRegister: null,
       includeAssets: ['icons/*.png', 'icons/*.svg'],
       manifest: false, // Using our custom manifest.json
       workbox: {
