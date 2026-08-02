@@ -81,6 +81,12 @@ everything; iOS stays the listening path. Their own order:
 Smart playlist CRUD and the album/artist grids need no ADR — ordinary work inside `0013`'s direction,
 and both depend on nothing, so they were the fastest visible wins once `0013` was accepted.
 
+**`ADR-0018`–`ADR-0019` bring the Mac's arrangement to the phone** (proposed 2026-08-02). `0018`
+replaces the segmented picker and the Collections screen with one root list of destinations; `0019`
+opens that list's Discover row onto the same embedded surface the Mac uses. Neither reverses
+`ADR-0013` point 2 — every destination involved is a way of finding something to play, and the
+management surfaces stay off the phone. `0018` ships without Discover if `0019` is not accepted.
+
 Within `0016`, **Music Map comes before embedded Discover**: the two halves are independent, and the
 map is one self-contained screen against endpoints that already generate, while the embedding half
 carries point 4's rule that an embedded page must never construct a second audio engine.

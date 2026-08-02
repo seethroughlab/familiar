@@ -7,6 +7,12 @@ Date: 2026-07-30
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md).
 
 Implementation:
+- **Point 1's placement changed on the phone in [ADR-0018](ADR-0018-the-phone-navigates-from-a-root-list.md)**
+  (2026-08-02), and its substance did not. Favorites and Downloads are still one group and still not
+  segments of the browse picker; they are reached from a row in a root list instead of from a toolbar
+  button and a screen. Recorded here rather than edited into the Decision above: the tap this ADR
+  accepted was the price of a button that could not show a number, and a row can — which is what
+  point 1 said it wanted.
 - Accepted 2026-07-30.
 - Execution order, each phase its own branch: (1) `FavoritesSource` and `FavoritesStore` in
   `FamiliarKit`, no networking and no UI; (2) the generated-client half and the Collections group;
