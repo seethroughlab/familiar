@@ -1,7 +1,10 @@
 /**
- * Hook for auto-downloading new tracks in playlists/smart playlists.
- * Compares current track IDs against offline tracks and triggers download
- * for any missing tracks when auto-download is enabled.
+ * Keeps a collection downloaded, for playlists, smart playlists and favorites.
+ *
+ * **Not only new tracks**, which is what the controls used to say. It compares the whole current
+ * track list against what is offline and downloads everything missing — so switching it on for a
+ * collection you have never downloaded fetches all of it, not nothing. The labels were corrected to
+ * match; this comment is the reason they had to be.
  */
 import { useEffect, useRef } from 'react';
 import { useDownloadStore } from '../stores/downloadStore';

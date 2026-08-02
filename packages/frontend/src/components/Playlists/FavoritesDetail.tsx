@@ -244,7 +244,11 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
                 ? 'bg-blue-600 hover:bg-blue-500'
                 : 'bg-zinc-700 hover:bg-zinc-600'
             }`}
-            title={autoDownloadEnabled ? 'Disable auto-download' : 'Auto-download new favorites'}
+            title={autoDownloadEnabled
+              ? 'Stop keeping favorites downloaded'
+              // Says what it does. It reads as "only ones I add from now on", and it is not: it
+              // fetches every favorite not already held, then keeps up as the collection changes.
+              : 'Keep favorites downloaded — fetches all that are missing, then keeps up'}
           >
             <RotateCw className="w-4 h-4" />
             <span className="text-sm">Auto</span>

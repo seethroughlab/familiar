@@ -583,7 +583,9 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
                 ? 'bg-blue-600 hover:bg-blue-500'
                 : 'bg-zinc-700 hover:bg-zinc-600'
             }`}
-            title={playlist.auto_download ? 'Disable auto-download' : 'Auto-download new tracks'}
+            title={playlist.auto_download
+              ? 'Stop keeping this playlist downloaded'
+              : 'Keep this playlist downloaded — fetches all that are missing, then keeps up'}
           >
             <RotateCw className="w-4 h-4" />
             <span className="text-sm">Auto</span>
