@@ -3,6 +3,7 @@ import {
   isEmbedded,
   postPlayIntent,
   profileFromURL,
+  postNavigateIntent,
   isEmbedSurfaceDocument,
   BRIDGE_HANDLER,
   type PlayIntent,
@@ -146,5 +147,80 @@ describe('isEmbedSurfaceDocument', () => {
   it('rejects a marker with the wrong value', () => {
     expect(isEmbedSurfaceDocument(docWith('<meta name="familiar-surface" content="app">'))).toBe(false);
     expect(isEmbedSurfaceDocument(docWith('<meta name="familiar-surface">'))).toBe(false);
+  });
+});
+
+/**
+ * The second message (ADR-0020), and the reason it is the last one for now.
+ *
+ * ADR-0016 point 5 called the bridge the main risk of embedding and kept it to one shape. This
+ * widens it by exactly one, so both shapes must fail identically — inert in a browser, inert rather
+ * than throwing when the host misbehaves — or the next message inherits whichever half was
+ * remembered.
+ */
+describe('postNavigateIntent', () => {
+  let posted: unknown[];
+
+  function installHandler(impl?: (m: unknown) => void) {
+    posted = [];
+    (window as unknown as Record<string, unknown>).webkit = {
+      messageHandlers: { familiar: { postMessage: impl ?? ((m: unknown) => posted.push(m)) } },
+    };
+  }
+
+  beforeEach(() => {
+    posted = [];
+    delete (window as unknown as Record<string, unknown>).webkit;
+  });
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).webkit;
+  });
+
+  it('posts an artist intent without an album key', () => {
+    installHandler();
+    expect(postNavigateIntent({ to: 'artist', artist: 'Boards of Canada' })).toBe(true);
+    expect(posted).toEqual([{ type: 'navigate', to: 'artist', artist: 'Boards of Canada' }]);
+  });
+
+  it('posts an album intent with both names', () => {
+    installHandler();
+    expect(postNavigateIntent({ to: 'album', artist: 'Interpol', album: 'Antics' })).toBe(true);
+    expect(posted).toEqual([
+      { type: 'navigate', to: 'album', artist: 'Interpol', album: 'Antics' },
+    ]);
+  });
+
+  it('trims, and refuses a target it cannot address', () => {
+    installHandler();
+    expect(postNavigateIntent({ to: 'artist', artist: '  M83  ' })).toBe(true);
+    expect((posted[0] as { artist: string }).artist).toBe('M83');
+
+    expect(postNavigateIntent({ to: 'artist', artist: '   ' })).toBe(false);
+    expect(postNavigateIntent({ to: 'album', artist: 'Interpol' })).toBe(false);
+    expect(postNavigateIntent({ to: 'album', artist: 'Interpol', album: ' ' })).toBe(false);
+    expect(posted).toHaveLength(1);
+  });
+
+  /**
+   * A slash-named artist is passed through unchanged. There are 79 of them, the path-keyed API
+   * cannot address any, and the native side already degrades to a filtered track list — inventing a
+   * second answer here would give two behaviours for one limitation.
+   */
+  it('passes through names the path-keyed API cannot address', () => {
+    installHandler();
+    expect(postNavigateIntent({ to: 'artist', artist: 'Kruder & Dorfmeister/K&D' })).toBe(true);
+    expect((posted[0] as { artist: string }).artist).toBe('Kruder & Dorfmeister/K&D');
+  });
+
+  it('is inert in an ordinary browser, like the play intent', () => {
+    expect(postNavigateIntent({ to: 'artist', artist: 'M83' })).toBe(false);
+  });
+
+  it('survives a throwing host, like the play intent', () => {
+    installHandler(() => {
+      throw new Error('native side blew up');
+    });
+    expect(() => postNavigateIntent({ to: 'artist', artist: 'M83' })).not.toThrow();
+    expect(postNavigateIntent({ to: 'artist', artist: 'M83' })).toBe(false);
   });
 });

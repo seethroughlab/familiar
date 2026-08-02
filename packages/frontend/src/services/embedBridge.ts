@@ -12,6 +12,22 @@
  * detail.
  */
 
+/**
+ * Open an artist or an album in the *app*, not in the page (ADR-0020).
+ *
+ * Addressed by name because that is what the API offers — `/library/artists/{artist_name}` and
+ * `/library/albums/{artist_name}/{album_name}`. Names containing a slash cannot be addressed, and
+ * the native side already degrades those to a filtered track list rather than failing; this inherits
+ * that rather than inventing a second answer.
+ */
+export interface NavigateIntent {
+  type: 'navigate';
+  to: 'artist' | 'album';
+  artist: string;
+  /** Present only for `to: 'album'`. */
+  album?: string;
+}
+
 /** What the native side receives. Keep this in step with the Swift `WKScriptMessageHandler`. */
 export interface PlayIntent {
   type: 'play';
@@ -86,20 +102,52 @@ export function isEmbedded(): boolean {
  * for an unbridged page, and why ADR-0017 puts a null engine underneath: the alternative to silence
  * is a second audio engine, not success.
  */
+/**
+ * Ask the app to open an artist or album.
+ *
+ * The second and — per ADR-0020 point 2 — final message shape until an ADR says otherwise. It earns
+ * its place by that ADR's point 3: the native app already has these screens, they are better than a
+ * web equivalent inside a web view, and the page cannot reach them.
+ *
+ * Returns whether it was delivered. A `false` in an ordinary browser is correct: this module ships
+ * in the web app and the iOS app too, and must be inert outside a native host.
+ */
+export function postNavigateIntent(intent: Omit<NavigateIntent, 'type'>): boolean {
+  const artist = intent.artist?.trim();
+  if (!artist) return false;
+  if (intent.to === 'album' && !intent.album?.trim()) return false;
+
+  return post({
+    type: 'navigate',
+    to: intent.to,
+    artist,
+    ...(intent.to === 'album' ? { album: intent.album!.trim() } : {}),
+  } satisfies NavigateIntent);
+}
+
 export function postPlayIntent(intent: Omit<PlayIntent, 'type'>): boolean {
   if (intent.trackIds.length === 0) return false;
-  const w = window as unknown as WebKitBridgeWindow;
-  const handler = w.webkit?.messageHandlers?.[BRIDGE_HANDLER];
-  if (!handler || typeof handler.postMessage !== 'function') return false;
 
-  const message: PlayIntent = {
+  return post({
     type: 'play',
     trackIds: intent.trackIds,
     // Defended rather than trusted: a `startingAt` outside the list would leave the native side
     // choosing a cursor for a track it was not given, and the first track is the honest default.
     startingAt: intent.trackIds.includes(intent.startingAt) ? intent.startingAt : intent.trackIds[0],
-  };
+  } satisfies PlayIntent);
+}
 
+/**
+ * The one place a message actually crosses.
+ *
+ * Shared so the two shapes cannot fail differently — with the bridge now two messages wide
+ * (ADR-0020), "inert in a browser" and "survives a throwing host" have to mean the same thing for
+ * both, or the next one to be added inherits whichever half was remembered.
+ */
+function post(message: PlayIntent | NavigateIntent): boolean {
+  const w = window as unknown as WebKitBridgeWindow;
+  const handler = w.webkit?.messageHandlers?.[BRIDGE_HANDLER];
+  if (!handler || typeof handler.postMessage !== 'function') return false;
   try {
     handler.postMessage(message);
     return true;
