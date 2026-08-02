@@ -143,3 +143,46 @@ async def test_spa_fallback_still_serves_the_app_for_client_routes() -> None:
 
     for path in ("", "library", "playlists/abc", "settings/audio"):
         assert isinstance(await spa_fallback(path), FileResponse)
+
+
+async def test_embed_route_serves_its_own_document_not_the_app() -> None:
+    """The embedded surface must never be handed `index.html` (ADR-0017).
+
+    That document registers `WebAudioEngine`, so serving it to the Mac app's web view would put a
+    second audio engine one play button away from the native player — the defect ADR-0016 point 4
+    exists to prevent, arriving from inside a `WKWebView` where it is hardest to diagnose.
+
+    Called directly rather than through `client`, for the same reason as the two above: the route is
+    only registered when a static build exists, and the suite runs without one.
+    """
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from fastapi.responses import FileResponse
+
+    from app import main
+
+    with patch.object(main, "STATIC_DIR", Path(__file__).parent):
+        # `test_contract_error_shapes.py` is beside this file, so a file that exists stands in for
+        # the built document without needing a fixture on disk.
+        with patch.object(Path, "exists", lambda self: True):
+            response = await main.serve_embed()
+
+    assert isinstance(response, FileResponse)
+    assert response.path.name == "embed.html", "the embed route must not serve index.html"
+
+
+async def test_embed_route_404s_when_the_build_predates_it() -> None:
+    """A server built before the embedded surface existed says so, rather than 500ing.
+
+    `FileResponse` on a missing path raises at send time, which surfaces as a stack trace in the log
+    and a blank web view — the least diagnosable combination for a screen inside a native app.
+    """
+    import pytest
+
+    from app.api.exceptions import NotFoundError
+    from app import main
+
+    with pytest.raises(NotFoundError) as caught:
+        await main.serve_embed()
+    assert caught.value.status_code == 404

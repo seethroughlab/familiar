@@ -85,13 +85,15 @@ Within `0016`, **Music Map comes before embedded Discover**: the two halves are 
 map is one self-contained screen against endpoints that already generate, while the embedding half
 carries point 4's rule that an embedded page must never construct a second audio engine.
 
-**`ADR-0017` (`proposed`) must land before embedded Discover is built.** It extends `0016`. It began
+**`ADR-0017` (`accepted`, web half shipped) governs how embedded Discover boots.** It extends `0016`. It began
 by recording that point 4's conclusion — forbid playback, and no second engine is constructed — did
 not hold, because seven capability helpers constructed one without playing anything. That cause has
 since been fixed, and the ADR records both that and why it still stands: **Discover itself plays
 music** (`DiscoverTrackList` drives `playerStore`), so an embedded copy has real construction paths,
 and the bridge has to catch every one. The **null audio engine** on its own entry point is what makes
-a missed intent inert rather than a second engine.
+a missed intent inert rather than a second engine. The web half is built — `/embed` serves its own
+document registering the null engine. What remains is `familiar-apple`: the `WKWebView`, the
+`WKScriptMessageHandler` that receives the play intent, and the native "unavailable" state.
 
 ## Key Directories
 
