@@ -135,6 +135,10 @@ remove.
 - **Tradeoff:** The bridge is a new seam between two clients that were previously independent, and a
   web-app change could break the native app through it. It should be narrow enough — one message
   shape — that this stays unlikely.
-- **Follow-up:** Decide whether the embedded page should be a purpose-built route that renders only
-  Discover, rather than the full web app with everything else hidden. The narrower route is safer
-  against point 4 but is a change in the web app.
+- **Follow-up, resolved by [ADR-0017](ADR-0017-the-embedded-surface-gets-a-null-audio-engine.md):**
+  Decide whether the embedded page should be a purpose-built route that renders only Discover, rather
+  than the full web app with everything else hidden. The narrower route is safer against point 4 but
+  is a change in the web app. **Answer: the purpose-built route, and it registers a null audio
+  engine.** Investigating this found that point 4's own conclusion did not hold — capability queries
+  constructed an engine without playing anything, since fixed — and that Discover plays music itself,
+  so an embedded copy has real play paths for the bridge to catch. ADR-0017 has both.
