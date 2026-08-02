@@ -101,6 +101,14 @@ a missed intent inert rather than a second engine. The web half is built — `/e
 document registering the null engine. What remains is `familiar-apple`: the `WKWebView`, the
 `WKScriptMessageHandler` that receives the play intent, and the native "unavailable" state.
 
+**`ADR-0020`–`ADR-0021` are proposed 2026-08-02.** `0020` widens the embed bridge by one message so
+Discover's links open the app's own artist and album screens, and states the bar for a third. `0021`
+turns the Mac's track lists into sortable tables with a column chooser, bumps the **macOS floor to
+14** for `TableColumnCustomization` (iOS stays at 15), and adds `playCount`/`dateAdded` to the
+server's sort allowlist. `0021`'s load-bearing point is that the Tracks list sorts **server-side** —
+it pages at 50, and sorting the loaded page would repeat the library-shuffle defect on a surface
+where a wrong order looks like an order.
+
 ## Key Directories
 
 ```

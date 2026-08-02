@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter
+from sqlalchemy import Float, cast, nulls_last
 
 from app.api.schemas.tracks import (  # noqa: F401 — re-export for sub-routers
     BatchTracksRequest,
@@ -17,7 +18,7 @@ from app.api.schemas.tracks import (  # noqa: F401 — re-export for sub-routers
     TrackListResponse,
     TrackResponse,
 )
-from app.db.models import ProfilePlayHistory, Track
+from app.db.models import ProfilePlayHistory, Track, TrackAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,18 @@ SORT_FIELD_MAP: dict[str, Any] = {
     'genre': Track.genre,
     'trackNum': Track.track_number,
     'format': Track.format,
+    'dateAdded': Track.created_at,
     'lastPlayed': ProfilePlayHistory.last_played_at,
+    'playCount': ProfilePlayHistory.play_count,
 }
+
+# Sort fields that live on the *listener's* play history rather than on the track.
+#
+# They need the per-profile join, and they are meaningless without a profile — "how often have you
+# played this" has no answer when there is no you. Ordering by one anyway would leave SQLAlchemy to
+# invent a cross join against every row of `profile_play_history`, which is a wrong answer served
+# slowly rather than an error.
+PROFILE_SORT_FIELDS = {'lastPlayed', 'playCount'}
 
 # Analysis features that need JSONB extraction
 SORT_FEATURE_FIELDS = {
@@ -75,6 +86,58 @@ AUDIO_MIME_TYPES = {
 # Aggregate sub-routers into top-level router
 # ---------------------------------------------------------------------------
 
+def apply_track_sort(
+    query: Any,
+    *,
+    sort_by: str | None,
+    sort_order: str,
+    profile: Any | None,
+    has_feature_filter: bool,
+) -> Any:
+    """Order a track query, or leave it to the caller's default when the request cannot be honoured.
+
+    Shared by `/tracks` and `/tracks/ids` because they had the same twenty lines twice, and the two
+    must agree: `/tracks/ids` builds the queue that `/tracks` paginates the metadata for, so an
+    order that differs between them would hand the player a queue in one order and titles in
+    another.
+
+    Returns `None` when the sort was not applied, so the caller can fall back to its own default
+    ordering rather than this function having to know what that is.
+    """
+    if not sort_by:
+        return None
+
+    if sort_by in SORT_FIELD_MAP:
+        # A play-history field with nobody to attribute it to. Falling back beats ordering by a
+        # column from a table that was never joined — see `PROFILE_SORT_FIELDS`.
+        if sort_by in PROFILE_SORT_FIELDS and profile is None:
+            return None
+
+        sort_col = SORT_FIELD_MAP[sort_by]
+        if sort_by in PROFILE_SORT_FIELDS:
+            query = query.outerjoin(
+                ProfilePlayHistory,
+                (ProfilePlayHistory.track_id == Track.id)
+                & (ProfilePlayHistory.profile_id == profile.id),
+            )
+        sort_expr = sort_col.desc() if sort_order == 'desc' else sort_col.asc()
+    elif sort_by in SORT_FEATURE_FIELDS:
+        if not has_feature_filter:
+            query = query.outerjoin(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        sort_col_attr = getattr(TrackAnalysis, sort_by, None)
+        expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
+        sort_expr = expr.desc() if sort_order == 'desc' else expr.asc()
+    else:
+        return None
+
+    # `Track.id` last so the total order is unique. Without it, 866 tie groups covering 2,846 rows
+    # share an ordering key, and OFFSET paging over a non-unique order may repeat or skip rows
+    # between pages.
+    return query.order_by(
+        nulls_last(sort_expr), Track.artist, Track.album, Track.track_number, Track.id
+    )
+
+
 from app.api.routes.tracks.discovery import router as discovery_router  # noqa: E402
 from app.api.routes.tracks.identification import router as identification_router  # noqa: E402
 from app.api.routes.tracks.listing import list_tracks  # noqa: E402
@@ -94,3 +157,4 @@ router.include_router(discovery_router)
 router.include_router(playback_router)
 router.include_router(metadata_router)
 router.include_router(identification_router)
+
