@@ -1,6 +1,6 @@
 # ADR-0022: Chat Is Built Native, and Hidden Without a Provider
 
-Status: proposed
+Status: accepted
 Date: 2026-08-02
 
 Extends [ADR-0016](ADR-0016-embedded-web-surfaces-on-the-mac.md)

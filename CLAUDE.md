@@ -109,7 +109,7 @@ server's sort allowlist. `0021`'s load-bearing point is that the Tracks list sor
 it pages at 50, and sorting the loaded page would repeat the library-shuffle defect on a surface
 where a wrong order looks like an order.
 
-**`ADR-0022` builds chat natively (proposed 2026-08-02).** It extends `0016` by applying that ADR's
+**`ADR-0022` builds chat natively (accepted 2026-08-02).** It extends `0016` by applying that ADR's
 point 1 test to a third surface: chat is 965 lines against Discover's 2,828 and has had 6 commits in
 six months against 15, so it lands on the **native** side rather than being embedded. The bridge
 settles it independently — a chat response carries `queued_tracks` and `playback_action`, so an
