@@ -20,7 +20,12 @@ if (!nativeAudioV2Enabled) {
 }
 
 // Register Capacitor audio engine
-registerEngineFactory(() => new CapacitorEngine());
+// See the web entry point: declared beside the factory so a capability question constructs nothing.
+registerEngineFactory(() => new CapacitorEngine(), {
+  crossfade: true,
+  visualizer: false,
+  effects: 'none',
+});
 
 // Register ambient synth bridge (deferred — must not block boot)
 import { registerAmbientSynthBridge } from '@familiar/frontend/src/player/ambient/ambientSynthBridge';
