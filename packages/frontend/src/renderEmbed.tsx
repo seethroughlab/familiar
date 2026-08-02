@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { initApiOrigin, registerProfileProvider } from './api/base';
-import { getSelectedProfileId, clearSelectedProfile } from './services/profileSelection';
+import { profileFromURL } from './services/embedBridge';
 import { EmbedDiscover } from './components/Embed/EmbedDiscover';
+
 
 /**
  * Boots the embedded surface (ADR-0017).
@@ -25,7 +26,13 @@ import { EmbedDiscover } from './components/Embed/EmbedDiscover';
  * 2,943-line surface that ADR-0016 embedded precisely to avoid maintaining twice.
  */
 export function renderEmbed(options?: { onReady?: () => void }): void {
-  registerProfileProvider({ getSelectedProfileId, clearSelectedProfile });
+  const profileId = profileFromURL();
+  registerProfileProvider({
+    getSelectedProfileId: async () => profileId,
+    // Nothing to clear: this surface never selected a profile, it was told one. Clearing storage it
+    // does not read would be a no-op dressed up as an action.
+    clearSelectedProfile: async () => {},
+  });
 
   // Its own client, with the app's defaults. The embedded page is a separate document with a
   // separate cache; nothing is shared with a browser tab that happens to have the app open.

@@ -24,6 +24,26 @@ export interface PlayIntent {
 /** The handler name the native side installs. */
 export const BRIDGE_HANDLER = 'familiar';
 
+/**
+ * The profile this surface acts as, taken from the URL and nowhere else (ADR-0016 point 6).
+ *
+ * The native app appends `?profile=…` when it points its web view here. Reading it from the query
+ * string rather than from storage is the whole of that decision: a `WKWebView` has its own
+ * `localStorage`, separate from any browser, so whatever it found there would be either empty or
+ * left over from a previous listener — and a surface acting as a different profile than the window
+ * around it is a bug nobody would think to look for.
+ *
+ * Absent means **no profile**, not "fall back to storage". Falling back would reintroduce exactly
+ * the failure this prevents, and do it silently.
+ *
+ * The server URL needs no equivalent: the document is served *by* that server, so relative API
+ * paths can only reach the one it came from. Point 6 is satisfied for the URL by construction.
+ */
+export function profileFromURL(search: string = window.location.search): string | null {
+  const value = new URLSearchParams(search).get('profile');
+  return value !== null && value.trim() !== '' ? value : null;
+}
+
 interface WebKitBridgeWindow {
   webkit?: {
     messageHandlers?: Record<string, { postMessage: (message: unknown) => void } | undefined>;
