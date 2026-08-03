@@ -3,6 +3,33 @@
 Status: accepted
 Date: 2026-08-02
 
+Implementation:
+- The Mac surface shipped in `familiar-apple` #54: `ChatStore` (status through the generated client,
+  stream through a hand-rolled `URLSession` reader) and `ChatView`, with the decidable parts in
+  `FamiliarKit` — `ChatEvent`, `ChatStreamParser`, `ChatLineSplitter`, `ChatConversation`,
+  `ChatPlaybackCommand`, `ChatMarkdown`.
+- **Three places the server did not match its own documentation**, found building it. It emits nine
+  event types, not the seven its docstring lists (`navigate` and `ephemeral_playlist_created` are
+  undocumented). `error` arrives in two shapes — `content` from the service, `message` from the
+  route's exception handler. And `control_playback` speaks in absolutes while `FamiliarPlayer`
+  offers toggles, so a direct wiring would have paused music that was already playing.
+- **Point 2's premise held for a reason it did not anticipate**: the assistant's prose arrives as
+  whole `text` events, not token deltas, so streaming buys tool-call visibility rather than a typing
+  effect. The tool events really are the whole of it.
+- The tradeoff this ADR recorded — a hand-parsed event set outside ADR-0007's generation — cost a
+  bug immediately. `URLSession.AsyncBytes.lines` drops empty lines, which in SSE terminate a frame,
+  so every reply accumulated into one unparseable payload and the surface answered every question
+  with silence. The parser's own tests passed, having fed lines from a splitter that *does* produce
+  the empty strings. `ChatLineSplitter` moved the splitting to where a test can fail on it.
+- Point 7's phone half and Listening Ideas: `familiar-apple` #55 (open at the time of writing). The iOS floor of 15 was the real
+  cost — `TextField(axis:)` and `lineLimit(1...6)` are iOS 16, `onChange(of:initial:)` is iOS 17 —
+  so the phone composes on one line rather than the floor being raised.
+- Point 3's rule applies to the web app too, in `familiar` #78 (open at the time of writing): `chatApi.getStatus` had never been
+  called there, so an install with no provider showed a chat box that failed on send.
+- Restoring the "Listening Ideas" that `familiar` #76 removed needed **no third bridge message and
+  no ADR of its own**: `/library/discover/prompts` carries the `library` tag and was already
+  generated, so the native surface asks for them itself and ADR-0020 point 2's cap of two stands.
+
 Extends [ADR-0016](ADR-0016-embedded-web-surfaces-on-the-mac.md)
 
 ## Context
