@@ -109,6 +109,17 @@ server's sort allowlist. `0021`'s load-bearing point is that the Tracks list sor
 it pages at 50, and sorting the loaded page would repeat the library-shuffle defect on a surface
 where a wrong order looks like an order.
 
+**`ADR-0022` builds chat natively (accepted 2026-08-02).** It extends `0016` by applying that ADR's
+point 1 test to a third surface: chat is 965 lines against Discover's 2,828 and has had 6 commits in
+six months against 15, so it lands on the **native** side rather than being embedded. The bridge
+settles it independently — a chat response carries `queued_tracks` and `playback_action`, so an
+embedded chat would need both, against `0020` point 2's cap of two. Its load-bearing point is point
+3: **the destination is absent when the active provider is not configured**, read from
+`GET /chat/status`, which already exists for that purpose and which the web app has never called.
+Not a disabled row and not an error after the user has typed — that is the "Listening Ideas" defect
+(`#76`) moved one step later. Accepting `0022` is also what makes `#76` reversible, since `0020`
+point 3's bar for a third bridge message is cleared once a native chat exists to receive the intent.
+
 ## Key Directories
 
 ```
