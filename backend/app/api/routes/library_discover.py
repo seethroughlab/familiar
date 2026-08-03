@@ -13,6 +13,7 @@ from app.api.routes._external_albums_schemas import (
     ExternalAlbumResponse,
     ExternalAlbumsResponse,
 )
+from app.api.schemas.common import UTCDateTime
 from app.db.models import Artist, ArtistAlias, Track, TrackStatus
 from app.services.app_settings import get_app_settings_service
 from app.services.external_albums_helpers import normalize_artist_name
@@ -76,7 +77,7 @@ class CuratedPromptsResponse(BaseModel):
     """AI-generated listening suggestions."""
 
     prompts: list[CuratedPrompt]
-    generated_at: str | None = None
+    generated_at: UTCDateTime | None = None
 
 
 @router.get("/discover/prompts", response_model=CuratedPromptsResponse)
@@ -214,7 +215,7 @@ Respond with ONLY a JSON array, no other text:
             if isinstance(p, dict) and "prompt" in p
         ][:6]
 
-        generated_at = utcnow().isoformat()
+        generated_at = utcnow()
         response = CuratedPromptsResponse(prompts=prompts, generated_at=generated_at)
 
         # Cache in Redis (4 hours)

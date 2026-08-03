@@ -45,6 +45,10 @@ class TrackResponse(BaseModel):
     format: str | None
     status: str = "active"
     analysis_version: int
+    # When the scanner first saw the file. `from_attributes` fills it straight off
+    # `Track.created_at`, which is what ADR-0021's `dateAdded` column sorts by — the sort
+    # shipped without the field, so the column was built, seen blank on every row, and removed.
+    created_at: UTCDateTime | None = None
     features: TrackFeaturesResponse | None = None
     # Play history (profile-specific, populated when profile header is present)
     last_played_at: UTCDateTime | None = None

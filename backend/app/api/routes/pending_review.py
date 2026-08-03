@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError, ValidationError
+from app.api.schemas.common import UTCDateTime
 from app.db.models import Track, TrackStatus
-from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ class PendingTrackResponse(BaseModel):
     bitrate: int | None
     bitrate_mode: str | None
     codec: str | None
-    created_at: str
+    created_at: UTCDateTime
     review_info: ReviewInfo | None
 
 
@@ -99,7 +99,7 @@ class PendingGroupResponse(BaseModel):
     duplicate_count: int
     upgrade_count: int
     downgrade_count: int
-    earliest_scan: str
+    earliest_scan: UTCDateTime
     tracks: list[PendingTrackResponse]
 
 
@@ -223,7 +223,7 @@ def _track_to_response(track: Track) -> PendingTrackResponse:
         bitrate=track.bitrate,
         bitrate_mode=track.bitrate_mode,
         codec=track.codec,
-        created_at=to_rfc3339(track.created_at),
+        created_at=track.created_at,
         review_info=_to_review_info(track.review_info),
     )
 
@@ -381,7 +381,7 @@ async def list_groups(
             duplicate_count=duplicate_count,
             upgrade_count=upgrade_count,
             downgrade_count=downgrade_count,
-            earliest_scan=to_rfc3339(earliest),
+            earliest_scan=earliest,
             tracks=[_track_to_response(t) for t in group_tracks],
         ))
 

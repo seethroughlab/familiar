@@ -17,9 +17,9 @@ from app.api.exceptions import (
     ProfileNotFoundError,
     ValidationError,
 )
+from app.api.schemas.common import UTCDateTime
 from app.config import settings
 from app.db.models import Profile
-from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class ProfileResponse(BaseModel):
     name: str
     color: str | None
     avatar_url: str | None
-    created_at: str
+    created_at: UTCDateTime
     has_lastfm: bool
 
 
@@ -69,7 +69,7 @@ def profile_to_response(profile: Profile, has_lastfm: bool) -> ProfileResponse:
         name=profile.name,
         color=profile.color,
         avatar_url=avatar_url,
-        created_at=to_rfc3339(profile.created_at),
+        created_at=profile.created_at,
         has_lastfm=has_lastfm,
     )
 

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.exceptions import NotFoundError, ValidationError
+from app.api.schemas.common import UTCDateTime
 from app.db.models import ChangeSource, ChangeStatus
 from app.services.proposed_changes import (
     ApplyResult,
@@ -20,7 +21,6 @@ from app.services.proposed_changes import (
     ChangeStats,
     ProposedChangesService,
 )
-from app.utils.time import to_rfc3339
 
 # Tag is kebab-case like every other one in the schema. It was "Proposed Changes" — the only tag
 # with a space and capitals — until ADR-0014 brought it into the generated Swift surface, where an
@@ -50,8 +50,8 @@ class ProposedChangeResponse(BaseModel):
     reason: str | None
     scope: str
     status: str
-    created_at: str
-    applied_at: str | None
+    created_at: UTCDateTime
+    applied_at: UTCDateTime | None
     target_description: str | None = None
 
 
@@ -129,8 +129,8 @@ def _change_to_response(
         reason=change.reason,
         scope=change.scope.value if hasattr(change.scope, "value") else change.scope,
         status=change.status.value if hasattr(change.status, "value") else change.status,
-        created_at=to_rfc3339(change.created_at) if change.created_at else None,
-        applied_at=to_rfc3339(change.applied_at) if change.applied_at else None,
+        created_at=change.created_at if change.created_at else None,
+        applied_at=change.applied_at if change.applied_at else None,
         target_description=target_description,
     )
 

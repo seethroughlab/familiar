@@ -20,6 +20,7 @@ from app.api.exceptions import (
     NotFoundError,
     ValidationError,
 )
+from app.api.schemas.common import UTCDateTime
 from app.config import settings
 from app.db.models import MixTape, Playlist, PlaylistTrack
 from app.services.mixtape_export import (
@@ -29,7 +30,6 @@ from app.services.mixtape_export import (
     run_mixtape_export,
 )
 from app.services.smart_playlists import SmartPlaylistService
-from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,8 @@ class MixTapeResponse(BaseModel):
     error_message: str | None
     duration_seconds: float | None
     file_size_bytes: int | None
-    created_at: str
-    completed_at: str | None
+    created_at: UTCDateTime
+    completed_at: UTCDateTime | None
     progress: dict[str, Any] | None = None
 
 
@@ -79,8 +79,10 @@ def _serialize(mt: MixTape, progress: dict[str, Any] | None = None) -> MixTapeRe
         error_message=mt.error_message,
         duration_seconds=mt.duration_seconds,
         file_size_bytes=mt.file_size_bytes,
-        created_at=to_rfc3339(mt.created_at) if mt.created_at else "",
-        completed_at=to_rfc3339(mt.completed_at) if mt.completed_at else None,
+        # The column is non-nullable; the empty-string fallback that used to be here
+        # only made sense while this field was a `str`.
+        created_at=mt.created_at,
+        completed_at=mt.completed_at if mt.completed_at else None,
         progress=progress,
     )
 
