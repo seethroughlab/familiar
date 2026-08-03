@@ -33,6 +33,16 @@ export function useChatAvailability(): void {
   });
 
   useEffect(() => {
-    if (data) setChatSurfaceAvailable(data.configured);
+    if (!data) return;
+    setChatSurfaceAvailable(data.configured);
+
+    // **Close the panel rather than leaving it rendering nothing.** The answer arrives after the
+    // first paint, so chat can already be open when it turns out to be unavailable — from a
+    // restored `rightPanel`, or from a toggle pressed in the moment before the request resolved.
+    // Guarding the panel's *render* on availability produced exactly that: an open panel with no
+    // input in it, which is a worse failure than the one the gate exists to prevent.
+    if (!data.configured && useUIStore.getState().rightPanel === 'chat') {
+      useUIStore.getState().closeRightPanel();
+    }
   }, [data, setChatSurfaceAvailable]);
 }

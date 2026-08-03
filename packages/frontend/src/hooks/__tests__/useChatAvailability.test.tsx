@@ -54,3 +54,47 @@ describe('useChatAvailability', () => {
     expect(useUIStore.getState().chatSurfaceAvailable).toBe(true);
   });
 });
+
+/**
+ * The failure CI caught and a local run did not: the status answer arrives *after* the first
+ * paint, so chat can already be open by the time it turns out to be unavailable. Guarding the
+ * panel's render on availability left an open panel with no input in it — a worse state than the
+ * one the gate exists to prevent, and the reason four E2E tests timed out looking for a chat box
+ * that was on screen but empty.
+ */
+describe('useChatAvailability when chat is already open', () => {
+  const wrapper = ({ children }: { children: ReactNode }) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  };
+
+  it('closes the panel when the answer turns out to be no', async () => {
+    useUIStore.setState({ chatSurfaceAvailable: true, rightPanel: 'chat' });
+    vi.mocked(chatApi.getStatus).mockResolvedValue({ configured: false, provider: null });
+
+    renderHook(() => useChatAvailability(), { wrapper });
+
+    await waitFor(() => expect(useUIStore.getState().rightPanel).toBeNull());
+  });
+
+  it('leaves an open panel alone when a provider is configured', async () => {
+    useUIStore.setState({ chatSurfaceAvailable: true, rightPanel: 'chat' });
+    vi.mocked(chatApi.getStatus).mockResolvedValue({ configured: true, provider: 'anthropic' });
+
+    renderHook(() => useChatAvailability(), { wrapper });
+
+    await waitFor(() => expect(chatApi.getStatus).toHaveBeenCalled());
+    expect(useUIStore.getState().rightPanel).toBe('chat');
+  });
+
+  /** The queue must not be closed by a chat answer. */
+  it('does not close a different panel', async () => {
+    useUIStore.setState({ chatSurfaceAvailable: true, rightPanel: 'queue' });
+    vi.mocked(chatApi.getStatus).mockResolvedValue({ configured: false, provider: null });
+
+    renderHook(() => useChatAvailability(), { wrapper });
+
+    await waitFor(() => expect(useUIStore.getState().chatSurfaceAvailable).toBe(false));
+    expect(useUIStore.getState().rightPanel).toBe('queue');
+  });
+});
