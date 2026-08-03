@@ -9,6 +9,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { ScrollContainerContext } from '../hooks/useScrollContainer';
 import { Loader2 } from 'lucide-react';
 import { useLastfmCallback } from '../hooks/useLastfmCallback';
+import { useChatAvailability } from '../hooks/useChatAvailability';
 import { useUIStore } from '../stores/uiStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -54,6 +55,9 @@ export function AppShell() {
   const showSettings = useUIStore((s) => s.showSettings);
   const showFullPlayer = useUIStore((s) => s.showFullPlayer);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
+  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
+  // Asks the server once and hides chat everywhere if there is no provider (ADR-0022 point 3).
+  useChatAvailability();
   const closeRightPanel = useUIStore((s) => s.closeRightPanel);
   const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowFullPlayer = useUIStore((s) => s.setShowFullPlayer);
@@ -137,7 +141,7 @@ export function AppShell() {
               <div className="flex-1 overflow-hidden min-h-0">
                 <Suspense fallback={<LazyLoadSpinner />}>
                   {rightPanel === 'queue' && <QueueView />}
-                  {rightPanel === 'chat' && (
+                  {rightPanel === 'chat' && chatAvailable && (
                     <ChatPanel
                       pendingMessage={pendingChatMessage}
                       onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
@@ -174,7 +178,7 @@ export function AppShell() {
             onExpandClick={() => setShowFullPlayer(true)}
             onQueueToggle={() => toggleRightPanel('queue')}
             isQueueOpen={rightPanel === 'queue'}
-            onChatToggle={() => toggleRightPanel('chat')}
+            onChatToggle={chatAvailable ? () => toggleRightPanel('chat') : undefined}
             isChatOpen={rightPanel === 'chat'}
             onSessionToggle={() => toggleRightPanel('session')}
             isSessionOpen={rightPanel === 'session'}
@@ -235,7 +239,7 @@ export function AppShell() {
         )}
 
         {/* Mobile chat overlay */}
-        {rightPanel === 'chat' && (
+        {rightPanel === 'chat' && chatAvailable && (
           <div className="md:hidden fixed inset-0 z-50 flex">
             <div className="absolute inset-0 bg-black/50" onClick={closeRightPanel} />
             <div className={`relative w-full max-w-md ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} flex flex-col pt-safe pb-safe`}>

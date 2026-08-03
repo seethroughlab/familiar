@@ -24,6 +24,7 @@ export function MobileBottomNav() {
   const showFullPlayer = useUIStore((s) => s.showFullPlayer);
   const rightPanel = useUIStore((s) => s.rightPanel);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
+  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
   const [showMore, setShowMore] = useState(false);
 
   // Hide when full player is open
@@ -58,6 +59,7 @@ export function MobileBottomNav() {
             </button>
           );
         })}
+        {chatAvailable && (
         <button
           onClick={() => toggleRightPanel('chat')}
           className={`flex flex-col items-center gap-0.5 py-2 px-4 min-w-[64px] transition-colors ${
@@ -69,6 +71,7 @@ export function MobileBottomNav() {
           <MessageSquare className="w-5 h-5" />
           <span className="text-[10px] font-medium">Chat</span>
         </button>
+        )}
         <button
           onClick={() => setShowMore(true)}
           className={`flex flex-col items-center gap-0.5 py-2 px-4 min-w-[64px] transition-colors ${
