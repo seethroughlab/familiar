@@ -79,7 +79,9 @@ def _serialize(mt: MixTape, progress: dict[str, Any] | None = None) -> MixTapeRe
         error_message=mt.error_message,
         duration_seconds=mt.duration_seconds,
         file_size_bytes=mt.file_size_bytes,
-        created_at=mt.created_at if mt.created_at else "",
+        # The column is non-nullable; the empty-string fallback that used to be here
+        # only made sense while this field was a `str`.
+        created_at=mt.created_at,
         completed_at=mt.completed_at if mt.completed_at else None,
         progress=progress,
     )
