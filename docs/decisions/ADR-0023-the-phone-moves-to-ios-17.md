@@ -9,9 +9,18 @@ Implementation:
   `Artwork.legacyEmbedded` with its `#available` — the last of which had been carrying an iOS 15
   path since before any of this.
 - Point 4 held: `NavigationStack` was not adopted, and the phone still hand-rolls its stack.
-- The chat composer's single-line fallback and `followsStreamingText` are **not** removed here. They
-  live in `familiar-apple` #55, which was still open — they become dead the moment it merges, and
-  removing them is a separate small change rather than a reason to bundle two branches.
+- The chat composer's single-line fallback and `followsStreamingText` were removed with
+  `familiar-apple` #55, which was rebased onto the raised floor before merging rather than landing
+  code the bump had already killed.
+- **Point 4's follow-up is done**: `familiar-apple` #58 adopted `NavigationStack(path:)` on the
+  phone, retiring `backBar` there. Two defects surfaced only by running it, neither a compile error:
+  the back button from an artist screen read *"Aphex Twin"* — the screen you were already on,
+  because `navigationTitle` still consulted `path.last`, which suits the Mac's swapping column and
+  not a stack; and a title attached outside a `NavigationStack` is not shown at all. The stack is
+  placed *inside* the transport's `VStack`, since a `NavigationStack` replaces its content on push
+  and a now-playing bar within it would vanish on opening an album.
+- macOS keeps its hand-rolled column and `backBar` on purpose — it has a permanent sidebar and no
+  pop gesture to restore.
 
 Extends [ADR-0021](ADR-0021-track-lists-on-the-mac-are-sortable-tables.md)
 
@@ -111,8 +120,10 @@ than the thing it avoids, in service of devices nobody owns.
   if the app were ever distributed more widely.
 - **Tradeoff.** The precedent cuts both ways: a floor that moves when an API earns it is a floor that
   will be asked to move again. Point 3 is the guard, and it is only as good as the next ADR.
-- **Follow-up:** Adopt `NavigationStack(path:)` on the phone, retiring `backBar` and the manual
-  `path.popLast()`. This is the payoff and it is deliberately not in this change.
+- **Follow-up, done in `familiar-apple` #58:** `NavigationStack(path:)` on the phone, retiring
+  `backBar` there. The phone's root list → section transition stays a state swap with `menuBar` as
+  its way back (ADR-0018), so only the detail screens became pushes — which leaves the phone with
+  two back affordances for now, worth revisiting on its own.
 - **Follow-up:** Reconsider `LibrarySidebar`'s and `LibraryView`'s header comments once
   `NavigationStack` lands — both explain a shape chosen because of the floor, and both will be
   describing history rather than a constraint.
