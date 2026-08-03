@@ -120,6 +120,15 @@ Not a disabled row and not an error after the user has typed — that is the "Li
 (`#76`) moved one step later. Accepting `0022` is also what makes `#76` reversible, since `0020`
 point 3's bar for a third bridge message is cleared once a native chat exists to receive the intent.
 
+**`ADR-0023` moves the phone to iOS 17** (accepted 2026-08-03). It extends `0021`, whose point 2 had
+said "iOS is untouched at 15". The prompt was three unavailable APIs while building chat on the
+phone; the finding was that the floor is why **the phone has no swipe-back at all** —
+`NavigationStack(path:)` is iOS 16, so `LibraryView` hand-rolls a `[BrowseRoute]` stack across ten
+push sites behind a custom back bar. 17 rather than 16 because 16 would leave the `onChange`
+compatibility branch alive for one API. **Adopting `NavigationStack` is deliberately not part of it**
+— that is the payoff, recorded as a follow-up, and a navigation rewrite should not ride along with a
+deployment-target bump.
+
 ## Key Directories
 
 ```

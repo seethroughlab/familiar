@@ -1,7 +1,17 @@
 # ADR-0023: The Phone Moves to iOS 17
 
-Status: proposed
+Status: accepted
 Date: 2026-08-03
+
+Implementation:
+- The bump and the cleanups it makes dead shipped together in `familiar-apple` #56: `Package.swift`,
+  both `IPHONEOS_DEPLOYMENT_TARGET` entries, the seven single-parameter `onChange` call sites, and
+  `Artwork.legacyEmbedded` with its `#available` — the last of which had been carrying an iOS 15
+  path since before any of this.
+- Point 4 held: `NavigationStack` was not adopted, and the phone still hand-rolls its stack.
+- The chat composer's single-line fallback and `followsStreamingText` are **not** removed here. They
+  live in `familiar-apple` #55, which was still open — they become dead the moment it merges, and
+  removing them is a separate small change rather than a reason to bundle two branches.
 
 Extends [ADR-0021](ADR-0021-track-lists-on-the-mac-are-sortable-tables.md)
 
