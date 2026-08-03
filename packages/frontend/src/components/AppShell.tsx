@@ -141,7 +141,7 @@ export function AppShell() {
               <div className="flex-1 overflow-hidden min-h-0">
                 <Suspense fallback={<LazyLoadSpinner />}>
                   {rightPanel === 'queue' && <QueueView />}
-                  {rightPanel === 'chat' && chatAvailable && (
+                  {rightPanel === 'chat' && (
                     <ChatPanel
                       pendingMessage={pendingChatMessage}
                       onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
@@ -239,7 +239,7 @@ export function AppShell() {
         )}
 
         {/* Mobile chat overlay */}
-        {rightPanel === 'chat' && chatAvailable && (
+        {rightPanel === 'chat' && (
           <div className="md:hidden fixed inset-0 z-50 flex">
             <div className="absolute inset-0 bg-black/50" onClick={closeRightPanel} />
             <div className={`relative w-full max-w-md ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} flex flex-col pt-safe pb-safe`}>
