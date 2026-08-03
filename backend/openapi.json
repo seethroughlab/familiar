@@ -6292,6 +6292,7 @@
             "type": "integer"
           },
           "earliest_scan": {
+            "format": "date-time",
             "title": "Earliest Scan",
             "type": "string"
           },

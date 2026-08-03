@@ -99,7 +99,7 @@ class PendingGroupResponse(BaseModel):
     duplicate_count: int
     upgrade_count: int
     downgrade_count: int
-    earliest_scan: str
+    earliest_scan: UTCDateTime
     tracks: list[PendingTrackResponse]
 
 
