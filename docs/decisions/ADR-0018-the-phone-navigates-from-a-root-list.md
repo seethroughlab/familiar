@@ -1,11 +1,25 @@
 # ADR-0018: The Phone Navigates From a Root List
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-02
 
 Extends [ADR-0012](ADR-0012-favorites-are-a-collection-not-a-library-section.md) and
 [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
+
+Implementation:
+- Accepted 2026-08-02, shipped on `familiar-apple` `feat/phone-root-list` (#44) and confirmed on the
+  device. `LibraryRoot` gained a `.menu` case rather than the view gaining a `Bool` — and the
+  exhaustive `switch` earned its keep, breaking both macOS branches at compile time instead of
+  silently rendering the wrong column.
+- Point 3's counts arrive only once a section's store has loaded, so the list is sparser on a cold
+  launch than a minute later. Judged acceptable in use; a placeholder read worse.
+- Playlists shows no count: that endpoint returns them all rather than paging, so there is no total
+  to display without counting the list.
+- Point 5's cost — a tap to reach Tracks — was accepted in use rather than merely on paper. Its
+  follow-up (remembering the last destination) is still open.
+- The Collections screen went with it, as point 4 anticipated. `collectionsSummary` was deleted in
+  the same change.
 
 ## Context
 
