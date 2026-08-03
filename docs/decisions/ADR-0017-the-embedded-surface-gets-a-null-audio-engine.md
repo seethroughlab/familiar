@@ -14,11 +14,22 @@ Implementation:
 - Its first follow-up was done *before* acceptance rather than after, and changed the argument for
   this ADR rather than the decision — see the Context section on what the fix did and what survived
   it.
-- Point 5's bridge exists only on the page side so far: `services/embedBridge.ts` posts the play
-  intent, and nothing receives it yet. That is deliberate — the intent being dropped is the correct
-  failure until the Swift half lands, and it is the exact case the null engine makes inert.
-- Not yet built: the `WKWebView` host, the `WKScriptMessageHandler` that receives the intent, and
-  points 3's native "unavailable" state — all of them `familiar-apple` work under ADR-0016.
+- Point 5's bridge shipped on the page side first: `services/embedBridge.ts` posted the play intent
+  with nothing receiving it. That was deliberate — a dropped intent is the correct failure until the
+  Swift half lands, and it is the exact case the null engine makes inert.
+- **The Swift half shipped** in `familiar-apple` #43, with the surface-marker check: the `WKWebView`
+  host, the `WKScriptMessageHandler` that receives the intent, and point 3's native "unavailable"
+  state. `familiar-apple` #53 brought the same surface to the phone under ADR-0019.
+- **Three defects since, all the same shape** — an affordance on the embedded page whose destination
+  was not there, failing silently rather than loudly:
+  - `familiar` #70: the virtualised track lists rendered zero rows, having no scroll container and
+    no bounded flex ancestor.
+  - `familiar` #74: pressing a track in "Unheard in Your Library" posted no intent and spun forever.
+    `EmbedDiscover` wired the bridge to the `onPlayTrack` prop and `DiscoverTrackList` never calls it
+    — it drives `usePlayerStore` directly. Fixed at the store, where every play path converges, which
+    is the point this ADR makes about the null engine being a floor rather than a substitute.
+  - `familiar` #76: "Listening Ideas" did nothing, a curated prompt being a message for a chat this
+    surface does not mount. Removed rather than bridged; restored natively under ADR-0022 instead.
 
 ## Context
 

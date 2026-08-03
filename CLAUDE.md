@@ -85,21 +85,31 @@ and both depend on nothing, so they were the fastest visible wins once `0013` wa
 replaces the segmented picker and the Collections screen with one root list of destinations; `0019`
 opens that list's Discover row onto the same embedded surface the Mac uses. Neither reverses
 `ADR-0013` point 2 — every destination involved is a way of finding something to play, and the
-management surfaces stay off the phone. `0018` ships without Discover if `0019` is not accepted.
+management surfaces stay off the phone. Both shipped — `0018` in `familiar-apple` #44, `0019` in
+#53 — and the phone's Chat row followed under `0022`.
 
-Within `0016`, **Music Map comes before embedded Discover**: the two halves are independent, and the
-map is one self-contained screen against endpoints that already generate, while the embedding half
-carries point 4's rule that an embedded page must never construct a second audio engine.
+Within `0016`, Music Map shipped before embedded Discover (`familiar-apple` #41, then #43): the two
+halves were independent, and the map was one self-contained screen against endpoints that already
+generate, while the embedding half carried point 4's rule that an embedded page must never construct
+a second audio engine. **The map's interaction is still half-wired** — its footer advertises
+scroll-to-zoom that was never implemented, `zoomed(by:toward:)` is only reached through `stepped()`,
+and the drag gesture competes with click-to-focus.
 
-**`ADR-0017` (`accepted`, web half shipped) governs how embedded Discover boots.** It extends `0016`. It began
+**`ADR-0017` (`accepted`, shipped both sides) governs how embedded Discover boots.** It extends `0016`. It began
 by recording that point 4's conclusion — forbid playback, and no second engine is constructed — did
 not hold, because seven capability helpers constructed one without playing anything. That cause has
 since been fixed, and the ADR records both that and why it still stands: **Discover itself plays
 music** (`DiscoverTrackList` drives `playerStore`), so an embedded copy has real construction paths,
 and the bridge has to catch every one. The **null audio engine** on its own entry point is what makes
-a missed intent inert rather than a second engine. The web half is built — `/embed` serves its own
-document registering the null engine. What remains is `familiar-apple`: the `WKWebView`, the
-`WKScriptMessageHandler` that receives the play intent, and the native "unavailable" state.
+a missed intent inert rather than a second engine. Both halves are built: `/embed` serves its own
+document registering the null engine, and `familiar-apple` #43 added the `WKWebView`, the
+`WKScriptMessageHandler` and the native "unavailable" state.
+
+**Three defects have come out of that surface since, all the same shape** — an affordance whose
+destination is not mounted, failing silently: zero-height virtualised lists (`familiar` #70), a play
+that posted no intent and spun forever (#74), and "Listening Ideas" with no chat to open (#76).
+Worth knowing before adding anything to the embedded page: check what the affordance reaches, not
+just that it renders. The ADR's own record carries the detail.
 
 **`ADR-0020`–`ADR-0021` are accepted and shipped (2026-08-02).** `0020` widens the embed bridge by one message so
 Discover's links open the app's own artist and album screens, and states the bar for a third. `0021`
@@ -109,16 +119,24 @@ server's sort allowlist. `0021`'s load-bearing point is that the Tracks list sor
 it pages at 50, and sorting the loaded page would repeat the library-shuffle defect on a surface
 where a wrong order looks like an order.
 
-**`ADR-0022` builds chat natively (accepted 2026-08-02).** It extends `0016` by applying that ADR's
-point 1 test to a third surface: chat is 965 lines against Discover's 2,828 and has had 6 commits in
+**`ADR-0022` builds chat natively** (accepted 2026-08-02; the Mac surface shipped in
+`familiar-apple` #54, with the phone in #55 and the web-app gate in `familiar` #78, both open at the
+time of writing). It extends `0016` by applying that ADR's point 1 test to a
+third surface: chat is 965 lines against Discover's 2,828 and has had 6 commits in
 six months against 15, so it lands on the **native** side rather than being embedded. The bridge
 settles it independently — a chat response carries `queued_tracks` and `playback_action`, so an
 embedded chat would need both, against `0020` point 2's cap of two. Its load-bearing point is point
 3: **the destination is absent when the active provider is not configured**, read from
-`GET /chat/status`, which already exists for that purpose and which the web app has never called.
+`GET /chat/status`, which already existed for that purpose and which nothing had ever called.
 Not a disabled row and not an error after the user has typed — that is the "Listening Ideas" defect
-(`#76`) moved one step later. Accepting `0022` is also what makes `#76` reversible, since `0020`
-point 3's bar for a third bridge message is cleared once a native chat exists to receive the intent.
+(`#76`) moved one step later. `familiar` #78 applies the same rule to the web app, where
+`chatApi.getStatus` had never been called at all.
+
+**"Listening Ideas" came back without growing the bridge.** The obvious route was a third message
+under `0020` point 3, whose bar a chat prompt clears once a native chat exists — but it was not
+needed: `/library/discover/prompts` carries the `library` tag and was already generated, so the
+native surface asks for the prompts itself and shows them in the chat's empty state, above the field
+that acts on them. **The bridge stays at two messages.** Do not add a third for this.
 
 ## Key Directories
 
@@ -182,6 +200,8 @@ docs/
 | IndexedDB schema | `packages/frontend/src/db/index.ts` |
 | Full player | `packages/frontend/src/components/FullPlayer/` |
 | Discovery | `packages/frontend/src/components/Discovery/` |
+| Chat (web) | `packages/frontend/src/components/Chat/`, `api/chat.ts` |
+| Embedded surface | `packages/frontend/src/renderEmbed.tsx`, `components/Embed/`, `services/embedBridge.ts`, `player/playbackInterceptor.ts` |
 | Smart playlists UI | `packages/frontend/src/components/SmartPlaylists/` |
 | Settings | `packages/frontend/src/components/Settings/` |
 | Docker setup | `docker/Dockerfile`, `docker/docker-compose.prod.yml`, `docker/start.sh` |
