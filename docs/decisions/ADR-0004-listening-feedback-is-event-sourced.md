@@ -158,4 +158,49 @@ Record listening as **events**, and derive aggregates from them rather than only
   [ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md) depends on. History starts at
   the migration.
 - **Follow-up:** Decide the completion-ratio threshold for `skipped` empirically once data exists,
-  rather than fixing it by convention now.
+  rather than fixing it by convention now. **Blocked until roughly 2026-09-01 — see below.**
+
+**The data did not start accumulating when this shipped.** Until `familiar` #57 the web client
+delivered a play the moment listening crossed `min(duration / 2, 4 min)` and sent
+`completion_ratio` as measured at that instant, never revising it. A web play therefore landed at
+almost exactly 0.5 whether the listener heard half the track or all of it. Measured on the live
+database on 2026-08-01: **289 of 357 completed events sat in the 0.5–0.6 bucket**, against native
+rows correctly reading 0.95–1.00.
+
+Verified again on 2026-08-02, by day and context. Every context before 2026-08-01 shows completions
+averaging 0.42–0.50 — including `library`, because the web derives `context` from the queue source
+and sends `library` for a library queue exactly as the native app does. From 2026-08-01 the same
+context reads 0.972 and 1.000, and skips cluster at ≤0.1. Of 823 rows, **795 predate the fix**.
+
+Three consequences worth stating plainly, because the first is the one that would have gone
+unnoticed:
+
+1. **The clock restarted on 2026-08-01, not 2026-07-27.** A month of trustworthy data lands around
+   2026-09-01. This follow-up, ADR-0005's weight tuning, and `familiar` #53 all inherit that date.
+2. **The contaminated rows are excluded, not deleted** (`services/listening_feedback.py`:
+   `FEEDBACK_TRUSTWORTHY_SINCE`, `trustworthy_feedback_only`). `play_events` records no client and
+   `context` does not stand in for one, so the good native rows cannot be separated from the bad web
+   rows beside them; selecting on the ratio would be circular, since that is the variable being
+   measured. A date is the only separator that does not assume the answer, and it costs those native
+   rows. Deleting would also throw away rows that are still useful — see 3.
+3. **`outcome` is unreliable before the cutoff too, and skips are under-counted.** A track abandoned
+   at 55% was recorded as a completion at ~0.5 rather than as a skip. What survives is that rows
+   marked `skipped` or `rejected` describe real abandonments; they are an incomplete census rather
+   than a wrong one. `ambient._negative_signal` counts exactly those two outcomes over a rolling
+   90-day window, so **the live recommender was never poisoned** — it has been running on a slightly
+   weak negative signal, which heals as the window passes the cutoff (around 2026-10-30).
+
+Volume in the clean window, as of 2026-08-02: **28 events across 26 distinct tracks over two days**.
+At that rate a month yields roughly 400 events — enough to place a completion-ratio threshold, thin
+for ADR-0005's weight tuning, which may want longer or a narrower first pass.
+
+- **Follow-up:** `play_events` records no client, which is the only reason the good native rows from
+  before the cutoff had to be discarded with the bad web ones. A nullable `client` column, sent by
+  all three clients, would make the next contamination separable instead of fatal to a whole window.
+  Cheap now, worthless applied retroactively.
+- **Follow-up:** Whether the web client still reports at all is **unverified**. Every row since the
+  cutoff carries `context = 'library'`, which is what the native app hardcodes; the web's other
+  contexts (`other`, `null`, `playlist`) stop on 2026-07-31. That is equally consistent with nobody
+  having used the web app since, and cannot be told apart from the rows alone — which is the
+  preceding follow-up restated as a live question. Settle it by playing one track in the web app and
+  looking for a non-`library` context, not by reasoning about the data.
