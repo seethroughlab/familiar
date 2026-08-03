@@ -75,9 +75,18 @@ const MOCK_NO_TRACKS_RESPONSE = createMockSSEResponse([
 
 /** Open the chat panel (hidden by default behind a toggle button) */
 async function openChatPanel(page: Page) {
-  const chatButton = page.locator('button[aria-label*="chat" i]').first();
+  const chatButton = chatToggle(page);
+  // Waits rather than clicking straight away: the toggle only exists once `/chat/status`
+  // has answered, so on a slow run it appears a moment after the page does. Clicking the
+  // first match immediately made every test in this file race that request.
+  await chatButton.waitFor({ state: 'visible', timeout: 15000 });
   await chatButton.click();
   await getChatInput(page).waitFor({ timeout: 5000 });
+}
+
+/** The player-bar button that opens chat. Absent entirely when no provider is configured. */
+function chatToggle(page: Page) {
+  return page.locator('button[aria-label*="chat" i]').first();
 }
 
 /** Get the chat input element */
@@ -189,35 +198,36 @@ test.describe('AI Chat (Mocked)', () => {
     await expect(noTracksText).toBeVisible({ timeout: 15000 });
   });
 
-  test('chat shows disabled state when API is not configured', async ({ page }) => {
-    // Override the status mock to indicate not configured
+  /**
+   * With no provider configured there is **no way into chat at all** — not a disabled input and
+   * not a "configure me" notice inside a panel you can still open.
+   *
+   * This test used to assert the opposite, and it is the reason it changed: a surface that opens
+   * and then explains it cannot work is the defect ADR-0022 point 3 refuses. The user has already
+   * gone looking for chat by the time it says no.
+   */
+  test('there is no way into chat when no provider is configured', async ({ page }) => {
     await page.route('**/api/v1/chat/status', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ configured: false, provider: 'claude' }),
+        body: JSON.stringify({ configured: false, provider: null }),
       });
     });
 
-    // Reload page to pick up new mock
-    await page.reload();
-    await ensureProfile(page);
-    // Re-open chat panel, waiting for status response (fetched when panel opens)
     await Promise.all([
       page.waitForResponse('**/api/v1/chat/status'),
-      openChatPanel(page),
+      page.reload(),
     ]);
+    await ensureProfile(page);
 
-    // The chat input should be disabled or there's a configuration message
-    const chatInput = getChatInput(page);
-    const configureMessage = page.locator('text=/configure|api key|not configured|unavailable/i').first();
+    // The player bar has to be up, or "absent" would prove only that nothing had rendered.
+    await expect(page.locator('button[aria-label*="queue" i]').first()).toBeVisible({
+      timeout: 15000,
+    });
 
-    // Wait for either condition to be true (up to 5s for UI to reflect status)
-    const isInputDisabled = await chatInput.isDisabled({ timeout: 5000 }).catch(() => false);
-    const hasConfigMessage = await configureMessage.isVisible({ timeout: 5000 }).catch(() => false);
-
-    // Either input is disabled OR there's a config message
-    expect(isInputDisabled || hasConfigMessage).toBe(true);
+    await expect(chatToggle(page)).toHaveCount(0);
+    await expect(getChatInput(page)).toHaveCount(0);
   });
 
   test('queue updates when AI returns tracks', async ({ page }) => {

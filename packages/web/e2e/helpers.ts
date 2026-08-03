@@ -114,6 +114,9 @@ export async function openChatPanel(page: Page) {
   const desktopButton = page.locator('button[aria-label="Open chat"]');
   const mobileButton = page.locator('nav button:has-text("Chat")');
 
+  // Both toggles are absent until `/chat/status` says a provider is configured, and absent for
+  // good if it says otherwise. The 3s below is therefore waiting on a request, not on a render —
+  // and on a server with no provider this function correctly opens nothing.
   if (await desktopButton.isVisible({ timeout: 3000 }).catch(() => false)) {
     await desktopButton.click();
   } else if (await mobileButton.isVisible({ timeout: 2000 }).catch(() => false)) {
