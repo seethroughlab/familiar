@@ -224,6 +224,8 @@ export function HomeScreen() {
     setShowFullPlayer(true);
   };
 
+  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
+
   const handlePromptClick = (prompt: string) => {
     useUIStore.getState().triggerChat(prompt);
   };
@@ -350,6 +352,9 @@ export function HomeScreen() {
         );
 
       case 'prompts':
+        // Every card in here opens the chat panel, so without a provider the module is a row of
+        // suggestions that cannot be taken up (ADR-0022 point 3).
+        if (!chatAvailable) return null;
         return (
           <HomeCard
             key={moduleId}
@@ -570,6 +575,7 @@ export function HomeScreen() {
                 <Settings2 className="h-4 w-4" />
                 Customize
               </button>
+              {chatAvailable && (
               <button
                 onClick={() => useUIStore.getState().triggerChat('Help me rediscover my library.')}
                 className="inline-flex items-center gap-2 rounded-lg bg-purple-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-purple-400"
@@ -577,6 +583,7 @@ export function HomeScreen() {
                 <MessageSquare className="h-4 w-4" />
                 Ask Familiar
               </button>
+              )}
             </div>
           </div>
 
