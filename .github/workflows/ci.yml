@@ -642,13 +642,22 @@ jobs:
     name: E2E Tests (Playwright)
     # Pull requests only — see docker-build. It also depends on docker-build, which does
     # not run on push, so leaving it enabled would leave it permanently skipped anyway.
-    if: github.event_name != 'push'
+    #
+    # `!cancelled()` rather than the default: `needs` is kept purely to *order* these two on the
+    # self-hosted runner, which is also the NAS that serves music — running a Docker build and a
+    # browser suite at once is a bad neighbour. This job downloads nothing from docker-build and
+    # builds its own frontend and backend, so there is no reason for a flaky NAS network to decide
+    # whether the browser tests run.
+    if: ${{ github.event_name != 'push' && !cancelled() }}
     runs-on: [self-hosted, Linux]
     needs: [docker-build]
-    # Advisory only: this job only runs when docker-build succeeds, and
-    # docker-build is itself advisory due to NAS network flakiness. Don't
-    # let skipped/failed E2E mark CI red.
-    continue-on-error: true
+    # **Deliberately not `continue-on-error`.** It was, and the reason was sound: the job inherited
+    # docker-build's flakiness, so a NAS hiccup would have blocked unrelated merges. Decoupling the
+    # two above removes that reason, and the cost of keeping it had become concrete — the chat
+    # specs' `/chat/status` mock never worked in CI, seven of them failed for an unknown length of
+    # time, and nothing went red because nothing could. A suite that cannot fail quietly stops being
+    # true. If NAS flakiness starts blocking merges through *this* job rather than through
+    # docker-build, that is the signal to revisit, and it will be visible rather than silent.
     env:
       UV_HTTP_TIMEOUT: '120'
       NPM_CONFIG_FETCH_RETRIES: '5'
