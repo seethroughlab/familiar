@@ -4,6 +4,18 @@ Status: accepted
 
 Date: 2026-07-26
 
+Implementation:
+- Shipped: `services/ranking_profiles.py` carries the profiles, with `RADIO` at line 92 and the
+  registry at 121; ambient and radio both rank through it, and the negative signal from ADR-0004
+  arrives via `ambient._negative_signal`.
+- Recorded late, on 2026-08-02. The decision had been executed for weeks with no `Implementation:`
+  block, which is how it came to look unbuilt in a survey of the set.
+- **Both follow-ups below are blocked until roughly 2026-09-01**, and not for the reason the dates
+  suggest. ADR-0004's data did not begin accumulating usably until `familiar` #57 landed on
+  2026-08-01: 795 of the first 823 rows carry a completion ratio of ~0.5 by construction. Tuning
+  `RADIO` against them would fit the weights to a client bug. See ADR-0004's Implementation section
+  for the measurement and for `FEEDBACK_TRUSTWORTHY_SINCE`, which any tuning query must apply.
+
 Extends [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md).
 
 ## Context
