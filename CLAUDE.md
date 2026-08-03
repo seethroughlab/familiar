@@ -138,6 +138,15 @@ needed: `/library/discover/prompts` carries the `library` tag and was already ge
 native surface asks for the prompts itself and shows them in the chat's empty state, above the field
 that acts on them. **The bridge stays at two messages.** Do not add a third for this.
 
+**`ADR-0023` moves the phone to iOS 17** (accepted 2026-08-03). It extends `0021`, whose point 2 had
+said "iOS is untouched at 15". The prompt was three unavailable APIs while building chat on the
+phone; the finding was that the floor is why **the phone has no swipe-back at all** —
+`NavigationStack(path:)` is iOS 16, so `LibraryView` hand-rolls a `[BrowseRoute]` stack across ten
+push sites behind a custom back bar. 17 rather than 16 because 16 would leave the `onChange`
+compatibility branch alive for one API. **Adopting `NavigationStack` is deliberately not part of it**
+— that is the payoff, recorded as a follow-up, and a navigation rewrite should not ride along with a
+deployment-target bump.
+
 ## Key Directories
 
 ```
