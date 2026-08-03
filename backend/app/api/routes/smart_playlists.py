@@ -10,10 +10,10 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError, ValidationError, sanitize_error_for_client
+from app.api.schemas.common import UTCDateTime
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import ProfilePlayHistory
 from app.services.smart_playlists import SmartPlaylistService
-from app.utils.time import to_rfc3339
 
 router = APIRouter(prefix="/smart-playlists", tags=["smart-playlists"])
 
@@ -63,10 +63,10 @@ class SmartPlaylistResponse(BaseModel):
     order_direction: str
     max_tracks: int | None
     cached_track_count: int
-    last_refreshed_at: str | None
+    last_refreshed_at: UTCDateTime | None
     auto_download: bool = False
-    created_at: str
-    updated_at: str
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
 
 class SmartPlaylistTracksResponse(BaseModel):
@@ -89,10 +89,10 @@ def playlist_to_response(playlist: Any) -> SmartPlaylistResponse:
         order_direction=playlist.order_direction,
         max_tracks=playlist.max_tracks,
         cached_track_count=playlist.cached_track_count,
-        last_refreshed_at=to_rfc3339(playlist.last_refreshed_at) if playlist.last_refreshed_at else None,
+        last_refreshed_at=playlist.last_refreshed_at if playlist.last_refreshed_at else None,
         auto_download=playlist.auto_download,
-        created_at=to_rfc3339(playlist.created_at),
-        updated_at=to_rfc3339(playlist.updated_at),
+        created_at=playlist.created_at,
+        updated_at=playlist.updated_at,
     )
 
 

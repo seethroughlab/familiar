@@ -22,8 +22,9 @@ from sqlalchemy import select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
+from app.api.schemas.common import UTCDateTime
 from app.db.models import PlayEvent, ProfilePlayHistory, Track
-from app.utils.time import to_naive_utc, to_rfc3339, utcnow
+from app.utils.time import to_naive_utc, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,7 @@ class TopTrackStat(BaseModel):
     artist: str | None = None
     play_count: int
     total_play_seconds: float
-    last_played_at: str | None = None
+    last_played_at: UTCDateTime | None = None
 
 
 class ProfilePlayStatsResponse(BaseModel):
@@ -356,7 +357,7 @@ async def get_play_stats(
             artist=track.artist,
             play_count=ph.play_count,
             total_play_seconds=ph.total_play_seconds,
-            last_played_at=to_rfc3339(ph.last_played_at) if ph.last_played_at else None,
+            last_played_at=ph.last_played_at if ph.last_played_at else None,
         )
         for ph, track in rows[:limit]
     ]

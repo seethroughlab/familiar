@@ -9,9 +9,9 @@ from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
+from app.api.schemas.common import UTCDateTime
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import ProfileFavorite, ProfilePlayHistory, Track
-from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/favorites", tags=["favorites"])
 class FavoriteTrackResponse(TrackResponse):
     """Track in favorites list — full track data plus favorited_at."""
 
-    favorited_at: str = ""
+    favorited_at: UTCDateTime | None = None
 
 
 class FavoritesListResponse(BaseModel):
@@ -106,7 +106,7 @@ async def list_favorites(
         resp = FavoriteTrackResponse.model_validate(
             track, from_attributes=True
         )
-        resp.favorited_at = to_rfc3339(favorite.favorited_at)
+        resp.favorited_at = favorite.favorited_at
         if track.id in play_history_map:
             ph = play_history_map[track.id]
             resp.last_played_at = ph.last_played_at

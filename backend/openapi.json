@@ -2876,6 +2876,7 @@
         "description": "AI-generated listening suggestions.",
         "properties": {
           "generated_at": {
+            "format": "date-time",
             "title": "Generated At",
             "type": [
               "string",
@@ -3731,6 +3732,14 @@
               "null"
             ]
           },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "disc_number": {
             "title": "Disc Number",
             "type": [
@@ -3746,9 +3755,12 @@
             ]
           },
           "favorited_at": {
-            "default": "",
+            "format": "date-time",
             "title": "Favorited At",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "features": {
             "$ref": "#/components/schemas/TrackFeaturesResponse"
@@ -5781,6 +5793,7 @@
             ]
           },
           "completed_at": {
+            "format": "date-time",
             "title": "Completed At",
             "type": [
               "string",
@@ -5788,6 +5801,7 @@
             ]
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -6432,6 +6446,7 @@
             ]
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -6966,6 +6981,7 @@
             "type": "boolean"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -7003,6 +7019,7 @@
             "type": "array"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           }
@@ -7063,6 +7080,7 @@
             "type": "boolean"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -7097,6 +7115,7 @@
             "type": "integer"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           }
@@ -7295,6 +7314,7 @@
             ]
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -7351,6 +7371,7 @@
         "description": "Response model for a proposed change.",
         "properties": {
           "applied_at": {
+            "format": "date-time",
             "title": "Applied At",
             "type": [
               "string",
@@ -7366,6 +7387,7 @@
             "type": "number"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -8766,6 +8788,7 @@
             "type": "integer"
           },
           "created_at": {
+            "format": "date-time",
             "title": "Created At",
             "type": "string"
           },
@@ -8781,6 +8804,7 @@
             "type": "string"
           },
           "last_refreshed_at": {
+            "format": "date-time",
             "title": "Last Refreshed At",
             "type": [
               "string",
@@ -8818,6 +8842,7 @@
             "type": "array"
           },
           "updated_at": {
+            "format": "date-time",
             "title": "Updated At",
             "type": "string"
           }
@@ -9617,6 +9642,7 @@
             "type": "string"
           },
           "last_played_at": {
+            "format": "date-time",
             "title": "Last Played At",
             "type": [
               "string",
@@ -9936,6 +9962,7 @@
             "type": "string"
           },
           "last_played_at": {
+            "format": "date-time",
             "title": "Last Played At",
             "type": [
               "string",
@@ -10502,6 +10529,14 @@
           },
           "artist": {
             "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
             "type": [
               "string",
               "null"

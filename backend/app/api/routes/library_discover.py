@@ -20,6 +20,7 @@ from app.services.llm.providers import get_provider
 from app.services.recommendations import RecommendationsService
 from app.services.redis_client import get_redis
 from app.utils.time import utcnow
+from app.api.schemas.common import UTCDateTime
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class CuratedPromptsResponse(BaseModel):
     """AI-generated listening suggestions."""
 
     prompts: list[CuratedPrompt]
-    generated_at: str | None = None
+    generated_at: UTCDateTime | None = None
 
 
 @router.get("/discover/prompts", response_model=CuratedPromptsResponse)
@@ -214,7 +215,7 @@ Respond with ONLY a JSON array, no other text:
             if isinstance(p, dict) and "prompt" in p
         ][:6]
 
-        generated_at = utcnow().isoformat()
+        generated_at = utcnow()
         response = CuratedPromptsResponse(prompts=prompts, generated_at=generated_at)
 
         # Cache in Redis (4 hours)
