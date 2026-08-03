@@ -13,6 +13,17 @@ export default defineConfig({
     baseURL: process.env.BASE_URL || 'http://localhost:4400',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // CI builds the app and serves `dist/` from the backend, so the PWA service worker is
+    // registered — locally these run against the dev server, where it is not. `page.route` does not
+    // intercept requests a service worker handles, and Workbox's runtime caching handles **GET**s,
+    // so a mocked GET silently reached the real backend while a mocked POST did not.
+    //
+    // That asymmetry hid itself until a GET started mattering: the chat specs' `/chat/status` mock
+    // had never applied in CI, and nobody noticed while the chat toggle was unconditional. Once the
+    // toggle depended on that endpoint, CI's provider-less backend answered "not configured", the
+    // toggle correctly disappeared, and seven specs failed against an app that was behaving exactly
+    // as designed.
+    serviceWorkers: 'block',
   },
   projects: [
     {
