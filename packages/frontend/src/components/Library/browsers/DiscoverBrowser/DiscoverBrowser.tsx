@@ -20,6 +20,7 @@ import { queryKeys } from '../../../../api/queryKeys';
 import { STALE_TIME } from '../../../../api/queryDefaults';
 import type { BrowserProps } from '../../types';
 import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
+import { useUIStore } from '../../../../stores/uiStore';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
@@ -47,10 +48,13 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
     staleTime: STALE_TIME.LONG,
   });
 
+  // Generating these costs an LLM call (cached 4h server-side), so a surface that hides the
+  // section should not be asking for it either.
+  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
   const promptsQuery = useQuery({
     queryKey: queryKeys.curatedPrompts.all,
     queryFn: () => libraryApi.getCuratedPrompts(),
-    enabled: !isOffline,
+    enabled: !isOffline && chatAvailable,
     staleTime: STALE_TIME.STATIC, // 30 min client-side; server caches 4h
   });
 
