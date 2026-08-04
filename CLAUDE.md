@@ -91,9 +91,10 @@ management surfaces stay off the phone. Both shipped — `0018` in `familiar-app
 Within `0016`, Music Map shipped before embedded Discover (`familiar-apple` #41, then #43): the two
 halves were independent, and the map was one self-contained screen against endpoints that already
 generate, while the embedding half carried point 4's rule that an embedded page must never construct
-a second audio engine. **The map's interaction is still half-wired** — its footer advertises
-scroll-to-zoom that was never implemented, `zoomed(by:toward:)` is only reached through `stepped()`,
-and the drag gesture competes with click-to-focus.
+a second audio engine. **The map's interaction was half-wired and is now finished** — the footer had
+advertised a scroll-to-zoom nothing implemented, so `zoomed(by:toward:)` was reachable only through
+`stepped()`, and a 1pt drag threshold ate click-to-focus. Worth keeping from that: **the footer of a
+canvas is documentation, and nothing checked it against the gestures that existed.**
 
 **`ADR-0017` (`accepted`, shipped both sides) governs how embedded Discover boots.** It extends `0016`. It began
 by recording that point 4's conclusion — forbid playback, and no second engine is constructed — did

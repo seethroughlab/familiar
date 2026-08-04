@@ -26,6 +26,23 @@ import { useUIStore } from '../../../../stores/uiStore';
 import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
 import { usePreviewAudio } from '../../../../hooks/usePreviewAudio';
 
+// How many artists to ask for — the server's maximum.
+//
+// Not a threshold, a count: the server takes every artist with an analysed track, sorts by track
+// count and keeps the top slice (`embedding_map.py`), so what "makes the map" is wherever the
+// cut-off lands for a given library. On the reference library, 200 meant artists with 30+ tracks and
+// covered 12,365 of 26,396 tracks; 500 means 15+ and covers 18,715 — 47% to 71%, measured
+// 2026-08-04. The map was answering "where does this artist sit" for well under half of what anyone
+// would ask it about.
+//
+// 500 is the endpoint's own cap, and the server caches per (entity_type, limit), so both clients
+// asking for the same number is one Redis key rather than two computations.
+const MAP_ENTITY_LIMIT = 500;
+
+// The label threshold, and the map size it was judged against. See `labelZoom` below.
+const LABEL_TUNED_NODE_COUNT = 200;
+const LABEL_ZOOM_AT_TUNED_COUNT = 1.4;
+
 // Lens features in display order, with friendly labels. Only those actually
 // present in the data are shown in the picker.
 const LENS_OPTIONS: { key: string; label: string }[] = [
@@ -109,8 +126,8 @@ export function VibeMap({ onGoToArtist }: BrowserProps) {
 
   // Fetch global similarity map
   const { data, isLoading, error } = useQuery({
-    queryKey: ['library', 'vibe-map', 'artists', 200],
-    queryFn: () => libraryApi.getMusicMap({ entity_type: 'artists', limit: 200 }),
+    queryKey: ['library', 'vibe-map', 'artists', MAP_ENTITY_LIMIT],
+    queryFn: () => libraryApi.getMusicMap({ entity_type: 'artists', limit: MAP_ENTITY_LIMIT }),
     enabled: !isOffline,
     staleTime: STALE_TIME.LONG,
   });
@@ -147,6 +164,18 @@ export function VibeMap({ onGoToArtist }: BrowserProps) {
   const maxTrackCount = useMemo(() => {
     if (!data || data.nodes.length === 0) return 1;
     return Math.max(...data.nodes.map((n) => n.track_count));
+  }, [data]);
+
+  // The zoom past which every name is drawn, scaled to how many there are.
+  //
+  // 1.4 was judged by eye against a 200-artist map. Zooming by z spreads the points over z² the
+  // area, so holding labels-per-screen constant means scaling by the square root of the count —
+  // otherwise raising the limit to 500 draws two and a half times as many names in the same space,
+  // which is the grey rectangle the threshold exists to prevent.
+  const labelZoom = useMemo(() => {
+    const count = data?.nodes.length ?? 0;
+    if (count <= 0) return LABEL_ZOOM_AT_TUNED_COUNT;
+    return LABEL_ZOOM_AT_TUNED_COUNT * Math.sqrt(count / LABEL_TUNED_NODE_COUNT);
   }, [data]);
 
   // Measure container
@@ -308,8 +337,9 @@ export function VibeMap({ onGoToArtist }: BrowserProps) {
         ctx.stroke();
       }
 
-      // Labels for prominent / interesting nodes
-      if (zoom > 1.4 || isHovered || isSelected || isFocused || isNeighbor) {
+      // Labels for prominent / interesting nodes. The ones singled out are always named, at any
+      // zoom; the rest wait for there to be room, which depends on how many there are.
+      if (zoom > labelZoom || isHovered || isSelected || isFocused || isNeighbor) {
         ctx.font = `${isFocused ? 'bold ' : ''}12px system-ui, sans-serif`;
         ctx.fillStyle = isFocused ? '#ffffff' : isSelected ? '#22c55e' : '#a1a1aa';
         ctx.textAlign = 'center';
@@ -336,7 +366,8 @@ export function VibeMap({ onGoToArtist }: BrowserProps) {
     }
   }, [
     data, dimensions, zoom, dataToScreen, hovered, selectedArtists, focusedArtist,
-    adjacency, nodeById, lensFeature, showEdges, maxTrackCount, isLassoing, lassoStart, lassoEnd,
+    adjacency, nodeById, lensFeature, showEdges, maxTrackCount, labelZoom,
+    isLassoing, lassoStart, lassoEnd,
   ]);
 
   useEffect(() => {
