@@ -17,6 +17,27 @@ Implementation:
   `library_maps.py` caps at 200 and 500 on lines 58 and 73, and `packages/web/src/main.tsx:14` is
   the unconditional `registerEngineFactory` call that point 4 exists to contain.
 - Music Map first, being independent of the embedding half and much the lower risk of the two.
+- **The map's gestures were finished afterwards**, on `familiar-apple` branch
+  `feat/music-map-interaction`. It shipped with a footer advertising "pinch or scroll to zoom" and a
+  comment in the gesture code referring to "the scroll wheel below" — neither of which existed, so
+  the anchored `zoomed(by:toward:)` was reachable only through `stepped()`, which always holds the
+  centre. The map's most-reached-for gesture did nothing.
+
+  Point 3 claims a native map buys "real trackpad gestures" over an embedded one, and that claim was
+  the thing left unbuilt. It holds now: scrolling zooms toward the pointer, pinch does the same
+  toward the pinch (`MagnifyGesture` reports a location where the deprecated `MagnificationGesture`
+  did not), and the zoom curve is exponential so scrolling back returns to exactly the zoom you
+  started at.
+
+  Two defects came out with it. The pan threshold was **1pt**, inside the wobble of an ordinary
+  trackpad click, so a click that moved a pixel became a pan and the click-to-focus never happened —
+  intermittently, looking like a dropped event. And the hover was recomputed only when the *pointer*
+  moved, so zooming without moving the mouse left the tooltip naming the artist that used to be
+  underneath it.
+
+  **The lesson worth keeping is about the footer.** It documented three gestures, one of which had
+  never been written, and it had been on screen since the map shipped. A caption is a claim, and
+  nothing checks captions.
 
 ## Context
 
