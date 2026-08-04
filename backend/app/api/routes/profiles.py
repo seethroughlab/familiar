@@ -10,7 +10,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import DbSession, RequiredProfile
+from app.api.deps import DbSession, RequiredProfile, release_connection
 from app.api.exceptions import (
     NotFoundError,
     PayloadTooLargeError,
@@ -279,6 +279,9 @@ async def get_avatar(
     avatar_file = PROFILES_DIR / f"{profile_id}.jpg"
     if not avatar_file.exists():
         raise NotFoundError("Avatar file not found")
+
+    # See `release_connection`: the file is found, the profile is no longer needed.
+    await release_connection(db)
 
     return FileResponse(
         avatar_file,

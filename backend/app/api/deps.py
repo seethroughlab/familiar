@@ -38,16 +38,48 @@ profile_header = APIKeyHeader(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Get an async database session with proper transaction handling."""
+    """Get an async database session with proper transaction handling.
+
+    A FastAPI ``yield`` dependency is held until the response has finished *sending*, not until
+    the handler returns. For an ordinary JSON response those are the same moment. For a file or a
+    stream they are not, and the difference is a database connection pinned for the length of a
+    download.
+
+    That is not hypothetical: on 2026-08-02 a bulk download of 1,720 favourites produced **2,416**
+    ``QueuePool limit of size 20 overflow 20 reached, connection timed out, timeout 30.00`` errors,
+    and the client stored 834 of the resulting 500 bodies as ``.mp3`` files. Every streaming
+    endpoint needs one connection for a metadata query and none at all for the transfer.
+
+    So a handler may call :func:`release_connection` once it has what it needs, and this commits
+    only if the session is still in a transaction. Without that check the commit here would take a
+    fresh connection from the pool at the *end* of the stream — reintroducing the problem at the
+    other end of the response.
+    """
     async with async_session_maker() as session:
         try:
             yield session
-            await session.commit()
+            if session.in_transaction():
+                await session.commit()
         except Exception:
             await session.rollback()
             raise
         finally:
             await session.close()
+
+
+async def release_connection(db: AsyncSession) -> None:
+    """Return this request's database connection to the pool before a long response body.
+
+    Call once the handler has read everything it needs from the database and is about to return a
+    ``FileResponse`` or ``StreamingResponse``. After this the session is inert: reading a lazy
+    relationship would begin a new transaction and take another connection, which is exactly what
+    this exists to avoid, so read what you need into plain values first.
+
+    Safe to call on a session that other dependencies also hold — ``get_current_profile`` and
+    ``require_profile`` resolve through the same cached session, and a ``Profile`` already loaded
+    stays usable for its plain attributes.
+    """
+    await db.close()
 
 
 async def get_current_profile(

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, TranscodeError, ValidationError
 from app.db.models import Track
 from app.services.artwork import compute_album_hash, get_artwork_path
@@ -103,9 +103,23 @@ async def stream_track(
         logger.warning("Audio file missing: track_id=%s path=%s", track_id, file_path)
         raise NotFoundError("Audio file not found")
 
+    # Everything the response needs is now a plain value, so the connection can go back.
+    #
+    # **This is the endpoint that exhausted the pool.** A `yield` dependency is held until the
+    # response finishes *sending*, so before this line every in-flight download pinned a connection
+    # for the whole transfer — one per concurrent download, against a pool of 40. Bulk-downloading
+    # 1,720 favourites on 2026-08-02 produced 2,416 `QueuePool limit ... timed out` errors, and the
+    # Mac client stored 834 of the resulting 500 bodies as `.mp3`.
+    #
+    # Read `track` into locals *first*: after this, touching a lazy attribute would begin a new
+    # transaction and take another connection.
+    needs_transcode = track.needs_transcode
+    codec = track.codec
+    await release_connection(db)
+
     # Transcode tracks with browser-unsupported codecs
-    if track.needs_transcode:
-        logger.info("Transcoding (unsupported codec=%s) track_id=%s", track.codec, track_id)
+    if needs_transcode:
+        logger.info("Transcoding (unsupported codec=%s) track_id=%s", codec, track_id)
         return await _get_or_transcode(track_id, file_path, request)
 
     # Transcode formats that browsers can't natively decode
@@ -252,6 +266,11 @@ async def get_track_artwork(
         # Check again
         if not artwork_path.exists():
             raise NotFoundError("No artwork available")
+
+    # Artwork is small, but this endpoint is called once per visible row — a library grid asks for
+    # dozens at a time, so holding a connection through each is the pool problem in miniature.
+    # See `release_connection`.
+    await release_connection(db)
 
     # Stream the artwork file
     def stream_artwork() -> Iterator[bytes]:
