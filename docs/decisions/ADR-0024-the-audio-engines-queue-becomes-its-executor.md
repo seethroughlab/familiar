@@ -1,6 +1,6 @@
 # ADR-0024: The Audio Engine's Queue Becomes Its Executor
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-04
 
