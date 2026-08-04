@@ -1,6 +1,6 @@
 # ADR-0025: The Phone Gets a Settings Destination
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-04
 
