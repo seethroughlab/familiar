@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.api.deps import DbSession, RequiredProfile
+from app.api.deps import DbSession, RequiredProfile, release_connection
 from app.api.exceptions import (
     ConflictError,
     NotFoundError,
@@ -240,8 +240,14 @@ async def download_mixtape(
         raise NotFoundError("Bundle file missing on disk")
 
     safe = "".join(c if c.isalnum() or c in " -_." else "_" for c in mixtape.name).strip() or "Mixtape"
+    # Read into locals above, then hand the connection back: a mixtape bundle is a large zip, and
+    # holding a connection for the length of that download is what exhausted the pool on the stream
+    # endpoint. See `release_connection`.
+    bundle_path = mixtape.bundle_path
+    await release_connection(db)
+
     return FileResponse(
-        path=mixtape.bundle_path,
+        path=bundle_path,
         media_type="application/zip",
         filename=f"{safe}.zip",
     )

@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from app.api.deps import DbSession
+from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
 from app.db.models import Track
 from app.services.video import get_video_service
@@ -203,6 +203,11 @@ async def stream_video(
         raise NotFoundError("No video available")
 
     file_size = video_path.stat().st_size
+
+    # Nothing below reads the database, so the connection goes back before the body is sent.
+    # A `yield` dependency otherwise lives until the response *finishes*, which for a video is the
+    # length of the video. See `release_connection`.
+    await release_connection(db)
 
     async def stream_video_file() -> AsyncIterator[bytes]:
         with open(video_path, "rb") as f:
