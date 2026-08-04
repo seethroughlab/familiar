@@ -23,7 +23,13 @@ the app as the bulk of the job. It is not. Compiled with `-strict-concurrency=co
 |---|---|---|
 | `FamiliarKit` — `NativeAudioEngine.swift` | 1 | **74** |
 | `FamiliarKit` — everything else | 42 | 1 |
+| `FamiliarAPI` | 2 | 2 |
 | the app target (`App/`) | 50 | 5 |
+
+*(The `FamiliarAPI` row was missing from this table when the ADR was written: the
+first count was taken from an incremental build in which that target was not
+recompiled. Corrected while carrying out point 5, which is when a stale figure
+would otherwise have been mistaken for finished work.)*
 
 `LibraryView` has **two**, both the same thing: a synchronous nonisolated context calling two
 `@MainActor` statics. The other three are one `Any` that is not `Sendable` (`SmartPlaylistDraft`),
