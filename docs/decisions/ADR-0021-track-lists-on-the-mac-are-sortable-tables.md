@@ -8,7 +8,9 @@ Extends [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
 
 Implementation:
 - Accepted 2026-08-02. Server half on `familiar` #72, the Tracks table on `familiar-apple` #50.
-  Point 2's floor bump to macOS 14 shipped with it; iOS is untouched at 15.
+  Point 2's floor bump to macOS 14 shipped with it; iOS is untouched at 15 — and has since moved to
+  17 under [ADR-0023](ADR-0023-the-phone-moves-to-ios-17.md), for reasons of its own. The Mac's floor
+  moved again, to **14.4**, when point 7's rollout needed conditional columns; see below.
 - Point 4's `playCount` and `dateAdded` are live and verified against the real library — sorting by
   plays descending returns 42, 38, 35. A latent defect was fixed alongside: the play-history join
   was added only for `lastPlayed` *and* only when a profile existed, while the ordering column was
@@ -19,9 +21,65 @@ Implementation:
   response only when `include_features` is set, which this list does not request. A column that
   renders blank on every row while its header sorts is worse than an absent one — it reads as "the
   library has no tempo data". Filling them is a schema change and a query change respectively.
-- Point 7's rollout to the other six lists has not happened yet; only Tracks is a `Table`. They hold
-  their rows whole, so they sort on-device and need none of the store work Tracks required.
-- Not yet exercised: clicking a header. The server round-trip is untested in the running app.
+- **The two absent columns are filled**, on `familiar-apple` branch `feat/adr-0021-columns`.
+  `created_at` reached `TrackResponse` in `familiar` #82 and `LibraryStore` now asks for
+  `include_features`, so the table draws all seventeen of `TrackColumns.all` plus the title. `#` and
+  `format` came with them: both were in the vocabulary and on `TrackRowValue` from the start and
+  simply were not drawn, so the table and the vocabulary now agree exactly.
+
+  Features are requested unconditionally rather than tracked against which columns are visible. A
+  page is fifty rows and the features are one `selectinload`; the alternative couples the store to a
+  display preference point 5 keeps on the device.
+
+  **The server round-trip is exercised, against the live 26,396-track library** — though through the
+  API rather than by clicking a header in the app. Sorting by `bpm` descending returns 215.3, 198.8,
+  198.8; by `energy`, 1.0, 1.0, 1.0; by `playCount`, 42, 38, 35. `created_at` spans 2026-01-25 to
+  2026-05-29, so **Added is a real spread rather than one repeated scan date** — worth checking,
+  because a column showing the same value on every row is the blank-column defect wearing a value.
+
+  Two shapes worth knowing. **Seventeen columns in one `Table` body defeats the type checker**,
+  which gives up with "unable to type-check this expression in reasonable time" rather than naming
+  the problem; they are four `@TableColumnBuilder` properties instead. And the comparator map is a
+  dictionary that asserts its keys are `TrackColumns.all`: a column with no entry sorts the rows on
+  screen and never re-queries, which on a list holding fifty of 26,396 is exactly the silent wrong
+  order this ADR exists to avoid. There is no app test bundle to catch it — `swift test` compiles
+  the package and `App/Shared` is built only by the Xcode app targets — so it is asserted at run
+  time and compiled out of release.
+- **Point 7 is done** — album, artist, playlist, smart playlist, favorites and downloads are all the
+  same `TrackTable`, on `familiar-apple` branch `feat/adr-0021-columns`. The phone keeps its rows.
+
+  **The lists are not equally rich, which the original note did not anticipate.** `AlbumTrack`
+  carries five fields and `ArtistTrack` six, against `TrackResponse`'s twenty — the artist and album
+  are the page you are already on, so the endpoints do not repeat them per track. A table offering
+  every column everywhere would draw eleven blank ones on an album screen, so `TrackListKind` records
+  what each list can fill *and* where it sorts, in `FamiliarKit` with 11 tests. Point 3's rule now
+  follows from that value rather than from each call site.
+
+  Three things came out of the rollout:
+
+  - **A playlist can hold the same track twice**, so a row's identity is its membership rather than
+    its track — keyed by track id, `Table` collapses the two rows. Playing the second copy now
+    starts there rather than at the first, by counting the occurrence.
+  - **`FavoriteTrack` was discarding most of `/favorites`**: four tags out of twenty fields, so the
+    screen whose questions are "when did I add this" and "how often do I play it" could answer
+    neither. Widened at its one mapping site.
+  - **Downloads needed two columns nothing else has** — size and download date are facts about this
+    device rather than about a track. They are offered to that list alone, are not server-sortable,
+    and a test keeps them away from the list that sorts on the server. Without them a table would
+    have been a worse version of the rows it replaced, which is worth stating: point 7's "one table
+    component" does not mean one column set.
+
+  **The Mac's floor moves 14.0 → 14.4**, refining point 2 rather than reversing it. `if` inside a
+  `TableColumnBuilder` is 14.4, and so is `TableColumnForEach` — with a 14.0 floor the column set
+  must be known statically, which means a table per list shape or drawing all seventeen columns
+  everywhere and hiding the empty ones. The app has never been released and 14.4 is from March 2024.
+- **One shared `TableColumnCustomization` across tables with different column sets holds**, verified
+  in the running app on 2026-08-04. The doubt was real enough to be worth writing down: point 7 wants
+  one preference across every list, nothing documents what the system does with ids a table did not
+  build, and the failure would have been visiting a two-column album screen quietly emptying the
+  library's column layout. It does not — columns turned on for Tracks survive a detour through album
+  and artist tables. So point 7 stands as written, and the fallback of a storage key per list is not
+  needed.
 
 ## Context
 
