@@ -19,9 +19,35 @@ Implementation:
   response only when `include_features` is set, which this list does not request. A column that
   renders blank on every row while its header sorts is worse than an absent one — it reads as "the
   library has no tempo data". Filling them is a schema change and a query change respectively.
+- **The two absent columns are filled**, on `familiar-apple` branch `feat/adr-0021-columns`.
+  `created_at` reached `TrackResponse` in `familiar` #82 and `LibraryStore` now asks for
+  `include_features`, so the table draws all seventeen of `TrackColumns.all` plus the title. `#` and
+  `format` came with them: both were in the vocabulary and on `TrackRowValue` from the start and
+  simply were not drawn, so the table and the vocabulary now agree exactly.
+
+  Features are requested unconditionally rather than tracked against which columns are visible. A
+  page is fifty rows and the features are one `selectinload`; the alternative couples the store to a
+  display preference point 5 keeps on the device.
+
+  **The server round-trip is exercised, against the live 26,396-track library** — though through the
+  API rather than by clicking a header in the app. Sorting by `bpm` descending returns 215.3, 198.8,
+  198.8; by `energy`, 1.0, 1.0, 1.0; by `playCount`, 42, 38, 35. `created_at` spans 2026-01-25 to
+  2026-05-29, so **Added is a real spread rather than one repeated scan date** — worth checking,
+  because a column showing the same value on every row is the blank-column defect wearing a value.
+
+  Two shapes worth knowing. **Seventeen columns in one `Table` body defeats the type checker**,
+  which gives up with "unable to type-check this expression in reasonable time" rather than naming
+  the problem; they are four `@TableColumnBuilder` properties instead. And the comparator map is a
+  dictionary that asserts its keys are `TrackColumns.all`: a column with no entry sorts the rows on
+  screen and never re-queries, which on a list holding fifty of 26,396 is exactly the silent wrong
+  order this ADR exists to avoid. There is no app test bundle to catch it — `swift test` compiles
+  the package and `App/Shared` is built only by the Xcode app targets — so it is asserted at run
+  time and compiled out of release.
 - Point 7's rollout to the other six lists has not happened yet; only Tracks is a `Table`. They hold
-  their rows whole, so they sort on-device and need none of the store work Tracks required.
-- Not yet exercised: clicking a header. The server round-trip is untested in the running app.
+  their rows whole, so they sort on-device and need none of the store work Tracks required. **They
+  do not hold the same columns**, though: `AlbumTrack` carries four fields and `ArtistTrack` six,
+  against `TrackResponse`'s twenty. A shared table must therefore be told what each list can fill,
+  or the album screen draws eleven empty columns.
 
 ## Context
 
