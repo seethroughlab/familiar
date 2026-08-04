@@ -73,11 +73,13 @@ Implementation:
   `TableColumnBuilder` is 14.4, and so is `TableColumnForEach` — with a 14.0 floor the column set
   must be known statically, which means a table per list shape or drawing all seventeen columns
   everywhere and hiding the empty ones. The app has never been released and 14.4 is from March 2024.
-- **Not verified in the running app**: whether one `TableColumnCustomization` shared across tables
-  with different column sets keeps the ids a given table does not build. Point 5 wants one preference
-  across every list, and the risk is that visiting an album — two columns — prunes the library's
-  layout. Worth watching on first run; the fallback is a key per list, at the cost of point 7's
-  "one column preference across them".
+- **One shared `TableColumnCustomization` across tables with different column sets holds**, verified
+  in the running app on 2026-08-04. The doubt was real enough to be worth writing down: point 7 wants
+  one preference across every list, nothing documents what the system does with ids a table did not
+  build, and the failure would have been visiting a two-column album screen quietly emptying the
+  library's column layout. It does not — columns turned on for Tracks survive a detour through album
+  and artist tables. So point 7 stands as written, and the fallback of a storage key per list is not
+  needed.
 
 ## Context
 
