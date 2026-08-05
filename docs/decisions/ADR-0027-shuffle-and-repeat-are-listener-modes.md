@@ -71,7 +71,7 @@ most common one.
    place the modes do not survive, and it is deliberate rather than an oversight.
 
 7. **The modes are not yet persisted anywhere.** They survive queue changes within a launch and
-   nothing more. Where they are stored across launches is [ADR-0028](ADR-0028-the-apple-client-writes-its-playback-session-back.md)'s
+   nothing more. Where they are stored across launches is [ADR-0028](ADR-0028-the-apple-clients-playback-session-is-local.md)'s
    decision, and deliberately not this one — this ADR is executable on its own and fixes the
    reported defect on its own.
 

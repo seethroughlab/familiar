@@ -74,7 +74,7 @@ it calls. None of them are preferences in the sense a listener would recognise.
 6. **Session state is device-authoritative with the server as a handoff mirror.** The playback queue
    is not a preference — it changes constantly, it has a conflict story, and it goes stale. Each
    device restores its own; the server session exists so another device can pick it up
-   ([ADR-0028](ADR-0028-the-apple-client-writes-its-playback-session-back.md)). The web client
+   ([ADR-0028](ADR-0028-the-apple-clients-playback-session-is-local.md)). The web client
    already works this way and is the reference implementation: IndexedDB `playerState` is
    authoritative and always written, and `reconcileWithServer` adopts the server copy only when it
    is newer.
