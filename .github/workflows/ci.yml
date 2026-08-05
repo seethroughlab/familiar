@@ -613,14 +613,30 @@ jobs:
           docker system prune -f || true
           df -h || true
 
+      # A *named* builder that outlives the job. Its layer cache lives in the
+      # buildkit container's own volume under /var/lib/docker — on disk, and
+      # updated in place, so nothing has to be exported and copied anywhere.
+      #
+      # This is what replaces `cache-to: type=local,mode=max`, which rewrote the
+      # entire 3.8G cache on every build — 5m03s of a 17m30s run measured on
+      # 2026-08-05, and paid in full even on docs-only PRs where not one layer
+      # changed.
+      #
+      # `cleanup: false` is what keeps it between runs. Note that "Clean up
+      # dangling resources" above removes *stopped* containers, so a builder
+      # that ever stops is recreated empty next run. That is survivable rather
+      # than costly because cache-from below still seeds it from disk.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          name: familiar-persistent
+          cleanup: false
 
       # The cache must live on disk, not under /tmp. /tmp on this runner is a
       # tmpfs (systemd's default, half of RAM) — a 3.8G cache there was a
-      # quarter of the box's 15.6G, and the rotate below briefly doubles that
-      # against a 7.8G cap. /opt/actions-runner is ext4 with 753G free and is
-      # owned by the runner user.
+      # quarter of the box's 15.6G. Nothing writes here any more, but the
+      # assert stays: this path silently becoming tmpfs would cost memory on
+      # the machine that also serves the music library.
       - name: Ensure buildx cache dir exists on disk
         run: |
           mkdir -p /opt/actions-runner/_cache
@@ -634,20 +650,26 @@ jobs:
           file: docker/Dockerfile
           push: false
           tags: familiar:test
-          # Persist buildx layer cache to a runner-local path so subsequent
-          # builds reuse pnpm install, apt-get, uv sync, torch wheels, etc.
-          # Without this, setup-buildx-action creates a new isolated builder
-          # every run and every layer is rebuilt from scratch.
+          # Read-only floor. The persistent builder above holds the live cache;
+          # this directory is a fixed snapshot that seeds it whenever the
+          # builder has been recreated, so losing the builder costs seconds
+          # rather than the ~60m a fully cold build takes. There is deliberately
+          # no cache-to: exporting is the 5m03s this change removes.
           cache-from: type=local,src=/opt/actions-runner/_cache/familiar-buildx
-          cache-to: type=local,dest=/opt/actions-runner/_cache/familiar-buildx-new,mode=max
 
-      - name: Rotate buildx cache
+      # Bound the builder's cache, which is the job the rotate used to do — the
+      # local exporter could not prune in place, so a full rewrite was the only
+      # way to drop stale layers. Pruning does it directly and incrementally.
+      #
+      # The flag is `--max-used-space`; buildx v0.33 on this runner has no
+      # `--keep-storage`, whatever older documentation says. Failure is reported
+      # rather than swallowed, because a prune that silently never runs looks
+      # exactly like one that works until the disk fills.
+      - name: Bound the builder cache
+        if: always()
         run: |
-          rm -rf /opt/actions-runner/_cache/familiar-buildx
-          if [ -d /opt/actions-runner/_cache/familiar-buildx-new ]; then
-            mv /opt/actions-runner/_cache/familiar-buildx-new \
-               /opt/actions-runner/_cache/familiar-buildx
-          fi
+          docker buildx prune --builder familiar-persistent --max-used-space=20GB -f \
+            || echo "::warning::buildx prune failed — the builder cache is unbounded"
 
   e2e-test:
     name: E2E Tests (Playwright)

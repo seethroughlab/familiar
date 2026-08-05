@@ -102,32 +102,47 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Deno - required by yt-dlp for YouTube JS challenge solving
 RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh
 
+# Create the non-root user here rather than at the end, because every COPY
+# below uses --chown and that needs the user to already exist. This ordering
+# is what keeps the venv out of a recursive chown — see the note further down.
+RUN useradd --create-home --shell /bin/bash familiar
+
 # Copy Python virtual environment from deps stage
-COPY --from=python-deps /app/.venv /app/.venv
+COPY --from=python-deps --chown=familiar:familiar /app/.venv /app/.venv
 
 # Copy backend application code
-COPY backend/app ./app
+COPY --chown=familiar:familiar backend/app ./app
 
 # Copy smoke test script for post-build verification
-COPY backend/scripts/smoke_test_clap.py ./scripts/smoke_test_clap.py
+COPY --chown=familiar:familiar backend/scripts/smoke_test_clap.py ./scripts/smoke_test_clap.py
 
 # Copy Alembic configuration
 # Note: migrations/ instead of alembic/ to avoid shadowing the alembic package
-COPY backend/alembic.ini ./
-COPY backend/migrations ./migrations
+COPY --chown=familiar:familiar backend/alembic.ini ./
+COPY --chown=familiar:familiar backend/migrations ./migrations
 
 # Copy built frontend
-COPY --from=frontend-builder /app/packages/web/dist ./static
+COPY --from=frontend-builder --chown=familiar:familiar /app/packages/web/dist ./static
 
 # Download silero-vad ONNX model (~2MB) for voice activity detection
 RUN mkdir -p /app/data/models \
     && curl -fsSL -o /app/data/models/silero_vad.onnx \
        https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
 
-# Create non-root user and directories
-RUN useradd --create-home --shell /bin/bash familiar \
-    && mkdir -p /data/music /data/art /data/videos /data/mixtapes /app/data \
-    && chown -R familiar:familiar /app /data
+# Runtime data directories.
+#
+# The recursive chown here deliberately covers only /data (empty at build time)
+# and /app/data (~2MB of models). Everything large under /app already arrived
+# owned by familiar via COPY --chown above, which costs nothing because the
+# ownership is set as the files are written.
+#
+# This step used to be `chown -R familiar:familiar /app /data`, and it took
+# 9m12s of a 17m30s CI build on 2026-08-05 — /app/.venv is a CPU torch build
+# with analysis extras, and walking it dominated the image. Do not reintroduce
+# a recursive chown over /app; add --chown to the COPY instead.
+RUN mkdir -p /data/music /data/art /data/videos /data/mixtapes /app/data \
+    && chown familiar:familiar /app /app/VERSION \
+    && chown -R familiar:familiar /data /app/data
 
 # Copy entrypoint script
 COPY docker/entrypoint.sh /entrypoint.sh
