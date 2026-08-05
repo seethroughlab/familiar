@@ -43,6 +43,52 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 #
 #   `outputs` is present as nine *operations* rather than as a tag, because nine of its
 #   twenty-four are zones — dead, unpersisted, and one of them unreachable (ADR-0031 point 2).
+# The surface, vendored here — and cross-checked against the real config whenever it is reachable.
+#
+# The Swift client's `openapi-generator-config.yaml` is the source of truth, but it lives in the
+# *other* repository, which a CI checkout of this one does not have beside it. Reading it and
+# raising when absent would fail every build; reading it and defaulting when absent would pass
+# vacuously on a repo the lint had quietly stopped checking. Neither is acceptable, so both happen:
+# this copy is what the lint scopes on, and when the real config *is* reachable the two are compared
+# and a mismatch fails.
+#
+# The limitation, stated rather than left to be discovered: **the cross-check does not run in CI**,
+# because the Apple repo is not checked out there. It runs for anyone working with both repos side
+# by side, which is where the surface actually gets edited. A second checkout in the workflow would
+# close that gap.
+VENDORED_TAGS = {
+    "tracks",
+    "library",
+    "playlists",
+    "smart-playlists",
+    "profiles",
+    "favorites",
+    "chat",
+    # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these directly — the
+    # whole point of ADR-0006 is that they carry no ranking code.
+    "queue",
+    # Management surfaces the Mac app gained (ADR-0013, generated per ADR-0014). Not on iOS, which
+    # ADR-0013 point 2 keeps on the listening path — but the generated client is shared by both
+    # targets, so iOS compiles these and never calls them.
+    "pending-review",
+    "proposed-changes",
+    "mixtapes",
+}
+
+# Casting (ADR-0031), by operation rather than by tag: nine of the twenty-four `outputs` operations
+# are zones — dead, unpersisted, and one of them unreachable — so the tag cannot be adopted whole.
+VENDORED_OPERATIONS = {
+    "outputs_list_outputs",
+    "outputs_discover_all_outputs",
+    "outputs_get_output",
+    "outputs_play_to_output",
+    "outputs_pause_output",
+    "outputs_resume_output",
+    "outputs_stop_output",
+    "outputs_seek_output",
+    "outputs_set_output_volume",
+}
+
 SWIFT_CLIENT_CONFIG = (
     Path(__file__).resolve().parents[3]
     / "familiar-apple"
@@ -52,36 +98,43 @@ SWIFT_CLIENT_CONFIG = (
 )
 
 
-def load_generated_surface() -> tuple[set[str], set[str]]:
-    """Tags and operationIds the Swift client generates, read from its config.
+def surface_disagreement() -> str | None:
+    """Whether the vendored surface still matches the Swift client's config.
 
-    Returns ``(tags, operation_ids)``. The generator unions its filter keys, so an operation is
-    in scope if *either* matches.
-
-    Raises rather than defaulting if the config cannot be read. A lint that quietly falls back to
-    "everything is out of scope" passes on a repo it has stopped checking, which is the failure
-    mode this whole change exists to remove.
+    Returns a description of the difference, or None when they agree — or when the config is not
+    reachable, which is the ordinary CI case and not a failure.
     """
     if not SWIFT_CLIENT_CONFIG.exists():
-        raise SystemExit(
-            f"Cannot find the Swift client config at {SWIFT_CLIENT_CONFIG}.\n"
-            "This lint scopes itself to what that file generates, so it cannot run without it.\n"
-            "If the Apple repo is not checked out beside this one, skip this lint rather than "
-            "letting it pass vacuously."
-        )
-
-    import yaml
+        return None
+    try:
+        import yaml
+    except ImportError:  # pragma: no cover - yaml is a dev dependency
+        return None
 
     config = yaml.safe_load(SWIFT_CLIENT_CONFIG.read_text()) or {}
     document_filter = config.get("filter") or {}
     tags = set(document_filter.get("tags") or [])
     operations = set(document_filter.get("operations") or [])
-    if not tags and not operations:
-        raise SystemExit(f"{SWIFT_CLIENT_CONFIG} declares no filter; refusing to guess the surface.")
-    return tags, operations
+
+    problems = []
+    if tags != VENDORED_TAGS:
+        problems.append(f"tags — only here {sorted(VENDORED_TAGS - tags)}, only there {sorted(tags - VENDORED_TAGS)}")
+    if operations != VENDORED_OPERATIONS:
+        problems.append(
+            f"operations — only here {sorted(VENDORED_OPERATIONS - operations)}, "
+            f"only there {sorted(operations - VENDORED_OPERATIONS)}"
+        )
+    if not problems:
+        return None
+    return (
+        f"The generated surface here disagrees with {SWIFT_CLIENT_CONFIG}:\n    "
+        + "\n    ".join(problems)
+        + "\n  One was edited without the other; the Swift config is the source of truth."
+    )
 
 
-GENERATED_SURFACE, GENERATED_OPERATIONS = load_generated_surface()
+GENERATED_SURFACE = VENDORED_TAGS
+GENERATED_OPERATIONS = VENDORED_OPERATIONS
 
 
 # Operations that are BOTH allowlisted as untyped AND inside the generated surface.
@@ -251,6 +304,11 @@ def _success_response(operation: dict[str, Any]) -> dict[str, Any] | None:
 
 def lint_openapi(schema: dict[str, Any]) -> list[str]:
     errors: list[str] = []
+
+    # Before anything else: if both repos are present and their idea of the generated surface has
+    # diverged, everything below is scoped against the wrong list and its verdict is meaningless.
+    if disagreement := surface_disagreement():
+        errors.append(disagreement)
     components = schema.get("components", {}).get("schemas", {})
 
     # The profile header must reach the schema. It is the only authentication there is, and it is
@@ -439,7 +497,8 @@ def main() -> int:
     print(
         f"OpenAPI lint OK: {operations} operations validated "
         f"({len(GENERATED_SURFACE)} tags + {len(GENERATED_OPERATIONS)} operations in the "
-        f"generated surface, read from {SWIFT_CLIENT_CONFIG.name}; "
+        f"generated surface, "
+        f"{'cross-checked against the Swift client' if SWIFT_CLIENT_CONFIG.exists() else 'vendored — the Swift client is not checked out beside this repo, so the cross-check did not run'}; "
         f"{len(ALLOWED_UNTYPED_OPERATIONS)} allowlisted for burn-down)"
     )
     return 0
