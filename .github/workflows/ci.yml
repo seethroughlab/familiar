@@ -616,6 +616,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # The cache must live on disk, not under /tmp. /tmp on this runner is a
+      # tmpfs (systemd's default, half of RAM) — a 3.8G cache there was a
+      # quarter of the box's 15.6G, and the rotate below briefly doubles that
+      # against a 7.8G cap. /opt/actions-runner is ext4 with 753G free and is
+      # owned by the runner user.
+      - name: Ensure buildx cache dir exists on disk
+        run: |
+          mkdir -p /opt/actions-runner/_cache
+          test "$(findmnt -no FSTYPE -T /opt/actions-runner/_cache)" != tmpfs
+
       - name: Build Docker image
         uses: docker/build-push-action@v6
         timeout-minutes: 55
@@ -628,14 +638,15 @@ jobs:
           # builds reuse pnpm install, apt-get, uv sync, torch wheels, etc.
           # Without this, setup-buildx-action creates a new isolated builder
           # every run and every layer is rebuilt from scratch.
-          cache-from: type=local,src=/tmp/familiar-buildx-cache
-          cache-to: type=local,dest=/tmp/familiar-buildx-cache-new,mode=max
+          cache-from: type=local,src=/opt/actions-runner/_cache/familiar-buildx
+          cache-to: type=local,dest=/opt/actions-runner/_cache/familiar-buildx-new,mode=max
 
       - name: Rotate buildx cache
         run: |
-          rm -rf /tmp/familiar-buildx-cache
-          if [ -d /tmp/familiar-buildx-cache-new ]; then
-            mv /tmp/familiar-buildx-cache-new /tmp/familiar-buildx-cache
+          rm -rf /opt/actions-runner/_cache/familiar-buildx
+          if [ -d /opt/actions-runner/_cache/familiar-buildx-new ]; then
+            mv /opt/actions-runner/_cache/familiar-buildx-new \
+               /opt/actions-runner/_cache/familiar-buildx
           fi
 
   e2e-test:
