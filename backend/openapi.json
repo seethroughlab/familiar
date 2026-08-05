@@ -14790,7 +14790,8 @@
     },
     "/api/v1/favorites/auto-download": {
       "get": {
-        "description": "Get the auto-download setting for favorites.",
+        "deprecated": true,
+        "description": "Get the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).\n\nThe setting moved to the client. Whether to keep 1,700 tracks offline depends on the device's\ndisk, and one boolean per profile meant a phone and a desktop could not disagree. This was the\nonly listener preference the server held; after the move it holds none.\n\nStill served, and still reads the stored value, because both clients call it exactly once per\nprofile to carry the old value across. Removing it would make that seed impossible and silently\nturn the feature off for anyone who had it on. It can go once every client has seeded \u2014 and\nnote that `familiar-apple` commits `openapi.json` verbatim, so removal there means regenerating\nthe Swift client in the same change.",
         "operationId": "favorites_get_favorites_auto_download",
         "responses": {
           "200": {
@@ -14865,7 +14866,8 @@
         ]
       },
       "put": {
-        "description": "Set the auto-download setting for favorites.",
+        "deprecated": true,
+        "description": "Set the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).\n\nNo shipping client writes here any more \u2014 the setting is device-local. Kept so an older build\nthat still writes is not met with a 404, and so the stored value stays a usable seed for a\ndevice that has not been updated yet.",
         "operationId": "favorites_set_favorites_auto_download",
         "requestBody": {
           "content": {
