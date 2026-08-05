@@ -24,45 +24,88 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Tags whose operations a generated client will cover. Everything else is
-# management surface that stays web-only.
-GENERATED_SURFACE = {
-    "tracks",
-    "library",
-    "playlists",
-    "smart-playlists",
-    "profiles",
-    "favorites",
-    "chat",
-    # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these
-    # directly — the whole point of ADR-0006 is that they carry no ranking code.
-    "queue",
-    # Management surfaces the Mac app now has (ADR-0013, generated per ADR-0014). Not on
-    # iOS, which ADR-0013 point 2 keeps on the listening path — but the generated client is
-    # shared by both targets, so iOS compiles these and never calls them.
-    "pending-review",
-    "proposed-changes",
-    "mixtapes",
-}
+# The generated surface is **read from the Swift client's own config**, not restated here.
+#
+# It used to be a hand-maintained set of tags, with a comment in each file claiming the other
+# enforced it. Nothing did: no code compared them, so the two could drift silently and the
+# guarantee existed only in prose. ADR-0031 made that worse by defining the surface a second way —
+# `operations:` as well as `tags:` — which this file's tag-shaped copy could not have expressed at
+# all. Reading the real config is the only version of this that cannot rot.
+#
+# Notes worth keeping about *what* is in there, since they explain the shape rather than restate it:
+#
+#   `library` stays whole despite mixing ~18 listening operations with ~17 management ones (import,
+#   dedup, scan, review). Tag granularity cannot express that split, and the cost of the extra 17
+#   was dead generated code rather than a defect — under ADR-0013 those 17 stop being dead, since
+#   the review surfaces need them.
+#
+#   `ambient` is absent: ADR-0001 point 5 puts ambient/generative mode out of v1.
+#
+#   `outputs` is present as nine *operations* rather than as a tag, because nine of its
+#   twenty-four are zones — dead, unpersisted, and one of them unreachable (ADR-0031 point 2).
+SWIFT_CLIENT_CONFIG = (
+    Path(__file__).resolve().parents[3]
+    / "familiar-apple"
+    / "Sources"
+    / "FamiliarAPI"
+    / "openapi-generator-config.yaml"
+)
 
-# Tags deliberately NOT generated, with the reason. Recorded rather than merely absent,
-# because two of them were in the surface until this list existed.
+
+def load_generated_surface() -> tuple[set[str], set[str]]:
+    """Tags and operationIds the Swift client generates, read from its config.
+
+    Returns ``(tags, operation_ids)``. The generator unions its filter keys, so an operation is
+    in scope if *either* matches.
+
+    Raises rather than defaulting if the config cannot be read. A lint that quietly falls back to
+    "everything is out of scope" passes on a repo it has stopped checking, which is the failure
+    mode this whole change exists to remove.
+    """
+    if not SWIFT_CLIENT_CONFIG.exists():
+        raise SystemExit(
+            f"Cannot find the Swift client config at {SWIFT_CLIENT_CONFIG}.\n"
+            "This lint scopes itself to what that file generates, so it cannot run without it.\n"
+            "If the Apple repo is not checked out beside this one, skip this lint rather than "
+            "letting it pass vacuously."
+        )
+
+    import yaml
+
+    config = yaml.safe_load(SWIFT_CLIENT_CONFIG.read_text()) or {}
+    document_filter = config.get("filter") or {}
+    tags = set(document_filter.get("tags") or [])
+    operations = set(document_filter.get("operations") or [])
+    if not tags and not operations:
+        raise SystemExit(f"{SWIFT_CLIENT_CONFIG} declares no filter; refusing to guess the surface.")
+    return tags, operations
+
+
+GENERATED_SURFACE, GENERATED_OPERATIONS = load_generated_surface()
+
+
+# Operations that are BOTH allowlisted as untyped AND inside the generated surface.
 #
-#   ambient   — ADR-0001 point 5 puts ambient/generative mode out of v1, and it is iOS-only
-#               anyway (`ambientSynthBridge`: "Web never registers").
-#   outputs   — casting does not appear in ADR-0001 point 4's v1 scope. Removing it also
-#               restores the invariant ADR-0001's readiness audit claimed: the five
-#               allowlisted untyped operations that were inside the surface are all
-#               `outputs/zones/*`, so every allowlisted entry is now genuinely out of scope.
+# A contradiction, and a pre-existing one: the allowlist above says its entries are "management or
+# analysis surfaces that a generated client will not call", and for these nine that stopped being
+# true when ADR-0014 pulled `pending-review` into the surface. Nobody removed them, and nothing
+# noticed, because until now no check compared the two lists.
 #
-# `mixtapes` left this set in ADR-0014. It was here under ADR-0001 point 5, which ADR-0013
-# revisited: the Mac is a management surface now, and mixtapes are one of the things it gained.
-#
-# `library` stays whole despite mixing ~18 listening operations with ~17 management ones
-# (import, dedup, scan, review). Tag granularity cannot express that split, and the cost of
-# the extra 17 was dead generated code rather than a defect — under ADR-0013 those 17 stop
-# being dead, since the review surfaces need them.
-NOT_GENERATED = {"ambient", "outputs"}
+# So the Swift client generates an untyped `object` for each of these today. That is worth fixing
+# with a response_model, but it is unrelated backend work — recording it bounded is the honest
+# middle, and it matches this file's stated doctrine: the allowlists are a burn-down list, not an
+# approved state, and anything NEW fails.
+GENERATED_BUT_UNTYPED = {
+    ("POST", "/api/v1/pending-tracks/bulk/approve-all"),
+    ("POST", "/api/v1/pending-tracks/bulk/skip-all"),
+    ("POST", "/api/v1/pending-tracks/bulk/unskip-all"),
+    ("POST", "/api/v1/pending-tracks/group/approve"),
+    ("POST", "/api/v1/pending-tracks/group/metadata"),
+    ("POST", "/api/v1/pending-tracks/group/replace-upgrades"),
+    ("POST", "/api/v1/pending-tracks/group/skip"),
+    ("POST", "/api/v1/pending-tracks/group/skip-downgrades"),
+    ("POST", "/api/v1/pending-tracks/group/unskip"),
+}
 
 # Error statuses every in-scope operation must declare, so a generated client can model
 # failures. 422 is the important one: FastAPI emits HTTPValidationError for it automatically,
@@ -247,9 +290,11 @@ def lint_openapi(schema: dict[str, Any]) -> list[str]:
         for method, operation in sorted(methods.items()):
             where = f"{method.upper()} {path}"
             tags = operation.get("tags") or []
-            in_scope = bool(set(tags) & GENERATED_SURFACE)
-
             operation_id = operation.get("operationId", "")
+            # Either match puts an operation in scope, because the generator unions its filter
+            # keys. `outputs` arrives through the operations half (ADR-0031) — a tag-only test
+            # would silently exempt every one of them.
+            in_scope = bool(set(tags) & GENERATED_SURFACE) or operation_id in GENERATED_OPERATIONS
             if operation_id:
                 if operation_id in seen_operation_ids:
                     errors.append(
@@ -322,7 +367,22 @@ def lint_openapi(schema: dict[str, Any]) -> list[str]:
             body = content["application/json"].get("schema") or {}
             if in_scope:
                 _referenced_schemas(body, in_scope_schemas)
-            if _is_loose(body) and (method.upper(), path) not in ALLOWED_UNTYPED_OPERATIONS:
+            allowlisted = (method.upper(), path) in ALLOWED_UNTYPED_OPERATIONS
+
+            # The allowlist exists for looseness a generated client will never meet — its own
+            # comment says so. So an allowlisted operation entering the generated surface is not
+            # exempt, it is a contradiction: the Swift client would generate an untyped `object`
+            # for it, which is the exact thing this lint is here to prevent.
+            #
+            # Found by testing that the lint could fail rather than assuming it: adding an
+            # allowlisted operationId to the Swift config was silently accepted.
+            if allowlisted and in_scope and (method.upper(), path) not in GENERATED_BUT_UNTYPED:
+                errors.append(
+                    f"{where}: allowlisted as untyped, but the Swift client now generates it "
+                    f"({operation_id}). The allowlist is for out-of-scope looseness only — "
+                    "either give it a response_model or drop it from the client's filter."
+                )
+            elif _is_loose(body) and not allowlisted:
                 scope = "in generated surface" if in_scope else "out of scope"
                 errors.append(
                     f"{where}: 2xx response generates as untyped object ({scope}). "
@@ -378,7 +438,8 @@ def main() -> int:
     operations = sum(len(m) for m in schema.get("paths", {}).values())
     print(
         f"OpenAPI lint OK: {operations} operations validated "
-        f"({len(GENERATED_SURFACE)} tags in the generated surface, "
+        f"({len(GENERATED_SURFACE)} tags + {len(GENERATED_OPERATIONS)} operations in the "
+        f"generated surface, read from {SWIFT_CLIENT_CONFIG.name}; "
         f"{len(ALLOWED_UNTYPED_OPERATIONS)} allowlisted for burn-down)"
     )
     return 0
