@@ -159,8 +159,10 @@ before it is imposed on a phone.
   than assumed.
 - **Positive.** The Mac can play to the speakers in the house, which is a genuine part of the
   listening path that the web app has and the native client did not.
-- **Positive.** Excluding zones and `airplay` keeps the generated surface at fifteen operations
-  rather than twenty-four, and keeps the client away from the parts that are broken.
+- **Positive.** Excluding zones and `airplay` keeps the generated surface at **nine** operations
+  rather than twenty-four, and keeps the client away from the parts that are broken. *Nine, not the
+  fifteen this originally said: registration is unnecessary because discovery auto-registers, and
+  the four per-protocol discover endpoints are redundant beside `discover_all`.*
 - **Positive.** Point 3 removes the double-audio failure by construction rather than by guarding
   against it.
 - **Tradeoff.** The muted local decode is genuinely inelegant: the Mac fetches and decodes audio it
@@ -169,9 +171,15 @@ before it is imposed on a phone.
 - **Tradeoff.** Two concurrent fetches of the same track hit `GET /tracks/{id}/stream`, the endpoint
   that exhausted the connection pool once already. The fix is in and the fetches are sequentialish
   rather than bulk, but casting is the feature that multiplies that traffic.
-- **Tradeoff.** Adopting `outputs` will trip the OpenAPI linter: its five allowlisted untyped
-  operations are all `outputs/zones/*`, so excluding zones from the *generated* surface must be
-  expressed in the lint's scope too, or the allowlist grows to cover operations no client uses.
+- ~~**Tradeoff.** Adopting `outputs` will trip the OpenAPI linter.~~ **It does not.** The prediction
+  assumed the surface could only be widened a tag at a time, which would have dragged the zones in;
+  `swift-openapi-generator` filters by operationId as well, so the nine arrive without them. All
+  nine already declare 401/404/422/500, so nothing trips.
+
+  What the linter *did* need was the opposite of a workaround: it restated the generated surface as
+  its own list of tags, with each file's comments claiming the other enforced it while no code
+  compared them. Adding a second way to express the surface would have widened that gap, so the
+  lint now reads the Swift config directly.
 - **Follow-up.** **There is no server-side owner for an output.** Two clients can drive one speaker
   with neither aware of the other. This is pre-existing and the ADR does not fix it, but a second
   client makes it likelier to be met.
