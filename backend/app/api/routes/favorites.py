@@ -131,23 +131,39 @@ class AutoDownloadUpdate(BaseModel):
     enabled: bool
 
 
-@router.get("/auto-download", response_model=AutoDownloadResponse)
+@router.get("/auto-download", response_model=AutoDownloadResponse, deprecated=True)
 async def get_favorites_auto_download(
     db: DbSession,
     profile: RequiredProfile,
 ) -> AutoDownloadResponse:
-    """Get the auto-download setting for favorites."""
+    """Get the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).
+
+    The setting moved to the client. Whether to keep 1,700 tracks offline depends on the device's
+    disk, and one boolean per profile meant a phone and a desktop could not disagree. This was the
+    only listener preference the server held; after the move it holds none.
+
+    Still served, and still reads the stored value, because both clients call it exactly once per
+    profile to carry the old value across. Removing it would make that seed impossible and silently
+    turn the feature off for anyone who had it on. It can go once every client has seeded — and
+    note that `familiar-apple` commits `openapi.json` verbatim, so removal there means regenerating
+    the Swift client in the same change.
+    """
     enabled = (profile.settings or {}).get("favorites_auto_download", False)
     return AutoDownloadResponse(enabled=enabled)
 
 
-@router.put("/auto-download", response_model=AutoDownloadResponse)
+@router.put("/auto-download", response_model=AutoDownloadResponse, deprecated=True)
 async def set_favorites_auto_download(
     request: AutoDownloadUpdate,
     db: DbSession,
     profile: RequiredProfile,
 ) -> AutoDownloadResponse:
-    """Set the auto-download setting for favorites."""
+    """Set the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).
+
+    No shipping client writes here any more — the setting is device-local. Kept so an older build
+    that still writes is not met with a 404, and so the stored value stays a usable seed for a
+    device that has not been updated yet.
+    """
     settings = dict(profile.settings or {})
     settings["favorites_auto_download"] = request.enabled
     profile.settings = settings

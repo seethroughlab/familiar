@@ -1,16 +1,15 @@
-import { useCallback, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Play, Heart, Clock, Download, Check, Loader2, RotateCw } from 'lucide-react';
 import { favoritesApi } from '../../api';
-import { queryKeys } from '../../api/queryKeys';
-import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useDownloadStore } from '../../stores/downloadStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useAutoDownload } from '../../hooks/useAutoDownload';
 import { useOfflineTrackState } from '../../hooks/useOfflineTrackState';
+import { useFavoritesAutoDownloadStore } from '../../stores/favoritesAutoDownloadStore';
+import { getCachedProfileId } from '../../services/profileSelection';
 import { useTrackSearch } from '../../hooks/useTrackSearch';
 import type { Track } from '../../types';
 import type { FavoriteTrack } from '../../api';
@@ -26,7 +25,6 @@ interface Props {
 export function FavoritesDetail({ onBack: onBackProp }: Props) {
   const routeNavigate = useNavigate();
   const onBack = onBackProp || (() => routeNavigate(-1));
-  const queryClient = useQueryClient();
   const currentTrack = usePlayerStore((s) => s.currentTrack);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
@@ -68,14 +66,31 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
     total: downloadJob?.trackIds.length ?? 0,
   };
 
-  // Auto-download setting
-  const { data: autoDownloadSetting } = useQuery({
-    queryKey: queryKeys.favorites.autoDownload,
-    queryFn: () => favoritesApi.getAutoDownload(),
-    staleTime: STALE_TIME.MEDIUM,
-    retry: offlineAwareRetry(isOffline),
-  });
-  const autoDownloadEnabled = autoDownloadSetting?.enabled ?? false;
+  // Auto-download setting — this browser's, not the profile's (ADR-0029 point 4).
+  //
+  // It used to be the single key in `Profile.settings` on the server, so a phone and a desktop
+  // could not disagree about holding 1,700 tracks offline. Whether to keep audio on a device
+  // depends on that device, so it moved here.
+  const profileId = getCachedProfileId();
+  const autoDownloadStore = useFavoritesAutoDownloadStore();
+  const autoDownloadEnabled = autoDownloadStore.isEnabled(profileId);
+
+  // Carry the server's old value across exactly once per profile. Without it, anyone who had this
+  // on stops getting downloads after the update and rightly calls that a bug. A failed read is not
+  // an answer, so nothing is marked seeded and the next load tries again.
+  useEffect(() => {
+    if (!profileId || autoDownloadStore.hasSeeded(profileId)) return;
+    let cancelled = false;
+    favoritesApi
+      .getAutoDownload()
+      .then(({ enabled }) => {
+        if (!cancelled) autoDownloadStore.seed(profileId, enabled);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId, autoDownloadStore]);
 
   // Offline track state
   const { offlineTrackIds } = useOfflineTrackState({ downloadJobStatus: downloadJob?.status });
@@ -234,10 +249,8 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
 
           {/* Auto-download toggle */}
           <button
-            onClick={async () => {
-              const newValue = !autoDownloadEnabled;
-              await favoritesApi.setAutoDownload(newValue);
-              queryClient.setQueryData(queryKeys.favorites.autoDownload, { enabled: newValue });
+            onClick={() => {
+              if (profileId) autoDownloadStore.setEnabled(profileId, !autoDownloadEnabled);
             }}
             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-full transition-colors ${
               autoDownloadEnabled
@@ -245,10 +258,10 @@ export function FavoritesDetail({ onBack: onBackProp }: Props) {
                 : 'bg-zinc-700 hover:bg-zinc-600'
             }`}
             title={autoDownloadEnabled
-              ? 'Stop keeping favorites downloaded'
+              ? 'Stop keeping favorites downloaded on this device'
               // Says what it does. It reads as "only ones I add from now on", and it is not: it
               // fetches every favorite not already held, then keeps up as the collection changes.
-              : 'Keep favorites downloaded — fetches all that are missing, then keeps up'}
+              : 'Keep favorites downloaded on this device — fetches all that are missing, then keeps up'}
           >
             <RotateCw className="w-4 h-4" />
             <span className="text-sm">Auto</span>

@@ -6,6 +6,17 @@ const log = createLogger('ProfileSelection');
 let cachedProfileId: string | null = null;
 
 /**
+ * The selected profile ID without awaiting IndexedDB, or null before one has been resolved.
+ *
+ * For render paths that need to key state by listener and cannot be async. Safe wherever the
+ * library is on screen: `renderApp` resolves the profile before mounting it, which populates the
+ * cache. Anything that might run *before* that must use `getSelectedProfileId` and await it.
+ */
+export function getCachedProfileId(): string | null {
+  return cachedProfileId;
+}
+
+/**
  * Get the currently selected profile ID.
  * Returns null if no profile is selected.
  */
