@@ -10,6 +10,12 @@ Implementation:
 - Accepted 2026-08-01. Two claims in the proposed draft were corrected against the engine before
   acceptance rather than after — it is six effects rather than five (saturation is the waveshaper),
   and the setters are internal rather than public, which is why decision point 3 exists at all.
+- **Point 7 — "macOS only… no iOS surface is added" — is reversed by
+  [ADR-0025](ADR-0025-the-phone-gets-a-settings-destination.md).** Points 5 and 6 are untouched and
+  matter more for it: effects stay per-device, and a phone is a different device from a desk. The
+  reversal is on this ADR's own reasoning rather than against it — the Alternatives section justifies
+  per-device settings because "effects compensate for output — headphones, car speakers, a desk
+  monitor", and two of those three are the phone.
 
 ## Context
 
