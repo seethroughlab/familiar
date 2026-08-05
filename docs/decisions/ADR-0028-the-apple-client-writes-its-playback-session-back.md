@@ -46,9 +46,16 @@ is a second implementation of an existing contract, not a new one.
 
 ## Decision
 
-1. **Resume-across-launches is the server session, not a local snapshot.** The Apple client gains no
-   private store of what was playing. It already restores from the server on launch; this ADR makes
-   that restore meaningful by ensuring the server holds what this device did.
+1. **Resume-across-launches is a local snapshot, and needs no network.** Each device persists its own
+   queue, cursor, modes and position, and restores from that at launch — armed, never playing.
+
+   **This reverses the first draft of this ADR, which said the opposite**: that resume was the server
+   session and "the Apple client gains no private store of what was playing". Two things overturned
+   it. Point 8 gated resume behind the queue-sync toggle, whose interface copy promises it "never
+   writes back" — so the gate governed something the label never claimed. And
+   [ADR-0029](ADR-0029-the-server-stores-no-listener-preferences.md) point 6 settled the general
+   case: session state is device-authoritative, with the server as a handoff mirror. The web client
+   has worked this way since ADR-0003 phase 3; the Apple client was the odd one out.
 
 2. **The Apple client writes the playback session, completing ADR-0003 phase 4's deferred half.**
    `queuePutPlaybackSession` is called with the same fields the web client sends, on the same
@@ -81,25 +88,45 @@ is a second implementation of an existing contract, not a new one.
    abandoned hours ago. This is deliberately narrower than the web client's offline outbox, which
    exists for actions that must not be lost; a playback position is not one.
 
-8. **With queue sync disabled, none of this happens and nothing is preserved.** The existing
-   `familiar.queueSync.enabled` setting (`ServerConfiguration.swift:48`) governs writes as it governs
-   reads. A listener who has turned sync off has asked for this device not to participate, and
-   inventing local persistence for them would be answering a question they did not ask — see the
-   alternatives.
+8. **Queue sync governs handoff only. Resume is never gated.** `familiar.queueSync.enabled`
+   (`ServerConfiguration.swift:48`) decides whether this device writes to and picks up from the
+   shared session — which is exactly what its interface copy already says. It has nothing to do with
+   whether the app reopens on what you were playing, because that is local and needs no server at
+   all. **An earlier draft of this point gated resume behind the toggle**; that was the defect this
+   revision exists to remove.
 
-9. **Verification is against a real server, in three layers.** The payload construction is pure and
-   unit-tested in `FamiliarKit`; the conflict and adoption paths extend the existing
-   `QueueAdopterTests`; and a launch-quit-relaunch cycle is checked by hand against the live server,
-   because the failure this fixes is only visible across a process boundary.
+9. **Handoff is offered, not applied.** `QueueAdopter` currently swaps the queue at launch whenever
+   the server's version is newer. With point 1 restoring a local session first, a silent swap would
+   throw away what this device was doing. So adoption splits into a check, an offer the listener
+   acts on, and a dismissal that is remembered. The arm-don't-play rule survives it: picking up a
+   queue arms the transport, it does not start audio.
+
+   A consequence worth stating because it is easy to miss in code review: `QueueAdopter`'s
+   `guard player.isIdle` becomes `isIdle || isArmed`. After point 1 the player is *armed* at launch,
+   so the existing guard would reject every handoff.
+
+10. **Verification is in three layers, and the third is not optional.** Persistence, restore and the
+    payload construction are pure and unit-tested in `FamiliarKit`; the check/adopt/dismiss paths
+    extend the existing `QueueAdopterTests`; and a launch-quit-relaunch cycle is checked by hand,
+    **including with the network off**, because the failure this fixes is only visible across a
+    process boundary and the offline case is the one the server could never serve.
 
 ## Alternatives Considered
 
-**Persist to `UserDefaults` or a local file, and leave sync alone.** Much smaller, works offline,
-and needs no server round trip. Rejected because launch-time adoption already exists and already
-writes the player's state from the server — so a local snapshot creates two sources of truth that
-disagree on exactly the launch where it matters, and something must arbitrate. It also fixes the
-symptom while leaving the cause: the Mac would still be silently overwriting itself on the server,
-and the phone and web app would still be adopting a stale session after an hour of Mac listening.
+**Persist locally and leave sync alone** — resume from a local file, never write back. Smaller, and
+it grants the original request in full. Rejected because it fixes the symptom and leaves the cause:
+the Mac would still never record its listening, so the phone and the web app would go on adopting a
+session that is stale by however long the Mac was in use. Points 1 and 2 are separable, and both are
+needed.
+
+**Resume from the server rather than from disk** — the first draft of this ADR, rejected on review.
+It reads as the tidier design, since one source of truth needs no arbitration. It fails on three
+counts: it cannot work offline, which is the case a downloads-first client most needs; it makes
+resume depend on a feature flag that is off by default on both the server and the client; and with
+one session per profile it cannot distinguish "what this Mac was doing" from "what any device did
+most recently", so on a profile used from three devices it is not resume at all. The two-sources
+objection is answered by point 1 rather than avoided: local is authoritative, the server is a mirror,
+and the listener arbitrates via point 9's offer.
 
 **Write only `position_seconds`, treating the queue as the web client's to own.** Cheap, and would
 deliver most of "resume where I left off" for a listener who uses the Mac alone. Rejected because
@@ -120,8 +147,8 @@ rather than a new risk.
 
 ## Consequences
 
-- **Positive.** The Mac resumes where it left off, which is what was asked for — and so does the
-  phone, and so does handoff between all three, because they resume from the same place.
+- **Positive.** The Mac resumes where it left off, which is what was asked for — offline included,
+  and with no dependence on a feature flag that ships off by default at both ends.
 - **Positive.** The Apple client stops silently degrading the shared session. This is the larger
   defect and it was invisible: nothing on any surface indicates that the Mac's listening was never
   recorded.
@@ -133,9 +160,13 @@ rather than a new risk.
   writing this down.
 - **Tradeoff.** Two clients now write one session, so conflicts become real rather than theoretical.
   Point 6 resolves them by discarding one side's recent listening — correct, and still a loss.
-- **Tradeoff.** Point 8 means the request is not granted for anyone who has turned queue sync off:
-  they get no persistence at all. That is defensible and it is not obvious, and it may be the point
-  reviewers most want to push on.
+- **Tradeoff.** Handoff stops being automatic. A listener who liked opening the Mac onto whatever
+  the phone was playing now has to accept an offer, and an offer that goes unnoticed is a feature
+  that has quietly stopped working. Point 9 buys resume at handoff's expense; they cannot both be
+  the silent default while one session per profile is all there is.
+- **Tradeoff.** State now lives in two places for real, and they can diverge. The mirror is not a
+  backup — a device that never enables queue sync has exactly one copy of its session, on its own
+  disk, per ADR-0029 point 7.
 - **Tradeoff.** Point 3's coarse `position_seconds` means a resumed track can start a few seconds
   from where it stopped. ADR-0003 already carries this as a follow-up; this ADR inherits it rather
   than fixing it.
