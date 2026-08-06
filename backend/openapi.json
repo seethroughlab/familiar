@@ -33708,7 +33708,7 @@
     },
     "/api/v1/tracks/{track_id}/skipped": {
       "post": {
-        "description": "Record that playback of a track stopped before it was scrobbled.\n\nProfilePlayHistory is not modified \u2014 only completed plays count toward it.\n\nThe outcome is derived rather than assumed: a track abandoned at 95%, or a short\ntrack played in full, is recorded as `completed`, and a failed load is recorded as\n`errored` so it never reaches the taste signal.",
+        "description": "Record that playback of a track stopped before it ran out.\n\nProfilePlayHistory is not modified \u2014 only completed plays count toward it.\n\nThe outcome is derived rather than assumed: a track abandoned at 95%, or a short\ntrack played in full, is recorded as `completed`, and a failed load is recorded as\n`errored` so it never reaches the taste signal.\n\n**A skip can still be a scrobble** (ADR-0030). Last.fm asks for half a track; Familiar's\n`play_count` means the track reached its end. A track abandoned at 60% arrives here and nowhere\nelse, and Last.fm wants it \u2014 which is why scrobbling is decided from the event's own numbers\nrather than from which endpoint it came through.",
         "operationId": "tracks_record_skip",
         "parameters": [
           {
@@ -33800,6 +33800,88 @@
           }
         ],
         "summary": "Record Skip",
+        "tags": [
+          "tracks"
+        ]
+      }
+    },
+    "/api/v1/tracks/{track_id}/started": {
+      "post": {
+        "description": "A track just started playing (ADR-0030 point 6).\n\nThe signal this server has never had. `/played` and `/skipped` both fire at the *end* of a\ntrack, so nothing until now could tell it what a listener is hearing right now.\n\nDeliberately generic rather than a Last.fm endpoint: \"this track just started\" is a fact about\nlistening, and the server is free to do more with it later \u2014 presence, listening-together, a\nrecently-started feed. Today it forwards to Last.fm as now-playing and nothing else.\n\nWrites nothing. There is no database work here at all, which is why it takes no session: a\nnow-playing is a claim about the present that expires in minutes, and the durable record of this\ntrack arrives later on `/played` or `/skipped`.\n\n204 rather than a body: there is nothing a caller can do with the outcome, and a client must not\nwait on it.",
+        "operationId": "tracks_record_start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "track_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Track Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Record Start",
         "tags": [
           "tracks"
         ]
