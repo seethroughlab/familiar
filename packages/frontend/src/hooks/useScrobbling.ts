@@ -1,95 +1,48 @@
 import { useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../stores/playerStore';
-import { lastfmApi } from '../api';
-import { queryKeys } from '../api/queryKeys';
-import { STALE_TIME } from '../api/queryDefaults';
+import { playTrackingApi } from '../api/profiles';
 
 /**
- * Hook for automatic Last.fm scrobbling.
+ * Tell the server when a track starts (ADR-0030).
  *
- * Scrobbling rules (per Last.fm guidelines):
- * - Track must have been played for at least 30 seconds
- * - Track must be scrobbled when either 50% complete OR 4 minutes have passed
- * - Each track should only be scrobbled once per play
+ * **This hook used to do the scrobbling itself**, implementing Last.fm's rules in the browser — a
+ * 30-second floor, a scrobble at `min(duration / 2, 4 minutes)`, once per play, gated on a
+ * connection-status query. All of that now lives on the server, which already receives
+ * `played_seconds`, `track_duration` and `started_at` on every `/played` and `/skipped` from every
+ * client. Leaving it here would scrobble each browser play twice.
+ *
+ * Moving it also fixed a case this could not see: Last.fm scrobbles at half a track, while
+ * Familiar's `play_count` means the track reached its end. A track abandoned at 60% is a *skip* to
+ * Familiar and a *scrobble* to Last.fm, and only the server sees both events.
+ *
+ * What is left is the one thing the server cannot infer. `/played` and `/skipped` both fire at the
+ * *end* of a track, so nothing tells it what is playing right now — hence a start signal, sent once
+ * per track. Fire-and-forget by design: a now-playing is a claim about the present, it expires in
+ * minutes, and a retry would assert something that had already stopped being true.
  */
 export function useScrobbling() {
-  const { currentTrack, currentTime, duration, isPlaying } = usePlayerStore(
-    useShallow((s) => ({ currentTrack: s.currentTrack, currentTime: s.currentTime, duration: s.duration, isPlaying: s.isPlaying }))
+  const { currentTrack, isPlaying } = usePlayerStore(
+    useShallow((s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying }))
   );
 
-  const scrobbledTrackRef = useRef<string | null>(null);
-  const nowPlayingTrackRef = useRef<string | null>(null);
-  const playStartTimeRef = useRef<number>(0);
+  // So pausing and resuming the same track does not announce it twice.
+  const announcedTrackRef = useRef<string | null>(null);
 
-  // Get Last.fm connection status
-  const { data: status } = useQuery({
-    queryKey: queryKeys.lastfmStatus.all,
-    queryFn: lastfmApi.getStatus,
-    staleTime: STALE_TIME.LONG,
-  });
-
-  const isConnected = status?.connected ?? false;
-
-  // Update "Now Playing" when track changes
   useEffect(() => {
-    if (!isConnected || !currentTrack || !isPlaying) return;
+    if (!currentTrack || !isPlaying) return;
+    if (announcedTrackRef.current === currentTrack.id) return;
 
-    // Only update if this is a new track
-    if (nowPlayingTrackRef.current === currentTrack.id) return;
-
-    nowPlayingTrackRef.current = currentTrack.id;
-    playStartTimeRef.current = Date.now();
-
-    // Reset scrobble status for new track
-    if (scrobbledTrackRef.current !== currentTrack.id) {
-      scrobbledTrackRef.current = null;
-    }
-
-    // Send now playing update (fire and forget)
-    lastfmApi.updateNowPlaying(currentTrack.id).catch(() => {
-      // Ignore errors - now playing is best-effort
+    announcedTrackRef.current = currentTrack.id;
+    playTrackingApi.recordStart(currentTrack.id).catch(() => {
+      // Best-effort by design. Nothing downstream depends on this landing, and the durable record
+      // of this track arrives later on /played or /skipped.
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when track ID changes, not object reference
-  }, [currentTrack?.id, isPlaying, isConnected]);
+  }, [currentTrack, isPlaying]);
 
-  // Handle scrobbling based on playback progress
-  useEffect(() => {
-    if (!isConnected || !currentTrack || !isPlaying || !duration) return;
-
-    // Already scrobbled this track
-    if (scrobbledTrackRef.current === currentTrack.id) return;
-
-    // Calculate thresholds
-    const halfDuration = duration / 2;
-    const fourMinutes = 4 * 60;
-    const scrobbleThreshold = Math.min(halfDuration, fourMinutes);
-
-    // Must have played at least 30 seconds
-    if (currentTime < 30) return;
-
-    // Check if we've reached the scrobble threshold
-    if (currentTime >= scrobbleThreshold) {
-      scrobbledTrackRef.current = currentTrack.id;
-
-      // Calculate timestamp (when playback started)
-      const timestamp = Math.floor(playStartTimeRef.current / 1000);
-
-      // Submit scrobble
-      lastfmApi.scrobble(currentTrack.id, timestamp).catch(() => {
-        // Reset so we can retry
-        scrobbledTrackRef.current = null;
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only re-run when track ID changes, not object reference
-  }, [currentTrack?.id, currentTime, duration, isPlaying, isConnected]);
-
-  // Reset when track changes
   useEffect(() => {
     return () => {
-      // When unmounting or track changes, reset refs
-      nowPlayingTrackRef.current = null;
+      announcedTrackRef.current = null;
     };
   }, [currentTrack?.id]);
 }

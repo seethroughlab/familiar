@@ -1,11 +1,19 @@
 /**
- * Tests for useScrobbling hook - Last.fm scrobbling behavior.
+ * Tests for useScrobbling — the track-start signal (ADR-0030).
  *
- * Scrobbling rules (per Last.fm guidelines):
- * - Send "now playing" when a new track starts
- * - Track must have been played for at least 30 seconds
- * - Track must be scrobbled when either 50% complete OR 4 minutes have passed
- * - Each track should only be scrobbled once per play
+ * **Six tests were deleted from this file rather than made to pass**, and that is worth saying
+ * here. They asserted browser-side scrobbling: the 30-second floor, the halfway threshold, the
+ * four-minute cap on long tracks, not scrobbling while paused or while Last.fm was disconnected.
+ * None of that happens in the browser any more — the server scrobbles from the `/played` and
+ * `/skipped` events it already receives from every client, so leaving this here would scrobble each
+ * browser play twice.
+ *
+ * The coverage did not vanish, it moved to `backend/tests/test_scrobble_policy.py`, which asserts
+ * the same thresholds plus a case this file could never have caught: a track abandoned at 60% is a
+ * *skip* to Familiar and a *scrobble* to Last.fm, and only the server sees both events.
+ *
+ * What is left is the one thing the server cannot infer, because `/played` and `/skipped` both fire
+ * at the *end* of a track: what is playing right now.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -13,8 +21,7 @@ import { act } from 'react';
 import { useScrobbling } from '../useScrobbling';
 import { usePlayerStore } from '../../stores/playerStore';
 
-// Track renderHook results for cleanup (prevents hook leaks between tests —
-// unmounted hooks still react to zustand store changes, causing extra API calls).
+// Unmounted hooks still react to zustand changes, which leaks calls between tests.
 let _unmount: (() => void) | undefined;
 function renderScrobbling() {
   const result = renderHook(() => useScrobbling());
@@ -22,25 +29,14 @@ function renderScrobbling() {
   return result;
 }
 
-// Mock the API client
-vi.mock('../../api', () => ({
-  lastfmApi: {
-    getStatus: vi.fn(() => Promise.resolve({ connected: true, configured: true, username: 'testuser' })),
-    updateNowPlaying: vi.fn(() => Promise.resolve({ status: 'ok', message: '' })),
-    scrobble: vi.fn(() => Promise.resolve({ status: 'ok', message: '' })),
+const recordStart = vi.fn(() => Promise.resolve());
+
+vi.mock('../../api/profiles', () => ({
+  playTrackingApi: {
+    recordStart: (...args: unknown[]) => recordStart(...args),
   },
 }));
 
-// Mock react-query
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn(({ queryFn: _queryFn }: { queryFn: () => unknown }) => ({
-    data: { connected: true, configured: true, username: 'testuser' },
-    isLoading: false,
-    error: null,
-  })),
-}));
-
-// Mock the persistence functions
 vi.mock('../../services/playerPersistence', () => ({
   debouncedSavePlayerState: vi.fn(),
   loadPlayerState: vi.fn(() => Promise.resolve(null)),
@@ -48,334 +44,81 @@ vi.mock('../../services/playerPersistence', () => ({
   migrateOldPlayerState: vi.fn(() => Promise.resolve()),
 }));
 
-const createMockTrack = (id: string) => ({
-  id,
-  file_path: `/music/${id}.mp3`,
-  title: 'Test Track',
-  artist: 'Test Artist',
-  album: 'Test Album',
-  album_artist: null,
-  album_type: 'album' as const,
-  track_number: null,
-  disc_number: null,
-  year: null,
-  genre: null,
-  duration_seconds: 300,
-  format: 'mp3',
-  analysis_version: 1,
-});
+const track = (id: string) =>
+  ({
+    id,
+    title: `Track ${id}`,
+    artist: 'Artist',
+    album: 'Album',
+    duration_seconds: 180,
+  }) as never;
 
-describe('useScrobbling', () => {
+function setPlayer(state: Record<string, unknown>) {
+  act(() => {
+    usePlayerStore.setState(state as never);
+  });
+}
+
+describe('useScrobbling — the track-start signal', () => {
   beforeEach(() => {
-    usePlayerStore.setState({
-      currentTrack: null,
-      isPlaying: false,
-      currentTime: 0,
-      duration: 0,
-      volume: 0.5,
-      shuffle: false,
-      repeat: 'off',
-      queue: [],
-      queueIndex: -1,
-      history: [],
-      shuffleOrder: [],
-      shuffleIndex: -1,
-      crossfadeState: 'idle',
-      nextTrackPreloaded: false,
-      isHydrated: true,
-    });
+    usePlayerStore.setState({ currentTrack: null, isPlaying: false } as never);
+    recordStart.mockClear();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     _unmount?.();
     _unmount = undefined;
-    vi.clearAllMocks();
   });
 
-  it('should send now-playing update when a new track starts', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-1');
+  it('announces a track when it starts playing', async () => {
+    renderScrobbling();
+    setPlayer({ currentTrack: track('a'), isPlaying: true });
 
+    await waitFor(() => expect(recordStart).toHaveBeenCalledWith('a'));
+  });
+
+  it('says nothing while nothing is playing', async () => {
+    renderScrobbling();
+    setPlayer({ currentTrack: track('a'), isPlaying: false });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(recordStart).not.toHaveBeenCalled();
+  });
+
+  /** Re-announcing mid-track would re-assert something already true. */
+  it('announces each track once, not on every pause and resume', async () => {
+    renderScrobbling();
+    setPlayer({ currentTrack: track('a'), isPlaying: true });
+    await waitFor(() => expect(recordStart).toHaveBeenCalledTimes(1));
+
+    setPlayer({ isPlaying: false });
+    setPlayer({ isPlaying: true });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(recordStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces the next track when the queue advances', async () => {
+    renderScrobbling();
+    setPlayer({ currentTrack: track('a'), isPlaying: true });
+    await waitFor(() => expect(recordStart).toHaveBeenCalledTimes(1));
+
+    setPlayer({ currentTrack: track('b') });
+
+    await waitFor(() => expect(recordStart).toHaveBeenCalledWith('b'));
+  });
+
+  /** Nothing downstream depends on this landing; the durable record arrives on /played. */
+  it('ignores a failure to announce', async () => {
+    recordStart.mockImplementationOnce(() => Promise.reject(new Error('offline')));
     renderScrobbling();
 
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 300,
-        currentTime: 0,
-      });
-    });
+    setPlayer({ currentTrack: track('a'), isPlaying: true });
+    await waitFor(() => expect(recordStart).toHaveBeenCalledTimes(1));
 
-    await waitFor(() => {
-      expect(lastfmApi.updateNowPlaying).toHaveBeenCalledWith('track-1');
-    });
-  });
-
-  it('should not send now-playing when not playing', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-1');
-
-    renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: false,
-        duration: 300,
-        currentTime: 0,
-      });
-    });
-
-    await waitFor(() => {
-      expect(lastfmApi.updateNowPlaying).not.toHaveBeenCalled();
-    });
-  });
-
-  it('should not scrobble before 30 seconds of playback', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-1');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 60,
-        currentTime: 0,
-      });
-    });
-
-    rerender();
-
-    // At 25 seconds, should not scrobble yet
-    act(() => {
-      usePlayerStore.setState({ currentTime: 25 });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).not.toHaveBeenCalled();
-    });
-  });
-
-  it('should scrobble at 50% of track duration', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-2');
-
-    const { rerender } = renderScrobbling();
-
-    // Start playing a 120-second track
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 120,
-        currentTime: 0,
-      });
-    });
-
-    rerender();
-
-    // Jump to 60 seconds (50% of 120)
-    act(() => {
-      usePlayerStore.setState({ currentTime: 60 });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).toHaveBeenCalledWith('track-2', expect.any(Number));
-    });
-  });
-
-  it('should scrobble at 4 minutes for long tracks instead of 50%', async () => {
-    const { lastfmApi } = await import('../../api');
-    // 10-minute track: 50% = 300s, 4min = 240s, so scrobble at 240s
-    const track = createMockTrack('track-long');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 600,
-        currentTime: 0,
-      });
-    });
-
-    rerender();
-
-    // Jump to 240 seconds (4 minutes)
-    act(() => {
-      usePlayerStore.setState({ currentTime: 240 });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).toHaveBeenCalledWith('track-long', expect.any(Number));
-    });
-  });
-
-  it('should not double-scrobble the same track', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-3');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 120,
-        currentTime: 0,
-      });
-    });
-
-    rerender();
-
-    // First scrobble point
-    act(() => {
-      usePlayerStore.setState({ currentTime: 60 });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).toHaveBeenCalledTimes(1);
-    });
-
-    // Continue playing past scrobble point
-    act(() => {
-      usePlayerStore.setState({ currentTime: 100 });
-    });
-
-    rerender();
-
-    // Should still only have 1 scrobble call
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it('should not scrobble when paused', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-4');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 120,
-        currentTime: 0,
-      });
-    });
-
-    rerender();
-
-    // Pause
-    act(() => {
-      usePlayerStore.setState({ isPlaying: false });
-    });
-
-    // Jump past threshold while paused
-    act(() => {
-      usePlayerStore.setState({ currentTime: 100 });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).not.toHaveBeenCalled();
-    });
-  });
-
-  it('should not scrobble when no duration is set', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-5');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 0,
-        currentTime: 60,
-      });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).not.toHaveBeenCalled();
-    });
-  });
-
-  it('should send now-playing only once per track', async () => {
-    const { lastfmApi } = await import('../../api');
-    const track = createMockTrack('track-6');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 300,
-        currentTime: 0,
-      });
-    });
-
-    rerender();
-
-    // Update time without changing track
-    act(() => {
-      usePlayerStore.setState({ currentTime: 30 });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.updateNowPlaying).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it('should not scrobble when Last.fm is not connected', async () => {
-    const { lastfmApi } = await import('../../api');
-    const { useQuery } = await import('@tanstack/react-query');
-
-    vi.mocked(useQuery).mockReturnValue({
-      data: { connected: false, configured: false, username: null },
-      isLoading: false,
-      error: null,
-    } as ReturnType<typeof useQuery>);
-
-    const track = createMockTrack('track-7');
-
-    const { rerender } = renderScrobbling();
-
-    act(() => {
-      usePlayerStore.setState({
-        currentTrack: track,
-        isPlaying: true,
-        duration: 120,
-        currentTime: 60,
-      });
-    });
-
-    rerender();
-
-    await waitFor(() => {
-      expect(lastfmApi.scrobble).not.toHaveBeenCalled();
-      expect(lastfmApi.updateNowPlaying).not.toHaveBeenCalled();
-    });
+    // Reaching the next announcement without an unhandled rejection is the assertion.
+    setPlayer({ currentTrack: track('b') });
+    await waitFor(() => expect(recordStart).toHaveBeenCalledTimes(2));
   });
 });

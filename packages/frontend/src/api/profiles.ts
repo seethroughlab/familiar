@@ -187,6 +187,20 @@ export const playTrackingApi = {
    * Called only once scrobble thresholds are met, so reaching this endpoint is itself
    * the definition of a play — the backend does not derive the outcome here.
    */
+  /**
+   * A track just started (ADR-0030 point 6).
+   *
+   * The signal the server has never had: `/played` and `/skipped` both fire at the *end*. Generic
+   * rather than a Last.fm call — today the server forwards it as now-playing, and it is free to do
+   * more with it later.
+   *
+   * Returns nothing and is never retried: a now-playing is a claim about the present that expires
+   * in minutes, so a replayed one asserts something that has stopped being true.
+   */
+  recordStart: async (trackId: string, options?: RequestOptions): Promise<void> => {
+    await api.post(`/tracks/${trackId}/started`, undefined, options);
+  },
+
   recordPlay: async (
     trackId: string,
     durationSeconds?: number,
