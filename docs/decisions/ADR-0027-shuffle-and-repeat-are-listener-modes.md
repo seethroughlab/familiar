@@ -1,9 +1,28 @@
 # ADR-0027: Shuffle and Repeat Are Listener Modes
 
-Status: proposed
+Status: accepted
 Date: 2026-08-05
 
 Extends [ADR-0003](ADR-0003-server-owns-the-playback-queue.md)
+
+Implementation:
+- Accepted 2026-08-05 and shipped in `familiar-apple` #70, alongside
+  [ADR-0028](ADR-0028-the-apple-clients-playback-session-is-local.md) — the two were built together
+  because point 7's deferral only holds if the thing it defers to lands in the same change.
+- Point 2's split is in `Sources/FamiliarKit/FamiliarPlayer.swift`. `play(_:startingAt:)` no longer
+  assigns `isShuffled = false`; the doc comment at `:216` now records that shuffle survives it and
+  why it used to not.
+- Point 5's reading of an adopted session is moot in practice: ADR-0028 removed adoption entirely
+  in the same PR. `adoptLogicalOrder` remains and still sets `isShuffled = false` (`:358`), which is
+  what `restoreSession` must *not* call — a local snapshot's play order is not a flattened server
+  order, and restoring through the adoption path would give back a shuffled queue that can never be
+  straightened out again. That distinction is the point-2 split doing its job on the first thing
+  that touched it.
+- Point 7's persistence question is answered by ADR-0028's cold file, which carries `repeatMode` and
+  `consume` with a defaulting decoder so a snapshot written before those fields existed still loads.
+- Point 4's `playShuffled(_:)` keeps its meaning and now leaves the mode on (`:255`).
+- **Follow-ups not done:** the transport-affordance check across all three surfaces, and the
+  annotation on ADR-0003's phase 4 bullet.
 
 ## Context
 

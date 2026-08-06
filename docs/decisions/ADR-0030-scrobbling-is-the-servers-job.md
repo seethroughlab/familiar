@@ -1,9 +1,32 @@
 # ADR-0030: Scrobbling Is the Server's Job
 
-Status: proposed
+Status: accepted
 Date: 2026-08-05
 
 Extends [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md)
+
+Implementation:
+- Accepted 2026-08-05 and shipped the same day. Server half on `familiar` #103; point 6's client
+  call on `familiar-apple` #74.
+- Point 2's threshold rule is `backend/app/services/scrobble_policy.py` — pure, 40 lines, covered by
+  `backend/tests/test_scrobble_policy.py` including the 60%-then-skipped case that distinguishes
+  this design from the first draft. Point 4's out-of-band guarantee is
+  `backend/app/services/scrobble_dispatch.py`, called from `/played` and `/skipped` in
+  `api/routes/tracks/playback.py`. Point 6's `POST /tracks/{id}/started` is at `playback.py:346`.
+- Point 5 was paid: `useScrobbling.ts` lost its scrobble call, and **six tests went with it rather
+  than being made to pass**. The file records where that coverage moved and why, which is the part
+  worth keeping — a deleted test is otherwise indistinguishable from a forgotten one.
+- Point 8 held exactly: the Apple clients got scrobbling with no scrobbling code at all, and the
+  start signal was one call on a tag they already had. On the client it is keyed on `trackEpoch`
+  rather than the track id — the counter ADR-0031 added — because under `repeat one`, and in a queue
+  holding one track twice in a row, the id never changes though the track genuinely restarts, and an
+  id-keyed task falls silent in exactly those cases. Point 7's "never queued" is honoured by the
+  reporter sending it directly rather than through `ListeningEventQueue`.
+- Point 10's third layer was performed against the real account, in both directions: a `/started`
+  call put a track up as NOW PLAYING, and scrobbles landed. The account's last scrobble before this
+  was 31 July, which is the measure of what the gap cost.
+- **Follow-ups.** `POST /tracks/{id}/started` still has one consumer. The Apple track-start hook
+  the second follow-up asked for is now wired, via `trackEpoch` as predicted.
 
 ## Context
 

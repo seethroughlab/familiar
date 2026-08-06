@@ -8,7 +8,18 @@ Extends [ADR-0015](ADR-0015-audio-effects-are-exposed-not-rebuilt.md) and
 [ADR-0025](ADR-0025-the-phone-gets-a-settings-destination.md). Constrained by
 [ADR-0031](ADR-0031-casting-is-the-macs-and-excludes-zones.md) point 6.
 
-## Context
+Implementation:
+- Accepted 2026-08-05, shipped in `familiar-apple` #76 on 2026-08-06. `CrossfadeDecision` is in
+  `FamiliarKit`, asserted case for case against the web's `eventHandlers.test.ts`;
+  `FamiliarPlayer.considerCrossfade` runs on the existing 4 Hz tick; `CrossfadeSettings` is
+  per-device in `UserDefaults` beside the audio effects, on both platforms through the panes
+  ADR-0025 built.
+- ADR-0031 point 6 arrived with it rather than after it: `CrossfadeDecision` takes `isCasting` and
+  returns no fade, so a speaker plays each track to its true end.
+- The engine changes and the defects building the caller made reachable are recorded in the
+  Consequences below, which were written against what the build found rather than what it planned.
+- **The follow-up listen is not complete.** The Consequences specify ten cases on both platforms;
+  the first real listen produced the `handleTrackEnd` finding and the rest have not been walked.
 
 **The native apps do not crossfade, and nothing is broken.** `NativeAudioEngine.executeCrossfade`
 exists at `NativeAudioEngine.swift:1512`, runs 77 lines, ramps two player nodes against each other on
