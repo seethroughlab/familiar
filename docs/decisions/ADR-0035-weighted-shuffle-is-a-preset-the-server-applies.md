@@ -1,11 +1,72 @@
 # ADR-0035: Weighted Shuffle Is a Preset the Server Applies
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
 
 Extends [ADR-0027](ADR-0027-shuffle-and-repeat-are-listener-modes.md) and
 [ADR-0029](ADR-0029-the-server-stores-no-listener-preferences.md).
+
+Implementation:
+- Accepted 2026-08-06 and built on `familiar-apple`. The Context's claim held exactly: no server
+  change, no schema change, no generator change and no re-vendor — `openapi.json` already carried
+  `shuffle_preset` and `start_with` on `tracks_list_track_ids`, so the whole cost was client-side.
+- **The failure this feature has, and it is silent.** `/tracks/ids` keys its weighted branch on
+  `SHUFFLE_PRESETS.get(name)`, so a name the server does not recognise is *not* an error — the
+  branch is skipped and the endpoint falls through to its standard path, which without
+  `shuffle=true` orders by `artist, album, track_number, id`. Verified against the real library:
+  `?shuffle_preset=rediscovery` returns ids byte-identical to no preset at all. **A typo, or a
+  client newer than its server, therefore plays the library alphabetically from a button marked
+  Shuffle, with a 200 and nothing in any log.** Two tests exist for it and neither is decoration:
+  `ShufflePresetTests` pins the four raw values against `VALID_SHUFFLE_PRESETS`, and
+  `WeightedShuffleSliceTests` asserts that two identical weighted requests return *different*
+  orders while two unweighted ones return the same. That difference is the only signal on the wire
+  that distinguishes a drawn order from an ignored parameter.
+- Point 1 is a profile-suffixed `UserDefaults` key on `ServerConfiguration`, beside
+  `favoritesAutoDownloadEnabled`. Unlike that one it needs no seed: the web app has always kept its
+  copy in `localStorage`, so there is no server value to carry across. An unrecognised stored value
+  reads as "no preset" rather than being repaired, because there is nothing safe to repair it to.
+- Points 2 and 4 are `LibraryDraw` in `FamiliarKit` — `inOrder`, `shuffledHere`, `weighted(preset)`
+  — so the choice is made once in a testable place rather than twice at two call sites in
+  `LibraryView`. **Its widening rule is a reading of this ADR rather than a line from it**: point 4
+  names `widenQueueToLibrary(startedWith:)`, but tapping a row with shuffle *off* means "play the
+  library in order from here", and answering that with a weighted order would be a surprise nobody
+  asked for. So the preset shapes the order widening installs; it does not decide that widening
+  should be unordered. The web gates it the same way. The tapped track is pinned to the front with
+  `start_with`, which the weighted path honours.
+- Point 3 is `FamiliarPlayer.playWeighted`, which installs the server's order as both `queue` and
+  `logicalQueue` and never calls `QueueShuffle.enabling`, plus `widenQueue(to:weighted:)`. **The
+  flag on `widenQueue` is not optional politeness.** Widening permutes whenever shuffle is on, and
+  `LibraryDraw.forWidening` only asks for a preset when it is — so without it, every weighted widen
+  would have been shuffled on top of its own weighting, every single time, which is the "appears to
+  work and does nothing" defect this ADR was written to avoid. `WeightedQueueTests` covers it.
+- **Point 5 is half-built, deliberately.** The survival half is free — the preset is in
+  `UserDefaults`, so it outlives any queue change. The clearing half has **no reachable trigger**:
+  `FamiliarPlayer.stop()`, which is the `clear()` ADR-0027 point 6 refers to, has no caller anywhere
+  in `App/` or `Sources/` — only tests. Wiring an observer to it would have added a callback with no
+  caller, which is a defect shape this app has been bitten by twice. If `stop()` ever gains a UI
+  caller, clearing the stored preset belongs with it.
+- Point 6 is the preset section being absent from the menu when `Connectivity.isOnline == false` —
+  not disabled, not an error after choosing. **A premise correction while implementing it:** there
+  was never a plain-shuffle fallback to guard against, because "Shuffle everything" already required
+  `/tracks/ids` and has no offline behaviour at all. Offline the two paths fail identically, so the
+  rule lives in the control and nowhere else. `isOnline == nil` ("not told yet") counts as online,
+  or the presets would flicker in a moment after every cold start.
+- Point 7 is a `Menu` with a `primaryAction` — tap toggles, press-and-hold discloses — in a shared
+  `ShuffleControl`. Shared because the glyph already existed twice, in `NowPlayingBar` and
+  `FullPlayerView`, and a preset list drawn in two places is a list that drifts. **The menu
+  indicator is shown on the Mac and hidden on the phone.** Long-press is the iOS idiom and the
+  phone's bar has no width for a chevron; the Mac has no such idiom, and a control that answers only
+  to click-and-hold is one nobody finds — which is what this point warns about when it rejects a
+  Settings pane. The chevron is the "disclosure" the point offers as the alternative.
+- Verified against the 26,396-track library on the NAS: all four presets return distinct orders,
+  each differing from the unweighted order and from each other; `start_with` is honoured on the
+  weighted path; `comfort_zone` surfaced a 31-play track in its top five where the other three
+  surfaced unplayed ones. 707 unit tests pass, and both app targets build.
+- **Follow-up, unchanged from below.** The presets do not work offline, and ADR-0006's manifest
+  variants are the route to fixing it. The Home rows of
+  [ADR-0032](ADR-0032-the-apple-clients-get-a-home-destination.md) point 4 are absent until that ADR
+  lands, as it says.
 
 ## Context
 
