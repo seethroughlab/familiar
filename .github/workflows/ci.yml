@@ -78,6 +78,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fails in a second with the remedy, instead of four minutes later inside a Docker
+      # build with an error message that blames a locked keychain. `svc.sh install`
+      # rewrites this key on every runner reinstall, so the fix is one `svc.sh` away from
+      # being silently undone — and the symptom is nowhere near the cause.
+      - name: Check the runner can reach the keychain
+        run: |
+          for plist in "$HOME/Library/LaunchAgents"/actions.runner.seethroughlab.*.plist; do
+            [ -f "$plist" ] || continue
+            value=$(plutil -extract SessionCreate raw "$plist" 2>/dev/null || echo absent)
+            if [ "$value" = "true" ]; then
+              echo "::error::$(basename "$plist" .plist) has SessionCreate=true, so the runner"
+              echo "::error::sits in its own security session and cannot reach the login keychain."
+              echo "::error::Docker Desktop's credential service will fail during the build."
+              echo "::error::Fix on the runner host: ./scripts/fix-macos-runner-session.sh"
+              exit 1
+            fi
+          done
+          echo "Runner session is shared with the login session; the keychain is reachable."
+
       - name: Prepare keychain-free Docker config
         run: |
           rm -rf "$DOCKER_CONFIG"
