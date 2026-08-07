@@ -81,6 +81,34 @@ first callback at or past 16.67 ms is the third, so frames emit every ~17.4 ms �
 48 kHz device gives a different number again. `NativeAudioAnalysisMetrics.cadenceHz` already carries
 the measured rate in every frame, which is the right thing for the page to trust.
 
+**The purpose is a plugin ecosystem, and the plugin surface is already built and empty.** Recorded
+2026-08-07, because it is the rationale for this ADR and it was missing: the visualizer is the one
+place in Familiar where someone outside this repository can add something, and the scaffolding for
+that shipped long ago. `docs/VISUALIZER_API.md` is **575 lines** with Registration, Guidelines,
+Performance Tips and Contributing sections; `visualizers/_template/` holds an `ExampleVisualizer.tsx`
+and its own README; `VisualizerMeta` carries an `author` field commented *"for community
+visualizers"*. And `visualizers/community/` has contained nothing but `.gitkeep` since it was created
+on 2026-04-20.
+
+**A correction, per rule 4.** This ADR's Alternatives section claimed a native rebuild would strand
+*"the three plugin repositories that target the web API"*. There are none — not in this
+organisation, not referenced anywhere in the docs. `community/` is empty and the four visualizers in
+the picker are all first-party. The sentence is fixed below; the ambition it described is real and
+unrealised, which is a different and more useful thing to record.
+
+**Which reframes what embedding buys.** A visualizer author writes Three.js against
+`getAudioData()`. Today that runs in a browser tab — and the browser tab is not where this product
+is used any more: ADR-0001 moved listening to the native clients and ADR-0013 left the web app as a
+management surface. So the reward for writing one is that it runs in the place nobody listens.
+Embedding is what makes a third-party visualizer appear on the Mac and the phone **without its
+author writing a line of Swift**, which is the only version of this that a person outside the repo
+would spend an evening on. Points 4 and 5 are what deliver that: the contract they preserve is not
+an internal convenience, it is the thing being offered to other people.
+
+The two occurrences of the phrase *"from Web Audio API"* — `VISUALIZER_API.md:156` and
+`types.ts:27` — are the only promise in that contract a push source falsifies. Neither states a bin
+count and neither names `AnalyserNode`, so the fix is two sentences, not a versioned API change.
+
 Exposing an FFT here is mostly a publishing problem. Two signal-processing problems come with it,
 below.
 
@@ -269,7 +297,8 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
 already in the right process. Rejected on maintenance, for the reason ADR-0016 rejected a native
 Discover: 3,985 lines across 22 files with 14 commits in six months is the most active surface in
 the product, and a second implementation would have to change with it every time. It would also
-strand the four existing visualizers and the three plugin repositories that target the web API.
+strand the four existing visualizers and the plugin API they are written against — see the
+Context note on what that API is worth, and on the claim this sentence used to make.
 
 **Have the page pull each frame with `WKScriptMessageHandlerWithReply`.** Genuinely attractive: the
 page's `requestAnimationFrame` becomes the clock, so backpressure is automatic and a hidden page
@@ -298,16 +327,28 @@ would need point 7 and not points 3–6, which is most of the work avoided. Reje
 that need no FFT are the two least worth embedding a web view for, and the channel gets built the
 first time anyone wants `reactive-terrain` — which at 1,311 lines is the default and the largest.
 
-**Leave the visualizer web-only, as ADR-0001 point 5 said.** Still defensible: it is the one
-feature in the product with no functional purpose, and the web app is a browser tab away. Rejected
-because the phone and the Mac are now where the listening happens, the DSP is already running and
-being discarded on every track, and "possibly permanently" was written as a scope boundary for v1
-rather than as a finding.
+**Leave the visualizer web-only, as ADR-0001 point 5 said.** The case for it, which this ADR
+previously made in its own voice: the visualizer plays nothing, finds nothing and manages nothing,
+and the web app is a browser tab away. **That framing is wrong and is corrected here rather than
+left standing** — it measures the visualizer as a playback feature, and it is not one. It is the
+product's only extension point, the one thing a stranger can contribute without touching the
+backend, the LLM or the audio engine; and it is the part that makes the app enjoyable rather than
+merely useful, which is not nothing in a music player. Rejected because leaving it web-only leaves
+that extension point pointed at the surface ADR-0013 reduced to management, so the plugin API stays
+what it is today — 575 lines of documentation, a template, and an empty `community/` directory.
+Also because the phone and the Mac are now where the listening happens, the DSP is already running
+and being discarded on every track, and "possibly permanently" was written as a scope boundary for
+v1 rather than as a finding.
 
 ## Consequences
 
 - **Positive:** The four existing visualizers work on both Apple clients with no changes to any of
   them, because points 4 and 5 keep `getAudioData()` and its shape intact.
+- **Positive, and the reason to do this at all:** the plugin API stops pointing at a surface
+  nobody listens on. A Three.js visualizer written against `getAudioData()` would run on the Mac and
+  the phone with no Swift and no change by its author, which is the first time contributing one has
+  been worth an evening. Whether anyone takes it up is not something this ADR can promise — but
+  today the offer is one the product cannot keep, and after this it is one it can.
 - **Positive:** An FFT that currently runs ~57 times a second and is discarded starts being used.
 - **Positive:** The band maths and the onset detector stop existing in two places that disagree.
   Point 5 makes `analysisMetrics.ts` the single implementation for every client.
