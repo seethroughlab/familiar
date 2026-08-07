@@ -1,10 +1,47 @@
 # ADR-0041: The Playhead Is Published Separately from the Player
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-07
 
 Extends [ADR-0028](ADR-0028-the-apple-clients-playback-session-is-local.md) point 7.
+
+Implementation:
+- Accepted 2026-08-07 and shipped in `familiar-apple` #82, in two commits kept separate because each
+  is measurable alone: the per-pass list costs, then the split itself.
+- **The measurement, in the state the baseline was taken in** — playing, queue pane open, Favorites
+  on screen:
+
+  | | main-thread samples | in `flushObservers` | CPU |
+  |---|---|---|---|
+  | Before | 2,712 | 2,320 — **86%** | 92–98% |
+  | After the list fixes | 1,991 | 1,352 — **68%** | — |
+  | After the split | 276 | 13 — **4.7%** | **5–9%** |
+
+  The middle row is what isolates the split: it and the last were taken on comparable screens, so
+  **1,352 → 13** is the split's own doing. The list fixes cut the cost per pass; the split stopped
+  the passes.
+- **Making the forwarders get-only is what found every write site.** Fourteen assignments to
+  `currentTime`/`duration` inside `FamiliarPlayer`, each a compile error until routed through the
+  playhead. Point 3's forwarders were written to keep callers compiling; they turned out to be the
+  migration's safety net as well.
+- Point 5's invariant test earned its place immediately. It asserted one wake per tick and got
+  **two** — an unchanged `duration` was being re-assigned four times a second, and `@Published` does
+  not compare before publishing. `Playhead.update` now checks first, halving the wakes in steady
+  state. The assumption was wrong and what it uncovered was real.
+- The four silent traps named in planning all held. `PlaybackSessionWriter` needed the second
+  subscription or the position would have stopped being saved while queue writes carried on;
+  `CastSnapshot` needed no change because `positionMS` reads the forwarder and the read that matters
+  happens outside the sink; `CarPlayBridge`'s row diff stays as defence in depth with its comment
+  updated to record that the cause is fixed; `CrossfadeWiringTests`' delegate signature is untouched.
+- **Step 4 of the plan was correctly conditional and correctly skipped.** `TrackRowMenu`'s 71
+  baseline samples were 71 samples *at 4 Hz*; after the split it registers zero. Restructuring a
+  component with seven call sites on speculation would have been work for nothing.
+- Two things the plan called for were dropped for the same reason: a search debounce and caching the
+  derived `[TrackRowValue]`. Both were justified by the filter running per render, which it no longer
+  does.
+- **Follow-up.** `@Observable` still subsumes this entirely, per the third alternative. The split is
+  compatible with it and would simply become redundant.
 
 ## Context
 
