@@ -1,11 +1,62 @@
 # ADR-0032: The Apple Clients Get a Home Destination
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
 
 Extends [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) and
 [ADR-0018](ADR-0018-the-phone-navigates-from-a-root-list.md).
+
+Implementation:
+- Accepted 2026-08-07 and shipped in `familiar-apple` #83, in two commits: the destination, then
+  the content. It became buildable the same morning — point 4's weighted presets arrived with
+  [ADR-0035](ADR-0035-weighted-shuffle-is-a-preset-the-server-applies.md).
+- **Point 7 is half right, and the half it gets wrong is the dangerous one.** Adding `case home`
+  does fail five exhaustive switches — `LibraryRoot.init(selecting:)`, `sidebarItem(section:)`, and
+  three in `LibraryView`. It does **not** touch `LibrarySidebar` or `LibraryRootList`, which build
+  their rows from literals rather than from a switch. So **the two files that decide whether anyone
+  can see Home at all are exactly the two the compiler says nothing about.** Both now carry a
+  comment saying so. The ADR leaned on "it will fail to compile" as the safety argument for touching
+  routing, and that argument only covers half the work.
+- **The same shape had already reached the tests.** `testEveryItemIsCovered` claimed to guard
+  against the suite going stale and did not: it compared a hand-written `allItems` against a *second*
+  hardcoded set, so a destination missing from both passed silently. `.chat` and `.settings` had sat
+  unlisted for months beneath a docstring saying they could not. `LibraryRoot` is now `CaseIterable`
+  and the test enumerates from the compiler's list, stating only the one deliberate exception —
+  `.menu`, which is reached by `showMenu()` rather than by selection. Verified by removing `.home`
+  and watching it fail, which the previous version would not have done.
+- **Point 4 conflicts with ADR-0035 point 4, and the accepted ADR won.** This one says "the weighted
+  presets" (plural); ADR-0035 says "the Home row" (singular). One Shuffle Everything row, drawing
+  with whatever preset the listener set on the transport — four rows would make Home a second place
+  to choose one, against ADR-0035 point 7. The row names the active preset, which is otherwise
+  visible only inside the menu that sets it.
+- **The row set grew, under point 6's own licence.** Five rows read as a menu rather than a home
+  screen, so two discovery sections were added from `GET /library/discover` — Unheard and Deep Cuts,
+  five tracks each. Point 6 says "if the row set turns out to be wrong, the fix is a different row
+  set", which makes this ordinary work inside the decision rather than a new one. **They play**,
+  where the web app's Discovery Preview names a track and then navigates to the Discover page
+  instead of playing it — the one place this Home is better than the one it was ported from rather
+  than smaller. Home therefore fetches now, but its offline story is unchanged: a section that
+  cannot load is absent, the rule Shuffle Everything already followed.
+- **Point 2 has a gap it did not notice.** It promises the root list "remains the one mechanism by
+  which every other destination is reached" while point 4's row list contains no route to it. The
+  interim answer is a Library row on the phone — the one row here that navigates. The real answer is
+  a persistent navigation like the web app's mobile tab bar, which **reverses ADR-0018 point 1** and
+  is deferred to its own ADR rather than smuggled in here.
+- No prompts row, despite the last follow-up below anticipating one: `ChatStore` already fetches
+  curated prompts and `ChatView` shows them in its empty state, so a Home section would put the same
+  six in two places — and it would navigate rather than play.
+- `shuffleLibrary()` was not extracted. It depends on six pieces of `LibraryView`'s state including
+  the hydration bookkeeping that stops a 26,396-id queue reading "Untitled", so Home takes closures,
+  the shape `LibraryRootList` already uses.
+- Home observes `FamiliarPlayer` and never `Playhead`
+  ([ADR-0041](ADR-0041-the-playhead-is-published-separately.md)): it is the landing screen, the worst
+  place to reintroduce a 4 Hz subscription, which is also why the Resume row deliberately shows no
+  position.
+- **The web Home's "starts nothing" is one notch absolute**, checked while porting. Its Resume module
+  does call `setIsPlaying`/`jumpToQueueIndex` — transport control on an existing queue, not content
+  selection. Nothing on it turns a library item into playback, so the Context's argument holds; the
+  sentence is stronger than the code.
 
 ## Context
 
