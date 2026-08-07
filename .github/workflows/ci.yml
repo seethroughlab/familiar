@@ -45,25 +45,36 @@ jobs:
 
   macos-compose-integration:
     name: macOS Compose Integration
-    # Pull requests only, for the same NAS-contention reason as docker-build. Its
-    # keychain failure is environmental and it is already advisory, so running it on
-    # every merge adds a red check that means nothing.
+    # Pull requests only, for the same NAS-contention reason as docker-build.
     if: github.event_name != 'push'
     runs-on: [self-hosted, macOS]
     timeout-minutes: 15
-    # Advisory: the self-hosted macOS runner runs as a launchd service with
-    # no interactive session, so its login keychain stays locked. Docker
-    # Desktop on macOS ignores credsStore-override workarounds and still
-    # invokes the osxkeychain helper for image-metadata auth, which then
-    # fails. Real fix lives on the runner host — either remove
-    # `"credsStore": "osxkeychain"` from ~/.docker/config.json, or
-    # auto-unlock the keychain at boot. Until then, don't redden CI.
-    continue-on-error: true
+    # **This job had never once passed, for two independent reasons, and the fix for
+    # the first guaranteed the second.** Recorded because the previous comment here
+    # described a cause that was not the cause.
+    #
+    # 1. `error getting credentials — keychain cannot be accessed because the current
+    #    session does not allow user interaction`. Not a locked keychain: it is
+    #    unlocked, with no timeout. The runner's LaunchAgent carried
+    #    `SessionCreate = true`, which puts it in its own security session, and
+    #    securityd will not release an item to a session that cannot prompt. Docker
+    #    Desktop resolves registry auth through its own credential service
+    #    (`credsStore: "desktop"`, not `osxkeychain`), which ignores DOCKER_CONFIG —
+    #    so no amount of config override here could have helped. Fixed on the runner
+    #    host by removing that key from
+    #    ~/Library/LaunchAgents/actions.runner.seethroughlab.jeffbook.plist.
+    #
+    # 2. `DOCKER_BUILDKIT: '0'` was set to route around the above, and the classic
+    #    builder cannot read `RUN --mount=type=cache`, which docker/Dockerfile uses
+    #    at step 23. So the workaround for the first problem made the build fail
+    #    outright. It is gone; BuildKit's auth path works now that the session does.
+    #
+    # `continue-on-error` was also here, and it does not do what it was added for:
+    # the workflow conclusion goes green but the *check run* still reports failure,
+    # which is what a PR shows. It is removed rather than left as a comment that
+    # misdescribes the behaviour — this job either gates or it does not.
     env:
       DOCKER_CONFIG: /tmp/familiar-ci-docker-config
-      # Skip buildkit so the classic builder uses our overridden config
-      # (buildkit's metadata fetcher has its own auth path).
-      DOCKER_BUILDKIT: '0'
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +82,11 @@ jobs:
         run: |
           rm -rf "$DOCKER_CONFIG"
           mkdir -p "$DOCKER_CONFIG"
-          # `credsStore: ""` tells Docker to skip credential helpers entirely.
+          # `credsStore: ""` tells Docker to skip credential helpers entirely. Kept as
+          # belt and braces rather than as the fix: it verifiably works for the CLI —
+          # a deliberately bogus helper name here does get invoked and does fail — but
+          # Docker Desktop's own credential service never consulted this file, which
+          # is why it never addressed the failure above.
           echo '{"credsStore":"","credHelpers":{},"auths":{}}' > "$DOCKER_CONFIG/config.json"
           # Docker looks up CLI plugins (compose, buildx) under
           # $DOCKER_CONFIG/cli-plugins. Without this symlink, `docker compose`
