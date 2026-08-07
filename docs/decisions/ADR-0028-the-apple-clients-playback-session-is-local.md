@@ -1,11 +1,32 @@
 # ADR-0028: The Apple Client's Playback Session Is Local
 
-Status: proposed
+Status: accepted
 Date: 2026-08-05
 
 Extends [ADR-0027](ADR-0027-shuffle-and-repeat-are-listener-modes.md) and
 [ADR-0029](ADR-0029-the-server-stores-no-listener-preferences.md).
 Retires ADR-0003 phase 4 for the Apple clients.
+
+Implementation:
+- Accepted 2026-08-05 and shipped in `familiar-apple` #70, with
+  [ADR-0027](ADR-0027-shuffle-and-repeat-are-listener-modes.md).
+- Points 2 and 4 are done by deletion: `QueueAdopter`, `QueueAdoptionText`, `ServerQueueSource`,
+  `QueueSyncStatus`, the `familiar.queueSync.enabled` switch and both settings surfaces are gone
+  from the repository. `PlaybackSessionSnapshot` survives as point 6 specifies, now `Codable` and
+  carrying `repeatMode` and `consume`.
+- Point 7's two files shipped as designed, and the reasons written into it were each load-bearing.
+  The signature is SHA256 rather than `hashValue` — Swift seeds `Hasher` per process, so a stored
+  hash never matches on the next launch and restore would have silently done nothing forever.
+  Beyond what the ADR anticipated, three further failures were only avoided by being looked for:
+  the writer must attach strictly *after* restore, or it saves an empty player over the session
+  before anything reads it; `restoreSession` must not route through `adoptQueue`, for the reason in
+  ADR-0027's record; and the writer is a `@StateObject`, because its only other reference is a weak
+  Combine subscription and a plain `let` on a re-created view struct would deallocate it mid-session
+  with playback carrying on unsaved.
+- Point 8's third layer — launch, quit, relaunch with the network off — was performed.
+- **Both follow-ups stand.** The `queue` tag is still in the generator's filter list with no
+  callers, and `Tests/FamiliarAPITests/QueueSessionTests.swift` still exercises an endpoint this
+  client no longer calls.
 
 ## Context
 

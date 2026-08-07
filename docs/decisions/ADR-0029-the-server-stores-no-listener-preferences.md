@@ -1,10 +1,38 @@
 # ADR-0029: The Server Stores No Listener Preferences
 
-Status: proposed
+Status: accepted
 Date: 2026-08-05
 
 Extends [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) and
 [ADR-0015](ADR-0015-audio-effects-are-exposed-not-rebuilt.md)
+
+Implementation:
+- Accepted 2026-08-05. Points 1, 2, 3, 5 and 6 describe the codebase as it already was, so the only
+  executable part was point 4 — which shipped on both clients the same day: `familiar` #99 and
+  `familiar-apple` #71.
+- **The migration needed a seed, and the seed needed a guard.** Both clients read
+  `GET /favorites/auto-download` exactly once per profile to carry the old value across; without it,
+  anyone who had the setting on stops getting downloads after the update and rightly calls it a bug.
+  A failed read is not an answer — nothing is marked seeded and the next load tries again. And the
+  seed must not resurrect a value the listener has since changed, or the toggle appears to undo
+  itself on reload.
+- **Both endpoints survive, marked `deprecated` with the reason in the docstring**
+  (`backend/app/api/routes/favorites.py`). They can go once every client has seeded; note that
+  `familiar-apple` commits `openapi.json` verbatim, so removing them means regenerating the Swift
+  client in the same change. Until then `Profile.settings` is not yet the empty bag the last
+  follow-up describes.
+- The web keys the setting by profile *inside* the store, unlike `familiar-queue-sync`, which was a
+  rollout gate and genuinely per-device-only. Favourites belong to a listener, so two people sharing
+  one browser must not share the answer.
+- Two things fell out of the move that the ADR did not predict. The Mac gained a Downloads tab in
+  Settings: both native apps had *read* `favorites_auto_download` since they shipped and only the
+  phone could write it, so the Mac had been silently obeying a setting with nothing anywhere to
+  change it (the gap ADR-0025 point 5 recorded). And the launch read stopped failing silently — it
+  was wrapped in `catch { return }`, so offline, the one condition where having files on disk
+  matters most, the setting simply did not apply.
+- **All four follow-ups stand**: the five `normalization_*` fields, re-scoping
+  `playlist_discovery_mode` and `community_cache_contribute`, the playlist `auto_download` flags,
+  and what becomes of `Profile.settings`.
 
 ## Context
 

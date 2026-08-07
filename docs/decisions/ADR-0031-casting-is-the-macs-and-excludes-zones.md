@@ -1,10 +1,37 @@
 # ADR-0031: Casting Is the Mac's, and Excludes Zones
 
-Status: proposed
+Status: accepted
 Date: 2026-08-05
 
 Extends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) and
 [ADR-0014](ADR-0014-the-generated-surface-widens-to-management.md)
+
+Implementation:
+- Accepted 2026-08-05 and shipped in `familiar-apple` #73. The OpenAPI lint change the last
+  follow-up asked for landed first, on `familiar` #102.
+- **Points 2, 3 and 4 are expressed as an `operations:` list, not a tag**, in
+  `Sources/FamiliarAPI/openapi-generator-config.yaml`. The generator filters by `operationId` as
+  well as by tag, so the exclusion is exact — and the trap worth naming is that the filter keys are
+  a **union**: adding `outputs` to `tags:` would re-admit all 24 operations including the nine this
+  list exists to exclude. Verified as 141 → 150 generated methods, exactly +9, with zero `Zone`
+  schemas. A typo is a build failure, not a silent omission.
+- The client is `Sources/FamiliarKit/Casting.swift` and `CastCommand.swift`, with
+  `App/Shared/ServerCastOutputsSource.swift` behind `#if os(macOS)` — point 7 enforced by the
+  compiler rather than by convention. The UI is in `NowPlayingBar.swift`. Tests:
+  `CastControllerTests`, `CastReducerTests`, `TrackEpochTests`.
+- **Point 5 needed a signal that did not exist.** The client is the timeline authority, so casting
+  has to know when a track *begins* in order to hand the speaker the next URL, and
+  `onPlaybackEnded` had no counterpart. Notifying on a track-id change is wrong twice over — under
+  `repeat one`, and in a queue holding one track twice in a row, the id does not change though the
+  track restarts. `trackEpoch` is a counter instead, and ADR-0030's now-playing call keys on it too.
+- Point 6 is live: `CrossfadeDecision` takes `isCasting` and returns no fade, so
+  [ADR-0026](ADR-0026-crossfade-is-decided-by-the-player-not-the-engine.md) was built already
+  constrained rather than corrected afterwards.
+- Point 10's third layer — real hardware, including the `device_stream_base_url` failure that
+  reports success over silence — is the one that cannot be automated and is the one to re-run
+  whenever the transport changes.
+- **Follow-ups.** No server-side owner for an output, and `GET /outputs/zones` is still unreachable
+  behind `GET /{output_id}`; a second client now makes the first likelier to be met.
 
 ## Context
 
