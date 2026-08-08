@@ -201,7 +201,22 @@ async def on_call_tool(
         executor = ToolExecutor(session, profile_id=profile_id, user_message=generation_prompt)
         result = await executor.execute(name, arguments)
 
+    # Every call is logged with its arguments, because the arguments are the interesting part.
+    # ADR-0043 point 3 rests on a host calling get_feature_distribution *before* it thresholds,
+    # and there is otherwise no way to see whether it did: the tool sequence lives in the host's
+    # conversation, not here. `docker logs familiar-api | grep mcp_tool_call` is the record.
     is_error = isinstance(result, dict) and "error" in result
+    matched = result.get("count") if isinstance(result, dict) else None
+    logger.info(
+        "mcp_tool_call",
+        extra={
+            "tool": name,
+            "arguments": json.dumps(arguments, default=str)[:400],
+            "profile_id": str(profile_id),
+            "matched": matched,
+            "is_error": is_error,
+        },
+    )
     if is_error:
         logger.info("mcp tool %s returned an error: %s", name, result.get("error"))
     return types.CallToolResult(
