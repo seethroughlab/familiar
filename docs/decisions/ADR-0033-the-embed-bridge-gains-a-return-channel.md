@@ -153,6 +153,25 @@ The two occurrences of the phrase *"from Web Audio API"* — `VISUALIZER_API.md:
 `types.ts:27` — are the only promise in that contract a push source falsifies. Neither states a bin
 count and neither names `AnalyserNode`, so the fix is two sentences, not a versioned API change.
 
+**The frames arrive ~80 ms after their audio was heard, and that is not the same problem as the
+rate.** Measured 2026-08-08, because "10 Hz" alone does not say whether a buffer is about to be
+played or has just finished playing, and the two lead to opposite designs:
+
+    tap block runs  +81.7 ms  after the buffer's own audio timestamp  (76.1-86.9, n=20)
+    outputNode.presentationLatency = 1.3 ms
+    sampleTime step = 4410 frames
+
+Output latency is negligible, so the handoff is the whole story. A buffer **straddles now**: by the
+time the block runs, roughly its first 80 ms has already left the speakers and only its last ~20 ms
+is still ahead. This is the cost of a tap being non-realtime — the block runs on an ordinary
+dispatch queue, where allocating and locking are safe, and 100 ms of chunking is what pays for that.
+
+Two consequences fall straight out. Anything that *replays* the buffer over the following 100 ms
+doubles the lag rather than fixing it. And a detector reading these frames reports an onset up to
+80 ms after it was audible — invisible for a level meter, which is why the native spectrum meter
+looks correct, and past the ~45 ms threshold at which audio-visual desync becomes noticeable for
+anything that flashes on a beat.
+
 Exposing an FFT here is mostly a publishing problem. Two signal-processing problems come with it,
 below.
 
@@ -249,12 +268,39 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
    is right for the render loop and is a cost to the detector; the two must be designed together
    rather than each in isolation.
 
-4. **The page-side landing point is `nativeAnalysisBuffers.ts`, unchanged.** The frame is written
-   with `setNativeAnalysisBuffers`, `useAudioAnalyser` reads it, and `getAudioData()` keeps its
-   current signature. Every visualizer in `docs/VISUALIZER_API.md` works without modification,
-   which is most of what embedding is being bought for.
+4. **The page-side landing point is `nativeAnalysisBuffers.ts`, and `getAudioData()` keeps its
+   current signature.** The newest sub-frame is written with `setNativeAnalysisBuffers` and
+   `getAudioData()` returns what it always has, so every visualizer in `docs/VISUALIZER_API.md`
+   works without modification — which is most of what embedding is being bought for.
 
-5. **The frame carries the spectrum, not the derived values.** `frequencyData` and
+   **`useAudioAnalyser` itself does change**, and the distinction matters: it is shared
+   infrastructure, not a visualizer. Point 5's sequence has to reach the flux detector, so the
+   native branch of `analyseLoop` gains a path that runs flux across the four sub-frames it was
+   handed rather than differencing whatever `getAudioData()` last returned. Nothing above that line
+   notices.
+
+5. **The frame carries the spectrum, not the derived values — as a sequence of four, not one.**
+
+   **Amended 2026-08-08.** As first written this point assumed the page could difference consecutive
+   frames the way it does under Web Audio. It cannot: `analyseLoop` computes spectral flux per
+   `requestAnimationFrame`, and at 10 Hz five of every six passes would see identical bytes. The
+   `FLUX_EMA_ALPHA = 0.1` baseline would learn from ~50 zeroes a second, collapse, and fire on
+   essentially every arriving buffer — a detector reporting buffer arrivals rather than beats,
+   clamped to 9/s by `ONSET_REFRACTORY_MS = 110`.
+
+   The fix is that **10 Hz is a delivery rate, not an analysis limit**. Each buffer holds 4410
+   *continuous* samples, so onset resolution is set by the hop, which is ours to choose. At a 1024
+   hop that is four windows per buffer, **23 ms resolution, ~43 Hz** — the same order as the
+   `hop_length = 512` this repo's own `librosa.onset.onset_strength` uses in
+   `backend/app/services/analysis.py`. The four windows are already computed for point 12; this
+   point stops collapsing them.
+
+   So the original intent survives intact — one tuned implementation, on the page — and it survives
+   *because* the sequence crosses rather than a single spectrum.
+
+   The two rules that follow from carrying a sequence are points 14 and 15.
+
+   **The frame carries the spectrum, not the derived values.** `frequencyData` and
    `timeDomainData` cross; `bass`, `mid`, `treble`, `beat` and `onset` are derived on the page by
    `player/audio/analysisMetrics.ts` and the spectral-flux detector in `useAudioAnalyser`, which
    already exist and are already tuned. This deliberately routes around the two never-passing tests
@@ -355,6 +401,37 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
     see `App/`, and a wire format is exactly the kind of decision that belongs in the package —
     the same reasoning that put `EmbedIntent.parse` there rather than in the message handler.
 
+14. **The newest sub-frame is what gets drawn; the sequence is what gets analysed.** Added
+    2026-08-08. Detection quality comes from the run of four, timing from the last of them — which
+    the Context measurement puts within about ±12 ms of what is audible, where sub-frame 0 is 80 ms
+    behind it. Drawing the sequence in order would animate 80 ms of the past every 100 ms. Drawing
+    only the newest keeps the picture honest, and costs nothing, since the older three have already
+    done their job by the time the flux is computed.
+
+15. **Beat-locked effects are driven by a predicted grid, not by the flux.** Added 2026-08-08.
+    Nothing above removes the 80 ms between an onset happening and this channel reporting it, so a
+    reactive flash is late by construction on the native clients while the same visualizer is tight
+    in a browser. A *predicted* grid is immune to input lag in a way a reactive detector is not.
+
+    **A grid needs tempo and phase, and only tempo is stored.** Checked 2026-08-08 rather than
+    assumed: `bpm` is persisted and is in `tracks.py`'s queryable allowlist, but the beat *positions*
+    are not. `analysis.py:350-351` computes `beat_frames` and `beat_times` from a PLP curve and puts
+    them in the shared dict at :366-367 — and nothing writes them to `features`, and there is no
+    column. They are thrown away at the end of every analysis, which is the same shape of waste this
+    ADR opened with.
+
+    So this point costs one of two things, and the choice is deliberately left open because it is a
+    backend decision rather than a bridge one: **derive phase on the page** from `bpm` plus the
+    first flux onset, self-correcting and free but wrong until a beat has been heard; or **persist
+    `beat_times`**, which is a migration and a few hundred floats per track, and which would also
+    serve anything else that ever wants to line up with a beat. The flux stays for what it is good
+    at either way: reacting to what a grid cannot predict.
+
+    **This is the one point that changes a visualizer's own code**, and it is therefore the one to
+    weigh against ADR-0016 point 1's whole premise. Points 4 and 5 exist so the four existing
+    visualizers run unmodified; this says the beat-locked ones want a different clock on native. It
+    is recorded here rather than left for whoever first notices the flashes are late.
+
 ## Alternatives Considered
 
 **Rebuild the visualizer natively in Metal or SceneKit.** Fully native, no web view, and the FFT is
@@ -385,6 +462,21 @@ careful to separate: a listener-initiated intent, of which there may be two, and
 render feed. It would also make ADR-0020 point 2's cap meaningless — "two messages" would come to include
 one that fires continuously for as long as a track plays — and the bar in point 3 would then have to be argued about
 every future push as well as every future intent.
+
+**Replay the four sub-frames over the following 100 ms, so they are drawn in time.** The obvious
+way to turn a 10 Hz delivery into 43 Hz motion, and it was the leading candidate until the arrival
+time was measured. Rejected on that measurement: the block runs **81.7 ms after** the buffer's own
+audio timestamp, so the buffer straddles now rather than sitting ahead of it and every sub-frame is
+already due on arrival. Replaying them would add a second 100 ms on top of the 80 ms already spent —
+lag of up to 180 ms in exchange for smoothness that point 14 gets for free by interpolating toward
+the newest.
+
+**Derive onsets natively and send the events.** Precise timing, tiny payload, and the analysis could
+run at any hop we like. Rejected for what point 5 and
+[ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md) both exist to prevent: a second
+tuned detector, in a second language, drifting from the one the four existing visualizers are
+written against. It also would not help — the 80 ms is the handoff, not the analysis, so a natively
+detected onset arrives just as late.
 
 **Ship only the `lyrics` and `music-video` visualizers, which need metadata but no spectrum.** It
 would need point 7 and not points 3–6, which is most of the work avoided. Rejected because the two
@@ -450,6 +542,17 @@ v1 rather than as a finding.
   the analysis channel or is derived page-side from a start time is unresolved here and is the first
   thing implementation will hit. The measured 10 Hz makes the second more likely: a clock that
   updates ten times a second is visibly steppy, and lyrics timing is exactly where that shows.
+- **Tradeoff, measured 2026-08-08:** **beat-locked visuals are ~80 ms late on the native clients**
+  and tight in a browser, because the tap hands its buffer over 81.7 ms after that audio played.
+  Past the ~45 ms at which desync is noticeable. Point 15 is the answer and it is not a free one:
+  it asks the page for a tempo grid it does not fetch today, and it is the only place this ADR
+  changes a visualizer rather than carrying it unmodified.
+- **Positive:** the detector gets a better input than it has in the browser in one respect — a
+  23 ms hop is fixed and known, where `requestAnimationFrame` under Web Audio delivers whatever the
+  frame rate happened to be, and drops frames under load.
+- **Follow-up:** `beat_times` is computed on every analysed track and discarded (`analysis.py:351`,
+  never written to `features`). Point 15 is the first thing that would want it. Deciding whether to
+  persist it is a backend question and is not settled here.
 - **Follow-up:** The two skipped tests in `NativeAudioAnalysisProcessorTests` are now routed around
   rather than fixed. They still assert something about a processor this ADR depends on, and
   `testBrightFixtureDominatesTreble` in particular encodes a disagreement about where treble begins
