@@ -1,6 +1,6 @@
 # ADR-0022: Chat Is Built Native, and Hidden Without a Provider
 
-Status: accepted
+Status: superseded by [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 Date: 2026-08-02
 
 Implementation:
