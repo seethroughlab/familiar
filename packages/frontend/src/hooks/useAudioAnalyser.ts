@@ -82,12 +82,121 @@ let prevFreq: Uint8Array | null = null;
 let fluxEMA = 0;
 let beatEnv = 0;
 let lastOnsetTime = 0;
+/** The last native frame consumed, so an envelope is never applied twice. */
+let lastNativeSequence = 0;
 let lastBeatUpdate = 0;
 
 // Silence watchdog: warn once if we're "playing" but the analyser reads silence
 // for a sustained period (suspended AudioContext, broken routing, CORS taint…).
 let lastSignalTime = 0;
 let silenceWarned = false;
+
+/**
+ * The tuned half of onset detection: adaptive threshold, refractory, decaying envelope.
+ *
+ * Split out so a *supplied* flux envelope goes through exactly the same constants as a locally
+ * differenced one. This matters more than it looks: ADR-0033 point 5 keeps onset derivation on the
+ * page so there is one tuned implementation, and the moment a native host started sending flux
+ * there were two candidate places to threshold it. This is the one.
+ */
+function applyFlux(flux: number, now: number): void {
+  fluxEMA += FLUX_EMA_ALPHA * (flux - fluxEMA);
+
+  let onset = false;
+  if (
+    flux > ONSET_MIN_FLUX &&
+    flux > fluxEMA * ONSET_SENSITIVITY &&
+    now - lastOnsetTime > ONSET_REFRACTORY_MS
+  ) {
+    onset = true;
+    lastOnsetTime = now;
+    beatEnv = 1;
+  }
+
+  const dt = now - lastBeatUpdate;
+  lastBeatUpdate = now;
+  if (!onset && dt > 0) {
+    beatEnv = Math.max(0, beatEnv - dt / BEAT_DECAY_MS);
+  }
+
+  sharedData!.beat = beatEnv;
+  sharedData!.onset = onset;
+}
+
+/**
+ * Run a supplied envelope through the detector, oldest value first.
+ *
+ * Each value is a separate observation ~23 ms apart, so they are fed in sequence rather than
+ * averaged — averaging would flatten exactly the transient the detector is looking for. The
+ * refractory period then does its usual job of stopping one drum hit firing twice.
+ *
+ * `onset` is left true if *any* value in the envelope fired, because a caller reads it once per
+ * animation frame and would otherwise miss onsets that landed in the same frame.
+ */
+/** Fall the beat envelope by elapsed time, without treating it as a new observation. */
+function decayBeat(now: number): void {
+  const dt = now - lastBeatUpdate;
+  lastBeatUpdate = now;
+  if (dt > 0) beatEnv = Math.max(0, beatEnv - dt / BEAT_DECAY_MS);
+  sharedData!.beat = beatEnv;
+  sharedData!.onset = false;
+}
+
+function applyFluxEnvelope(flux: Float32Array, now: number, intervalSeconds: number): void {
+  if (flux.length === 0) return;
+  // **Milliseconds.** `now` is `performance.now()` and every constant in this file is in ms, where
+  // the interval arrives in seconds because that is the unit an audio hop is naturally expressed
+  // in. Mixing them made the four values of an envelope 0.023 ms apart instead of 23 ms — close
+  // enough to simultaneous that the 110 ms refractory would swallow all but the first.
+  const intervalMs = intervalSeconds * 1000;
+  let fired = false;
+  for (let i = 0; i < flux.length; i++) {
+    // Back-dated so the refractory window measures real time between observations rather than
+    // treating a whole envelope as simultaneous, which would let it swallow every value but one.
+    const at = now - (flux.length - 1 - i) * intervalMs;
+    applyFlux(flux[i], at);
+    if (sharedData!.onset) fired = true;
+  }
+  if (fired) sharedData!.onset = true;
+}
+
+/**
+ * Clear the detector's module-level state.
+ *
+ * **The state is genuinely module-level and genuinely never reset** — not on a track change, not on
+ * a seek, not between tests. That is mostly harmless in the app, where the adaptive baseline
+ * re-converges in under a second, but it makes tests order-dependent in a way that is very hard to
+ * see: `lastOnsetTime` survives, and `performance.now()` is not faked by vitest's defaults, so a
+ * second test running microseconds later sits inside the first one's 110 ms refractory window and
+ * simply cannot fire. Two new tests failed this way and the first one to look at was the *existing*
+ * code path, which had not changed.
+ *
+ * Named `ForTesting` in the idiom `resetPlaybackInterceptorForTesting` already establishes here.
+ */
+export function resetOnsetDetectorForTesting(): void {
+  // **Stop the loop first, and this is the part that actually matters.** The rAF loop is a
+  // module-level singleton guarded by `loopRunning`, and `stopLoop` only runs when the last
+  // subscriber unmounts. A test that renders the hook and never unmounts therefore leaves
+  // `loopRunning` true with a cancelled frame — so every later `startLoop` returns early and the
+  // loop never ticks again. Two tests failed this way and looked for all the world like a broken
+  // detector: the analyser was simply not running.
+  stopLoop();
+  prevFreq = null;
+  fluxEMA = 0;
+  beatEnv = 0;
+  // `-Infinity`, not 0. The refractory test is `now - lastOnsetTime > 110`, so zero means "an onset
+  // fired at time zero" and blocks everything for the first 110 ms of the clock. Harmless in the
+  // app, where the clock starts high; fatal under a faked clock, where it never advances past it —
+  // which is what made two new tests fail on a code path that had not changed.
+  lastOnsetTime = Number.NEGATIVE_INFINITY;
+  lastBeatUpdate = 0;
+  lastNativeSequence = 0;
+  // The mobile throttle's clock. Left stale, a faked clock that restarts lower than it leaves the
+  // loop returning early on every frame — which looks exactly like the analyser not running.
+  lastAnalyseTime = 0;
+  sharedData = null;
+  lastBinCount = 0;
+}
 
 function computeOnset(freq: Uint8Array, now: number): void {
   if (!prevFreq || prevFreq.length !== freq.length) {
@@ -113,27 +222,7 @@ function computeOnset(freq: Uint8Array, now: number): void {
   }
   flux = flux / (n * 255); // normalize to ~0-1
 
-  fluxEMA += FLUX_EMA_ALPHA * (flux - fluxEMA);
-
-  let onset = false;
-  if (
-    flux > ONSET_MIN_FLUX &&
-    flux > fluxEMA * ONSET_SENSITIVITY &&
-    now - lastOnsetTime > ONSET_REFRACTORY_MS
-  ) {
-    onset = true;
-    lastOnsetTime = now;
-    beatEnv = 1;
-  }
-
-  const dt = now - lastBeatUpdate;
-  lastBeatUpdate = now;
-  if (!onset && dt > 0) {
-    beatEnv = Math.max(0, beatEnv - dt / BEAT_DECAY_MS);
-  }
-
-  sharedData!.beat = beatEnv;
-  sharedData!.onset = onset;
+  applyFlux(flux, now);
 
   // Silence watchdog (only meaningful while the player thinks it's playing).
   const playing = usePlayerStore.getState().isPlaying;
@@ -182,7 +271,27 @@ function analyseLoop() {
     sharedData.frequencyData.set(nativeBuffers.frequency);
     sharedData.timeDomainData.set(nativeBuffers.timeDomain);
     computeBands(sharedData.frequencyData);
-    computeOnset(sharedData.frequencyData, now);
+
+    if (nativeBuffers.flux && nativeBuffers.sequence !== lastNativeSequence) {
+      lastNativeSequence = nativeBuffers.sequence;
+      // The host sent an onset envelope, so use it rather than differencing. See
+      // `setNativeAnalysisBuffers` — at 10 Hz, differencing here compares a spectrum against
+      // itself five frames in six and the detector degenerates into a buffer-arrival counter.
+      //
+      // `prevFreq` is still kept in step so that a host which *stops* sending an envelope falls
+      // back to differencing cleanly instead of on a spectrum from minutes ago.
+      if (!prevFreq || prevFreq.length !== sharedData.frequencyData.length) {
+        prevFreq = new Uint8Array(sharedData.frequencyData.length);
+      }
+      prevFreq.set(sharedData.frequencyData);
+      applyFluxEnvelope(nativeBuffers.flux, now, nativeBuffers.fluxInterval || 1 / 43);
+    } else if (!nativeBuffers.flux) {
+      computeOnset(sharedData.frequencyData, now);
+    } else {
+      // Same envelope as last frame — already consumed. Decay the beat envelope on the render
+      // clock so it still falls smoothly at 60 fps between the channel's 10 Hz arrivals.
+      decayBeat(now);
+    }
     sharedAudioDataRef.current = sharedData;
     recordConsumedAnalysisFrame('native', sharedData.frequencyData, sharedData.timeDomainData);
     return;
