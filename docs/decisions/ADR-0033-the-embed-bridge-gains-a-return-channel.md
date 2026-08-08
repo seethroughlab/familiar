@@ -10,6 +10,27 @@ Extends [ADR-0016](ADR-0016-embedded-web-surfaces-on-the-mac.md),
 Amends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5 and
 [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) point 4.
 
+Implementation:
+- **Nothing of the channel itself is built.** This ADR remains `proposed`: whether the visualizer is
+  worth an embedded surface is undecided, and points 1–5 and 7–11 describe work not started.
+- **Points 6 and 12 shipped early, on 2026-08-08, in `familiar-apple` #84**, driven by a different
+  and much smaller feature: a 24-bar spectrum meter above the Mac's scrubber, drawn natively from
+  these frames. It needed the same two fixes for the same reasons, so they landed there rather than
+  waiting on a decision about the web visualizer.
+- That is why the numbers in `## Context` changed. A consumer is the only thing that makes an
+  analysis path measurable, and this ADR had been reasoning from arithmetic — **the 57.4 Hz cadence
+  it previously stated as verified was wrong by a factor of six.** Points 6 and 12 were both
+  right in direction and wrong in detail until something drew the frames.
+- The meter needs no ADR of its own, on the precedent
+  [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) set when it separated the Music Map
+  from ADR-0001 point 5: *"'4,017 lines of three.js' is the visualizer, a different feature."* The
+  3,985-line Three.js surface stays out of scope and remains this ADR's subject.
+- **Four changes now sit inside the fence ADR-0015 point 2 put around
+  `NativeAudioEngine`'s processing** — smoothing, `fftSize`, accumulation order, and the `cadenceHz`
+  the last of those broke. Each is recorded where it was made and none can alter what anyone hears,
+  the processor being a read-only tap. Accepting this ADR is what makes them a decision rather than
+  a run of exceptions; that acceptance has not happened.
+
 ## Context
 
 [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5 put the visualizer
@@ -63,23 +84,46 @@ nonisolated func audioEngineDidUpdateAnalysis(
 ) {}
 ```
 
-An empty body. The tap is installed on every `play()`, the FFT runs at 60 Hz, the frame hops to the
-main actor, and it is thrown away — because of the ADR point this one amends.
+An empty body. The tap was installed on every `play()`, the FFT ran, the frame hopped to the main
+actor, and it was thrown away — because of the ADR point this one amends. **That body is no longer
+empty**: the Mac's transport gained a spectrum meter on 2026-08-08 (`familiar-apple` #84), which is
+what turned several of the numbers below from estimates into measurements. See `Implementation`.
 
 **The main-thread cost of this channel is therefore already being paid, into nothing.** Verified
 2026-08-07, after [ADR-0041](ADR-0041-the-playhead-is-published-separately.md) made this the
 question worth asking: `NativeAudioEngine.swift:2199` performs a `DispatchQueue.main.async` for
-every emitted frame — roughly **57 times a second throughout playback** — carrying two `[UInt8]`
-arrays and a thirteen-field struct to that empty function. This ADR does not add a 60 Hz main-thread
-burden. It gives one that already exists a purpose, which is a materially better position than "a
-visualizer would cost 60 hops a second" and is worth stating plainly, because ADR-0041's measurement
-otherwise reads as an argument against this ADR.
+every emitted frame — **ten times a second throughout playback** — carrying two `[UInt8]` arrays and
+a thirteen-field struct to that empty function. This ADR does not add a 60 Hz main-thread burden. It
+gives one that already exists a purpose, which is a materially better position than "a visualizer
+would cost 60 hops a second" and is worth stating plainly, because ADR-0041's measurement otherwise
+reads as an argument against this ADR.
 
-**~57 Hz, not 60, and it is the hardware's number rather than ours.** `analysisMinInterval` is
-`1.0/60.0`, but the guard is evaluated on tap callbacks, which arrive at 44100/256 ≈ 172 Hz. The
-first callback at or past 16.67 ms is the third, so frames emit every ~17.4 ms ≈ 57.4 Hz — and a
-48 kHz device gives a different number again. `NativeAudioAnalysisMetrics.cadenceHz` already carries
-the measured rate in every frame, which is the right thing for the page to trust.
+**10 Hz, and it is the platform's number rather than ours.**
+
+**Corrected 2026-08-08, and this replaces a figure this ADR previously asserted as verified.** An
+earlier revision of this section said "~57.4 Hz", derived by assuming tap callbacks arrive at
+44100/256 ≈ 172 Hz and counting how many the `1.0/60.0` throttle would let through. That arithmetic
+was sound and its premise was invented — nothing had ever measured the callback rate, because until
+#84 nothing consumed the frames.
+
+Measured two ways once something did. A probe on the delegate, on the running Mac app during real
+playback:
+
+    frames/s(observed)=10.0  cadenceHz mean=10.0 min=9.4 max=10.8  bins=512
+
+and then a standalone `AVAudioEngine` playing silence, to find out why:
+
+    requested  256 / 512 / 1024 / 2048 / 4096  ->  actual 4410  (10.0 Hz)
+    mainMixerNode 4410 (10.0 Hz),  playerNode 4410 (10.0 Hz)
+
+4410 frames is **exactly 0.1 seconds**. macOS clamps `installTap` to a 100 ms buffer for every
+requested `bufferSize` and on every tappable node, so `analysisMinInterval` never binds and the
+emission rate is the callback rate. **10 Hz is a platform floor**, not a tuning choice, and it is
+the rate any consumer of this channel gets.
+
+`NativeAudioAnalysisMetrics.cadenceHz` carries the measured rate in every frame and is the right
+thing for the page to trust — which is the lesson here restated: the number was available all along
+and the ADR preferred a derivation.
 
 **The purpose is a plugin ecosystem, and the plugin surface is already built and empty.** Recorded
 2026-08-07, because it is the rationale for this ADR and it was missing: the visualizer is the one
@@ -150,13 +194,18 @@ guard now - lastFrameAt >= minInterval else { return nil }
 sampleBuffer.append(contentsOf: UnsafeBufferPointer(start: channelData, count: frameCount))
 ```
 
-So a throttled callback discards its buffer entirely — **roughly two of every three buffers of audio
-are never seen.** Each frame is a 256-sample window with ~740 samples unobserved before it, not a
-window onto a continuous stream. That is harmless for a level meter and is *not* harmless for
-spectral flux, which is defined as the frame-to-frame difference of consecutive spectra: the page's
-detector would be differencing snapshots taken across gaps. This is independent of the smoothing
-problem, undermines point 5 in the same way, and is invisible from the ADR's vantage point because
-the frames currently go nowhere.
+So a throttled callback discarded its buffer entirely. **Corrected 2026-08-08:** this ADR first
+described that as "roughly two of every three buffers", which followed from the invented 172 Hz.
+With callbacks at 10 Hz the throttle never fires at all — and the real loss was worse and in a
+different place. Each 4410-frame buffer was appended whole and then a *single* 1024-sample window
+taken from it, so **under a quarter of the audio was analysed**: the last 23 ms of every 100 ms. A
+transient landing anywhere else was never seen.
+
+That is survivable for a level meter and is *not* survivable for spectral flux, which is defined as
+the frame-to-frame difference of consecutive spectra: the page's detector would be differencing
+snapshots taken across gaps. It is independent of the smoothing problem and undermines point 5 in
+the same way. It was invisible from this ADR's original vantage point precisely because the frames
+went nowhere — which is the argument for landing a consumer early, and is what happened.
 
 **And two native tests have never passed.** `NativeAudioAnalysisProcessorTests.swift:54` and `:75`
 are unconditional skips — *"Band edges disagree with the fixture"* and *"Variance ordering does not
@@ -183,7 +232,12 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
    frame.** The native side calls `evaluateJavaScript` with the latest frame, fire-and-forget, and
    **never has more than one call in flight** — if a frame is ready while one is outstanding, the
    newer frame replaces it and the older is dropped. A visualizer rendering at 30 fps must not
-   accumulate a queue of 60 Hz frames it will never draw.
+   accumulate a queue of frames it will never draw.
+
+   **Cheaper than it reads, now the rate is known.** At the measured 10 Hz a 30 fps page is *three*
+   redraws per frame, not the other way round, so coalescing will almost never have anything to
+   drop. It stays in the design because a stalled main thread is the case it exists for, not the
+   steady state.
 
    **Nothing to build this on exists today.** There is no buffering anywhere in the analysis path:
    each frame is an independent `DispatchQueue.main.async`, so a busy main queue delays every frame
@@ -209,6 +263,9 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
 
 6. **The native `fftSize` rises from 256 to 1024 and its smoothing falls from 0.8 to 0.5**, both
    matching `WebAudioEngine`, so the page's detector receives the spectrum it was tuned for.
+   **Both shipped on 2026-08-08 ahead of this ADR** — see `Implementation`; the native meter needed
+   them for the same reasons, and 256 turned out to be worse than "lower resolution": its first bin
+   begins at 172 Hz, above the kick drum, so there was no bass in the data at all.
    Anything less makes point 5 a downgrade dressed as reuse — and the smoothing is the half this
    ADR originally missed. `WebAudioEngine.ts`'s comment gives both numbers for both reasons, and
    0.8 is named there as the value that "starved spectral-flux onset detection". Shipping 1024 bins
@@ -266,12 +323,19 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
     shared file so both surfaces use it makes those tests fail on the *path* rather than on the
     substance they exist to protect.
 
-12. **The processor accumulates continuously instead of discarding throttled buffers.** Added
-    2026-08-07. The throttle currently returns *before* appending, so ~2 of every 3 buffers are
-    dropped and each frame is a window with ~740 unobserved samples in front of it. Point 5 hands
-    onset detection to the page, and spectral flux is the difference between *consecutive* spectra —
-    so the fix is to keep appending on every callback and throttle only the *emission*, leaving the
-    ring of samples continuous.
+12. **The processor analyses every window of every buffer instead of one window per callback.**
+    Added 2026-08-07, corrected and shipped 2026-08-08.
+
+    As first written this point said the throttle returned before appending and dropped ~2 of every
+    3 buffers. The append order was indeed wrong and is fixed; but with callbacks at 10 Hz the
+    throttle never fires, and the real loss was that a single 1024-sample window was taken from each
+    4410-frame buffer — **under a quarter of the audio**, the last 23 ms of every 100 ms. Point 5
+    hands onset detection to the page, and spectral flux is the difference between *consecutive*
+    spectra, so a detector fed this is differencing across gaps three times wider than the windows.
+
+    The processor now appends on every callback, throttles only the emission, and folds **every**
+    complete window in the buffer, keeping the loudest value per bin so a transient anywhere is
+    carried. Given the 100 ms floor this is the only place the temporal detail can come from.
 
     **This changes code inside `NativeAudioEngine`'s processing**, which
     [ADR-0015](ADR-0015-audio-effects-are-exposed-not-rebuilt.md) point 2 fenced off — *"If exposing
@@ -303,7 +367,7 @@ Context note on what that API is worth, and on the claim this sentence used to m
 **Have the page pull each frame with `WKScriptMessageHandlerWithReply`.** Genuinely attractive: the
 page's `requestAnimationFrame` becomes the clock, so backpressure is automatic and a hidden page
 asks for nothing. Rejected because it inverts a schedule that already exists — the engine throttles
-the tap to 60 Hz and knows when a frame is ready — and it adds an asynchronous round trip per
+the tap and knows when a frame is ready — and it adds an asynchronous round trip per
 rendered frame to fetch data that is already sitting in a buffer. `getAudioData()` is synchronous
 inside `useFrame`; making it await would change the contract every visualizer is written against,
 which is point 4's whole value.
@@ -317,9 +381,9 @@ anyone drawing a treble bar means. Deriving on the page keeps one tuned implemen
 
 **Add a third message to the existing `familiar` handler instead of a second channel.** No new
 plumbing, one contract to keep in step. Rejected because it conflates two things ADR-0020 was
-careful to separate: a listener-initiated intent, of which there may be two, and a 60 Hz render
-feed. It would also make ADR-0020 point 2's cap meaningless — "two messages" would come to include
-one that fires sixty times a second — and the bar in point 3 would then have to be argued about
+careful to separate: a listener-initiated intent, of which there may be two, and a continuous
+render feed. It would also make ADR-0020 point 2's cap meaningless — "two messages" would come to include
+one that fires continuously for as long as a track plays — and the bar in point 3 would then have to be argued about
 every future push as well as every future intent.
 
 **Ship only the `lyrics` and `music-video` visualizers, which need metadata but no spectrum.** It
@@ -349,7 +413,8 @@ v1 rather than as a finding.
   the phone with no Swift and no change by its author, which is the first time contributing one has
   been worth an evening. Whether anyone takes it up is not something this ADR can promise — but
   today the offer is one the product cannot keep, and after this it is one it can.
-- **Positive:** An FFT that currently runs ~57 times a second and is discarded starts being used.
+- **Positive:** An FFT that ran ten times a second and was discarded is already being used, by the
+  native meter #84 added; this puts the same frames to a second purpose rather than starting one.
 - **Positive:** The band maths and the onset detector stop existing in two places that disagree.
   Point 5 makes `analysisMetrics.ts` the single implementation for every client.
 - **Positive:** Raising `fftSize` to 1024 *and* dropping smoothing to 0.5 fixes a mismatch that
@@ -368,11 +433,11 @@ v1 rather than as a finding.
   a signal to stop and reconsider. The reconsideration is recorded there rather than skipped, and it
   is the one place this ADR spends its "no engine changes" credit — worth knowing before anything
   else in it is treated as licence to spend more.
-- **Tradeoff, and smaller than it first read:** ~57 `evaluateJavaScript` calls a second is real
-  main-thread work whenever the visualizer is on screen, on top of the render loop inside the web
-  view. What it is *not* is a new 60 Hz hop: measured 2026-08-07, the app already performs a
-  main-queue dispatch per frame at that rate into an empty delegate, so the added cost is the
-  `evaluateJavaScript` call and the serialisation, not the hop. ADR-0041's finding — a **4 Hz**
+- **Tradeoff, and much smaller than it first read:** **ten** `evaluateJavaScript` calls a second is
+  real main-thread work whenever the visualizer is on screen, on top of the render loop inside the
+  web view. Not sixty, and not the ~57 an earlier revision of this ADR assumed — see the Context
+  note on the 100 ms tap floor. Nor is it a new hop: the app already performs a main-queue dispatch
+  per frame at that rate, so the added cost is the `evaluateJavaScript` call and the serialisation. ADR-0041's finding — a **4 Hz**
   publisher saturating the main thread — reads as an argument against this ADR and on inspection is
   not one: that cost was unbounded SwiftUI invalidation, where this is a bounded call with a fixed
   payload. The yardstick worth holding it against is `MusicMapView`'s 0.83 ms/frame of dictionary
@@ -382,8 +447,9 @@ v1 rather than as a finding.
   `currentTime` and `duration` — all from a player store the embedded document will not have. Point
   7 carries identity and point 8 sends the page to fetch its own lyrics, so the gap is the *clock*:
   `currentTime` advances continuously and the lyrics visualizer is built on it. Whether that rides
-  the analysis channel, which already arrives ~57 times a second, or is derived page-side from a
-  start time is unresolved here and is the first thing implementation will hit.
+  the analysis channel or is derived page-side from a start time is unresolved here and is the first
+  thing implementation will hit. The measured 10 Hz makes the second more likely: a clock that
+  updates ten times a second is visibly steppy, and lyrics timing is exactly where that shows.
 - **Follow-up:** The two skipped tests in `NativeAudioAnalysisProcessorTests` are now routed around
   rather than fixed. They still assert something about a processor this ADR depends on, and
   `testBrightFixtureDominatesTreble` in particular encodes a disagreement about where treble begins
