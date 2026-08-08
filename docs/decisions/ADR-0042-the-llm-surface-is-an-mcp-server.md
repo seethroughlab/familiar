@@ -72,6 +72,33 @@ arrives today from the `X-Profile-ID` header on the chat request, and MCP has no
 host does not pass the user's turn to a tool call**, so this is not a value that can be plumbed
 through — it has to become an argument or be dropped. Point 9 decides both.
 
+**Point 3's risk was measured rather than assumed, and it runs in both directions.**
+`SYSTEM_PROMPT` is 11,010 characters, but most of it is chat-loop control — "SEARCH ONCE, THEN
+QUEUE", "STOP CONDITIONS", "you've made 2 searches → STOP" — which exists to stop a chat agent
+looping and is **irrelevant under MCP**, where the host runs its own loop and the listener can
+iterate. The portable subset is much smaller. What makes it load-bearing is *what is in it*.
+Measured against the live library (25,697 analysed tracks) through `get_feature_distribution`:
+
+| feature | min | median | mean | max |
+|---|---|---|---|---|
+| `energy` | 0.0 | **0.826** | 0.809 | 1.0 |
+| `valence` | 0.0 | **0.848** | 0.825 | 1.0 |
+| `danceability` | 0.0 | **0.149** | 0.150 | 0.989 |
+| `acousticness` | 0.159 | 0.491 | 0.486 | 0.866 |
+| `instrumentalness` | 0.0 | **1.0** | 0.999 | 1.0 |
+
+A model applying conventional thresholds gets `energy_min=0.8` → **half the library**,
+`valence_min=0.7` → **nearly all of it**, `danceability_min=0.5` → **almost nothing**. Because the
+error runs in both directions it cannot be corrected by a constant, nor by a model noticing that
+results look consistently wrong. This is exactly the knowledge `get_feature_distribution`'s
+description already tells a model to fetch, and exactly what is lost if descriptions stop carrying
+it.
+
+**A second trap lives only in `SYSTEM_PROMPT` and in no tool description.** `search_library`
+applies a diversity filter capping results at **2 per artist**, so "play me some [artist]" through
+it silently returns two tracks. The prompt says "do NOT use search_library here"; the tool's own
+description says nothing.
+
 **Four defects found while surveying, none of which should be carried across:**
 
 - **`clear_existing` is inert at both ends.** `_queue_tracks` accepts it and echoes it in its
@@ -117,13 +144,18 @@ The `bcrypt` dependency in `backend/pyproject.toml` is the only thing left of it
    `fetch_webpage` is dropped outright: it is a server-side URL fetcher on an API with no inbound
    authentication, and the host's own web access does the job better. **That leaves 26 tools.**
 
-3. **Tool descriptions carry the sequencing knowledge the system prompt used to.** `service.py`
-   builds a system prompt that encodes real operating knowledge — call `identify_track` before
-   `find_similar_tracks`; call `get_feature_distribution` before choosing a threshold, because
-   "high energy" means something different in every collection. **MCP guarantees no system prompt.**
-   The descriptions and the server's `instructions` are the only channel that reaches every host, so
-   that knowledge moves into them or it is lost. This is the point most likely to be skipped and the
-   one most likely to make the result feel worse than the chat it replaced.
+3. **Tool descriptions carry the sequencing knowledge the system prompt used to, and the claim is
+   tested before the port rather than after.** `service.py` builds a system prompt encoding real
+   operating knowledge — call `identify_track` before `find_similar_tracks`; call
+   `get_feature_distribution` before choosing a threshold; do not reach for `search_library` when
+   you want more than two tracks by one artist. **MCP guarantees no system prompt**, so the
+   descriptions and the server's `instructions` are the only channel that reaches every host.
+   **Only the portable subset moves.** The loop control does not: it exists to stop a chat agent
+   looping and would actively mislead a host that runs its own loop.
+   `backend/scripts/spike_mcp_server.py` exists to settle this — two arms over five real tools,
+   logging every call, so "descriptions are enough" is a measurement rather than a hope. This is
+   the point most likely to be skipped and the one most likely to make the result feel worse than
+   the chat it replaced.
 
 4. **Familiar keeps the external tools that join to the library, and cedes open-ended search to the
    host.** `get_similar_artists_in_library` (Last.fm ∩ this library), `get_spotify_unmatched` and
@@ -237,5 +269,10 @@ them.
   authentication, and the prerequisite for point 7's public half. It is worth noting that the 158
   unauthenticated operations are a finding about Familiar today, not a new risk created here.
 - **Follow-up.** `ADR-0022` flips to `superseded by ADR-0042` when this is accepted, not before.
+- **Follow-up, unrelated to MCP and found by measuring for point 3.** `instrumentalness` has median
+  **1.0** and mean **0.999** across 25,697 analysed tracks — it is saturated and cannot discriminate
+  anything, yet `filter_tracks` exposes `instrumentalness_min` as a usable filter. Either the
+  extractor is wrong or the filter should go. `danceability` at median 0.149 is worth a second look
+  for the same reason.
 - **Follow-up.** The `bcrypt` dependency is vestigial from the shelved Subsonic API and should be
   removed, or deliberately kept for ADR-0044 to build on.
