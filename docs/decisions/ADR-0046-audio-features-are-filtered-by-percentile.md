@@ -1,4 +1,4 @@
-# ADR-0045: Audio Features Are Filtered by Percentile, Not by Absolute Value
+# ADR-0046: Audio Features Are Filtered by Percentile, Not by Absolute Value
 
 Status: proposed
 
@@ -40,7 +40,7 @@ a *correctly calibrated* model chose 0.4 and got five tracks, because there is n
 works.
 
 **A workaround already exists and is not enough.**
-[ADR-0042](ADR-0042-the-llm-surface-is-an-mcp-server.md) point 3 requires tool descriptions to tell
+[ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md) point 3 requires tool descriptions to tell
 a model to call `get_feature_distribution` before choosing a bound, and the spike showed it works:
 blind thresholding went from 3 occurrences to 0. But it only helps the one consumer that has a model
 in the loop reading descriptions. **It does nothing for the other consumers**, which have no
@@ -92,7 +92,7 @@ Point 7 below is a direct consequence.
    percentile form is the one documented as the default for perceptual language.
 
 5. **`get_feature_distribution` returns the boundaries**, so the tool that already exists to answer
-   "what does high mean here" answers it in the units the filter now speaks. ADR-0042 point 3's
+   "what does high mean here" answers it in the units the filter now speaks. ADR-0043 point 3's
    guidance stays, and becomes cheaper to follow rather than redundant.
 
 6. **No `ANALYSIS_VERSION` bump and no re-analysis.** Everything here is derived from data already
@@ -126,7 +126,7 @@ a machine that is also the music server and the CI runner, and more importantly 
 library's distribution into the definition: the constants would be fitted to this collection, and
 would be wrong for anyone else's, which is the same failure one layer down.
 
-**Leave it, and rely on ADR-0042 point 3's calibration guidance.** It works — the spike measured
+**Leave it, and rely on ADR-0043 point 3's calibration guidance.** It works — the spike measured
 blind thresholding falling from 3 to 0 — and it costs nothing to keep. Rejected as a complete answer
 because it only reaches the consumer with a language model in it. The `fx`/`fy` axes, smart-playlist
 rules and the ranking engine have no way to calibrate, and a listener building a smart playlist by
@@ -162,12 +162,12 @@ playlists, and a decision that fixes one caller leaves the shared defect in plac
   album moves nothing; the failure mode to watch is a *small* new library, where each import shifts
   the distribution materially and a stale cache is proportionally wrong.
 - **Tradeoff.** Point 3 touches four call sites across two subsystems, one of which is the LLM tool
-  path that `ADR-0042` is concurrently proposing to re-host. Whichever lands second inherits the
+  path that `ADR-0043` is concurrently proposing to re-host. Whichever lands second inherits the
   merge.
 - **Follow-up.** `bpm` is quantised to **33 distinct values** across the whole library — librosa's
   geometric tempo lattice, `…117.45, 123.05, 129.20…`. Percentiles are the wrong tool for it and it
   is excluded here, but a BPM filter that cannot distinguish 122 from 124 is worth its own look.
-- **Follow-up.** If this lands, `ADR-0042` point 3's calibration guidance becomes a convenience
+- **Follow-up.** If this lands, `ADR-0043` point 3's calibration guidance becomes a convenience
   rather than a load-bearing requirement, and that ADR's tradeoff about description quality softens.
   It does not become wrong, and it should not be edited until this is accepted.
 - **Follow-up.** `instrumentalness` and `speechiness` stay withdrawn under point 7 until a vocal
