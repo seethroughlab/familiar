@@ -295,7 +295,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await bg.startup()
     logger.info("Background task manager started")
 
-    yield
+    # The MCP session manager must be running or every /mcp request fails at *request* time with
+    # "Task group is not initialized", not at startup — so it looks like a runtime bug rather than
+    # missing wiring (ADR-0043 point 1).
+    async with _mcp_session_manager_running(app):
+        yield
 
     # Shutdown
     logger.info("Shutting down Familiar API")
@@ -330,6 +334,24 @@ app = FastAPI(
     lifespan=lifespan,
     generate_unique_id_function=custom_generate_unique_id,
 )
+
+# MCP (ADR-0043). Mounted here rather than beside the API routers because the SPA catch-all is
+# registered last and would swallow it — and asymmetrically: streamable HTTP uses POST for requests
+# and GET for the server-initiated stream, so a late mount leaves POST working while GET quietly
+# returns index.html. `mcp` is in NON_SPA_PREFIXES for the same reason.
+from app.mcp.server import MCPDispatch  # noqa: E402
+from app.mcp.server import build_asgi_app as _build_mcp_app  # noqa: E402
+
+_mcp_asgi_app = _build_mcp_app()
+app.add_middleware(MCPDispatch, mcp_app=_mcp_asgi_app)
+
+
+@asynccontextmanager
+async def _mcp_session_manager_running(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Run the MCP session manager for the lifetime of the app."""
+    async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
+        yield
+
 
 # Rate limiting
 app.state.limiter = limiter
@@ -508,7 +530,7 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 # Prefixes the single-page app must never swallow. A miss inside these belongs to the API, and the
 # answer to it is a 404 rather than an HTML document.
-NON_SPA_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "health")
+NON_SPA_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "health", "mcp")
 
 
 async def serve_embed() -> FileResponse:
