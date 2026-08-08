@@ -9,6 +9,9 @@ from pathlib import Path
 import acoustid
 import numpy as np
 
+# Cheap at import time: vocal_detection imports onnxruntime lazily, inside its functions.
+from app.services.vocal_detection import VADError
+
 # Check torch availability without importing it (~0 memory cost)
 # The actual torch import happens lazily inside functions that need it
 _torch_available = importlib.util.find_spec("torch") is not None
@@ -569,8 +572,14 @@ def derive_features(
     try:
         from app.services.vocal_detection import detect_speech
         vad_result = detect_speech(y, sr)
+    except VADError as e:
+        # The model is present and did not work. This was logged at debug and therefore
+        # invisible, while the spectral fallback below wrote a saturated value that looked
+        # like a measurement. Warn: every track taking this path has wrong
+        # instrumentalness and speechiness.
+        logger.warning(f"VAD unusable, falling back to spectral heuristic: {e}")
     except Exception as e:
-        logger.debug(f"VAD detection failed, using spectral fallback: {e}")
+        logger.debug(f"VAD detection unavailable, using spectral fallback: {e}")
 
     if vad_result is not None:
         mean_speech_prob, _speech_frac = vad_result
