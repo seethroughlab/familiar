@@ -58,7 +58,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -173,7 +173,7 @@ def _log(tool: str, args: dict[str, Any], result: Any, error: str | None = None)
     else:
         summary = result
     record = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": datetime.now(UTC).isoformat(),
         "arm": ARM,
         "seq": _seq,
         "tool": tool,
