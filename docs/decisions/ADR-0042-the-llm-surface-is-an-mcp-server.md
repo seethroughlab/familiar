@@ -99,6 +99,28 @@ applies a diversity filter capping results at **2 per artist**, so "play me some
 it silently returns two tracks. The prompt says "do NOT use search_library here"; the tool's own
 description says nothing.
 
+**Three constraints on the mount, each verified by running it rather than read from a document.**
+The MCP SDK's streamable-HTTP app is a Starlette sub-application, and mounting it into
+`app/main.py` is not sufficient on its own:
+
+- **The session manager needs a lifespan or every request fails at request time**, not at startup:
+  `RuntimeError: Task group is not initialized. Make sure to use run().` `app/main.py:262` already
+  has a `lifespan` to chain it into, so the fix is small — but the symptom reads as a runtime bug
+  rather than a wiring mistake.
+- **DNS-rebinding protection rejects every `Host` by default.**
+  `TransportSecuritySettings.enable_dns_rebinding_protection` is `True` and `allowed_hosts` has no
+  default, so `localhost` and `openmediavault:4400` both return **421 Misdirected Request** until
+  they are named explicitly. A 421 reads as a proxy fault, not as configuration.
+- **The SPA catch-all will swallow it, and this is the third instance of that trap in one file.**
+  `app/main.py:591` registers `@app.get("/{full_path:path}")` whenever `static/` exists — always,
+  in production — and `NON_SPA_PREFIXES` is `("api/", "docs", "redoc", "openapi.json", "health")`
+  with no `mcp`. Streamable HTTP uses **POST for requests and GET for the server-initiated SSE
+  stream**, so the failure is asymmetric and quiet: POST works, GET returns `index.html` with HTTP
+  200, and half the transport is silently dead. `/embed` already carries a comment at `:586`
+  explaining it had to be registered before the catch-all for exactly this reason, and
+  `spa_fallback`'s own docstring records the same shape a second time, where unmatched `/api/`
+  paths answered 200 with an undecodable body.
+
 **Four defects found while surveying, none of which should be carried across:**
 
 - **`clear_existing` is inert at both ends.** `_queue_tracks` accepts it and echoes it in its
@@ -131,11 +153,24 @@ The `bcrypt` dependency in `backend/pyproject.toml` is the only thing left of it
 ## Decision
 
 1. **Familiar exposes an MCP server, and it is the LLM surface.** It is hosted **in-process in
-   FastAPI**, as streamable HTTP mounted at `/mcp`. The tools need the request's `AsyncSession`, the
-   app settings service and the `handlers/` package; a separate process would re-implement 27 tools
-   against the REST API and drift from them. This is the same reasoning
+   FastAPI**, as streamable HTTP mounted at `/mcp`, so it runs where the backend runs — next to the
+   database, inside the image where torch is already installed. The tools need the request's
+   `AsyncSession`, the app settings service and the `handlers/` package. This is the same reasoning
    [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) applies to the generated client — one
-   contract, generated from the thing itself, not maintained alongside it.
+   contract, taken from the thing itself rather than maintained alongside it.
+
+   **Three wiring requirements, because each fails in a way that does not look like a wiring
+   problem** (see Context): the session manager's lifespan is chained into the app's;
+   `allowed_hosts` names every host the server is reached by; and **`mcp` joins
+   `NON_SPA_PREFIXES` and the mount is registered before the catch-all**, or GET is swallowed while
+   POST keeps working.
+
+   **The tool module has two entry points, and only one of them is the mount.** The same tools are
+   servable over stdio from a local process, which is how they are developed and how the arms in
+   `scripts/spike_mcp_server.py` are run — a description edit becomes a file save rather than a
+   `make deploy-dev`. This is [ADR-0017](ADR-0017-the-embedded-surface-gets-a-null-audio-engine.md)
+   point 1's shape reused: a second entry point over shared code, not a second implementation. The
+   mount is what ships; stdio is what the tuning loop runs on.
 
 2. **The exposed surface is the 27 tools that do not require a Familiar client, minus
    `fetch_webpage`.** The three that require one — `get_visible_tracks`, `queue_tracks`,
@@ -207,13 +242,29 @@ chat implementation to keep working" as a tradeoff at six commits in six months;
 third. The deprioritisation that ADR-0022 recorded is the argument: a surface nobody uses does not
 earn a permanent seat.
 
-**Run the MCP server as a separate local process on the Mac, talking to the REST API.** Genuinely
-attractive on security grounds — stdio transport, no network listener, no auth question at all, and
-it would work for Claude Desktop today with nothing else built. Rejected because the tools do not
-live in the REST API. 26 of them would have to be re-implemented against endpoints that do not
-expose the same shapes: there is no REST endpoint for `semantic_search`, `get_feature_distribution`
-or `filter_tracks`' 46 properties. It would be a second implementation of the most valuable code in
-the project, guaranteed to drift, in exchange for a deployment property.
+**Run the MCP server as a separate local process on the Mac, talking to the REST API.** The
+strongest rejected option, and stronger than the first draft of this ADR allowed — that draft
+claimed the REST API does not expose these shapes, and **the claim was measured and found
+overstated**. `GET /tracks` takes 21 parameters including `energy_min/max`, `valence_min/max` and
+generic `fx`/`fy` axes that filter on an arbitrary named feature; `GET /tracks/{id}/similar`,
+`/library/stats`, `/bandcamp/search`, `/new-releases`, `/spotify/unmatched`, `/playlists` and
+`/proposed-changes` cover most of the rest. Its real merits are also substantial: **stdio transport
+means no network listener at all** — Claude Desktop reaches the library with the server holding an
+API token and nothing new exposed — and it inherits ADR-0007's committed schema and CI staleness
+check, which the tool surface otherwise has no equivalent of.
+
+Rejected on the residue rather than on the whole. Four capabilities have **no REST expression at
+all**: `semantic_search` (no `semantic`, `embed` or `clap` path exists), `get_feature_distribution`,
+`get_library_genres` and `select_diverse_tracks` — and `filter_tracks` reaches 21 of its 46
+properties, missing `is_favorite`, the play-history predicates, `mood_tag`, `key` and every
+deep-analysis feature. **The two that are entirely absent are the two carrying the most value**: the
+CLAP embeddings, and the calibration step the distribution table above shows is load-bearing.
+
+Recorded rather than dismissed, because the gap is narrow and closable: roughly four endpoints
+would make this option fully viable, and at least two of them — semantic search and feature
+distribution — have independent value to the native clients, which have no way to ask either
+question today. If those land for their own reasons, this alternative should be reconsidered on
+its security and distribution merits rather than treated as settled here.
 
 **Expose the existing `openapi.json` as MCP tools automatically.** 261 operations, already typed,
 already lint-gated, zero new tool definitions. Rejected because the REST surface is the wrong
@@ -256,6 +307,9 @@ them.
 - **Tradeoff.** Ephemeral, explicitly-unsaved playlists have no equivalent. An MCP tool creates a
   real `Playlist` row or nothing. Arguably better, but it is a behaviour change and the staging step
   disappears.
+- **Tradeoff.** The mount shares the API's process, pool and restart, on a machine that is also this
+  project's CI runner. A heavy MCP query competes with music streaming, which is a contention this
+  project has already been bitten by.
 - **Tradeoff.** Point 9 binds a connection to one profile, so a household with several configures
   several connections and a host cannot switch between them mid-conversation. That is the cost of
   refusing to let a model guess at whose favourites it is reading.
@@ -269,6 +323,13 @@ them.
   authentication, and the prerequisite for point 7's public half. It is worth noting that the 158
   unauthenticated operations are a finding about Familiar today, not a new risk created here.
 - **Follow-up.** `ADR-0022` flips to `superseded by ADR-0042` when this is accepted, not before.
+- **Follow-up.** `streamable_http_app(stateless_http=...)` is a real choice and should be made
+  deliberately rather than inherited. It bears directly on
+  [ADR-0043](ADR-0043-mcp-clients-actuate-playback-through-a-command-channel.md) point 6's note that
+  a multi-worker deployment needs revisiting.
+- **Follow-up.** Four REST endpoints — semantic search, feature distribution, library genres, and
+  the missing `filter_tracks` predicates — would make the rejected local-process option viable, and
+  the first two are worth building for the native clients regardless. See Alternatives.
 - **Follow-up, unrelated to MCP and found by measuring for point 3.** `instrumentalness` has median
   **1.0** and mean **0.999** across 25,697 analysed tracks — it is saturated and cannot discriminate
   anything, yet `filter_tracks` exposes `instrumentalness_min` as a usable filter. Either the
