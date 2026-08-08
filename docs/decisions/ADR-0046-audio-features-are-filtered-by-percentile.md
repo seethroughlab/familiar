@@ -1,8 +1,24 @@
 # ADR-0046: Audio Features Are Filtered by Percentile, Not by Absolute Value
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-08
+
+Implementation:
+- Accepted 2026-08-08.
+- **The rejected "rescale at extraction" alternative was reopened on acceptance and then narrowed,
+  not revived.** It was offered a full re-analysis of the library — and the investigation that
+  followed found that almost nothing needs one. Every miscalibrated scalar here is a *monotonic
+  function of a value already stored*, so correcting it is arithmetic rather than re-extraction.
+  That is [ADR-0047](ADR-0047-feature-scales-are-corrected-in-place.md), which sits alongside this
+  one: **0046 fixes how you ask, 0047 fixes what the numbers mean.** They are complementary, and
+  neither makes the other unnecessary — even perfectly scaled features have a library-specific
+  distribution, which is the case for percentiles regardless.
+- **The `bpm` follow-up got sharper and stayed out.** The lattice is exactly
+  `BPM(k) = 60·sr/hop = 2583.984 / k` at `sr=22050, hop_length=512` (`analysis.py:343-345`) — k=21
+  gives 123.05 and k=22 gives 117.45, matching the observed values. It is the **only** feature whose
+  correction genuinely requires re-extraction, because a lattice destroys information no transform
+  recovers. That makes it a cost decision rather than a scaling one, and it belongs in its own ADR.
 
 ## Context
 
