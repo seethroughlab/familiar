@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # Analysis
     analysis_version: int = 1
 
+    # MCP (ADR-0043). Comma-separated hosts this server is reached by, e.g.
+    # "localhost:4400,myserver:4400". Set it and DNS-rebinding protection is enabled for /mcp;
+    # leave it empty and the protection is off, with a warning at startup. The SDK ships no default
+    # allowlist, so enabling it without naming your host rejects every request with a 421.
+    mcp_allowed_hosts: str = ""
+
     # API Keys (Phase 3+)
     anthropic_api_key: str | None = None
     frontend_url: str | None = None  # Base URL for OAuth callbacks (e.g., http://myserver:4400)
