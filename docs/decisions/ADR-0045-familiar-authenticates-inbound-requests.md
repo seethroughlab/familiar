@@ -1,8 +1,30 @@
 # ADR-0045: Familiar Authenticates Inbound Requests
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-07
+
+Implementation:
+- Accepted 2026-08-08 alongside [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md) and
+  [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md).
+- **Five things were raised on acceptance that this ADR does not currently cover.** Recorded here
+  rather than smuggled into the Decision, because each is arguably its own scope:
+  1. Point 2 — closing the 158 operations — is the actual project. The token is a day's work; the
+     allowlist in `lint_profile_contracts.py` spans ~30 modules.
+  2. **Point 5 breaks the demo server.** [ADR-0038](ADR-0038-the-demo-server-is-always-on.md) runs a
+     deliberately public instance with one shared profile so App Store reviewers can sign in. How it
+     is exempted must be decided before point 5 ships, or a submission fails.
+  3. Rate limiting is keyed on client IP (`app/api/ratelimit.py`). Once a token exists it is the
+     better key — an MCP host behind CGNAT otherwise shares a bucket with strangers.
+  4. **One shared token means no attribution.** Anyone holding it can act as any profile and the
+     logs cannot say which client did what. Accepted deliberately, consistent with profiles being a
+     convenience rather than a boundary.
+  5. Rotation and revocation must exist from the start. A token that can only be changed by editing
+     JSON on the NAS is a token nobody rotates.
+- **TLS stays out of scope, deliberately.** The application enforces none today; Tailscale provides
+  it. Making Familiar safe to expose *without* Tailscale would pull termination, certificates and
+  renewal into the product, which is the step from music player to hosting product that
+  ADR-0038 point 7 declines.
 
 Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 

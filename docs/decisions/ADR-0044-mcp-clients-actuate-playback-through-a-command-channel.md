@@ -1,8 +1,18 @@
 # ADR-0044: MCP Clients Actuate Playback Through a Command Channel
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-07
+
+Implementation:
+- Accepted 2026-08-08 alongside [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md) and
+  [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md).
+- **Point 11 was added on acceptance**, in answer to the question the ADR did not address: an MCP
+  server has to act on the server *and* on the device, and this ADR only covered playback.
+- The audit behind point 11 confirmed the premise from the other direction: **the backend has no
+  push transport at all.** Not one WebSocket route exists. `useListeningSession.ts:100` opens a
+  socket to `/api/v1/sessions/ws`, a route that was deleted — so a client is already calling a
+  channel that is not there, which is the fourth instance of that shape found in this codebase.
 
 Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 
@@ -111,6 +121,32 @@ of them, and "play this" has to mean something specific.
 10. **The Mac first, then the phone and the web app.** Same order as every client surface since
     ADR-0016, and the Mac is where the MCP hosts in ADR-0043 point 7 actually run.
 
+11. **Three categories of action, and only one of them needs this channel.** An MCP server has to
+    act on the server *and* on the device, and conflating those is what makes this look harder than
+    it is:
+
+    | category | example | how it is done |
+    |---|---|---|
+    | **Server-side state** | create a playlist, propose metadata | written directly; **no channel** |
+    | **Transient device action** | play, pause, skip, queue | an imperative on this channel |
+    | **Device-local preference** | crossfade, effects, columns, theme | an imperative on this channel; the client persists it locally |
+
+    Playlists are real rows and `create_playlist` needs only a profile id, so the case that sounds
+    hardest is already solved. **Preferences are the interesting one.**
+    [ADR-0029](ADR-0029-the-server-stores-no-listener-preferences.md) keeps every listener preference
+    on the device and its point 5 leaves device identity uninvented — so the server has no key to
+    address a device by. **This channel does not need one**: it addresses *the client that is
+    subscribed*, not a device. A preference-set travels as an imperative, the client applies and
+    persists it locally, and the server still stores nothing. ADR-0029 is upheld rather than bent.
+
+12. **The channel carries a capability declaration on subscribe.** The clients do not agree about
+    which preferences exist — the Apple clients have no theme, visualizer, normalization or
+    shuffle-weight storage at all, where the web app has all four. Without a declaration, a
+    perfectly well-formed "set the theme" reaches a Mac and does nothing, which is the
+    affordance-with-no-destination defect this project has now hit four times. **The tool surface
+    reports what the attached client can actually do**, and a preference it cannot set is absent
+    rather than accepted and dropped.
+
 ## Alternatives Considered
 
 **Have the MCP server write `PUT /queue/session` and let clients adopt it.** Uses ADR-0003's
@@ -167,6 +203,14 @@ looks.
   explicit target exists because the heuristic is not always right.
 - **Tradeoff.** Point 6 means commands are lost across a restart with no indication. Acceptable for
   imperatives; it would not be for anything durable, which is why nothing durable travels here.
+- **Tradeoff, and the sharpest cost of point 11.** A preference-set with no client attached is
+  simply lost. Point 5 makes it *say so* rather than hang, but the ephemeral model fits "play this"
+  far better than "set crossfade to 5 seconds", where a listener reasonably expects the instruction
+  to stick and take effect next time. The alternative — storing the preference server-side until a
+  client collects it — is a direct reversal of ADR-0029 and is not taken here.
+- **Tradeoff.** Point 11 gives no way to *read* a preference back. The channel is one-way by point 1,
+  so "what is my crossfade set to?" is unanswerable: setting works, asking does not. This is the
+  asymmetry most likely to surprise someone using the MCP surface.
 - **Follow-up.** Multi-worker deployment breaks point 6, exactly as it breaks ADR-0036 point 8.
   Whichever of the two lands first should decide whether that is worth solving once for both.
 - **Follow-up.** Now-playing readback is deliberately excluded and is the obvious next request.

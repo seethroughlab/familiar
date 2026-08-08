@@ -1,10 +1,22 @@
 # ADR-0043: The LLM Surface Is an MCP Server, Not a Chat Client
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-07
 
 Supersedes [ADR-0022](ADR-0022-chat-is-built-native-and-hidden-without-a-provider.md).
+
+Implementation:
+- Accepted 2026-08-08, together with [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md)
+  and [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md).
+- **The accepted rationale is broader than the one this ADR argues**, and is recorded because it is
+  the durable half: *"People are using apps like Claude.app and ChatGPT.app more and more, so it's
+  redundant to replace a chat surface when there is already one that users are more comfortable
+  with."* The line-count and churn comparison above is why the port is *cheap*; the ecosystem shift
+  is why it is *right*. If those ever disagree, the second one governs.
+- Point 3's risk was measured before acceptance rather than after — see the table in Context and
+  `scripts/spike_mcp_arms.py`. Two of its three worries were unfounded; the whole effect is
+  calibration, which narrows the work.
 
 ## Context
 
