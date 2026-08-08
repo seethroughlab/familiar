@@ -57,7 +57,17 @@ async function globalSetup() {
     }
 
     if (attempts >= maxAttempts) {
-      console.warn('⚠️ Sync timed out after 120 seconds');
+      // Do not warn and carry on. This setup's contract is "the library is synced", and a
+      // sync that is still running when tests start is worse than no sync at all: the first
+      // thing library-sync.spec.ts does is click a Sync button that is disabled *because of
+      // this*, and it reports a 30s actionability timeout that names neither the sync nor
+      // this line. One tolerated failure, one confusing failure somewhere else.
+      throw new Error(
+        `Library sync did not finish within ${maxAttempts}s. Tests were not started, because ` +
+          `a sync still running disables the Sync button and fails library-sync.spec.ts for ` +
+          `reasons that point nowhere near here. If this fires regularly the timeout is the ` +
+          `thing to tune, not this check.`
+      );
     }
 
     // Verify tracks are available
