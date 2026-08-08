@@ -89,43 +89,81 @@ def exposed_tools() -> list[types.Tool]:
     return tools
 
 
-def _header_profile(ctx: ServerRequestContext[Any]) -> str | None:
+def _request_profile(ctx: ServerRequestContext[Any]) -> str | None:
+    """The profile named by the request, by header or by query string.
+
+    The query string exists because **hosts cannot all set headers.** Claude Desktop's custom
+    connector takes a URL and nothing else, so a header-only server cannot be added to it at all.
+    A profile id is not a secret — `GET /api/v1/profiles` lists them unauthenticated — so carrying
+    it in the URL gives nothing away that the API does not already.
+    """
     request = getattr(ctx, "request", None)
-    headers = getattr(request, "headers", None)
-    if headers is None:
+    if request is None:
         return None
     try:
-        return headers.get(PROFILE_HEADER)
-    except Exception:  # noqa: BLE001 - a header bag that does not behave is simply absent
+        headers = getattr(request, "headers", None)
+        if headers is not None:
+            named = headers.get(PROFILE_HEADER)
+            if named:
+                return str(named)
+        params = getattr(request, "query_params", None)
+        if params is not None:
+            named = params.get("profile")
+            if named:
+                return str(named)
+    except Exception:  # noqa: BLE001 - a request object that does not behave is simply silent
         return None
+    return None
+
+
+async def _sole_profile() -> UUID | None:
+    """The only profile, when there is exactly one.
+
+    ADR-0043 point 9 refuses a *default* profile because a model must not guess at another
+    listener's favourites. With exactly one profile there is nothing to guess: the single
+    possibility is the correct one, and requiring configuration to state the obvious is how a
+    working server looks broken. Add a second profile and this returns None immediately, so
+    connections must name one from that moment on.
+    """
+    async with async_session_maker() as session:
+        ids = (await session.scalars(select(Profile.id).limit(2))).all()
+    return ids[0] if len(ids) == 1 else None
 
 
 async def resolve_profile(ctx: ServerRequestContext[Any]) -> UUID:
     """The profile this connection acts as.
 
-    Header first so one server can serve several listeners; the environment variable is how the
-    stdio entry point binds a single one. Raises rather than defaulting: acting as *some* profile
-    because none was named is how a model ends up reading the wrong person's favourites.
+    Request first, so one server can serve several listeners; then the environment variable, which
+    is how the stdio entry point binds one; then the sole profile, if there is only one.
     """
-    raw = _header_profile(ctx) or os.environ.get(PROFILE_ENV)
+    raw = _request_profile(ctx) or os.environ.get(PROFILE_ENV)
     if not raw:
+        only = await _sole_profile()
+        if only is not None:
+            return only
         raise ProfileNotBound(
-            f"No profile is bound to this connection. Send the {PROFILE_HEADER} header, or set "
-            f"{PROFILE_ENV} for stdio. Familiar's tools are per-listener — favourites, play history "
-            f"and playlists all depend on it — so there is no safe default."
+            f"No profile is bound to this connection, and this server has more than one. Send the "
+            f"{PROFILE_HEADER} header, add ?profile=<uuid> to the URL, or set {PROFILE_ENV} for "
+            f"stdio. Familiar's tools are per-listener — favourites, play history and playlists all "
+            f"depend on it — so with several profiles there is no safe default. "
+            f"GET /api/v1/profiles lists them."
         )
     try:
         profile_id = UUID(raw)
     except ValueError as exc:
         raise ProfileNotBound(f"Profile id {raw!r} is not a UUID.") from exc
 
-    async with async_session_maker() as session:
-        exists = await session.scalar(select(Profile.id).where(Profile.id == profile_id))
-    if exists is None:
+    if await _verify_profile(profile_id) is None:
         raise ProfileNotBound(
             f"Profile {profile_id} does not exist on this server. GET /api/v1/profiles lists them."
         )
     return profile_id
+
+
+async def _verify_profile(profile_id: UUID) -> UUID | None:
+    """The profile id if it exists, else None. A named profile is checked, never assumed."""
+    async with async_session_maker() as session:
+        return await session.scalar(select(Profile.id).where(Profile.id == profile_id))
 
 
 async def on_list_tools(

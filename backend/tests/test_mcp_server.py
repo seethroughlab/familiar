@@ -14,9 +14,9 @@ quietly if broken:
 
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace
 from typing import Any
+from uuid import UUID
 
 import pytest
 
@@ -187,37 +187,75 @@ class TestMountedEndpoint:
         assert installed[0].kwargs.get("mcp_app") is not None
 
 
+ONE = UUID("11111111-1111-1111-1111-111111111111")
+TWO = UUID("22222222-2222-2222-2222-222222222222")
+
+
 class TestProfileBinding:
-    @pytest.mark.asyncio
-    async def test_unbound_connection_is_refused(self, monkeypatch):
+    """Resolution order: request (header, then query), environment, then a sole profile."""
+
+    @pytest.fixture(autouse=True)
+    def _no_database(self, monkeypatch):
+        """Keep these off the database; each test says what the server should look like."""
         monkeypatch.delenv(PROFILE_ENV, raising=False)
+
+        async def sole_none():
+            return None
+
+        async def exists(profile_id):
+            return profile_id
+
+        monkeypatch.setattr("app.mcp.server._sole_profile", sole_none)
+        monkeypatch.setattr("app.mcp.server._verify_profile", exists)
+
+    @pytest.mark.asyncio
+    async def test_unbound_with_several_profiles_is_refused(self):
         with pytest.raises(ProfileNotBound) as exc:
             await resolve_profile(_ctx())
         assert "no safe default" in str(exc.value)
 
     @pytest.mark.asyncio
-    async def test_malformed_profile_is_refused(self, monkeypatch):
-        monkeypatch.delenv(PROFILE_ENV, raising=False)
+    async def test_malformed_profile_is_refused(self):
         with pytest.raises(ProfileNotBound) as exc:
             await resolve_profile(_ctx({"x-profile-id": "not-a-uuid"}))
         assert "not a UUID" in str(exc.value)
 
     @pytest.mark.asyncio
-    async def test_header_is_preferred_over_environment(self, monkeypatch):
-        """One server, several listeners: the header wins so stdio's binding cannot leak in."""
-        monkeypatch.setenv(PROFILE_ENV, "11111111-1111-1111-1111-111111111111")
-        seen: list[str] = []
+    async def test_header_binds_the_connection(self):
+        assert await resolve_profile(_ctx({"x-profile-id": str(TWO)})) == TWO
 
-        async def fake_lookup(ctx):
-            raw = ctx.request.headers.get("x-profile-id") or os.environ.get(PROFILE_ENV)
-            seen.append(raw)
-            raise ProfileNotBound("stop before the database")
+    @pytest.mark.asyncio
+    async def test_query_string_binds_the_connection(self):
+        """Claude Desktop's custom connector takes a URL and cannot set headers."""
+        ctx = SimpleNamespace(request=SimpleNamespace(headers={}, query_params={"profile": str(TWO)}))
+        assert await resolve_profile(ctx) == TWO
 
-        monkeypatch.setattr("app.mcp.server.resolve_profile", fake_lookup)
-        from app.mcp import server as mcp_server
-
-        with pytest.raises(ProfileNotBound):
-            await mcp_server.resolve_profile(
-                _ctx({"x-profile-id": "22222222-2222-2222-2222-222222222222"})
+    @pytest.mark.asyncio
+    async def test_header_beats_query_string(self):
+        ctx = SimpleNamespace(
+            request=SimpleNamespace(
+                headers={"x-profile-id": str(ONE)}, query_params={"profile": str(TWO)}
             )
-        assert seen == ["22222222-2222-2222-2222-222222222222"]
+        )
+        assert await resolve_profile(ctx) == ONE
+
+    @pytest.mark.asyncio
+    async def test_request_beats_environment(self, monkeypatch):
+        """stdio's binding must not leak into an HTTP connection that named its own."""
+        monkeypatch.setenv(PROFILE_ENV, str(ONE))
+        assert await resolve_profile(_ctx({"x-profile-id": str(TWO)})) == TWO
+
+    @pytest.mark.asyncio
+    async def test_environment_is_used_when_the_request_names_none(self, monkeypatch):
+        monkeypatch.setenv(PROFILE_ENV, str(ONE))
+        assert await resolve_profile(_ctx()) == ONE
+
+    @pytest.mark.asyncio
+    async def test_sole_profile_needs_no_configuration(self, monkeypatch):
+        """With exactly one profile there is nothing to guess, so nothing to configure."""
+
+        async def sole_one():
+            return ONE
+
+        monkeypatch.setattr("app.mcp.server._sole_profile", sole_one)
+        assert await resolve_profile(_ctx()) == ONE
