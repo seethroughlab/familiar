@@ -29,17 +29,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from mcp.server.stdio import stdio_server  # noqa: E402
+
 from app.mcp.server import PROFILE_ENV, build_server  # noqa: E402
 
 
 async def main() -> None:
-    if not os.environ.get(PROFILE_ENV):
-        raise SystemExit(
-            f"{PROFILE_ENV} is not set. Familiar's tools are per-listener, so there is no safe "
-            f"default profile. GET /api/v1/profiles lists the ids on your server."
-        )
-    print(f"[familiar-mcp] stdio, profile={os.environ[PROFILE_ENV]}", file=sys.stderr)
-    await build_server().run("stdio")
+    bound = os.environ.get(PROFILE_ENV)
+    print(f"[familiar-mcp] stdio, profile={bound or 'sole profile'}", file=sys.stderr)
+    server = build_server()
+    async with stdio_server() as (stdin, stdout):
+        await server.run(stdin, stdout, server.create_initialization_options())
 
 
 if __name__ == "__main__":
