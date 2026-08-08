@@ -229,9 +229,18 @@ Each platform entry point (`packages/web/src/main.tsx`, `packages/ios/src/main.t
 ## Common Tasks
 
 ### Add a new audio feature
-1. Add extraction logic to `analysis.py` in `extract_features()`
-2. No schema change needed (features stored as JSONB)
-3. Bump `ANALYSIS_VERSION` in `config.py` to re-analyze existing tracks
+1. Add extraction logic in `analysis.py` — `derive_features()` for librosa scalars (`extract_features()`
+   is a thin wrapper), or `services/track_analysis/analyzers.py` for the section analyzers, mapped
+   through `extract_feature_scalars()` in `track_analysis/pipeline.py`
+2. **Add a typed column** to `TrackAnalysis` in `backend/app/db/models/tracks.py`, list it in
+   `ANALYSIS_FEATURE_COLUMNS`, and write an Alembic migration. Features were promoted out of JSONB
+   into typed columns — a new feature that skips this is computed and then silently dropped
+3. Bump `FEATURES_VERSION` in `config.py` and add a line to the history comment beside it. There is
+   **no `ANALYSIS_VERSION`**; the constants are per phase, so bumping features leaves embeddings and
+   melodic data alone
+4. Re-analysis only happens during a **library sync** — nothing is scheduled. Budget for it: one
+   worker, a fresh interpreter per track, and an 8-hour cap on the features phase, so a large
+   library takes several consecutive syncs. See `VERSIONING.md`
 
 ### Add a new LLM tool
 1. Define tool schema in `MUSIC_TOOLS` list in `services/llm/tools.py`
