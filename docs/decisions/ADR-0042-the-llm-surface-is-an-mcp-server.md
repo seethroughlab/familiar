@@ -94,6 +94,42 @@ results look consistently wrong. This is exactly the knowledge `get_feature_dist
 description already tells a model to fetch, and exactly what is lost if descriptions stop carrying
 it.
 
+**The spike was run, and point 3 survives — but narrower than this ADR first claimed.** Eight
+prompts through both arms, tools executed for real against the library
+(`scripts/spike_mcp_arms.py`; **n=1 per cell**, so this is directional evidence, not a settled
+result):
+
+| | `bare` | `guided` |
+|---|---|---|
+| calibrated before thresholding | **1/8** | **4/8** |
+| thresholded *without* calibrating | **3** | **0** |
+| `semantic_search` used | 4 | 3 |
+| `identify_track` before `find_similar_tracks` | ✓ | ✓ |
+
+**Two of point 3's three worries were unfounded.** Both arms called `identify_track` before
+`find_similar_tracks`, and both reached for `semantic_search` on abstract moods — `bare` slightly
+more often. Those descriptions already carry their own sequencing, so nothing needed to move.
+**The entire measured effect is calibration**, which is where the guidance belongs and nowhere else.
+
+**What the blind thresholds actually produced**, counted against the 25,697 analysed tracks:
+
+| request | arm | filter | matched |
+|---|---|---|---|
+| "upbeat and happy" | `bare` | `energy≥0.6, valence≥0.6` | **23,761 — 92.5% of the library** |
+| "upbeat and happy" | `guided` | `energy≥0.85, valence≥0.85` | 5,956 — 23.2% |
+| "high energy" | `bare` | `energy≥0.85` | 9,520 — 37.0% |
+| "high energy" | `guided` | `energy≥0.9` | 2,380 — 9.3% |
+
+Returning 92.5% of a library is not a playlist, and nothing in the response would tell the listener
+that. **This is the failure point 3 exists to prevent, observed rather than predicted.**
+
+**Calibration is necessary and not sufficient, which the same run also showed.** Asked for
+something "really danceable", `bare` guessed `danceability≥0.7` and got 3 tracks. `guided`
+calibrated, chose 0.6, got 3, retried at 0.4 and got 5. **Only 5 tracks out of 25,697 — 0.02% —
+have `danceability ≥ 0.4`.** No threshold works, because the feature is degenerate; the guided arm
+did everything right and still failed. That is a data defect, not a description defect, and it is
+recorded as a follow-up rather than folded into this decision.
+
 **A second trap lives only in `SYSTEM_PROMPT` and in no tool description.** `search_library`
 applies a diversity filter capping results at **2 per artist**, so "play me some [artist]" through
 it silently returns two tracks. The prompt says "do NOT use search_library here"; the tool's own
@@ -330,10 +366,12 @@ them.
 - **Follow-up.** Four REST endpoints — semantic search, feature distribution, library genres, and
   the missing `filter_tracks` predicates — would make the rejected local-process option viable, and
   the first two are worth building for the native clients regardless. See Alternatives.
-- **Follow-up, unrelated to MCP and found by measuring for point 3.** `instrumentalness` has median
-  **1.0** and mean **0.999** across 25,697 analysed tracks — it is saturated and cannot discriminate
-  anything, yet `filter_tracks` exposes `instrumentalness_min` as a usable filter. Either the
-  extractor is wrong or the filter should go. `danceability` at median 0.149 is worth a second look
-  for the same reason.
+- **Follow-up, unrelated to MCP and the most actionable thing this ADR turned up.** Two of the
+  features `filter_tracks` advertises cannot discriminate anything. `instrumentalness` has median
+  **1.0** and mean **0.999**; `danceability` has **5 tracks out of 25,697 above 0.4** — 0.02%.
+  Both are offered as usable filters (`instrumentalness_min`, `danceability_min`), and the spike
+  showed a correctly-calibrated model failing on `danceability` because there is nothing to select.
+  Either the extractors are wrong or the filters should go, and this is true whether or not MCP
+  happens.
 - **Follow-up.** The `bcrypt` dependency is vestigial from the shelved Subsonic API and should be
   removed, or deliberately kept for ADR-0044 to build on.
