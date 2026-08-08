@@ -1,6 +1,6 @@
 # ADR-0033: The Embed Bridge Gains a Return Channel
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
 
@@ -11,8 +11,9 @@ Amends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5 
 [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) point 4.
 
 Implementation:
-- **Nothing of the channel itself is built.** This ADR remains `proposed`: whether the visualizer is
-  worth an embedded surface is undecided, and points 1–5 and 7–11 describe work not started.
+- **Accepted 2026-08-08.** Points 1–4 and 7–11 — the channel and the second embedded document — are
+  not built. What is accepted is the direction: the visualizer becomes an embedded surface fed by
+  the native FFT, rather than staying web-only or being rebuilt natively.
 - **Points 6 and 12 shipped early, on 2026-08-08, in `familiar-apple` #84**, driven by a different
   and much smaller feature: a 24-bar spectrum meter above the Mac's scrubber, drawn natively from
   these frames. It needed the same two fixes for the same reasons, so they landed there rather than
@@ -25,11 +26,24 @@ Implementation:
   [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) set when it separated the Music Map
   from ADR-0001 point 5: *"'4,017 lines of three.js' is the visualizer, a different feature."* The
   3,985-line Three.js surface stays out of scope and remains this ADR's subject.
-- **Four changes now sit inside the fence ADR-0015 point 2 put around
-  `NativeAudioEngine`'s processing** — smoothing, `fftSize`, accumulation order, and the `cadenceHz`
-  the last of those broke. Each is recorded where it was made and none can alter what anyone hears,
-  the processor being a read-only tap. Accepting this ADR is what makes them a decision rather than
-  a run of exceptions; that acceptance has not happened.
+- **Point 15 is built** (`familiar-apple` #86, 2026-08-08) and took the third of the three routes
+  its own text left open. Not persisted `beat_times`, and not phase derived page-side: the grid is
+  computed **natively**, phase-locked live from the flux envelope with the stored `bpm` as the tempo
+  prior. The embedded page could never have derived it — `NullAudioEngine` gives it no audio, no
+  analyser and no clock (ADR-0017) — so the Swift side is the only place with the inputs. `bpm`
+  needed no backend work, so `beat_times` stays unpersisted and its follow-up below stands.
+- **Five changes sit inside the fence ADR-0015 point 2 put around `NativeAudioEngine`'s
+  processing** — smoothing 0.8→0.5, `fftSize` 256→1024, the accumulation order, the `cadenceHz` the
+  third of those broke, and the flux envelope point 15 needed. Each is justified where it was made,
+  and none can alter what anyone hears: the processor is a read-only tap on `mainMixerNode`.
+  **Accepting this ADR is what makes them a decision rather than a run of exceptions**, and that is
+  a substantial part of what is being accepted here.
+- **A correction point 15 acquired on contact with the code**, recorded because the ADR argued it
+  the wrong way round: a constant latency is *not* absorbed into the phase estimate. The loop
+  estimates phase from the timestamps it is given, so a uniform delay shifts every predicted beat by
+  that delay. What prediction buys is that the error collapses to **one measurable constant**, where
+  a reactive detector's lateness is irreducible. The distinction is the whole justification for
+  point 15 and it is smaller than the one first written down.
 
 ## Context
 
@@ -550,6 +564,14 @@ v1 rather than as a finding.
 - **Positive:** the detector gets a better input than it has in the browser in one respect — a
   23 ms hop is fixed and known, where `requestAnimationFrame` under Web Audio delivers whatever the
   frame rate happened to be, and drops frames under load.
+- **Follow-up:** the grid's `outputLead` — how far the audio timeline runs ahead of the ear — is
+  unmeasured and left at zero, so beats currently fire early by the tap handoff plus device latency.
+  It cannot be found in a unit test; it needs a click track and the engine's sample-accurate clock,
+  on each platform.
+- **Follow-up:** flux is full-band, so "on the beat" and "on the offbeat" are indistinguishable when
+  the offbeat is louder — reggae, some house, a heavy backbeat over a quiet kick — and the grid will
+  be confidently half a beat wrong there. Weighting toward the low bins, where the kick lives, is
+  the known mitigation and was left out to keep point 15's first landing small.
 - **Follow-up:** `beat_times` is computed on every analysed track and discarded (`analysis.py:351`,
   never written to `features`). Point 15 is the first thing that would want it. Deciding whether to
   persist it is a backend question and is not settled here.
