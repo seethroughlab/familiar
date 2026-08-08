@@ -1,4 +1,4 @@
-# ADR-0042: The LLM Surface Is an MCP Server, Not a Chat Client
+# ADR-0043: The LLM Surface Is an MCP Server, Not a Chat Client
 
 Status: proposed
 
@@ -211,7 +211,7 @@ The `bcrypt` dependency in `backend/pyproject.toml` is the only thing left of it
 2. **The exposed surface is the 27 tools that do not require a Familiar client, minus
    `fetch_webpage`.** The three that require one — `get_visible_tracks`, `queue_tracks`,
    `control_playback` — are out of scope here and are the subject of
-   [ADR-0043](ADR-0043-mcp-clients-actuate-playback-through-a-command-channel.md).
+   [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md).
    `fetch_webpage` is dropped outright: it is a server-side URL fetcher on an API with no inbound
    authentication, and the host's own web access does the job better. **That leaves 26 tools.**
 
@@ -247,7 +247,7 @@ The `bcrypt` dependency in `backend/pyproject.toml` is the only thing left of it
    consequence of this one, and it does not get smuggled in here.
 
 7. **Reachability is Tailscale and localhost. Public exposure is gated behind
-   [ADR-0044](ADR-0044-familiar-authenticates-inbound-requests.md).** Claude Desktop and Claude Code
+   [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md).** Claude Desktop and Claude Code
    reach the server on the machine or the tailnet the listener already runs. Hosted third-party
    clients cannot, and making them able to means auditing 158 unauthenticated operations and
    inventing an inbound credential. That is a larger decision than this one and it is not a
@@ -353,15 +353,15 @@ them.
   I'm looking at" become unanswerable, and no MCP host can supply a viewport Familiar owns.
 - **Tradeoff.** Point 6 removes a feature that was restored only days ago, and removes an endpoint
   that ADR-0022's implementation notes call out as the reason no third bridge message was needed.
-- **Follow-up.** [ADR-0043](ADR-0043-mcp-clients-actuate-playback-through-a-command-channel.md) —
+- **Follow-up.** [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md) —
   playback actuation. Until it lands, MCP produces artifacts and answers; it does not play anything.
-- **Follow-up.** [ADR-0044](ADR-0044-familiar-authenticates-inbound-requests.md) — inbound
+- **Follow-up.** [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md) — inbound
   authentication, and the prerequisite for point 7's public half. It is worth noting that the 158
   unauthenticated operations are a finding about Familiar today, not a new risk created here.
-- **Follow-up.** `ADR-0022` flips to `superseded by ADR-0042` when this is accepted, not before.
+- **Follow-up.** `ADR-0022` flips to `superseded by ADR-0043` when this is accepted, not before.
 - **Follow-up.** `streamable_http_app(stateless_http=...)` is a real choice and should be made
   deliberately rather than inherited. It bears directly on
-  [ADR-0043](ADR-0043-mcp-clients-actuate-playback-through-a-command-channel.md) point 6's note that
+  [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md) point 6's note that
   a multi-worker deployment needs revisiting.
 - **Follow-up.** Four REST endpoints — semantic search, feature distribution, library genres, and
   the missing `filter_tracks` predicates — would make the rejected local-process option viable, and
@@ -374,4 +374,4 @@ them.
   Either the extractors are wrong or the filters should go, and this is true whether or not MCP
   happens.
 - **Follow-up.** The `bcrypt` dependency is vestigial from the shelved Subsonic API and should be
-  removed, or deliberately kept for ADR-0044 to build on.
+  removed, or deliberately kept for ADR-0045 to build on.

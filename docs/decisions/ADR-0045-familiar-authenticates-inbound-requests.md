@@ -1,14 +1,14 @@
-# ADR-0044: Familiar Authenticates Inbound Requests
+# ADR-0045: Familiar Authenticates Inbound Requests
 
 Status: proposed
 
 Date: 2026-08-07
 
-Extends [ADR-0042](ADR-0042-the-llm-surface-is-an-mcp-server.md)
+Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 
 ## Context
 
-[ADR-0042](ADR-0042-the-llm-surface-is-an-mcp-server.md) point 7 confines the MCP server to
+[ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md) point 7 confines the MCP server to
 Tailscale and localhost, because hosted third-party clients cannot reach it and making them able to
 is a larger decision. This is that decision.
 
@@ -44,8 +44,8 @@ is a larger decision. This is that decision.
 Tailscale."* `docs/CONFIGURATION.md` recommends `tailscale serve`. Nothing in the application
 enforces or checks it. If the host's firewall is open, so is the library.
 
-**This is a finding about Familiar as it is today, not a risk created by ADR-0042.** The MCP server
-does not widen it — it runs behind the same tailnet. What ADR-0042 does is make the question
+**This is a finding about Familiar as it is today, not a risk created by ADR-0043.** The MCP server
+does not widen it — it runs behind the same tailnet. What ADR-0043 does is make the question
 unavoidable, because "any LLM can do this" is only true if the LLM can reach the server.
 
 **The premise that most needs checking is whether public exposure is wanted at all.**
@@ -114,7 +114,7 @@ The `bcrypt` dependency in `backend/pyproject.toml` is all that remains, and the
 genuinely modest, and it costs nothing. Rejected because it is not enforced anywhere in the
 application: the same code runs on `0.0.0.0` in Docker with a published port, and the only thing
 between a personal library and the internet is a firewall the application knows nothing about. It
-also cannot be the answer for ADR-0042 point 7's public half, and the 158 operations mean the
+also cannot be the answer for ADR-0043 point 7's public half, and the 158 operations mean the
 blast radius is the whole server rather than one profile.
 
 **Per-profile passwords, as the Subsonic API had.** Closest to a conventional design, already
@@ -136,7 +136,7 @@ Familiar runs in Docker on machines with no Tailscale, and an MCP host that spea
 header is the lowest common denominator that works everywhere.
 
 **Scope this to the MCP endpoint only** — authenticate `/mcp` and leave the REST API as it is.
-Much smaller, and it unblocks ADR-0042 immediately. Rejected because it protects the new door on a
+Much smaller, and it unblocks ADR-0043 immediately. Rejected because it protects the new door on a
 building with 158 open windows, and because the MCP tools call the same handlers the REST API
 exposes. It would let the change look complete while changing nothing about the actual exposure.
 
@@ -146,7 +146,7 @@ exposes. It would let the change look complete while changing nothing about the 
   enforced one (nothing) closes, and it closes in the application rather than in a deployment guide.
 - **Positive.** Point 2 makes the 158 measurable and falsifiable. It is a number that can go to zero
   and stay there, checked by the linter that already exists.
-- **Positive.** ADR-0042's MCP server becomes safe to reach from anything on the tailnet without
+- **Positive.** ADR-0043's MCP server becomes safe to reach from anything on the tailnet without
   each new client re-opening the question.
 - **Tradeoff.** Every client gains a credential to hold, configure and get wrong — the web app,
   both Apple clients, and any MCP host. Point 3 keeps the profile handling unchanged, which is what

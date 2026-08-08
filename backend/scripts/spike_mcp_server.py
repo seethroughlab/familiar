@@ -1,10 +1,10 @@
-"""SPIKE — throwaway MCP server testing ADR-0042 point 3.
+"""SPIKE — throwaway MCP server testing ADR-0043 point 3.
 
 Not production code. Not wired into the app. Delete when the question is answered.
 
 ## The question
 
-ADR-0042 point 3 claims the sequencing knowledge currently in `SYSTEM_PROMPT` can move into
+ADR-0043 point 3 claims the sequencing knowledge currently in `SYSTEM_PROMPT` can move into
 tool descriptions and the server's `instructions`, because **MCP guarantees no system prompt**.
 That is the load-bearing risk in the whole direction: if a host given only descriptions
 thresholds `energy > 0.8` without ever calling `get_feature_distribution`, the MCP surface

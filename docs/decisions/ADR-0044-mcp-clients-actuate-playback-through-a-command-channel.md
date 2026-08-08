@@ -1,14 +1,14 @@
-# ADR-0043: MCP Clients Actuate Playback Through a Command Channel
+# ADR-0044: MCP Clients Actuate Playback Through a Command Channel
 
 Status: proposed
 
 Date: 2026-08-07
 
-Extends [ADR-0042](ADR-0042-the-llm-surface-is-an-mcp-server.md)
+Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 
 ## Context
 
-[ADR-0042](ADR-0042-the-llm-surface-is-an-mcp-server.md) point 2 exposes the 26 tools that need no
+[ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md) point 2 exposes the 26 tools that need no
 Familiar client and explicitly defers the three that do. This ADR decides those three:
 `queue_tracks`, `control_playback`, and — by consequence rather than by tool — whether an external
 host can start music at all.
@@ -100,7 +100,7 @@ of them, and "play this" has to mean something specific.
    2 still holds — nothing in the playback path waits on the network — because the network is what
    *delivers* the command, not what services it.
 
-8. **`clear_existing` becomes real here or it goes.** ADR-0042's Context records it as inert at both
+8. **`clear_existing` becomes real here or it goes.** ADR-0043's Context records it as inert at both
    ends. The command carries an explicit replace-or-append, and whichever is chosen, the schema and
    the behaviour agree.
 
@@ -109,7 +109,7 @@ of them, and "play this" has to mean something specific.
    wired to this; otherwise it goes, with the docstring.
 
 10. **The Mac first, then the phone and the web app.** Same order as every client surface since
-    ADR-0016, and the Mac is where the MCP hosts in ADR-0042 point 7 actually run.
+    ADR-0016, and the Mac is where the MCP hosts in ADR-0043 point 7 actually run.
 
 ## Alternatives Considered
 
@@ -129,7 +129,7 @@ which is the shape of cost ADR-0041 has just finished removing from this app.
 **Let the MCP server be a local process that drives the Mac app directly** — an XPC service, a URL
 scheme, or AppleScript. No server involvement at all, and the strongest possible targeting: it is
 the app on this machine. Rejected because it only ever works for one platform and one machine, it
-duplicates ADR-0042 point 1's rejected split-process design, and driving the Mac app from outside
+duplicates ADR-0043 point 1's rejected split-process design, and driving the Mac app from outside
 has been tried and does not work — synthetic media keys and accessibility traversal both fail
 against it.
 
@@ -141,7 +141,7 @@ listening events from [ADR-0030](ADR-0030-scrobbling-is-the-servers-job.md) than
 for imperatives. Worth its own decision if wanted.
 
 **Do not build it — MCP produces artifacts, and the listener presses play.** The honest minimum, and
-it is genuinely defensible: playlists are durable, the app is already open, and ADR-0042 delivers
+it is genuinely defensible: playlists are durable, the app is already open, and ADR-0043 delivers
 its value without this. Rejected because "queue this up" is the request that motivated the whole
 direction, and because a playlist created and never surfaced is one more affordance whose
 destination is not mounted. Recorded as the fallback if point 4's targeting proves worse than it
@@ -149,7 +149,7 @@ looks.
 
 ## Consequences
 
-- **Positive.** ADR-0042's three deferred tools come back, and the MCP surface can do everything the
+- **Positive.** ADR-0043's three deferred tools come back, and the MCP surface can do everything the
   chat panel could — which is the bar the replacement has to clear to be a replacement.
 - **Positive.** The server gains a general way to say something to a client, which several
   half-built things have wanted: `BrowserOutput`'s docstring, the casting path, and any future

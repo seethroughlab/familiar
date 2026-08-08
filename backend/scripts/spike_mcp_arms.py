@@ -4,7 +4,7 @@ Not production code. Delete with the spike.
 
 ## What this measures
 
-ADR-0042 point 3 claims the sequencing knowledge in `SYSTEM_PROMPT` can survive in tool
+ADR-0043 point 3 claims the sequencing knowledge in `SYSTEM_PROMPT` can survive in tool
 descriptions, because MCP guarantees no system prompt. This runs a fixed prompt set through both
 arms and reports **which tools got called, in what order**, so the claim is settled by evidence.
 
@@ -52,7 +52,7 @@ SERVER = str(Path(__file__).resolve().parent / "spike_mcp_server.py")
 MODEL = "claude-sonnet-4-5-20250929"  # matches services/llm/models.py
 MAX_TURNS = 8
 
-# Each prompt targets a specific claim in ADR-0042 point 3. `expect` is what a well-sequenced
+# Each prompt targets a specific claim in ADR-0043 point 3. `expect` is what a well-sequenced
 # answer looks like; it is scored by inspection, not asserted, because there is more than one
 # defensible ordering.
 PROMPTS: list[dict[str, str]] = [
