@@ -1,8 +1,48 @@
 # ADR-0039: The Website Is Rebuilt in Place
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
+
+## Implementation
+
+Points 1, 2, 3, 5, 6 and 7 are done. **Point 4 is not**, and point 8 is half done.
+
+The page was reordered rather than rewritten, exactly as point 2 asks — all ten sections were
+extracted whole and reassembled, so no content was lost or retyped. The order is now screenshots,
+features, ask, comparison, who it's for, remote access, FAQ, intro, install, feedback, and a closing
+call to action before the footer. **Install moved from seventh to second-from-last on purpose**: the
+*command* is in the hero under point 3, and the detailed section is the repeat at the bottom that
+point 2 asks for. The manifesto paragraph that used to be the gate is now a coda.
+
+Point 3 put the `docker compose` quickstart and the requirements line directly in the hero, at
+smaller type than the page's other code blocks — it is a thing you copy, not a thing you read, and
+at body size three long URLs dominate the hero they exist to support.
+
+Point 7 corrected `site/README.md`, which had described GitHub Pages, a CNAME file the repository
+does not contain, and DNS pointing at `seethroughlab.github.io`. It deploys to the Cloudflare Pages
+project `familiar-site` via `CF_API_TOKEN` and `CF_ACCOUNT_ID`. The workflow is still named
+`pages.yml` with a job called Pages, which is presumably how the stale text survived the migration —
+the follow-up about renaming it stands, and is now the only thing keeping this from recurring.
+
+**Point 8 is done.** The Apple clients are in the hero and the closing call to action, and the demo
+link joined them once [ADR-0038](ADR-0038-the-demo-server-is-always-on.md)'s machine was up — which
+happened the same day, after a Dockerfile fix.
+
+It was absent for several hours in between, on purpose: `familiar-demo.fly.dev` was scaled to zero
+and timing out at 30 seconds, and a "Try the demo" button that hangs is worse than no button. **The
+condition for adding it was not "the deploy finished" but "the thing a visitor will do works"** —
+verified as 32 tracks over the API and a `206 Partial Content` on a range request against a track's
+stream, which is what a player actually issues. A demo that loads and cannot play is the same defect
+one screen later.
+
+**Point 4 — the illustration set — is untouched**, and the ADR's own tradeoff predicted this is the
+part most likely to be left half-done. It is not half-done; it is not started, which is the better
+of the two states. The structure is ready to receive it.
+
+Verified rather than eyeballed: the document parses with every tag balanced, all fourteen in-page
+anchors resolve to an id that exists (the nav and section order both changed, so this was the likely
+breakage), and all eighteen referenced local assets are present.
 
 ## Context
 

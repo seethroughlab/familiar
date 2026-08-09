@@ -19,9 +19,14 @@ primary_region = 'sjc'
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = 'stop'
+  # **Always on** (ADR-0038 point 1). An App Store reviewer who hits a cold machine sees timeouts,
+  # and one rejection costs more in calendar time than this machine costs in a year. The health
+  # check below has a 30s grace period, the container runs `alembic upgrade head` on boot, and the
+  # first request also has to warm Postgres — "Fly cold starts are usually quick" is doing far too
+  # much work in front of an audience holding a rejection form.
+  auto_stop_machines = 'off'
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
   processes = ['app']
 
   [[http_service.checks]]
@@ -36,6 +41,12 @@ primary_region = 'sjc'
   destination = '/data'
   initial_size = '1gb'
 
+# **Deliberately small, and this is not an oversight** (ADR-0038 point 2). `docs/TEST-SERVER.md`
+# specified a `performance-2x` with 8 GB because it was sized for a machine that would *analyse*
+# music. This one never analyses: `DISABLE_CLAP_EMBEDDINGS` is set above, the 32-track library
+# arrives pre-analysed in the seed dump, and the flag gates *computing* embeddings rather than using
+# them — so similarity search and the Music Map work here without the ~1.5 GB CLAP model ever being
+# loaded. Do not "fix" that flag; turning it off is how this machine runs out of memory.
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'

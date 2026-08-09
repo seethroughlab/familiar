@@ -1,0 +1,149 @@
+name: Reset demo library
+
+# ADR-0038 point 5. Reviewers and anyone with the link share one profile, so play counts,
+# favourites, playlists and skip history accumulate from strangers. The seed is the source of truth
+# and the database is disposable; this puts it back.
+#
+# **Restores from a file in the repository**, `deploy/fly/demo-seed.sql.gz`, produced by
+# `scripts/capture-demo-seed.sh` or `scripts/seed-demo-library.sh`. The first version of this
+# workflow fetched a dump from a `DEMO_SEED_URL` secret — which nothing published, because
+# `seed-demo-library.sh` wrote its dump to `mktemp` with a `trap` deleting it on exit. The golden
+# copy was destroyed every time it was made. Committing it means the restore has no prerequisite,
+# no secret, and no hosting; it is versioned alongside the schema that produced it, so a migration
+# that invalidates the seed shows up in the same pull request.
+#
+# **Weekly rather than nightly.** A reset mid-review would look like data loss to the person
+# deciding whether to approve the app, and the drift this corrects is cosmetic — a demo carrying a
+# few strangers' play counts still demonstrates the product. Sunday 04:00 UTC is the quietest slot
+# for an audience of mostly American reviewers and European visitors.
+#
+# Fly has no cron, which is why this is a GitHub Action against Neon rather than something beside
+# the app.
+on:
+  schedule:
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RESET to confirm — this discards the demo database'
+        required: true
+        default: ''
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  SEED_FILE: deploy/fly/demo-seed.sql.gz
+
+jobs:
+  reset:
+    name: Restore familiar-demo from the committed seed
+    runs-on: ubuntu-latest
+    concurrency: fly-demo-deploy
+    steps:
+      - name: Refuse an unconfirmed manual run
+        # The schedule passes no inputs, so this only guards the button. Destroying a database
+        # because someone clicked "Run workflow" to see what it did is what a dispatch input is for.
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'RESET'
+        run: |
+          echo "::error::Type RESET in the confirm field to run this. Nothing has been changed."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Check the seed and the secret exist before touching anything
+        env:
+          DEMO_DATABASE_URL_DIRECT: ${{ secrets.DEMO_DATABASE_URL_DIRECT }}
+        run: |
+          failed=0
+          if [ ! -s "$SEED_FILE" ]; then
+            echo "::error::$SEED_FILE is missing. Produce it with scripts/capture-demo-seed.sh and commit it."
+            failed=1
+          fi
+          if [ -z "$DEMO_DATABASE_URL_DIRECT" ]; then
+            echo "::error::DEMO_DATABASE_URL_DIRECT is not set"
+            failed=1
+          fi
+
+          # **Every way this secret has actually been got wrong, checked up front.** All three
+          # produce a failure hours into a Sunday morning, on a job nobody is watching, with an
+          # error that reads like a broken database rather than a malformed string. They are cheap
+          # to catch here and expensive to diagnose there.
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *-pooler.*)
+              echo "::error::Points at Neon's pooler. Use the direct host — the pooler ignores search_path."
+              failed=1 ;;
+          esac
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *+asyncpg*)
+              echo "::error::Carries the +asyncpg driver prefix. That is the app's URL; psql needs a plain postgresql:// one."
+              failed=1 ;;
+          esac
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *[?\&]ssl=*)
+              echo "::error::Uses ssl= (asyncpg's spelling). psql needs sslmode=."
+              failed=1 ;;
+          esac
+
+          exit $failed
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Restore
+        env:
+          # **The direct host, not the pooler.** Neon's pgbouncer ignores `ALTER ROLE SET
+          # search_path`, so a restore through the pooler does not find the schema and fails in a
+          # way that looks like a corrupt dump.
+          DEMO_DATABASE_URL_DIRECT: ${{ secrets.DEMO_DATABASE_URL_DIRECT }}
+        run: |
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *-pooler.*)
+              echo "::error::DEMO_DATABASE_URL_DIRECT points at Neon's pooler. Use the direct host."
+              exit 1
+              ;;
+          esac
+
+          # Clear what accumulates, then reload. The seed is `--data-only`, so the rows it carries
+          # have to go first or every insert collides on its primary key.
+          #
+          # **Only the two roots are named, and `CASCADE` does the rest.** Listing child tables by
+          # hand is how this breaks silently later: a first draft named `favorites`, and the table is
+          # `profile_favorites`. Everything a visitor creates — play events, favourites, playlists,
+          # play history — hangs off `profiles`, and `track_analysis` hangs off `tracks`, so the
+          # cascade reaches all of it without this file having to keep a list in step with the
+          # schema.
+          gunzip -c "$SEED_FILE" > /tmp/demo-seed.sql
+          psql "$DEMO_DATABASE_URL_DIRECT" -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          TRUNCATE profiles, tracks, artist_info RESTART IDENTITY CASCADE;
+          COMMIT;
+          SQL
+          psql "$DEMO_DATABASE_URL_DIRECT" -v ON_ERROR_STOP=1 -f /tmp/demo-seed.sql
+
+      - name: Confirm the app still serves music
+        # Not just a health check. A restore that drops the tracks and fails halfway leaves a
+        # perfectly healthy server with an empty library, which is the failure this is most likely
+        # to produce and the one a health endpoint cannot see.
+        run: |
+          for attempt in $(seq 1 10); do
+            body=$(curl -s --max-time 20 https://familiar-demo.fly.dev/api/v1/health || true)
+            if [ "$body" = '{"status":"healthy"}' ]; then break; fi
+            sleep 15
+          done
+
+          profile=$(curl -s --max-time 20 https://familiar-demo.fly.dev/api/v1/profiles \
+            | sed -n 's/.*"id":"\([^"]*\)".*/\1/p' | head -1)
+          if [ -z "$profile" ]; then
+            echo "::error::No profile after the restore — the seed did not load."
+            exit 1
+          fi
+
+          tracks=$(curl -s --max-time 30 -H "X-Profile-ID: $profile" \
+            https://familiar-demo.fly.dev/api/v1/library/stats \
+            | sed -n 's/.*"total_tracks":\([0-9]*\).*/\1/p')
+          echo "tracks after restore: ${tracks:-0}"
+          if [ "${tracks:-0}" -lt 1 ]; then
+            echo "::error::The library is empty after the restore."
+            exit 1
+          fi

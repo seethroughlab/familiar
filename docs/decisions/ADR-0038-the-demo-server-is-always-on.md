@@ -1,8 +1,50 @@
 # ADR-0038: The Demo Server Is Always On
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
+
+## Implementation
+
+The repository half is done; two steps need a Fly account and are listed at the end of
+`docs/TEST-SERVER.md`.
+
+Points 1, 2 and 4 are `deploy/fly/fly.toml` (`auto_stop_machines = 'off'`,
+`min_machines_running = 1`, with the small VM's justification written beside it so nobody "fixes"
+`DISABLE_CLAP_EMBEDDINGS` and runs the machine out of memory) and the restored `push:` trigger in
+`fly-deploy-demo.yml`, scoped to `backend/**` and `deploy/fly/**`.
+
+Point 3 rewrote `docs/TEST-SERVER.md` entirely. It was a *plan to build* that had been read as a
+description ever since — a `familiar-test` app, a `performance-2x` with 8 GB, a `fly/seed-music.sh`
+and a `deploy-fly.yml`, none of which exist. One thing it got wrong that this ADR also missed: the
+database is **Neon**, not the Fly Postgres the document specified.
+
+**Point 5 needed a mechanism, and the first attempt at one did not work.** `fly-reset-demo.yml`
+originally fetched a dump from a `DEMO_SEED_URL` secret — and nothing could ever have published one,
+because `seed-demo-library.sh` wrote its dump to `mktemp` with a `trap` deleting it on exit. **The
+golden copy of the demo library was destroyed every time it was made**, which is why the follow-up
+said the reset "needs a mechanism" without anyone noticing there was no artifact either.
+
+The seed is now `deploy/fly/demo-seed.sql.gz`, **committed to the repository**: no secret, no
+hosting, no prerequisite, and versioned beside the schema that produced it, so a migration that
+invalidates it appears in the same pull request. `scripts/capture-demo-seed.sh` produces it from the
+live demo in seconds — the usual case — and refuses to capture a database with more than 25 play
+events, because snapshotting after people have listened bakes their history into the copy the reset
+restores.
+
+The reset truncates `profiles`, `tracks` and `artist_info` with `CASCADE` rather than naming child
+tables. A first draft listed `favorites`; the table is `profile_favorites`. Everything a visitor
+creates hangs off one of those two roots, so the cascade stays correct without a list to keep in
+step. It then checks that the library is **not empty**, because a half-failed restore leaves a
+perfectly healthy server with no music — the failure a health check cannot see.
+
+Point 6 is unfinished: where the review account lives is still unchosen.
+
+**Point 8 is done.** ADR-0036 shipped, so nothing pointed at `familiar-sessions.fly.dev` any more —
+and it was still up, answering 200 in 4.6 seconds, when that was checked. It was destroyed on
+2026-08-09 and the hostname now resolves to nothing. The gap between the code that orphaned it
+shipping and the app being removed was a few hours, which is the *short* version of how it became
+load-bearing without appearing in any decision. The Fly footprint is one app.
 
 ## Context
 

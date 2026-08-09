@@ -235,6 +235,7 @@ carries listeners' identities and messages.
   returns, or is replaced by this ADR plus something shorter, is unresolved.
 - **Follow-up:** `/listen/{code}` is not a route in `App.tsx`. A share link needs somewhere to land,
   and the shelved `GuestListener.tsx` (475 lines) is what used to be there.
-- **Follow-up:** `familiar-sessions.fly.dev` is a second Fly application in the project's
-  footprint. Once nothing points at it, it should be shut down rather than left running — and
-  [ADR-0038](ADR-0038-the-demo-server-is-always-on.md) is where the Fly footprint is accounted for.
+- **Follow-up — done, 2026-08-09.** `familiar-sessions.fly.dev` was a second Fly application in the
+  project's footprint. This ADR shipping is what orphaned it; it was destroyed the same day and the
+  hostname no longer resolves. [ADR-0038](ADR-0038-the-demo-server-is-always-on.md) point 8 is where
+  the Fly footprint is accounted for, and it is now one app.
