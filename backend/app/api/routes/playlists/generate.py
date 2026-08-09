@@ -40,6 +40,10 @@ class GeneratePlaylistRequest(BaseModel):
     artist: str | None = None
     album: str | None = None
     track_ids: list[UUID] | None = None
+    #: A set of artist names — what VibeMap's map selection actually is. Point 2's `track_ids` was
+    #: described as "what VibeMap has"; it is not, and resolving names to ids client-side would move
+    #: the centroid off the server for no gain.
+    artists: list[str] | None = None
 
     limit: int = Field(default=25, ge=5, le=100)
     max_per_artist: int = Field(default=2, ge=1, le=10)
@@ -57,11 +61,12 @@ class GeneratePlaylistRequest(BaseModel):
             bool(self.track_ids),
             self.album is not None,
             self.artist is not None and self.album is None,
+            bool(self.artists),
         ]
         if sum(shapes) != 1:
             raise ValueError(
                 "Provide exactly one seed: track_id, album (optionally with artist), "
-                "artist, or track_ids."
+                "artist, artists, or track_ids."
             )
         return self
 
@@ -100,6 +105,7 @@ async def generate_playlist(
         artist=request.artist,
         album=request.album,
         track_ids=request.track_ids,
+        artists=request.artists,
     )
     if seed is None:
         # A 404 rather than an empty playlist: "make a playlist from an album that is not in your

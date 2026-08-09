@@ -15,6 +15,7 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useUIStore } from '../../stores/uiStore';
 import { ShuffleWeightPopover } from './ShuffleWeightPopover';
 import { OutputSelector } from './OutputSelector';
+import { useGeneratePlaylist } from '../../hooks/useGeneratePlaylist';
 
 interface PlayerBarProps {
   onExpandClick?: () => void;
@@ -68,6 +69,7 @@ export function PlayerBar({
   onSessionToggle,
   isSessionOpen = false,
 }: PlayerBarProps) {
+  const { generate: generatePlaylist } = useGeneratePlaylist();
   const { currentTrack, isPlaying, isLoadingAudio, currentTime, duration, volume, shuffle, repeat, consume } = usePlayerStore(
     useShallow((s) => ({
       currentTrack: s.currentTrack, isPlaying: s.isPlaying, isLoadingAudio: s.isLoadingAudio,
@@ -513,9 +515,8 @@ export function PlayerBar({
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
+              // ADR-0048: a track id is already unambiguous, so there is nothing to phrase.
+              void generatePlaylist({ track_id: contextMenu.track.id });
             }
           }}
           onEditMetadata={() => {

@@ -11,6 +11,7 @@ import { downloadApi } from '../api';
 import { showLoading, showError } from '../stores/toastStore';
 import { toast } from 'sonner';
 import type { Track } from '../types';
+import { useGeneratePlaylist } from './useGeneratePlaylist';
 
 interface UseTrackContextMenuOptions {
   /** Called to play the context menu track. Receives the track. */
@@ -54,6 +55,7 @@ interface UseTrackContextMenuOptions {
 }
 
 export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
+  const { generate: generatePlaylist } = useGeneratePlaylist();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setQueue = usePlayerStore((s) => s.setQueue);
@@ -183,9 +185,11 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
           useUIStore.getState().openPlaylistPicker([track.id]);
         }}
         onMakePlaylist={() => {
-          const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
+          // ADR-0048. **This is the most-used "Make a playlist" in the app** — `TrackListBrowser`,
+          // `ArtistDetail`, `PlaylistTrackList` and `AlbumDetail` all reach it through this hook —
+          // and the ADR's table of affordances does not mention it.
           options.beforeNavigate?.();
-          useUIStore.getState().triggerChat(message);
+          void generatePlaylist({ track_id: track.id });
         }}
         onEditMetadata={() => {
           if (options.onEditMetadata) {

@@ -74,6 +74,7 @@ async def resolve_seed(
     artist: str | None = None,
     album: str | None = None,
     track_ids: list[UUID] | None = None,
+    artists: list[str] | None = None,
 ) -> ResolvedSeed | None:
     """Turn one of the four accepted seed shapes into tracks, a centroid and a label.
 
@@ -94,6 +95,13 @@ async def resolve_seed(
         if artist:
             conditions.append(func.lower(Track.artist) == artist.lower())
         kind = "album"
+    elif artists:
+        # **VibeMap selects artists, not tracks.** ADR-0048 point 2 says `track_ids` is "what VibeMap
+        # has"; it is not — the map's selection is a set of artist names. Rather than have the client
+        # resolve those to hundreds of track ids and post them back, the plural of an accepted seed
+        # kind is accepted here, which keeps the centroid on the server where point 3 wants it.
+        conditions.append(func.lower(Track.artist).in_([a.lower() for a in artists]))
+        kind = "artists"
     elif artist is not None:
         conditions.append(func.lower(Track.artist) == artist.lower())
         kind = "artist"
@@ -141,6 +149,13 @@ def _seed_label(kind: str, rows: Sequence[Any], *, artist: str | None, album: st
         return album or first.album or "this album"
     if kind == "artist":
         return artist or first.artist or "this artist"
+    if kind == "artists":
+        names = sorted({row[0].artist for row in rows if row[0].artist})
+        if len(names) == 1:
+            return names[0]
+        if len(names) == 2:
+            return f"{names[0]} and {names[1]}"
+        return f"{names[0]}, {names[1]} and {len(names) - 2} more"
     if kind == "track":
         return first.title or "this track"
     # A set: name it after the artists, which is what VibeMap's selection actually is.

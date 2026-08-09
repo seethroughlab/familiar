@@ -3953,6 +3953,16 @@
               "null"
             ]
           },
+          "artists": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artists",
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "include_seed": {
             "default": false,
             "title": "Include Seed",

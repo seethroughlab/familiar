@@ -17,6 +17,7 @@ import type { Track } from '../../types';
 import { useUIStore } from '../../stores/uiStore';
 
 import { createLogger } from '../../utils/logger';
+import { useGeneratePlaylist } from '../../hooks/useGeneratePlaylist';
 
 const log = createLogger('QueueView');
 
@@ -43,6 +44,7 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
+  const { generate: generatePlaylist } = useGeneratePlaylist();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
 
   // Scroll container + virtualizer
@@ -541,9 +543,8 @@ export function QueueView({ onTrackDropped }: QueueViewProps = {}) {
           }}
           onMakePlaylist={() => {
             if (contextMenu.track) {
-              const track = contextMenu.track;
-              const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-              useUIStore.getState().triggerChat(message);
+              // ADR-0048: a track id is already unambiguous, so there is nothing to phrase.
+              void generatePlaylist({ track_id: contextMenu.track.id });
             }
           }}
           onEditMetadata={() => {
