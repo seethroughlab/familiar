@@ -253,15 +253,17 @@ handed across another boundary — rebuilding ADR-0033's channel a second time, 
 - **Tradeoff:** Shipped and local bundles can declare the same `id`. Which wins has to be decided
   in implementation, and whichever it is will surprise someone. *Decided: local wins, and the
   shipped one is listed as shadowed rather than disappearing. See Implementation.*
-- **Tradeoff:** **Point 3 costs 1.59 MB, measured.** Handing `@react-three/drei` to plugins means
-  `import * as Drei`, which defeats tree-shaking: the inlined visualizer document is 1,782 kB
-  without it and 3,375 kB with it. Nothing in the repo needs it — the only built-in that imports
-  drei is `LyricWordField`, which is not registered — and neither does either sample visualizer, so
-  today this is paid by every install to support a plugin nobody has written. It is also the one of
-  the four that a plugin could reasonably carry itself: two Reacts genuinely do not work and two
+- **Tradeoff:** **Point 3 costs 1.59 MB on top of what drei already costs, measured.** Handing
+  `@react-three/drei` to plugins means `import * as Drei`, and a namespace import cannot be
+  tree-shaken: the inlined visualizer document is 1,782 kB without it and 3,375 kB with it.
+  *Corrected from the first version of this line, which claimed nothing in the repo used drei.*
+  `ScrollingLyrics` renders `LyricWordField`, which imports drei's `Text`, and `LyricStorm` renders
+  the same field — so drei ships regardless. What the namespace import buys is the rest of the
+  library, which point 3 promises plugins and which no first-party visualizer needs. It is also the
+  one of the four a plugin could reasonably carry itself: two Reacts genuinely do not work and two
   three.js in one context is waste plus a shared-context problem, but a second drei is only bytes.
-  Worth revisiting if no plugin ever uses it. The document is read from local disk rather than
-  fetched, so the price is app-bundle size and parse time, not download time.
+  The document is read from local disk rather than fetched, so the price is app-bundle size and
+  parse time, not download time.
 - **Tradeoff:** `familiar-plugin-non-places` is not under version control anywhere, and it is the
   only sample that exercises the shared three.js globals — which is to say the only one that would
   catch point 3 being broken. If that directory is lost, the evidence for the part of the contract
