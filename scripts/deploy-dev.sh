@@ -29,9 +29,6 @@ done
 # Build frontend if needed
 if [ "$DEPLOY_FRONTEND" = true ]; then
     echo "Building frontend..."
-    # Bake the public listening-sessions relay URL into the bundle. Override by
-    # exporting VITE_SESSIONS_RELAY_URL before invoking this script.
-    export VITE_SESSIONS_RELAY_URL="${VITE_SESSIONS_RELAY_URL:-https://familiar-sessions.fly.dev}"
     pnpm --filter @familiar/web run build
 
     echo "Syncing frontend to $NAS_HOST..."

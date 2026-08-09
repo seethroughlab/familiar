@@ -13,6 +13,7 @@ import {
   type SessionReaction,
   type SessionReactionKind,
 } from '../services/listeningSessionFamiliars';
+import { getApiOrigin } from '../api/base';
 import { createLogger } from '../utils/logger';
 import { showError } from '../stores/toastStore';
 
@@ -25,14 +26,6 @@ const PENDING_SEND_TICK_MS = 100;
 const HANDSHAKE_TIMEOUT_MS = 12000;
 const REACTION_RETENTION_MS = 4000;
 
-/**
- * Public WebRTC signaling relay URL (familiar-sessions service).
- * Override at build time via VITE_SESSIONS_RELAY_URL.
- * Falls back to the same origin as the Familiar app — useful for local dev when
- * running familiar-sessions on the same host.
- */
-const RELAY_URL: string =
-  (import.meta.env?.VITE_SESSIONS_RELAY_URL as string | undefined) ?? '';
 
 export interface SessionParticipant {
   user_id: string;
@@ -97,24 +90,36 @@ function normalizeSession(value: SessionInfo): SessionInfo {
   };
 }
 
+/**
+ * Where signalling goes: the listener's own Familiar server, and nowhere else (ADR-0036).
+ *
+ * **There used to be a build argument here**, `VITE_SESSIONS_RELAY_URL`, defaulting to a public Fly
+ * application. Every released build signalled through it; every development build fell back to a
+ * same-origin route that had been deleted five months earlier, so the panel 404ed in `pnpm dev` and
+ * nothing said so. Both halves of that are gone: there is one path now, it is the server the app is
+ * already talking to, and it is the one the route exists on.
+ *
+ * Derived from `getApiOrigin()` rather than `window.location`, because the two differ whenever the
+ * app is served from somewhere other than the API — which `setApiOrigin` exists to support.
+ */
 function buildWsUrl(): string {
-  let base: string;
-  if (RELAY_URL) {
-    base = RELAY_URL.replace(/^http/, 'ws').replace(/\/$/, '');
-  } else {
-    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    base = `${proto}//${window.location.host}`;
-  }
+  const origin = getApiOrigin() || window.location.origin;
+  const base = origin.replace(/^http/, 'ws').replace(/\/$/, '');
   return `${base}/api/v1/sessions/ws`;
 }
 
-/** Public guest URL the host can share. */
+/**
+ * The URL a host shares with a guest.
+ *
+ * **A guest must be able to reach the host's server**, which is the real cost of ADR-0036 point 2
+ * and is stated in its Consequences. This link used to work from anywhere because it pointed at a
+ * public relay; it now points where the music is, so it works over Tailscale, a tunnel or a public
+ * address, and not otherwise.
+ */
 export function buildShareLink(code: string): string {
   const safe = encodeURIComponent(code);
-  if (RELAY_URL) {
-    return `${RELAY_URL.replace(/\/$/, '')}/listen/${safe}`;
-  }
-  return `${window.location.origin}/listen/${safe}`;
+  const origin = getApiOrigin() || window.location.origin;
+  return `${origin.replace(/\/$/, '')}/listen/${safe}`;
 }
 
 export function useListeningSession({ username }: UseListeningSessionOptions = {}) {

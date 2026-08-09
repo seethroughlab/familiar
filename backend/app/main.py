@@ -56,6 +56,7 @@ from app.api.routes import (
     proposed_changes,
     queue,
     s3_backup,
+    sessions,
     smart_playlists,
     spotify_import,
     tracks,
@@ -518,6 +519,9 @@ app.include_router(spotify_import.router, prefix="/api/v1", responses=DEFAULT_ER
 app.include_router(ambient.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(playback.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+# Listening sessions (ADR-0036). Carries this backend's only WebSocket route, which rides on the
+# same router as the two typed REST operations.
+app.include_router(sessions.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(external_albums.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(new_releases.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(admin_artists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)

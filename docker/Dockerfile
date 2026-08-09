@@ -26,11 +26,9 @@ COPY packages/web/package.json packages/web/
 RUN pnpm install --frozen-lockfile --filter @familiar/web...
 
 # Copy source and build.
-# VITE_SESSIONS_RELAY_URL is baked in at build time; defaults to the public
-# Fly.io relay. Override with --build-arg VITE_SESSIONS_RELAY_URL=... if you
-# self-host familiar-sessions.
-ARG VITE_SESSIONS_RELAY_URL=https://familiar-sessions.fly.dev
-ENV VITE_SESSIONS_RELAY_URL=${VITE_SESSIONS_RELAY_URL}
+# There is no sessions relay build argument. Listening sessions signal through the Familiar server
+# this image *is* (ADR-0036); a build argument that silently sent listeners' session codes, chat and
+# reactions to a third party was the thing that decision removed.
 COPY packages/frontend/ packages/frontend/
 COPY packages/web/ packages/web/
 RUN pnpm --filter @familiar/web run build
