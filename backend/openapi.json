@@ -3936,6 +3936,118 @@
         "title": "FrontendLogIngestResponse",
         "type": "object"
       },
+      "GeneratePlaylistRequest": {
+        "description": "A closed, structured seed \u2014 ADR-0048 point 2.\n\n**Free text is deliberately not accepted.** A sentence would re-introduce interpretation, and\ninterpretation is the one thing that genuinely needed a model. Every caller of this endpoint has\nalready been told the seed by a right-click.",
+        "properties": {
+          "album": {
+            "title": "Album",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "include_seed": {
+            "default": false,
+            "title": "Include Seed",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 5.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "max_per_album": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Per Album",
+            "type": "integer"
+          },
+          "max_per_artist": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Per Artist",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "title": "Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Track Ids",
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "title": "GeneratePlaylistRequest",
+        "type": "object"
+      },
+      "GeneratePlaylistResponse": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "playlist_id": {
+            "format": "uuid",
+            "title": "Playlist Id",
+            "type": "string"
+          },
+          "pool_size": {
+            "title": "Pool Size",
+            "type": "integer"
+          },
+          "seed_track_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Seed Track Ids",
+            "type": "array"
+          },
+          "track_count": {
+            "title": "Track Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "playlist_id",
+          "name",
+          "track_count",
+          "seed_track_ids",
+          "pool_size"
+        ],
+        "title": "GeneratePlaylistResponse",
+        "type": "object"
+      },
       "GroupApproveRequest": {
         "properties": {
           "folder_path": {
@@ -24549,6 +24661,93 @@
           }
         ],
         "summary": "Create Playlist",
+        "tags": [
+          "playlists"
+        ]
+      }
+    },
+    "/api/v1/playlists/generate": {
+      "post": {
+        "description": "Generate and save a playlist from a structured seed.\n\nReturns a **saved** playlist, not a preview (point 6): it is reached from a menu item that said\n\"Make a playlist\", and a confirmation step would make the button a lie. It is marked\n`is_auto_generated` so it sorts and filters with the others and is one action to delete.",
+        "operationId": "playlists_generate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePlaylistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratePlaylistResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Generate Playlist",
         "tags": [
           "playlists"
         ]

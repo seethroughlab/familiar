@@ -163,6 +163,108 @@ class PlaylistHandlersMixin:
             return {"error": f"No track {track_id} is in the library."}
         return {"track_id": track_id, "is_favorite": favorite}
 
+    async def _generate_playlist(
+        self: "ToolExecutor",
+        track_id: str | None = None,
+        album: str | None = None,
+        artist: str | None = None,
+        track_ids: list[str] | None = None,
+        limit: Any = 25,
+        max_per_artist: Any = 2,
+        include_seed: Any = False,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Seeded playlist generation, ADR-0048 — the same code path the endpoint uses.
+
+        **This deliberately does not re-implement any of the pipeline.** Point 8 puts this on MCP so
+        a host can do what the button does; if the tool scored tracks itself the two would drift,
+        and the drift would be invisible because both would still return plausible playlists.
+        """
+        from app.services.playlist_generation import (
+            generate_seeded_playlist,
+            resolve_seed,
+        )
+
+        def safe_int(v: Any, default: int) -> int:
+            try:
+                return int(float(v)) if v is not None and v != "" else default
+            except (ValueError, TypeError):
+                return default
+
+        seed_uuid = None
+        if track_id:
+            parsed = self._safe_parse_uuids([track_id])
+            seed_uuid = parsed[0] if parsed else None
+            if seed_uuid is None:
+                return {"error": f"'{track_id}' is not a valid track id"}
+
+        seed_uuids = self._safe_parse_uuids(track_ids) if track_ids else None
+
+        provided = [seed_uuid is not None, bool(seed_uuids), bool(album), bool(artist and not album)]
+        if sum(provided) != 1:
+            return {
+                "error": "Provide exactly one seed: track_id, album (optionally with artist), "
+                         "artist, or track_ids."
+            }
+
+        seed = await resolve_seed(
+            self.db,
+            track_id=seed_uuid,
+            artist=artist,
+            album=album,
+            track_ids=seed_uuids,
+        )
+        if seed is None:
+            return {"error": "No tracks in the library matched that seed", "tracks": [], "count": 0}
+
+        result = await generate_seeded_playlist(
+            self.db,
+            seed,
+            limit=safe_int(limit, 25),
+            max_per_artist=safe_int(max_per_artist, 2),
+            include_seed=bool(include_seed),
+            profile_id=self.profile_id,
+        )
+
+        if not result.track_ids:
+            return {
+                "error": "Nothing in the library was close enough to that seed.",
+                "tracks": [],
+                "count": 0,
+                "pool_size": result.pool_size,
+            }
+
+        playlist = Playlist(
+            profile_id=self.profile_id,
+            name=name or result.name,
+            description=None,
+            is_auto_generated=True,
+            # The seed, not a sentence — there is no sentence. See the endpoint.
+            generation_prompt=f"seed:{seed.kind}:{seed.label}",
+        )
+        self.db.add(playlist)
+        await self.db.flush()
+
+        for position, tid in enumerate(result.track_ids):
+            self.db.add(PlaylistTrack(playlist_id=playlist.id, track_id=tid, position=position))
+
+        await self.db.commit()
+
+        tracks = (
+            await self.db.execute(select(Track).where(Track.id.in_(result.track_ids)))
+        ).scalars().all()
+        by_id = {t.id: t for t in tracks}
+
+        return {
+            "playlist_id": str(playlist.id),
+            "name": playlist.name,
+            "count": len(result.track_ids),
+            "pool_size": result.pool_size,
+            "tracks": [
+                self._track_to_dict(by_id[tid]) for tid in result.track_ids if tid in by_id
+            ],
+        }
+
     async def _select_diverse_tracks(
         self: "ToolExecutor",
         track_ids: list[str],

@@ -68,6 +68,7 @@ class ToolExecutor(
             "get_track_details": self._get_track_details,
             "search_bandcamp": self._search_bandcamp,
             "recommend_bandcamp_purchases": self._recommend_bandcamp_purchases,
+            "generate_playlist": self._generate_playlist,
             "select_diverse_tracks": self._select_diverse_tracks,
             # Metadata correction tools
             "lookup_correct_metadata": self._lookup_correct_metadata,
