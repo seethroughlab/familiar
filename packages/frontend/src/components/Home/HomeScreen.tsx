@@ -160,12 +160,6 @@ export function HomeScreen() {
     staleTime: STALE_TIME.LONG,
   });
 
-  const promptsQuery = useQuery({
-    queryKey: queryKeys.curatedPrompts.all,
-    queryFn: () => libraryApi.getCuratedPrompts(),
-    enabled: !isOffline,
-    staleTime: STALE_TIME.STATIC,
-  });
 
   const activeModuleOrder = preferences.order.filter((moduleId) => preferences.enabled[moduleId]);
 
@@ -205,13 +199,6 @@ export function HomeScreen() {
     { label: 'Music Map', to: '/library/music-map', icon: Sparkles, detail: 'Explore by sound' },
   ];
 
-  const refreshPrompts = () => {
-    queryClient.fetchQuery({
-      queryKey: queryKeys.curatedPrompts.all,
-      queryFn: () => libraryApi.getCuratedPrompts({ refresh: true }),
-      staleTime: 0,
-    });
-  };
 
   const handleResume = () => {
     if (queue.length === 0) return;
@@ -226,9 +213,6 @@ export function HomeScreen() {
 
   const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
 
-  const handlePromptClick = (prompt: string) => {
-    useUIStore.getState().triggerChat(prompt);
-  };
 
   const renderModule = (moduleId: HomeModuleId) => {
     switch (moduleId) {
@@ -348,69 +332,6 @@ export function HomeScreen() {
                 )}
               </div>
             </div>
-          </HomeCard>
-        );
-
-      case 'prompts':
-        // Every card in here opens the chat panel, so without a provider the module is a row of
-        // suggestions that cannot be taken up (ADR-0022 point 3).
-        if (!chatAvailable) return null;
-        return (
-          <HomeCard
-            key={moduleId}
-            title="Prompt Onramp"
-            description="Ask Familiar what to play, revisit, or discover next."
-            actions={
-              <button
-                onClick={refreshPrompts}
-                disabled={promptsQuery.isFetching || isOffline}
-                className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-sm text-zinc-200 transition hover:border-zinc-600 hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <RefreshCw className={`h-4 w-4 ${promptsQuery.isFetching ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-            }
-          >
-            <div className="mb-4 flex items-start gap-3 rounded-xl border border-zinc-800 bg-zinc-950/70 p-4 text-sm text-zinc-300">
-              <div className="rounded-lg bg-purple-500/15 p-2 text-purple-300">
-                <Brain className="h-4 w-4" />
-              </div>
-              <div>
-                The starter prompts below come from the LLM using your library context and refresh
-                over time, so Home doesn&apos;t feel like a static demo wall.
-              </div>
-            </div>
-            {promptsQuery.isLoading ? (
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Generating listening ideas...
-              </div>
-            ) : promptsQuery.data?.prompts?.length ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {promptsQuery.data.prompts.slice(0, 6).map((prompt, index) => (
-                  <button
-                    key={`${prompt.prompt}-${index}`}
-                    onClick={() => handlePromptClick(prompt.prompt)}
-                    className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 text-left transition hover:border-purple-500/40 hover:bg-zinc-900"
-                  >
-                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-purple-300">
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      Prompt
-                    </div>
-                    <div className="text-sm font-medium leading-6 text-zinc-100">{prompt.prompt}</div>
-                    {prompt.context && (
-                      <div className="mt-2 text-xs text-zinc-400">{prompt.context}</div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-zinc-800 px-4 py-6 text-sm text-zinc-500">
-                {isOffline
-                  ? 'Prompt suggestions need a connection so the LLM can generate fresh ideas.'
-                  : 'Prompt suggestions are temporarily unavailable.'}
-              </div>
-            )}
           </HomeCard>
         );
 
@@ -575,15 +496,6 @@ export function HomeScreen() {
                 <Settings2 className="h-4 w-4" />
                 Customize
               </button>
-              {chatAvailable && (
-              <button
-                onClick={() => useUIStore.getState().triggerChat('Help me rediscover my library.')}
-                className="inline-flex items-center gap-2 rounded-lg bg-purple-500 px-3 py-2 text-sm font-medium text-white transition hover:bg-purple-400"
-              >
-                <MessageSquare className="h-4 w-4" />
-                Ask Familiar
-              </button>
-              )}
             </div>
           </div>
 

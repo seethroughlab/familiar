@@ -1,8 +1,6 @@
 """Discovery dashboard endpoints."""
 
-import json
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -13,13 +11,9 @@ from app.api.routes._external_albums_schemas import (
     ExternalAlbumResponse,
     ExternalAlbumsResponse,
 )
-from app.api.schemas.common import UTCDateTime
 from app.db.models import Artist, ArtistAlias, Track, TrackStatus
-from app.services.app_settings import get_app_settings_service
 from app.services.external_albums_helpers import normalize_artist_name
-from app.services.llm.providers import get_provider
 from app.services.recommendations import RecommendationsService
-from app.services.redis_client import get_redis
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -63,173 +57,6 @@ class DiscoverResponse(BaseModel):
 
     # Recently added to library
     recently_added_count: int
-
-
-class CuratedPrompt(BaseModel):
-    """A single AI-generated listening suggestion."""
-
-    prompt: str
-    context: str
-    icon: str | None = None
-
-
-class CuratedPromptsResponse(BaseModel):
-    """AI-generated listening suggestions."""
-
-    prompts: list[CuratedPrompt]
-    generated_at: UTCDateTime | None = None
-
-
-@router.get("/discover/prompts", response_model=CuratedPromptsResponse)
-async def get_curated_prompts(
-    db: DbSession,
-    profile: RequiredProfile,
-    refresh: bool = Query(False),
-) -> CuratedPromptsResponse:
-    """Generate AI-powered listening suggestions based on the user's library."""
-    from app.db.models import ProfilePlayHistory
-
-    # Cache key bumped to v2 so the Pass 2 deploy serves freshly-generated
-    # prompts that reference deduped canonical artist names instead of
-    # whatever string-grouped version was cached pre-cutover.
-    cache_key = f"curated_prompts:v2:{profile.id}"
-
-    # Check Redis cache (unless refresh requested)
-    if not refresh:
-        try:
-            r = get_redis()
-            cached = r.get(cache_key)
-            if cached:
-                return CuratedPromptsResponse(**json.loads(cached))
-        except Exception:
-            pass
-
-    # Gather library context
-    try:
-        # Top 5 genres
-        genre_query = (
-            select(Track.genre, func.count(Track.id).label("cnt"))
-            .where(Track.genre.isnot(None), Track.status == TrackStatus.ACTIVE)
-            .group_by(Track.genre)
-            .order_by(func.count(Track.id).desc())
-            .limit(5)
-        )
-        genre_result = await db.execute(genre_query)
-        top_genres = [row.genre for row in genre_result.fetchall() if row.genre]
-
-        # Top 5 canonical artists by play count.
-        artist_query = (
-            select(
-                Artist.name,
-                func.sum(ProfilePlayHistory.play_count).label("plays"),
-            )
-            .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .join(Artist, Artist.id == Track.canonical_artist_id)
-            .where(ProfilePlayHistory.profile_id == profile.id)
-            .group_by(Artist.id, Artist.name)
-            .order_by(func.sum(ProfilePlayHistory.play_count).desc())
-            .limit(5)
-        )
-        artist_result = await db.execute(artist_query)
-        top_artists = [row.name for row in artist_result.fetchall() if row.name]
-
-        # Total track count
-        total_tracks = await db.scalar(
-            select(func.count(Track.id)).where(Track.status == TrackStatus.ACTIVE)
-        ) or 0
-
-        # Recently added count (30 days)
-        from datetime import timedelta
-
-        thirty_days_ago = utcnow() - timedelta(days=30)
-        recently_added = await db.scalar(
-            select(func.count(Track.id)).where(
-                Track.created_at >= thirty_days_ago,
-                Track.status == TrackStatus.ACTIVE,
-            )
-        ) or 0
-
-    except Exception as e:
-        logger.warning(f"Failed to gather library context for prompts: {e}")
-        return CuratedPromptsResponse(prompts=[])
-
-    # Build LLM prompt
-    current_hour = datetime.now().hour
-    time_of_day = (
-        "morning" if 5 <= current_hour < 12
-        else "afternoon" if 12 <= current_hour < 17
-        else "evening" if 17 <= current_hour < 21
-        else "late night"
-    )
-    day_of_week = datetime.now().strftime("%A")
-
-    llm_prompt = f"""Generate 6 home-screen starter prompts for a music lover based on their library.
-
-Library context:
-- Top genres: {', '.join(top_genres) if top_genres else 'Unknown'}
-- Top artists: {', '.join(top_artists) if top_artists else 'Unknown'}
-- Total tracks: {total_tracks}
-- Recently added: {recently_added} tracks in last 30 days
-- Current time: {day_of_week} {time_of_day}
-
-Rules:
-- Each item should be a natural language prompt the user can send to Familiar's AI DJ
-- Return a deliberate mix:
-  - 3 prompts for using or rediscovering the user's existing library
-  - 3 prompts for discovering new artists, scenes, or recent releases
-- Reference specific artists/genres from their library when possible
-- Make the discovery prompts feel adjacent to their taste, not generic
-- Consider the time of day for 1-2 prompts
-- Keep prompts conversational (10-20 words)
-- Each context line should be a brief explanation (5-10 words)
-- Choose an icon from: music, headphones, radio, mic, sparkles, sun, moon, coffee, zap, heart
-- Avoid repetitive phrasing such as "make me a playlist"
-- Do not mention the words "library guidance" or "discovery prompt" explicitly
-
-Respond with ONLY a JSON array, no other text:
-[{{"prompt": "...", "context": "...", "icon": "..."}}]"""
-
-    try:
-        settings_service = get_app_settings_service()
-        if not settings_service.is_active_provider_configured():
-            return CuratedPromptsResponse(prompts=[])
-
-        text = await get_provider().complete_utility(
-            prompt=llm_prompt, max_tokens=600, timeout_seconds=15.0
-        )
-
-        # Parse JSON from response (handle markdown code blocks)
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-            text = text.rsplit("```", 1)[0]
-        text = text.strip()
-
-        raw_prompts = json.loads(text)
-        prompts = [
-            CuratedPrompt(
-                prompt=p["prompt"],
-                context=p.get("context", ""),
-                icon=p.get("icon"),
-            )
-            for p in raw_prompts
-            if isinstance(p, dict) and "prompt" in p
-        ][:6]
-
-        generated_at = utcnow()
-        response = CuratedPromptsResponse(prompts=prompts, generated_at=generated_at)
-
-        # Cache in Redis (4 hours)
-        try:
-            r = get_redis()
-            r.setex(cache_key, 14400, json.dumps(response.model_dump()))
-        except Exception:
-            pass
-
-        return response
-
-    except Exception as e:
-        logger.warning(f"Failed to generate curated prompts: {e}")
-        return CuratedPromptsResponse(prompts=[])
 
 
 @router.get("/discover", response_model=DiscoverResponse)

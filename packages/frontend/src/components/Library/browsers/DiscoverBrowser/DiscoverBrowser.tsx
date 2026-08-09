@@ -24,7 +24,6 @@ import { useUIStore } from '../../../../stores/uiStore';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
-  CuratedPrompts,
   type DiscoveryItem,
 } from '../../../Discovery';
 import { NewReleasesSection } from './NewReleasesSection';
@@ -48,15 +47,6 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
     staleTime: STALE_TIME.LONG,
   });
 
-  // Generating these costs an LLM call (cached 4h server-side), so a surface that hides the
-  // section should not be asking for it either.
-  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
-  const promptsQuery = useQuery({
-    queryKey: queryKeys.curatedPrompts.all,
-    queryFn: () => libraryApi.getCuratedPrompts(),
-    enabled: !isOffline && chatAvailable,
-    staleTime: STALE_TIME.STATIC, // 30 min client-side; server caches 4h
-  });
 
   const { sections } = useLibraryDiscovery({ data });
 
@@ -124,17 +114,6 @@ export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserPr
   return (
     <div className="h-full overflow-y-auto p-4 space-y-8">
       {/* AI-generated listening suggestions */}
-      <CuratedPrompts
-        prompts={promptsQuery.data?.prompts ?? []}
-        loading={promptsQuery.isLoading || promptsQuery.isFetching}
-        onRefresh={() => {
-          queryClient.fetchQuery({
-            queryKey: queryKeys.curatedPrompts.all,
-            queryFn: () => libraryApi.getCuratedPrompts({ refresh: true }),
-            staleTime: 0,
-          });
-        }}
-      />
 
       {/* External-album sections (Pass 3) — placed above existing sections
           since "what's new" / "what to acquire" are more actionable than

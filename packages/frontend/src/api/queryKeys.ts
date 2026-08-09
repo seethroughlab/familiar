@@ -97,9 +97,6 @@ export const queryKeys = {
   libraryDiscover: {
     all: ['library-discover'] as const,
   },
-  curatedPrompts: {
-    all: ['curated-prompts'] as const,
-  },
   newReleases: {
     all: ['new-releases'] as const,
     list: (params: { limit: number; offset: number; include_dismissed: boolean; include_owned: boolean }) =>

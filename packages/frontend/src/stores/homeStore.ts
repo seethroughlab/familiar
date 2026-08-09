@@ -3,7 +3,6 @@ import { persist } from 'zustand/middleware';
 
 export type HomeModuleId =
   | 'resume'
-  | 'prompts'
   | 'quick-picks'
   | 'discovery'
   | 'library-shortcuts';
@@ -34,7 +33,6 @@ export interface HomePreferences {
 
 const DEFAULT_MODULE_ORDER: HomeModuleId[] = [
   'resume',
-  'prompts',
   'quick-picks',
   'discovery',
   'library-shortcuts',
@@ -42,7 +40,6 @@ const DEFAULT_MODULE_ORDER: HomeModuleId[] = [
 
 const DEFAULT_ENABLED: Record<HomeModuleId, boolean> = {
   resume: true,
-  prompts: true,
   'quick-picks': true,
   discovery: true,
   'library-shortcuts': true,
