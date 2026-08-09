@@ -788,3 +788,35 @@ footer a { color: var(--text-secondary); }
 
   h2 { font-size: 20px; }
 }
+
+/* The hero's install command (ADR-0039 point 3).
+   Sized down from the page's other code blocks on purpose: this is a thing you copy, not a thing
+   you read, and at body size three long URLs dominate the hero they are supposed to support. */
+.hero-install {
+  margin: 1.25rem 0 1rem;
+  max-width: 46rem;
+}
+.hero-install pre {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  overflow-x: auto;
+}
+.hero-requirements {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+/* The closing call to action (ADR-0039 point 2). */
+.closing-cta {
+  text-align: center;
+}
+.closing-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.25rem;
+}
