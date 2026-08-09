@@ -21,6 +21,45 @@ Implementation:
      convenience rather than a boundary.
   5. Rotation and revocation must exist from the start. A token that can only be changed by editing
      JSON on the NAS is a token nobody rotates.
+- **Phase 1 shipped: the token exists and the gate is built, off until a token is configured.**
+  `app/api/auth.py`, `app/api/routes/auth.py`, issue/read/rotate/revoke, and 23 tests. Enforcement
+  is deliberately inert on an unconfigured server, because turning it on before any client can
+  present a token takes the library offline rather than securing it. Point 5 — on by default, refuse
+  a non-loopback interface without one — is a later phase and still blocked on the demo-server
+  question in note 2 above.
+- **Point 7 paid for itself, and corrects this ADR's own Context.** The Context describes the
+  shelved Subsonic work as *"per-user bcrypt-hashed credentials"*. It stored
+  `subsonic_credentials.password_token` — **the plaintext** — in the column beside the bcrypt hash,
+  because the Subsonic protocol verifies `md5(password + salt)` and so cannot use a one-way hash.
+  The hash guarded a secret sitting in the next column. The precedent is therefore weaker evidence
+  than the Context implies, and nobody should re-derive it as a model.
+- **Point 8 is settled: `bcrypt` is removed.** Not merely because nothing imported it — it was a
+  dependency with one comment referring to a deleted API — but because it is the wrong primitive.
+  bcrypt is deliberately slow to make guessing a *human-chosen* secret expensive. This token is 256
+  bits from `secrets.token_urlsafe`; guessing is not the threat, and `hmac.compare_digest` is what
+  the comparison needs.
+- **Point 2's count conflates two axes, and only one of them is 160 units of work.** The number is
+  real and has grown — **160 unauthenticated operations of 264 today, against the 158 recorded at
+  write time**, which is this ADR's argument about permanent allowlists making itself. But
+  *authentication* ("does the caller hold the token") is not per-operation here: one middleware
+  gates every `/api/` path and `/mcp`, and the honest OpenAPI expression is a global `security`
+  block, which the spec had never had at all. That is done, and it covers all 267 operations at
+  once. *Profile scoping* ("which profile may this act as") is the per-operation half, is what
+  `lint_profile_contracts.py`'s 30-module allowlist tracks, and is the genuinely large and dull
+  remainder. Kept separate so the work cannot look finished while half of it has not begun.
+- **The gate is a middleware because `/mcp` is not a route.** `MCPDispatch` answers before the
+  router, so a router dependency would have protected all 264 REST operations and left the one
+  endpoint ADR-0043 exists to expose as the only open door. Its position in `main.py` is load-bearing
+  in three directions: inside CORS (preflight is answered, not refused opaquely), inside
+  `RequestIDMiddleware` (a 401 correlates to a log line), outside `MCPDispatch` (`/mcp` is checked).
+  Verified end to end — an unauthenticated `/mcp` returns **401 rather than the 400** it returns when
+  the MCP app handles it.
+- **Revocation was a silent no-op and is now tested.** `AppSettingsService.update` skips `None`
+  values unless the key is declared nullable, so `update(access_token=None)` returned success and
+  changed nothing — an operator would have read "revoked" while the old token kept working. This is
+  the shape worth remembering: the acceptance note asking for rotation *and revocation* from the
+  start was right, and the danger was not that revocation would be missing but that it would appear
+  to work.
 - **TLS stays out of scope, deliberately.** The application enforces none today; Tailscale provides
   it. Making Familiar safe to expose *without* Tailscale would pull termination, certificates and
   renewal into the product, which is the step from music player to hosting product that

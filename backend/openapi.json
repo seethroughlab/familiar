@@ -9789,6 +9789,56 @@
         "title": "TemplatesResponse",
         "type": "object"
       },
+      "TokenIssued": {
+        "description": "A newly minted token.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "header": {
+            "default": "X-Familiar-Token",
+            "title": "Header",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "token"
+        ],
+        "title": "TokenIssued",
+        "type": "object"
+      },
+      "TokenStatus": {
+        "description": "Whether inbound authentication is configured, and the token if it is.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "header": {
+            "default": "X-Familiar-Token",
+            "title": "Header",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configured"
+        ],
+        "title": "TokenStatus",
+        "type": "object"
+      },
       "TopTrackStat": {
         "description": "A track in the profile's most-played list.",
         "properties": {
@@ -11266,6 +11316,12 @@
       }
     },
     "securitySchemes": {
+      "FamiliarToken": {
+        "description": "Server token (ADR-0045). Issue one at POST /api/v1/auth/token. When no token is configured the server accepts unauthenticated requests, so generated clients must treat this as optional-but-expected rather than required.",
+        "in": "header",
+        "name": "X-Familiar-Token",
+        "type": "apiKey"
+      },
       "ProfileHeader": {
         "description": "Profile identity. Obtain one from POST /api/v1/profiles/register. Optional on some endpoints, required on most; see each operation.",
         "in": "header",
@@ -12493,6 +12549,218 @@
         "summary": "Get Artwork By Hash",
         "tags": [
           "artwork"
+        ]
+      }
+    },
+    "/api/v1/auth/token": {
+      "delete": {
+        "description": "Clear the token, returning the server to unauthenticated.\n\nKept because a token that cannot be removed is one an operator will work around by editing JSON\non the NAS \u2014 the thing rotation exists to prevent. It reopens the server, which is why it needs\nthe current token.",
+        "operationId": "auth_revoke_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Revoke Token",
+        "tags": [
+          "auth"
+        ]
+      },
+      "get": {
+        "description": "Read the current token.\n\nReturns the value rather than a mask, because the point of it is to be copied into clients and\nit is already readable in `data/settings.json` by anyone who can call this. Reading it requires\nholding it, once one exists.",
+        "operationId": "auth_get_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Token",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "Mint a token, replacing any existing one.\n\nRotation and first issue are the same operation on purpose: a separate \"rotate\" would be the\nsame code behind a second name, and one endpoint means there is no path where a client rotates\nwhen it meant to create.",
+        "operationId": "auth_issue_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenIssued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Issue Token",
+        "tags": [
+          "auth"
         ]
       }
     },
@@ -34991,5 +35259,10 @@
         ]
       }
     }
-  }
+  },
+  "security": [
+    {
+      "FamiliarToken": []
+    }
+  ]
 }
