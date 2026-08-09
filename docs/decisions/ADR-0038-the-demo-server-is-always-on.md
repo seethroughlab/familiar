@@ -40,8 +40,18 @@ perfectly healthy server with no music — the failure a health check cannot see
 
 **Point 5's reset was then run by hand rather than left for Sunday**, which is how two things were
 found. `TRUNCATE ... artist_info` named a table this schema does not have — inherited from
-`seed-demo-library.sh` — and pg_dump had been silently ignoring the same stale name for as long as
-anyone has run it, because a `--table` pattern matching nothing is skipped without `--strict-names`.
+`seed-demo-library.sh`, and pg_dump had been silently ignoring the same stale name for **three and a
+half months**, because a `--table` pattern matching nothing is skipped without `--strict-names`.
+
+The provenance is exact and worth keeping, because it is a shape rather than an accident:
+`artist_info` was a real table until `af6e3c8` on **2026-04-28** — "canonical artists Passes 2-4 —
+ArtistInfo retirement" — which dropped it and migrated its rows into `artists` and
+`external_artist_image_cache`. That migration is careful, guarding itself with
+`if not table_exists("artist_info")`. `seed-demo-library.sh` was last edited on **2026-04-23**, five
+days before. A table was retired properly, a script referencing it was not updated, and a default
+flag made the mismatch invisible — so the seed quietly stopped containing something nobody noticed
+was absent. Nothing was actually lost: all three successor tables are empty on the demo, checked.
+It came to light only because `TRUNCATE` has no equivalent of "silently ignore what is not there".
 The demo survived only because the truncate runs inside a transaction. Both are fixed, and the
 verified run restored 32 tracks against the live database.
 
