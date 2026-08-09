@@ -1,9 +1,20 @@
-"""Tests for listening sessions service."""
+"""Tests for listening sessions: the service's model, and the REST half ADR-0036 typed."""
 
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from app.services.sessions import ListeningSession, Participant, PlaybackState, SessionRole
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.api.routes import sessions as sessions_routes
+from app.main import app
+from app.services.sessions import (
+    ListeningSession,
+    Participant,
+    PlaybackState,
+    SessionRole,
+    get_session_manager,
+)
 
 
 class TestSessionRole:
@@ -105,13 +116,6 @@ class TestParticipant:
 # Added on revival. The shelved file tested the service's dataclasses and nothing that goes over the
 # wire — which is the half that now has to satisfy ADR-0007, and the half the Apple clients generate
 # from.
-
-import pytest
-from httpx import ASGITransport, AsyncClient
-
-from app.api.routes import sessions as sessions_routes
-from app.main import app
-from app.services.sessions import get_session_manager
 
 
 @pytest.fixture
