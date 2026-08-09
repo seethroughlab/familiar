@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
-import { initApiOrigin, registerProfileProvider } from './api/base';
+import { initApiOrigin, initServerToken, registerProfileProvider } from './api/base';
 import { profileFromURL } from './services/embedBridge';
 import { EmbedDiscover } from './components/Embed/EmbedDiscover';
 import { useUIStore } from './stores/uiStore';
@@ -51,7 +51,8 @@ export function renderEmbed(options?: { onReady?: () => void }): void {
     },
   });
 
-  initApiOrigin().then(() => {
+  // The token too (ADR-0045) — the embedded surface calls the same API the app does.
+  Promise.all([initApiOrigin(), initServerToken()]).then(() => {
     options?.onReady?.();
     createRoot(document.getElementById('root')!).render(
       <StrictMode>

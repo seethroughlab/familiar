@@ -132,6 +132,66 @@ export async function clearApiOrigin(): Promise<void> {
   }
 }
 
+// ============================================================================
+// Server token (ADR-0045)
+//
+// Stored and cached exactly like the backend URL above: localStorage for synchronous access,
+// mirrored into the registered preferences provider so the native clients keep it across a
+// reinstall. It is a server-wide credential, not a per-profile one — switching profiles must not
+// clear it, which is why it lives here rather than in profileService.
+//
+// **This covers axios requests only.** Artwork and audio are `<img src>` and `el.src` on an
+// `<audio>` element (see `AlbumArtwork.tsx` and `WebAudioEngine.ts:227`), and a media element
+// cannot send a custom header. Those routes are unauthenticated today, so nothing is broken by
+// this — but they are the reason ADR-0045 point 5 cannot simply be switched on, and that is
+// recorded in the ADR rather than discovered when playback stops.
+// ============================================================================
+
+const SERVER_TOKEN_KEY = 'familiar_server_token';
+
+let _serverToken = '';
+
+/** Load the stored server token. Call at boot, beside `initApiOrigin`. */
+export async function initServerToken(): Promise<void> {
+  const cached = localStorage.getItem(SERVER_TOKEN_KEY);
+  if (cached) {
+    _serverToken = cached;
+    return;
+  }
+  if (_preferencesProvider) {
+    try {
+      const value = await _preferencesProvider.get(SERVER_TOKEN_KEY);
+      if (value) {
+        _serverToken = value;
+        localStorage.setItem(SERVER_TOKEN_KEY, value);
+      }
+    } catch {
+      log.warn('Could not load server token from preferences provider');
+    }
+  }
+}
+
+/** Persist a server token. Empty string clears it. */
+export async function setServerToken(token: string): Promise<void> {
+  _serverToken = token.trim();
+  if (_serverToken) {
+    localStorage.setItem(SERVER_TOKEN_KEY, _serverToken);
+  } else {
+    localStorage.removeItem(SERVER_TOKEN_KEY);
+  }
+  if (_preferencesProvider) {
+    try {
+      await _preferencesProvider.set(SERVER_TOKEN_KEY, _serverToken);
+    } catch {
+      // localStorage is sufficient as fallback
+    }
+  }
+}
+
+export function getServerToken(): string {
+  return _serverToken;
+}
+
 /** Base origin for non-axios URLs (stream, artwork, etc). Empty string for same-origin. */
 export function getApiOrigin(): string {
   return _apiOrigin;
@@ -162,6 +222,16 @@ api.interceptors.request.use((config) => {
 export function encodePathSegment(value: string): string {
   return encodeURIComponent(value).replace(/%2F/gi, '%252F');
 }
+
+// Add the server token to all requests (ADR-0045). Separate interceptor from the profile header
+// below because they answer different questions: the token says whether this client may act at
+// all, the profile says which listener it acts as.
+api.interceptors.request.use((config) => {
+  if (_serverToken && !config.headers['X-Familiar-Token']) {
+    config.headers['X-Familiar-Token'] = _serverToken;
+  }
+  return config;
+});
 
 // Add X-Profile-ID header to all requests (if a profile is selected)
 api.interceptors.request.use(async (config) => {
@@ -197,6 +267,15 @@ api.interceptors.response.use(
     // Track error for debugging visibility
     const errorInfo = extractAxiosError(error);
     apiErrorTracker.track(errorInfo);
+
+    // A missing or wrong server token (ADR-0045). Checked before the profile case below and kept
+    // distinct from it: both are 401, but clearing the selected profile in response to a token
+    // failure would log the listener out of a profile that was never the problem, and then the
+    // profile selector itself would 401 too.
+    if (error.response?.status === 401 && error.response?.data?.detail?.includes('X-Familiar-Token')) {
+      window.dispatchEvent(new CustomEvent('server-token-required'));
+      return Promise.reject(error);
+    }
 
     // Check if this is an "invalid profile" error
     if (

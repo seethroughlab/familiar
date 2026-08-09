@@ -15,6 +15,7 @@ import { DataManagement } from './DataManagement';
 import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
 import { ServerSettings } from './ServerSettings';
+import { ServerTokenSettings } from './ServerTokenSettings';
 import { ShuffleWeightSettings } from './ShuffleWeightSettings';
 import { RadioSettings } from './RadioSettings';
 import { QueueSyncSettings } from './QueueSyncSettings';
@@ -45,6 +46,9 @@ export function SettingsPanel() {
             <SystemStatus />
             <ApiKeyStatus />
             {isNativeApp() && <ServerSettings />}
+            {/* Unlike ServerSettings, this is not native-only: the web app is same-origin and so
+                needs no URL, but it still has to present a token once the server has one. */}
+            <ServerTokenSettings />
           </div>
         </section>
 
