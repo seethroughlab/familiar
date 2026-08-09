@@ -84,19 +84,37 @@ curl https://familiar-demo.fly.dev/api/v1/health     # 200
 |---|---|---|
 | `FLY_API_TOKEN` | GitHub Actions | Used by both workflows |
 | `DEMO_DATABASE_URL_DIRECT` | GitHub Actions | Neon, **direct host** — the reset job rejects a `-pooler` URL |
-| `DEMO_SEED_URL` | GitHub Actions | Where the seed dump is published. **Does not exist yet** — see below |
 | `DATABASE_URL`, `REDIS_URL` | Fly | Set with `flyctl secrets set -a familiar-demo` |
 
-### The reset needs a published dump first
+### The weekly reset, and the golden seed
 
-`fly-reset-demo.yml` restores the demo from a dump every Sunday, because reviewers and anyone with
-the link share one profile and their play counts, favourites and playlists accumulate.
+`fly-reset-demo.yml` restores the demo every Sunday, because reviewers and anyone with the link
+share one profile and their play counts, favourites and playlists accumulate.
 
-**It cannot work yet.** `seed-demo-library.sh` builds the dump locally and `psql`s it straight into
-Neon, leaving no artifact a scheduled job could fetch. Publishing the file it writes — a GitHub
-release asset is the obvious home, since the content is CC-licensed music metadata — and setting
-`DEMO_SEED_URL` to it is the missing step. Until then the workflow fails on its first step with a
-clear message rather than half-restoring anything.
+It restores from **`deploy/fly/demo-seed.sql.gz`, committed to this repository** — a `--data-only`
+dump of `profiles`, `artist_info`, `tracks` and `track_analysis`. No secret, no hosting, and it is
+versioned next to the schema that produced it, so a migration that invalidates the seed shows up in
+the same pull request.
+
+Produce or refresh it two ways:
+
+```bash
+# From the live demo — seconds, and the usual case.
+DEMO_NEON_URL=postgresql://...  ./scripts/capture-demo-seed.sh
+
+# From scratch, when the library itself changes — hours, needs the analysis stack.
+./scripts/seed-demo-library.sh
+```
+
+Then commit the file.
+
+**Capture from a clean demo.** The script snapshots whatever is there, so running it after people
+have been listening bakes their play counts into the copy the reset restores — the exact thing the
+reset removes. It counts `play_events` and refuses above 25 unless you pass `ALLOW_DIRTY=1`.
+
+> This used to be a `DEMO_SEED_URL` secret pointing at a published dump. Nothing ever published one,
+> because `seed-demo-library.sh` wrote its dump to `mktemp` with a `trap` deleting it on exit — the
+> golden copy was destroyed every time it was made.
 
 ## The review account
 

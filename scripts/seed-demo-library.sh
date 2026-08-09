@@ -54,6 +54,11 @@ UPDATE tracks
 SET file_path = '/data/music/' || regexp_replace(file_path, '^.*/', '');
 SQL
 
+# **The dump is kept, not thrown away.** It used to go to `mktemp` with a `trap` deleting it on
+# exit, which meant the golden copy of the demo library was destroyed every time it was made — and
+# the weekly reset job had nothing to restore from. It is now written into the repository, gzipped,
+# and committed alongside the schema that produced it.
+SEED_FILE="${SEED_FILE:-deploy/fly/demo-seed.sql.gz}"
 DUMP_FILE="$(mktemp -t demo-seed.XXXXXX.sql)"
 trap 'rm -f "$DUMP_FILE"' EXIT
 
@@ -72,6 +77,17 @@ docker exec "$ANALYSIS_PG_CONTAINER" pg_dump \
 
 BYTES=$(wc -c < "$DUMP_FILE" | tr -d ' ')
 echo "   $(basename "$DUMP_FILE") — ${BYTES} bytes"
+
+echo "→ Writing the golden seed to ${SEED_FILE}…"
+mkdir -p "$(dirname "$SEED_FILE")"
+gzip -9 -c "$DUMP_FILE" > "$SEED_FILE"
+GZ_BYTES=$(wc -c < "$SEED_FILE" | tr -d ' ')
+echo "   ${SEED_FILE} — ${GZ_BYTES} bytes gzipped"
+if [ "$GZ_BYTES" -gt 20000000 ]; then
+    echo "   WARNING: over 20 MB. Committing this is questionable — consider a release asset" >&2
+    echo "   and pointing the reset workflow at it instead." >&2
+fi
+echo "   Commit it: the weekly reset (.github/workflows/fly-reset-demo.yml) restores from this file."
 
 echo "→ Ensuring pgvector extension on Neon…"
 psql "$NEON_URL" -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vector;'

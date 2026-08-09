@@ -19,13 +19,24 @@ description ever since — a `familiar-test` app, a `performance-2x` with 8 GB, 
 and a `deploy-fly.yml`, none of which exist. One thing it got wrong that this ADR also missed: the
 database is **Neon**, not the Fly Postgres the document specified.
 
-**Point 5 is written but cannot run yet, and this is stated rather than left to be discovered.**
-`fly-reset-demo.yml` restores from a dump every Sunday and refuses a Neon pooler URL outright. But
-`seed-demo-library.sh` builds its dump on a throwaway local Docker stack and `psql`s it straight
-into Neon, leaving **no artifact a scheduled job can fetch** — so `DEMO_SEED_URL` has nothing to
-point at until someone publishes that file. The workflow fails on its first step with a clear
-message rather than half-restoring anything, because a reset job that quietly does nothing is worse
-than one that is visibly not set up.
+**Point 5 needed a mechanism, and the first attempt at one did not work.** `fly-reset-demo.yml`
+originally fetched a dump from a `DEMO_SEED_URL` secret — and nothing could ever have published one,
+because `seed-demo-library.sh` wrote its dump to `mktemp` with a `trap` deleting it on exit. **The
+golden copy of the demo library was destroyed every time it was made**, which is why the follow-up
+said the reset "needs a mechanism" without anyone noticing there was no artifact either.
+
+The seed is now `deploy/fly/demo-seed.sql.gz`, **committed to the repository**: no secret, no
+hosting, no prerequisite, and versioned beside the schema that produced it, so a migration that
+invalidates it appears in the same pull request. `scripts/capture-demo-seed.sh` produces it from the
+live demo in seconds — the usual case — and refuses to capture a database with more than 25 play
+events, because snapshotting after people have listened bakes their history into the copy the reset
+restores.
+
+The reset truncates `profiles`, `tracks` and `artist_info` with `CASCADE` rather than naming child
+tables. A first draft listed `favorites`; the table is `profile_favorites`. Everything a visitor
+creates hangs off one of those two roots, so the cascade stays correct without a list to keep in
+step. It then checks that the library is **not empty**, because a half-failed restore leaves a
+perfectly healthy server with no music — the failure a health check cannot see.
 
 Point 6 is unfinished: where the review account lives is still unchosen.
 
