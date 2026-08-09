@@ -4,9 +4,10 @@
  * Dropdown/popup for selecting between visualizers.
  */
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, Image, Type, Video } from 'lucide-react';
+import { ChevronDown, Sparkles, Image, Type, Video, AlertTriangle } from 'lucide-react';
 import { getVisualizers } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
+import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
 
 // Icon mapping for visualizers
 const visualizerIcons: Record<string, typeof Sparkles> = {
@@ -23,6 +24,10 @@ export function VisualizerPicker() {
 
   const visualizers = getVisualizers();
   const currentVisualizer = visualizers.find(v => v.metadata.id === visualizerId);
+
+  // ADR-0034 points 7 and 8: a plugin that was refused, or that crashed, says so here. Anything
+  // that loaded is already in `visualizers` above and needs no separate row.
+  const troubled = useVisualizerPluginStore((s) => s.records).filter((r) => r.status !== 'loaded');
 
   // Close on click outside
   useEffect(() => {
@@ -144,6 +149,37 @@ export function VisualizerPicker() {
                 </button>
               );
             })}
+
+            {/* Not buttons: there is nothing to select. A refused plugin is here so that dropping a
+                file into the Visualizers folder and seeing nothing happen has an explanation, which
+                is the whole of ADR-0034 point 7. */}
+            {troubled.length > 0 && (
+              <div className="border-t border-zinc-700">
+                <div className="px-3 pt-3 pb-1">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wide">
+                    Not loaded
+                  </span>
+                </div>
+                {troubled.map((record, index) => (
+                  <div
+                    key={`${record.id ?? 'unnamed'}-${index}`}
+                    className="flex items-start gap-3 p-3 text-left"
+                  >
+                    <div className="p-2 rounded-lg bg-zinc-800">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-zinc-400">
+                        {record.name ?? record.id ?? 'Unnamed plugin'}
+                      </div>
+                      <div className="text-xs text-zinc-500 mt-0.5">
+                        {record.detail}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

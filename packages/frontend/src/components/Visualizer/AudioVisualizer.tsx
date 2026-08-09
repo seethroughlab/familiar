@@ -4,13 +4,14 @@
  * Dynamically renders the selected visualizer from the registry.
  * Passes the full VisualizerProps API to each visualizer component.
  */
-import { Suspense } from 'react';
+import { Suspense, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
 import { getVisualizer } from './types';
 import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
+import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 // Import all visualizers to register them
@@ -37,7 +38,28 @@ function LoadingFallback() {
   );
 }
 
-function VisualizerErrorFallback() {
+/**
+ * What a crashed visualizer falls back to (ADR-0034 point 8).
+ *
+ * **The album art, when there is any** — the same square the player shows when no visualizer is
+ * available, so a third-party plugin dying degrades to the ordinary no-visualizer screen instead of
+ * an error message that implies the app is broken. The message and the reload button stay for the
+ * case where there is no artwork either, because then a black rectangle would be indistinguishable
+ * from a visualizer that simply renders nothing.
+ */
+function VisualizerErrorFallback({ artworkUrl }: { artworkUrl: string | null }) {
+  if (artworkUrl) {
+    return (
+      <div className="w-full h-full bg-[#0a0015] flex items-center justify-center p-8">
+        <img
+          src={artworkUrl}
+          alt=""
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full h-full bg-[#0a0015] flex flex-col items-center justify-center gap-4">
       <p className="text-zinc-400 text-sm">Visualizer failed to load</p>
@@ -64,9 +86,20 @@ export function AudioVisualizer({
   className = '',
 }: AudioVisualizerProps) {
   const { visualizerId } = useVisualizerStore();
+  const markPluginFailed = useVisualizerPluginStore((s) => s.markFailed);
 
   // Get the current visualizer component
   const visualizer = getVisualizer(visualizerId) || getVisualizer(DEFAULT_VISUALIZER_ID);
+  const activeId = visualizer?.metadata.id;
+
+  // ADR-0034 point 8: the picker marks the plugin as failed. A built-in id is not in the plugin
+  // records and `markFailed` ignores it, so this is safe to call for whatever crashed.
+  const handleError = useCallback(
+    (error: Error) => {
+      if (activeId) markPluginFailed(activeId, error.message || 'The visualizer crashed while rendering.');
+    },
+    [activeId, markPluginFailed]
+  );
 
   if (!visualizer) {
     return (
@@ -81,8 +114,13 @@ export function AudioVisualizer({
   return (
     <div className={`w-full h-full ${className}`}>
       <ErrorBoundary
+        // **Keyed by the visualizer**, so switching away from a crashed one gets a fresh boundary.
+        // Without it the boundary stays latched and every subsequent choice renders the fallback,
+        // which reads as "all the visualizers are broken" when only one is.
+        key={activeId}
         name="visualizer"
-        fallback={<VisualizerErrorFallback />}
+        onError={handleError}
+        fallback={<VisualizerErrorFallback artworkUrl={artworkUrl} />}
       >
         <Suspense fallback={<LoadingFallback />}>
           <VisualizerComponent
