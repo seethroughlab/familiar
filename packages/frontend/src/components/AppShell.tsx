@@ -9,7 +9,6 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { ScrollContainerContext } from '../hooks/useScrollContainer';
 import { Loader2 } from 'lucide-react';
 import { useLastfmCallback } from '../hooks/useLastfmCallback';
-import { useChatAvailability } from '../hooks/useChatAvailability';
 import { useUIStore } from '../stores/uiStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -32,7 +31,6 @@ import { useListeningSession } from '../hooks/useListeningSession';
 const FullPlayer = lazy(() => import('./FullPlayer').then(m => ({ default: m.FullPlayer })));
 const SettingsPanel = lazy(() => import('./Settings').then(m => ({ default: m.SettingsPanel })));
 const QueueView = lazy(() => import('./Queue').then(m => ({ default: m.QueueView })));
-const ChatPanel = lazy(() => import('./Chat').then(m => ({ default: m.ChatPanel })));
 const AmbientScreen = lazy(() => import('./Ambient').then(m => ({ default: m.AmbientScreen })));
 const SessionPanel = lazy(() => import('./Sessions/SessionPanel').then(m => ({ default: m.SessionPanel })));
 
@@ -55,9 +53,6 @@ export function AppShell() {
   const showSettings = useUIStore((s) => s.showSettings);
   const showFullPlayer = useUIStore((s) => s.showFullPlayer);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
-  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
-  // Asks the server once and hides chat everywhere if there is no provider (ADR-0022 point 3).
-  useChatAvailability();
   const closeRightPanel = useUIStore((s) => s.closeRightPanel);
   const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowFullPlayer = useUIStore((s) => s.setShowFullPlayer);
@@ -97,7 +92,6 @@ export function AppShell() {
     },
   });
 
-  const pendingChatMessage = useUIStore((s) => s.pendingChatMessage);
   const playlistPickerTrackIds = useUIStore((s) => s.playlistPickerTrackIds);
 
   // Listening session — single hook owns the WS connection for the whole app shell
@@ -123,7 +117,7 @@ export function AppShell() {
             </ScrollContainerContext.Provider>
           </main>
 
-          {/* Right panel - Queue or Chat (desktop only) */}
+          {/* Right panel - Queue or Session (desktop only) */}
           {rightPanel && (
             <div className={`hidden md:flex w-80 border-l flex-col ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'}`}>
               <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
@@ -141,12 +135,6 @@ export function AppShell() {
               <div className="flex-1 overflow-hidden min-h-0">
                 <Suspense fallback={<LazyLoadSpinner />}>
                   {rightPanel === 'queue' && <QueueView />}
-                  {rightPanel === 'chat' && (
-                    <ChatPanel
-                      pendingMessage={pendingChatMessage}
-                      onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
-                    />
-                  )}
                   {rightPanel === 'session' && (
                     <SessionPanel
                       session={listeningSession.session}
@@ -178,8 +166,6 @@ export function AppShell() {
             onExpandClick={() => setShowFullPlayer(true)}
             onQueueToggle={() => toggleRightPanel('queue')}
             isQueueOpen={rightPanel === 'queue'}
-            onChatToggle={chatAvailable ? () => toggleRightPanel('chat') : undefined}
-            isChatOpen={rightPanel === 'chat'}
             onSessionToggle={() => toggleRightPanel('session')}
             isSessionOpen={rightPanel === 'session'}
           />
@@ -234,22 +220,6 @@ export function AppShell() {
                   <SettingsPanel />
                 </Suspense>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Mobile chat overlay */}
-        {rightPanel === 'chat' && (
-          <div className="md:hidden fixed inset-0 z-50 flex">
-            <div className="absolute inset-0 bg-black/50" onClick={closeRightPanel} />
-            <div className={`relative w-full max-w-md ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'} flex flex-col pt-safe pb-safe`}>
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ChatPanel
-                  pendingMessage={pendingChatMessage}
-                  onPendingMessageConsumed={() => useUIStore.getState().consumePendingChatMessage()}
-                  onClose={closeRightPanel}
-                />
-              </Suspense>
             </div>
           </div>
         )}

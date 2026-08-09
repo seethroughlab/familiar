@@ -79,17 +79,6 @@ export function useAppBootstrap({
     return () => window.removeEventListener('navigate-to-settings', handler);
   }, [setShowSettings]);
 
-  // Listen for show-playlist event from ChatPanel
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.playlistId) {
-        navigate(`/playlists/${detail.playlistId}`);
-      }
-    };
-    window.addEventListener('show-playlist', handler);
-    return () => window.removeEventListener('show-playlist', handler);
-  }, [navigate]);
 
   // Listen for show-ephemeral-playlist event
   useEffect(() => {

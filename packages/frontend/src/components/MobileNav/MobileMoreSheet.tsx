@@ -8,7 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   List, Grid3X3, Map, Sparkles, FileText,
-  Download, MessageSquare, Settings, Waves,
+  Download, Settings, Waves,
   ListMusic, Clock, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
@@ -41,7 +41,6 @@ export function MobileMoreSheet({ onClose }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
-  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowAmbientScreen = useUIStore((s) => s.setShowAmbientScreen);
   const hasAmbientSynth = getAmbientSynthBridge() !== null;
@@ -72,10 +71,6 @@ export function MobileMoreSheet({ onClose }: Props) {
     onClose();
   };
 
-  const handleChat = () => {
-    toggleRightPanel('chat');
-    onClose();
-  };
 
   const handleSettings = () => {
     setShowSettings(true);
@@ -209,10 +204,6 @@ export function MobileMoreSheet({ onClose }: Props) {
 
           {/* Utility items */}
           <div className={`my-2 mx-4 border-t ${light ? 'border-zinc-200' : 'border-zinc-800'}`} />
-          <button onClick={handleChat} className={`flex items-center gap-3 px-4 py-3 w-full ${light ? 'text-zinc-700 active:bg-zinc-100' : 'text-zinc-300 active:bg-zinc-800'}`}>
-            <MessageSquare className="w-5 h-5 flex-shrink-0" />
-            <span>Chat</span>
-          </button>
           <button onClick={handleSettings} className={`flex items-center gap-3 px-4 py-3 w-full ${light ? 'text-zinc-700 active:bg-zinc-100' : 'text-zinc-300 active:bg-zinc-800'}`}>
             <Settings className="w-5 h-5 flex-shrink-0" />
             <span>Settings</span>

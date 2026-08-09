@@ -219,6 +219,8 @@ export interface GeneratePlaylistSeed {
   album?: string;
   artist?: string;
   track_ids?: string[];
+  /** A set of artist names — VibeMap's map selection. See ADR-0048's Context. */
+  artists?: string[];
   limit?: number;
   max_per_artist?: number;
   include_seed?: boolean;
