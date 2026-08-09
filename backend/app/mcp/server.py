@@ -30,7 +30,9 @@ from sqlalchemy import select
 from app.config import settings as app_config
 from app.db.models import Profile
 from app.db.session import async_session_maker
+from app.mcp import playback as playback_tools
 from app.mcp.guidance import GUIDANCE, INSTRUCTIONS
+from app.mcp.playback import PLAYBACK_TOOLS, add_target_property, list_players_tool
 from app.services.llm.tools import MUSIC_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -39,10 +41,12 @@ SERVER_NAME = "familiar"
 PROFILE_HEADER = "x-profile-id"
 PROFILE_ENV = "FAMILIAR_MCP_PROFILE_ID"
 
-#: Requires a Familiar client to mean anything — ADR-0043 point 2 defers these to ADR-0044.
-#: `get_visible_tracks` answers only because a chat client uploaded its viewport; `queue_tracks`
-#: and `control_playback` write to in-memory fields that never reach the server's state.
-_CLIENT_BOUND = {"get_visible_tracks", "queue_tracks", "control_playback"}
+#: Requires a Familiar client to mean anything, and has no way to reach one.
+#: `get_visible_tracks` answers only because a chat client uploaded its viewport with the request,
+#: and no MCP host has a viewport to upload. `queue_tracks` and `control_playback` were here too
+#: until ADR-0044's command channel gave them a destination — they are now served by
+#: `app.mcp.playback` rather than by `ToolExecutor`'s in-memory fields, which stay dead.
+_CLIENT_BOUND = {"get_visible_tracks"}
 
 #: Dropped outright. A server-side URL fetcher on an API with no inbound authentication is an SSRF
 #: primitive, and the host's own web access does the job better (ADR-0043 point 2).
@@ -83,9 +87,12 @@ def exposed_tools() -> list[types.Tool]:
             types.Tool(
                 name=name,
                 description=str(spec["description"]) + GUIDANCE.get(name, ""),
-                input_schema=schema,
+                input_schema=add_target_property(name, schema),
             )
         )
+    # Not in MUSIC_TOOLS: the chat client never needed to ask which players it could reach,
+    # because it was the player. An MCP host has to ask (ADR-0044 point 4).
+    tools.append(list_players_tool())
     return tools
 
 
@@ -199,7 +206,15 @@ async def on_call_tool(
 
     async with async_session_maker() as session:
         executor = ToolExecutor(session, profile_id=profile_id, user_message=generation_prompt)
-        result = await executor.execute(name, arguments)
+        if name in PLAYBACK_TOOLS:
+            # Actuation, not a query: these travel the command channel to a subscribed client.
+            # The executor is still handed over, because resolving track ids to tracks is its
+            # job and has nothing to do with delivery.
+            result = await playback_tools.handle(
+                name, arguments, profile_id=profile_id, execute=executor.execute
+            )
+        else:
+            result = await executor.execute(name, arguments)
 
     # Every call is logged with its arguments, because the arguments are the interesting part.
     # ADR-0043 point 3 rests on a host calling get_feature_distribution *before* it thresholds,

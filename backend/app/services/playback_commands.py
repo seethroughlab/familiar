@@ -147,6 +147,14 @@ class PlaybackCommandChannel:
         project has hit four times.
         """
         candidates = self.players(profile_id)
+        # Checked first, and deliberately. Filtering by target or capability before this would
+        # report "no attached player can 'play'" when the truth is that nothing is running at all
+        # — a capability problem the listener cannot act on, in place of one they can.
+        if not candidates:
+            raise NoPlayerAttached(
+                "No player is attached to this profile. Open Familiar on a device and try again — "
+                "commands are delivered to a running client, not stored for later."
+            )
         if target is not None:
             candidates = [p for p in candidates if p.id == target or p.name == target]
             if not candidates:
@@ -162,11 +170,6 @@ class PlaybackCommandChannel:
                     f"{[(p.name, sorted(p.capabilities)) for p in candidates] or 'none'}."
                 )
             candidates = able
-        if not candidates:
-            raise NoPlayerAttached(
-                "No player is attached to this profile. Open Familiar on a device and try again — "
-                "commands are delivered to a running client, not stored for later."
-            )
 
         player = candidates[0]
         if player.queue.full():
