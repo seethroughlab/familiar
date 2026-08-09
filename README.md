@@ -25,9 +25,9 @@
 
 ## Screenshots
 
-| Library | AI Chat |
+| Library | Discover |
 |:--:|:--:|
-| ![Library](screenshots/01-library-tracks.png) | ![Chat](screenshots/08-chat-panel.png) |
+| ![Library](screenshots/01-library-tracks.png) | ![Discover](screenshots/07-library-discover.png) |
 
 | Artists | 3D Explorer |
 |:--:|:--:|

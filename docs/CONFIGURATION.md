@@ -34,7 +34,13 @@ API keys are configured via environment variables in your `.env` file (see below
 
 ### Anthropic (Claude AI)
 
-The Anthropic API powers the AI chat feature, allowing you to ask questions about your music library and get intelligent recommendations.
+**Familiar no longer calls a language model itself** (ADR-0043, ADR-0048). The chat client is
+retired and playlists are generated from the library's own audio analysis, so **no API key is
+required** for any feature in the app.
+
+An Anthropic key is still useful for one thing: pointing an MCP host — Claude Desktop, Claude Code —
+at Familiar's MCP server, where the *host* brings the model. That key is configured in the host, not
+here.
 
 1. Go to [console.anthropic.com](https://console.anthropic.com/)
 2. Sign up or log in to your account

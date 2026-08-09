@@ -106,25 +106,6 @@ export async function navigateToView(page: Page, label: string) {
   await page.waitForLoadState('domcontentloaded');
 }
 
-/**
- * Open the chat panel via the player bar toggle button, then wait for the chat input.
- * Falls back to clicking the mobile "Chat" button if the desktop button isn't visible.
- */
-export async function openChatPanel(page: Page) {
-  const desktopButton = page.locator('button[aria-label="Open chat"]');
-  const mobileButton = page.locator('nav button:has-text("Chat")');
-
-  // Both toggles are absent until `/chat/status` says a provider is configured, and absent for
-  // good if it says otherwise. The 3s below is therefore waiting on a request, not on a render —
-  // and on a server with no provider this function correctly opens nothing.
-  if (await desktopButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await desktopButton.click();
-  } else if (await mobileButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await mobileButton.click();
-  }
-
-  await page.locator('[aria-label="Chat message"]').first().waitFor({ timeout: 5000 });
-}
 
 /**
  * Navigate to a specific section in the sidebar-based UI

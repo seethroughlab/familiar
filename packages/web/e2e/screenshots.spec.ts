@@ -16,7 +16,7 @@
  * Add new screens as the interface grows.
  */
 import { test } from '@playwright/test';
-import { ensureProfile, navigateToView, openChatPanel, waitForContentReady } from './helpers';
+import { ensureProfile, navigateToView, waitForContentReady } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -150,20 +150,6 @@ test.describe('Screenshot Capture', () => {
     await takeScreenshot(page, '04-library-mood-grid.png');
   });
 
-  // Chat panel test - use Albums view as backdrop (Tracks can crash on some data)
-  test('08 - Chat Panel', async ({ page }) => {
-    await navigateToView(page, 'Albums');
-    await waitForContentReady(page, { images: true });
-
-    await openChatPanel(page);
-
-    // Type a sample message to show the chat interface
-    const chatInput = page.locator('[aria-label="Chat message"]').first();
-    await chatInput.fill('Make me a playlist of upbeat 80s songs');
-    await page.waitForLoadState('domcontentloaded');
-
-    await takeScreenshot(page, '08-chat-panel.png');
-  });
 
   test('07 - Library Discover', async ({ page }) => {
     await navigateToView(page, 'Discover');
