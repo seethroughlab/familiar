@@ -13,6 +13,31 @@ Implementation:
   push transport at all.** Not one WebSocket route exists. `useListeningSession.ts:100` opens a
   socket to `/api/v1/sessions/ws`, a route that was deleted — so a client is already calling a
   channel that is not there, which is the fourth instance of that shape found in this codebase.
+- **Proven end to end on 2026-08-09**, from Claude Desktop to sound. The whole trace, from the
+  server's own log:
+
+  ```
+  get_library_stats → get_library_genres → search_library("Ambient") → 30 matched
+  list_players ×3
+  select_diverse_tracks → 12
+  SENT queue → player p1
+  SENT play  → player p1
+  ```
+
+  Three things in that are worth keeping. The Mac **attached on its own** seconds after launch,
+  declaring exactly the three capabilities it implements (`play`, `queue`, `crossfade`) — point 12
+  working, and validated against the server's set rather than hoped at. The host called
+  `list_players` three times rather than assuming, which is point 4's tool surface being used the
+  way it was meant to be. And `select_diverse_tracks` was reached for unprompted, so the ambient set
+  was not twelve tracks by one artist.
+- **The first real limitation is the one this ADR predicted, and it is not fixable here.** Asked to
+  play with Familiar closed, the host correctly reported no player attached — then offered to *drive
+  the screen* to open the app, because none of its thirty tools can. The server cannot open a
+  client: it addresses a subscription that already exists, and ADR-0029 point 5 leaves device
+  identity uninvented, so there is no way to knock on the door of a machine where nothing is
+  running. Point 5 is what makes that read as "your app is closed" rather than a spinner. Whether to
+  close the gap — a `launch` tool on the local stdio bridge, or autostart at login — is left open;
+  both live outside this channel.
 - **The server half shipped in `familiar` #121**: `GET /api/v1/playback/commands`,
   `services/playback_commands.py`, and the MCP tools in `app/mcp/playback.py`. `queue_tracks` and
   `control_playback` return to the surface, joined by `list_players` and `get_now_playing`.
