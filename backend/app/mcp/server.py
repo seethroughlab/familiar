@@ -46,18 +46,24 @@ SERVER_NAME = "familiar"
 PROFILE_HEADER = "x-profile-id"
 PROFILE_ENV = "FAMILIAR_MCP_PROFILE_ID"
 
-#: Requires a Familiar client to mean anything, and has no way to reach one.
-#: `get_visible_tracks` answers only because a chat client uploaded its viewport with the request,
-#: and no MCP host has a viewport to upload. `queue_tracks` and `control_playback` were here too
-#: until ADR-0044's command channel gave them a destination — they are now served by
-#: `app.mcp.playback` rather than by `ToolExecutor`'s in-memory fields, which stay dead.
-_CLIENT_BOUND = {"get_visible_tracks"}
-
-#: Dropped outright. A server-side URL fetcher on an API with no inbound authentication is an SSRF
-#: primitive, and the host's own web access does the job better (ADR-0043 point 2).
-_WITHHELD = {"fetch_webpage"}
-
-EXCLUDED = _CLIENT_BOUND | _WITHHELD
+#: Tools withheld from MCP hosts. **Empty, and that is the finished state rather than a gap.**
+#:
+#: ADR-0043 point 2 defined the exposed surface as everything in `MUSIC_TOOLS` minus the
+#: client-bound and the withheld, and there were one of each:
+#:
+#: - `get_visible_tracks` was client-bound — it answered only because a chat client uploaded its
+#:   viewport with the request, and no MCP host has a viewport to upload.
+#: - `fetch_webpage` was withheld — a server-side URL fetcher on an API with no inbound
+#:   authentication is an SSRF primitive, and a host's own web access does the job better.
+#:
+#: Point 5 retired the chat clients, which left both tools with no caller at all, so they were
+#: deleted rather than left excluded. `queue_tracks` and `control_playback` were once here too,
+#: until ADR-0044's command channel gave them a destination.
+#:
+#: Keep this set rather than deleting it: it is the seam where a future client-bound tool goes, and
+#: `exposed_tools()` reads it. A tool that needs a Familiar client in front of it belongs here, not
+#: in an `if` somewhere.
+EXCLUDED: frozenset[str] = frozenset()
 
 
 class ProfileNotBound(Exception):

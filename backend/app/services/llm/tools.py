@@ -239,14 +239,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "get_visible_tracks",
-        "description": "Get the tracks currently visible in the user's library view. Use this when the user refers to 'these tracks', 'this list', 'what I'm looking at', 'all of these', or wants to queue/analyze the tracks they're currently viewing. Returns track IDs and basic metadata for all tracks in the current view.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
-        }
-    },
-    {
         "name": "queue_tracks",
         "description": "Add tracks to the playback queue. Can include both local tracks and suggested external tracks (if discovery mode allows). Use after finding tracks the user wants to play.",
         "input_schema": {
@@ -654,21 +646,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             "required": ["track_ids"]
         }
     },
-    # Web page reading tools
-    {
-        "name": "fetch_webpage",
-        "description": "Fetch a web page and extract its readable content. Use this when the user provides a URL to an article, list, or page containing music information (artists, albums, tracks). Returns the page content for analysis.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "The URL to fetch"
-                }
-            },
-            "required": ["url"]
-        }
-    },
     {
         "name": "list_playlists",
         "description": (
@@ -786,7 +763,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "create_playlist_from_items",
-        "description": "Create a playlist from a list of music items (artists, albums, tracks). Matches items to local library and creates missing track placeholders for items not found. Use after analyzing web page content with fetch_webpage.",
+        "description": "Create a playlist from a list of music items (artists, albums, tracks). Matches items to local library and creates missing track placeholders for items not found. Use after extracting music references from a web page or any other source.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1041,16 +1018,13 @@ Example response format when artist not in library:
 
 ## Web Page Music Discovery
 
-When a user provides a URL to an article, blog post, or list about music:
-1. Use fetch_webpage to get the content
-2. Analyze the content to extract music references (artists, albums, tracks, years)
-3. Use create_playlist_from_items with the extracted data
-4. Report results: how many items found locally vs marked as missing
+When the listener provides a URL to an article, blog post, or list about music, read the page
+yourself — Familiar no longer fetches pages on your behalf (ADR-0043 point 2 withheld that tool and
+ADR-0043 point 5 removed it, because an MCP host's own web access is better than this server's).
+Extract the music references and pass them to create_playlist_from_items:
 
-Example workflow:
-- User: "make me a playlist from this article: https://example.com/best-albums-2024"
-- fetch_webpage(url="https://...")
-- Analyze content, extract: [{"artist": "...", "album": "...", "year": 2024}, ...]
+- Listener: "make me a playlist from this article: https://example.com/best-albums-2024"
+- Read the page, extract: [{"artist": "...", "album": "...", "year": 2024}, ...]
 - create_playlist_from_items(name="Best Albums 2024", items=[...], description="From: https://...")
 - Response: "Created playlist with X tracks. Y are in your library, Z are marked as missing."
 

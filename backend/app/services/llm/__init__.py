@@ -1,25 +1,23 @@
-"""LLM service package for conversational music discovery.
+"""Tool definitions and execution for Familiar's LLM surface.
 
-This module provides:
-- LLMService: Main service for handling chat interactions
-- ToolExecutor: Executes LLM-called tools against the database
-- MUSIC_TOOLS: Tool definitions for the LLM
-- SYSTEM_PROMPT: System prompt for the music assistant
+**This package no longer runs a conversation.** ADR-0043 replaced Familiar's own chat client with an
+MCP server, and ADR-0043 point 5 retired `service.py` — the tool-and-conversation loop — along with
+the chat route and both chat UIs. What survives is the part an MCP host needs:
 
-Usage:
-    from app.services.llm import LLMService
+- ``MUSIC_TOOLS``: the tool schemas, iterated by ``app.mcp.server.exposed_tools``
+- ``ToolExecutor``: the handlers those schemas dispatch to
+- ``SYSTEM_PROMPT``: retained because it is still the best written description of how these tools
+  are meant to be used together; ``app/mcp/server.py`` sends its own ``INSTRUCTIONS`` to hosts.
 
-    service = LLMService()
-    async for event in service.chat(message, history, db, profile_id):
-        handle(event)
+The provider layer (``providers.py``, ``providers_anthropic.py``, ``providers_openai.py``,
+``models.py``) is a separate concern and is not imported here — Familiar calls a model itself only
+for utility completions, never for chat.
 """
 
 from .executor import ToolExecutor
-from .service import LLMService
 from .tools import MUSIC_TOOLS, SYSTEM_PROMPT
 
 __all__ = [
-    "LLMService",
     "ToolExecutor",
     "MUSIC_TOOLS",
     "SYSTEM_PROMPT",

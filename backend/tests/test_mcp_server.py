@@ -3,8 +3,10 @@
 These pin the four things that are decisions rather than implementation, and that would fail
 quietly if broken:
 
-1. **Which tools are exposed.** ADR-0043 point 2 excludes three client-bound tools and withholds
-   `fetch_webpage`. A regression here leaks a tool that cannot work, or an SSRF primitive.
+1. **Which tools are exposed.** ADR-0043 point 2 defines the surface as `MUSIC_TOOLS` minus the
+   excluded. `EXCLUDED` is empty now that point 5 retired the chat clients and with them the only
+   two tools it held, so what this pins is the *rule* — every tool with a handler is reachable, and
+   nothing reaches a host that has no way to answer it.
 2. **`/mcp` is not swallowed by the SPA catch-all.** The failure is asymmetric — POST keeps working
    while GET returns `index.html` with HTTP 200 — so half the transport dies looking healthy.
 3. **An unbound connection fails, naming the reason** (point 9), rather than acting as some
@@ -44,13 +46,22 @@ MCP_ONLY_TOOLS = {"list_players", "get_now_playing"}
 
 
 class TestToolSurface:
-    def test_excludes_client_bound_and_withheld_tools(self):
+    def test_excluded_tools_never_leak(self):
         names = {t.name for t in exposed_tools()}
         assert not (names & EXCLUDED), f"excluded tools leaked: {names & EXCLUDED}"
-        # `get_visible_tracks` needs a viewport no MCP host has; `fetch_webpage` is an SSRF
-        # primitive on an API with no inbound auth. Neither has a route back.
-        for withheld in ("get_visible_tracks", "fetch_webpage"):
-            assert withheld not in names
+
+    def test_the_retired_chat_tools_are_gone_entirely(self):
+        """Not merely excluded — deleted.
+
+        `get_visible_tracks` answered from a viewport a chat client uploaded, and `fetch_webpage`
+        was the chat agent's. ADR-0043 point 5 removed the chat clients, which left both with no
+        caller, so they were deleted rather than left sitting in `MUSIC_TOOLS` behind an exclusion.
+        Asserted against `MUSIC_TOOLS` rather than the exposed surface, because an exclusion would
+        make the weaker check pass.
+        """
+        declared = {t["name"] for t in MUSIC_TOOLS}
+        for retired in ("get_visible_tracks", "fetch_webpage"):
+            assert retired not in declared
 
     def test_playback_tools_are_exposed_again(self):
         """ADR-0044 gave them a destination, so ADR-0043 point 2's deferral has expired.
