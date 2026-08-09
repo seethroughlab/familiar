@@ -6,7 +6,24 @@ Date: 2026-08-06
 
 ## Implementation
 
-All eight points shipped together; ADR-0037 is the client half and follows.
+All eight points shipped together.
+
+**ADR-0037, the Apple half, was rejected** — a Mac cannot host, because `RTCAudioDevice` is not
+exposed in `stasel/WebRTC`'s macOS slice. That matters here for one reason worth naming: this ADR's
+Alternatives rejected *"Delete listening sessions properly rather than reviving them"* partly on the
+grounds that "the feature is being asked for on the Apple clients (ADR-0037), and reviving it
+correctly is the prerequisite for that." **That prerequisite no longer has anything to be a
+prerequisite for.**
+
+This decision still stands on the rest of its own argument, which never depended on ADR-0037: the
+one feature involving other people was routing through a box the listener does not run, and it had
+been broken in `pnpm dev` for five months. Both are fixed, in the web app, where the feature lives
+and works. But anyone re-reading that Alternative should know half its reasoning has expired.
+
+Point 5's generated `sessions` surface is the other casualty: it is generated for the Apple clients
+and now has no Apple consumer. It is left in place — the backend lint cross-checks `VENDORED_TAGS`
+against the Swift config, so removing it is a change on both sides, and iOS already compiles
+management operations it never calls. Worth deciding deliberately rather than inheriting.
 
 `backend/app/services/sessions.py` came back from `ceeb926^` unchanged — it was removed for scope
 and there was no finding against it. `backend/app/api/routes/sessions.py` did not: the REST half is

@@ -1,11 +1,56 @@
 # ADR-0037: The Apple Clients Host and Join Listening Sessions
 
-Status: proposed
+Status: rejected
 
 Date: 2026-08-06
 
 Extends [ADR-0036](ADR-0036-listening-sessions-signal-through-familiars-own-server.md) and
 [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
+
+## Why This Was Rejected
+
+**A Mac cannot host a listening session, and the whole decision rests on it being able to.** This
+was found while building, on 2026-08-09, after points 2, 8 and 11 had shipped as a foundation — that
+work is reverted and `familiar-apple` #90 is closed.
+
+`RTCAudioDevice` is the only public route for feeding `AVAudioEngine`'s output into WebRTC, and
+`stasel/WebRTC` **does not expose it in the macOS slice**:
+
+- The header ships in `ios-arm64`, `ios-x86_64_arm64-simulator` and `ios-…-maccatalyst`. It is
+  absent from `macos-x86_64_arm64`'s `Headers/`, its `Versions/A/Headers/`, and its umbrella header.
+- macOS's `RTCPeerConnectionFactory.h` still declares
+  `initWithEncoderFactory:decoderFactory:audioDevice:`, backed only by a forward
+  `@protocol RTCAudioDevice;`. It compiles. Nothing can conform to it, so `nil` is the only argument
+  available.
+
+Without it, WebRTC uses its default audio device module, which captures **the microphone**. A Mac
+host would stream the room rather than the music. That makes **point 4** — "a host adds one tap,
+beside the analysis tap" — unachievable on macOS, and with it **point 1**.
+
+**Precisely what does and does not work**, because the distinction is easy to lose: a Mac can
+*join*. A guest's audio is played by WebRTC's own device, which is exactly what point 3 stops
+`NativeAudioEngine` for, so the receive path never needed the custom device. iOS can both host and
+join. **It is only the Mac's outbound path that has no route.**
+
+The judgement, which is a product one rather than a technical one: a listening-party feature that
+the machine holding the library cannot start is not worth a **44 MB** binary framework nobody here
+can rebuild, shipped inside an App Store build. Point 2 asked for that liability to be entered
+knowingly; knowing this, it is not entered.
+
+Worth recording as an irony rather than a lesson: the Alternatives below reject *"Host only on the
+Mac, join on both"*, and the binary forces close to the exact opposite.
+
+Two things this rejection does **not** say. It is not a finding against libwebrtc — the string
+`RTCAudioDeviceDelegate` appears in the macOS binary, so this reads as a packaging omission in the
+distribution, and a build that exposed the protocol would remove the obstacle entirely. And it is
+not a finding against listening sessions, which work in the web app against the listener's own
+server under [ADR-0036](ADR-0036-listening-sessions-signal-through-familiars-own-server.md), and
+which shipped.
+
+**What would reopen this:** a maintained macOS WebRTC distribution that exposes `RTCAudioDevice`, or
+a decision that iOS-only hosting is worth the dependency on its own. Either is a new ADR. The
+material below is left exactly as it was proposed — the design was sound, and if the obstacle is
+removed it is still the design.
 
 ## Context
 
@@ -36,9 +81,9 @@ And the render path is closed on purpose.
 [ADR-0024](ADR-0024-the-audio-engine-is-main-actor-except-where-it-cannot-be.md) point 3 made the
 tap closure `@Sendable` and non-isolated after a Swift 6 runtime check crashed the app on the first
 track played — `Thread 8 Crashed:: Dispatch queue: RealtimeMessenger.mServiceQueue`. The analysis
-tap at `NativeAudioEngine.swift:2148` captures a processor and nothing else, and its comment says
-why in eleven lines. A capture tap for a host's outbound stream sits beside it under exactly the
-same rules.
+tap — at `NativeAudioEngine.swift:2408`, not 2148 as first written; the file has grown to 2,494
+lines since — captures a processor and nothing else, and its comment says why in eleven lines. A
+capture tap for a host's outbound stream would sit beside it under exactly the same rules.
 
 **The web app's host path is one line of Web Audio.** `WebAudioEngine.getOutputStream()` lazily
 branches `masterGain` into a `MediaStreamAudioDestinationNode` and hands the result to
@@ -151,6 +196,10 @@ point of ADR-0001 was that listening moves to the native clients — leaving the
 the browser splits the feature across two apps.
 
 ## Consequences
+
+**None of these came to pass — the decision was rejected.** They are kept as written because they
+are the terms on which it would be reconsidered, and the second Tradeoff below is most of why it
+was not.
 
 - **Positive:** The Mac and the phone can start and join a listening session, on a server they are
   already configured against, with the profile they already hold.
