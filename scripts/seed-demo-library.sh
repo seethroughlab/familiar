@@ -75,12 +75,23 @@ docker exec "$ANALYSIS_PG_CONTAINER" pg_dump \
     --table=track_analysis \
     > "$DUMP_FILE"
 
+# **Normalise pg_dump 17's random restrict token.** It emits `\restrict <token>` / `\unrestrict
+# <token>` with a fresh random token per dump — a psql-side guard against a dump injecting commands
+# during restore. Random is right for a dump you were handed; here the file is committed and
+# reviewed in a pull request, and a token that changes every run means two captures of *identical*
+# data produce a diff, so "the library changed" becomes indistinguishable from "someone re-ran the
+# script". The pair only has to match each other, so both are pinned to one value: the mechanism
+# still works, and the artifact is deterministic.
+sed -i.bak -E 's/^\\(restrict|unrestrict) .*/\\\1 familiar_demo_seed/' "$DUMP_FILE"
+rm -f "$DUMP_FILE.bak"
+
 BYTES=$(wc -c < "$DUMP_FILE" | tr -d ' ')
 echo "   $(basename "$DUMP_FILE") — ${BYTES} bytes"
 
 echo "→ Writing the golden seed to ${SEED_FILE}…"
 mkdir -p "$(dirname "$SEED_FILE")"
-gzip -9 -c "$DUMP_FILE" > "$SEED_FILE"
+# `-n` so identical data gzips to identical bytes — see capture-demo-seed.sh.
+gzip -9 -n -c "$DUMP_FILE" > "$SEED_FILE"
 GZ_BYTES=$(wc -c < "$SEED_FILE" | tr -d ' ')
 echo "   ${SEED_FILE} — ${GZ_BYTES} bytes gzipped"
 if [ "$GZ_BYTES" -gt 20000000 ]; then

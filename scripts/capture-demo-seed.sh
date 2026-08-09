@@ -44,10 +44,44 @@ NEON_URL="${NEON_URL//&ssl=/&sslmode=}"
 
 command -v docker >/dev/null || { echo "docker required (for a pg16-matched pg_dump)" >&2; exit 1; }
 
-# pg_dump must match the server major version, which is 16 on Neon. Running it from the official
-# image rather than trusting whatever is on PATH — a pg15 client against a pg16 server fails with a
-# version error that reads like a connection problem.
-PG_IMAGE="${PG_IMAGE:-postgres:16-alpine}"
+# **pg_dump must match the server's major version, and the server's version is asked for rather
+# than assumed.** `seed-demo-library.sh` says "pg16 on Neon" in a comment; Neon is on 17 now, and a
+# pinned 16 client aborts with `server version mismatch`. Managed Postgres gets upgraded underneath
+# you, so anything hardcoded here is a bomb with a timer on it.
+#
+# psql itself is tolerant of the mismatch, so the version query below runs on any image — only
+# `pg_dump` is strict.
+PROBE_IMAGE="${PROBE_IMAGE:-postgres:17-alpine}"
+
+echo "→ Asking the server what version it is…"
+set +e
+# **Only the last line, and only digits.** `docker run` prints a platform warning on Apple silicon
+# pulling an amd64 image, and capturing `2>&1` mixed it into the value. `grep` matches per line, so
+# the guard below still passed — and the arithmetic then got a multi-line string and produced an
+# image tag like `postgres:170010-alpine`. stderr is kept separately so the error message can still
+# show it.
+PROBE_ERR="$(mktemp)"
+PG_RAW=$(docker run --rm "$PROBE_IMAGE" \
+    psql "$NEON_URL" -t -A -c "SHOW server_version_num" 2>"$PROBE_ERR")
+PROBE_STATUS=$?
+set -e
+PG_MAJOR=$(printf '%s' "$PG_RAW" | tr -d '[:space:]')
+if [ "$PROBE_STATUS" -ne 0 ] || ! printf '%s' "$PG_MAJOR" | grep -qE '^[0-9]+$'; then
+    PG_MAJOR="$(cat "$PROBE_ERR" 2>/dev/null)${PG_MAJOR}"
+    rm -f "$PROBE_ERR"
+    echo >&2
+    echo "Could not read the demo database, so there is nothing to capture." >&2
+    echo "psql said:" >&2
+    printf '  %s\n' "$PG_MAJOR" >&2
+    echo >&2
+    echo "Check DEMO_NEON_URL — it must be a real Neon URL on the direct host." >&2
+    exit 1
+fi
+rm -f "$PROBE_ERR"
+# server_version_num is e.g. 170010 for 17.10; the major is everything but the last four digits.
+PG_MAJOR=$(( PG_MAJOR / 10000 ))
+PG_IMAGE="${PG_IMAGE:-postgres:${PG_MAJOR}-alpine}"
+echo "   server is Postgres ${PG_MAJOR} — using ${PG_IMAGE}"
 
 echo "→ Checking what is in there…"
 # **A failed query must not read as an empty database.** The first version of this ended in
@@ -100,11 +134,24 @@ docker run --rm "$PG_IMAGE" \
     --table=track_analysis \
     > "$DUMP_FILE"
 
+# **Normalise pg_dump 17's random restrict token.** It emits `\restrict <token>` / `\unrestrict
+# <token>` with a fresh random token per dump — a psql-side guard against a dump injecting commands
+# during restore. Random is right for a dump you were handed; here the file is committed and
+# reviewed in a pull request, and a token that changes every run means two captures of *identical*
+# data produce a diff, so "the library changed" becomes indistinguishable from "someone re-ran the
+# script". The pair only has to match each other, so both are pinned to one value: the mechanism
+# still works, and the artifact is deterministic.
+sed -i.bak -E 's/^\\(restrict|unrestrict) .*/\\\1 familiar_demo_seed/' "$DUMP_FILE"
+rm -f "$DUMP_FILE.bak"
+
 BYTES=$(wc -c < "$DUMP_FILE" | tr -d ' ')
 [ "$BYTES" -gt 1000 ] || { echo "Dump is only ${BYTES} bytes — that is not a library." >&2; exit 1; }
 
 mkdir -p "$(dirname "$SEED_FILE")"
-gzip -9 -c "$DUMP_FILE" > "$SEED_FILE"
+# `-n`: no timestamp or filename in the gzip header. Without it, two captures of identical
+# data differ byte-for-byte, so every re-run shows a diff and "the library changed" becomes
+# indistinguishable from "someone ran the script again".
+gzip -9 -n -c "$DUMP_FILE" > "$SEED_FILE"
 
 GZ_BYTES=$(wc -c < "$SEED_FILE" | tr -d ' ')
 echo "→ ${SEED_FILE} — ${BYTES} bytes raw, ${GZ_BYTES} bytes gzipped"
