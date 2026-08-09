@@ -1,8 +1,37 @@
 # ADR-0038: The Demo Server Is Always On
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
+
+## Implementation
+
+The repository half is done; two steps need a Fly account and are listed at the end of
+`docs/TEST-SERVER.md`.
+
+Points 1, 2 and 4 are `deploy/fly/fly.toml` (`auto_stop_machines = 'off'`,
+`min_machines_running = 1`, with the small VM's justification written beside it so nobody "fixes"
+`DISABLE_CLAP_EMBEDDINGS` and runs the machine out of memory) and the restored `push:` trigger in
+`fly-deploy-demo.yml`, scoped to `backend/**` and `deploy/fly/**`.
+
+Point 3 rewrote `docs/TEST-SERVER.md` entirely. It was a *plan to build* that had been read as a
+description ever since — a `familiar-test` app, a `performance-2x` with 8 GB, a `fly/seed-music.sh`
+and a `deploy-fly.yml`, none of which exist. One thing it got wrong that this ADR also missed: the
+database is **Neon**, not the Fly Postgres the document specified.
+
+**Point 5 is written but cannot run yet, and this is stated rather than left to be discovered.**
+`fly-reset-demo.yml` restores from a dump every Sunday and refuses a Neon pooler URL outright. But
+`seed-demo-library.sh` builds its dump on a throwaway local Docker stack and `psql`s it straight
+into Neon, leaving **no artifact a scheduled job can fetch** — so `DEMO_SEED_URL` has nothing to
+point at until someone publishes that file. The workflow fails on its first step with a clear
+message rather than half-restoring anything, because a reset job that quietly does nothing is worse
+than one that is visibly not set up.
+
+Point 6 is unfinished: where the review account lives is still unchosen.
+
+**Point 8 became actionable while this was being written.** ADR-0036 shipped, so nothing points at
+`familiar-sessions.fly.dev` any more — and it was still up, answering 200 in 4.6 seconds, when this
+was checked. It is the one item in this ADR that *saves* money.
 
 ## Context
 

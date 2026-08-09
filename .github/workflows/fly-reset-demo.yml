@@ -1,0 +1,104 @@
+name: Reset demo library
+
+# ADR-0038 point 5. Reviewers and anyone with the link share one profile, so play counts,
+# favourites, playlists and skip history accumulate from strangers. The seed dump is the source of
+# truth and the database is disposable; this puts it back.
+#
+# **Weekly rather than nightly.** A reset mid-review would look like data loss to the person
+# deciding whether to approve the app, and the drift this corrects is cosmetic — a demo with a few
+# stranger's play counts still demonstrates the product. Sunday 04:00 UTC is the quietest slot for
+# an audience that is mostly American reviewers and European visitors.
+#
+# Fly has no cron, which is why this is a GitHub Action against Neon rather than something running
+# beside the app.
+#
+# **Prerequisite, and it does not exist yet: a published dump.** `scripts/seed-demo-library.sh`
+# builds the dump on a throwaway local Docker stack and `psql`s it straight into Neon — it leaves no
+# artifact anywhere a scheduled job could reach. So somebody has to publish the file that script
+# writes (`$DUMP_FILE`) somewhere fetchable — a GitHub release asset on this repo is the obvious
+# place, since it is already private-free content — and set `DEMO_SEED_URL` to it.
+#
+# Until that exists this workflow fails on its first step with a clear message rather than
+# half-restoring anything. That is deliberate: a reset job that quietly does nothing is worse than
+# one that is visibly not set up.
+on:
+  schedule:
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RESET to confirm — this discards the demo database'
+        required: true
+        default: ''
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  reset:
+    name: Restore familiar-demo from the seed dump
+    runs-on: ubuntu-latest
+    concurrency: fly-demo-deploy
+    steps:
+      - name: Refuse an unconfirmed manual run
+        # The schedule passes no inputs, so this only guards the button. Destroying a database
+        # because someone clicked "Run workflow" to see what it did is exactly the kind of thing a
+        # dispatch input exists to prevent.
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'RESET'
+        run: |
+          echo "::error::Type RESET in the confirm field to run this. Nothing has been changed."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets exist before touching anything
+        env:
+          DEMO_SEED_URL: ${{ secrets.DEMO_SEED_URL }}
+          DEMO_DATABASE_URL_DIRECT: ${{ secrets.DEMO_DATABASE_URL_DIRECT }}
+        run: |
+          missing=0
+          [ -n "$DEMO_SEED_URL" ] || { echo "::error::DEMO_SEED_URL is not set"; missing=1; }
+          [ -n "$DEMO_DATABASE_URL_DIRECT" ] || { echo "::error::DEMO_DATABASE_URL_DIRECT is not set"; missing=1; }
+          exit $missing
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Fetch the seed dump
+        env:
+          DEMO_SEED_URL: ${{ secrets.DEMO_SEED_URL }}
+        run: |
+          curl -fsSL "$DEMO_SEED_URL" -o seed.dump
+          ls -la seed.dump
+
+      - name: Restore
+        env:
+          # **The direct host, not the pooler.** Neon's pgbouncer ignores `ALTER ROLE SET
+          # search_path`, so a restore through the pooler does not find the schema and fails in a
+          # way that looks like a corrupt dump. This secret must be the `-pooler`-free hostname.
+          DEMO_DATABASE_URL_DIRECT: ${{ secrets.DEMO_DATABASE_URL_DIRECT }}
+        run: |
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *-pooler.*)
+              echo "::error::DEMO_DATABASE_URL_DIRECT points at Neon's pooler. Use the direct host."
+              exit 1
+              ;;
+          esac
+          pg_restore --clean --if-exists --no-owner --no-privileges \
+            --dbname "$DEMO_DATABASE_URL_DIRECT" seed.dump
+
+      - name: Confirm the app comes back
+        run: |
+          for attempt in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+              https://familiar-demo.fly.dev/api/v1/health || true)
+            if [ "$code" = "200" ]; then
+              echo "healthy after $attempt attempt(s)"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::familiar-demo did not return 200 after the reset."
+          exit 1
