@@ -34,6 +34,14 @@ esac
 
 NEON_URL="${DEMO_NEON_URL/postgresql+asyncpg:/postgresql:}"
 
+# **`ssl=require` is asyncpg's spelling; libpq only knows `sslmode=require`.** The app's
+# `DATABASE_URL` has to use `ssl=` or asyncpg rejects it, and `psql`/`pg_dump` reject that exact
+# same string with `invalid URI query parameter: "ssl"`. So the one URL cannot serve both, and
+# reading the app's secret straight into this script fails on a parameter that is correct where it
+# came from. Translated here rather than left to whoever is holding the terminal.
+NEON_URL="${NEON_URL//\?ssl=/?sslmode=}"
+NEON_URL="${NEON_URL//&ssl=/&sslmode=}"
+
 command -v docker >/dev/null || { echo "docker required (for a pg16-matched pg_dump)" >&2; exit 1; }
 
 # pg_dump must match the server major version, which is 16 on Neon. Running it from the official
