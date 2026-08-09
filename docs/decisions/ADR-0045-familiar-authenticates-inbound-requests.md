@@ -72,6 +72,43 @@ Implementation:
   who sets it has made a choice rather than inherited a default. **The startup refusal must name the
   variable**, or the first person to hit it will conclude the upgrade is broken rather than that it
   is working.
+- **Media is exempt from the gate, decided 2026-08-09 rather than left to be discovered.** Artwork
+  and audio reach the browser as `<img src>` and `el.src` on an `<audio>` element
+  (`AlbumArtwork.tsx`, `WebAudioEngine.ts:227`), and a media element cannot send a header. That is
+  the visible half of the problem; the deciding half is that **two shipped features structurally
+  cannot hold a credential at all**:
+  1. **Network audio outputs.** `outputs.py:90` builds
+     `{device_stream_base_url}/api/v1/tracks/{id}/stream` and hands it to a WiiM or Sonos, which
+     fetches the audio itself. A third-party appliance will never present a Familiar token.
+  2. **Guest listeners.** `sessions.py`'s `join_guest` takes a six-character code — *"something one
+     person reads aloud to another"* — so a guest has no profile and no token by design, and then
+     streams and displays artwork.
+  Any scheme that gates media needs an escape for both, which is true of a cookie, a header and a
+  query parameter alike. Only server-minted signed URLs serve both cleanly, and **that is point 6's
+  ADR, not this one** — building them now would pay the cost of public exposure while still sitting
+  behind Tailscale.
+- **What the exemption leaks is asymmetric, and only one half matters.** A stream URL is
+  `/api/v1/tracks/{uuid}/stream`, and a v4 UUID is 122 random bits — with the rest of the API closed
+  it is a capability URL and cannot be enumerated. **Artwork is not**: `artwork.py:84` computes
+  `sha256(f"{artist}|{album}")[:16]`, so anyone can derive the hash for a guessed album and ask
+  whether this library has it. That is an oracle over the collection. **Follow-up: the artwork hash
+  is the one genuine leak this exemption leaves**, and it is separable — `<img>` is the easier of the
+  two to convert, and artwork has no WiiM equivalent forcing it open.
+- **The accepted rationale for exempting it is proportionality.** The management surface is where
+  the damage is: `/settings` returns API keys, `DELETE /profiles/{id}` removes people,
+  `PATCH /tracks/{id}/metadata` rewrites tags, `POST /library/sync` starts an eight-hour job. None of
+  that is media. Gating media is the expensive half of the work and the cheap half of the benefit.
+  **On a tailnet it is close to zero security for real feature breakage.** If Familiar is ever
+  exposed publicly, media authentication becomes mandatory — and so does everything else in point
+  6's ADR.
+- **Where execution stands, and this ADR is not finished.** Phase 1 (the token and the gate) and
+  phase 2 (clients holding it) are built. **Point 4 (CORS narrowing) is not started, point 5 (on by
+  default) is deliberately deferred, and point 2's profile allowlist — the large half — has not
+  begun.** Deferral is a scheduling judgement rather than a reversal: Familiar is local and
+  tailnet-only today, and Jeff's stated priority as of 2026-08-09 is that security is not a current
+  concern. What that costs is stated plainly so nobody reads the built half as the whole: **until
+  point 5 lands, the gap this ADR exists to close — a documented security model that the application
+  does not enforce — is still open.** A token that is off by default is a capability, not a control.
 - **TLS stays out of scope, deliberately.** The application enforces none today; Tailscale provides
   it. Making Familiar safe to expose *without* Tailscale would pull termination, certificates and
   renewal into the product, which is the step from music player to hosting product that
