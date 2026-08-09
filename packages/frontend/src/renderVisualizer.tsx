@@ -1,10 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { initApiOrigin, registerProfileProvider } from './api/base';
+import { initApiOrigin, registerProfileProvider, setApiOrigin } from './api/base';
 import { profileFromURL } from './services/embedBridge';
 import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
 import { useUIStore } from './stores/uiStore';
+import { installVisualizerSink } from './services/visualizerSink';
 
 /**
  * Boots the embedded visualizer surface (ADR-0033).
@@ -19,7 +20,26 @@ import { useUIStore } from './stores/uiStore';
  * shape, and lyrics are a request the page can make perfectly well on its own.
  */
 export function renderVisualizer(options?: { onReady?: () => void }): void {
+  // **First, before anything async.** The host probes for the sink as soon as the document finishes
+  // loading, which is well before `initApiOrigin` resolves or React mounts — installing it any
+  // later loses that race and the host reports a page that is not listening. It also means frames
+  // arriving during boot land in the buffers instead of being dropped.
+  installVisualizerSink();
+
   const profileId = profileFromURL();
+
+  // **The host tells this page where the server is.**
+  //
+  // Read out of the app bundle over a custom URL scheme (ADR-0034 point 4), this page has no server
+  // in its own location to infer one from. `initApiOrigin` derives the origin from where the
+  // document was served, which is right for the web app and for the embedded Discover page — both
+  // come from the server — and yields an empty string here. Origin-relative URLs would then resolve
+  // against the custom scheme and fetch nothing, so artwork would silently never load.
+  //
+  // `setApiOrigin` is the same function `ServerSettings` uses; it also caches to localStorage,
+  // which the custom scheme has because it is a real origin (a `file://` or `loadHTMLString` page
+  // would not).
+  const api = new URLSearchParams(window.location.search).get('api');
   registerProfileProvider({
     getSelectedProfileId: async () => profileId,
     // Same as the Discover surface: it was told a profile, it never chose one, so there is nothing
@@ -40,7 +60,10 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
     },
   });
 
-  initApiOrigin().then(() => {
+  // Only when the host did not say — `initApiOrigin` would otherwise overwrite an explicit origin
+  // with an origin-relative empty string.
+  const ready = api ? setApiOrigin(api) : initApiOrigin();
+  ready.then(() => {
     options?.onReady?.();
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
