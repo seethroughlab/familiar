@@ -63,6 +63,9 @@ from app.api.routes import (
     updates,
     videos,
 )
+from app.api.routes import (
+    auth as auth_routes,
+)
 from app.api.routes import settings as settings_routes
 from app.api.schemas.common import error_responses
 from app.config import AUDIO_EXTENSIONS, MUSIC_LIBRARY_PATH, get_app_version
@@ -347,6 +350,22 @@ from app.mcp.server import build_asgi_app as _build_mcp_app  # noqa: E402
 _mcp_asgi_app = _build_mcp_app()
 app.add_middleware(MCPDispatch, mcp_app=_mcp_asgi_app)
 
+# Inbound authentication (ADR-0045 point 1).
+#
+# **The position in this file is the whole design.** `add_middleware` prepends, so the *last* one
+# added is the outermost. Adding this immediately after `MCPDispatch` and before `RequestIDMiddleware`
+# and CORS puts it:
+#   - *inside* CORS, so a preflight is answered with CORS headers rather than an opaque 401;
+#   - *inside* `RequestIDMiddleware`, so a refusal carries the `x-request-id` that correlates it;
+#   - *outside* `MCPDispatch`, which is the load-bearing one — `MCPDispatch` answers `/mcp` before
+#     the router is ever reached, so a router dependency would protect all 264 REST operations and
+#     leave the MCP endpoint, the one ADR-0043 exists to expose, as the only open door.
+#
+# It is inert until a token is configured; see `TokenAuthMiddleware`.
+from app.api.auth import TokenAuthMiddleware  # noqa: E402
+
+app.add_middleware(TokenAuthMiddleware)
+
 
 @asynccontextmanager
 async def _mcp_session_manager_running(_app: FastAPI) -> AsyncGenerator[None, None]:
@@ -492,6 +511,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 DEFAULT_ERROR_RESPONSES = error_responses(400, 401, 404, 422, 500)
 
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(auth_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(tracks.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(library.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(chat.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
@@ -528,6 +548,61 @@ app.include_router(admin_artists.router, prefix="/api/v1", responses=DEFAULT_ERR
 app.include_router(pending_review.group_router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(pending_review.bulk_router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(pending_review.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+
+
+def _openapi_with_global_security() -> dict[str, Any]:
+    """Publish the server token as a global security requirement (ADR-0045 point 2).
+
+    Point 2 says *"every operation carries a security requirement, and the allowlist goes to zero"*,
+    and cites 158 operations with none. That number is real — it is 160 today, having grown by two
+    since the ADR was written, which is the ADR's own argument about permanent allowlists making
+    itself. But the count conflates two axes that this codebase keeps separate:
+
+    - **Authentication** — does the caller hold the server token? That is not a property of an
+      individual operation here. `TokenAuthMiddleware` gates every `/api/` path and `/mcp` at once,
+      so the honest OpenAPI expression is a *global* `security` block, which the spec has never had
+      (`security` was absent entirely). One block covers all 264.
+    - **Profile scoping** — which profile may a request act as? That is per-operation, it is what
+      `lint_profile_contracts.py`'s 30-module allowlist tracks, and it is the genuinely large half
+      of point 2. It is untouched here and is a later phase.
+
+    Conflating them would let this look finished while the second half had not started, so the two
+    are separated deliberately rather than quietly.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    from fastapi.openapi.utils import get_openapi
+
+    from app.api.auth import TOKEN_HEADER
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    components = schema.setdefault("components", {})
+    schemes = components.setdefault("securitySchemes", {})
+    schemes["FamiliarToken"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": TOKEN_HEADER,
+        "description": (
+            "Server token (ADR-0045). Issue one at POST /api/v1/auth/token. When no token is "
+            "configured the server accepts unauthenticated requests, so generated clients must "
+            "treat this as optional-but-expected rather than required."
+        ),
+    }
+    # Applies to every operation, including the ones that declare `ProfileHeader`: the two are
+    # different questions, and an operation can require both.
+    schema["security"] = [{"FamiliarToken": []}]
+
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _openapi_with_global_security  # type: ignore[method-assign]
 
 
 # Serve frontend static files in production

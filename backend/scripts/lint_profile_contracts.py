@@ -55,6 +55,15 @@ ALLOWLISTED_MODULES = {
 
 # Individual functions exempt in otherwise-profiled modules
 ALLOWLISTED_FUNCTIONS = {
+    # The server token (ADR-0045) is server configuration, not listener state — ADR-0029 point 2's
+    # category one. Requiring a profile here would be actively *weaker*: profile IDs are public
+    # (GET /api/v1/profiles lists them all, unauthenticated), so it would gate token rotation behind
+    # something anyone can read. These routes check the current token instead, which is the
+    # credential that actually means something. Listed per-function rather than as a module, because
+    # ADR-0045 point 2 sends ALLOWLISTED_MODULES to zero and a new module entry moves it the wrong
+    # way.
+    ("auth", "issue_token"),
+    ("auth", "revoke_token"),
     # Profile creation/registration can't require an existing profile
     ("profiles", "create_profile"),
     ("profiles", "register_profile"),

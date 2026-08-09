@@ -16,6 +16,12 @@ everything. Add prompts or resources to the server and they need forwarding here
     uv run --project backend python backend/scripts/mcp_bridge.py
 
 `FAMILIAR_MCP_PROFILE_ID` is optional — send it only if the server has more than one profile.
+
+`FAMILIAR_MCP_TOKEN` is the server token (ADR-0045). Optional while the server has none configured;
+required once it does, and the failure without it is a 401 at connect rather than a tool error, so
+it looks like the server is down rather than like a missing credential. It is read from the
+environment rather than passed as an argument because `claude_desktop_config.json` is world-readable
+in the user's Library folder either way, but `env` keeps it out of the process list.
 """
 
 from __future__ import annotations
@@ -34,15 +40,34 @@ from mcp.server.stdio import stdio_server
 
 URL = os.environ.get("FAMILIAR_MCP_URL", "http://localhost:4400/mcp")
 PROFILE = os.environ.get("FAMILIAR_MCP_PROFILE_ID", "")
+TOKEN = os.environ.get("FAMILIAR_MCP_TOKEN", "")
 
 
 async def main() -> None:
     headers = {"X-Profile-ID": PROFILE} if PROFILE else {}
+    if TOKEN:
+        headers["X-Familiar-Token"] = TOKEN
     http_client = httpx2.AsyncClient(headers=headers, timeout=180.0)
 
     async with streamable_http_client(URL, http_client=http_client) as (read, write):
         async with ClientSession(read, write) as upstream:
-            init = await upstream.initialize()
+            try:
+                init = await upstream.initialize()
+            except Exception:
+                # Without this, a server with a token configured and none supplied fails during the
+                # MCP handshake, which Claude Desktop reports as "server could not be loaded" — the
+                # same message it gives for a crashed script or a wrong path. Naming the variable
+                # here is the difference between a two-minute fix and an evening of debugging the
+                # wrong thing.
+                if not TOKEN:
+                    print(
+                        "[familiar-mcp] connect failed and FAMILIAR_MCP_TOKEN is not set. If this "
+                        f"server has a token configured (ADR-0045), every request to {URL} is a "
+                        "401. Read it from the admin UI or GET /api/v1/auth/token and set "
+                        "FAMILIAR_MCP_TOKEN in the `env` block of claude_desktop_config.json.",
+                        file=sys.stderr,
+                    )
+                raise
             print(f"[familiar-mcp] bridging {URL} ({init.server_info.name})", file=sys.stderr)
 
             async def on_list_tools(

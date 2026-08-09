@@ -21,6 +21,94 @@ Implementation:
      convenience rather than a boundary.
   5. Rotation and revocation must exist from the start. A token that can only be changed by editing
      JSON on the NAS is a token nobody rotates.
+- **Phase 1 shipped: the token exists and the gate is built, off until a token is configured.**
+  `app/api/auth.py`, `app/api/routes/auth.py`, issue/read/rotate/revoke, and 23 tests. Enforcement
+  is deliberately inert on an unconfigured server, because turning it on before any client can
+  present a token takes the library offline rather than securing it. Point 5 — on by default, refuse
+  a non-loopback interface without one — is a later phase and still blocked on the demo-server
+  question in note 2 above.
+- **Point 7 paid for itself, and corrects this ADR's own Context.** The Context describes the
+  shelved Subsonic work as *"per-user bcrypt-hashed credentials"*. It stored
+  `subsonic_credentials.password_token` — **the plaintext** — in the column beside the bcrypt hash,
+  because the Subsonic protocol verifies `md5(password + salt)` and so cannot use a one-way hash.
+  The hash guarded a secret sitting in the next column. The precedent is therefore weaker evidence
+  than the Context implies, and nobody should re-derive it as a model.
+- **Point 8 is settled: `bcrypt` is removed.** Not merely because nothing imported it — it was a
+  dependency with one comment referring to a deleted API — but because it is the wrong primitive.
+  bcrypt is deliberately slow to make guessing a *human-chosen* secret expensive. This token is 256
+  bits from `secrets.token_urlsafe`; guessing is not the threat, and `hmac.compare_digest` is what
+  the comparison needs.
+- **Point 2's count conflates two axes, and only one of them is 160 units of work.** The number is
+  real and has grown — **160 unauthenticated operations of 264 today, against the 158 recorded at
+  write time**, which is this ADR's argument about permanent allowlists making itself. But
+  *authentication* ("does the caller hold the token") is not per-operation here: one middleware
+  gates every `/api/` path and `/mcp`, and the honest OpenAPI expression is a global `security`
+  block, which the spec had never had at all. That is done, and it covers all 267 operations at
+  once. *Profile scoping* ("which profile may this act as") is the per-operation half, is what
+  `lint_profile_contracts.py`'s 30-module allowlist tracks, and is the genuinely large and dull
+  remainder. Kept separate so the work cannot look finished while half of it has not begun.
+- **The gate is a middleware because `/mcp` is not a route.** `MCPDispatch` answers before the
+  router, so a router dependency would have protected all 264 REST operations and left the one
+  endpoint ADR-0043 exists to expose as the only open door. Its position in `main.py` is load-bearing
+  in three directions: inside CORS (preflight is answered, not refused opaquely), inside
+  `RequestIDMiddleware` (a 401 correlates to a log line), outside `MCPDispatch` (`/mcp` is checked).
+  Verified end to end — an unauthenticated `/mcp` returns **401 rather than the 400** it returns when
+  the MCP app handles it.
+- **Revocation was a silent no-op and is now tested.** `AppSettingsService.update` skips `None`
+  values unless the key is declared nullable, so `update(access_token=None)` returned success and
+  changed nothing — an operator would have read "revoked" while the old token kept working. This is
+  the shape worth remembering: the acceptance note asking for rotation *and revocation* from the
+  start was right, and the danger was not that revocation would be missing but that it would appear
+  to work.
+- **Acceptance note 2 is resolved: the demo server opts out explicitly, with
+  `FAMILIAR_ALLOW_UNAUTHENTICATED=1`.** Decided 2026-08-09. Point 5 would otherwise refuse to listen
+  on a non-loopback interface with no token and take
+  [ADR-0038](ADR-0038-the-demo-server-is-always-on.md)'s public instance down, failing an App Store
+  submission. The variable is set only in the demo's compose file, so **the demo declares itself
+  insecure on purpose and every other install fails closed.** Chosen over publishing a real token in
+  the App Store Connect review notes — which needs no exemption mechanism at all, but makes a
+  working credential to Jeff's demo instance a permanent published string that rotating would
+  require a metadata update to propagate. An env var is auditable in one `grep`, and a self-hoster
+  who sets it has made a choice rather than inherited a default. **The startup refusal must name the
+  variable**, or the first person to hit it will conclude the upgrade is broken rather than that it
+  is working.
+- **Media is exempt from the gate, decided 2026-08-09 rather than left to be discovered.** Artwork
+  and audio reach the browser as `<img src>` and `el.src` on an `<audio>` element
+  (`AlbumArtwork.tsx`, `WebAudioEngine.ts:227`), and a media element cannot send a header. That is
+  the visible half of the problem; the deciding half is that **two shipped features structurally
+  cannot hold a credential at all**:
+  1. **Network audio outputs.** `outputs.py:90` builds
+     `{device_stream_base_url}/api/v1/tracks/{id}/stream` and hands it to a WiiM or Sonos, which
+     fetches the audio itself. A third-party appliance will never present a Familiar token.
+  2. **Guest listeners.** `sessions.py`'s `join_guest` takes a six-character code — *"something one
+     person reads aloud to another"* — so a guest has no profile and no token by design, and then
+     streams and displays artwork.
+  Any scheme that gates media needs an escape for both, which is true of a cookie, a header and a
+  query parameter alike. Only server-minted signed URLs serve both cleanly, and **that is point 6's
+  ADR, not this one** — building them now would pay the cost of public exposure while still sitting
+  behind Tailscale.
+- **What the exemption leaks is asymmetric, and only one half matters.** A stream URL is
+  `/api/v1/tracks/{uuid}/stream`, and a v4 UUID is 122 random bits — with the rest of the API closed
+  it is a capability URL and cannot be enumerated. **Artwork is not**: `artwork.py:84` computes
+  `sha256(f"{artist}|{album}")[:16]`, so anyone can derive the hash for a guessed album and ask
+  whether this library has it. That is an oracle over the collection. **Follow-up: the artwork hash
+  is the one genuine leak this exemption leaves**, and it is separable — `<img>` is the easier of the
+  two to convert, and artwork has no WiiM equivalent forcing it open.
+- **The accepted rationale for exempting it is proportionality.** The management surface is where
+  the damage is: `/settings` returns API keys, `DELETE /profiles/{id}` removes people,
+  `PATCH /tracks/{id}/metadata` rewrites tags, `POST /library/sync` starts an eight-hour job. None of
+  that is media. Gating media is the expensive half of the work and the cheap half of the benefit.
+  **On a tailnet it is close to zero security for real feature breakage.** If Familiar is ever
+  exposed publicly, media authentication becomes mandatory — and so does everything else in point
+  6's ADR.
+- **Where execution stands, and this ADR is not finished.** Phase 1 (the token and the gate) and
+  phase 2 (clients holding it) are built. **Point 4 (CORS narrowing) is not started, point 5 (on by
+  default) is deliberately deferred, and point 2's profile allowlist — the large half — has not
+  begun.** Deferral is a scheduling judgement rather than a reversal: Familiar is local and
+  tailnet-only today, and Jeff's stated priority as of 2026-08-09 is that security is not a current
+  concern. What that costs is stated plainly so nobody reads the built half as the whole: **until
+  point 5 lands, the gap this ADR exists to close — a documented security model that the application
+  does not enforce — is still open.** A token that is off by default is a capability, not a control.
 - **TLS stays out of scope, deliberately.** The application enforces none today; Tailscale provides
   it. Making Familiar safe to expose *without* Tailscale would pull termination, certificates and
   renewal into the product, which is the step from music player to hosting product that
