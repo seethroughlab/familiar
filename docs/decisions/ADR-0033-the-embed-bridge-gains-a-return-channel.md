@@ -11,6 +11,15 @@ Amends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5 
 [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) point 4.
 
 Implementation:
+- **The channel is built** (`familiar-apple` #87, `familiar` #88, 2026-08-08). Points 1–5, 9, 13 and
+  14 shipped; the visualizer runs embedded on the Mac, drawing from the native FFT.
+- **Point 11 became moot rather than being implemented, and that is the most useful thing this ADR
+  learned.** It planned a second *server-hosted* document with its own marker, probe and route. The
+  page renders entirely from bridge data, so hosting it remotely bought nothing — and cost exactly
+  what it cost: a container restart reverted the route, the SPA fallback answered with the whole web
+  app, and a screen drawing from local data broke. The document now ships in the app bundle
+  (ADR-0034 point 4), read over a custom URL scheme, and the marker, the probe and the route are all
+  gone with the network.
 - **Accepted 2026-08-08.** Points 1–4 and 7–11 — the channel and the second embedded document — are
   not built. What is accepted is the direction: the visualizer becomes an embedded surface fed by
   the native FFT, rather than staying web-only or being rebuilt natively.
@@ -311,6 +320,15 @@ hold; not yet diagnosed"* — and CI never reported it because the iOS job ends
 
    So the original intent survives intact — one tuned implementation, on the page — and it survives
    *because* the sequence crosses rather than a single spectrum.
+
+   **Built 2026-08-08, and the sequence is of flux values rather than spectra.** The page needs
+   onset *strength* over time, not the spectra themselves — it only ever differenced them to get
+   here — so the frame carries one spectrum plus four flux values instead of four spectra. Same
+   43 Hz resolution, ~1 KB against ~4 KB, and every tuned constant still on the page:
+   `FLUX_EMA_ALPHA`, `ONSET_SENSITIVITY`, `ONSET_REFRACTORY_MS` and `BEAT_DECAY_MS` are untouched
+   and `applyFlux` is now the single place a flux value is thresholded, whether it arrived or was
+   differenced locally. What moved native is the subtraction, which is mechanical and unavoidable:
+   the page cannot difference spectra it never receives.
 
    The two rules that follow from carrying a sequence are points 14 and 15.
 
