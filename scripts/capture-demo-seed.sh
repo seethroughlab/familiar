@@ -42,9 +42,26 @@ command -v docker >/dev/null || { echo "docker required (for a pg16-matched pg_d
 PG_IMAGE="${PG_IMAGE:-postgres:16-alpine}"
 
 echo "→ Checking what is in there…"
+# **A failed query must not read as an empty database.** The first version of this ended in
+# `2>/dev/null || echo "0"`, so an unreachable host, a bad password or a typo in the URL all came
+# back as "0 play events" — a clean bill of health for a database it had never spoken to. It then
+# went on to dump, and the dump failed with the real error a step later. The guard has to be able to
+# tell "nothing has happened here" from "I could not ask".
+set +e
 PLAY_EVENTS=$(docker run --rm "$PG_IMAGE" \
-    psql "$NEON_URL" -t -A -c \
-    "SELECT count(*) FROM play_events" 2>/dev/null || echo "0")
+    psql "$NEON_URL" -t -A -c "SELECT count(*) FROM play_events" 2>&1)
+PSQL_STATUS=$?
+set -e
+
+if [ "$PSQL_STATUS" -ne 0 ] || ! printf '%s' "$PLAY_EVENTS" | grep -qE '^[0-9]+$'; then
+    echo >&2
+    echo "Could not read the demo database, so there is nothing to capture." >&2
+    echo "psql said:" >&2
+    printf '  %s\n' "$PLAY_EVENTS" >&2
+    echo >&2
+    echo "Check DEMO_NEON_URL — it must be a real Neon URL on the direct host." >&2
+    exit 1
+fi
 echo "   play_events: ${PLAY_EVENTS}"
 
 MAX_EVENTS="${MAX_EVENTS:-25}"
