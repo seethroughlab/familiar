@@ -60,6 +60,18 @@ Implementation:
   the shape worth remembering: the acceptance note asking for rotation *and revocation* from the
   start was right, and the danger was not that revocation would be missing but that it would appear
   to work.
+- **Acceptance note 2 is resolved: the demo server opts out explicitly, with
+  `FAMILIAR_ALLOW_UNAUTHENTICATED=1`.** Decided 2026-08-09. Point 5 would otherwise refuse to listen
+  on a non-loopback interface with no token and take
+  [ADR-0038](ADR-0038-the-demo-server-is-always-on.md)'s public instance down, failing an App Store
+  submission. The variable is set only in the demo's compose file, so **the demo declares itself
+  insecure on purpose and every other install fails closed.** Chosen over publishing a real token in
+  the App Store Connect review notes — which needs no exemption mechanism at all, but makes a
+  working credential to Jeff's demo instance a permanent published string that rotating would
+  require a metadata update to propagate. An env var is auditable in one `grep`, and a self-hoster
+  who sets it has made a choice rather than inherited a default. **The startup refusal must name the
+  variable**, or the first person to hit it will conclude the upgrade is broken rather than that it
+  is working.
 - **TLS stays out of scope, deliberately.** The application enforces none today; Tailscale provides
   it. Making Familiar safe to expose *without* Tailscale would pull termination, certificates and
   renewal into the product, which is the step from music player to hosting product that
