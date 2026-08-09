@@ -54,17 +54,24 @@ test.describe('Library Sync', () => {
       hasText: /sync/i,
     }).first();
 
-    // Only proceed if button is not disabled
-    const isDisabled = await syncButton.isDisabled();
-    if (!isDisabled) {
-      await syncButton.click();
-      // Use API polling instead of visual progress detection
-      await waitForSyncComplete(page, 30000);
+    // Wait for the button to be actionable rather than checking and then clicking.
+    // `isDisabled()` followed by `click()` is a race: a sync starting in between leaves the
+    // check saying "enabled" and the click waiting out its full actionability timeout, which
+    // is how this test failed while reporting only `<button disabled ...>`.
+    try {
+      await expect(syncButton).toBeEnabled({ timeout: 10000 });
+    } catch {
+      test.skip(true, 'A sync was already running, so this test has nothing to trigger.');
+      return;
     }
 
-    // Verify sync completed by checking status shows idle
-    // If we got here without error, sync either completed or was already idle
-    expect(true).toBe(true);
+    await syncButton.click();
+    await waitForSyncComplete(page, 30000);
+
+    // Assert the sync actually reached a terminal state, rather than asserting nothing.
+    const status = await page.request.get('/api/v1/library/sync/status');
+    expect(status.ok()).toBe(true);
+    expect(['idle', 'complete', 'completed']).toContain((await status.json()).status);
   });
 
   test('Library shows content after sync', async ({ page }) => {
