@@ -32,13 +32,22 @@ beside the analysis tap" — unachievable on macOS, and with it **point 1**.
 `NativeAudioEngine` for, so the receive path never needed the custom device. iOS can both host and
 join. **It is only the Mac's outbound path that has no route.**
 
-The judgement, which is a product one rather than a technical one: a listening-party feature that
-the machine holding the library cannot start is not worth a **44 MB** binary framework nobody here
-can rebuild, shipped inside an App Store build. Point 2 asked for that liability to be entered
-knowingly; knowing this, it is not entered.
+**And point 1's premise was wrong, independently of any of this.** It argued that "the phone is
+where listening happens, and a listening party you can only start from a desk is a party in the
+wrong room." That is not how this product is used: **the Mac desktop app is the primary place a
+session would be hosted.** Hosting is a thing you do at the machine with the library, the big
+screen and the good speakers; joining is what happens on a phone. So the platform the binary cannot
+serve is not an unfortunate half of the feature — it is the half that matters.
 
-Worth recording as an irony rather than a lesson: the Alternatives below reject *"Host only on the
-Mac, join on both"*, and the binary forces close to the exact opposite.
+The judgement is therefore a product one rather than a technical one, and it is short: if it cannot
+happen on the Mac, it is not worth pursuing now. Point 2 asked for a 44 MB binary framework nobody
+here can rebuild to be entered knowingly, shipped inside an App Store build. Knowing that it buys
+hosting only on the device where hosting is least likely, it is not entered.
+
+Worth recording rather than smoothing over: the Alternatives below reject *"Host only on the Mac,
+join on both"* on the same mistaken premise as point 1. Read today, that rejected alternative is
+closer to right than the decision was — and the binary forces almost exactly its opposite. Two
+things went wrong at once, and only one of them was WebRTC's fault.
 
 Two things this rejection does **not** say. It is not a finding against libwebrtc — the string
 `RTCAudioDeviceDelegate` appears in the macOS binary, so this reads as a packaging omission in the
@@ -47,10 +56,15 @@ not a finding against listening sessions, which work in the web app against the 
 server under [ADR-0036](ADR-0036-listening-sessions-signal-through-familiars-own-server.md), and
 which shipped.
 
-**What would reopen this:** a maintained macOS WebRTC distribution that exposes `RTCAudioDevice`, or
-a decision that iOS-only hosting is worth the dependency on its own. Either is a new ADR. The
-material below is left exactly as it was proposed — the design was sound, and if the obstacle is
-removed it is still the design.
+**What would reopen this:** a maintained macOS WebRTC distribution that exposes `RTCAudioDevice`.
+That is the one condition, and it is narrower than it was a paragraph ago — "iOS-only hosting is
+worth the dependency anyway" is *not* a route, because hosting on the phone alone is the version of
+this feature nobody asked for. A new ADR either way.
+
+The material below is left exactly as it was proposed, with one caveat now attached to it: the
+design was sound and would still be the design, **but point 1 would need rewriting even if the
+obstacle vanished tomorrow.** "Both platforms host and join" is fine as an outcome; the reasoning
+under it is not.
 
 ## Context
 
