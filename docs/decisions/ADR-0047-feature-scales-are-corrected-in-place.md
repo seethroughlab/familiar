@@ -1,6 +1,6 @@
 # ADR-0047: Feature Scales Are Corrected in Place, Not Re-Extracted
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-08
 
@@ -19,13 +19,13 @@ found the cost mostly does not need paying.** Both halves of that finding are wo
 
 ### Re-analysis is far more expensive than the ADR assumed
 
-- **`ANALYSIS_VERSION` no longer exists.** It is `FEATURES_VERSION = 8` (`backend/app/config.py:114`),
+- **`ANALYSIS_VERSION` no longer exists.** It is `FEATURES_VERSION = 8` (`backend/app/config.py:131`),
   split per phase alongside `EMBEDDING_VERSION` and `MELODIC_VERSION`. A vestigial
   `Settings.analysis_version` survives at `config.py:46` with no readers, and `CLAUDE.md`,
   `AGENTS.md` and `VERSIONING.md` still instruct bumping the old constant and show `= 3`. Anyone
   following the documented procedure today would edit a dead value and watch nothing happen.
-- **Analysis runs on one worker.** `max_analysis_workers = 1` (`config.py:88`) feeding a
-  `ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1)` (`services/background/executors.py:70-78`)
+- **Analysis runs on one worker.** `max_analysis_workers = 1` (`config.py:105`) feeding a
+  `ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1)` (`services/background/executors.py:73-78`)
   — a fresh interpreter spawn per track. Nothing anywhere sets `MAX_ANALYSIS_WORKERS`.
 - **A features pass aborts after 8 hours** (`services/tasks/library_sync.py:355`), so a full
   re-analysis is 5–10 consecutive sync runs, not one job.
@@ -46,11 +46,11 @@ Each miscalibrated feature is a **monotonic function of a scalar already in `tra
 | `swing_ratio` | onset position, gated `0.3 < x < 0.8`, default 0.5 (`analyzers.py:901-919`) | **the observed 0.300–0.800 range is the gate itself**, not the music |
 | `syncopation` | `mean(dist to 16th grid) × 4` (`analyzers.py:921-939`) | maximum possible min-distance is 0.125, so it **cannot exceed ~0.5 by construction** |
 | `harmonic_complexity` | chord changes per bar, unscaled (`analyzers.py:297-298`) | unbounded; observed max 14.0 while its neighbours claim 0–1 |
-| `brightness` | `min(centroid / 8000, 1.0)` (`analyzers.py:1121-1123`) | while `analysis.py:632` uses `centroid/(sr/2)*2` for valence's own brightness term — **two brightness scales in one codebase** |
+| `brightness` | `min(centroid / 8000, 1.0)` (`pipeline.py:114`) | while `analysis.py:640-641` uses `centroid/(sr/2)*2` for valence's own brightness term — **two brightness scales in one codebase** |
 
 None of these requires touching audio. There is precedent for the correction living in code rather
 than in the data: **`valence` already applies a post-hoc rescaler**, `sign(c)·|c|^0.6 · 1.8` at
-`analysis.py:661`, for exactly this reason.
+`analysis.py:670`, for exactly this reason.
 
 ### The one genuine exception
 
@@ -79,10 +79,30 @@ measured. Fixing it means re-extraction, which makes it a cost decision rather t
    difference. The same declaration is what [ADR-0046](ADR-0046-audio-features-are-filtered-by-percentile.md)
    point 7 already needs to detect a degenerate feature, so it is one mechanism, not two.
 
-4. **The two brightness formulas are reconciled to one.** `analyzers.py:1121` divides the spectral
-   centroid by a fixed 8 kHz; `analysis.py:632` divides by `sr/2` and doubles it. They disagree for
-   every track, and one of them feeds a stored column while the other feeds `valence`. Which
-   survives is an implementation choice; **having two is not**.
+4. **The three brightness scales are reconciled to one, and `/8000` is the one that survives.**
+   `pipeline.py:114` stores `min(centroid_hz / 8000, 1.0)`; `analysis.py:640-641` feeds valence
+   `clip(centroid / (sr/2) × 2, 0, 1)`. At 44.1 kHz those denominators are 8,000 and 22,050 — the
+   same track scores roughly 2.75× apart depending on which one you read. There is a third:
+   `pipeline.py:116-123` falls back to mapping the categorical `"dark"/"neutral"/"bright"` label to
+   0.1/0.5/0.9 when `centroid_hz` is missing.
+
+   **`/8000` wins, and valence changes to match.** A fixed ceiling makes brightness comparable
+   across tracks regardless of sample rate; `/(sr/2)` is more principled in the abstract and
+   sample-rate dependent in practice, so the same music at 44.1 and 48 kHz would score differently —
+   a real defect in a library assembled from mixed sources. It is also already what the stored
+   column contains, so adopting it changes no stored value, which is what point 2 exists to protect.
+
+   The saturation above 8 kHz is accepted and named: a spectral centroid above 8 kHz is rare in
+   music and the values that reach it are all "as bright as this gets".
+
+   The categorical fallback goes, or becomes the same function. Three scales is worse than two, and
+   a fallback that silently produces a coarse three-value approximation of a continuous feature is
+   the kind of thing point 3's declared range is meant to make impossible.
+
+   **Corrected from the first version of this point**, which put the `/8000` in
+   `analyzers.py:1121-1123`. It is not there — that file normalises by `sr/2` like `analysis.py`
+   does, and turns the result into a *label*. The divergence is one layer out, in the mapping from
+   analyzer output to stored column, which is exactly where nobody looks.
 
 5. **`bpm` is excluded, named, and deferred to its own decision.** It is the sole feature whose
    correction requires re-extraction, and therefore the sole one whose price is a multi-day
@@ -94,10 +114,12 @@ measured. Fixing it means re-extraction, which makes it a cost decision rather t
    have different top deciles of a perfectly scaled feature. **0046 fixes how you ask; this fixes
    what the number means.** Both are needed, and the second is not a workaround for the first.
 
-7. **The stale versioning documentation is corrected as part of this.** `CLAUDE.md`, `AGENTS.md` and
-   `VERSIONING.md` describe a constant that no longer exists. This ADR is the first work in a year
-   to depend on knowing how re-analysis is triggered, and it found the documented procedure to be
-   wrong — leaving it wrong would guarantee the next person repeats the investigation.
+7. **The stale versioning documentation was already corrected, and this point is closed.** It said
+   `CLAUDE.md`, `AGENTS.md` and `VERSIONING.md` still describe a constant that no longer exists.
+   They did when this was drafted; `2252b9a` — "docs: correct the audio-feature instructions, which
+   were wrong on both counts" (#119) — landed the same day and fixed all three. They now state that
+   there is no `ANALYSIS_VERSION` and that the constants are per phase. Kept rather than deleted so
+   the next reader knows it was checked, not overlooked.
 
 ## Alternatives Considered
 
