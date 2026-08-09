@@ -28,15 +28,25 @@ import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familia
  */
 export class NullAudioEngine implements AudioEngine {
   /**
-   * Declared here *and* registered beside the factory in `embed.tsx`, because the two are read at
-   * different times: the registration answers before anything is built, and this answers if anything
-   * ever is. They must agree, and `assertCapabilitiesMatch` says so out loud if they drift.
+   * Declared here *and* registered beside the factory in the entry point, because the two are read
+   * at different times: the registration answers before anything is built, and this answers if
+   * anything ever is. They must agree, and `assertCapabilitiesMatch` says so out loud if they drift.
+   *
+   * **Injectable because the visualizer surface needs `visualizer: true` and the same silence.**
+   * That combination looks contradictory and is the whole point: `isVisualizerAvailable()` reads
+   * this flag to decide whether to draw a visualizer at all, so a surface declaring `false` would
+   * render album art forever. What keeps ADR-0017's guarantee is not the flag but the omission —
+   * `getAnalyser` and every other optional member are still missing, and `getAudioAnalyser()` calls
+   * `existingEngine()?.getAnalyser?.()`, which cannot construct anything. So the visualizer surface
+   * says it can show a visualizer and still cannot make or analyse a sound.
    */
-  readonly capabilities: AudioEngineCapabilities = {
-    crossfade: false,
-    visualizer: false,
-    effects: 'none',
-  };
+  readonly capabilities: AudioEngineCapabilities;
+
+  constructor(
+    capabilities: AudioEngineCapabilities = { crossfade: false, visualizer: false, effects: 'none' }
+  ) {
+    this.capabilities = capabilities;
+  }
 
   // Lifecycle
   initialize(): boolean {

@@ -172,6 +172,44 @@ async def test_embed_route_serves_its_own_document_not_the_app() -> None:
     assert response.path.name == "embed.html", "the embed route must not serve index.html"
 
 
+async def test_visualizer_route_serves_its_own_document_not_the_app() -> None:
+    """And the visualizer surface must never be handed `index.html` either (ADR-0033).
+
+    Same failure as the Discover surface's, with an extra edge: this document is loaded while the
+    native app is *already playing*, so a `WebAudioEngine` arriving here would contend for the audio
+    session with audio in progress rather than merely being available to.
+    """
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from fastapi.responses import FileResponse
+
+    from app import main
+
+    with patch.object(main, "STATIC_DIR", Path(__file__).parent):
+        with patch.object(Path, "exists", lambda self: True):
+            response = await main.serve_visualizer()
+
+    assert isinstance(response, FileResponse)
+    assert response.path.name == "visualizer.html", "the visualizer route must not serve index.html"
+
+
+async def test_visualizer_route_404s_when_the_build_predates_it() -> None:
+    """A server too old to have the visualizer document says so.
+
+    The native side turns this into "redeploy the server" rather than a black screen that never
+    receives a frame — which is what a 200 with the wrong document would produce.
+    """
+    import pytest
+
+    from app import main
+    from app.api.exceptions import NotFoundError
+
+    with pytest.raises(NotFoundError) as caught:
+        await main.serve_visualizer()
+    assert caught.value.status_code == 404
+
+
 async def test_embed_route_404s_when_the_build_predates_it() -> None:
     """A server built before the embedded surface existed says so, rather than 500ing.
 

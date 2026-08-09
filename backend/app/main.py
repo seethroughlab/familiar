@@ -557,6 +557,23 @@ async def serve_embed() -> FileResponse:
     return FileResponse(embed)
 
 
+async def serve_visualizer() -> FileResponse:
+    """Serve the embedded visualizer's own document (ADR-0033).
+
+    A sibling of :func:`serve_embed`, and separate for the same reason: the SPA fallback answers any
+    unknown path with ``index.html`` — HTTP 200, the whole web app, ``WebAudioEngine`` and all. A
+    native host loading that would get a second audio engine inside a web view inside an app that is
+    already playing, which is the one thing ADR-0016 point 4 exists to prevent.
+
+    404s rather than falling through when the build predates this surface, so the app can say the
+    server is too old instead of showing a visualizer that will never receive a frame.
+    """
+    visualizer = STATIC_DIR / "visualizer.html"
+    if not visualizer.exists():
+        raise NotFoundError("This server has no embedded visualizer build.")
+    return FileResponse(visualizer)
+
+
 async def spa_fallback(full_path: str) -> FileResponse:
     """Serve index.html for SPA routing (catches all non-API routes).
 
@@ -607,9 +624,10 @@ if STATIC_DIR.exists():
         """Serve index.html for root path."""
         return FileResponse(STATIC_DIR / "index.html")
 
-    # Registered before the catch-all below, which would otherwise swallow it and hand the web view
-    # the full app.
+    # Registered before the catch-all below, which would otherwise swallow them and hand the web
+    # view the full app.
     app.get("/embed", response_model=None)(serve_embed)
+    app.get("/visualizer", response_model=None)(serve_visualizer)
 
     # SPA fallback - serve index.html for all non-API routes
     app.get("/{full_path:path}", response_model=None)(spa_fallback)

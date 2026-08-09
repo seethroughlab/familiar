@@ -100,3 +100,6 @@ AuthKey*.p8
 # and scripts/analyze-demo-library.sh; not for git).
 demo-library/
 .demo-analysis/
+
+# Intermediate output of the visualizer bundle build; the artifact is vendored into familiar-apple.
+packages/web/dist-visualizer/

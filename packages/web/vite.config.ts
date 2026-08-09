@@ -14,17 +14,19 @@ export default defineConfig({
   build: {
     manifest: true,
     rollupOptions: {
-      // Two documents, not one. `embed.html` is the embedded surface ADR-0017 gives its own entry
-      // point, and naming `index.html` here is required as soon as `input` is set at all — Vite's
-      // default single entry stops applying.
+      // Three documents, not one. `embed.html` is the embedded Discover surface ADR-0017 gives its
+      // own entry point; `visualizer.html` is the embedded visualizer ADR-0033 adds. Naming
+      // `index.html` here is required as soon as `input` is set at all — Vite's default single
+      // entry stops applying.
       //
       // Not built for Capacitor: the iOS app is the listening path (ADR-0013 point 2) and embeds
-      // nothing, so the second document would be dead weight in the bundle it ships.
+      // nothing, so the extra documents would be dead weight in the bundle it ships.
       input: isCapacitorBuild
         ? { index: resolve(__dirname, 'index.html') }
         : {
             index: resolve(__dirname, 'index.html'),
             embed: resolve(__dirname, 'embed.html'),
+            visualizer: resolve(__dirname, 'visualizer.html'),
           },
       output: {
         manualChunks(id) {

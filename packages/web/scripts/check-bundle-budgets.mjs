@@ -51,8 +51,16 @@ if (!fs.existsSync(manifestPath)) {
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const manifestEntries = Object.values(manifest);
 
-const entry = manifestEntries.find((entryMeta) => entryMeta.isEntry && entryMeta.src === 'index.html')
-  ?? manifestEntries.find((entryMeta) => entryMeta.isEntry);
+// `entry` stays the app's, so the headline metric means the same thing it always did and the
+// numbers in `bundle-metrics.json` remain comparable across builds.
+//
+// **But it is no longer the only one measured.** There are three documents now — the app, the
+// embedded Discover surface, and the embedded visualizer — and this script checked whichever came
+// first, which was fine while there was one. `allEntries` below carries the rest into the report,
+// because the visualizer is the entry that pulls `vendor-three`, the largest chunk in the build,
+// and leaving the heaviest surface unwatched is precisely backwards.
+const entries = manifestEntries.filter((entryMeta) => entryMeta.isEntry);
+const entry = entries.find((entryMeta) => entryMeta.src === 'index.html') ?? entries[0];
 
 if (!entry || !entry.file) {
   console.error('[bundle-budget] Could not resolve entry chunk from manifest.');
@@ -96,9 +104,25 @@ const topJsAssets = Array.from(jsAssets)
   .sort((a, b) => b.gzipBytes - a.gzipBytes)
   .slice(0, 10);
 
+// Every entry, measured. Reported rather than budgeted: the visualizer surface legitimately pulls
+// three.js and would fail the app's budget on day one, so a number to watch is honest where a
+// threshold picked today would just be turned off later.
+const allEntries = entries
+  .map((entryMeta) => {
+    const filePath = path.join(distDir, entryMeta.file);
+    const gzipBytes = gzipSize(filePath);
+    return { src: entryMeta.src ?? entryMeta.file, file: entryMeta.file, gzipBytes, gzipKb: toKb(gzipBytes) };
+  })
+  .sort((a, b) => b.gzipBytes - a.gzipBytes);
+
+for (const measured of allEntries) {
+  console.log(`[bundle-budget] Entry ${measured.src}: ${measured.gzipKb} kB gzip (${measured.file})`);
+}
+
 const metrics = {
   generatedAt: new Date().toISOString(),
   budgets: BUDGETS,
+  entries: allEntries,
   entry: {
     file: entry.file,
     rawBytes: fs.statSync(entryPath).size,
