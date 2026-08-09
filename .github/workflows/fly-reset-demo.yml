@@ -62,6 +62,27 @@ jobs:
             echo "::error::DEMO_DATABASE_URL_DIRECT is not set"
             failed=1
           fi
+
+          # **Every way this secret has actually been got wrong, checked up front.** All three
+          # produce a failure hours into a Sunday morning, on a job nobody is watching, with an
+          # error that reads like a broken database rather than a malformed string. They are cheap
+          # to catch here and expensive to diagnose there.
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *-pooler.*)
+              echo "::error::Points at Neon's pooler. Use the direct host — the pooler ignores search_path."
+              failed=1 ;;
+          esac
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *+asyncpg*)
+              echo "::error::Carries the +asyncpg driver prefix. That is the app's URL; psql needs a plain postgresql:// one."
+              failed=1 ;;
+          esac
+          case "$DEMO_DATABASE_URL_DIRECT" in
+            *[?\&]ssl=*)
+              echo "::error::Uses ssl= (asyncpg's spelling). psql needs sslmode=."
+              failed=1 ;;
+          esac
+
           exit $failed
 
       - name: Install postgresql-client
