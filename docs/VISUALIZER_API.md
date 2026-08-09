@@ -601,6 +601,111 @@ registerVisualizer(
 
 ---
 
+## Drop-In Plugins
+
+Everything above describes a visualizer compiled into the app. A visualizer can also be **dropped
+in as a pre-built bundle**, with no pull request and no redeploy
+([ADR-0034](decisions/ADR-0034-visualizers-are-drop-in-bundles.md)). The component you write is
+identical — same `VisualizerProps`, same hooks, same `registerVisualizer` — only how it reaches the
+app differs.
+
+### Anatomy
+
+```
+my-visualizer/
+├── familiar-plugin.json     # the manifest
+└── dist/index.js            # the built bundle
+```
+
+```json
+{
+  "name": "Non-Places",
+  "id": "non-places",
+  "version": "0.1.0",
+  "type": "visualizer",
+  "description": "Surreal 3D models drifting through fog",
+  "main": "dist/index.js",
+  "familiar": { "apiVersion": 1 },
+  "icon": "Building2"
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `id` | yes | Lowercase letters, digits and hyphens. Must match the id your bundle registers, and must not be one of the built-ins (`reactive-terrain`, `beat-tiles`, `lyrics`, `music-video`). |
+| `name` | yes | Shown in the picker. |
+| `type` | yes | Must be `visualizer`. Library browsers are out of scope. |
+| `main` | yes | Path to the bundle, relative to this folder. It may not point outside it. |
+| `familiar.apiVersion` | yes | Must equal the version the app implements — currently **1**. A missing or mismatched value is refused before the bundle is run. |
+| `version`, `description`, `icon`, `author` | no | `icon` is a [lucide](https://lucide.dev) name, used by the web picker only. |
+
+### Building the bundle
+
+The bundle is an **IIFE**, not an ES module, and it reads `window.Familiar` at its top level:
+
+```js
+// rollup.config.js
+export default {
+  input: 'src/index.tsx',
+  output: {
+    file: 'dist/index.js',
+    format: 'iife',
+    globals: {
+      react: 'window.Familiar.React',
+      'react/jsx-runtime': 'window.Familiar.React',
+      three: 'window.Familiar.THREE',
+      '@react-three/fiber': 'window.Familiar.ReactThreeFiber',
+      '@react-three/drei': 'window.Familiar.Drei',
+    },
+  },
+  external: ['react', 'react/jsx-runtime', 'three', '@react-three/fiber', '@react-three/drei'],
+  plugins: [nodeResolve(), typescript()],
+};
+```
+
+**Externalise React, three.js, `@react-three/fiber` and `@react-three/drei` — the host provides all
+four.** This is not a size optimisation: two copies of React in one document do not work, and two
+copies of three.js in one WebGL context is a megabyte of duplicate for nothing. Nothing enforces
+this; a bundle that carries its own will break in ways that look like a host bug.
+
+```js
+const { React, THREE, ReactThreeFiber, Drei, registerVisualizer, hooks } = window.Familiar;
+const { useAudioAnalyser, getAudioData, useBeatSync, useLyricTiming, useArtworkPalette } = hooks;
+```
+
+### Installing
+
+Copy the folder into Familiar's `Visualizers` directory, then reopen the visualizer:
+
+- **macOS** — `~/Library/Application Support/Familiar/Visualizers`. Settings → Playback has a
+  **Show Visualizers Folder** button.
+- **iOS** — Files → On My iPhone → Familiar → Visualizers.
+- **Web** — not supported. A browser has no such directory, and ADR-0034 admits no third source;
+  drop-in plugins are a Mac and phone feature. Install-from-URL is deferred, not rejected.
+
+### When it does not appear
+
+**It always says why.** A plugin that is present and not loaded is listed under **Not loaded** in
+the visualizer menu (native) or the picker (web), with the reason:
+
+| Reason | Cause |
+|---|---|
+| *is not a JSON object* / *could not be read* | The manifest is malformed. |
+| *needs plugin API version N* | `familiar.apiVersion` does not match this app. |
+| *is a browser plugin* | `type` is not `visualizer`. |
+| *is a built-in visualizer* | The `id` collides with one of the four compiled in. |
+| *registered no visualizer with the id* | The bundle ran but the id it registered differs from the manifest's. |
+| *Could not read `main`* | The path is wrong, or the bundle was never built. |
+| *threw while loading* | The bundle raised at evaluation. |
+
+A folder with **no `familiar-plugin.json` at all** is ignored silently — that directory collects
+`.DS_Store` and half-unzipped archives, and complaining about each would bury the reasons above.
+
+A plugin that crashes while *rendering* falls back to the album art and is marked **failed**; it
+cannot take the visualizer down with it.
+
+---
+
 ## Contributing
 
 1. Fork the repository
@@ -610,3 +715,5 @@ registerVisualizer(
 5. Submit a PR with a screenshot or GIF
 
 See the [template README](../frontend/src/components/Visualizer/visualizers/_template/README.md) for detailed instructions.
+
+For a plugin you do not want to upstream, see **Drop-In Plugins** above — it needs no PR at all.

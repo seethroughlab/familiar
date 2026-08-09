@@ -7,6 +7,13 @@ import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
 import { useUIStore } from './stores/uiStore';
 import { installVisualizerSink } from './services/visualizerSink';
 import { useVisualizerStore } from './stores/visualizerStore';
+import { loadVisualizerPlugins } from './services/visualizerPluginHost';
+import { getVisualizers } from './components/Visualizer/types';
+// Side-effect import: registers the compile-time visualizers. **Explicit here, and before the
+// plugin loader runs**, because the loader needs their ids to refuse a drop-in plugin that would
+// otherwise overwrite one (ADR-0034). `AudioVisualizer` imports the same module, but that happens
+// at mount — far too late to be the thing the loader consults.
+import './components/Visualizer/visualizers';
 
 /**
  * Boots the embedded visualizer surface (ADR-0033).
@@ -75,7 +82,18 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
   // Only when the host did not say — `initApiOrigin` would otherwise overwrite an explicit origin
   // with an origin-relative empty string.
   const ready = api ? setApiOrigin(api) : initApiOrigin();
-  ready.then(() => {
+
+  // **Drop-in visualizers, before the first render** (ADR-0034). They have to be in the registry
+  // by the time `AudioVisualizer` looks up the chosen id, or a plugin the host was told to draw
+  // would fall back to the default on every launch and only appear after some later re-render.
+  //
+  // `catch` rather than trust: `loadVisualizerPlugins` is written never to reject, and if that ever
+  // stops being true the cost is a page that never mounts — a black rectangle with no error, which
+  // is the failure this surface produces over and over. A plugin problem must not be able to take
+  // the visualizer down with it.
+  const plugins = loadVisualizerPlugins(getVisualizers().map((v) => v.metadata.id)).catch(() => {});
+
+  Promise.all([ready, plugins]).then(() => {
     options?.onReady?.();
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
