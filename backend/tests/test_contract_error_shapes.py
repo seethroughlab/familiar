@@ -79,17 +79,16 @@ def test_library_missing_invalid_track_id_error_shape(client: TestClient) -> Non
     assert "does not exist" in response.json()["message"]
 
 
-def test_chat_no_api_key_error_shape(client: TestClient) -> None:
-    """Chat uses CurrentProfile (optional) — without API key it returns 503."""
-    response = client.post("/api/v1/chat", json={"message": "hello"})
-    assert_error_shape(response, status_code=503)
-    assert "API key" in response.json()["message"] or "not configured" in response.json()["message"]
 
+def test_invalid_profile_header_error_shape(client: TestClient) -> None:
+    """A malformed `X-Profile-ID` is a 400 with the standard envelope.
 
-def test_chat_invalid_profile_header_error_shape(client: TestClient) -> None:
-    response = client.post(
-        "/api/v1/chat",
-        json={"message": "hello"},
+    **Re-pointed from `/chat` when ADR-0043 retired it.** This never tested chat — it tests the
+    profile-header contract, and chat was simply a convenient POST. `/playlists` asserts the same
+    thing on a route that still exists.
+    """
+    response = client.get(
+        "/api/v1/playlists",
         headers={"X-Profile-ID": "not-a-uuid"},
     )
     assert_error_shape(response, status_code=400)
