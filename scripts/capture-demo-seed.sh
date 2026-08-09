@@ -119,17 +119,24 @@ fi
 DUMP_FILE="$(mktemp -t demo-seed.XXXXXX.sql)"
 trap 'rm -f "$DUMP_FILE"' EXIT
 
-# The same four tables `seed-demo-library.sh` dumps, in the same shape, so the two produce
+# The same tables `seed-demo-library.sh` dumps, in the same shape, so the two produce
 # interchangeable files. `--column-inserts` keeps it diffable and restore-order independent.
-echo "→ Dumping profiles / artist_info / tracks / track_analysis…"
+#
+# **`--strict-names` because pg_dump silently ignores a `--table` pattern that matches nothing.**
+# Both scripts asked for `artist_info`, a table that does not exist in this schema — inherited from
+# an older one — and pg_dump skipped it without a word for as long as anyone has been running this.
+# The seed looked complete. The first thing to notice was the reset job's `TRUNCATE`, which failed
+# loudly against the live database. A stale name should fail here instead, on a machine with someone
+# watching.
+echo "→ Dumping profiles / tracks / track_analysis…"
 docker run --rm "$PG_IMAGE" \
     pg_dump "$NEON_URL" \
     --data-only \
     --no-owner \
     --no-privileges \
     --column-inserts \
+    --strict-names \
     --table=profiles \
-    --table=artist_info \
     --table=tracks \
     --table=track_analysis \
     > "$DUMP_FILE"

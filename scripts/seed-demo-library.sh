@@ -69,8 +69,8 @@ docker exec "$ANALYSIS_PG_CONTAINER" pg_dump \
     --no-owner \
     --no-privileges \
     --column-inserts \
+    --strict-names \
     --table=profiles \
-    --table=artist_info \
     --table=tracks \
     --table=track_analysis \
     > "$DUMP_FILE"

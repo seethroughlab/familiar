@@ -108,15 +108,20 @@ jobs:
           # have to go first or every insert collides on its primary key.
           #
           # **Only the two roots are named, and `CASCADE` does the rest.** Listing child tables by
-          # hand is how this breaks silently later: a first draft named `favorites`, and the table is
-          # `profile_favorites`. Everything a visitor creates — play events, favourites, playlists,
-          # play history — hangs off `profiles`, and `track_analysis` hangs off `tracks`, so the
-          # cascade reaches all of it without this file having to keep a list in step with the
-          # schema.
+          # hand is how this breaks: a first draft named `favorites`, and the table is
+          # `profile_favorites`; a second named `artist_info`, which does not exist in this schema at
+          # all and took down the first real run of this job. Everything a visitor creates — play
+          # events, favourites, playlists, play history — hangs off `profiles`, and `track_analysis`
+          # hangs off `tracks`, so the cascade reaches all of it without a list to keep in step.
+          #
+          # **The `BEGIN`/`COMMIT` is what made that failure safe.** `artist_info` aborted the
+          # transaction, so nothing was truncated and the demo was untouched — a bare `TRUNCATE`
+          # would have emptied `profiles` and `tracks` first and then failed, leaving a live public
+          # server with no music and a seed that had not loaded yet.
           gunzip -c "$SEED_FILE" > /tmp/demo-seed.sql
           psql "$DEMO_DATABASE_URL_DIRECT" -v ON_ERROR_STOP=1 <<'SQL'
           BEGIN;
-          TRUNCATE profiles, tracks, artist_info RESTART IDENTITY CASCADE;
+          TRUNCATE profiles, tracks RESTART IDENTITY CASCADE;
           COMMIT;
           SQL
           psql "$DEMO_DATABASE_URL_DIRECT" -v ON_ERROR_STOP=1 -f /tmp/demo-seed.sql
