@@ -32,7 +32,12 @@ from app.db.models import Profile
 from app.db.session import async_session_maker
 from app.mcp import playback as playback_tools
 from app.mcp.guidance import GUIDANCE, INSTRUCTIONS
-from app.mcp.playback import PLAYBACK_TOOLS, add_target_property, list_players_tool
+from app.mcp.playback import (
+    PLAYBACK_TOOLS,
+    add_target_property,
+    list_players_tool,
+    now_playing_tool,
+)
 from app.services.llm.tools import MUSIC_TOOLS
 
 logger = logging.getLogger(__name__)
@@ -93,6 +98,7 @@ def exposed_tools() -> list[types.Tool]:
     # Not in MUSIC_TOOLS: the chat client never needed to ask which players it could reach,
     # because it was the player. An MCP host has to ask (ADR-0044 point 4).
     tools.append(list_players_tool())
+    tools.append(now_playing_tool())
     return tools
 
 

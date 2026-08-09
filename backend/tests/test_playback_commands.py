@@ -268,3 +268,35 @@ class TestDescription:
                 "capabilities": ["play", "queue"],
             }
         ]
+
+
+class TestCapabilityVocabulary:
+    """A closed set, so the two ends cannot quietly disagree.
+
+    Freeform strings were enough while the Mac was the only client and would have been a trap the
+    moment there were two: a client declaring "playback" where the server requires "play" matches
+    nothing, and the symptom is commands going elsewhere with no error anywhere.
+    """
+
+    def test_a_misspelled_capability_is_refused_at_subscribe(self, channel):
+        from app.services.playback_commands import UnknownCapability
+
+        with pytest.raises(UnknownCapability) as exc:
+            attach(channel, uuid4(), caps=("playback",))
+        assert "playback" in str(exc.value)
+        assert "play" in str(exc.value), "the message should show what the known names are"
+
+    def test_known_capabilities_attach_normally(self, channel):
+        from app.services.playback_commands import KNOWN_CAPABILITIES
+
+        profile = uuid4()
+        player = attach(channel, profile, caps=tuple(KNOWN_CAPABILITIES))
+        assert player.capabilities == KNOWN_CAPABILITIES
+
+    def test_a_refused_client_is_not_left_half_attached(self, channel):
+        from app.services.playback_commands import UnknownCapability
+
+        profile = uuid4()
+        with pytest.raises(UnknownCapability):
+            attach(channel, profile, caps=("play", "teleport"))
+        assert channel.players(profile) == [], "a rejected subscribe must leave nothing behind"

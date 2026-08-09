@@ -24,7 +24,11 @@ from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
 from app.api.schemas.common import UTCDateTime
 from app.db.models import PlayEvent, ProfilePlayHistory, Track
-from app.services.scrobble_dispatch import scrobble_if_earned, send_now_playing
+from app.services.scrobble_dispatch import (
+    remember_now_playing,
+    scrobble_if_earned,
+    send_now_playing,
+)
 from app.utils.time import to_naive_utc, utcnow
 
 logger = logging.getLogger(__name__)
@@ -356,7 +360,9 @@ async def record_start(
 
     Deliberately generic rather than a Last.fm endpoint: "this track just started" is a fact about
     listening, and the server is free to do more with it later — presence, listening-together, a
-    recently-started feed. Today it forwards to Last.fm as now-playing and nothing else.
+    recently-started feed. It forwards to Last.fm as now-playing, and it is also what lets an MCP
+    host answer "what am I listening to?" — the "later" this docstring anticipated, costing the
+    clients nothing because they already send this.
 
     Writes nothing. There is no database work here at all, which is why it takes no session: a
     now-playing is a claim about the present that expires in minutes, and the durable record of this
@@ -366,6 +372,8 @@ async def record_start(
     wait on it.
     """
     background_tasks.add_task(send_now_playing, profile_id=profile.id, track_id=track_id)
+    # Same reasoning as above — the caller must not wait, and this still writes nothing durable.
+    background_tasks.add_task(remember_now_playing, profile_id=profile.id, track_id=track_id)
 
 
 @router.post("/{track_id}/rejected", response_model=ListenEventResponse)

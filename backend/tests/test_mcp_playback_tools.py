@@ -212,3 +212,101 @@ class TestListPlayers:
         )
         assert result["players"] == []
         assert "nothing can play" in result["note"]
+
+
+class TestNowPlaying:
+    """Readback, using the signal ADR-0030 already gave the server.
+
+    It costs the clients nothing — they have called `POST /tracks/{id}/started` since ADR-0030
+    shipped — and it does not touch the command channel, so ADR-0044 point 1's one direction is
+    intact. The channel carries imperatives; this is a separate read of a fact the server was
+    already being told.
+    """
+
+    @pytest.mark.asyncio
+    async def test_reports_a_recent_start(self, profile):
+        from uuid import uuid4 as _uuid4
+
+        from app.services.now_playing import StartedTrack, get_registry
+
+        track_id = _uuid4()
+        get_registry().record(
+            profile,
+            StartedTrack(
+                track_id=track_id,
+                title="Teardrop",
+                artist="Massive Attack",
+                album="Mezzanine",
+                duration_seconds=330.0,
+                started_at=__import__("time").monotonic() - 30,
+            ),
+        )
+        try:
+            result = await playback_tools.handle(
+                "get_now_playing", {}, profile_id=profile, execute=None
+            )
+            assert result["playing"]["title"] == "Teardrop"
+            assert result["playing"]["started_seconds_ago"] >= 29
+            # The distinction the whole feature depends on being honest about.
+            assert result["playing"]["confidence"] == "reported_start_not_confirmed_still_playing"
+        finally:
+            get_registry().clear(profile)
+
+    @pytest.mark.asyncio
+    async def test_forgets_a_track_that_cannot_still_be_playing(self, profile):
+        """A stale answer is worse than none: a listener cannot tell it from a wrong one."""
+        import time as _time
+        from uuid import uuid4 as _uuid4
+
+        from app.services.now_playing import StartedTrack, get_registry
+
+        get_registry().record(
+            profile,
+            StartedTrack(
+                track_id=_uuid4(),
+                title="Long finished",
+                artist="Someone",
+                album=None,
+                duration_seconds=180.0,
+                started_at=_time.monotonic() - 3600,
+            ),
+        )
+        result = await playback_tools.handle(
+            "get_now_playing", {}, profile_id=profile, execute=None
+        )
+        assert result["playing"] is None
+
+    @pytest.mark.asyncio
+    async def test_says_plainly_when_nothing_started(self, profile):
+        result = await playback_tools.handle(
+            "get_now_playing", {}, profile_id=profile, execute=None
+        )
+        assert result["playing"] is None
+        assert "does not appear to be playing" in result["note"]
+
+    @pytest.mark.asyncio
+    async def test_profiles_do_not_see_each_other(self, profile):
+        import time as _time
+        from uuid import uuid4 as _uuid4
+
+        from app.services.now_playing import StartedTrack, get_registry
+
+        other = _uuid4()
+        get_registry().record(
+            profile,
+            StartedTrack(
+                track_id=_uuid4(),
+                title="Mine",
+                artist="A",
+                album=None,
+                duration_seconds=200.0,
+                started_at=_time.monotonic(),
+            ),
+        )
+        try:
+            result = await playback_tools.handle(
+                "get_now_playing", {}, profile_id=other, execute=None
+            )
+            assert result["playing"] is None
+        finally:
+            get_registry().clear(profile)

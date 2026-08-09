@@ -16,11 +16,15 @@ import logging
 import time
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import DbSession, RequiredProfile, release_connection
-from app.services.playback_commands import AttachedPlayer, get_channel
+from app.services.playback_commands import (
+    AttachedPlayer,
+    UnknownCapability,
+    get_channel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,13 +102,19 @@ async def playback_commands(
     await release_connection(db)
 
     declared = frozenset(c.strip() for c in capabilities.split(",") if c.strip())
-    player = get_channel().attach(
-        profile_id,
-        name=client,
-        platform=platform,
-        capabilities=declared,
-        now=time.monotonic(),
-    )
+    try:
+        player = get_channel().attach(
+            profile_id,
+            name=client,
+            platform=platform,
+            capabilities=declared,
+            now=time.monotonic(),
+        )
+    except UnknownCapability as exc:
+        # 400 rather than a silent partial attach: a client that misspells a capability must be
+        # told, at the moment it connects, rather than discovering later that commands it expected
+        # never arrive.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return StreamingResponse(
         _events(request, player),

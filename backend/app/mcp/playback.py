@@ -14,18 +14,20 @@ never needed it, since it was itself the player.
 from __future__ import annotations
 
 import logging
+import time
 from copy import deepcopy
 from typing import Any
 from uuid import UUID
 
 import mcp.types as types
 
+from app.services.now_playing import get_registry as get_now_playing_registry
 from app.services.playback_commands import NoPlayerAttached, get_channel
 
 logger = logging.getLogger(__name__)
 
 #: Handled here rather than dispatched to `ToolExecutor`.
-PLAYBACK_TOOLS = {"queue_tracks", "control_playback", "list_players"}
+PLAYBACK_TOOLS = {"queue_tracks", "control_playback", "list_players", "get_now_playing"}
 
 #: What a client must have declared to receive each command (ADR-0044 point 12).
 _REQUIRES = {"queue_tracks": "queue", "control_playback": "play"}
@@ -48,6 +50,23 @@ def list_players_tool() -> types.Tool:
             "if this returns nothing, playback is unavailable until the listener opens Familiar "
             "somewhere. Call this when a play or queue request reports no player attached, or "
             "when the listener has more than one device and you need to name one."
+        ),
+        input_schema={"type": "object", "properties": {}},
+    )
+
+
+def now_playing_tool() -> types.Tool:
+    return types.Tool(
+        name="get_now_playing",
+        description=(
+            "What the listener most recently started playing, if anything is still credible. "
+            "Use it before answering questions about the current track, and before 'more like "
+            "this' — it gives you a track_id you can pass straight to find_similar_tracks.\n"
+            "Read the answer carefully: the server is told when a track STARTS and is never told "
+            "when it stops, so this reports a reported start, not a confirmed state. A track "
+            "whose duration has elapsed is not reported at all rather than reported wrongly. If "
+            "it returns nothing, say the listener does not appear to be playing anything rather "
+            "than guessing."
         ),
         input_schema={"type": "object", "properties": {}},
     )
@@ -84,6 +103,20 @@ async def handle(
 ) -> dict[str, Any]:
     """Run one playback tool. `execute` runs a `ToolExecutor` tool, for track resolution."""
     channel = get_channel()
+
+    if name == "get_now_playing":
+        started = get_now_playing_registry().current(profile_id, time.monotonic())
+        if started is None:
+            return {
+                "playing": None,
+                "note": (
+                    "Nothing was reported as started recently, so the listener does not appear to "
+                    "be playing anything. The server is told when a track starts and never when "
+                    "it stops, so this is the absence of a recent start rather than a confirmed "
+                    "stop."
+                ),
+            }
+        return {"playing": started.describe(time.monotonic())}
 
     if name == "list_players":
         players = [p.describe() for p in channel.players(profile_id)]

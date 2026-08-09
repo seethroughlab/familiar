@@ -39,6 +39,10 @@ def _ctx(headers: dict[str, str] | None = None) -> SimpleNamespace:
     return SimpleNamespace(request=SimpleNamespace(headers=headers))
 
 
+#: Tools this layer adds that have no MUSIC_TOOLS entry.
+MCP_ONLY_TOOLS = {"list_players", "get_now_playing"}
+
+
 class TestToolSurface:
     def test_excludes_client_bound_and_withheld_tools(self):
         names = {t.name for t in exposed_tools()}
@@ -57,14 +61,20 @@ class TestToolSurface:
         names = {t.name for t in exposed_tools()}
         assert {"queue_tracks", "control_playback"} <= names
 
-    def test_list_players_is_added(self):
-        """Not in MUSIC_TOOLS: the chat client never had to ask, because it was the player."""
-        assert "list_players" in {t.name for t in exposed_tools()}
+    def test_mcp_only_tools_are_added(self):
+        """Neither is in MUSIC_TOOLS, and neither could have been.
+
+        `list_players` answers a question that only exists because commands go to a subscribed
+        client — the chat client never had to ask, because it *was* the player.
+        `get_now_playing` reads a fact ADR-0030 already gave the server, which the chat client
+        also never needed, for the same reason.
+        """
+        assert MCP_ONLY_TOOLS <= {t.name for t in exposed_tools()}
 
     def test_exposes_everything_else(self):
         """The surface is MUSIC_TOOLS minus exclusions, plus the MCP-only tool — never a list."""
         names = {t.name for t in exposed_tools()}
-        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED) | {"list_players"}
+        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED) | MCP_ONLY_TOOLS
         assert names == expected
 
     def test_schemas_come_from_music_tools_unchanged(self):
@@ -73,7 +83,7 @@ class TestToolSurface:
         # Each of these gains exactly one MCP-only property, covered by its own test below.
         widened = {"create_playlist_from_items", "queue_tracks", "control_playback"}
         for tool in exposed_tools():
-            if tool.name in widened or tool.name == "list_players":
+            if tool.name in widened or tool.name in MCP_ONLY_TOOLS:
                 continue
             assert tool.input_schema == by_name[tool.name]["input_schema"]
 

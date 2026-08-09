@@ -13,6 +13,33 @@ Implementation:
   push transport at all.** Not one WebSocket route exists. `useListeningSession.ts:100` opens a
   socket to `/api/v1/sessions/ws`, a route that was deleted — so a client is already calling a
   channel that is not there, which is the fourth instance of that shape found in this codebase.
+- **The server half shipped in `familiar` #121**: `GET /api/v1/playback/commands`,
+  `services/playback_commands.py`, and the MCP tools in `app/mcp/playback.py`. `queue_tracks` and
+  `control_playback` return to the surface, joined by `list_players` and `get_now_playing`.
+- **The capability vocabulary is a closed set on the server**, not the freeform strings this ADR
+  implies. Freeform was enough while the Mac was the only client and would have been a trap at the
+  second: a client declaring `"playback"` where the server requires `"play"` matches nothing, and
+  the symptom is commands going elsewhere with no error anywhere. An unknown capability is now a
+  **400 at subscribe**, which is the moment it can still be fixed cheaply.
+- **`get_now_playing` exists, and it does not reverse point 1.** Readback was asked for, and it
+  needed neither a return direction on the channel nor any client work: `POST /tracks/{id}/started`
+  has existed since [ADR-0030](ADR-0030-scrobbling-is-the-servers-job.md) point 6, every client
+  already calls it, and that ADR's own docstring anticipated exactly this — *"the server is free to
+  do more with it later — presence, listening-together, a recently-started feed."* The channel is
+  still one direction; this is a separate read of a fact the server was already being told.
+  **It is honest about what it knows**: the server hears about a start and is never told about a
+  stop, so a start is credible for the track's duration plus grace and is then forgotten rather
+  than reported stale. The answer says so, in a `confidence` field.
+- **Preferences still cannot be read back**, so the Consequences below stand unchanged: point 11
+  can set a device-local preference and nothing can ask what one currently is.
+- **Two weaknesses recorded rather than fixed.** "Most recently active" is implemented as *most
+  recently attached*, so a Mac open all evening loses to a phone just unlocked — irrelevant with
+  one device, wrong-feeling with two. And `player` targeting matches id *or* name, while names are
+  not unique.
+- **Found while writing the tests**: with zero players attached, the capability filter ran before
+  the empty check and reported "no attached player can 'play'" when the truth was that nothing was
+  running at all — a problem the listener cannot act on, in place of one they can. The empty check
+  now runs first.
 
 Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 

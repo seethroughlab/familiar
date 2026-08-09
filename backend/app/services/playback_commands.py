@@ -37,6 +37,31 @@ logger = logging.getLogger(__name__)
 #: helped by the backlog, so the oldest is dropped rather than the newest refused.
 _BUFFER = 32
 
+#: The capability vocabulary, named on the server so both ends cannot drift.
+#:
+#: Freeform strings would have been enough while the Mac is the only client, and would have been a
+#: quiet trap the moment there were two: a client declaring "playback" where the server requires
+#: "play" matches nothing, and the symptom is commands going somewhere else — or nowhere — with no
+#: error anywhere. A closed set makes that a rejection at subscribe time instead.
+KNOWN_CAPABILITIES = frozenset(
+    {
+        "play",  # transport: play, pause, next, previous
+        "queue",  # replace or extend the playback queue
+        "seek",
+        "volume",
+        "crossfade",
+        "effects",
+        "theme",
+        "visualizer",
+        "shuffle_weights",
+        "normalization",
+    }
+)
+
+
+class UnknownCapability(ValueError):
+    """A client declared a capability this server has no name for."""
+
 _ids = itertools.count(1)
 
 
@@ -88,6 +113,15 @@ class PlaybackCommandChannel:
         capabilities: frozenset[str],
         now: float,
     ) -> AttachedPlayer:
+        unknown = capabilities - KNOWN_CAPABILITIES
+        if unknown:
+            # Rejected here, loudly, rather than accepted and never matched. A capability the
+            # server has no name for can never route a command, so silence would mean a client
+            # that looks attached and cannot be reached for the thing it thinks it can do.
+            raise UnknownCapability(
+                f"Unknown capabilities: {sorted(unknown)}. "
+                f"Known: {sorted(KNOWN_CAPABILITIES)}."
+            )
         player = AttachedPlayer(
             id=f"p{next(_ids)}",
             profile_id=profile_id,
