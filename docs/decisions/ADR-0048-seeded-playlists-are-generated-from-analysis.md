@@ -1,8 +1,27 @@
 # ADR-0048: Seeded Playlists Are Generated From Analysis, Not From a Sentence
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-09
+
+Implementation:
+- Accepted 2026-08-09. Nothing is built yet.
+- **Execution order matters here, because a wrong order ships the defect this ADR exists to
+  prevent.** `familiar` #133 retires the backend chat surface and is parked as a draft on this
+  ADR: merging it before the replacement exists would leave four context-menu buttons whose
+  destination is not mounted, which is `#70`, `#74` and `#76` again. The order is:
+  1. Build `POST /api/v1/playlists/generate` and the `PLAYLIST` ranking profile.
+  2. Re-point the four seeded affordances (`ArtistDetail`, `AlbumGrid`, `FullPlayer`, `VibeMap`) at
+     it, so no button is ever orphaned even briefly.
+  3. Remove the three conversational ones (Home's prompt cards, "Help me rediscover my library",
+     Listening Ideas) together with `GET /library/discover/prompts`.
+  4. Then, and only then, the web and Swift chat retirement, and with it the provider layer, both
+     SDKs and the AI settings surface.
+- **The rejected first answer is worth keeping in view while building.** Pointing the buttons at
+  `get_radio_suggestions` was proposed and rejected on review, and the reason is a trap the
+  implementation can still fall into: the engine underneath is shared, so it is easy to end up
+  scoring transitions rather than sets by simply reusing `RADIO`'s weights. Point 4 exists for that
+  reason and is not a formality.
 
 Extends [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
 
