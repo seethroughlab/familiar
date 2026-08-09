@@ -127,9 +127,12 @@ right-clicked. ADR-0043 replaced Familiar's *chat client*; it did not argue that
 stop having features.
 
 **Keep the chat client alive just for these buttons.** Preserves everything with no new work.
-Rejected: it keeps 2,092 backend lines, both provider SDKs, the API key setting and the whole
-conversational surface alive to serve four context-menu items, and it contradicts ADR-0043's
-accepted rationale.
+Rejected because of what it keeps alive to serve four context-menu items, measured rather than
+inherited: **328 backend lines** unique to the conversation (`service.py` 118, `chat.py` 210), the
+**549-line provider layer** and both SDKs, the API key setting, and the **1,479-line web chat**,
+plus the Swift chat on two platforms. Note that ADR-0043's *"2,092 backend lines"* is the wrong
+figure to cite here — most of it is `tools.py` and `executor.py`, which MCP needs and which survive
+either way. It also contradicts ADR-0043's accepted rationale.
 
 **Generate the playlist server-side with an LLM call.** A small `complete_utility` prompt could pick
 tracks from a candidate list and name the result. Rejected because the provider layer is being
