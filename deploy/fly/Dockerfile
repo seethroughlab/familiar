@@ -1,6 +1,18 @@
-FROM node:20-alpine AS frontend-builder
+# **Match `docker/Dockerfile` exactly.** These two build definitions drifted, and the demo build
+# broke on 2026-08-09 because of it: `pnpm@latest` resolved to 11.21.0, which requires Node ≥22.13
+# and imports `node:sqlite`, a module Node 20 does not have. The release image had been on
+# `node:22-alpine` with `pnpm@10` — pinned — the whole time.
+#
+# **`pnpm@latest` in a Dockerfile is the actual defect.** It makes the build non-reproducible: the
+# same commit built successfully last month and fails today because a package manager released a
+# major version. Pinned here for the same reason the release image pins.
+#
+# ADR-0038's follow-up asks whether the demo should build from the same image the release publishes.
+# Until that is answered, these two files have to be kept in step by hand, and this is what happens
+# when they are not.
+FROM node:22-alpine AS frontend-builder
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /app
 
