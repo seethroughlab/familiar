@@ -820,3 +820,11 @@ footer a { color: var(--text-secondary); }
   justify-content: center;
   margin-top: 1.25rem;
 }
+
+/* The live demo link (ADR-0039 point 8). Sits under the requirements line rather than beside the
+   install command: someone who wants to try before installing is making a different decision, and
+   should not have to read a shell command to find that out. */
+.hero-demo {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+}

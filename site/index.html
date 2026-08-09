@@ -55,6 +55,10 @@
 curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql
 MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code></pre>
       <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed · <a href="#install">full instructions</a></p>
+      <!-- ADR-0039 point 8. Held back until ADR-0038's machine was actually up: a "try the demo"
+           button that hangs is worse than no button. Verified serving 32 tracks and streaming audio
+           before this line was written. -->
+      <p class="hero-demo">Or <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">try the live demo</a> — a real instance with 32 CC-licensed tracks, already analysed.</p>
     </div>
     <div class="nav-links">
       <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
@@ -367,15 +371,16 @@ cd familiar/docker
      it is the cheapest thing on the page — someone who read to the bottom has decided, and should
      not have to scroll back up to act on it.
 
-     **No demo link here yet, deliberately.** Point 8 says the demo gets one once ADR-0038 provides
-     a public instance. `familiar-demo.fly.dev` was still scaled to zero and timing out when this
-     was written, and a "Try the demo" button that hangs for thirty seconds is worse than no button.
-     Add it when the machine is up. -->
+     The demo link below is ADR-0039 point 8, and it was deliberately absent until the machine
+     existed: `familiar-demo.fly.dev` was scaled to zero and timing out at thirty seconds when this
+     section was first written, and a "Try the demo" button that hangs is worse than no button.
+     It went in only after the instance was verified serving 32 tracks and streaming audio. -->
 <section id="get-started" class="closing-cta">
   <h2>Get started</h2>
   <p>One <code>compose up</code> against the music you already own.</p>
   <div class="closing-cta-actions">
     <a href="#install" class="primary">Install the server</a>
+    <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">Try the demo</a>
     <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
       <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
     </a>

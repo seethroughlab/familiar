@@ -25,11 +25,16 @@ project `familiar-site` via `CF_API_TOKEN` and `CF_ACCOUNT_ID`. The workflow is 
 `pages.yml` with a job called Pages, which is presumably how the stale text survived the migration —
 the follow-up about renaming it stands, and is now the only thing keeping this from recurring.
 
-**Point 8 is deliberately half done.** The Apple clients are in the hero and in the closing call to
-action. The demo link is *not*, because `familiar-demo.fly.dev` was still scaled to zero and timing
-out at 30 seconds when this was written — a "Try the demo" button that hangs is worse than no
-button, and adding one would be the same defect this project keeps shipping. It goes in when
-[ADR-0038](ADR-0038-the-demo-server-is-always-on.md)'s machine is actually up.
+**Point 8 is done.** The Apple clients are in the hero and the closing call to action, and the demo
+link joined them once [ADR-0038](ADR-0038-the-demo-server-is-always-on.md)'s machine was up — which
+happened the same day, after a Dockerfile fix.
+
+It was absent for several hours in between, on purpose: `familiar-demo.fly.dev` was scaled to zero
+and timing out at 30 seconds, and a "Try the demo" button that hangs is worse than no button. **The
+condition for adding it was not "the deploy finished" but "the thing a visitor will do works"** —
+verified as 32 tracks over the API and a `206 Partial Content` on a range request against a track's
+stream, which is what a player actually issues. A demo that loads and cannot play is the same defect
+one screen later.
 
 **Point 4 — the illustration set — is untouched**, and the ADR's own tradeoff predicted this is the
 part most likely to be left half-done. It is not half-done; it is not started, which is the better
