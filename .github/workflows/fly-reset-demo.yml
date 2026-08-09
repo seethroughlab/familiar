@@ -90,6 +90,33 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends postgresql-client
 
+      - name: Refuse to reset a library the seed does not match
+        # **The reset is what destroys the evidence, so the check has to come first.**
+        #
+        # Nothing on the demo lets a visitor add tracks — there is no upload path. So a track count
+        # that differs from the seed means somebody deliberately changed the demo library and did
+        # not re-run `scripts/capture-demo-seed.sh`. Restoring anyway would delete that work every
+        # Sunday, silently, and the person who did it would have no way to tell why their tracks
+        # kept disappearing.
+        #
+        # This **fails rather than warns**, and so skips the reset. A week of accumulated play counts
+        # is cosmetic; deleting a deliberate change to the library is not. The failure is loud,
+        # names both numbers, and says exactly what to run.
+        env:
+          DEMO_DATABASE_URL_DIRECT: ${{ secrets.DEMO_DATABASE_URL_DIRECT }}
+        run: |
+          seed=$(gunzip -c "$SEED_FILE" | grep -c '^INSERT INTO public\.tracks ')
+          live=$(psql "$DEMO_DATABASE_URL_DIRECT" -t -A -c 'SELECT count(*) FROM tracks')
+          echo "seed: $seed tracks | live: $live tracks"
+
+          if [ "$seed" != "$live" ]; then
+            echo "::error::The demo library has $live tracks; the committed seed has $seed."
+            echo "::error::Restoring would delete the difference. If the demo is correct, re-run"
+            echo "::error::scripts/capture-demo-seed.sh and commit deploy/fly/demo-seed.sql.gz."
+            echo "::error::If the demo is wrong, reset it by hand once and this will pass again."
+            exit 1
+          fi
+
       - name: Restore
         env:
           # **The direct host, not the pooler.** Neon's pgbouncer ignores `ALTER ROLE SET

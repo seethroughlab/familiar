@@ -114,6 +114,12 @@ Then commit the file.
 have been listening bakes their play counts into the copy the reset restores — the exact thing the
 reset removes. It counts `play_events` and refuses above 25 unless you pass `ALLOW_DIRTY=1`.
 
+**If you change the demo library, re-capture.** The reset compares its track count against the live
+database *before* truncating, and refuses to run when they differ — because nothing on the demo lets
+a visitor add tracks, so a difference means somebody changed the library deliberately, and restoring
+would delete that every Sunday without saying so. The job fails with both numbers and the command to
+run. A week of accumulated play counts is cosmetic; losing a deliberate change is not.
+
 > This used to be a `DEMO_SEED_URL` secret pointing at a published dump. Nothing ever published one,
 > because `seed-demo-library.sh` wrote its dump to `mktemp` with a `trap` deleting it on exit — the
 > golden copy was destroyed every time it was made.

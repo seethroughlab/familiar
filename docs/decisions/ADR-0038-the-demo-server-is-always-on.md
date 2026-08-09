@@ -38,6 +38,18 @@ creates hangs off one of those two roots, so the cascade stays correct without a
 step. It then checks that the library is **not empty**, because a half-failed restore leaves a
 perfectly healthy server with no music — the failure a health check cannot see.
 
+**Point 5's reset was then run by hand rather than left for Sunday**, which is how two things were
+found. `TRUNCATE ... artist_info` named a table this schema does not have — inherited from
+`seed-demo-library.sh` — and pg_dump had been silently ignoring the same stale name for as long as
+anyone has run it, because a `--table` pattern matching nothing is skipped without `--strict-names`.
+The demo survived only because the truncate runs inside a transaction. Both are fixed, and the
+verified run restored 32 tracks against the live database.
+
+It also gained a gate the ADR did not anticipate: **the reset refuses to run when the demo's track
+count differs from the seed's.** Nothing on the demo lets a visitor add tracks, so a difference means
+the library was changed deliberately and never re-captured — and restoring would quietly delete that
+work every week. Checked before the truncate, because the truncate is what destroys the evidence.
+
 Point 6 is unfinished: where the review account lives is still unchosen.
 
 **Point 8 is done.** ADR-0036 shipped, so nothing pointed at `familiar-sessions.fly.dev` any more —
