@@ -99,8 +99,10 @@ the same pull request.
 Produce or refresh it two ways:
 
 ```bash
-# From the live demo — seconds, and the usual case.
-DEMO_NEON_URL=postgresql://...  ./scripts/capture-demo-seed.sh
+# From the live demo — seconds, and the usual case. Reads the app's own secret, so there is no
+# password to retype: the script strips `+asyncpg` and translates `ssl=` to `sslmode=` itself.
+DEMO_NEON_URL="$(flyctl ssh console -a familiar-demo -C 'printenv DATABASE_URL' \
+  | tr -d '\r' | sed 's/-pooler//')" ./scripts/capture-demo-seed.sh
 
 # From scratch, when the library itself changes — hours, needs the analysis stack.
 ./scripts/seed-demo-library.sh
