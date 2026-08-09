@@ -1,6 +1,6 @@
 # ADR-0042: The Phone Gets a Persistent Tab Bar
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-07
 
@@ -49,6 +49,31 @@ platform-shaped navigation no longer applies.
 More opens a sheet holding Tracks, Albums, Music Map, Discover, Changes, Downloads and Settings.
 That is the arrangement being asked for, and copying its *shape* while choosing our own contents is
 the same move ADR-0018 made when the phone adopted the Mac's arrangement rather than its layout.
+
+**ADR-0018 rejected a tab bar by name, and that rejection has to be answered rather than stepped
+around.** Its Alternatives say:
+
+> **A tab bar.** The most conventional iOS answer, and the one Apple Music uses. Rejected because it
+> has the same ceiling as the picker — five tabs before it collapses into "More" — and this exists to
+> hold seven destinations now and more later. It would also be a third arrangement, agreeing with
+> neither the picker it replaces nor the Mac.
+
+Both halves are addressed, and neither by disagreeing with the reasoning as it stood.
+
+The ceiling is real and is **not a failure mode — it is the design**. "Collapses into More" describes
+the web app, which has shipped `Home / Artists / Favorites / Chat / More` with seven destinations
+behind More for as long as the phone has had a picker. A tab bar does not stop working at five; it
+stops putting things one tap away at five, which is the same trade every navigation makes and one
+this ADR takes deliberately — four tabs for the destinations that earn a permanent slot, the
+remaining seven one tap deeper, in the list ADR-0018 designed and point 3 keeps intact. The picker's
+ceiling was different in kind: it had no More, so a destination that did not fit was simply absent,
+which is why Discover was missing.
+
+The "third arrangement" objection has since dissolved on its own. It was written when the phone's
+picker and the Mac's sidebar were the only two arrangements and the iOS 15 floor made a third
+expensive. The floor is 17, the web app's tab bar is the arrangement a listener most likely already
+knows, and after this there are two: a sidebar on the Mac and a tab bar everywhere else. That is
+fewer than today, not more.
 
 ## Decision
 
