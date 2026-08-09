@@ -88,6 +88,12 @@ class ToolExecutor(
             # Web page reading tools
             "fetch_webpage": self._fetch_webpage,
             "create_playlist_from_items": self._create_playlist_from_items,
+            "list_playlists": self._list_playlists,
+            "get_playlist": self._get_playlist,
+            "add_tracks_to_playlist": self._add_tracks_to_playlist,
+            "set_favorite": self._set_favorite,
+            "get_recently_played": self._get_recently_played,
+            "get_radio_suggestions": self._get_radio_suggestions,
             # Track identification tools
             "identify_track": self._identify_track,
             # Analysis tools

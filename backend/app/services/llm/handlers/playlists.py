@@ -21,7 +21,147 @@ logger = logging.getLogger(__name__)
 
 
 class PlaylistHandlersMixin:
-    """Mixin providing playlist-related tool handlers."""
+    """Mixin providing playlist-related tool handlers.
+
+    The read and append handlers below **call the route functions directly** rather than repeating
+    their queries. That is already how this codebase composes them — `crud.py` and `tracks.py` call
+    each other the same way — and it keeps one implementation of dedupe, ordering and the ownership
+    check. The only adaptation needed is loading the `Profile`: routes take the ORM object, and a
+    tool handler holds only `self.profile_id`.
+    """
+
+    async def _profile(self: "ToolExecutor") -> Any:
+        """The `Profile` row the route functions expect."""
+        from app.db.models import Profile
+
+        return await self.db.get(Profile, self.profile_id)
+
+    async def _list_playlists(
+        self: "ToolExecutor",
+        include_auto: bool = True,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """The listener's playlists, most recently updated first."""
+        from app.api.routes.playlists.crud import list_playlists
+
+        profile = await self._profile()
+        if profile is None:
+            return {"error": "No profile is bound to this session."}
+
+        # `include_auto` is passed explicitly: the route defaults it with `Query(...)`, which
+        # arrives as a FastAPI object rather than a bool when the function is called directly.
+        playlists = await list_playlists(self.db, profile, include_auto=include_auto)
+
+        # Bounded here because the route is not. It paginates in a UI; a tool result cannot, and a
+        # library with hundreds of auto-generated playlists would bury the answer.
+        shown = [p.model_dump(mode="json") for p in playlists[:limit]]
+        result: dict[str, Any] = {"playlists": shown, "count": len(shown)}
+        if len(playlists) > limit:
+            result["note"] = (
+                f"Showing {limit} of {len(playlists)} playlists, most recently updated first."
+            )
+        return result
+
+    async def _get_playlist(self: "ToolExecutor", playlist_id: str) -> dict[str, Any]:
+        """One playlist and the tracks on it, in order."""
+        from app.api.exceptions import PlaylistNotFoundError
+        from app.api.routes.playlists.crud import get_playlist
+
+        profile = await self._profile()
+        if profile is None:
+            return {"error": "No profile is bound to this session."}
+        ids = self._safe_parse_uuids([playlist_id])
+        if not ids:
+            return {"error": f"{playlist_id!r} is not a valid playlist id."}
+
+        try:
+            detail = await get_playlist(ids[0], self.db, profile)
+        except PlaylistNotFoundError:
+            # Caught rather than raised: the executor's catch-all would render an HTTP exception,
+            # which tells the model nothing it can act on. "No such playlist" is actionable.
+            return {"error": f"No playlist {playlist_id} belongs to this listener."}
+        return detail.model_dump(mode="json")
+
+    async def _add_tracks_to_playlist(
+        self: "ToolExecutor",
+        playlist_id: str,
+        track_ids: list[str],
+    ) -> dict[str, Any]:
+        """Append tracks to a playlist that already exists."""
+        from app.api.exceptions import PlaylistNotFoundError
+        from app.api.routes.playlists.tracks import add_tracks_to_playlist
+
+        profile = await self._profile()
+        if profile is None:
+            return {"error": "No profile is bound to this session."}
+        ids = self._safe_parse_uuids([playlist_id])
+        if not ids:
+            return {"error": f"{playlist_id!r} is not a valid playlist id."}
+        if not track_ids:
+            return {"error": "No track ids were given."}
+
+        before = len(await self._playlist_track_ids(ids[0]))
+        try:
+            detail = await add_tracks_to_playlist(
+                ids[0], self.db, profile, track_ids=track_ids
+            )
+        except PlaylistNotFoundError:
+            return {"error": f"No playlist {playlist_id} belongs to this listener."}
+
+        # Summarised rather than returned whole: the route re-reads the entire playlist, which for
+        # a long one is far more than the model asked for or needs.
+        added = len(detail.tracks) - before
+        return {
+            "playlist_id": str(detail.id),
+            "name": detail.name,
+            "added": added,
+            "track_count": len(detail.tracks),
+            "note": (
+                f"Added {added} of {len(track_ids)} requested; the rest were already on the "
+                f"playlist or matched no track."
+                if added < len(track_ids)
+                else f"Added {added} tracks."
+            ),
+        }
+
+    async def _playlist_track_ids(self: "ToolExecutor", playlist_id: UUID) -> list[UUID]:
+        """Current members, for reporting how many an append actually added."""
+        rows = await self.db.execute(
+            select(PlaylistTrack.track_id).where(PlaylistTrack.playlist_id == playlist_id)
+        )
+        return list(rows.scalars().all())
+
+    async def _set_favorite(
+        self: "ToolExecutor",
+        track_id: str,
+        favorite: bool = True,
+    ) -> dict[str, Any]:
+        """Mark or unmark a track as a favourite.
+
+        **Set semantics, deliberately not a toggle.** `_toggle_local_favorite` is the obvious thing
+        to reuse — it is the only function in that module taking a raw `profile_id` — and it is the
+        wrong primitive here: a tool call that is retried, which happens routinely, would flip the
+        state back, so asking twice to favourite something would un-favourite it. `add_favorite` and
+        `remove_favorite` are already idempotent, which is what a retryable tool needs.
+        """
+        from app.api.exceptions import TrackNotFoundError
+        from app.api.routes.favorites import add_favorite, remove_favorite
+
+        profile = await self._profile()
+        if profile is None:
+            return {"error": "No profile is bound to this session."}
+        ids = self._safe_parse_uuids([track_id])
+        if not ids:
+            return {"error": f"{track_id!r} is not a valid track id."}
+
+        try:
+            if favorite:
+                await add_favorite(ids[0], self.db, profile)
+            else:
+                await remove_favorite(ids[0], self.db, profile)
+        except TrackNotFoundError:
+            return {"error": f"No track {track_id} is in the library."}
+        return {"track_id": track_id, "is_favorite": favorite}
 
     async def _select_diverse_tracks(
         self: "ToolExecutor",

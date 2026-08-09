@@ -25,7 +25,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "find_similar_tracks",
-        "description": "Find tracks sonically similar to a given track, using audio embeddings. Great for 'play more like this' requests.",
+        "description": "Find tracks that SOUND like a given track — nearest neighbours in the audio embedding space, and nothing else. Use it for 'what else sounds like this?'. For a listening session rather than a similarity list, prefer get_radio_suggestions, which adds this listener's taste and what they have skipped.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -614,6 +614,121 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             },
             "required": ["url"]
         }
+    },
+    {
+        "name": "list_playlists",
+        "description": (
+            "List this listener's playlists, most recently updated first. Call this BEFORE "
+            "creating a playlist when they refer to one they already have — 'add these to my "
+            "Ambient playlist' needs its id, and creating a second playlist with the same name is "
+            "not what was asked for."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "include_auto": {
+                    "type": "boolean",
+                    "description": "Include auto-generated playlists. Default true.",
+                },
+                "limit": {"type": "integer", "description": "Maximum playlists to return."},
+            },
+        },
+    },
+    {
+        "name": "get_playlist",
+        "description": (
+            "The tracks on one playlist, in order. Use it to see what is already there before "
+            "adding, and to check what you just created."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "playlist_id": {"type": "string", "description": "Playlist UUID, from list_playlists."},
+            },
+            "required": ["playlist_id"],
+        },
+    },
+    {
+        "name": "add_tracks_to_playlist",
+        "description": (
+            "Append tracks to a playlist that already exists. Tracks already on the playlist are "
+            "skipped, so this is safe to repeat. Use this rather than create_playlist_from_items "
+            "whenever the listener names a playlist they already have."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "playlist_id": {"type": "string", "description": "Playlist UUID, from list_playlists."},
+                "track_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Local track UUIDs to append.",
+                },
+            },
+            "required": ["playlist_id", "track_ids"],
+        },
+    },
+    {
+        "name": "set_favorite",
+        "description": (
+            "Mark or unmark a track as a favourite. Setting, not toggling: calling it twice with "
+            "the same value leaves the track in that state, so it is safe to retry. To read "
+            "favourites, use filter_tracks with is_favorite."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "track_id": {"type": "string", "description": "Local track UUID."},
+                "favorite": {
+                    "type": "boolean",
+                    "description": "True to favourite, false to un-favourite. Default true.",
+                },
+            },
+            "required": ["track_id"],
+        },
+    },
+    {
+        "name": "get_recently_played",
+        "description": (
+            "What this listener has actually played, newest first, one entry per play. Use it for "
+            "'what have I been listening to?' and to ground recommendations in recent listening "
+            "rather than all-time counts. Each entry carries an outcome: a skip is a much weaker "
+            "signal of liking something than a completed play. For all-time favourites use "
+            "filter_tracks with sort_by play_count instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Maximum plays to return, up to 100."},
+                "days": {
+                    "type": "integer",
+                    "description": "Only plays within this many days. Omit for the most recent regardless of age.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_radio_suggestions",
+        "description": (
+            "Familiar's own recommender, seeded from one track — what to play NEXT. Unlike "
+            "find_similar_tracks, which is pure sonic similarity, this also weighs this listener's "
+            "taste and the tracks they have skipped, so it is the better choice for building a "
+            "listening session. Needs a seed track id: get one from get_now_playing, "
+            "identify_track, or a previous search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "seed_track_id": {"type": "string", "description": "Local track UUID to seed from."},
+                "limit": {"type": "integer", "description": "How many suggestions, up to 20."},
+                "profile": {
+                    "type": "string",
+                    "enum": ["radio", "ambient"],
+                    "description": "'radio' follows taste more strongly; 'ambient' favours continuity and low disruption.",
+                },
+            },
+            "required": ["seed_track_id"],
+        },
     },
     {
         "name": "create_playlist_from_items",
