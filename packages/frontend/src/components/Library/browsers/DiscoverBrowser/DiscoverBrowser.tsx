@@ -9,7 +9,7 @@
  * - Deep cuts (existing)
  * - External artists to explore (existing)
  */
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Music,
@@ -20,7 +20,6 @@ import { queryKeys } from '../../../../api/queryKeys';
 import { STALE_TIME } from '../../../../api/queryDefaults';
 import type { BrowserProps } from '../../types';
 import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
-import { useUIStore } from '../../../../stores/uiStore';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
@@ -32,7 +31,6 @@ import { ListeningProfileSection } from './ListeningProfileSection';
 
 export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
   const discoverNavigate = useNavigate();
-  const queryClient = useQueryClient();
   const { isOffline } = useOfflineStatus();
 
   const { data, isLoading, error, refetch } = useQuery({

@@ -1,19 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowDown,
   ArrowUp,
-  Brain,
   Compass,
   Heart,
   Home,
   Library,
   Loader2,
-  MessageSquare,
   Music2,
   Play,
-  RefreshCw,
   Settings2,
   Sparkles,
   Waves,
@@ -37,7 +34,6 @@ import { useUIStore } from '../../stores/uiStore';
 
 const MODULE_LABELS: Record<HomeModuleId, string> = {
   resume: 'Resume / Continue',
-  prompts: 'Prompt Onramp',
   'quick-picks': 'Quick Picks',
   discovery: 'Discovery Preview',
   'library-shortcuts': 'Library Shortcuts',
@@ -111,7 +107,6 @@ function ActionPill({
 
 export function HomeScreen() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const resolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const { isOffline } = useOfflineStatus();
   const { total: favoritesCount } = useFavorites();
@@ -211,7 +206,6 @@ export function HomeScreen() {
     setShowFullPlayer(true);
   };
 
-  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
 
 
   const renderModule = (moduleId: HomeModuleId) => {

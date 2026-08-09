@@ -1,4 +1,3 @@
-import { useUIStore } from '../../stores/uiStore';
 /**
  * Context menu for track actions.
  *
@@ -79,7 +78,6 @@ export function TrackContextMenu({
   onDownloadSelectedAnalyses,
   onClearSelection,
 }: TrackContextMenuProps) {
-  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
   const { downloadAnalysis } = useAnalysis();
 
   const handleAction = (action: () => void) => {
@@ -253,14 +251,19 @@ export function TrackContextMenu({
 
       <MenuDivider />
 
-      {/* AI Actions. Absent without a provider: this item only ever opens the chat panel. */}
-      {chatAvailable && (
-        <MenuItem
-          icon={<Sparkles className="w-4 h-4" />}
-          label="Make Playlist From This..."
-          onClick={() => handleAction(onMakePlaylist)}
-        />
-      )}
+      {/*
+        **No longer gated on a chat provider** (ADR-0048). This used to open the chat panel, so it
+        was correctly hidden without one; it now posts a structured seed to
+        `POST /playlists/generate`, which is scored from the library's own analysis and works on a
+        server with no model at all. Leaving the gate would have hidden the button precisely where
+        the ADR promises it still works — a mounted destination with no affordance, which is the
+        `#70`/`#74`/`#76` defect inverted.
+      */}
+      <MenuItem
+        icon={<Sparkles className="w-4 h-4" />}
+        label="Make Playlist From This..."
+        onClick={() => handleAction(onMakePlaylist)}
+      />
     </ContextMenuContainer>
   );
 }
