@@ -169,7 +169,38 @@ interface AudioAnalysisData {
   mid: number;                  // 0-1, mid frequency intensity
   treble: number;               // 0-1, high frequency intensity
   averageFrequency: number;     // 0-255, overall intensity
+  beat: number;                 // 0-1, decaying envelope; spikes to 1 on a detected onset
+  onset: boolean;               // true only on the frame an onset is detected
 }
+```
+
+### `beat` and `onset`
+
+**These were undocumented for a long time while two shipping visualizers used them**, so if you have
+read this file before and not seen them, that is why rather than because they are new.
+
+`beat` is an envelope, not a flag: it jumps to 1 when a transient is detected and falls linearly to
+0 over ~230 ms. Multiply things by it. It is the right choice for anything continuous — a scale, an
+intensity, a camera nudge — and it degrades gracefully, because a missed onset just means a smaller
+number.
+
+`onset` is true for **exactly one frame**. Use it to *start* something — spawn a ripple, flip a
+tile — and read it every frame if you do, because a consumer that samples less often than the
+analyser can miss it entirely.
+
+Both come from spectral flux against an adaptive threshold: energy appearing across the spectrum,
+compared to a running average of how much has been appearing lately. There is no tempo model and no
+beat grid behind them, so they respond to *events* rather than to a pulse. On music with a strong
+regular beat that amounts to the same thing; on rubato or free time it does not, and nothing here
+will pretend otherwise.
+
+**Timing.** In a browser these lag the audio by roughly 40–60 ms — an FFT window plus smoothing plus
+a frame. Inside the native apps the audio arrives from a different process and the lag is closer to
+120–140 ms. That is inherent to reacting rather than predicting: nothing can respond to a transient
+before it has heard it. If you are building something where being exactly on the beat matters more
+than reacting to what actually happened, this is the wrong signal for it.
+
+```typescript
 ```
 
 **Example:**
@@ -241,6 +272,12 @@ function MyVisualizer({ artworkUrl }: VisualizerProps) {
 ```
 
 ### useBeatSync
+
+**Not recommended, and documented here mainly so you know why it is not.** It is a pure metronome
+over `bpm`: it assumes the first beat is at `t=0`, which is true of almost no recording, and it is
+driven by `currentTime`, which updates about four times a second — so its `onBeat` window at 120 BPM
+is narrower than the interval between updates and it misses most beats. No shipping visualizer uses
+it. Prefer `beat` from `useAudioAnalyser` above.
 
 Synchronize animations with detected BPM.
 
