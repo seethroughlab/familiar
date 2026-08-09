@@ -22,9 +22,9 @@ import { useQuery } from '@tanstack/react-query';
 import { libraryApi, tracksApi, type MapNode } from '../../../../api';
 import { STALE_TIME } from '../../../../api/queryDefaults';
 import { registerBrowser, type BrowserProps } from '../../types';
-import { useUIStore } from '../../../../stores/uiStore';
 import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
 import { usePreviewAudio } from '../../../../hooks/usePreviewAudio';
+import { useGeneratePlaylist } from '../../../../hooks/useGeneratePlaylist';
 
 // How many artists to ask for — the server's maximum.
 //
@@ -97,6 +97,7 @@ export function VibeMap({ onGoToArtist }: BrowserProps) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { generate: generatePlaylist } = useGeneratePlaylist();
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   // View state
@@ -535,12 +536,16 @@ export function VibeMap({ onGoToArtist }: BrowserProps) {
 
   const handleCreatePlaylist = useCallback(() => {
     if (selectedArtists.size === 0) return;
-    const artistList = Array.from(selectedArtists)
-      .map((id) => nodeById.get(id)?.name ?? id)
-      .join(', ');
-    useUIStore.getState().triggerChat(`Create a playlist from these artists: ${artistList}`);
+    // ADR-0048. The map's selection is a set of **artist names**, which is why the endpoint accepts
+    // `artists` — the ADR describes this as `track_ids`, and it is not. Sending names keeps the
+    // centroid on the server (point 3) instead of resolving hundreds of ids here first.
+    const names = Array.from(selectedArtists)
+      .map((id) => nodeById.get(id)?.name)
+      .filter((name): name is string => Boolean(name));
+    if (names.length === 0) return;
+    void generatePlaylist({ artists: names });
     setSelectedArtists(new Set());
-  }, [selectedArtists, nodeById]);
+  }, [selectedArtists, nodeById, generatePlaylist]);
 
   if (isOffline) {
     return (

@@ -1,19 +1,13 @@
-"""Tests for Anthropic model unification and literal-model guardrails."""
+"""Anthropic model unification and the literal-model guardrail.
+
+The curated-prompts test that lived here went with `GET /library/discover/prompts` in ADR-0048
+step 3 — it asserted that endpoint routed through `complete_utility`, and neither exists now.
+What remains is `models.py` itself, which step 4 removes along with the rest of the provider layer.
+"""
 
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from app.api.routes.library_discover import get_curated_prompts
 from app.services.llm.models import get_anthropic_model
-
-
-def _fake_execute_result(rows: list[object]) -> MagicMock:
-    result = MagicMock()
-    result.fetchall.return_value = rows
-    return result
 
 
 class TestAnthropicModelSelection:
@@ -41,44 +35,3 @@ class TestAnthropicModelSelection:
                 offenders.append(str(path))
 
         assert offenders == []
-
-
-@pytest.mark.asyncio
-async def test_curated_prompts_routes_through_provider_utility() -> None:
-    """Curated prompts should route through the active provider's utility call."""
-    db = AsyncMock()
-    db.execute.side_effect = [
-        _fake_execute_result([SimpleNamespace(genre="Ambient"), SimpleNamespace(genre="Electronic")]),
-        _fake_execute_result([SimpleNamespace(name="Boards of Canada"), SimpleNamespace(name="Autechre")]),
-    ]
-    db.scalar.side_effect = [2400, 48]
-
-    with patch("app.api.routes.library_discover.get_redis") as mock_redis:
-        cache = MagicMock()
-        cache.get.return_value = None
-        mock_redis.return_value = cache
-
-        with patch("app.api.routes.library_discover.get_app_settings_service") as mock_settings:
-            settings = MagicMock()
-            settings.is_active_provider_configured.return_value = True
-            mock_settings.return_value = settings
-
-            with patch("app.api.routes.library_discover.get_provider") as mock_get_provider:
-                mock_provider = MagicMock()
-                mock_provider.complete_utility = AsyncMock(
-                    return_value=(
-                        '[{"prompt":"Help me rediscover my library.",'
-                        '"context":"A familiar way back in.","icon":"music"}]'
-                    )
-                )
-                mock_get_provider.return_value = mock_provider
-
-                response = await get_curated_prompts(
-                    db=db,
-                    profile=SimpleNamespace(id="profile-123"),
-                    refresh=True,
-                )
-
-    assert response.prompts[0].prompt == "Help me rediscover my library."
-    mock_provider.complete_utility.assert_called_once()
-    assert mock_provider.complete_utility.call_args.kwargs["max_tokens"] == 600

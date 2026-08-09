@@ -56,17 +56,16 @@ describe('homeStore', () => {
   it('maintains independent preferences per profile and restores defaults on reset', () => {
     const { setModuleEnabled, moveModule, resetPreferences } = useHomeStore.getState();
 
-    setModuleEnabled('profile-a', 'prompts', false);
+    setModuleEnabled('profile-a', 'quick-picks', false);
     moveModule('profile-a', 'discovery', 'up');
 
     const profileAPreferences = getHomePreferences(
       'profile-a',
       useHomeStore.getState().preferencesByProfile
     );
-    expect(profileAPreferences.enabled.prompts).toBe(false);
+    expect(profileAPreferences.enabled['quick-picks']).toBe(false);
     expect(profileAPreferences.order).toEqual([
       'resume',
-      'prompts',
       'discovery',
       'quick-picks',
       'library-shortcuts',
@@ -76,10 +75,9 @@ describe('homeStore', () => {
     expect(
       getHomePreferences('profile-a', useHomeStore.getState().preferencesByProfile)
     ).toEqual({
-      order: ['resume', 'prompts', 'quick-picks', 'discovery', 'library-shortcuts'],
+      order: ['resume', 'quick-picks', 'discovery', 'library-shortcuts'],
       enabled: {
         resume: true,
-        prompts: true,
         'quick-picks': true,
         discovery: true,
         'library-shortcuts': true,
@@ -91,7 +89,6 @@ describe('homeStore', () => {
     const { setModuleEnabled } = useHomeStore.getState();
 
     setModuleEnabled('profile-a', 'resume', false);
-    setModuleEnabled('profile-a', 'prompts', false);
     setModuleEnabled('profile-a', 'quick-picks', false);
     setModuleEnabled('profile-a', 'discovery', false);
     setModuleEnabled('profile-a', 'library-shortcuts', false);

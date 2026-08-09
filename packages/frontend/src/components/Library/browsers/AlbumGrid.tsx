@@ -32,6 +32,7 @@ import { getOfflineTrackIds, removeOfflineTrack } from '../../../services/offlin
 import { useGridColumns } from '../../../hooks/useGridColumns';
 import { useScrollContainer } from '../../../hooks/useScrollContainer';
 import { getDownloadedAlbumsPage } from '../../../services/libraryCache';
+import { useGeneratePlaylist } from '../../../hooks/useGeneratePlaylist';
 
 const PAGE_SIZE = 50;
 
@@ -56,6 +57,7 @@ export function AlbumGrid({
   onGoToYear,
 }: BrowserProps) {
   const { isOffline } = useOfflineStatus();
+  const { generate: generatePlaylist } = useGeneratePlaylist();
   const [isMobileViewport, setIsMobileViewport] = useState(
     () => typeof window !== 'undefined' ? !window.matchMedia('(min-width: 768px)').matches : false
   );
@@ -624,8 +626,9 @@ export function AlbumGrid({
           onMakePlaylist={() => {
             if (albumContextMenu.album) {
               const album = albumContextMenu.album;
-              const message = `Make me a playlist based on the album "${album.name}" by ${album.artist}`;
-              useUIStore.getState().triggerChat(message);
+              // ADR-0048: the seed, not a sentence about the seed. `artist` disambiguates —
+              // "Greatest Hits" is not one album.
+              void generatePlaylist({ album: album.name, artist: album.artist });
             }
           }}
         />

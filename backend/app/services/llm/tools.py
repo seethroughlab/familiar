@@ -128,6 +128,60 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "generate_playlist",
+        "description": (
+            "Build a playlist from a seed — a track, an album, an artist, or an explicit set of "
+            "tracks — using the library's audio analysis. This is the same implementation the app's "
+            "'Make a playlist' menu items call (ADR-0048), so a host and the app produce identical "
+            "results. Prefer this over composing a playlist by hand from search results: it scores "
+            "the whole library by embedding similarity plus this listener's taste, and enforces "
+            "artist and album diversity. The seed material is excluded from the result unless "
+            "include_seed is set. Provide exactly one seed."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "track_id": {
+                    "type": "string",
+                    "description": "UUID of a single seed track"
+                },
+                "album": {
+                    "type": "string",
+                    "description": "Album name to seed from. Pair with artist when the name is ambiguous."
+                },
+                "artist": {
+                    "type": "string",
+                    "description": "Artist name to seed from, or to disambiguate album"
+                },
+                "track_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Explicit set of seed track UUIDs, averaged into one centroid"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "How many tracks to aim for (default 25)",
+                    "default": 25
+                },
+                "max_per_artist": {
+                    "type": "integer",
+                    "description": "Cap per artist in the result (default 2)",
+                    "default": 2
+                },
+                "include_seed": {
+                    "type": "boolean",
+                    "description": "Include the seed tracks themselves (default false)",
+                    "default": False
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Override the generated name. Omit for a deterministic one."
+                }
+            },
+            "required": []
+        }
+    },
+    {
         "name": "get_library_stats",
         "description": "Get statistics about the music library: total tracks, artists, albums, genres. Use when user asks about their library.",
         "input_schema": {

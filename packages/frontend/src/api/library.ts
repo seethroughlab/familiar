@@ -458,12 +458,6 @@ export const libraryApi = {
     return data;
   },
 
-  getCuratedPrompts: async (params?: {
-    refresh?: boolean;
-  }): Promise<CuratedPromptsResponse> => {
-    const { data } = await api.get('/library/discover/prompts', { params });
-    return data;
-  },
 
   getDiscover: async (params?: {
     recommendations_limit?: number;
@@ -477,16 +471,7 @@ export const libraryApi = {
 };
 
 // Curated Prompts types
-export interface CuratedPrompt {
-  prompt: string;
-  context: string;
-  icon: string | null;
-}
 
-export interface CuratedPromptsResponse {
-  prompts: CuratedPrompt[];
-  generated_at: string | null;
-}
 
 // Library Discover types
 export interface DiscoverTrack {

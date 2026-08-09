@@ -36,6 +36,7 @@ import { DiscoveryPanel, useArtistDiscovery, type DiscoveryItem } from '../Disco
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 
 import { createLogger } from '../../utils/logger';
+import { useGeneratePlaylist } from '../../hooks/useGeneratePlaylist';
 
 const log = createLogger('ArtistDetail');
 
@@ -93,6 +94,7 @@ const COLLAPSED_TRACK_COUNT = 15;
 export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, onGoToAlbum, onGoToGenre, onGoToYear }: Props) {
   // Support both route params and props
   const routeParams = useParams<{ name: string }>();
+  const { generate: generatePlaylist } = useGeneratePlaylist();
   const routeNavigate = useNavigate();
   const artistName = artistNameProp || routeParams.name || '';
   const onBack = onBackProp || (() => routeNavigate(-1));
@@ -848,8 +850,9 @@ export function ArtistDetail({ artistName: artistNameProp, onBack: onBackProp, o
           onMakePlaylist={() => {
             if (albumContextMenu.album) {
               const album = albumContextMenu.album;
-              const message = `Make me a playlist based on the album "${album.name}" by ${album.artist}`;
-              useUIStore.getState().triggerChat(message);
+              // ADR-0048: the seed, not a sentence about the seed. `artist` disambiguates —
+              // "Greatest Hits" is not one album.
+              void generatePlaylist({ album: album.name, artist: album.artist });
             }
           }}
         />

@@ -12,7 +12,6 @@ export { DiscoveryGrid } from './DiscoveryGrid';
 export { DiscoverTrackList } from './DiscoverTrackList';
 
 // Curated prompts
-export { CuratedPrompts } from './CuratedPrompts';
 
 // Utility components
 export { DiscoveryLoading } from './DiscoveryLoading';
