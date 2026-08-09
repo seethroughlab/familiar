@@ -108,7 +108,7 @@ class TestQueueTracks:
         assert result["queued"] == 1
         command = player.queue.get_nowait()
         assert command["type"] == "queue"
-        assert command["tracks"] == [TRACK]
+        assert command["track_ids"] == ["t1"], "ids travel, not a second copy of the Track shape"
 
     @pytest.mark.asyncio
     async def test_clear_existing_actually_reaches_the_client(self, profile):

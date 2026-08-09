@@ -161,9 +161,14 @@ async def handle(
         # `clear` is read here rather than from the executor, whose `clear_existing` never
         # reaches `_clear_queue` — it is accepted, echoed and dropped. Fixing that in the chat
         # path would be fixing a path being retired; this one carries the listener's actual intent.
+        # Ids, not track objects. The clients already fetch tracks by id through the generated
+        # client — `ServerTrackMetadataSource.loadTracks(ids:)` on the Mac, fifty at a time — and
+        # putting a second, untyped copy of the Track shape on this channel is exactly the
+        # hand-parsed surface ADR-0007 exists to prevent, which already cost ADR-0022 a bug. The
+        # tool's *reply* still carries the resolved tracks, because that is for the model to read.
         player = channel.send(
             profile_id,
-            {"type": "queue", "tracks": tracks, "clear": clear},
+            {"type": "queue", "track_ids": [t["id"] for t in tracks], "clear": clear},
             target=target,
             requires=_REQUIRES[name],
         )
