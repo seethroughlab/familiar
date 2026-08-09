@@ -298,3 +298,30 @@ class TestProfileBinding:
 
         monkeypatch.setattr("app.mcp.server._sole_profile", sole_one)
         assert await resolve_profile(_ctx()) == ONE
+
+
+class TestOAuthDiscovery:
+    """`.well-known` probes must 404, not be swallowed by the SPA.
+
+    An MCP host asks these before connecting, to learn whether the server has an authorisation
+    server. **404 is the answer that means "no, connect anonymously."** Served by the SPA they
+    returned `200 text/html`, so Claude Desktop read "yes, here it is", tried to register a client
+    against an HTML page, and reported *"Couldn't register with Familiar's sign-in service"* — an
+    error naming authentication, produced entirely by a routing default.
+
+    The fifth instance of this catch-all's shape, and the second to reach a user.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "path",
+        [
+            ".well-known/oauth-authorization-server",
+            ".well-known/oauth-protected-resource",
+            ".well-known/openid-configuration",
+            ".well-known/oauth-authorization-server/mcp",
+        ],
+    )
+    async def test_discovery_probes_are_not_answered_with_html(self, path):
+        with pytest.raises(NotFoundError):
+            await spa_fallback(path)

@@ -536,7 +536,25 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 
 # Prefixes the single-page app must never swallow. A miss inside these belongs to the API, and the
 # answer to it is a 404 rather than an HTML document.
-NON_SPA_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "health", "mcp")
+NON_SPA_PREFIXES = (
+    "api/",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "health",
+    "mcp",
+    # An MCP host probes these before connecting, to find out whether the server has an
+    # authorisation server. **A 404 is the answer that means "no, connect anonymously."** Served by
+    # the SPA they returned `200 text/html`, which reads as "yes, here it is" — so Claude Desktop
+    # tried to register a client against an HTML page and reported *"Couldn't register with
+    # Familiar's sign-in service"*, which points at authentication rather than at this line.
+    ".well-known",
+    # An MCP host probes these before connecting, to find out whether the server has an
+    # authorisation server. **A 404 is the answer that means "no, connect anonymously."** Served by
+    # the SPA they returned `200 text/html`, which reads as "yes, here it is" — so Claude Desktop
+    # tried to register a client against an HTML page and reported *"Couldn't register with
+    # Familiar's sign-in service"*, which points at authentication rather than at this line.
+)
 
 
 async def serve_embed() -> FileResponse:
@@ -597,6 +615,11 @@ async def spa_fallback(full_path: str) -> FileResponse:
     """
     if full_path.startswith(NON_SPA_PREFIXES):
         raise NotFoundError("Not found")
+    # The served path, not the route template. `request_completed` logs `/{full_path:path}` for
+    # everything that lands here, which is useless precisely when it matters: an MCP host probing
+    # for an authorisation server gets `index.html` with a 200, reads it as "yes, here it is", and
+    # reports a sign-in failure that names nothing about routing.
+    logger.info("spa_fallback_served", extra={"path": full_path})
     return FileResponse(STATIC_DIR / "index.html")
 
 
