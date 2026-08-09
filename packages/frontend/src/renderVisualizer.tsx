@@ -6,6 +6,7 @@ import { profileFromURL } from './services/embedBridge';
 import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
 import { useUIStore } from './stores/uiStore';
 import { installVisualizerSink } from './services/visualizerSink';
+import { useVisualizerStore } from './stores/visualizerStore';
 
 /**
  * Boots the embedded visualizer surface (ADR-0033).
@@ -39,7 +40,18 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
   // `setApiOrigin` is the same function `ServerSettings` uses; it also caches to localStorage,
   // which the custom scheme has because it is a real origin (a `file://` or `loadHTMLString` page
   // would not).
-  const api = new URLSearchParams(window.location.search).get('api');
+  const params = new URLSearchParams(window.location.search);
+
+  // **Which visualizer to draw, chosen by the host.**
+  //
+  // The page persists a choice of its own to `localStorage`, which is right for the web app where
+  // the picker lives beside the visualizer. Embedded, the picker is a native menu, so the app is
+  // the source of truth and says so on the URL — otherwise the two would each remember a different
+  // answer and whichever wrote last would win.
+  const visualizer = params.get('visualizer');
+  if (visualizer) useVisualizerStore.getState().setVisualizerId(visualizer);
+
+  const api = params.get('api');
   registerProfileProvider({
     getSelectedProfileId: async () => profileId,
     // Same as the Discover surface: it was told a profile, it never chose one, so there is nothing

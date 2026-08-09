@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 
 /**
@@ -18,7 +19,11 @@ import { resolve } from 'path';
  * so it costs bundle size and no load time.
  */
 export default defineConfig({
-  plugins: [react()],
+  // **Tailwind is a plugin here, not a PostCSS config**, so a build config that omits it produces
+  // CSS with every utility class silently missing. The symptom is not a styling glitch: the
+  // visualizer's own container is `w-full h-full absolute inset-0`, so without those rules it
+  // collapses to content height and the whole scene renders in a strip at the top of the window.
+  plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@familiar/frontend': resolve(__dirname, '../frontend'),
