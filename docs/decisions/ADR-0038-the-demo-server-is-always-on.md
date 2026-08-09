@@ -29,9 +29,11 @@ than one that is visibly not set up.
 
 Point 6 is unfinished: where the review account lives is still unchosen.
 
-**Point 8 became actionable while this was being written.** ADR-0036 shipped, so nothing points at
-`familiar-sessions.fly.dev` any more — and it was still up, answering 200 in 4.6 seconds, when this
-was checked. It is the one item in this ADR that *saves* money.
+**Point 8 is done.** ADR-0036 shipped, so nothing pointed at `familiar-sessions.fly.dev` any more —
+and it was still up, answering 200 in 4.6 seconds, when that was checked. It was destroyed on
+2026-08-09 and the hostname now resolves to nothing. The gap between the code that orphaned it
+shipping and the app being removed was a few hours, which is the *short* version of how it became
+load-bearing without appearing in any decision. The Fly footprint is one app.
 
 ## Context
 

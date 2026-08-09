@@ -104,17 +104,16 @@ The server URL and profile a reviewer types belong beside the App Store Connect 
 repository, so that preparing a submission does not begin by working out what they were. That
 location is **not yet chosen** — ADR-0038 point 6, unfinished.
 
-## The other Fly app
+## The Fly footprint
+
+**One app: `familiar-demo`.**
 
 `familiar-sessions.fly.dev` was the WebRTC signalling relay.
 [ADR-0036](decisions/ADR-0036-listening-sessions-signal-through-familiars-own-server.md) retired it —
-signalling now runs on the listener's own server, and nothing has pointed at the relay since that
-shipped. **It was still running and answering requests when this was written.** It should be shut
-down rather than left to be forgotten, which is how it came to be load-bearing without appearing in
-any decision:
+signalling runs on the listener's own server now — and it was **destroyed on 2026-08-09**
+(`flyctl apps destroy familiar-sessions`), confirmed by the hostname no longer resolving to
+anything. It had still been running and answering 200 for the hours between the code shipping and
+someone remembering the app existed, which is how it became load-bearing without appearing in any
+decision in the first place.
 
-```bash
-flyctl apps destroy familiar-sessions
-```
-
-That accounts for the whole Fly footprint: one app running deliberately, and one that should not be.
+If a second Fly app ever appears here, it belongs in this section on the day it is created.
