@@ -1,8 +1,38 @@
 # ADR-0036: Listening Sessions Signal Through Familiar's Own Server
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-06
+
+## Implementation
+
+All eight points shipped together; ADR-0037 is the client half and follows.
+
+`backend/app/services/sessions.py` came back from `ceeb926^` unchanged — it was removed for scope
+and there was no finding against it. `backend/app/api/routes/sessions.py` did not: the REST half is
+typed to ADR-0007 (`SessionResponse`, `IceServersResponse`, `operation_id`s, `NotFoundError` rather
+than a bare `HTTPException`), and `sessions` is now in `VENDORED_TAGS` and in the Swift generator
+config — twelve tags, 265 operations, lint green, and both operations generate.
+
+**ICE became a route as well as a join payload.** The shelved code exposed `get_ice_servers()` only
+inside the socket's join responses, which is too late for two callers: the Apple clients need it
+before joining (ADR-0037), and point 7 wants a client to be able to say "no TURN is configured" up
+front rather than after a handshake hangs. `GET /sessions/ice-servers` reports `has_turn`
+explicitly for that reason, and the socket now sends the same pair on `create` as well as on join —
+a host behind symmetric NAT should learn that before inviting anyone.
+
+**The guest page had to become a route, which the ADR filed as a follow-up.** It could not stay one:
+`buildShareLink` produces `/listen/{code}` against this origin once the relay is gone, and there has
+*never* been such a route in `App.tsx` — the relay served that page itself. Shipping point 3 without
+it would have made the one thing a host hands to a friend a 404. `GuestListener.tsx` is restored
+from `ceeb926^` and mounted **outside `AppShell`**, since a guest has no profile, no library and no
+player. Two things in it were repaired rather than restored: it read the join code from nowhere, and
+its WebSocket URL rewrote port 3000 to 8000 — a guess at a backend that has been on 4400 for a long
+time, wrong for as long as it was unreachable. Both now use the same origin every other request
+uses.
+
+18 backend tests. The shelved file tested the service's dataclasses and nothing that crosses the
+wire, which is precisely the half that now has a contract.
 
 ## Context
 
@@ -59,6 +89,14 @@ nothing.
 sessions, WebRTC streaming, and guest listener features. Code preserved on
 feature/listening-sessions branch"*, made the same afternoon as `dbdef05` shelved the plugin
 system. Nothing in either commit says the code was wrong.
+
+**But `feature/listening-sessions` does not exist**, and this was checked rather than assumed:
+not on `origin`, not locally, under any name. `dbdef05`'s counterpart branch —
+`feature/community-plugins` — *is* still there, locally only, so the convention was real and this
+one was simply lost. The code survives at **`ceeb926^`** and reads out intact
+(`sessions.py` 425 lines, `GuestListener.tsx` 475), so nothing is gone; but the recovery path is
+history, not a branch, and a plan written against the branch would have failed at its first step.
+Recorded because the same sentence is in the commit message, where it will be read again.
 
 **Two properties of the shelved implementation are worth surfacing before it comes back.**
 

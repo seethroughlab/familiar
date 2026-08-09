@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     lastfm_api_secret: str | None = None
     acoustid_api_key: str | None = None
 
+    # Listening sessions: TURN, by configuration only (ADR-0036 point 6).
+    #
+    # STUN alone gets two peers connected in most homes. It does not behind symmetric NAT, and no
+    # amount of retrying changes that — a relay is required, and Familiar does not run one and does
+    # not promise one. Set these to point at your own (coturn, or a hosted provider) and the server
+    # will hand them to clients; leave them unset and `GET /sessions/ice-servers` reports
+    # `has_turn: false` so the failure is named up front rather than discovered as a hang.
+    turn_server_url: str | None = None
+    turn_server_username: str | None = None
+    turn_server_credential: str | None = None
+
     # Network audio outputs (Sonos / WiiM / AirPlay / Chromecast).
     # DEVICE_STREAM_BASE_URL: LAN-reachable base URL (e.g. http://192.168.1.50:4400) that network
     # devices use to fetch the audio stream. Needed when the browser reaches the app via a network
