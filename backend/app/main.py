@@ -50,6 +50,7 @@ from app.api.routes import (
     organizer,
     outputs,
     pending_review,
+    playback,
     playlists,
     profiles,
     proposed_changes,
@@ -515,6 +516,7 @@ app.include_router(download.router, prefix="/api/v1", responses=DEFAULT_ERROR_RE
 app.include_router(updates.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(spotify_import.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(ambient.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(playback.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(external_albums.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(new_releases.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)

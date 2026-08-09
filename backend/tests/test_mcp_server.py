@@ -39,26 +39,65 @@ def _ctx(headers: dict[str, str] | None = None) -> SimpleNamespace:
     return SimpleNamespace(request=SimpleNamespace(headers=headers))
 
 
+#: Tools this layer adds that have no MUSIC_TOOLS entry.
+MCP_ONLY_TOOLS = {"list_players", "get_now_playing"}
+
+
 class TestToolSurface:
     def test_excludes_client_bound_and_withheld_tools(self):
         names = {t.name for t in exposed_tools()}
         assert not (names & EXCLUDED), f"excluded tools leaked: {names & EXCLUDED}"
-        for withheld in ("get_visible_tracks", "queue_tracks", "control_playback", "fetch_webpage"):
+        # `get_visible_tracks` needs a viewport no MCP host has; `fetch_webpage` is an SSRF
+        # primitive on an API with no inbound auth. Neither has a route back.
+        for withheld in ("get_visible_tracks", "fetch_webpage"):
             assert withheld not in names
 
-    def test_exposes_everything_else(self):
-        """The surface is MUSIC_TOOLS minus the exclusions — not a hand-maintained list."""
+    def test_playback_tools_are_exposed_again(self):
+        """ADR-0044 gave them a destination, so ADR-0043 point 2's deferral has expired.
+
+        They are served by `app.mcp.playback` over the command channel, not by `ToolExecutor`'s
+        in-memory fields — which is what made them useless over MCP in the first place.
+        """
         names = {t.name for t in exposed_tools()}
-        expected = {t["name"] for t in MUSIC_TOOLS} - EXCLUDED
+        assert {"queue_tracks", "control_playback"} <= names
+
+    def test_mcp_only_tools_are_added(self):
+        """Neither is in MUSIC_TOOLS, and neither could have been.
+
+        `list_players` answers a question that only exists because commands go to a subscribed
+        client — the chat client never had to ask, because it *was* the player.
+        `get_now_playing` reads a fact ADR-0030 already gave the server, which the chat client
+        also never needed, for the same reason.
+        """
+        assert MCP_ONLY_TOOLS <= {t.name for t in exposed_tools()}
+
+    def test_exposes_everything_else(self):
+        """The surface is MUSIC_TOOLS minus exclusions, plus the MCP-only tool — never a list."""
+        names = {t.name for t in exposed_tools()}
+        expected = ({t["name"] for t in MUSIC_TOOLS} - EXCLUDED) | MCP_ONLY_TOOLS
         assert names == expected
 
     def test_schemas_come_from_music_tools_unchanged(self):
         """ADR-0043 point 2: re-hosted, not reimplemented. Drift here is the thing to prevent."""
         by_name = {t["name"]: t for t in MUSIC_TOOLS}
+        # Each of these gains exactly one MCP-only property, covered by its own test below.
+        widened = {"create_playlist_from_items", "queue_tracks", "control_playback"}
         for tool in exposed_tools():
-            if tool.name == "create_playlist_from_items":
-                continue  # gains one property; covered separately
+            if tool.name in widened or tool.name in MCP_ONLY_TOOLS:
+                continue
             assert tool.input_schema == by_name[tool.name]["input_schema"]
+
+    def test_widened_schemas_add_one_property_and_no_more(self):
+        """A widened schema must still be the MUSIC_TOOLS one underneath."""
+        by_name = {t["name"]: t for t in MUSIC_TOOLS}
+        for name, added in (
+            ("create_playlist_from_items", "generation_prompt"),
+            ("queue_tracks", "player"),
+            ("control_playback", "player"),
+        ):
+            tool = next(t for t in exposed_tools() if t.name == name)
+            original = set(by_name[name]["input_schema"].get("properties", {}))
+            assert set(tool.input_schema["properties"]) == original | {added}
 
     def test_create_playlist_gains_generation_prompt(self):
         tool = next(t for t in exposed_tools() if t.name == "create_playlist_from_items")

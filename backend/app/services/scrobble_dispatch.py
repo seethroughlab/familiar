@@ -13,6 +13,7 @@ on 2026-08-02 — so work that outlives the handler takes its own connection or 
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime
 from uuid import UUID
 
@@ -70,6 +71,39 @@ async def scrobble_if_earned(
             )
     except Exception:
         logger.warning("Scrobble failed for track %s", track_id, exc_info=True)
+
+
+async def remember_now_playing(profile_id: UUID, track_id: UUID) -> None:
+    """Remember what just started, so the server can be asked what is playing.
+
+    Separate from `send_now_playing` because the two have different failure modes and different
+    reasons to exist: that one talks to Last.fm and needs a stored session, this one needs nothing
+    and must work for a listener who has never connected an account.
+    """
+    from app.services.now_playing import StartedTrack, get_registry
+
+    try:
+        async with async_session_maker() as db:
+            track = (
+                await db.execute(select(Track).where(Track.id == track_id, Track.active_filter()))
+            ).scalar_one_or_none()
+            if track is None:
+                return
+            get_registry().record(
+                profile_id,
+                StartedTrack(
+                    track_id=track.id,
+                    title=track.title,
+                    artist=track.artist,
+                    album=track.album,
+                    duration_seconds=(
+                        float(track.duration_seconds) if track.duration_seconds else None
+                    ),
+                    started_at=time.monotonic(),
+                ),
+            )
+    except Exception:
+        logger.warning("Could not remember now-playing for track %s", track_id, exc_info=True)
 
 
 async def send_now_playing(profile_id: UUID, track_id: UUID) -> None:

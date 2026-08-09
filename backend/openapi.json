@@ -23834,6 +23834,117 @@
         ]
       }
     },
+    "/api/v1/playback/commands": {
+      "get": {
+        "description": "Subscribe to this profile's playback commands.\n\nSubscribe while you can act and disconnect when you cannot: the subscription is the claim to\nbe a player, and the most recently attached client is the default target.\n\nCapabilities are declared here rather than assumed (point 12). The clients genuinely differ \u2014\nthe Apple clients have no theme, visualizer, normalization or shuffle-weight storage where the\nweb app has all four \u2014 so without a declaration a perfectly well-formed command reaches a\nclient that silently cannot obey it.",
+        "operationId": "playback_playback_commands",
+        "parameters": [
+          {
+            "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
+            "in": "query",
+            "name": "client",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
+              "title": "Client",
+              "type": "string"
+            }
+          },
+          {
+            "description": "e.g. macos, ios, web.",
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "e.g. macos, ios, web.",
+              "title": "Platform",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
+            "in": "query",
+            "name": "capabilities",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
+              "title": "Capabilities",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Playback commands for this profile, until the client disconnects."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Playback Commands",
+        "tags": [
+          "playback"
+        ]
+      }
+    },
     "/api/v1/playlists": {
       "get": {
         "description": "List all playlists for the current profile.",
@@ -33807,7 +33918,7 @@
     },
     "/api/v1/tracks/{track_id}/started": {
       "post": {
-        "description": "A track just started playing (ADR-0030 point 6).\n\nThe signal this server has never had. `/played` and `/skipped` both fire at the *end* of a\ntrack, so nothing until now could tell it what a listener is hearing right now.\n\nDeliberately generic rather than a Last.fm endpoint: \"this track just started\" is a fact about\nlistening, and the server is free to do more with it later \u2014 presence, listening-together, a\nrecently-started feed. Today it forwards to Last.fm as now-playing and nothing else.\n\nWrites nothing. There is no database work here at all, which is why it takes no session: a\nnow-playing is a claim about the present that expires in minutes, and the durable record of this\ntrack arrives later on `/played` or `/skipped`.\n\n204 rather than a body: there is nothing a caller can do with the outcome, and a client must not\nwait on it.",
+        "description": "A track just started playing (ADR-0030 point 6).\n\nThe signal this server has never had. `/played` and `/skipped` both fire at the *end* of a\ntrack, so nothing until now could tell it what a listener is hearing right now.\n\nDeliberately generic rather than a Last.fm endpoint: \"this track just started\" is a fact about\nlistening, and the server is free to do more with it later \u2014 presence, listening-together, a\nrecently-started feed. It forwards to Last.fm as now-playing, and it is also what lets an MCP\nhost answer \"what am I listening to?\" \u2014 the \"later\" this docstring anticipated, costing the\nclients nothing because they already send this.\n\nWrites nothing. There is no database work here at all, which is why it takes no session: a\nnow-playing is a claim about the present that expires in minutes, and the durable record of this\ntrack arrives later on `/played` or `/skipped`.\n\n204 rather than a body: there is nothing a caller can do with the outcome, and a client must not\nwait on it.",
         "operationId": "tracks_record_start",
         "parameters": [
           {
