@@ -44,6 +44,19 @@ destination is not mounted must not survive its destination, citing `familiar` #
 | `Home/HomeScreen.tsx:580` | "Help me rediscover my library" | that sentence |
 | `Discovery/CuratedPrompts.tsx:54` | Listening Ideas | the prompt |
 
+**Corrected while building step 2: there are ten callers, not seven, and the three missed are all
+seeded.** The table above was verified at write time and still missed
+`components/Queue/QueueView.tsx:546`, `components/Player/PlayerBar.tsx:518` and — the important one
+— `hooks/useTrackContextMenu.tsx:188`, which is **shared by `TrackListBrowser`, `ArtistDetail`,
+`PlaylistTrackList` and `AlbumDetail`** and is therefore the most-used "Make a playlist" in the app.
+All three compose the same track sentence as `FullPlayer`.
+
+So the seeded feature has **seven** sites, not four, and the conversational three are unchanged.
+Re-pointing only the four named here would have left three buttons pointing at a deleted chat when
+`#133` lands — which is the exact defect this ADR's ordering exists to prevent, one level down. That
+this ADR opens by correcting ADR-0043's count and then undercounts itself is worth keeping: an
+enumeration is only as good as the grep behind it, and `head -12` is how three of these hid.
+
 **Four of the seven are one feature.** "Make me a playlist based on this album / this track / these
 artists" is a real capability that happens to be *implemented* by composing an English sentence and
 handing it to a language model. The sentence is an implementation detail of a button whose meaning
