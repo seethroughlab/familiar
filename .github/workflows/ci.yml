@@ -10,6 +10,22 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# **One run per branch; a new push cancels the one it supersedes.**
+#
+# Without this, every commit queues a full CI run and none of them go away. On 2026-08-09 a branch
+# pushed eight commits in an hour and left seven dead runs queued — for commits that were no longer
+# the branch head — on a self-hosted pool of three runners, two of which are the only ones that can
+# take `[self-hosted, Linux]`. The head commit's own jobs then sat behind its own history.
+#
+# Hosted runners hide this because the pool is effectively unbounded. Self-hosted does not.
+#
+# `main` is deliberately excluded from cancellation: those runs gate deploys and a superseded one is
+# still worth having finished. `github.run_id` makes each `main` run its own group, so they queue
+# rather than cancel each other.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   macos-compose-check:
     name: macOS Compose Check
