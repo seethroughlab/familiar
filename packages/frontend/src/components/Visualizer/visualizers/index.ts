@@ -23,3 +23,9 @@ registerVisualizer(
   { id: 'music-video', name: 'Music Video', description: 'Search and play synced music videos from YouTube', usesMetadata: false },
   lazy(() => import('./MusicVideo'))
 );
+// The word field on its own, without the lyric column and vignette `ScrollingLyrics` layers over
+// it. Same `LyricWordField` scene, so the two cannot drift apart.
+registerVisualizer(
+  { id: 'lyric-storm', name: 'Lyric Storm', description: 'The song\'s own words drifting through a dark 3D space, reacting to the music', usesMetadata: true },
+  lazy(() => import('./LyricStorm'))
+);

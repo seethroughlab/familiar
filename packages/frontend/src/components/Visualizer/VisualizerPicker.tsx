@@ -4,7 +4,7 @@
  * Dropdown/popup for selecting between visualizers.
  */
 import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, Image, Type, Video, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Sparkles, Image, Type, Video, AlertTriangle, CloudLightning } from 'lucide-react';
 import { getVisualizers } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
@@ -15,6 +15,7 @@ const visualizerIcons: Record<string, typeof Sparkles> = {
   'beat-tiles': Image,
   'lyrics': Type,
   'music-video': Video,
+  'lyric-storm': CloudLightning,
 };
 
 export function VisualizerPicker() {

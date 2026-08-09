@@ -14,13 +14,15 @@
 import React from 'react';
 import * as THREE from 'three';
 import * as ReactThreeFiber from '@react-three/fiber';
-// **This one import costs 1.59 MB**, measured: the inlined visualizer document is 1,782 kB without
-// it and 3,375 kB with it, because `import *` defeats tree-shaking and no built-in visualizer pulls
-// drei in (`LyricWordField` does, and is not registered). ADR-0034 point 3 names drei as part of the
-// contract, so it is here — but nothing in the repo needs it yet, and the document is inlined into
-// both app bundles, so the price is paid by every install. Worth revisiting if no plugin ever uses
-// it: unlike React and three, a second copy of drei is not *broken*, only wasteful, so it is the one
-// of the four that a plugin could reasonably bundle itself.
+// **This one import costs 1.59 MB on top of what drei already costs**, measured: the inlined
+// visualizer document is 1,782 kB without it and 3,375 kB with it.
+//
+// The earlier version of this comment said "nothing pulls drei in", and that was wrong.
+// `ScrollingLyrics` — registered as `lyrics` — renders `LyricWordField`, which imports drei's
+// `Text`; `LyricStorm` now renders the same field. So drei ships either way. What `import *` adds
+// is the *rest* of the library, because a namespace import cannot be tree-shaken, and ADR-0034
+// point 3 promises plugins the whole of drei rather than the one component this repo happens to
+// use.
 import * as Drei from '@react-three/drei';
 
 import { createLogger } from '../utils/logger';
