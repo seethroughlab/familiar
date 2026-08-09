@@ -17,6 +17,21 @@ Implementation:
 - Point 3's risk was measured before acceptance rather than after — see the table in Context and
   `scripts/spike_mcp_arms.py`. Two of its three worries were unfounded; the whole effect is
   calibration, which narrows the work.
+- **Point 5's condition is met.** The surface was proven from Claude Desktop against the real
+  library on 2026-08-09 — library questions, semantic search, playlist creation and playback,
+  ending in sound. Retiring the chat clients was deliberately gated on this and is now unblocked;
+  see [ADR-0044](ADR-0044-mcp-clients-actuate-playback-through-a-command-channel.md)'s notes for
+  the trace.
+- **The host prefers the tools over the screen, which was the point.** Asked the same question the
+  day before, with no connector, it drove the computer and opened the web app. With the tools
+  present it said *"Familiar has a proper data API — let me pull your library stats directly
+  instead of poking at the screen."*
+- **Claude Desktop's *custom connector* cannot be used**, and that is not a defect in this ADR. Its
+  flow requires an OAuth-capable server, which Familiar deliberately is not
+  ([ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md) point 6). `scripts/mcp_bridge.py`
+  is the way in until then, because stdio needs no auth. Two red herrings were fixed on the way to
+  establishing that, both real: `.well-known` probes were being answered `200 text/html` by the SPA
+  catch-all, which reads as "yes, I have an authorisation server".
 
 ## Context
 
