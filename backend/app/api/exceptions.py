@@ -221,68 +221,14 @@ def sanitize_error_for_client(
     Returns:
         A user-friendly error message safe for client display
     """
-    import anthropic
-    import openai
-
-    from app.services.app_settings import get_app_settings_service
-
     # Handle our custom exceptions - use their message
     if isinstance(exception, FamiliarError):
         return exception.message
 
-    # Name the active provider in auth-error copy so users fix the right key.
-    try:
-        provider_label = (
-            "OpenAI"
-            if get_app_settings_service().get_active_provider() == "openai"
-            else "Anthropic"
-        )
-    except Exception:
-        provider_label = "Anthropic"
-
-    # Handle Anthropic API errors with user-friendly messages
-    if isinstance(exception, anthropic.AuthenticationError):
-        return f"Invalid API key. Check your {provider_label} API key in Settings."
-
-    if isinstance(exception, anthropic.RateLimitError):
-        return "Rate limit exceeded. Please wait a moment and try again."
-
-    if isinstance(exception, anthropic.BadRequestError):
-        return "The request could not be processed. Please try rephrasing."
-
-    if isinstance(exception, anthropic.APIConnectionError):
-        return "Could not connect to the AI service. Check your internet connection."
-
-    if isinstance(exception, anthropic.APIStatusError):
-        return "The AI service is temporarily unavailable. Please try again later."
-
-    if isinstance(exception, anthropic.APITimeoutError):
-        return "The AI request timed out. Please try again."
-
-    if isinstance(exception, anthropic.APIError):
-        return "An error occurred with the AI service. Please try again."
-
-    # Handle OpenAI API errors (covers any OpenAI-compatible endpoint).
-    if isinstance(exception, openai.AuthenticationError):
-        return f"Invalid API key. Check your {provider_label} API key in Settings."
-
-    if isinstance(exception, openai.RateLimitError):
-        return "Rate limit exceeded. Please wait a moment and try again."
-
-    if isinstance(exception, openai.BadRequestError):
-        return "The request could not be processed. Please try rephrasing."
-
-    if isinstance(exception, openai.APIConnectionError):
-        return "Could not connect to the AI service. Check your base URL and network."
-
-    if isinstance(exception, openai.APITimeoutError):
-        return "The AI request timed out. Please try again."
-
-    if isinstance(exception, openai.APIStatusError):
-        return "The AI service is temporarily unavailable. Please try again later."
-
-    if isinstance(exception, openai.APIError):
-        return "An error occurred with the AI service. Please try again."
+    # **No SDK exception can reach here any more.** This block matched `anthropic.*` and
+    # `openai.*` error types and named the active provider in the copy. ADR-0048 step 4 removed the
+    # provider layer and both SDKs — Familiar calls no model at all, the host brings one — so those
+    # branches were matching types nothing could raise, and importing two SDKs to do it.
 
     # Handle common Python exceptions
     if isinstance(exception, TimeoutError):

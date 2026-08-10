@@ -8421,17 +8421,6 @@
             "title": "Acoustid Configured",
             "type": "boolean"
           },
-          "anthropic_api_key": {
-            "title": "Anthropic Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "anthropic_configured": {
-            "title": "Anthropic Configured",
-            "type": "boolean"
-          },
           "clap_embeddings_enabled": {
             "title": "Clap Embeddings Enabled",
             "type": [
@@ -8479,45 +8468,9 @@
           "library_status": {
             "$ref": "#/components/schemas/LibraryStatus"
           },
-          "llm_provider": {
-            "title": "Llm Provider",
-            "type": "string"
-          },
           "music_library_configured": {
             "title": "Music Library Configured",
             "type": "boolean"
-          },
-          "openai_api_key": {
-            "title": "Openai Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_base_url": {
-            "title": "Openai Base Url",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_chat_model": {
-            "title": "Openai Chat Model",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_configured": {
-            "title": "Openai Configured",
-            "type": "boolean"
-          },
-          "openai_utility_model": {
-            "title": "Openai Utility Model",
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "playlist_discovery_mode": {
             "title": "Playlist Discovery Mode",
@@ -8563,13 +8516,7 @@
           "library_status",
           "lastfm_api_key",
           "lastfm_api_secret",
-          "anthropic_api_key",
           "acoustid_api_key",
-          "llm_provider",
-          "openai_api_key",
-          "openai_base_url",
-          "openai_chat_model",
-          "openai_utility_model",
           "clap_embeddings_enabled",
           "clap_status",
           "external_features_enabled",
@@ -8585,8 +8532,6 @@
           "s3_backup_schedule",
           "update_channel",
           "lastfm_configured",
-          "anthropic_configured",
-          "openai_configured",
           "acoustid_configured",
           "s3_backup_configured",
           "music_library_configured"
@@ -8599,13 +8544,6 @@
         "properties": {
           "acoustid_api_key": {
             "title": "Acoustid Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "anthropic_api_key": {
-            "title": "Anthropic Api Key",
             "type": [
               "string",
               "null"
@@ -8662,41 +8600,6 @@
           },
           "lastfm_api_secret": {
             "title": "Lastfm Api Secret",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "llm_provider": {
-            "title": "Llm Provider",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_api_key": {
-            "title": "Openai Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_base_url": {
-            "title": "Openai Base Url",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_chat_model": {
-            "title": "Openai Chat Model",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_utility_model": {
-            "title": "Openai Utility Model",
             "type": [
               "string",
               "null"

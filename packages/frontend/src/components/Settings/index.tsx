@@ -10,7 +10,6 @@ import { AnalysisSettings } from './AnalysisSettings';
 import { InstallStatus } from '../PWA/InstallPrompt';
 import { DebugSettings } from './DebugSettings';
 import { RemoteLogsPanel } from './RemoteLogsPanel';
-import { AISettings } from './AISettings';
 import { DataManagement } from './DataManagement';
 import { ApiKeyStatus } from './ApiKeyStatus';
 import { CommunityCache } from './CommunityCache';
@@ -63,14 +62,6 @@ export function SettingsPanel() {
           </div>
         </section>
 
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            AI Assistant
-          </h3>
-          <div className="space-y-4">
-            <AISettings />
-          </div>
-        </section>
 
         <section>
           <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">

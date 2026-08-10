@@ -53,7 +53,6 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - ART_PATH=/data/art
       - VIDEOS_PATH=/data/videos
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
       - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:4400}
