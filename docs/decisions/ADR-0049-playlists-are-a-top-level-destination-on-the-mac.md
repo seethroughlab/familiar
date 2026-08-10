@@ -39,11 +39,21 @@ principle — mirror the web sidebar's grouping "rather than inventing a second 
 same two things" — had quietly stopped being followed for playlists while still being followed for
 collections.
 
-**ADR-0048 turned a preference into a scaling problem.** `POST /playlists/generate` saves a playlist
-on *every* "Make a playlist" click. Generated playlists therefore accumulate without bound while
-hand-made ones do not, and each one would otherwise become a permanent sidebar row. On the live
-server today: **6 generated, 1 manual, 3 smart.** A flat list is already dominated by the ones nobody
-chose to keep.
+**ADR-0048 raises a scaling question, and an earlier draft of this ADR answered it with the wrong
+evidence.** `POST /playlists/generate` saves a playlist on *every* "Make a playlist" click, so
+generated playlists can accumulate while hand-made ones do not. Point 3 originally quarantined them
+on that basis, citing **6 generated against 1 manual** as proof it was already happening.
+
+**None of those six came from that mechanism.** Every one is from the retired chat surface, created
+deliberately between 2026-01-27 and 2026-04-30, 9 to 32 tracks each — *Essential IDM Albums*,
+*Crystalline Reverie*, *Neon Pulse Drift*, *Echoes of Stillness*, *Binary Dreamscape*, *Merck Records
+IDM - Like Ilkae*. `select count(*) from playlists where generation_prompt like 'seed:%'` returns
+**0**: nothing has ever been seeded-generated.
+
+So `is_auto_generated` does not mean "disposable byproduct". It means **"made through a feature we
+deleted"**, and those are the listener's real playlists. The single hand-made one, `Demo Analysis`,
+is a test artifact. A count was taken as evidence for a cause that produced none of it, and the
+quarantine built on it hid the collection while leaving the scratch file on show.
 
 ## Decision
 
@@ -55,11 +65,20 @@ chose to keep.
    do. An "All Playlists" row is kept above them, opening the existing `PlaylistsListView`: 200pt of
    sidebar is not where you find one playlist among two hundred, and that list has search.
 
-3. **Generated playlists are quarantined in a collapsible subgroup**, collapsed by default, rather
-   than interleaved with hand-made ones. This is the point that follows from ADR-0048 rather than
-   from taste: a surface that grows by one row per click is not the same kind of thing as a list you
-   curate, and mixing them would make the sidebar mostly disposable within a week of ordinary use.
-   The web app interleaves them today and will meet this problem later.
+3. **Every playlist is listed together, regardless of how it was made.** The sidebar does not group
+   by `is_auto_generated`.
+
+   **This point previously said the opposite** — that generated playlists were quarantined in a
+   collapsed subgroup — and it was wrong on the evidence. See the Context above: the six playlists
+   cited as proof of generate-flooding were not generated that way, and the flag marks a retired
+   feature rather than a disposable playlist. Corrected before acceptance, which is what `proposed`
+   is for.
+
+   The accumulation concern is real but hypothetical, and provenance is the wrong lever for it: how a
+   playlist was made says nothing about whether the listener wants it, and there is **no way to
+   change the flag after creation** — `PlaylistUpdate` carries only `name`, `description` and
+   `auto_download`, so a generated playlist you decide to keep can never become a regular one. A
+   grouping nobody can escape is a filing system, not a preference.
 
 4. **Smart Playlists move into the Playlists section.** They are something you made, not library
    contents. ADR-0013's reason for making them a sidebar item rather than a fifth `BrowseSection`
@@ -100,15 +119,16 @@ chose to keep.
    draws from — at a fraction of the surface area, and because the routing model staying untouched
    is independently verifiable.
 
-2. **A flat list with a `sparkles` badge on generated playlists**, which is what the web app does and
-   what `PlaylistsListView` already does for its rows. Rejected on the arithmetic: 6 of 7 rows would
-   be generated today and the ratio only worsens, so the badge would be marking the majority rather
-   than the exception.
+2. **Quarantining generated playlists in a collapsed subgroup.** This was point 3 as first written,
+   and it shipped before the evidence was checked. Rejected on the numbers above: the flag marks a
+   retired feature rather than a disposable playlist, so the group hid the collection and showed the
+   scratch file. Kept here rather than deleted because the reasoning was plausible and someone will
+   propose it again.
 
-3. **Keep generated playlists out of the sidebar entirely**, reachable only through All Playlists.
-   Rejected because a playlist you just generated would not appear where you would look for it, and
-   ADR-0048 point 6 was explicit that generation *saves* rather than previews precisely so the result
-   is somewhere findable.
+3. **A `sparkles` badge on generated rows in the sidebar**, marking provenance without hiding
+   anything. Rejected as re-asserting a distinction that is only ever interesting once — the badge
+   already exists in `PlaylistsListView`, where a mark on a list you deliberately opened is
+   information rather than a permanent label on a row you use every day.
 
 4. **Leave Playlists as one row and just add a create button.** The smaller change, and it fixes the
    stated complaint. Rejected because it leaves "Library" meaning three things, leaves the Mac
@@ -128,8 +148,8 @@ chose to keep.
   routing model's guarantees are untouched and the claim is checkable rather than asserted.
 - **Positive** — loading the stores at launch also fixes a pre-existing gap: the "Add to playlist"
   submenu was empty until you had visited the Playlists section.
-- **Positive** — the Mac is now ahead of the web app on the one point ADR-0048 makes urgent, so the
-  web has a design to adopt rather than a problem to rediscover.
+- **Positive** — the sidebar shows the listener's actual playlists, which the first version of point
+  3 had collapsed out of sight.
 - **Tradeoff** — the Mac and the phone now arrange playlists differently. This is the same shape as
   ADR-0012 point 1's split between the Mac's sidebar and the phone's `CollectionsView`, and is
   accepted for the same reason: a 200pt column and a 393pt phone are not the same surface.
@@ -140,8 +160,19 @@ chose to keep.
 - **Tradeoff** — the disclosure state is `@State` and resets each launch rather than persisting.
 - **Follow-up** — the phone still cannot create a playlist. Whether it should is an ADR-0013 point 2
   question, not an oversight to be quietly patched.
-- **Follow-up** — the web sidebar still interleaves generated playlists with hand-made ones and will
-  hit point 3's problem. Adopting the same grouping there is the obvious next step.
+- **Follow-up** — the accumulation ADR-0048 makes possible is still unaddressed, and is a real risk
+  once seeded generation is actually used. The lever should be recency, pinning, or an expiry — not
+  provenance, and not a group the listener cannot get out of.
+- **Follow-up** — `is_auto_generated` is read as a *capability* in two places, which nothing defends:
+  `GET /playlists/{id}/recommendations` answers **400** for a hand-made playlist
+  (`recommendations.py:69`), while its sibling `/recommendations/external-albums` documents at
+  `:121-123` that it deliberately works for any playlist; and the web "Add to playlist" picker passes
+  `include_auto=false` (`PlaylistPickerModal.tsx:28`), so on the web a track cannot be added to any
+  of the six playlists above — while the Mac's equivalent menu offers all of them.
+- **Follow-up** — nothing parses `generation_prompt`, and both surfaces that display it
+  (`PlaylistDetail.tsx:526`, `DetailStore.swift:192`) print it raw, so an ADR-0048 playlist shows the
+  listener `seed:album:OK Computer`. The structured form was introduced without updating the two
+  renderers that assumed a sentence.
 - **Follow-up** — two unrelated web defects found while investigating: mobile web filters its
   playlist list to `is_auto_generated`, so a hand-made playlist never appears there
   (`MobileMoreSheet.tsx:49-56`); and the entire "Unsaved" ephemeral-playlist system is unreachable,
