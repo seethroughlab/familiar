@@ -19,19 +19,15 @@ import { initializeProfile, type Profile } from './services/profileService';
 // Layout
 import { AppShell } from './components/AppShell';
 import { LibraryBrowser } from './components/Library/LibraryBrowser';
-import { HomeScreen } from './components/Home';
 
 // Lazy-loaded route components
+const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 const ArtistDetail = lazy(() => import('./components/Library/ArtistDetail').then(m => ({ default: m.ArtistDetail })));
 const AlbumDetail = lazy(() => import('./components/Library/AlbumDetail').then(m => ({ default: m.AlbumDetail })));
 const PlaylistDetail = lazy(() => import('./components/Playlists/PlaylistDetail').then(m => ({ default: m.PlaylistDetail })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
 const GuestListener = lazy(() => import('./components/Guest/GuestListener').then(m => ({ default: m.GuestListener })));
-const FavoritesDetail = lazy(() => import('./components/Playlists/FavoritesDetail').then(m => ({ default: m.FavoritesDetail })));
-const DownloadsDetail = lazy(() => import('./components/Playlists/DownloadsDetail').then(m => ({ default: m.DownloadsDetail })));
-const SmartPlaylistDetail = lazy(() => import('./components/SmartPlaylists/SmartPlaylistDetail').then(m => ({ default: m.SmartPlaylistDetail })));
-const MixTapesList = lazy(() => import('./components/MixTape').then(m => ({ default: m.MixTapesList })));
 
 import { MixTapeProgressWatcher } from './components/MixTape';
 
@@ -309,7 +305,18 @@ function App() {
 
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
-            <Route path="/home" element={<HomeScreen />} />
+            {/* Settings is the point of the web app now (docs/WEB-PARITY.md), so it is a page
+                with a URL rather than a modal you could not link to or bookmark. */}
+            <Route path="/settings" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+                  {/* A page needs a title where the modal had a chrome header. The E2E helper also
+                      waits on this heading, so it is load-bearing as well as ordinary good sense. */}
+                  <h2 className="text-lg font-semibold mb-4">Settings</h2>
+                  <SettingsPanel />
+                </div>
+              </Suspense>
+            } />
             {/* Library browser views */}
             {BROWSER_ROUTES.map(({ path, browserId }) => (
               <Route
@@ -332,16 +339,6 @@ function App() {
             } />
 
             {/* Collections */}
-            <Route path="/favorites" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <FavoritesDetail />
-              </Suspense>
-            } />
-            <Route path="/downloads" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <DownloadsDetail />
-              </Suspense>
-            } />
 
             {/* Playlists */}
             <Route path="/playlists/:id" element={
@@ -349,21 +346,11 @@ function App() {
                 <PlaylistDetail />
               </Suspense>
             } />
-            <Route path="/smart-playlists/:id" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <SmartPlaylistDetail />
-              </Suspense>
-            } />
             {/* Mix Tapes */}
-            <Route path="/mixtapes" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <MixTapesList />
-              </Suspense>
-            } />
 
             {/* Default redirect */}
-            <Route index element={<Navigate to="/home" replace />} />
-            <Route path="*" element={<Navigate to="/home" replace />} />
+            <Route index element={<Navigate to="/settings" replace />} />
+            <Route path="*" element={<Navigate to="/settings" replace />} />
           </Route>
         </Routes>
       </QueryClientProvider>

@@ -1,3 +1,4 @@
+import type { NavigateFunction } from 'react-router-dom';
 import { useEffect, useRef } from 'react';
 import { useAudioEngine } from '../player/useAudioEngine';
 import { useScrobbling } from './useScrobbling';
@@ -14,7 +15,7 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('AppShell');
 
 interface AppBootstrapDeps {
-  setShowSettings: (v: boolean) => void;
+  navigate: NavigateFunction;
   setShowFullPlayer: (v: boolean) => void;
   closeRightPanel: () => void;
 }
@@ -25,7 +26,7 @@ interface AppBootstrapDeps {
  * custom event listeners, and triple-tap recovery.
  */
 export function useAppBootstrap({
-  setShowSettings,
+  navigate,
   setShowFullPlayer,
   closeRightPanel,
 }: AppBootstrapDeps): void {
@@ -71,10 +72,10 @@ export function useAppBootstrap({
 
   // Listen for navigate-to-settings event
   useEffect(() => {
-    const handler = () => setShowSettings(true);
+    const handler = () => navigate('/settings');
     window.addEventListener('navigate-to-settings', handler);
     return () => window.removeEventListener('navigate-to-settings', handler);
-  }, [setShowSettings]);
+  }, [navigate]);
 
 
   // Hydrate player state from IndexedDB
@@ -95,7 +96,6 @@ export function useAppBootstrap({
           log.info('[AppShell] Triple-tap recovery triggered');
           setShowFullPlayer(false);
           closeRightPanel();
-          setShowSettings(false);
           tapCountRef.current = 0;
         }
       } else {
@@ -108,5 +108,5 @@ export function useAppBootstrap({
       document.addEventListener('touchstart', handleTripleTap);
       return () => document.removeEventListener('touchstart', handleTripleTap);
     }
-  }, [setShowFullPlayer, closeRightPanel, setShowSettings]);
+  }, [setShowFullPlayer, closeRightPanel]);
 }
