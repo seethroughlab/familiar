@@ -521,7 +521,11 @@ export function PlaylistDetail({ playlistId: playlistIdProp, onBack: onBackProp 
               <Clock className="w-4 h-4" />
               {Math.floor(totalDuration / 60)} min
             </span>
-            {playlist.is_auto_generated && playlist.generation_prompt && (
+            {/* Sentence prompts read as a caption; ADR-0048's `seed:album:OK Computer` does not,
+                and the playlist's own name already says "Based on OK Computer". */}
+            {playlist.is_auto_generated
+              && playlist.generation_prompt
+              && !playlist.generation_prompt.startsWith('seed:') && (
               <span className="text-purple-400/70 truncate max-w-full sm:max-w-xs">
                 "{playlist.generation_prompt}"
               </span>
