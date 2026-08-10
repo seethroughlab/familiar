@@ -1,7 +1,7 @@
 /**
  * Dexie database for local device storage.
  *
- * Stores device profile info, chat history, and offline data.
+ * Stores device profile info and offline data.
  */
 import Dexie, { type Table } from 'dexie';
 import { createLogger } from '../utils/logger';
@@ -14,31 +14,6 @@ export interface DeviceProfile {
   profileId: string; // UUID from backend
   deviceId: string; // UUID for this device
   createdAt: Date;
-}
-
-// Chat types
-export interface ChatToolCall {
-  name: string;
-  input: Record<string, unknown>;
-  result?: Record<string, unknown>;
-  status: 'running' | 'complete';
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  toolCalls?: ChatToolCall[];
-  timestamp: Date;
-}
-
-export interface ChatSession {
-  id: string; // UUID
-  profileId: string; // UUID from backend
-  title: string; // Auto-generated from first user message
-  messages: ChatMessage[];
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 // PWA Offline types
@@ -275,7 +250,6 @@ export async function isIndexedDBAvailable(): Promise<boolean> {
 
 export class FamiliarDB extends Dexie {
   deviceProfile!: Table<DeviceProfile>;
-  chatSessions!: Table<ChatSession>;
   cachedTracks!: Table<CachedTrack>;
   offlineTracks!: Table<OfflineTrack>;
   offlineArtwork!: Table<OfflineArtwork>;
@@ -405,6 +379,10 @@ export class FamiliarDB extends Dexie {
       remoteLogs: '++id, level, createdAt',
     });
 
+    // Version 12 below deletes `chatSessions`; versions 2–11 keep it because they describe
+    // migrations that already ran on devices in the wild. Rewriting history here would give an
+    // upgrading browser a different schema than the one it actually has.
+
     // Version 11: offline ranking manifests (ADR-0006). A new table requires a version
     // bump; adding optional fields to an existing record does not.
     this.version(11).stores({
@@ -423,6 +401,16 @@ export class FamiliarDB extends Dexie {
       partialDownloads: 'trackId, updatedAt',
       remoteLogs: '++id, level, createdAt',
       offlineManifests: 'profileId, generatedAt',
+    });
+
+    // Version 12: delete `chatSessions` (ADR-0048). `null` is how Dexie drops a store, and the
+    // stored conversations go with it — which is the point. Chat is retired on every surface, so
+    // leaving the table would keep transcripts on disk indefinitely for a feature the app no
+    // longer has, in the one place a user cannot see or clear them.
+    //
+    // Only the deleted store is named. Dexie carries the rest forward from version 11.
+    this.version(12).stores({
+      chatSessions: null,
     });
   }
 }

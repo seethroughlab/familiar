@@ -223,8 +223,13 @@ class TestExportImportService:
         assert export["profile"]["color"] == "#ff0000"
 
     @pytest.mark.asyncio
-    async def test_export_includes_chat_history_passthrough(self, service, mock_db):
-        """Export should pass through chat history."""
+    async def test_export_no_longer_carries_chat_history(self, service, mock_db):
+        """Chat history is not exported, and cannot be — ADR-0048 made it a clean break.
+
+        This replaces a passthrough test. The frontend stopped sending the field when the web chat
+        client was retired, and the store it came from is deleted in the same change, so the only
+        thing left to pin is that nothing reintroduces it quietly.
+        """
         profile = MagicMock(spec=Profile)
         profile.id = uuid4()
         profile.name = "Test"
@@ -235,11 +240,6 @@ class TestExportImportService:
         mock_result.all.return_value = []
         mock_db.execute.return_value = mock_result
 
-        chat_history = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there!"},
-        ]
-
         with patch("app.services.export_import.profile.get_app_version", return_value="1.0.0"):
             export = await service.export_profile(
                 profile,
@@ -248,10 +248,12 @@ class TestExportImportService:
                 include_playlists=False,
                 include_smart_playlists=False,
                 include_proposed_changes=False,
-                chat_history=chat_history,
             )
 
-        assert export["chat_history"] == chat_history
+        assert "chat_history" not in export
+
+        with pytest.raises(TypeError):
+            await service.export_profile(profile, chat_history=[{"role": "user"}])
 
 
 class TestImportService:
@@ -291,6 +293,31 @@ class TestImportService:
         assert session_id is not None
         assert len(session_id) == 36  # UUID format
         assert preview["session_id"] == session_id
+
+    @pytest.mark.asyncio
+    async def test_preview_ignores_chat_history_in_an_older_backup(self, service, mock_db):
+        """A backup written before ADR-0048 still carries `chat_history`. It is ignored, not fatal.
+
+        This is the half of a clean break that is easy to miss: the field stops being *written*
+        today, but files containing it exist on disk and are exactly what a restore is for.
+        """
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db.execute.return_value = mock_result
+
+        import_data = {
+            "version": EXPORT_VERSION,
+            "exported_at": "2024-01-15T10:00:00Z",
+            "profile": {"name": "Test"},
+            "play_history": [],
+            "favorites": [],
+            "playlists": [],
+            "chat_history": [{"role": "user", "content": "Hello"}],
+        }
+
+        _session_id, preview = await service.preview_import(import_data)
+
+        assert "chat_history_count" not in preview["summary"]
 
     @pytest.mark.asyncio
     async def test_preview_import_counts_items(self, service, mock_db):

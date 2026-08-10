@@ -1,13 +1,5 @@
 import api from './base';
 
-/** Anthropic-format chat message used in profile export/import/backup. */
-export interface ExportChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string | Array<Record<string, unknown>>;
-  tool_calls?: Array<Record<string, unknown>>;
-  tool_use_id?: string;
-}
-
 // Export/Import API
 export interface ExportRequest {
   include_play_history?: boolean;
@@ -15,7 +7,6 @@ export interface ExportRequest {
   include_playlists?: boolean;
   include_smart_playlists?: boolean;
   include_proposed_changes?: boolean;
-  chat_history?: ExportChatMessage[];
 }
 
 export interface ImportPreviewSummary {
@@ -25,7 +16,6 @@ export interface ImportPreviewSummary {
   smart_playlists_count: number;
   proposed_changes_count: number;
   user_overrides_count: number;
-  chat_history_count: number;
 }
 
 export interface ImportPreviewMatching {
@@ -77,7 +67,6 @@ export interface ImportExecuteResponse {
     smart_playlists: ImportResultCategory;
     proposed_changes: ImportResultCategory;
     user_overrides: ImportResultCategory;
-    chat_history: ExportChatMessage[];
   };
 }
 
@@ -294,8 +283,6 @@ export interface BackupRequest {
   include_acoustid?: boolean;
   // Output options
   compress?: boolean;
-  // Optional chat history
-  chat_history?: ExportChatMessage[];
 }
 
 export interface RestorePreviewSummary {
@@ -308,7 +295,6 @@ export interface RestorePreviewSummary {
     smart_playlists_count: number;
     proposed_changes_count: number;
     user_overrides_count: number;
-    chat_history_count: number;
   };
   library?: {
     total_tracks: number;
@@ -366,7 +352,6 @@ export interface RestoreProfileResults {
   smart_playlists: ImportResultCategory;
   proposed_changes: ImportResultCategory;
   user_overrides: ImportResultCategory;
-  chat_history: ExportChatMessage[];
 }
 
 export interface RestoreLibraryResults {
