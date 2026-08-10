@@ -36,7 +36,6 @@ from app.api.routes import (
     artwork,
     background,
     bandcamp,
-    chat,
     diagnostics,
     download,
     export_import,
@@ -514,7 +513,6 @@ app.include_router(health.router, prefix="/api/v1")
 app.include_router(auth_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(tracks.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(library.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(chat.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(videos.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(lastfm.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(settings_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)

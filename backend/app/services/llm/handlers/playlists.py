@@ -1,4 +1,4 @@
-"""Playlist tool handlers (select_diverse, fetch_webpage, create_playlist_from_items, search_for_item, save_as_playlist)."""
+"""Playlist tool handlers (select_diverse, create_playlist_from_items, search_for_item, save_as_playlist)."""
 
 from __future__ import annotations
 
@@ -311,75 +311,6 @@ class PlaylistHandlersMixin:
             "count": len(selected),
             "unique_artists": unique_artists,
             "note": f"Selected {len(selected)} tracks from {unique_artists} different artists",
-        }
-
-    async def _fetch_webpage(self: "ToolExecutor", url: str) -> dict[str, Any]:
-        """Fetch a web page and extract readable content.
-
-        Uses curl_cffi for TLS fingerprint impersonation to bypass bot detection
-        on sites like Discogs, Pitchfork, RateYourMusic that block httpx.
-        """
-        from urllib.parse import urlparse
-
-        import trafilatura
-        from curl_cffi.requests import AsyncSession
-
-        # Validate URL
-        if not url or not url.startswith(("http://", "https://")):
-            return {"error": "Invalid URL. Must start with http:// or https://"}
-
-        # Extract domain for Referer header
-        parsed = urlparse(url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
-
-        try:
-            async with AsyncSession() as session:
-                response = await session.get(
-                    url,
-                    impersonate="chrome",  # Latest Chrome TLS fingerprint
-                    timeout=30,
-                    headers={
-                        # Minimal headers - let curl_cffi set browser-appropriate defaults
-                        # Referer suggests we came from the site itself (not a bot)
-                        "Referer": base_url + "/",
-                    },
-                    allow_redirects=True,
-                )
-                response.raise_for_status()
-                html = response.text
-        except Exception as e:
-            error_msg = str(e)
-            logger.warning(f"fetch_webpage failed for {url}: {error_msg}")
-            if "timeout" in error_msg.lower():
-                return {"error": "Request timed out"}
-            if "403" in error_msg:
-                return {"error": "Access denied (403) - site is blocking automated access"}
-            return {"error": f"Failed to fetch page: {error_msg}"}
-
-        # Extract readable content with trafilatura
-        content = trafilatura.extract(
-            html,
-            favor_recall=True,
-            include_links=False,
-            include_images=False,
-            include_tables=True,
-        )
-
-        if not content:
-            return {
-                "error": "Could not extract readable content from page",
-                "url": url,
-            }
-
-        # Truncate if too long (to fit in context)
-        max_chars = 15000
-        if len(content) > max_chars:
-            content = content[:max_chars] + "\n\n[Content truncated...]"
-
-        return {
-            "url": url,
-            "content": content,
-            "char_count": len(content),
         }
 
     async def _create_playlist_from_items(

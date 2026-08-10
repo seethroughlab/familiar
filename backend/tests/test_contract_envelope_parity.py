@@ -7,7 +7,7 @@ validation failure.
 
 from fastapi.testclient import TestClient
 
-from tests.conftest import assert_full_envelope
+from tests.conftest import assert_full_envelope, make_profile_headers
 
 ZERO_UUID = "00000000-0000-0000-0000-000000000000"
 
@@ -42,9 +42,28 @@ def test_401_auth_error_has_envelope(client: TestClient) -> None:
     assert_full_envelope(response, status_code=401)
 
 
-def test_503_llm_not_configured_has_envelope(client: TestClient) -> None:
-    """LLMNotConfiguredError → 503 envelope."""
-    response = client.post("/api/v1/chat", json={"message": "hello"})
+def test_503_service_unavailable_has_envelope(
+    client: TestClient, test_profile: dict, monkeypatch
+) -> None:
+    """ServiceUnavailableError → 503 envelope.
+
+    **Re-pointed from `/chat` when ADR-0043 retired it.** That route raised
+    `LLMNotConfiguredError`, which is now defined and raised nowhere, so this shape had no reachable
+    trigger left. Last.fm's auth endpoint raises the same base class when it has no credentials —
+    which CI never configures — so the envelope stays covered rather than the test being deleted
+    with the route that happened to exercise it.
+    """
+    # **Forced, not assumed absent.** The obvious version of this just calls the endpoint and
+    # expects a 503 because CI configures no credentials — which passes in CI and fails on any
+    # developer machine that has them, exactly like the chat-key tests this repository already
+    # carries. Patching the check makes the assertion about the envelope rather than about the
+    # machine.
+    from app.services import lastfm as lastfm_module
+
+    service = lastfm_module.get_lastfm_service()
+    monkeypatch.setattr(service, "is_configured", lambda: False)
+
+    response = client.get("/api/v1/lastfm/auth", headers=make_profile_headers(test_profile))
     assert_full_envelope(response, status_code=503)
 
 
@@ -59,20 +78,20 @@ def test_405_method_not_allowed_has_envelope(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# SSE pre-stream error tests
+# SSE pre-stream error tests — **none remain, and that is a real gap.**
+#
+# These asserted that a route destined to become `text/event-stream` still returns a JSON envelope
+# when it fails during setup, rather than a half-open stream carrying an error frame. Every one of
+# them used `/chat/stream`, which ADR-0043 retired. The surviving SSE route, `/library/map/stream`,
+# cannot replace them: it requires no profile and opens the stream unconditionally, so it has no
+# pre-stream failure to provoke. Re-pointing them there would have asserted nothing while looking
+# like coverage.
+#
+# Recorded rather than quietly dropped: if an SSE route ever gains a pre-stream error path, this is
+# the section it belongs in.
 # ---------------------------------------------------------------------------
 
 
-def test_chat_stream_missing_body_returns_422(client: TestClient) -> None:
-    """POST /chat/stream with no body → 422 validation envelope."""
-    response = client.post("/api/v1/chat/stream")
-    assert_full_envelope(response, status_code=422)
-
-
-def test_chat_stream_no_api_key_returns_503(client: TestClient) -> None:
-    """POST /chat/stream with valid body but no API key → 503 envelope."""
-    response = client.post("/api/v1/chat/stream", json={"message": "hello"})
-    assert_full_envelope(response, status_code=503)
 
 
 def test_map_stream_invalid_entity_returns_422(client: TestClient) -> None:
@@ -86,12 +105,3 @@ def test_map_3d_stream_invalid_entity_returns_422(client: TestClient) -> None:
     response = client.get("/api/v1/library/map/3d/stream?entity_type=invalid")
     assert_full_envelope(response, status_code=422)
 
-
-def test_chat_stream_invalid_profile_returns_400(client: TestClient) -> None:
-    """POST /chat/stream with invalid X-Profile-ID → 400 envelope."""
-    response = client.post(
-        "/api/v1/chat/stream",
-        json={"message": "hello"},
-        headers={"X-Profile-ID": "not-a-uuid"},
-    )
-    assert_full_envelope(response, status_code=400)
