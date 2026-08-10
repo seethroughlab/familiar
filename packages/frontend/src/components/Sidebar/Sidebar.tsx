@@ -20,9 +20,9 @@ import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
-import { playlistsApi, smartPlaylistsApi, pendingTracksApi } from '../../api';
+import { playlistsApi, smartPlaylistsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
-import { STALE_TIME, offlineAwareRetry } from '../../api/queryDefaults';
+import { offlineAwareRetry } from '../../api/queryDefaults';
 import type { Playlist, SmartPlaylist } from '../../api';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
 import { PlaylistContextMenu } from './PlaylistContextMenu';
@@ -64,7 +64,6 @@ export function Sidebar() {
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed);
-  const setShowSettings = useUIStore((s) => s.setShowSettings);
 
   // Section collapse state
   const [playlistsExpanded, setPlaylistsExpanded] = useState(true);
@@ -97,15 +96,6 @@ export function Sidebar() {
     favorites: favoritesCount,
     downloads: downloadsCount,
   };
-
-  // Pending review count
-  const { data: pendingStats } = useQuery({
-    queryKey: queryKeys.pendingTracks.stats,
-    queryFn: () => pendingTracksApi.getStats(),
-    staleTime: STALE_TIME.MEDIUM,
-    retry: offlineAwareRetry(isOffline, 1),
-  });
-  const pendingReviewCount = pendingStats?.total_tracks ?? 0;
 
   // Playlists
   const { data: playlists } = useQuery({
@@ -188,7 +178,7 @@ export function Sidebar() {
         </div>
         <div className={`border-t p-1 space-y-0.5 ${dividerClass}`}>
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => navigate('/settings')}
             className={`flex items-center justify-center w-full p-2 rounded-lg ${textClass} ${hoverClass}`}
             title="Settings"
           >
@@ -255,11 +245,6 @@ export function Sidebar() {
               >
                 <item.icon className="w-4 h-4 flex-shrink-0" />
                 <span className="truncate flex-1">{item.label}</span>
-                {item.path === '/library/pending-review' && pendingReviewCount > 0 && (
-                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-600 text-white min-w-[1.25rem] text-center">
-                    {pendingReviewCount}
-                  </span>
-                )}
               </Link>
             </div>
           ))}
@@ -399,7 +384,7 @@ export function Sidebar() {
       <div className={`border-t p-2 ${dividerClass}`}>
         <div className="space-y-0.5">
           <button
-            onClick={() => setShowSettings(true)}
+            onClick={() => navigate('/settings')}
             className={`flex items-center gap-3 w-full px-2 py-1.5 rounded-lg text-sm transition-colors ${textClass} ${hoverClass}`}
           >
             <Settings className="w-4 h-4" />

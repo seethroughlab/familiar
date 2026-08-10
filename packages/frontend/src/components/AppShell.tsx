@@ -5,7 +5,7 @@
  * PlayerBar (full width, bottom)
  */
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Outlet } from 'react-router-dom';
+import { useNavigate, Outlet } from 'react-router-dom';
 import { ScrollContainerContext } from '../hooks/useScrollContainer';
 import { Loader2 } from 'lucide-react';
 import { useLastfmCallback } from '../hooks/useLastfmCallback';
@@ -28,7 +28,6 @@ import { useListeningSession } from '../hooks/useListeningSession';
 
 // Lazy-loaded components
 const FullPlayer = lazy(() => import('./FullPlayer').then(m => ({ default: m.FullPlayer })));
-const SettingsPanel = lazy(() => import('./Settings').then(m => ({ default: m.SettingsPanel })));
 const QueueView = lazy(() => import('./Queue').then(m => ({ default: m.QueueView })));
 const AmbientScreen = lazy(() => import('./Ambient').then(m => ({ default: m.AmbientScreen })));
 const SessionPanel = lazy(() => import('./Sessions/SessionPanel').then(m => ({ default: m.SessionPanel })));
@@ -42,16 +41,15 @@ function LazyLoadSpinner() {
 }
 
 export function AppShell() {
+  const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
 
   // UI store
   const rightPanel = useUIStore((s) => s.rightPanel);
-  const showSettings = useUIStore((s) => s.showSettings);
   const showFullPlayer = useUIStore((s) => s.showFullPlayer);
   const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
   const closeRightPanel = useUIStore((s) => s.closeRightPanel);
-  const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowFullPlayer = useUIStore((s) => s.setShowFullPlayer);
   const showAmbientScreen = useUIStore((s) => s.showAmbientScreen);
   const setShowAmbientScreen = useUIStore((s) => s.setShowAmbientScreen);
@@ -70,7 +68,7 @@ export function AppShell() {
   }, [showFullPlayer, fullPlayerMounted]);
 
   // One-time initialization (audio engine, sync, logging, hydration, events, triple-tap)
-  useAppBootstrap({ setShowSettings, setShowFullPlayer, closeRightPanel });
+  useAppBootstrap({ navigate, setShowFullPlayer, closeRightPanel });
 
   // Handle Last.fm OAuth callback token in URL
   useLastfmCallback();
@@ -81,8 +79,6 @@ export function AppShell() {
     onEscape: () => {
       if (showFullPlayer) {
         setShowFullPlayer(false);
-      } else if (showSettings) {
-        setShowSettings(false);
       } else if (rightPanel) {
         closeRightPanel();
       }
@@ -195,30 +191,6 @@ export function AppShell() {
               <AmbientScreen onClose={() => setShowAmbientScreen(false)} />
             </Suspense>
           </ErrorBoundary>
-        )}
-
-        {/* Settings modal */}
-        {showSettings && (
-          <div className="fixed inset-0 z-40 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60" onClick={() => setShowSettings(false)} />
-            <div className={`relative w-full max-w-4xl max-h-[85vh] mx-4 rounded-xl overflow-hidden shadow-2xl ${resolvedTheme === 'light' ? 'bg-white' : 'bg-zinc-900'}`}>
-              <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
-                <h2 className="text-lg font-semibold">Settings</h2>
-                <button
-                  onClick={() => setShowSettings(false)}
-                  className={`p-1.5 rounded-lg transition-colors ${resolvedTheme === 'light' ? 'hover:bg-zinc-100' : 'hover:bg-zinc-800'}`}
-                  aria-label="Close settings"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                </button>
-              </div>
-              <div className="overflow-y-auto max-h-[calc(85vh-4rem)]">
-                <Suspense fallback={<LazyLoadSpinner />}>
-                  <SettingsPanel />
-                </Suspense>
-              </div>
-            </div>
-          </div>
         )}
 
         {/* Mobile session overlay */}
