@@ -122,7 +122,7 @@ export function AppShell() {
             <div className={`hidden md:flex w-80 border-l flex-col ${resolvedTheme === 'light' ? 'border-zinc-200 bg-white' : 'border-zinc-800 bg-zinc-900'}`}>
               <div className={`flex items-center justify-between p-4 border-b ${resolvedTheme === 'light' ? 'border-zinc-200' : 'border-zinc-800'}`}>
                 <h2 className="font-semibold">
-                  {rightPanel === 'queue' ? 'Queue' : rightPanel === 'session' ? 'Listening Session' : 'AI Assistant'}
+                  {rightPanel === 'queue' ? 'Queue' : 'Listening Session'}
                 </h2>
                 <button
                   onClick={closeRightPanel}
