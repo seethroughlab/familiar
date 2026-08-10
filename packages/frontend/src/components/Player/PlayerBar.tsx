@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, ListX, ListMusic, MessageSquare, Radio } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Music, ChevronUp, Shuffle, Repeat, Loader2, ListX, ListMusic, Radio } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -21,8 +21,6 @@ interface PlayerBarProps {
   onExpandClick?: () => void;
   onQueueToggle?: () => void;
   isQueueOpen?: boolean;
-  onChatToggle?: () => void;
-  isChatOpen?: boolean;
   onSessionToggle?: () => void;
   isSessionOpen?: boolean;
 }
@@ -64,8 +62,6 @@ export function PlayerBar({
   onExpandClick,
   onQueueToggle,
   isQueueOpen = false,
-  onChatToggle,
-  isChatOpen = false,
   onSessionToggle,
   isSessionOpen = false,
 }: PlayerBarProps) {
@@ -448,19 +444,6 @@ export function PlayerBar({
           </button>
         )}
 
-        {/* Chat toggle */}
-        {onChatToggle && (
-          <button
-            onClick={onChatToggle}
-            className={`p-2 rounded-full transition-colors ${
-              isChatOpen ? 'text-green-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
-            }`}
-            aria-label={isChatOpen ? 'Close chat' : 'Open chat'}
-            title="AI Assistant"
-          >
-            <MessageSquare className="w-5 h-5" />
-          </button>
-        )}
 
         {/* Listening session toggle */}
         {onSessionToggle && (

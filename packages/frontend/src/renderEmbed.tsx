@@ -5,7 +5,6 @@ import { BrowserRouter } from 'react-router-dom';
 import { initApiOrigin, initServerToken, registerProfileProvider } from './api/base';
 import { profileFromURL } from './services/embedBridge';
 import { EmbedDiscover } from './components/Embed/EmbedDiscover';
-import { useUIStore } from './stores/uiStore';
 
 
 /**
@@ -35,10 +34,6 @@ export function renderEmbed(options?: { onReady?: () => void }): void {
     clearSelectedProfile: async () => {},
   });
 
-  // No shell here means no right panel, so `triggerChat` would set a message nothing renders.
-  // Declared rather than inferred: the affordances that lead to chat check this and stand down,
-  // instead of each one having to know it might be inside an embed.
-  useUIStore.getState().setChatSurfaceAvailable(false);
 
   // Its own client, with the app's defaults. The embedded page is a separate document with a
   // separate cache; nothing is shared with a browser tab that happens to have the app open.

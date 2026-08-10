@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Heart, MessageSquare, MoreHorizontal } from 'lucide-react';
+import { Home, Users, Heart, MoreHorizontal } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { MobileMoreSheet } from './MobileMoreSheet';
@@ -22,9 +22,6 @@ export function MobileBottomNav() {
   const navigate = useNavigate();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const showFullPlayer = useUIStore((s) => s.showFullPlayer);
-  const rightPanel = useUIStore((s) => s.rightPanel);
-  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel);
-  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
   const [showMore, setShowMore] = useState(false);
 
   // Hide when full player is open
@@ -59,19 +56,6 @@ export function MobileBottomNav() {
             </button>
           );
         })}
-        {chatAvailable && (
-        <button
-          onClick={() => toggleRightPanel('chat')}
-          className={`flex flex-col items-center gap-0.5 py-2 px-4 min-w-[64px] transition-colors ${
-            rightPanel === 'chat'
-              ? 'text-green-500'
-              : light ? 'text-zinc-500' : 'text-zinc-400'
-          }`}
-        >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-[10px] font-medium">Chat</span>
-        </button>
-        )}
         <button
           onClick={() => setShowMore(true)}
           className={`flex flex-col items-center gap-0.5 py-2 px-4 min-w-[64px] transition-colors ${

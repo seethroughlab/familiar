@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initApiOrigin, registerProfileProvider, setApiOrigin } from './api/base';
 import { profileFromURL } from './services/embedBridge';
 import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
-import { useUIStore } from './stores/uiStore';
 import { installVisualizerSink } from './services/visualizerSink';
 import { useVisualizerStore } from './stores/visualizerStore';
 import { loadVisualizerPlugins } from './services/visualizerPluginHost';
@@ -66,9 +65,6 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
     clearSelectedProfile: async () => {},
   });
 
-  // No shell, so nothing renders a chat panel. Declared rather than inferred, so the affordances
-  // that lead to chat stand down instead of each one learning it might be embedded.
-  useUIStore.getState().setChatSurfaceAvailable(false);
 
   const queryClient = new QueryClient({
     defaultOptions: {
