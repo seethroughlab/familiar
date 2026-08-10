@@ -415,28 +415,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
-        "name": "get_spotify_unmatched",
-        "description": "Find Spotify favorites and playlist tracks that aren't in the user's local library. Requires a prior Spotify data import. Use when the user asks what they're missing from Spotify, what to add next, or wants to compare libraries. Returns unmatched tracks with stats.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "search": {
-                    "type": "string",
-                    "description": "Free-text search across artist, track, and album names"
-                },
-                "artist": {
-                    "type": "string",
-                    "description": "Filter by artist name (case-insensitive)"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results to return (default 50)",
-                    "default": 50
-                }
-            }
-        }
-    },
-    {
         "name": "get_similar_artists_in_library",
         "description": "Find artists similar to a given artist that exist in the user's library. Uses Last.fm to find similar artists, then checks which ones the user actually has. IMPORTANT: Use this when the user asks for music like an artist they may not have. Returns similar artists in the library plus a Bandcamp link if the requested artist isn't in the library.",
         "input_schema": {
@@ -997,11 +975,6 @@ Don't ask permission first - just propose the change. The user reviews all propo
 1. Use get_discovery_recommendations to get similar artists + unheard tracks
 2. Present recommended_artists with Bandcamp links for discovery
 3. Optionally mention unheard_tracks and deep_cuts for re-discovering existing library
-
-**"What Spotify tracks am I missing?"** or **"What should I add from Spotify?"**:
-1. Use get_spotify_unmatched to find unmatched Spotify tracks
-2. Present stats (match rate) and top unmatched tracks
-3. If user asks about a specific artist, use the artist filter
 
 ## Discovery Suggestions
 

@@ -91,7 +91,6 @@ All custom exceptions inherit from `FamiliarError` (defined in `app/api/exceptio
 | `ServiceUnavailableError` | "Service temporarily unavailable" | External dependency down |
 | `LLMNotConfiguredError` | "AI assistant not configured..." | No API key set |
 | `ExternalServiceError` | "External service request failed" | External API call failure |
-| `SpotifyAPIError` | "Spotify request failed" | Spotify API failure |
 
 ---
 

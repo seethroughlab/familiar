@@ -11,9 +11,8 @@ Owns mixin classes that implement Claude tool-use handlers — one mixin per dom
 - `PlaybackHandlersMixin` — playback control tools
 - `PlaylistHandlersMixin` — playlist management tools
 - `SearchHandlersMixin` — library search tools
-- `SpotifyHandlersMixin` — Spotify integration tools
 
-All 8 mixins are composed into `ToolExecutor` (in `llm/executor.py`) via multiple inheritance.
+All 7 mixins are composed into `ToolExecutor` (in `llm/executor.py`) via multiple inheritance.
 
 ## Does NOT handle
 

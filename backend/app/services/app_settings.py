@@ -17,7 +17,6 @@ Settings by Source
 - music_library_paths
 
 **Admin UI with env fallback**:
-- spotify_client_id, spotify_client_secret
 - lastfm_api_key, lastfm_api_secret, acoustid_api_key
 - s3_backup_access_key_id, s3_backup_secret_access_key
 - s3_backup_bucket, s3_backup_region, s3_backup_prefix
@@ -233,7 +232,7 @@ class AppSettingsService:
         Precedence: AppSettings (JSON) > Environment variable > Default
 
         Args:
-            key: Setting name (e.g., 'lastfm_api_key', 'spotify_client_id')
+            key: Setting name (e.g., 'lastfm_api_key', 'acoustid_api_key')
 
         Returns:
             The effective value from the highest-priority source that has it set.

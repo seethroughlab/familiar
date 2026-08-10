@@ -159,10 +159,6 @@ class MapComputationError(FamiliarError):
     message = "Failed to compute library map"
 
 
-class SpotifyAPIError(ExternalServiceError):
-    """Spotify API call failed."""
-
-    message = "Spotify request failed"
 
 
 class LibraryImportError(FamiliarError):
