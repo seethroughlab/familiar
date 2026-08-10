@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   Activity, AlertCircle, AlertTriangle, Check, ChevronDown, Download, FileEdit,
-  Image, ListMusic, Loader2, Music, CassetteTape, CloudUpload, Smartphone, X,
+  Image, Loader2, Music, CassetteTape, CloudUpload, Smartphone, X,
 } from 'lucide-react';
 import { useHealthStore } from '../stores/healthStore';
 import { useBackgroundJobsStore } from '../stores/backgroundJobsStore';
@@ -34,14 +34,12 @@ const jobIcons: Record<BackgroundJob['type'], typeof Music> = {
   library_sync: Music,
   artwork_fetch: Image,
   s3_backup: CloudUpload,
-  spotify_matching: ListMusic,
 };
 
 const jobNames: Record<BackgroundJob['type'], string> = {
   library_sync: 'Library Sync',
   artwork_fetch: 'Artwork',
   s3_backup: 'S3 Backup',
-  spotify_matching: 'Spotify Matching',
 };
 
 const jobPhaseLabels: Record<string, string> = {

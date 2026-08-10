@@ -125,11 +125,6 @@ export const queryKeys = {
     detail: (artist: string) => ['ego-map', artist] as const,
   },
 
-  // ── Spotify ───────────────────────────────────────────────────────────
-  spotifyImport: {
-    all: ['spotify-import'] as const,
-  },
-
   // ── Pending Review ──────────────────────────────────────────────────
   pendingTracks: {
     all: ['pending-tracks'] as const,

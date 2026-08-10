@@ -57,7 +57,6 @@ from app.api.routes import (
     s3_backup,
     sessions,
     smart_playlists,
-    spotify_import,
     tracks,
     updates,
     videos,
@@ -533,7 +532,6 @@ app.include_router(s3_backup.router, prefix="/api/v1", responses=DEFAULT_ERROR_R
 app.include_router(analysis.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(download.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(updates.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(spotify_import.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(ambient.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(playback.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)

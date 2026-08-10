@@ -117,7 +117,7 @@ export interface JobProgress {
 }
 
 export interface BackgroundJob {
-  type: 'library_sync' | 'artwork_fetch' | 's3_backup' | 'spotify_matching';
+  type: 'library_sync' | 'artwork_fetch' | 's3_backup';
   status: 'running' | 'idle' | 'error' | 'complete';
   phase: string;
   progress: JobProgress | null;

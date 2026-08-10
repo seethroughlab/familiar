@@ -16,7 +16,6 @@ REQUIRED_PROFILE_ENDPOINTS = [
     ("GET", "/api/v1/smart-playlists"),
     ("GET", "/api/v1/favorites"),
     ("GET", "/api/v1/profiles/me"),
-    ("GET", "/api/v1/spotify/import"),
     ("GET", "/api/v1/bandcamp/search?q=test"),
     ("POST", "/api/v1/export-import/export"),
     ("GET", f"/api/v1/download/playlist/{ZERO_UUID}"),

@@ -838,8 +838,6 @@ jobs:
         working-directory: packages/web
         env:
           BASE_URL: http://localhost:4401
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         # Exclude screenshot specs - they're for README docs, not CI testing

@@ -18,7 +18,6 @@ import { PlayerBar } from './Player/PlayerBar';
 import { Sidebar } from './Sidebar/Sidebar';
 import { ContentToolbar } from './ContentToolbar';
 import { ErrorBoundary } from './ErrorBoundary';
-import { SpotifyImportModal } from './Import';
 import { InstallPrompt } from './PWA/InstallPrompt';
 import { OfflineIndicator } from './PWA/OfflineIndicator';
 import { TrackEditModal } from './TrackEdit';
@@ -45,7 +44,6 @@ function LazyLoadSpinner() {
 export function AppShell() {
   const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [spotifyImportFile, setSpotifyImportFile] = useState<File | null>(null);
   const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
 
   // UI store
@@ -290,13 +288,6 @@ export function AppShell() {
         {/* Playlist picker modal */}
         {playlistPickerTrackIds && <PlaylistPickerModal trackIds={playlistPickerTrackIds} />}
 
-        {/* Spotify import modal */}
-        {spotifyImportFile && (
-          <SpotifyImportModal
-            file={spotifyImportFile}
-            onClose={() => setSpotifyImportFile(null)}
-          />
-        )}
       </div>
   );
 }
