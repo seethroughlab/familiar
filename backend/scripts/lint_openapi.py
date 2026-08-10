@@ -63,7 +63,6 @@ VENDORED_TAGS = {
     "smart-playlists",
     "profiles",
     "favorites",
-    "chat",
     # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these directly — the
     # whole point of ADR-0006 is that they carry no ranking code.
     "queue",
