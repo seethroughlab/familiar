@@ -61,7 +61,6 @@ class BackupService:
         include_ssm: bool = True,
         # Output options
         compress: bool = True,
-        chat_history: list[dict[str, Any]] | None = None,
     ) -> AsyncGenerator[bytes, None]:
         """Create a unified backup file.
 
@@ -95,7 +94,6 @@ class BackupService:
                 include_playlists=include_playlists,
                 include_smart_playlists=include_smart_playlists,
                 include_proposed_changes=include_proposed_changes,
-                chat_history=chat_history,
             )
 
             # Copy profile data fields (excluding version/timestamp which we already have)
@@ -111,9 +109,6 @@ class BackupService:
             if include_proposed_changes:
                 export_data["proposed_changes"] = profile_export.get("proposed_changes", [])
                 export_data["user_overrides"] = profile_export.get("user_overrides", [])
-            if chat_history:
-                export_data["chat_history"] = chat_history
-
         # Add library data
         if include_library_analysis:
             # Build library data structure
@@ -373,7 +368,6 @@ class RestoreService:
             "smart_playlists_count": len(import_data.get("smart_playlists", [])),
             "proposed_changes_count": len(proposed_changes),
             "user_overrides_count": len(user_overrides),
-            "chat_history_count": len(import_data.get("chat_history", [])),
         }
 
         matching_results = {
@@ -587,7 +581,6 @@ class RestoreService:
             "smart_playlists": {"imported": 0, "skipped": 0, "errors": []},
             "proposed_changes": {"imported": 0, "skipped": 0, "errors": []},
             "user_overrides": {"imported": 0, "skipped": 0, "errors": []},
-            "chat_history": import_data.get("chat_history", []),
         }
 
         if import_play_history:

@@ -50,7 +50,6 @@ class BackupRequest(BaseModel):
     compress: bool = Field(default=True, description="Compress output with gzip")
 
     # Optional chat history from frontend
-    chat_history: list[dict[str, Any]] | None = Field(default=None, description="Chat history from frontend IndexedDB")
 
 
 class RestorePreviewResponse(BaseModel):
@@ -152,7 +151,6 @@ async def create_backup(
             include_midi=request.include_midi,
             include_ssm=request.include_ssm,
             compress=request.compress,
-            chat_history=request.chat_history,
         ):
             yield chunk
 

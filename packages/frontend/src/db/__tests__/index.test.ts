@@ -25,7 +25,10 @@ describe('FamiliarDB types', () => {
     // from Dexie's schema instead of using `in` on the instance.
     const tableNames = db.tables.map((t) => t.name)
     expect(tableNames).toContain('deviceProfile')
-    expect(tableNames).toContain('chatSessions')
+    // Deleted at version 12 (ADR-0048). Asserting its *absence* is what proves the `null` schema
+    // actually dropped the store rather than merely stopping new writes to it — the difference
+    // between a clean break and transcripts sitting on disk where nobody can clear them.
+    expect(tableNames).not.toContain('chatSessions')
     expect(tableNames).toContain('cachedTracks')
     expect(tableNames).toContain('offlineTracks')
     expect(tableNames).toContain('offlineArtwork')
@@ -68,52 +71,6 @@ describe('Interface type validation', () => {
     expect(profile.profileId).toBe('profile-123')
     expect(profile.deviceId).toBe('device-456')
     expect(profile.createdAt).toBeInstanceOf(Date)
-  })
-
-  it('ChatMessage should have correct shape', () => {
-    const message: import('../index').ChatMessage = {
-      id: 'msg-1',
-      role: 'user',
-      content: 'Hello',
-      timestamp: new Date(),
-    }
-
-    expect(message.role).toBe('user')
-    expect(message.content).toBe('Hello')
-  })
-
-  it('ChatMessage should support tool calls', () => {
-    const message: import('../index').ChatMessage = {
-      id: 'msg-2',
-      role: 'assistant',
-      content: 'Searching...',
-      toolCalls: [
-        {
-          name: 'search_library',
-          input: { query: 'jazz' },
-          result: { tracks: [], count: 0 },
-          status: 'complete',
-        },
-      ],
-      timestamp: new Date(),
-    }
-
-    expect(message.toolCalls).toHaveLength(1)
-    expect(message.toolCalls![0].name).toBe('search_library')
-  })
-
-  it('ChatSession should have correct shape', () => {
-    const session: import('../index').ChatSession = {
-      id: 'session-123',
-      profileId: 'profile-456',
-      title: 'Test Chat',
-      messages: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }
-
-    expect(session.title).toBe('Test Chat')
-    expect(session.messages).toHaveLength(0)
   })
 
   it('CachedTrack should handle nullable fields', () => {

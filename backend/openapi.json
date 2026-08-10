@@ -1410,18 +1410,6 @@
       "BackupRequest": {
         "description": "Request to create a backup.",
         "properties": {
-          "chat_history": {
-            "description": "Chat history from frontend IndexedDB",
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Chat History",
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "compress": {
             "default": true,
             "description": "Compress output with gzip",
@@ -3354,18 +3342,6 @@
       "ExportRequest": {
         "description": "Request to export profile data.",
         "properties": {
-          "chat_history": {
-            "description": "Chat history from frontend IndexedDB (passed through)",
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Chat History",
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "include_favorites": {
             "default": true,
             "title": "Include Favorites",

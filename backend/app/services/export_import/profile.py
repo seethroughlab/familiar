@@ -62,14 +62,12 @@ class ExportImportService:
         include_playlists: bool = True,
         include_smart_playlists: bool = True,
         include_proposed_changes: bool = True,
-        chat_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Export all data for a profile.
 
         Args:
             profile: The profile to export
             include_*: Flags for what to include
-            chat_history: Chat history from frontend (passed through)
 
         Returns:
             Export data dict
@@ -100,9 +98,6 @@ class ExportImportService:
         if include_proposed_changes:
             export_data["proposed_changes"] = await self._export_proposed_changes()
             export_data["user_overrides"] = await self._export_user_overrides()
-
-        if chat_history:
-            export_data["chat_history"] = chat_history
 
         return export_data
 
@@ -361,7 +356,6 @@ class ImportService:
             "smart_playlists_count": len(import_data.get("smart_playlists", [])),
             "proposed_changes_count": len(proposed_changes),
             "user_overrides_count": len(user_overrides),
-            "chat_history_count": len(import_data.get("chat_history", [])),
         }
 
         # Store matching results for later use
@@ -450,7 +444,6 @@ class ImportService:
             "smart_playlists": {"imported": 0, "skipped": 0, "errors": []},
             "proposed_changes": {"imported": 0, "skipped": 0, "errors": []},
             "user_overrides": {"imported": 0, "skipped": 0, "errors": []},
-            "chat_history": import_data.get("chat_history", []),
         }
 
         try:
