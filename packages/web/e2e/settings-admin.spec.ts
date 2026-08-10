@@ -22,8 +22,11 @@ test.describe('Settings', () => {
     const apiKeysHeading = page.getByText('API Keys', { exact: true });
     await expect(apiKeysHeading).toBeVisible({ timeout: 5000 });
 
-    // Should show the active API key services
-    await expect(page.getByText('Claude API', { exact: true })).toBeVisible({ timeout: 5000 });
+    // Should show the active API key services. **No Claude or OpenAI row**: ADR-0048 removed them
+    // with the provider layer, and this assertion is what would catch one coming back — a key field
+    // for a model this server never calls is a promise it cannot keep.
+    await expect(page.getByText('Claude API', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('OpenAI-compatible', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Last.fm', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
