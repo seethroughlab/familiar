@@ -25,4 +25,3 @@ export { useArtistDiscovery } from './hooks/useArtistDiscovery';
 export { useTrackDiscovery } from './hooks/useTrackDiscovery';
 export { usePlaylistDiscovery } from './hooks/usePlaylistDiscovery';
 export { useLibraryDiscovery } from './hooks/useLibraryDiscovery';
-export { useSpotifyDiscovery } from './hooks/useSpotifyDiscovery';

@@ -247,7 +247,7 @@ class ArtworkFetcher:
         """Fetch artwork from available sources.
 
         Returns True if artwork was successfully downloaded and saved.
-        Order: Last.fm (if configured) → MusicBrainz/CAA → Spotify
+        Order: Last.fm (if configured) → MusicBrainz/CAA
         Last.fm is preferred when available as it's faster and more reliable.
         """
         from app.services.lastfm import get_lastfm_service
