@@ -12,13 +12,12 @@ import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
   Heart, Download, Inbox, Combine,
   Settings, PanelLeftClose, PanelLeft,
-  ListMusic, Clock, ChevronDown, ChevronUp, Plus, CassetteTape,
+  ChevronDown, ChevronUp, Plus, CassetteTape,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useDownloadedTracks } from '../../hooks/useDownloadedTracks';
-import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { useContextMenu } from '../../hooks/useContextMenu';
 import { playlistsApi, smartPlaylistsApi, pendingTracksApi } from '../../api';
@@ -28,7 +27,6 @@ import type { Playlist, SmartPlaylist } from '../../api';
 import { SidebarPlaylistItem } from './SidebarPlaylistItem';
 import { PlaylistContextMenu } from './PlaylistContextMenu';
 import { SmartPlaylistContextMenu } from './SmartPlaylistContextMenu';
-import { EphemeralPlaylistContextMenu } from './EphemeralPlaylistContextMenu';
 import { PlaylistEditModal } from './PlaylistEditModal';
 import { CollectionContextMenu } from './CollectionContextMenu';
 import { LibraryItemContextMenu } from './LibraryItemContextMenu';
@@ -75,7 +73,6 @@ export function Sidebar() {
   // Context menu state
   const playlistMenu = useContextMenu<Playlist>();
   const smartPlaylistMenu = useContextMenu<SmartPlaylist>();
-  const ephemeralMenu = useContextMenu<string>(); // stores ephemeral playlist ID
   const collectionMenu = useContextMenu<string>(); // stores collection path
   const libraryMenu = useContextMenu<string>(); // stores library item path
 
@@ -124,9 +121,6 @@ export function Sidebar() {
     retry: offlineAwareRetry(isOffline),
   });
 
-  // Ephemeral playlists
-  const ephemeralPlaylists = useEphemeralPlaylistStore((s) => s.playlists);
-
   const isActive = (path: string) => {
     if (path === '/library/artists') {
       // Also match artist detail routes
@@ -140,7 +134,6 @@ export function Sidebar() {
 
   const isPlaylistActive = (id: string) => location.pathname === `/playlists/${id}`;
   const isSmartPlaylistActive = (id: string) => location.pathname === `/smart-playlists/${id}`;
-  const isEphemeralActive = (id: string) => location.pathname === `/ephemeral/${id}`;
 
   const light = resolvedTheme === 'light';
   const bgClass = light ? 'bg-zinc-50 border-zinc-200' : 'bg-zinc-950 border-zinc-800';
@@ -300,37 +293,6 @@ export function Sidebar() {
         </nav>
 
         <div className={`mx-4 my-3 border-t ${dividerClass}`} />
-
-        {/* Ephemeral (unsaved) playlists */}
-        {ephemeralPlaylists.length > 0 && (
-          <>
-            <div className={`px-4 py-1 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${sectionClass}`}>
-              <Clock className="w-3 h-3" />
-              Unsaved
-            </div>
-            <nav className="space-y-0.5 px-2 mt-1">
-              {ephemeralPlaylists.map((pl) => (
-                <div key={pl.id} onContextMenu={(e) => ephemeralMenu.open(pl.id, e)}>
-                  <Link
-                    to={`/ephemeral/${pl.id}`}
-                    className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors border border-dashed ${
-                      isEphemeralActive(pl.id)
-                        ? 'border-amber-500/30 bg-amber-900/20 text-amber-300'
-                        : `border-transparent ${textClass} ${hoverClass}`
-                    }`}
-                  >
-                    <ListMusic className="w-4 h-4 flex-shrink-0 text-amber-400" />
-                    <span className="truncate flex-1">{pl.name}</span>
-                    <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                      {pl.tracks.length}
-                    </span>
-                  </Link>
-                </div>
-              ))}
-            </nav>
-            <div className={`mx-4 my-3 border-t ${dividerClass}`} />
-          </>
-        )}
 
         {/* Playlists section */}
         <div className="flex items-center px-4 py-1">
@@ -492,13 +454,6 @@ export function Sidebar() {
           isOpen={true}
           onClose={() => setMixtapeSource(null)}
           source={mixtapeSource}
-        />
-      )}
-      {ephemeralMenu.state.isOpen && ephemeralMenu.state.item && (
-        <EphemeralPlaylistContextMenu
-          playlistId={ephemeralMenu.state.item}
-          position={ephemeralMenu.state.position}
-          onClose={ephemeralMenu.close}
         />
       )}
       {collectionMenu.state.isOpen && collectionMenu.state.item && (

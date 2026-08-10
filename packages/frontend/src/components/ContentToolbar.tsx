@@ -23,8 +23,7 @@ export function ContentToolbar() {
     || pathname === '/favorites'
     || pathname === '/downloads'
     || pathname.startsWith('/playlists/')
-    || pathname.startsWith('/smart-playlists/')
-    || pathname.startsWith('/ephemeral/');
+    || pathname.startsWith('/smart-playlists/');
   const searchValue = searchParams.get('search') || '';
 
   const updateSearch = (value: string) => {

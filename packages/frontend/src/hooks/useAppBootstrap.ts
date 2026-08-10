@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import type { NavigateFunction } from 'react-router-dom';
 import { useAudioEngine } from '../player/useAudioEngine';
 import { useScrobbling } from './useScrobbling';
 import { usePlayTracking } from './usePlayTracking';
@@ -15,7 +14,6 @@ import { createLogger } from '../utils/logger';
 const log = createLogger('AppShell');
 
 interface AppBootstrapDeps {
-  navigate: NavigateFunction;
   setShowSettings: (v: boolean) => void;
   setShowFullPlayer: (v: boolean) => void;
   closeRightPanel: () => void;
@@ -27,7 +25,6 @@ interface AppBootstrapDeps {
  * custom event listeners, and triple-tap recovery.
  */
 export function useAppBootstrap({
-  navigate,
   setShowSettings,
   setShowFullPlayer,
   closeRightPanel,
@@ -79,18 +76,6 @@ export function useAppBootstrap({
     return () => window.removeEventListener('navigate-to-settings', handler);
   }, [setShowSettings]);
 
-
-  // Listen for show-ephemeral-playlist event
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.ephemeralId) {
-        navigate(`/ephemeral/${detail.ephemeralId}`);
-      }
-    };
-    window.addEventListener('show-ephemeral-playlist', handler);
-    return () => window.removeEventListener('show-ephemeral-playlist', handler);
-  }, [navigate]);
 
   // Hydrate player state from IndexedDB
   const hydrate = usePlayerStore((state) => state.hydrate);

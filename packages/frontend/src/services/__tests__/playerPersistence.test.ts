@@ -55,7 +55,8 @@ import {
   migrateOldPlayerState,
   fetchTracksBatched,
   debouncedSavePlayerState,
-} from '../playerPersistence';
+// The re-export shim this used to import from is gone; the implementation was always here.
+} from '../../player/persistence';
 import { isIndexedDBAvailable } from '../../db';
 import { getSelectedProfileId } from '../profileService';
 import type { Track, QueueItem } from '../../types';
