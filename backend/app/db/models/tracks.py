@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -27,6 +28,33 @@ class Track(Base):
     """Core track entity with metadata from file tags."""
 
     __tablename__ = "tracks"
+
+    # These are declared here rather than left to the migrations that first created them, because
+    # the baseline builds fresh databases with `Base.metadata.create_all()` — so anything the models
+    # do not describe is schema only an incremental migration can produce. `scripts/diff_schema.py`
+    # found all seven of these present in every migrated database and in no model.
+    #
+    # The functional ones are `text()` rather than `func.lower(...)`: Postgres normalises both to the
+    # same `indexdef`, and the literal form is what the migrations wrote and what the reflected
+    # definition reads back as, so a future diff compares like with like.
+    __table_args__ = (
+        # Trigram indexes behind library search — without them `%` and ILIKE scan the table.
+        Index("ix_tracks_title_trgm", "title",
+              postgresql_using="gin", postgresql_ops={"title": "gin_trgm_ops"}),
+        Index("ix_tracks_artist_trgm", "artist",
+              postgresql_using="gin", postgresql_ops={"artist": "gin_trgm_ops"}),
+        Index("ix_tracks_album_trgm", "album",
+              postgresql_using="gin", postgresql_ops={"album": "gin_trgm_ops"}),
+        # Case- and whitespace-insensitive lookup. The grouping queries sort and join on exactly
+        # these expressions, so a plain column index does not serve them.
+        Index("ix_tracks_artist_lower", text("lower(trim(artist))")),
+        Index("ix_tracks_album_lower", text("lower(trim(album))")),
+        Index("ix_tracks_album_artist_lower",
+              text("lower(trim(coalesce(nullif(album_artist, ''), artist)))")),
+        # Partial: the pending-review queue is a small slice of a large table.
+        Index("ix_tracks_pending_review", "created_at",
+              postgresql_where=text("status = 'pending_review'")),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     file_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
@@ -178,6 +206,13 @@ class TrackAnalysis(Base):
         Index("ix_track_analysis_swing_ratio", "swing_ratio"),
         Index("ix_track_analysis_brightness", "brightness"),
         Index("ix_track_analysis_mood_tags", "mood_tags", postgresql_using="gin"),
+        # The index pgvector similarity search depends on. Without it every `<=>` comparison is a
+        # sequential scan over the whole table, which is radio, playlist generation and the music
+        # map — the slowest possible failure, and a silent one.
+        Index("ix_track_analysis_embedding_hnsw", "embedding",
+              postgresql_using="hnsw",
+              postgresql_ops={"embedding": "vector_cosine_ops"},
+              postgresql_with={"m": 16, "ef_construction": 64}),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
