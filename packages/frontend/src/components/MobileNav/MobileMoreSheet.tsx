@@ -19,7 +19,6 @@ import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { playlistsApi, smartPlaylistsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { offlineAwareRetry } from '../../api/queryDefaults';
-import type { Playlist } from '../../api';
 
 interface Props {
   onClose: () => void;
@@ -47,11 +46,10 @@ export function MobileMoreSheet({ onClose }: Props) {
   const { isOffline } = useOfflineStatus();
 
   const { data: playlists } = useQuery({
-    queryKey: queryKeys.playlists.ai,
-    queryFn: async () => {
-      const data = await playlistsApi.list(true);
-      return data.filter((p: Playlist) => p.is_auto_generated);
-    },
+    // Every playlist. This filtered to `is_auto_generated`, so a playlist made by hand was
+    // invisible on mobile entirely — the exact inverse of the desktop sidebar, which showed them all.
+    queryKey: queryKeys.playlists.all,
+    queryFn: () => playlistsApi.list(true),
     retry: offlineAwareRetry(isOffline),
   });
 

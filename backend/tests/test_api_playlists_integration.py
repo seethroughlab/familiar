@@ -85,7 +85,15 @@ class TestRemoveItem:
 
 class TestRecommendations:
     @pytest.mark.asyncio
-    async def test_recommendations_requires_auto_generated(self, async_db, client, profile_with_headers):
+    async def test_recommendations_work_for_a_hand_made_playlist(self, async_db, client, profile_with_headers):
+        """It used to answer 400 unless the playlist was auto-generated.
+
+        The gate was never defended: recommendations are computed from the playlist's *tracks*, and a
+        hand-made playlist has tracks. The sibling `/recommendations/external-albums` had already
+        documented that it deliberately worked for any playlist "unlike the sibling
+        ``/recommendations`` endpoint which is AI-only" — the inconsistency was written down rather
+        than fixed. This asserts it is gone rather than merely untested.
+        """
         profile, headers = profile_with_headers
         playlist = await insert_test_playlist(
             async_db, profile.id, name="Manual", is_auto_generated=False
@@ -96,7 +104,8 @@ class TestRecommendations:
             f"/api/v1/playlists/{playlist.id}/recommendations",
             headers=headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code != 400, "a hand-made playlist must not be refused"
+        assert resp.status_code == 200
 
     @pytest.mark.asyncio
     async def test_recommendations_mock_lastfm(self, async_db, client, profile_with_headers):

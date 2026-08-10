@@ -23,9 +23,17 @@ export function PlaylistPickerModal({ trackIds }: Props) {
   const queryClient = useQueryClient();
   const closePlaylistPicker = useUIStore((s) => s.closePlaylistPicker);
 
+  // `true` — every playlist, including auto-generated ones.
+  //
+  // It passed `false`, which meant "Add to playlist" silently omitted every playlist made through
+  // the old chat surface. Those are real playlists a listener made deliberately, and there is no way
+  // to convert one into a "regular" playlist, so the exclusion was permanent.
+  //
+  // It also collided: this shares `queryKeys.playlists.all` with the sidebar, which asks for `true`.
+  // Same cache key, different parameters — so which set you got depended on which mounted first.
   const { data: playlists = [], isLoading } = useQuery({
     queryKey: queryKeys.playlists.all,
-    queryFn: () => playlistsApi.list(false),
+    queryFn: () => playlistsApi.list(true),
   });
 
   useEffect(() => {
