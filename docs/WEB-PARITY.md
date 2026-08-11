@@ -4,8 +4,12 @@
 nothing is lost on the way to native clients. This document is that record, so the code no longer has
 to be. Code is a poor inventory: you cannot read it as a list, and it rots without saying so.
 
-Written 2026-08-10. Verified against the repos at that date — every "no" below was checked by looking
-for the call, not by assuming.
+Written 2026-08-10, last updated 2026-08-11. Verified against the repos at that date — every "no"
+below was checked by looking for the call, not by assuming.
+
+**This is maintained, not a snapshot.** ADR-0050 point 6 makes it the reference the code used to be,
+which only holds if it is corrected when a row changes. Update it in the same change that moves a
+✅ or a ❌, the way `openapi.json` is regenerated with the schema it describes.
 
 **How to read the verdicts:**
 
@@ -44,22 +48,28 @@ for the call, not by assuming.
 | Listen-together (guest sessions) | ✅ | ❌ | ❌ | ADR-0036 built the server half; **ADR-0037 was rejected**, so this is web-only by decision |
 | Sleep timer, playback speed | ❌ | ❌ | ❌ | Exists nowhere |
 
-## Playlist editing — the biggest gap
+## Playlist editing
+
+Was "the biggest gap". Mostly closed on the Mac, 2026-08-11.
 
 | Capability | Web | Mac | iPhone | Notes |
 |---|---|---|---|---|
 | Create a playlist | ✅ | ✅ | ❌ | ADR-0049; both editors are `#if os(macOS)` |
 | Create a smart playlist | ✅ | ✅ | ❌ | |
 | Add a track to a playlist | ✅ | ✅ | ✅ | |
-| **Remove a track from a playlist** | ✅ | ❌ | ❌ | `playlists/tracks.py` has the endpoint; nothing native calls it |
-| **Rename / delete a playlist** | ✅ | ❌ | ❌ | `playlistsUpdatePlaylist` / `playlistsDeletePlaylist` are **generated and uncalled** |
-| **Reorder playlist tracks** | ✅ | ❌ | ❌ | |
+| Remove a track from a playlist | ✅ | ✅ | ❌ | Row menu, playlist screens only. Removes *every* occurrence, so the view reloads rather than guessing which rows went |
+| Rename / delete a playlist | ✅ | ✅ | ❌ | Sidebar row context menu. Delete is confirmed; removing a track is not |
+| **Reorder playlist tracks** | ✅ | ❌ | ❌ | `playlistsReorderPlaylistTracks` is generated and uncalled — the work is drag-and-drop in `TrackTable`, not the request |
 | Delete a smart playlist | ✅ | ✅ | ❌ | |
 | **Reorder the queue / remove from it** | ✅ | ❌ | ❌ | `QueueView` has no `onMove`/`onDelete`; the only removal is rejecting a radio suggestion |
 | Save the queue as a playlist | ✅ | ❌ | ❌ | |
 
-**This is why `/playlists/:id` stays mounted in the browser.** The Mac's playlist detail looks
-equivalent and is nearly read-only.
+**`/playlists/:id` is still mounted in the browser, and reorder is the only reason left.** It was
+kept because the Mac's playlist detail looked equivalent and was nearly read-only — that is no longer
+true, and when reorder lands the route can go.
+
+**iPhone remains unable to edit playlists at all**, or to create one: every editor is
+`#if os(macOS)`. That is ADR-0013 point 2's listening-path rule, not an oversight.
 
 ## Library management
 
@@ -126,6 +136,17 @@ auth  health
 | Spotify favorites import | Retired 2026-08-10; the UI had been unreachable |
 | Server-synced playback queue | ADR-0028 |
 | Capacitor iOS app (`packages/ios`) | Superseded by ADR-0001. **Still builds against 100% of `frontend/src`** |
+
+## Changes since first written
+
+- **2026-08-11** — the Mac gained remove-a-track, rename and delete for playlists
+  (`familiar-apple` #100). Only reorder is still browser-only, and it is the last thing keeping
+  `/playlists/:id` mounted.
+- **2026-08-11** — the web app was reduced to management (`familiar` #151, ADR-0050): it opens on
+  Settings and twelve listening-path routes are unmounted. **The Web column below still describes
+  what the code can do, not what is currently routed** — `PARKED_BROWSERS` in
+  `packages/frontend/src/routes.ts` is the list of what is unmounted, and points 4 of ADR-0050 makes
+  deleting it a consequence of accepting that ADR.
 
 ## Dead at the time of writing
 
