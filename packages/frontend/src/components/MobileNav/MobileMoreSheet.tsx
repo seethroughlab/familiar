@@ -9,12 +9,11 @@ import { useQuery } from '@tanstack/react-query';
 import {
   List, Grid3X3, Map, Sparkles, FileText,
   Download, Settings, Waves,
-  ListMusic, Clock, X,
+  ListMusic, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { getAmbientSynthBridge } from '../../player/ambient/ambientSynthBridge';
 import { useThemeStore } from '../../stores/themeStore';
-import { useEphemeralPlaylistStore } from '../../stores/ephemeralPlaylistStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { playlistsApi, smartPlaylistsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
@@ -58,8 +57,6 @@ export function MobileMoreSheet({ onClose }: Props) {
     queryFn: () => smartPlaylistsApi.list(),
     retry: offlineAwareRetry(isOffline),
   });
-
-  const ephemeralPlaylists = useEphemeralPlaylistStore((s) => s.playlists);
 
   const light = resolvedTheme === 'light';
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
@@ -129,27 +126,6 @@ export function MobileMoreSheet({ onClose }: Props) {
               <span>{item.label}</span>
             </button>
           ))}
-
-          {/* Ephemeral playlists */}
-          {ephemeralPlaylists.length > 0 && (
-            <>
-              <div className={sectionClass}>
-                <Clock className="w-3 h-3 inline mr-1" />
-                Unsaved
-              </div>
-              {ephemeralPlaylists.map((pl) => (
-                <button
-                  key={pl.id}
-                  onClick={() => handleNav(`/ephemeral/${pl.id}`)}
-                  className={itemClass(`/ephemeral/${pl.id}`)}
-                >
-                  <ListMusic className="w-5 h-5 flex-shrink-0 text-amber-400" />
-                  <span className="flex-1 truncate">{pl.name}</span>
-                  <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>{pl.tracks.length}</span>
-                </button>
-              ))}
-            </>
-          )}
 
           {/* Playlists */}
           {playlists && playlists.length > 0 && (

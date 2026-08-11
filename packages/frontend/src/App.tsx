@@ -25,7 +25,6 @@ import { HomeScreen } from './components/Home';
 const ArtistDetail = lazy(() => import('./components/Library/ArtistDetail').then(m => ({ default: m.ArtistDetail })));
 const AlbumDetail = lazy(() => import('./components/Library/AlbumDetail').then(m => ({ default: m.AlbumDetail })));
 const PlaylistDetail = lazy(() => import('./components/Playlists/PlaylistDetail').then(m => ({ default: m.PlaylistDetail })));
-const EphemeralPlaylistDetail = lazy(() => import('./components/Playlists/EphemeralPlaylistDetail').then(m => ({ default: m.EphemeralPlaylistDetail })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
 const GuestListener = lazy(() => import('./components/Guest/GuestListener').then(m => ({ default: m.GuestListener })));
@@ -355,12 +354,6 @@ function App() {
                 <SmartPlaylistDetail />
               </Suspense>
             } />
-            <Route path="/ephemeral/:id" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <EphemeralPlaylistDetail />
-              </Suspense>
-            } />
-
             {/* Mix Tapes */}
             <Route path="/mixtapes" element={
               <Suspense fallback={<LazyLoadSpinner />}>

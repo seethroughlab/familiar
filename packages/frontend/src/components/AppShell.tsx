@@ -5,7 +5,7 @@
  * PlayerBar (full width, bottom)
  */
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { ScrollContainerContext } from '../hooks/useScrollContainer';
 import { Loader2 } from 'lucide-react';
 import { useLastfmCallback } from '../hooks/useLastfmCallback';
@@ -42,7 +42,6 @@ function LazyLoadSpinner() {
 }
 
 export function AppShell() {
-  const navigate = useNavigate();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [fullPlayerMounted, setFullPlayerMounted] = useState(false);
 
@@ -71,7 +70,7 @@ export function AppShell() {
   }, [showFullPlayer, fullPlayerMounted]);
 
   // One-time initialization (audio engine, sync, logging, hydration, events, triple-tap)
-  useAppBootstrap({ navigate, setShowSettings, setShowFullPlayer, closeRightPanel });
+  useAppBootstrap({ setShowSettings, setShowFullPlayer, closeRightPanel });
 
   // Handle Last.fm OAuth callback token in URL
   useLastfmCallback();
