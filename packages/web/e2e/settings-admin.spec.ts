@@ -109,9 +109,12 @@ test.describe('UI Elements', () => {
   });
 
   test('main sidebar navigation works', async ({ page }) => {
-    // Test sidebar navigation links are accessible
-    // Use Artists and Albums (Tracks view uses complex virtualizer that can be flaky in CI)
-    const sidebarLinks = ['Artists', 'Albums'] as const;
+    // Test sidebar navigation links are accessible.
+    //
+    // Artists and Albums used to be the choice here, as steadier than the virtualized Tracks view.
+    // Both are unmounted now — the web app keeps only what the native clients cannot do
+    // (docs/WEB-PARITY.md) — so these are what the sidebar actually offers.
+    const sidebarLinks = ['Tracks', 'Cleanup'] as const;
 
     for (const linkText of sidebarLinks) {
       const link = page.locator(`a:has-text("${linkText}")`).first();

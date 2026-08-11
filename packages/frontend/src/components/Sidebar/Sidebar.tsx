@@ -12,7 +12,7 @@ import {
   List, Users, Grid3X3, Smile, Map, Activity, Sparkles, FileText,
   Heart, Download, Inbox, Combine,
   Settings, PanelLeftClose, PanelLeft,
-  ChevronDown, ChevronUp, Plus, CassetteTape,
+  ChevronDown, ChevronUp, Plus,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -364,20 +364,6 @@ export function Sidebar() {
             )}
           </nav>
         )}
-
-        {/* Mix Tapes — single sidebar entry; list view shows the items. */}
-        <div className={`mx-4 my-3 border-t ${dividerClass}`} />
-        <div className="px-2">
-          <Link
-            to="/mixtapes"
-            className={`flex items-center gap-3 px-2 py-1.5 rounded-lg text-sm transition-colors ${
-              location.pathname === '/mixtapes' ? activeClass : `${textClass} ${hoverClass}`
-            }`}
-          >
-            <CassetteTape className="w-4 h-4 flex-shrink-0 text-orange-400" />
-            <span>Mix Tapes</span>
-          </Link>
-        </div>
       </div>
 
       {/* Footer */}

@@ -6,15 +6,17 @@
  */
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Heart, MoreHorizontal } from 'lucide-react';
+import { Music, Settings as SettingsIcon, MoreHorizontal } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { MobileMoreSheet } from './MobileMoreSheet';
 
+// All three of these — Home, Artists, Favorites — were unmounted when the web app was reduced to
+// management (docs/WEB-PARITY.md), and a bottom bar of buttons that redirect is worse than a short
+// one. These are what is still there.
 const NAV_ITEMS = [
-  { path: '/home', label: 'Home', icon: Home, match: '/home' },
-  { path: '/library/artists', label: 'Artists', icon: Users, match: '/library/artists' },
-  { path: '/favorites', label: 'Favorites', icon: Heart, match: '/favorites' },
+  { path: '/library/tracks', label: 'Tracks', icon: Music, match: '/library/tracks' },
+  { path: '/settings', label: 'Settings', icon: SettingsIcon, match: '/settings' },
 ] as const;
 
 export function MobileBottomNav() {
