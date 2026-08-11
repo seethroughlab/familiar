@@ -108,6 +108,13 @@ them, including a mobile bottom bar whose every button was a dead link.
    still fails the suite. **On acceptance, the parked set may be deleted**; the parity matrix is the
    record from then on.
 
+   **Parked is not the same as deletable, and one entry proves it.** `discover` has no route in the
+   app and belongs in `PARKED_BROWSERS`, but `components/Embed/EmbedDiscover.tsx` lazy-imports
+   `browsers/DiscoverBrowser/DiscoverBrowser` — it is what both Apple clients render inside their
+   `WKWebView`. Deleting it because it is parked would take out Discover on macOS and iOS. Anything
+   reachable from the `embed` or `visualizer` entry points is out of scope for deletion however
+   unreachable it is from the app's own routes; point 5 is the general form of this.
+
 5. **`/embed` and `/visualizer` are not part of this.** They are consumed by both Apple clients
    (ADR-0016, ADR-0017, ADR-0019, ADR-0033) and pin most of `api/`, `player/`, `db/` and `services/`
    regardless of what the app's own routes do. The web *bundle* is not going anywhere; only the app's
