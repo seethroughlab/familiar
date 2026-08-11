@@ -1,7 +1,15 @@
+/// The engine contract, minus the engine that is gone.
+//
+// This used to run the same suite against `CapacitorEngine` and then assert a further eleven
+// Capacitor-specific behaviours — a test in the *shared* package importing
+// `../../../../../ios/src/CapacitorEngine`, five directories up and into another workspace package.
+// That reach is why deleting `packages/ios` did not show up in a grep for "packages/ios": the path
+// was relative. The Capacitor app is retired (ADR-0001 point 6) and its assertions went with it.
+//
+// What stays is the part that was never about Capacitor: a contract any `AudioEngine` must satisfy,
+// run against a fake. The next engine to exist is what it is for.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AudioEngine, EngineEvent } from '../types';
-import { CapacitorEngine } from '../../../../../ios/src/CapacitorEngine';
-import type { FamiliarAudioPlugin } from '../../../../../ios/src/plugins/familiarAudio';
 
 vi.hoisted(() => {
   const g = globalThis as unknown as { window?: Record<string, unknown> };
@@ -130,113 +138,3 @@ function runContractSuite(name: string, factory: () => AudioEngine) {
 }
 
 runContractSuite('Web-like Engine Contract', () => new WebLikeAdapter());
-runContractSuite('Capacitor Engine Contract', () => new CapacitorEngine());
-
-describe('Capacitor Engine Parity Behaviors', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    familiarAudioMock.__resetListeners();
-  });
-
-  it('uses loadLocal for file:// URLs', async () => {
-    const engine = new CapacitorEngine();
-    await engine.load('t-local', 'file:///tmp/track.mp3');
-    expect(familiarAudioMock.loadLocal).toHaveBeenCalledWith({ path: 'file:///tmp/track.mp3', trackId: 't-local' });
-    expect(familiarAudioMock.load).not.toHaveBeenCalled();
-  });
-
-  it('completes crossfade callback even when native rejects', async () => {
-    familiarAudioMock.executeCrossfade.mockResolvedValueOnce({ success: false, reason: 'preload-not-ready' });
-    const engine = new CapacitorEngine();
-    let completed = false;
-    await new Promise<void>((resolve) => {
-      engine.executeCrossfade(2, () => {
-        completed = true;
-        resolve();
-      });
-    });
-    expect(completed).toBe(true);
-  });
-
-  it('maps pending track metadata fields to plugin payload', () => {
-    const engine = new CapacitorEngine();
-    engine.syncPendingTracks({
-      next: {
-        url: 'https://example.com/next.mp3',
-        trackId: 'next-1',
-        title: 'Next Track',
-        artist: 'Next Artist',
-        album: 'Next Album',
-        artworkUrl: 'https://example.com/next.jpg',
-      },
-      previous: {
-        url: 'https://example.com/prev.mp3',
-        trackId: 'prev-1',
-        title: 'Prev Track',
-        artist: 'Prev Artist',
-        album: 'Prev Album',
-        artworkUrl: 'https://example.com/prev.jpg',
-      },
-    });
-
-    expect(familiarAudioMock.setPendingTrackInfo).toHaveBeenCalledWith({
-      nextUrl: 'https://example.com/next.mp3',
-      nextTrackId: 'next-1',
-      nextTitle: 'Next Track',
-      nextArtist: 'Next Artist',
-      nextAlbum: 'Next Album',
-      nextArtworkUrl: 'https://example.com/next.jpg',
-      prevUrl: 'https://example.com/prev.mp3',
-      prevTrackId: 'prev-1',
-      prevTitle: 'Prev Track',
-      prevArtist: 'Prev Artist',
-      prevAlbum: 'Prev Album',
-      prevArtworkUrl: 'https://example.com/prev.jpg',
-    });
-  });
-
-  it('emits remotePrevious restart action from plugin event', () => {
-    const engine = new CapacitorEngine();
-    const handler = vi.fn();
-    engine.initialize();
-    engine.on(handler);
-
-    familiarAudioMock.__emit('remotePrevious', { nativeAction: 'restart', loadedTrackId: 'prev-1' });
-
-    expect(handler).toHaveBeenCalledWith({
-      type: 'remotePrevious',
-      nativeAction: 'restart',
-    });
-    expect(engine.getLoadedTrackId()).toBe('prev-1');
-  });
-
-  it('maps native error categories to EngineEvent codes', () => {
-    const engine = new CapacitorEngine();
-    const handler = vi.fn();
-    engine.initialize();
-    engine.on(handler);
-
-    familiarAudioMock.__emit('error', { message: 'Network down', category: 'network' });
-    familiarAudioMock.__emit('error', { message: 'Decode failed', category: 'decode' });
-    familiarAudioMock.__emit('error', { message: 'State failed', category: 'state' });
-    familiarAudioMock.__emit('error', { message: 'Resource missing', category: 'resource' });
-
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'network-unreachable' }));
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'media-decode' }));
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'state' }));
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', code: 'resource' }));
-  });
-
-  it('emits remote command fallback events when native load is not completed', () => {
-    const engine = new CapacitorEngine();
-    const handler = vi.fn();
-    engine.initialize();
-    engine.on(handler);
-
-    familiarAudioMock.__emit('remoteNext', {});
-    familiarAudioMock.__emit('remotePrevious', {});
-
-    expect(handler).toHaveBeenCalledWith({ type: 'remoteNext' });
-    expect(handler).toHaveBeenCalledWith({ type: 'remotePrevious', nativeAction: undefined });
-  });
-});
