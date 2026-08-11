@@ -310,3 +310,53 @@ async def test_paging_a_tie_group_returns_every_track_exactly_once(
 
     assert len(seen) == len(set(seen)), "OFFSET paging returned the same row twice"
     assert sorted(seen) == sorted(expected), "paging did not cover every track exactly once"
+
+
+class TestMetadataBlankClears:
+    """A blank field clears the tag rather than storing an empty one.
+
+    The bug this pins was on the client: the Swift `TrackMetadataUpdateRequest.genre` is a plain
+    `String?` with synthesised `Codable`, so a nil is omitted rather than sent as `null`, and
+    "clear this genre" was byte-identical to "change nothing". Clearing a tag on the Mac reported
+    success and did nothing. The client now sends `""`; this is the half that gives it meaning.
+
+    Worth having on this side regardless of the client: an empty-string genre sorts and groups
+    apart from every track that simply has none.
+    """
+
+    def test_a_blank_string_becomes_none(self) -> None:
+        from app.api.routes.tracks.metadata import TrackMetadataUpdateRequest
+
+        assert TrackMetadataUpdateRequest(genre="").genre is None
+
+    def test_whitespace_only_is_also_blank(self) -> None:
+        from app.api.routes.tracks.metadata import TrackMetadataUpdateRequest
+
+        assert TrackMetadataUpdateRequest(genre="   \t ").genre is None
+
+    def test_the_cleared_field_still_counts_as_set(self) -> None:
+        """The load-bearing half. The handler dumps with `exclude_unset=True`, so a field that
+        validated to None must still be *set* or the clear is dropped one layer later."""
+        from app.api.routes.tracks.metadata import TrackMetadataUpdateRequest
+
+        dumped = TrackMetadataUpdateRequest(genre="").model_dump(exclude_unset=True)
+        assert "genre" in dumped
+        assert dumped["genre"] is None
+
+    def test_an_untouched_field_stays_absent(self) -> None:
+        from app.api.routes.tracks.metadata import TrackMetadataUpdateRequest
+
+        dumped = TrackMetadataUpdateRequest(artist="Rachel's").model_dump(exclude_unset=True)
+        assert "genre" not in dumped
+
+    def test_surrounding_whitespace_is_trimmed(self) -> None:
+        from app.api.routes.tracks.metadata import TrackMetadataUpdateRequest
+
+        assert TrackMetadataUpdateRequest(album="  Selenography ").album == "Selenography"
+
+    def test_numbers_are_left_alone(self) -> None:
+        """There is no blank to interpret in an `int | None`, and coercing one would invent a rule."""
+        from app.api.routes.tracks.metadata import TrackMetadataUpdateRequest
+
+        assert TrackMetadataUpdateRequest(year=1999).year == 1999
+        assert TrackMetadataUpdateRequest().model_dump(exclude_unset=True) == {}
