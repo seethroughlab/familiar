@@ -7,15 +7,15 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  List, Grid3X3, Map, Sparkles, FileText,
-  Download, Settings, Waves,
+  List, FileText,
+  Settings, Waves,
   ListMusic, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { getAmbientSynthBridge } from '../../player/ambient/ambientSynthBridge';
 import { useThemeStore } from '../../stores/themeStore';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { playlistsApi, smartPlaylistsApi } from '../../api';
+import { playlistsApi } from '../../api';
 import { queryKeys } from '../../api/queryKeys';
 import { offlineAwareRetry } from '../../api/queryDefaults';
 
@@ -23,17 +23,14 @@ interface Props {
   onClose: () => void;
 }
 
+// Trimmed with the desktop sidebar (docs/WEB-PARITY.md). ADR-0002 point 3 already made mobile web a
+// non-target; this stops it advertising destinations that no longer exist.
 const LIBRARY_ITEMS = [
   { path: '/library/tracks', label: 'Tracks', icon: List },
-  { path: '/library/albums', label: 'Albums', icon: Grid3X3 },
-  { path: '/library/music-map', label: 'Music Map', icon: Map },
-  { path: '/library/discover', label: 'Discover', icon: Sparkles },
-  { path: '/library/proposed-changes', label: 'Changes', icon: FileText },
+  { path: '/library/artist-cleanup', label: 'Cleanup', icon: FileText },
 ];
 
-const COLLECTION_ITEMS = [
-  { path: '/downloads', label: 'Downloads', icon: Download },
-];
+const COLLECTION_ITEMS: { path: string; label: string; icon: typeof List }[] = [];
 
 export function MobileMoreSheet({ onClose }: Props) {
   const navigate = useNavigate();
@@ -49,12 +46,6 @@ export function MobileMoreSheet({ onClose }: Props) {
     // invisible on mobile entirely — the exact inverse of the desktop sidebar, which showed them all.
     queryKey: queryKeys.playlists.all,
     queryFn: () => playlistsApi.list(true),
-    retry: offlineAwareRetry(isOffline),
-  });
-
-  const { data: smartPlaylists } = useQuery({
-    queryKey: queryKeys.smartPlaylists.all,
-    queryFn: () => smartPlaylistsApi.list(),
     retry: offlineAwareRetry(isOffline),
   });
 
@@ -146,21 +137,6 @@ export function MobileMoreSheet({ onClose }: Props) {
           )}
 
           {/* Smart playlists */}
-          {smartPlaylists && smartPlaylists.length > 0 && (
-            <>
-              <div className={sectionClass}>Smart Playlists</div>
-              {smartPlaylists.map((pl) => (
-                <button
-                  key={pl.id}
-                  onClick={() => handleNav(`/smart-playlists/${pl.id}`)}
-                  className={itemClass(`/smart-playlists/${pl.id}`)}
-                >
-                  <Sparkles className="w-5 h-5 flex-shrink-0" />
-                  <span className="flex-1 truncate">{pl.name}</span>
-                </button>
-              ))}
-            </>
-          )}
 
           {/* Ambient mode (mobile only, requires native synth) */}
           {hasAmbientSynth && (

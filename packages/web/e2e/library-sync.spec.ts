@@ -75,12 +75,14 @@ test.describe('Library Sync', () => {
   });
 
   test('Library shows content after sync', async ({ page }) => {
-    // Navigate to Artists view (more reliable than Tracks which uses virtualizer)
-    await navigateToView(page, 'Artists');
-    await page.locator('text=/\\d+\\s*artist/i').first().waitFor({ timeout: 10000 }).catch(() => {});
+    // Tracks, because it is the only library view the web app still mounts — the Mac and iPhone
+    // took over browsing (docs/WEB-PARITY.md). This used to prefer Artists as the steadier of the
+    // two; the assertion below is deliberately tolerant, so the virtualizer's timing does not
+    // decide whether a *sync* test passes.
+    await navigateToView(page, 'Tracks');
+    await page.locator('text=/\\d+\\s*track/i').first().waitFor({ timeout: 10000 }).catch(() => {});
 
-    // Verify we're on the artists page and it rendered something
-    // The artists view shows "N artists" text when loaded
+    // Verify the view rendered something rather than an error or a blank column
     const pageContent = await page.textContent('body');
     const hasArtistText = /\d+\s*artist/i.test(pageContent || '');
     const hasAlbumText = /\d+\s*album/i.test(pageContent || '');

@@ -117,12 +117,13 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
       break;
     }
     case 'Settings': {
-      // Open Settings modal via custom event (same mechanism used by the app internally)
-      // Direct button click is unreliable in CI due to player bar overlay
+      // Settings is a page now, not a modal, but the same custom event still reaches it — the
+      // handler navigates instead of toggling a flag. Kept as an event because a direct button
+      // click is unreliable in CI behind the player bar overlay.
       await page.evaluate(() => {
         window.dispatchEvent(new Event('navigate-to-settings'));
       });
-      // Wait for the lazy-loaded Settings modal to render
+      // Wait for the lazy-loaded Settings page to render
       await page.waitForSelector('h2:has-text("Settings")', { timeout: 10000 });
       break;
     }
