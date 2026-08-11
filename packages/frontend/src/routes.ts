@@ -31,13 +31,11 @@ export const BROWSER_ROUTES = [
  * Each entry says where the capability went. When one of these is deleted for good, delete its line.
  */
 export const PARKED_BROWSERS: Record<string, string> = {
-  'artist-list': 'Mac and iPhone both browse artists',
-  'album-grid': 'Mac and iPhone both browse albums',
-  'vibe-map': 'Mac has a native Music Map (ADR-0016 point 3)',
-  discover: 'Mac and iPhone embed this same code via /embed (ADR-0016/0017/0019)',
-  'new-releases-detail': 'no native equivalent; the embed bridge cannot reach it either — see WEB-PARITY.md',
-  'proposed-changes': 'Mac has Proposed Changes (ADR-0013)',
-  'pending-review': 'Mac has Pending Review (ADR-0013)',
+  // **Parked but NOT deletable.** `EmbedDiscover` lazy-imports `DiscoverBrowser`, so this component
+  // is what both Apple clients render inside their WKWebView. Unmounted from this app's routes;
+  // still very much alive. See ADR-0050 point 4 — parked and deletable are not the same thing, and
+  // this is the entry that proves it.
+  discover: 'Mac and iPhone embed this same code via /embed (ADR-0016/0017/0019) — do not delete',
 };
 
 /** Where the app opens. Settings, because that is what the browser is for now. */
