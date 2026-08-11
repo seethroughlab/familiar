@@ -135,9 +135,13 @@ auth  health
 | Chat / AI assistant | ADR-0043 → ADR-0048. Familiar calls no model; an MCP host brings its own |
 | Spotify favorites import | Retired 2026-08-10; the UI had been unreachable |
 | Server-synced playback queue | ADR-0028 |
-| Capacitor iOS app (`packages/ios`) | Superseded by ADR-0001. **Still builds against 100% of `frontend/src`** |
+| Capacitor iOS app (`packages/ios`) | **Deleted 2026-08-11** (ADR-0001 point 6). It had been the largest consumer of `frontend/src` |
 
 ## Changes since first written
+
+- **2026-08-11** — `packages/ios` deleted. It was the last thing outside this repo's own surfaces
+  holding the shared frontend to full breadth, and the only path to App Store Connect until
+  `familiar-apple` shipped version 1.2 build 14.
 
 - **2026-08-11** — the Mac gained remove-a-track, rename and delete for playlists
   (`familiar-apple` #100). Only reorder is still browser-only, and it is the last thing keeping

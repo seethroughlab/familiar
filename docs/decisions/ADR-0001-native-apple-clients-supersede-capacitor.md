@@ -99,7 +99,32 @@ Implementation:
   explicit decision to leave the Swift in better shape before it is ported into `FamiliarKit`. It is
   the only such exception so far. **⚠️ It merged without its CarPlay simulator verification** — the
   four checks listed in that PR's description are still outstanding and should be run against main
-  before the next TestFlight build.
+  before the next TestFlight build. That verification never happened and now cannot: the code is
+  deleted, and CarPlay was rewritten against native state per decision point 3. The native CarPlay
+  surface carries its own risk, unrelated to this.
+
+- **Decision point 6 executed, 2026-08-11.** `packages/ios` is deleted — 62 files, 8.6 MB. The
+  condition was "retired once the native app reaches parity on the v1 scope", and what actually
+  released it was narrower than parity: **the Capacitor app owned the only path to App Store
+  Connect.** Deleting it before a native build had shipped would have left the phone app unable to
+  release at all, which is why the freeze outlasted the native client being usable by months.
+
+  `familiar-apple/scripts/release-testflight.sh` replaced it, and **version 1.2 build 14 uploaded
+  successfully** before the deletion — the same `com.familiar.player` record, so this is a
+  replacement rather than a migration. The first attempt was rejected (error 90474, no
+  `UISupportedInterfaceOrientations`), which is worth recording because the old script had never
+  exposed it and a dry run cannot: `-exportArchive` with `method: development` skips Apple's
+  validation entirely.
+
+  Against point 4's v1 scope — browse, search, playlists, album/artist detail, player, full-screen
+  now-playing, queue, offline, CarPlay, AI chat/discovery — all are present on the phone except
+  **chat, which was retired rather than built** ([ADR-0048](ADR-0048-seeded-playlists-are-generated-from-analysis.md)
+  replaced it with analysis-driven playlists, and [ADR-0043](ADR-0043-the-llm-surface-is-an-mcp-server.md)
+  moved the conversational surface to MCP). A scope item can be satisfied by a later decision
+  removing it, and that is what happened here.
+
+  `make release-testflight` and `make deploy-device` survive as signposts that print where the app
+  moved and exit non-zero, rather than disappearing into "No rule to make target".
 
 ## Context
 

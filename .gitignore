@@ -66,8 +66,6 @@ frontend/dist/
 frontend/.vite/
 
 # Capacitor synced web assets (regenerated on every build)
-packages/ios/native/App/App/public/
-packages/ios/native/App/public/
 
 # Xcode user-local IDE state (which file/scheme is selected, breakpoints, etc.)
 xcuserdata/

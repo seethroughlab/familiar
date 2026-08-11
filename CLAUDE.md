@@ -58,7 +58,7 @@ ranking engine, precomputed offline ranking, and OpenAPI-generated clients.
 
 | # | ADR | Why here |
 |---|---|---|
-| 1 | `0001`, `0002` | Framing only. No product code beyond freezing `packages/ios` to bug-fix-only. Everything else inherits from these. |
+| 1 | `0001`, `0002` | Framing only. No product code beyond freezing the Capacitor app to bug-fix-only (deleted 2026-08-11). Everything else inherits from these. |
 | 2 | `0004` → `0005` | Ships the radio feature to the web app in weeks. `0004` first so skip/completion events accumulate during the months of native work — the recommender is otherwise cold at launch, and that data can only be gathered in wall-clock time. |
 | 3 | `0007` | Must land before Swift consumes the API; the schema hardening is a prerequisite, not a cleanup. |
 | 4 | `0003` | Behind a flag, in the web app, proven against the existing player test suite before the native client depends on it. Highest-risk change in the set. |
@@ -160,20 +160,14 @@ packages/
 │       ├── player/        # Audio engine abstraction, playback hooks
 │       ├── services/      # offlineService, playlistCache, syncService, profileService
 │       └── db/            # IndexedDB/Dexie storage
-├── web/                   # Web entry point + Web Audio engine + PWA
-│   ├── src/
-│   │   ├── main.tsx       # Registers WebAudioEngine, sets up SW
-│   │   └── WebAudioEngine.ts
-│   ├── e2e/               # Playwright E2E tests
-│   └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
-└── ios/                   # Capacitor + native Swift + iOS deploy
+└── web/                   # Web entry point + Web Audio engine + PWA
     ├── src/
-    │   ├── main.tsx       # Registers CapacitorEngine
-    │   ├── CapacitorEngine.ts
-    │   └── plugins/familiarAudio.ts
-    ├── native/            # Xcode project + Swift code
-    ├── capacitor.config.ts
-    └── scripts/           # deploy-device.sh, release-testflight.sh
+    │   ├── main.tsx       # Registers WebAudioEngine, sets up SW
+    │   └── WebAudioEngine.ts
+    ├── e2e/               # Playwright E2E tests
+    └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
+                           # The Apple clients live in the familiar-apple repo (ADR-0001);
+                           # packages/ios, the Capacitor app, was deleted 2026-08-11.
 backend/
 ├── app/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)
@@ -201,7 +195,6 @@ docs/
 | Audio engine abstraction | `packages/frontend/src/player/audio/types.ts`, `createEngine.ts` |
 | Audio playback | `packages/frontend/src/player/useAudioEngine.ts` |
 | Web Audio engine | `packages/web/src/WebAudioEngine.ts` |
-| iOS Audio engine | `packages/ios/src/CapacitorEngine.ts` |
 | Player state | `packages/frontend/src/stores/playerStore.ts` |
 | Download queue | `packages/frontend/src/stores/downloadStore.ts` |
 | Offline storage | `packages/frontend/src/services/offlineService.ts` |
@@ -224,7 +217,7 @@ The frontend uses a **registration pattern** for platform-specific code. The sha
 - **`createEngine.ts`** — `registerEngineFactory(fn)` sets the audio engine constructor
 - **`api/base.ts`** — `registerPreferencesProvider(p)` for Capacitor Preferences
 
-Each platform entry point (`packages/web/src/main.tsx`, `packages/ios/src/main.tsx`) registers its implementations before calling `renderApp()`.
+The web entry point (`packages/web/src/main.tsx`) registers its implementations before calling `renderApp()`. It is the only one left: the Capacitor app that was the other was retired with ADR-0001 point 6, and the registration pattern stays because `/embed` and `/visualizer` still use it.
 
 ## Common Tasks
 
@@ -380,10 +373,16 @@ cd backend && FAMILIAR_HEAVY_TESTS=1 uv run pytest tests/test_analysis_heavy.py 
 
 ### iOS Development
 
+**Not in this repo.** The phone and Mac apps are built from `familiar-apple` (ADR-0001); the
+Capacitor app that used to live in `packages/ios` was deleted on 2026-08-11, once the native client
+had shipped a TestFlight build of its own.
+
 ```bash
-make deploy-device            # Build + install to connected iPhone (~2 min)
-make release-testflight       # Build + upload to TestFlight
+cd ../familiar-apple && ./scripts/release-testflight.sh   # archive, sign, upload
 ```
+
+Same App Store Connect record (`com.familiar.player`), so it replaces rather than migrates. `make
+release-testflight` and `make deploy-device` still exist here and print this, then exit non-zero.
 
 ## Code Conventions
 

@@ -1,2 +1,0 @@
-// Compatibility shim: App.xcodeproj references ../debug.xcconfig from packages/ios/native
-#include "native/debug.xcconfig"
