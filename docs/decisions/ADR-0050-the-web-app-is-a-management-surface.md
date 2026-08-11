@@ -1,19 +1,36 @@
 # ADR-0050: The Web App Is a Management Surface, Not a Client
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-11
 
-Supersedes [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) point 1, and with it
+Implementation:
+- Accepted 2026-08-11, after the change it describes had shipped and been lived with. The order was
+  deliberate: unmounting is one commit to revert, so the decision was made from a working example
+  rather than a forecast.
+- `familiar` #149 — the parity matrix (`docs/WEB-PARITY.md`), and ~2,560 lines of unreachable code
+  deleted, including the ephemeral-playlist system.
+- `familiar` #151 — twelve listening-path routes unmounted, Settings promoted from a modal to the
+  landing route. Following those routes found three affordances still pointing at them, including a
+  mobile bottom bar whose every button was a dead link.
+- `familiar` #153 — the matrix updated as point 6 requires.
+- **Point 4's permission is now live: the parked browsers may be deleted.** They are named in
+  `PARKED_BROWSERS` (`packages/frontend/src/routes.ts`) and amount to roughly 169 files and 35,900
+  lines. Not yet done, and deliberately its own change — it is a large diff whose only risk is
+  deleting something the matrix got wrong.
+
+Supersedes [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md) points 1 and 5, and with them
 [ADR-0002](ADR-0002-web-app-is-the-management-surface.md) point 2
 
 ## Context
 
+Two decisions kept the web app whole, and both are now reversed.
+
 ADR-0002 point 2 said: "Retained: full playback on desktop… The web app remains a complete player at
-a computer — **it is not reduced to an admin console**." ADR-0013 point 1 carried that forward more
-strongly: "Both clients keep everything. Nothing is removed from the web app… A browser on any
-machine stays fully capable, which is the property ADR-0002 valued most and **which costs nothing to
-keep**."
+a computer — **it is not reduced to an admin console**." ADR-0013 point 5 restated that unchanged.
+ADR-0013 point 1 then carried it further: "Both clients keep everything. Nothing is removed from the
+web app… A browser on any machine stays fully capable, which is the property ADR-0002 valued most and
+**which costs nothing to keep**."
 
 **That last clause was the load-bearing one, and it was wrong.** It was a prediction, and it has now
 been measured.

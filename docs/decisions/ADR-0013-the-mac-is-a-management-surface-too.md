@@ -1,6 +1,15 @@
 # ADR-0013: The Mac Is a Management Surface Too
 
-Status: accepted
+Status: accepted — points 1 and 5 superseded by
+[ADR-0050](ADR-0050-the-web-app-is-a-management-surface.md)
+
+Point 1 said "Both clients keep everything… which costs nothing to keep". That was measured and found
+false; ADR-0050 records what it cost. Point 5 kept "a complete player at a computer, not an admin
+console" — the web app is now close to the opposite, with one track list as a fallback player.
+
+**The rest stands.** Point 2 keeps iOS on the listening path, point 3 is the Mac's scope, and point 6
+restates parity as a non-goal; ADR-0050 touches none of them. Point 4's "still web-only" list has
+since shrunk as work moved to the Mac, which `docs/WEB-PARITY.md` tracks rather than this ADR.
 
 Date: 2026-08-01
 
