@@ -30,6 +30,7 @@ jobs:
   macos-compose-check:
     name: macOS Compose Check
     runs-on: self-hosted
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -193,6 +194,7 @@ jobs:
   migration-lint:
     name: Migration Lint
     runs-on: self-hosted
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -215,6 +217,7 @@ jobs:
   backend-lint:
     name: Backend Lint
     runs-on: self-hosted
+    timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
     defaults:
@@ -528,6 +531,7 @@ jobs:
   frontend-lint:
     name: Frontend Lint
     runs-on: self-hosted
+    timeout-minutes: 10
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
       NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
@@ -561,6 +565,7 @@ jobs:
   frontend-test:
     name: Frontend Test
     runs-on: self-hosted
+    timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
       NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
@@ -588,6 +593,7 @@ jobs:
   frontend-build:
     name: Frontend Build
     runs-on: self-hosted
+    timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
       NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
@@ -733,6 +739,7 @@ jobs:
     # whether the browser tests run.
     if: ${{ github.event_name != 'push' && !cancelled() }}
     runs-on: [self-hosted, Linux]
+    timeout-minutes: 30
     needs: [docker-build]
     # **Deliberately not `continue-on-error`.** It was, and the reason was sound: the job inherited
     # docker-build's flakiness, so a NAS hiccup would have blocked unrelated merges. Decoupling the
