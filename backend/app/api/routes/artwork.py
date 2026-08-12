@@ -13,7 +13,8 @@ from app.api.exceptions import (
     UnprocessableEntityError,
     ValidationError,
 )
-from app.services.artwork import compute_album_hash, get_artwork_path
+from app.services.album_resolver import album_key_for_tags
+from app.services.artwork import get_artwork_path
 from app.services.background import get_background_manager
 
 logger = logging.getLogger(__name__)
@@ -44,12 +45,14 @@ class ArtworkStatusResponse(BaseModel):
 
 
 @router.post("/queue", status_code=202)
-async def queue_artwork_download(request: ArtworkQueueRequest) -> dict[str, Any]:
+async def queue_artwork_download(
+    db: DbSession, request: ArtworkQueueRequest
+) -> dict[str, Any]:
     """Queue a single album for artwork download.
 
     Returns immediately (202 Accepted). Artwork will be fetched in background.
     """
-    album_hash = compute_album_hash(request.artist, request.album)
+    album_hash = await album_key_for_tags(db, request.artist, request.album)
 
     # Check if artwork already exists
     full_path = get_artwork_path(album_hash, "full")
@@ -63,7 +66,7 @@ async def queue_artwork_download(request: ArtworkQueueRequest) -> dict[str, Any]
     # Queue for background download
     bg = get_background_manager()
     await bg.queue_artwork_fetch(
-        album_hash=album_hash,
+        album_key=album_hash,
         artist=request.artist,
         album=request.album,
         track_id=request.track_id,
@@ -77,7 +80,9 @@ async def queue_artwork_download(request: ArtworkQueueRequest) -> dict[str, Any]
 
 
 @router.post("/queue/batch", status_code=202)
-async def queue_artwork_batch(request: ArtworkQueueBatchRequest) -> dict[str, Any]:
+async def queue_artwork_batch(
+    db: DbSession, request: ArtworkQueueBatchRequest
+) -> dict[str, Any]:
     """Queue multiple albums for artwork download.
 
     Returns immediately (202 Accepted). Artworks will be fetched in background.
@@ -94,7 +99,7 @@ async def queue_artwork_batch(request: ArtworkQueueBatchRequest) -> dict[str, An
     seen_hashes: set[str] = set()
 
     for item in request.items:
-        album_hash = compute_album_hash(item.artist, item.album)
+        album_hash = await album_key_for_tags(db, item.artist, item.album)
         logger.info(f"Queue batch: '{item.artist}' - '{item.album}' -> hash: {album_hash}")
 
         # Skip duplicates in this batch
@@ -117,7 +122,7 @@ async def queue_artwork_batch(request: ArtworkQueueBatchRequest) -> dict[str, An
 
         # Queue for background download
         was_queued = await bg.queue_artwork_fetch(
-            album_hash=album_hash,
+            album_key=album_hash,
             artist=item.artist,
             album=item.album,
             track_id=item.track_id,
@@ -144,7 +149,7 @@ async def get_artwork_status(album_hash: str) -> ArtworkStatusResponse:
     thumb_path = get_artwork_path(album_hash, "thumb")
 
     return ArtworkStatusResponse(
-        album_hash=album_hash,
+        album_key=album_hash,
         exists=full_path.exists() and thumb_path.exists(),
     )
 
@@ -226,7 +231,9 @@ class ArtworkRegenerateRequest(BaseModel):
 
 
 @router.post("/regenerate")
-async def regenerate_artwork(request: ArtworkRegenerateRequest) -> dict[str, Any]:
+async def regenerate_artwork(
+    db: DbSession, request: ArtworkRegenerateRequest
+) -> dict[str, Any]:
     """Force-regenerate artwork from audio analysis features.
 
     Only works if artwork is currently generated or missing (refuses to
@@ -234,7 +241,7 @@ async def regenerate_artwork(request: ArtworkRegenerateRequest) -> dict[str, Any
     """
     from app.services.artwork import is_generated_artwork
 
-    album_hash = compute_album_hash(request.artist, request.album)
+    album_hash = await album_key_for_tags(db, request.artist, request.album)
     full_path = get_artwork_path(album_hash, "full")
 
     if full_path.exists() and not is_generated_artwork(album_hash):
@@ -273,7 +280,7 @@ async def regenerate_stale_artwork(db: DbSession) -> dict[str, Any]:
     regenerated = 0
     failed = 0
     for artist, album in albums:
-        album_hash = compute_album_hash(artist, album)
+        album_hash = await album_key_for_tags(db, artist, album)
         if is_generated_artwork(album_hash) and not is_generated_art_current(album_hash):
             success = await generate_album_art(album_hash, artist, album)
             if success:
@@ -290,13 +297,13 @@ async def regenerate_stale_artwork(db: DbSession) -> dict[str, Any]:
 
 
 @router.head("/check/{artist}/{album}")
-async def check_artwork_exists(artist: str, album: str) -> None:
+async def check_artwork_exists(db: DbSession, artist: str, album: str) -> None:
     """Fast HEAD request to check if artwork exists.
 
     Returns 200 if artwork exists, 404 if not.
     Used by frontend for quick existence checks without body overhead.
     """
-    album_hash = compute_album_hash(artist, album)
+    album_hash = await album_key_for_tags(db, artist, album)
     full_path = get_artwork_path(album_hash, "full")
 
     if not full_path.exists():

@@ -27,7 +27,7 @@ SIZE = 500
 
 
 async def aggregate_album_features(
-    db, artist: str, album: str
+    db, artist: str, album: str, album_id=None
 ) -> dict | None:
     """Query all tracks for an album and aggregate their analysis features.
 
@@ -39,11 +39,23 @@ async def aggregate_album_features(
 
     from app.db.models import Track, TrackAnalysis
 
-    stmt = (
-        select(TrackAnalysis)
-        .join(Track, Track.id == TrackAnalysis.track_id)
-        .where(Track.artist == artist, Track.album == album)
-    )
+    # Matched on the canonical album where the track has one, falling back to the exact
+    # string pair. The old form was `Track.artist == artist AND Track.album == album` —
+    # case-sensitive, and keyed on the *track's* artist, so on a compilation it gathered
+    # only the tracks sharing one artist string and generated art from a fraction of the
+    # record. That is the same defect ADR-0052 exists to fix, reached from another angle.
+    if album_id is not None:
+        stmt = (
+            select(TrackAnalysis)
+            .join(Track, Track.id == TrackAnalysis.track_id)
+            .where(Track.canonical_album_id == album_id)
+        )
+    else:
+        stmt = (
+            select(TrackAnalysis)
+            .join(Track, Track.id == TrackAnalysis.track_id)
+            .where(Track.artist == artist, Track.album == album)
+        )
     result = await db.execute(stmt)
     analyses = result.scalars().all()
 
@@ -701,7 +713,9 @@ def _render_vinyl_label(
 # ── Public Entry Point ───────────────────────────────────────────────────
 
 
-async def generate_album_art(album_hash: str, artist: str, album: str) -> bool:
+async def generate_album_art(
+    album_key: str, artist: str, album: str, album_id=None
+) -> bool:
     """Generate deterministic album art from audio analysis features.
 
     Creates its own DB session. Saves artwork to disk and creates a
@@ -715,14 +729,20 @@ async def generate_album_art(album_hash: str, artist: str, album: str) -> bool:
     engine, session_maker = create_task_engine_session()
     try:
         async with session_maker() as db:
-            features = await aggregate_album_features(db, artist, album)
+            features = await aggregate_album_features(db, artist, album, album_id)
 
         if not features:
             logger.debug(f"No analyzed tracks for {artist} - {album}, skipping generative art")
             return False
 
-        # Deterministic seed from album hash
-        seed = int(hashlib.sha256(album_hash.encode()).hexdigest()[:8], 16)
+        # Deterministic seed from the album key.
+        #
+        # **Re-keying changes what every generated cover looks like**, because the key is
+        # the seed (ADR-0052). That is why GENERATIVE_ART_VERSION is bumped alongside:
+        # the existing /artwork/regenerate-stale sweep only touches files carrying a
+        # `.generated` marker, so it repaints the procedural covers and leaves real and
+        # hand-uploaded art alone.
+        seed = int(hashlib.sha256(album_key.encode()).hexdigest()[:8], 16)
         rng = random.Random(seed)
 
         # Derive color palette
@@ -744,11 +764,11 @@ async def generate_album_art(album_hash: str, artist: str, album: str) -> bool:
         image_data = buf.getvalue()
 
         # Save using standard artwork pipeline
-        saved = save_artwork(image_data, album_hash)
+        saved = save_artwork(image_data, album_key)
         if saved:
             from app.services.artwork import mark_as_generated
-            mark_as_generated(album_hash)
-            logger.info(f"Generated artwork for {artist} - {album} ({album_hash})")
+            mark_as_generated(album_key)
+            logger.info(f"Generated artwork for {artist} - {album} ({album_key})")
             return True
 
         return False

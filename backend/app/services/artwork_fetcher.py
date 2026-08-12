@@ -58,7 +58,7 @@ CAA_BASE_URL = "https://coverartarchive.org"
 class ArtworkFetchRequest:
     """Request to fetch artwork for an album."""
 
-    album_hash: str
+    album_key: str
     artist: str
     album: str
     track_id: str | None = None
@@ -74,16 +74,16 @@ class ArtworkFetcher:
 
     def __init__(self):
         self._queue: asyncio.Queue[ArtworkFetchRequest] = asyncio.Queue()
-        self._failed_cache: dict[str, float] = {}  # album_hash -> timestamp of failure
+        self._failed_cache: dict[str, float] = {}  # album_key -> timestamp of failure
         self._in_progress: set[str] = set()  # album_hashes currently being fetched
-        self._in_progress_items: dict[str, str] = {}  # album_hash -> "artist - album"
+        self._in_progress_items: dict[str, str] = {}  # album_key -> "artist - album"
         self._worker_task: asyncio.Task | None = None
         self._last_request_time: float = 0.0
         # Progress tracking
         self._completed: int = 0
         self._failed: int = 0
         self._started_at: str | None = None
-        self._queued_hashes: set[str] = set()  # Track what's already queued
+        self._queued_keys: set[str] = set()  # Track what's already queued
 
     def _update_progress(self) -> None:
         """Update progress in Redis."""
@@ -134,13 +134,13 @@ class ArtworkFetcher:
                 pass
             logger.info("Artwork fetcher worker stopped")
 
-    def is_pending(self, album_hash: str) -> bool:
+    def is_pending(self, album_key: str) -> bool:
         """Check if an album is pending (queued or in progress)."""
-        return album_hash in self._queued_hashes or album_hash in self._in_progress
+        return album_key in self._queued_keys or album_key in self._in_progress
 
-    def is_failed(self, album_hash: str) -> bool:
+    def is_failed(self, album_key: str) -> bool:
         """Check if an album fetch recently failed."""
-        failed_time = self._failed_cache.get(album_hash)
+        failed_time = self._failed_cache.get(album_key)
         if failed_time and time.time() - failed_time < CACHE_FAILED_DURATION:
             return True
         return False
@@ -152,23 +152,23 @@ class ArtworkFetcher:
         """
         # Skip if artwork already exists (unless it's generated — allow re-queue
         # so real art can replace generated art on retry)
-        full_path = get_artwork_path(request.album_hash, "full")
+        full_path = get_artwork_path(request.album_key, "full")
         if full_path.exists():
             from app.services.artwork import is_generated_artwork
-            if not is_generated_artwork(request.album_hash):
+            if not is_generated_artwork(request.album_key):
                 return False
 
         # Skip if recently failed
-        failed_time = self._failed_cache.get(request.album_hash)
+        failed_time = self._failed_cache.get(request.album_key)
         if failed_time and time.time() - failed_time < CACHE_FAILED_DURATION:
             return False
 
         # Skip if already in progress
-        if request.album_hash in self._in_progress:
+        if request.album_key in self._in_progress:
             return False
 
         # Skip if already queued
-        if request.album_hash in self._queued_hashes:
+        if request.album_key in self._queued_keys:
             return False
 
         # Start tracking if this is the first item
@@ -178,7 +178,7 @@ class ArtworkFetcher:
             self._failed = 0
 
         # Add to queue
-        self._queued_hashes.add(request.album_hash)
+        self._queued_keys.add(request.album_key)
         await self._queue.put(request)
         self._update_progress()
         return True
@@ -190,18 +190,18 @@ class ArtworkFetcher:
                 request = await self._queue.get()
 
                 # Remove from queued set
-                self._queued_hashes.discard(request.album_hash)
+                self._queued_keys.discard(request.album_key)
 
                 # Skip if already processed (may have been queued multiple times)
-                full_path = get_artwork_path(request.album_hash, "full")
+                full_path = get_artwork_path(request.album_key, "full")
                 if full_path.exists():
                     self._queue.task_done()
                     self._update_progress()
                     continue
 
                 # Mark as in progress
-                self._in_progress.add(request.album_hash)
-                self._in_progress_items[request.album_hash] = f"{request.artist} - {request.album}"
+                self._in_progress.add(request.album_key)
+                self._in_progress_items[request.album_key] = f"{request.artist} - {request.album}"
                 self._update_progress()
 
                 try:
@@ -215,11 +215,11 @@ class ArtworkFetcher:
                         self._completed += 1
                     else:
                         # Cache the failure to avoid repeated attempts
-                        self._failed_cache[request.album_hash] = time.time()
+                        self._failed_cache[request.album_key] = time.time()
                         self._failed += 1
                 finally:
-                    self._in_progress.discard(request.album_hash)
-                    self._in_progress_items.pop(request.album_hash, None)
+                    self._in_progress.discard(request.album_key)
+                    self._in_progress_items.pop(request.album_key, None)
                     self._queue.task_done()
                     self._update_progress()
 
@@ -270,7 +270,7 @@ class ArtworkFetcher:
 
         if image_data:
             # Save artwork to disk
-            saved = save_artwork(image_data, request.album_hash)
+            saved = save_artwork(image_data, request.album_key)
             if saved:
                 logger.info(f"Downloaded artwork for {request.artist} - {request.album}")
                 return True
@@ -279,7 +279,7 @@ class ArtworkFetcher:
         try:
             from app.services.generative_art import generate_album_art
             generated = await generate_album_art(
-                request.album_hash, request.artist, request.album
+                request.album_key, request.artist, request.album
             )
             if generated:
                 logger.info(f"Generated artwork for {request.artist} - {request.album}")

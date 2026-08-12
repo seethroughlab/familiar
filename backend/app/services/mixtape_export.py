@@ -49,7 +49,7 @@ from app.db.models import (
     PlaylistTrack,
     Track,
 )
-from app.services.artwork import compute_album_hash, get_artwork_path
+from app.services.artwork import album_key_for_track, get_artwork_path
 from app.services.smart_playlists import SmartPlaylistService
 from app.utils.time import utcnow
 
@@ -269,8 +269,8 @@ def _fallback_tile(seed: str, size: int) -> Image.Image:
 
 def _load_track_tile(track: Track, tile_size: int) -> Image.Image:
     """Load a square tile for a track from the album-art cache, or fallback."""
-    album_hash = compute_album_hash(track.artist, track.album)
-    art_path = get_artwork_path(album_hash, size="full")
+    album_key = album_key_for_track(track)
+    art_path = get_artwork_path(album_key, size="full")
     if art_path.is_file():
         try:
             img = Image.open(art_path).convert("RGB")

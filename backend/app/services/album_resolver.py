@@ -30,7 +30,7 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,6 +121,49 @@ async def _album_by_release_id(db: AsyncSession, release_id: str) -> Album | Non
             select(Album).where(Album.musicbrainz_release_id == release_id)
         )
     ).scalar_one_or_none()
+
+
+async def album_key_for_tags(
+    db: AsyncSession, artist: str | None, album: str | None
+) -> str:
+    """The artwork key for an ``(artist, album)`` pair, looked up through the library.
+
+    For the handful of callers that hold tag strings rather than a track — the artwork
+    queue endpoints, `regenerate`, the `HEAD` check — all of which are asked about
+    albums that already exist here, because the client is looking at one.
+
+    Resolved through a track rather than by recomputing the alias key, because the alias
+    key needs the *canonical artist id* and these callers have only a name. Matching on
+    either `artist` or `album_artist` is what makes it work for a compilation, where the
+    caller may hold either.
+
+    Falls back to the legacy hash when nothing matches, so an album that is not in the
+    library — or a call made before the backfill — behaves exactly as it did before.
+    """
+    from app.db.models import Track, TrackStatus
+    from app.services.artwork import compute_album_hash
+
+    album_name = (album or "").strip().lower()
+    artist_name = (artist or "").strip().lower()
+    if album_name:
+        stmt = (
+            select(Track.canonical_album_id)
+            .where(
+                func.lower(func.trim(Track.album)) == album_name,
+                Track.status == TrackStatus.ACTIVE,
+                Track.canonical_album_id.isnot(None),
+                or_(
+                    func.lower(func.trim(Track.artist)) == artist_name,
+                    func.lower(func.trim(Track.album_artist)) == artist_name,
+                ),
+            )
+            .limit(1)
+        )
+        album_id = (await db.execute(stmt)).scalar_one_or_none()
+        if album_id:
+            return str(album_id)
+
+    return compute_album_hash(artist, album)
 
 
 async def resolve_canonical_album(

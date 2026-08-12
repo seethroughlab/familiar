@@ -135,7 +135,13 @@ MELODIC_VERSION = 6
 #   v2: Added vinyl label overlay (arc text, initials)
 #   v3: Heavy blur for color-wash background, label after post-process, dark backdrop
 #   v4: Larger label radius for text padding, artist-only initials
-GENERATIVE_ART_VERSION = 4
+#   v5: Keyed by Album.id rather than the tag hash (ADR-0052). Nothing about the drawing
+#       changed — but the key *is* the random seed, so every generated cover comes out
+#       different, and the features are now aggregated across the whole album instead of
+#       only the tracks sharing one artist string. The bump exists so
+#       /artwork/regenerate-stale repaints them; it only touches files carrying a
+#       `.generated` marker, so real and hand-uploaded art is left alone.
+GENERATIVE_ART_VERSION = 5
 
 # Mood tags history:
 #   v1: CLAP-based mood/genre/instrumentation/energy tags
