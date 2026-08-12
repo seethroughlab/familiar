@@ -1,8 +1,19 @@
 # ADR-0051: Edited Metadata Outranks File Tags
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-11
+
+Implementation:
+- Accepted 2026-08-11, on the same day it was proposed — Jeff approved it alongside the work it
+  describes rather than as a separate round.
+- **All seven write paths record, and undo forgets** (`familiar` #157). The column, the migration and
+  the single-`PATCH` and bulk-editor paths landed first; writing this ADR is what surfaced the other
+  five, which is the argument for having written it before finishing.
+- Points 1–7 are built. **Point 8 is a stated limit, not a feature**: `forget` runs only on undoing a
+  proposed change, so there is still no way for a listener to hand an edited field back to the file.
+- Not yet deployed at time of writing. The Mac's editor and sync pane still describe the old
+  behaviour, correctly — see the third follow-up.
 
 ## Context
 
@@ -133,11 +144,13 @@ existed.
   to look.
 - **Tradeoff:** An edited field cannot currently be handed back to the file except by undoing a
   proposed change. Point 8 makes that explicit rather than leaving it to be discovered.
-- **Tradeoff:** Seven write paths must remember to record. Two do so far; the rest are follow-up, and
-  a path that forgets fails quietly — it simply does not protect the edit, which looks exactly like
-  the old behaviour.
-- **Follow-up:** Record overrides on the four `pending_review` and `proposed_changes` paths, and
-  remove them on undo per point 7.
+- **Tradeoff:** Seven write paths must remember to record, and a path that forgets fails quietly — it
+  simply does not protect the edit, which looks exactly like the old behaviour. All seven are wired,
+  and each is pinned by a test that reads the source, because there is nothing to notice at runtime.
+- **Tradeoff:** `pending_review` has a request field named `metadata_overrides` meaning something
+  else — corrections to apply while approving. Renaming it would break the web app's approve call, so
+  the collision is documented at the call site and its helper was renamed to `_apply_review_edits`
+  instead.
 - **Follow-up:** A "revert to the file's tags" affordance, per point 8, and an indication in the
   editor that a field is currently overriding the file.
 - **Follow-up:** The Mac's editor and library sync pane both describe this behaviour and must be
