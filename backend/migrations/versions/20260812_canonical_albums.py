@@ -106,6 +106,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # No-op per repo migration policy: migrations are one-way and the guards above
-    # make `alembic upgrade head` safe to re-run after a partial failure.
-    pass
+    """Genuinely reversible, because this migration only adds.
+
+    Worth having rather than a bare `pass`: the artwork re-key that depends on these
+    tables moves 283 MB of files, and being able to put the schema back while the
+    quarantine directory still holds the originals is the difference between a rollback
+    and a restore. Dropped in dependency order — the FK on `tracks` first, then the
+    aliases that cascade from `albums`.
+    """
+    if index_exists("ix_tracks_canonical_album_id"):
+        op.drop_index("ix_tracks_canonical_album_id", table_name="tracks")
+    if column_exists("tracks", "canonical_album_id"):
+        op.drop_column("tracks", "canonical_album_id")
+
+    if table_exists("album_aliases"):
+        op.drop_table("album_aliases")
+    if table_exists("albums"):
+        op.drop_table("albums")
