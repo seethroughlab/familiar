@@ -3,12 +3,6 @@
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
-vi.mock('../../utils/albumHash', () => ({
-  computeAlbumHash: vi.fn(async (artist: string, album: string) =>
-    `hash_${(artist || 'unknown').toLowerCase()}_${(album || 'unknown').toLowerCase()}`
-  ),
-}));
-
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
     info: vi.fn(),
@@ -124,6 +118,9 @@ describe('artworkStore', () => {
         queued_hashes: [],
         existing_hashes: ['hash_artist_album'],
         pending_hashes: [],
+        results: [
+          { artist: 'Artist', album: 'Album', album_key: 'hash_artist_album', status: 'exists' },
+        ],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -141,6 +138,9 @@ describe('artworkStore', () => {
         queued_hashes: ['hash_artist_album'],
         existing_hashes: [],
         pending_hashes: [],
+        results: [
+          { artist: 'Artist', album: 'Album', album_key: 'hash_artist_album', status: 'queued' },
+        ],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -159,6 +159,9 @@ describe('artworkStore', () => {
         queued_hashes: [],
         existing_hashes: [],
         pending_hashes: [],
+        results: [
+          { artist: 'Artist', album: 'Album', album_key: 'hash_artist_album', status: 'skipped' },
+        ],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -188,6 +191,9 @@ describe('artworkStore', () => {
         queued_hashes: ['hash_artist_album'],
         existing_hashes: [],
         pending_hashes: [],
+        results: [
+          { artist: 'Artist', album: 'Album', album_key: 'hash_artist_album', status: 'queued' },
+        ],
       });
 
       const { requestArtwork } = useArtworkStore.getState();
@@ -204,6 +210,9 @@ describe('artworkStore', () => {
         queued_hashes: [],
         existing_hashes: ['hash_artist_album'],
         pending_hashes: [],
+        results: [
+          { artist: 'Artist', album: 'Album', album_key: 'hash_artist_album', status: 'exists' },
+        ],
       });
 
       const { requestArtwork } = useArtworkStore.getState();

@@ -98,38 +98,59 @@ async def queue_artwork_batch(
     pending = []  # Already in queue or in progress from previous request
     seen_hashes: set[str] = set()
 
+    # `results` carries the key back per item, which is what lets the browser stop
+    # deriving it. `packages/frontend/src/utils/albumHash.ts` reimplemented
+    # `normalize_for_matching` *and* SHA-256 in JavaScript to guess this value, with a
+    # comment conceding "toLowerCase is close enough for JS" where Python casefolds — so
+    # the two could disagree, and when they did the album silently rendered blank. Since
+    # ADR-0052 the key is an `Album.id`, which nothing in a browser could ever derive.
+    results: list[dict[str, Any]] = []
+
     for item in request.items:
-        album_hash = await album_key_for_tags(db, item.artist, item.album)
-        logger.info(f"Queue batch: '{item.artist}' - '{item.album}' -> hash: {album_hash}")
+        album_key = await album_key_for_tags(db, item.artist, item.album)
+
+        def record(status: str) -> None:
+            results.append(
+                {
+                    "artist": item.artist,
+                    "album": item.album,
+                    "album_key": album_key,
+                    "status": status,
+                }
+            )
 
         # Skip duplicates in this batch
-        if album_hash in seen_hashes:
+        if album_key in seen_hashes:
+            record("duplicate")
             continue
-        seen_hashes.add(album_hash)
+        seen_hashes.add(album_key)
 
         # Check if artwork already exists
-        full_path = get_artwork_path(album_hash, "full")
-        logger.info(f"Checking path {full_path} exists: {full_path.exists()}")
+        full_path = get_artwork_path(album_key, "full")
         if full_path.exists():
-            exists.append(album_hash)
-            logger.info(f"Album exists: {album_hash}")
+            exists.append(album_key)
+            record("exists")
             continue
 
         # Check if already pending (queued or in progress from previous request)
-        if fetcher.is_pending(album_hash):
-            pending.append(album_hash)
+        if fetcher.is_pending(album_key):
+            pending.append(album_key)
+            record("pending")
             continue
 
         # Queue for background download
         was_queued = await bg.queue_artwork_fetch(
-            album_key=album_hash,
+            album_key=album_key,
             artist=item.artist,
             album=item.album,
             track_id=item.track_id,
         )
         if was_queued:
-            queued.append(album_hash)
-        # If not queued here, it must have been recently failed - frontend will treat as 'missing'
+            queued.append(album_key)
+            record("queued")
+        else:
+            # Recently failed — the client shows a placeholder rather than polling.
+            record("skipped")
 
     logger.info(f"Batch result: queued={len(queued)}, existing={len(exists)}, pending={len(pending)}")
     return {
@@ -139,6 +160,7 @@ async def queue_artwork_batch(
         "queued_hashes": queued,
         "existing_hashes": exists,
         "pending_hashes": pending,  # Already being fetched
+        "results": results,
     }
 
 
