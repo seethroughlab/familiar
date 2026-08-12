@@ -40,9 +40,18 @@ def normalize_for_matching(name: str | None) -> str:
     # Unicode NFC normalization (compose characters consistently)
     s = unicodedata.normalize("NFC", s)
 
-    # Normalize quotes: ' ' ´ ` ′ → '
-    s = re.sub(r"[''´`′]", "'", s)
-    s = re.sub(r'[""«»]', '"', s)
+    # Normalize quotes to their ASCII forms.
+    #
+    # **The curly quotes were missing from both classes.** Each held its ASCII form
+    # twice — someone typed the curly pair in the comment and plain ones in the pattern
+    # — so a typographic apostrophe passed straight through. This feeds
+    # compute_album_hash, so it filed one album under two artwork keys; 16 albums and 30
+    # tracks on the live library carry a curly apostrophe.
+    #
+    # The defect survived because ' and the curly form are near-identical in a monospace
+    # font. `test_normalize_quotes.py` asserts each character explicitly.
+    s = re.sub(r"[‘’´`′']", "'", s)
+    s = re.sub(r'[“”«»"]', '"', s)
 
     # Normalize dashes: – — − ‐ ‒ ⁻ → -
     s = re.sub(r"[–—−‐‒⁻]", "-", s)
