@@ -64,11 +64,6 @@ vi.mock('../../utils/logger', () => ({
   }),
 }));
 
-vi.mock('../../utils/albumHash', () => ({
-  computeAlbumHash: vi.fn((artist: string, album: string) =>
-    Promise.resolve(`hash-${artist}-${album}`)
-  ),
-}));
 
 import type { OfflineTrack, OfflineArtwork, PartialDownload } from '../../db';
 import {
@@ -502,19 +497,21 @@ describe('offlineService', () => {
   });
 
   describe('downloadArtworkForOffline', () => {
+    // Keyed by track id and fetched through /tracks/{id}/artwork since ADR-0052 — the
+    // browser no longer derives an album key, because that key is now an Album.id.
     it('should skip if artwork already downloaded', async () => {
       mockOfflineArtwork.get.mockResolvedValueOnce({
-        hash: 'hash-Artist-Album',
+        hash: 'track-1',
         artwork: new Blob(),
         cachedAt: new Date(),
       });
 
-      const result = await downloadArtworkForOffline('Artist', 'Album');
-      expect(result).toBe('hash-Artist-Album');
+      const result = await downloadArtworkForOffline('track-1');
+      expect(result).toBe('track-1');
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should download and store artwork', async () => {
+    it('should fetch through the per-track endpoint, not an album key', async () => {
       mockOfflineArtwork.get.mockResolvedValueOnce(undefined);
 
       const artworkBlob = new Blob(['image'], { type: 'image/jpeg' });
@@ -523,9 +520,13 @@ describe('offlineService', () => {
         blob: () => Promise.resolve(artworkBlob),
       });
 
-      const result = await downloadArtworkForOffline('Artist', 'Album');
-      expect(result).toBe('hash-Artist-Album');
+      const result = await downloadArtworkForOffline('track-1');
+      expect(result).toBe('track-1');
       expect(mockOfflineArtwork.put).toHaveBeenCalled();
+
+      const url = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+      expect(url).toContain('/tracks/track-1/artwork');
+      expect(url).not.toContain('/artwork/');
     });
 
     it('should return null when artwork not available', async () => {
@@ -536,7 +537,7 @@ describe('offlineService', () => {
         status: 404,
       });
 
-      const result = await downloadArtworkForOffline('Artist', 'Album');
+      const result = await downloadArtworkForOffline('track-1');
       expect(result).toBeNull();
     });
   });

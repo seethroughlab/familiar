@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, TranscodeError, ValidationError
 from app.db.models import Track
-from app.services.artwork import compute_album_hash, get_artwork_path
+from app.services.artwork import album_key_for_track, get_artwork_path
 
 from . import AUDIO_MIME_TYPES
 
@@ -252,8 +252,8 @@ async def get_track_artwork(
         raise TrackNotFoundError()
 
     # Compute album hash
-    album_hash = compute_album_hash(track.artist, track.album)
-    artwork_path = get_artwork_path(album_hash, size)
+    album_key = album_key_for_track(track)
+    artwork_path = get_artwork_path(album_key, size)
 
     # Check if artwork exists on disk
     if not artwork_path.exists():
@@ -261,7 +261,9 @@ async def get_track_artwork(
         file_path = Path(track.file_path)
         if file_path.exists():
             from app.services.artwork import extract_and_save_artwork
-            extract_and_save_artwork(file_path, track.artist, track.album)
+            extract_and_save_artwork(
+                file_path, track.artist, track.album, album_key=album_key
+            )
 
         # Check again
         if not artwork_path.exists():
@@ -301,7 +303,7 @@ async def upload_track_artwork(
     """
     from sqlalchemy import select
 
-    from app.services.artwork import compute_album_hash, save_artwork
+    from app.services.artwork import album_key_for_track, save_artwork
 
     # Validate content type
     if file.content_type not in ALLOWED_IMAGE_TYPES:
@@ -325,8 +327,11 @@ async def upload_track_artwork(
         raise TrackNotFoundError()
 
     # Save to cache
-    album_hash = compute_album_hash(track.artist, track.album)
-    saved_paths = save_artwork(image_data, album_hash)
+    # The uploaded cover lands on the whole album, which is what the Mac's editor says
+    # it does — and since ADR-0052 that is one key per record rather than one per track
+    # artist, so it now reaches a compilation's other tracks too.
+    album_key = album_key_for_track(track)
+    saved_paths = save_artwork(image_data, album_key)
     saved_to_cache = len(saved_paths) > 0
 
     return ArtworkUploadResponse(
@@ -349,7 +354,7 @@ async def delete_track_artwork(
     """
     from sqlalchemy import select
 
-    from app.services.artwork import compute_album_hash, get_artwork_path
+    from app.services.artwork import album_key_for_track, get_artwork_path
 
     # Get track
     query = select(Track).where(Track.id == track_id)
@@ -360,11 +365,11 @@ async def delete_track_artwork(
         raise TrackNotFoundError()
 
     # Remove cached artwork
-    album_hash = compute_album_hash(track.artist, track.album)
+    album_key = album_key_for_track(track)
     removed_cache = False
 
     for size in ["full", "thumb"]:
-        artwork_path = get_artwork_path(album_hash, size)
+        artwork_path = get_artwork_path(album_key, size)
         if artwork_path.exists():
             artwork_path.unlink()
             removed_cache = True

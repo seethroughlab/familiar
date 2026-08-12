@@ -7,7 +7,6 @@
 import { create } from 'zustand';
 import { getApiUrl } from '../api/base';
 import { artworkApi } from '../api/metadata';
-import { computeAlbumHash } from '../utils/albumHash';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Artwork');
@@ -84,22 +83,13 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
     set({ status: new Map(state.status) });
 
     try {
-      // Compute hashes for new albums
-      const hashPromises = newAlbums.map(async (album) => {
-        const hash = await computeAlbumHash(album.artist, album.album);
-        return { album, hash };
-      });
-      const albumsWithHashes = await Promise.all(hashPromises);
-
-      // Store hash mappings
-      const newHashes = new Map(get().hashes);
-      for (const { album, hash } of albumsWithHashes) {
-        const key = cacheKey(album.artist, album.album);
-        newHashes.set(key, hash);
-      }
-      set({ hashes: newHashes });
-
-      // Queue artwork downloads
+      // Ask the server. **It tells us the key; we no longer guess it.**
+      //
+      // This used to compute the key locally with a JavaScript reimplementation of the
+      // backend's `normalize_for_matching` and of SHA-256, kept in sync by hand — and
+      // when the two disagreed the album fell through to `missing` and rendered blank,
+      // silently. Since ADR-0052 the key is an `Album.id`, which no amount of hashing in
+      // a browser could produce.
       const data = await artworkApi.queueBatch(
         newAlbums.map((a) => ({
           artist: a.artist,
@@ -108,23 +98,37 @@ export const useArtworkStore = create<ArtworkState>((set, get) => ({
         })),
       );
 
-      // Update status based on response
+      const newHashes = new Map(get().hashes);
       const newStatus = new Map(get().status);
       const newPending = new Set(get().pendingHashes);
-      for (const { album, hash } of albumsWithHashes) {
-        const key = cacheKey(album.artist, album.album);
-        if (data.queued_hashes.includes(hash) || data.pending_hashes.includes(hash)) {
-          // Newly queued or already in progress from previous request - poll for completion
+
+      for (const result of data.results ?? []) {
+        const key = cacheKey(result.artist ?? '', result.album ?? '');
+        newHashes.set(key, result.album_key);
+
+        if (result.status === 'queued' || result.status === 'pending') {
           newStatus.set(key, 'pending');
-          newPending.add(hash);
-        } else if (data.existing_hashes.includes(hash)) {
+          newPending.add(result.album_key);
+        } else if (result.status === 'exists') {
           newStatus.set(key, 'ready');
+        } else if (result.status === 'duplicate') {
+          // Another item in this same batch owns it; its own result decides the status.
+          continue;
         } else {
-          // Not queued and doesn't exist - mark as missing
-          // This handles cases where backend skipped (failed cache, etc.)
+          // 'skipped' — recently failed on the server, so polling would never resolve.
           newStatus.set(key, 'missing');
         }
       }
+
+      // A server too old to send `results` leaves every requested album unresolved
+      // rather than blank-with-no-explanation.
+      if (!data.results) {
+        for (const album of newAlbums) {
+          newStatus.set(cacheKey(album.artist, album.album), 'missing');
+        }
+      }
+
+      set({ hashes: newHashes });
 
       set({
         status: newStatus,

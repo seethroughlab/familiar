@@ -5,6 +5,7 @@ import subprocess
 import tempfile
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import mutagen
 from mutagen.flac import FLAC
@@ -21,28 +22,34 @@ ARTWORK_SIZES = {
 }
 
 
-def _generated_marker_path(album_hash: str) -> Path:
-    """Get the path for the .generated marker file."""
-    return settings.art_path / f"{album_hash}.generated"
+def _generated_marker_path(album_key: str) -> Path:
+    """Get the path for the .generated marker file.
+
+    Note the `full` variant has no suffix, so a `f"{album_key}*"` glob also matches the
+    thumb and this marker. Fine for moving files, dangerous for deleting them —
+    `fix_album_art.py` deletes the two JPEGs and leaves the marker behind, which is why
+    a regenerated album can come back as generated art.
+    """
+    return settings.art_path / f"{album_key}.generated"
 
 
-def is_generated_artwork(album_hash: str) -> bool:
+def is_generated_artwork(album_key: str) -> bool:
     """Check if artwork for this album hash was generated (not real art)."""
-    return _generated_marker_path(album_hash).exists()
+    return _generated_marker_path(album_key).exists()
 
 
-def mark_as_generated(album_hash: str) -> None:
+def mark_as_generated(album_key: str) -> None:
     """Create a .generated marker file with current art version."""
     settings.art_path.mkdir(parents=True, exist_ok=True)
-    _generated_marker_path(album_hash).write_text(str(GENERATIVE_ART_VERSION))
+    _generated_marker_path(album_key).write_text(str(GENERATIVE_ART_VERSION))
 
 
-def is_generated_art_current(album_hash: str) -> bool:
+def is_generated_art_current(album_key: str) -> bool:
     """Check if generated artwork matches the current art version.
 
     Returns False if not generated, marker missing, or version is stale.
     """
-    marker = _generated_marker_path(album_hash)
+    marker = _generated_marker_path(album_key)
     if not marker.exists():
         return False
     try:
@@ -51,30 +58,41 @@ def is_generated_art_current(album_hash: str) -> bool:
         return False
 
 
-def clear_generated_marker(album_hash: str) -> None:
+def clear_generated_marker(album_key: str) -> None:
     """Remove the .generated marker (real art is replacing generated art)."""
-    _generated_marker_path(album_hash).unlink(missing_ok=True)
+    _generated_marker_path(album_key).unlink(missing_ok=True)
 
 
-def get_artwork_path(album_hash: str, size: str = "full") -> Path:
+def get_artwork_path(album_key: str, size: str = "full") -> Path:
     """Get the file path for artwork.
 
     Args:
-        album_hash: Hash identifying the album
+        album_key: Identifies the album on disk. Since ADR-0052 this is an ``Album.id``
+            for anything resolved; it is still a ``compute_album_hash`` value for tracks
+            the resolver could not place. Both are opaque filename-safe strings, which
+            is the only property this function needs.
         size: Size variant ('full' or 'thumb')
 
     Returns:
         Path to artwork file
     """
     suffix = f"_{size}" if size != "full" else ""
-    return settings.art_path / f"{album_hash}{suffix}.jpg"
+    return settings.art_path / f"{album_key}{suffix}.jpg"
 
 
 def compute_album_hash(artist: str | None, album: str | None) -> str:
-    """Compute a hash for identifying unique albums.
+    """The legacy artwork key: a hash of the normalized artist and album.
 
-    Uses normalized artist + album to create a stable identifier.
-    Normalization handles case, diacritics, quotes, dashes, whitespace.
+    **Superseded by ``Album.id`` (ADR-0052), and kept rather than deleted.** It is the
+    fallback for a track the resolver could not place, and the artwork migration needs
+    it to work out which album each existing file on disk belongs to — nothing in the
+    database ever recorded that, so recomputing this is the only way back from a
+    filename.
+
+    Its two defects are the reason ADR-0052 exists. It uses ``artist`` rather than
+    ``album_artist``, so a compilation gets one key per track artist; and it is derived
+    from the values a person can edit, so correcting a spelling silently re-keys the
+    artwork to a slot nothing has ever fetched.
     """
     from app.services.normalize import normalize_for_matching
 
@@ -82,6 +100,25 @@ def compute_album_hash(artist: str | None, album: str | None) -> str:
     album_norm = normalize_for_matching(album) or "unknown"
     key = f"{artist_norm}::{album_norm}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+def album_key_for_track(track: Any) -> str:
+    """The artwork key for a track (ADR-0052).
+
+    Its canonical album id when the resolver placed it, and the legacy hash when it did
+    not. **The fallback is what makes the rollout safe**: before the backfill runs, every
+    track has a null ``canonical_album_id`` and this behaves exactly as it did before, so
+    the schema can ship and be deployed without the artwork moving underneath anyone.
+
+    After the backfill and the file migration, only tracks the resolver genuinely could
+    not place — no album tag and no path — stay on a hash.
+    """
+    album_id = getattr(track, "canonical_album_id", None)
+    if album_id:
+        return str(album_id)
+    return compute_album_hash(
+        getattr(track, "artist", None), getattr(track, "album", None)
+    )
 
 
 def _extract_ffmpeg_artwork(file_path: Path) -> bytes | None:
@@ -204,14 +241,14 @@ def _extract_mp4_artwork(file_path: Path) -> bytes | None:  # type: ignore[retur
 
 def save_artwork(
     image_data: bytes,
-    album_hash: str,
+    album_key: str,
     sizes: dict[str, int] | None = None,
 ) -> dict[str, Path]:
     """Save artwork to disk in multiple sizes.
 
     Args:
         image_data: Raw image bytes
-        album_hash: Hash identifying the album
+        album_key: Hash identifying the album
         sizes: Dict of size names to max dimensions. Defaults to ARTWORK_SIZES.
 
     Returns:
@@ -226,7 +263,7 @@ def save_artwork(
     saved_paths: dict[str, Path] = {}
 
     # Clear generated marker — real art replaces generated
-    clear_generated_marker(album_hash)
+    clear_generated_marker(album_key)
 
     try:
         # Open image with Pillow
@@ -240,7 +277,7 @@ def save_artwork(
         from app.utils.atomic_write import atomic_write_via
 
         for size_name, max_dim in sizes.items():
-            output_path = get_artwork_path(album_hash, size_name)
+            output_path = get_artwork_path(album_key, size_name)
 
             # Resize maintaining aspect ratio
             img_copy = img.copy()
@@ -263,24 +300,28 @@ def extract_and_save_artwork(
     file_path: Path,
     artist: str | None,
     album: str | None,
+    *,
+    album_key: str | None = None,
 ) -> str | None:
-    """Extract artwork from file and save to disk.
+    """Extract artwork from a file's tags and save it under the album's key.
 
     Args:
         file_path: Path to audio file
-        artist: Artist name for album hash
-        album: Album name for album hash
+        artist: Artist name, used only to derive the legacy key
+        album: Album name, used only to derive the legacy key
+        album_key: The album's key (ADR-0052). Pass ``str(track.canonical_album_id)``
+            where a track is in hand; omitted, this falls back to the legacy hash, which
+            keeps the callers that have only tag strings working.
 
     Returns:
-        Album hash if artwork was saved, None otherwise.
+        The album key if artwork was saved, None otherwise.
     """
-    # Compute album hash
-    album_hash = compute_album_hash(artist, album)
+    album_key = album_key or compute_album_hash(artist, album)
 
     # Check if artwork already exists
-    full_path = get_artwork_path(album_hash, "full")
+    full_path = get_artwork_path(album_key, "full")
     if full_path.exists():
-        return album_hash
+        return album_key
 
     # Extract artwork from file
     image_data = extract_artwork(file_path)
@@ -288,8 +329,8 @@ def extract_and_save_artwork(
         return None
 
     # Save artwork
-    saved = save_artwork(image_data, album_hash)
+    saved = save_artwork(image_data, album_key)
     if saved:
-        return album_hash
+        return album_key
 
     return None

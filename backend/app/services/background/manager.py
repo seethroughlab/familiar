@@ -208,7 +208,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
 
     async def queue_artwork_fetch(
         self,
-        album_hash: str,
+        album_key: str,
         artist: str,
         album: str,
         track_id: str | None = None,
@@ -218,7 +218,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
 
         fetcher = get_artwork_fetcher()
         request = ArtworkFetchRequest(
-            album_hash=album_hash,
+            album_key=album_key,
             artist=artist,
             album=album,
             track_id=track_id,

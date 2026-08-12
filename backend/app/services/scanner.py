@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import AUDIO_EXTENSIONS, settings
 from app.db.models import Track, TrackAnalysis, TrackStatus
 from app.services import metadata_overrides
+from app.services.album_resolver import resolve_canonical_album
 from app.services.artist_resolver import resolve_canonical_artist
 
 
@@ -661,6 +662,39 @@ class LibraryScanner:
             return None
         return artist.id if artist else None
 
+    async def _resolve_canonical_album_id(
+        self,
+        album_tag: str | None,
+        *,
+        album_artist_id: Any | None,
+        file_path: str,
+        release_id: str | None = None,
+        year: int | None = None,
+    ) -> Any | None:
+        """Resolve a track's album tag to ``Album.id`` (ADR-0052 dual-write).
+
+        Same failure policy as the artist resolve above: never abort a scan. The track
+        goes in with a NULL ``canonical_album_id`` and the backfill reconciles it.
+
+        ``file_path`` is passed even when there *is* an album tag, because the resolver
+        only falls back to the directory when the tag is blank — 801 tracks in this
+        library are in that position, and they otherwise share one bucket.
+        """
+        try:
+            album = await resolve_canonical_album(
+                self.db,
+                album_tag,
+                album_artist_id=album_artist_id,
+                file_path=file_path,
+                musicbrainz_release_id=release_id,
+                year=year,
+                create_if_missing=True,
+            )
+        except Exception as e:
+            logger.warning(f"canonical album resolve failed for {album_tag!r}: {e}")
+            return None
+        return album.id if album else None
+
     async def _create_track(
         self, file_path: Path, file_hash: str, file_mtime: datetime, file_size: int | None = None
     ) -> Track:
@@ -688,6 +722,15 @@ class LibraryScanner:
             metadata.get("album_artist"),
             None,  # album_artist tag rarely carries a per-artist MBID
         )
+        # After both artists, because the album's alias key holds the canonical artist
+        # *id* — which is what makes album identity inherit artist identity (ADR-0052).
+        canonical_album_id = await self._resolve_canonical_album_id(
+            metadata.get("album"),
+            album_artist_id=canonical_album_artist_id or canonical_artist_id,
+            file_path=str(file_path),
+            release_id=metadata.get("musicbrainz_album_id"),
+            year=metadata.get("year"),
+        )
 
         values = {
             "file_path": str(file_path),
@@ -713,6 +756,7 @@ class LibraryScanner:
             "lyrics_language": metadata.get("lyrics_language"),
             "canonical_artist_id": canonical_artist_id,
             "canonical_album_artist_id": canonical_album_artist_id,
+            "canonical_album_id": canonical_album_id,
         }
 
         # Use upsert to handle race conditions (another process may have inserted this track)
@@ -753,6 +797,7 @@ class LibraryScanner:
                 "lyrics_language": insert_stmt.excluded.lyrics_language,
                 "canonical_artist_id": insert_stmt.excluded.canonical_artist_id,
                 "canonical_album_artist_id": insert_stmt.excluded.canonical_album_artist_id,
+                "canonical_album_id": insert_stmt.excluded.canonical_album_id,
             },
         ).returning(Track)
 
@@ -883,6 +928,17 @@ class LibraryScanner:
             metadata.get("album_artist"),
             None,
         )
+        # After both artists, because the album's alias key holds the canonical artist
+        # *id* (ADR-0052). Resolved from the file's tags like the artists above, and
+        # like them it is identity rather than a display field — which is why it comes
+        # before the overrides below rather than after.
+        track.canonical_album_id = await self._resolve_canonical_album_id(
+            metadata.get("album"),
+            album_artist_id=track.canonical_album_artist_id or track.canonical_artist_id,
+            file_path=track.file_path,
+            release_id=metadata.get("musicbrainz_album_id"),
+            year=metadata.get("year"),
+        )
 
         # **A correction made in Familiar wins over the file.**
         #
@@ -891,9 +947,15 @@ class LibraryScanner:
         # app, re-encoding it, or replacing it changes its hash and brings us here — and until this
         # existed, that silently restored the old spelling with nothing to show it had happened.
         #
-        # Applied last, after the canonical artist ids are resolved from the file, because those
-        # resolve identity from the tag the file carries; the override then corrects the display
-        # fields on top. A field with no override is untouched and still follows the file.
+        # Applied last, after the canonical artist and album ids are resolved from the file, because
+        # those resolve identity from the tag the file carries; the override then corrects the
+        # display fields on top. A field with no override is untouched and still follows the file.
+        #
+        # The ordering has a consequence worth knowing: an album *renamed* in Familiar keeps its
+        # `canonical_album_id` — the id came from the file's tag, which has not changed — so the
+        # artwork stays put, which is the whole point of ADR-0052. What it does *not* do is move the
+        # track to a different album because somebody edited the album field; that would need the
+        # override to feed the resolver, and is deliberately not attempted here.
         restored = metadata_overrides.apply(track, track.metadata_overrides)
         if restored:
             logger.info(

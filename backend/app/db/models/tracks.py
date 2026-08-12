@@ -105,6 +105,19 @@ class Track(Base):
         index=True,
     )
 
+    # Canonical album FK (ADR-0052) — the record this track belongs to, resolved from
+    # its tags rather than derived from them. Artwork hangs off `Album.id`, which is
+    # what makes a cover survive the album being renamed.
+    #
+    # Nullable and `SET NULL` for the same reason as the artist FKs: a resolve failure
+    # must never abort a scan, and losing an album row must not delete tracks. The
+    # backfill reconciles anything the scanner left null.
+    canonical_album_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("albums.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Extended metadata (for editing)
     composer: Mapped[str | None] = mapped_column(String(500))
     conductor: Mapped[str | None] = mapped_column(String(500))

@@ -9,7 +9,6 @@ import {
   type PartialDownload,
 } from '../db';
 import { getApiUrl } from '../api/base';
-import { computeAlbumHash } from '../utils/albumHash';
 import { trackFetchError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
 import { isNativeApp } from '../utils/platform';
@@ -395,7 +394,7 @@ export async function downloadTrackForOffline(
   if (trackInfo?.artist && trackInfo?.album) {
     // Best-effort artwork download - don't fail if artwork unavailable
     try {
-      await downloadArtworkForOffline(trackInfo.artist, trackInfo.album);
+      await downloadArtworkForOffline(trackId);
     } catch {
       // Artwork download failed, continue without it
     }
@@ -458,40 +457,49 @@ export async function removeOfflineTrack(trackId: string): Promise<void> {
 }
 
 /**
- * Download artwork for an album for offline use.
- * Returns the hash if successful, null if artwork unavailable.
+ * Cache a downloaded track's cover for offline use.
+ *
+ * **Fetched through `/tracks/{id}/artwork`, not through an album key.** It used to
+ * derive the server's key here, with a JavaScript reimplementation of
+ * `normalize_for_matching` and of SHA-256 (`utils/albumHash.ts`, now deleted). Since
+ * ADR-0052 that key is an `Album.id`, which nothing in a browser could produce — and the
+ * per-track endpoint has always existed and needs no key at all. It is what the Apple
+ * clients have always used, which is why they were never exposed to this.
+ *
+ * Keyed by track id rather than by album, so one downloaded album stores a thumbnail per
+ * track instead of one shared copy. A few hundred KB across a library this size, and the
+ * honest trade for not inventing an album identity in the browser.
+ *
+ * Worth knowing: **nothing reads these blobs.** `getOfflineArtwork` and the by-album
+ * reader had no callers outside their own tests, so this table has always been written
+ * and never consulted. Left working rather than removed, because the fix is a reader,
+ * not a deletion — but do not assume offline artwork displays anywhere today.
  */
 export async function downloadArtworkForOffline(
-  artist: string,
-  album: string
+  trackId: string
 ): Promise<string | null> {
-  const hash = await computeAlbumHash(artist, album);
-
-  // Check if already downloaded
-  const existing = await db.offlineArtwork.get(hash);
+  const existing = await db.offlineArtwork.get(trackId);
   if (existing) {
-    return hash;
+    return trackId;
   }
 
-  // Try to fetch thumb size (smaller, sufficient for offline)
   // eslint-disable-next-line no-restricted-globals -- Offline artwork blob storage
-  const response = await fetch(getApiUrl(`/artwork/${hash}/thumb`));
+  const response = await fetch(getApiUrl(`/tracks/${trackId}/artwork?size=thumb`));
   if (!response.ok) {
-    trackFetchError(`/artwork/${hash}/thumb`, 'GET', response.status, 'offline-artwork');
+    trackFetchError(
+      `/tracks/${trackId}/artwork`, 'GET', response.status, 'offline-artwork'
+    );
     return null;
   }
 
-  const blob = await response.blob();
-
-  // Store in IndexedDB
   const offlineArtwork: OfflineArtwork = {
-    hash,
-    artwork: blob,
+    hash: trackId,
+    artwork: await response.blob(),
     cachedAt: new Date(),
   };
 
   await db.offlineArtwork.put(offlineArtwork);
-  return hash;
+  return trackId;
 }
 
 /**
@@ -500,17 +508,6 @@ export async function downloadArtworkForOffline(
 export async function getOfflineArtwork(hash: string): Promise<Blob | null> {
   const artwork = await db.offlineArtwork.get(hash);
   return artwork?.artwork || null;
-}
-
-/**
- * Get offline artwork by artist/album.
- */
-export async function getOfflineArtworkByAlbum(
-  artist: string,
-  album: string
-): Promise<Blob | null> {
-  const hash = await computeAlbumHash(artist, album);
-  return getOfflineArtwork(hash);
 }
 
 /**

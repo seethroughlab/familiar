@@ -81,7 +81,7 @@ def run_track_features(track_id: str) -> dict[str, Any]:
         precompute_shared,
     )
     from app.services.app_settings import get_app_settings_service
-    from app.services.artwork import extract_and_save_artwork
+    from app.services.artwork import album_key_for_track, extract_and_save_artwork
     from app.services.community_cache import get_community_cache_service
     from app.services.track_analysis import run_cheap_sections
 
@@ -137,10 +137,14 @@ def run_track_features(track_id: str) -> dict[str, Any]:
             logger.info(f"Extracting features: {track.title} by {track.artist}")
 
             # Extract and save artwork
+            # `album_key` so extracted art lands under the album's id rather than a hash
+            # of the track's own artist — which is what put a compilation's cover in one
+            # slot per track artist (ADR-0052).
             artwork_hash = extract_and_save_artwork(
                 file_path,
                 artist=track.artist,
                 album=track.album,
+                album_key=album_key_for_track(track),
             )
             log_memory("after_artwork")
 

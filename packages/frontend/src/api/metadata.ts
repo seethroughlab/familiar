@@ -57,6 +57,21 @@ export interface ArtworkQueueResponse {
   message: string;
 }
 
+/** What the server decided for one album in a batch. */
+export interface ArtworkQueueBatchResult {
+  artist: string | null;
+  album: string | null;
+  /**
+   * The album's artwork key, as decided by the server.
+   *
+   * Since ADR-0052 this is an `Album.id`, which nothing in a browser could derive.
+   * Before it, the client reimplemented `normalize_for_matching` and SHA-256 in
+   * JavaScript to guess it — see the deleted `utils/albumHash.ts`.
+   */
+  album_key: string;
+  status: 'queued' | 'exists' | 'pending' | 'skipped' | 'duplicate';
+}
+
 export interface ArtworkQueueBatchResponse {
   status: string;
   queued_count: number;
@@ -64,6 +79,8 @@ export interface ArtworkQueueBatchResponse {
   queued_hashes: string[];
   existing_hashes: string[];
   pending_hashes: string[];
+  /** Per-item outcome. Prefer this over the three flat arrays. */
+  results?: ArtworkQueueBatchResult[];
 }
 
 export interface ArtworkStatusBatchResponse {
