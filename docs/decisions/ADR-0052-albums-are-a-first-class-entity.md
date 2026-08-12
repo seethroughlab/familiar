@@ -100,8 +100,18 @@ Both remain useful as *inputs* to identity. Neither can be identity on its own.
    keeps paying as the artist table is cleaned up.
 
 4. **Artwork is keyed by the album id.** `get_artwork_path` (`artwork.py:59`) takes an album id;
-   `compute_album_hash` retires. Renaming an album then changes the row's matching inputs while its
-   id stays put, so the cover follows the album.
+   `compute_album_hash` retires.
+
+   The durability this buys is specific, and worth stating exactly rather than in the flattering
+   general form. **The hash is computed from the database columns; the album id is resolved from the
+   file's tags.** So when somebody corrects an album name in Familiar — which writes to the library
+   and never to the file, and which is precisely what the new metadata editor invites — the hash
+   moves and the cover is lost, while the id does not move and the cover is kept.
+
+   What this does *not* do is survive the file itself being retagged in another application. That
+   changes the resolver's input, so the track resolves to a different album, and the artwork stays
+   with the record it was fetched for. A hash fails that case too; the entity at least fails it
+   coherently, because a file retagged to a different title arguably *is* a different record.
 
 5. **Tracks with no album tag group by their containing folder.** 372 folders become 372 albums,
    replacing a single shared `unknown::unknown` bucket that today would give one dropped cover to 61
@@ -147,9 +157,15 @@ Both remain useful as *inputs* to identity. Neither can be identity on its own.
 
 ## Consequences
 
-- **Positive:** artwork survives a retag, which makes the metadata editor's drop target trustworthy
-  rather than provisional — the property [ADR-0051](ADR-0051-edited-metadata-outranks-file-tags.md)
-  gave to tags, extended to covers.
+- **Positive:** artwork survives an album being renamed **in Familiar**, which makes the metadata
+  editor's drop target trustworthy rather than provisional — the property
+  [ADR-0051](ADR-0051-edited-metadata-outranks-file-tags.md) gave to tags, extended to covers. See
+  decision point 4 for the case it does not cover.
+- **Tradeoff:** a file retagged in another application resolves to a different album and leaves its
+  old cover behind. Closing that would mean treating a track's existing `canonical_album_id` as
+  evidence and adopting the new spelling as an alias of the album it already belongs to — which is
+  cheap to build and wrong whenever somebody genuinely moves a track between albums by retagging it.
+  Deliberately not attempted; recorded so the option is visible rather than forgotten.
 - **Positive:** one dropped cover applies to a whole album including compilations, which is what the
   editor already claims.
 - **Positive:** ~2,300 redundant artwork slots collapse; fetching, generation and the
