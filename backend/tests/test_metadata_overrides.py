@@ -117,3 +117,75 @@ class TestTheScannerUsesIt:
             "overrides are applied before the file's tags are assigned, so the file wins and the "
             "edit is lost — the bug this exists to prevent"
         )
+
+
+class TestForgetting:
+    """An undo is a retraction, not a new opinion (ADR-0051 point 7)."""
+
+    def test_a_forgotten_field_follows_the_file_again(self) -> None:
+        recorded = metadata_overrides.record({}, {"artist": "Rachel's", "album": "Selenography"})
+        assert metadata_overrides.forget(recorded, ["artist"]) == {"album": "Selenography"}
+
+    def test_forgetting_something_never_recorded_is_harmless(self) -> None:
+        assert metadata_overrides.forget({"album": "x"}, ["genre"]) == {"album": "x"}
+
+    def test_forgetting_nothing_recorded_at_all_is_harmless(self) -> None:
+        assert metadata_overrides.forget(None, ["genre"]) == {}
+
+    def test_the_original_mapping_is_not_mutated(self) -> None:
+        original = {"album": "Selenography"}
+        metadata_overrides.forget(original, ["album"])
+        assert original == {"album": "Selenography"}
+
+
+class TestEveryWritePathRecords:
+    """ADR-0051 lists seven paths that write these fields. A path that forgets to record fails
+    *quietly* — it simply does not protect the edit, which looks exactly like the old behaviour, so
+    there is nothing to notice at runtime.
+
+    Asserted against the source because each one commits inside a route or a service that needs a
+    database and a profile to reach. Brittle on purpose; the alternative is no coverage at all for a
+    rule whose failure mode is silence.
+    """
+
+    def _source(self, module_name: str) -> str:
+        import importlib
+        from pathlib import Path
+
+        return Path(importlib.import_module(module_name).__file__).read_text()
+
+    def test_the_single_track_patch_records(self) -> None:
+        source = self._source("app.api.routes.tracks.metadata")
+        assert "metadata_overrides.record(track.metadata_overrides, update_data)" in source
+
+    def test_the_bulk_editor_records(self) -> None:
+        source = self._source("app.services.bulk_editor")
+        assert "metadata_overrides.record(" in source
+
+    def test_approving_a_pending_track_records(self) -> None:
+        source = self._source("app.api.routes.pending_review")
+        body = source.split("def _apply_review_edits", 1)[1].split("\n\n\n", 1)[0]
+        assert "metadata_overrides.record(" in body
+
+    def test_group_metadata_records(self) -> None:
+        source = self._source("app.api.routes.pending_review")
+        body = source.split("async def group_metadata", 1)[1].split("\n\n\n", 1)[0]
+        assert "metadata_overrides.record(" in body
+
+    def test_patching_a_pending_track_records(self) -> None:
+        source = self._source("app.api.routes.pending_review")
+        body = source.split("async def update_track_metadata", 1)[1].split("\n\n\n", 1)[0]
+        assert "metadata_overrides.record(" in body
+
+    def test_applying_a_proposed_change_records(self) -> None:
+        source = self._source("app.services.proposed_changes")
+        body = source.split("async def _apply_metadata_to_db", 1)[1].split("\n\n", 1)[0]
+        assert "metadata_overrides.record(" in body
+
+    def test_undoing_a_proposed_change_forgets_rather_than_records(self) -> None:
+        """The one path that must *not* record. Recording here would pin the field to a value
+        nobody chose and make undo a lie."""
+        source = self._source("app.services.proposed_changes")
+        undo = source.split("async def undo", 1)[1].split("\n\n\n", 1)[0]
+        assert "metadata_overrides.forget(" in undo
+        assert "metadata_overrides.record(" not in undo

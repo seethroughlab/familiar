@@ -15,6 +15,7 @@ from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError, ValidationError
 from app.api.schemas.common import UTCDateTime
 from app.db.models import Track, TrackStatus
+from app.services import metadata_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -262,14 +263,24 @@ async def _get_pending_tracks_in_folder(
     return list(result.scalars().all())
 
 
-def _apply_metadata_overrides(track: Track, overrides: dict[str, Any] | None) -> None:
-    """Apply metadata overrides to a track."""
-    if not overrides:
+def _apply_review_edits(track: Track, edits: dict[str, Any] | None) -> None:
+    """Apply the corrections somebody made while approving a track, and remember they made them.
+
+    Renamed from `_apply_metadata_overrides`, which collided with
+    `services.metadata_overrides` and meant something else entirely — this one applies values from
+    the request, that one is the record of who wins against the file. ADR-0051 notes the collision.
+
+    The recording is the new half: a track approved with a corrected album name is exactly as
+    deliberate an edit as one corrected later through the track editor, and until now only the
+    latter survived the file changing (ADR-0051 point 1).
+    """
+    if not edits:
         return
     allowed = {"artist", "album", "title", "track_number", "year", "album_artist", "genre"}
-    for key, value in overrides.items():
-        if key in allowed:
-            setattr(track, key, value)
+    applied = {key: value for key, value in edits.items() if key in allowed}
+    for key, value in applied.items():
+        setattr(track, key, value)
+    track.metadata_overrides = metadata_overrides.record(track.metadata_overrides, applied)
 
 
 async def _activate_track(db: AsyncSession, track: Track, queue_analysis: bool = True) -> None:
@@ -452,7 +463,11 @@ async def group_approve(
         raise ValidationError("No pending tracks found in folder")
 
     for track in tracks:
-        _apply_metadata_overrides(track, request.metadata_overrides)
+        # `request.metadata_overrides` is the *request's* field — corrections to apply while
+        # approving. Unrelated to `track.metadata_overrides`, the column recording who wins against
+        # the file, despite the identical name. Renaming the request field would break the web app's
+        # approve call, so the collision is documented instead. ADR-0051 notes it too.
+        _apply_review_edits(track, request.metadata_overrides)
         await _activate_track(db, track, request.queue_analysis)
 
     await db.commit()
@@ -562,10 +577,14 @@ async def group_metadata(
         raise ValidationError("No pending tracks found in folder")
 
     _allowed = {"artist", "album", "year", "album_artist", "genre"}
+    applied = {k: v for k, v in request.metadata.items() if k in _allowed}
     for track in tracks:
-        for key, value in request.metadata.items():
-            if key in _allowed:
-                setattr(track, key, value)
+        for key, value in applied.items():
+            setattr(track, key, value)
+        # Correcting a whole folder's album name is the most deliberate edit in the app, and was
+        # the one most exposed: these are freshly-scanned files, so the tags on disk are exactly
+        # what somebody is here to disagree with. ADR-0051 point 1.
+        track.metadata_overrides = metadata_overrides.record(track.metadata_overrides, applied)
 
     await db.commit()
     return {"status": "updated", "count": len(tracks)}
@@ -633,7 +652,7 @@ async def approve_track(
 ) -> dict[str, str]:
     """Approve a single pending track."""
     track = await _get_pending_track(db, track_id)
-    _apply_metadata_overrides(track, request.metadata_overrides)
+    _apply_review_edits(track, request.metadata_overrides)
     await _activate_track(db, track, request.queue_analysis)
     await db.commit()
     return {"status": "approved", "track_id": str(track_id)}
@@ -665,7 +684,7 @@ async def replace_track(
         await _transfer_user_data(db, old_track_id, track_id)
 
     # New track → ACTIVE
-    _apply_metadata_overrides(track, request.metadata_overrides)
+    _apply_review_edits(track, request.metadata_overrides)
     await _activate_track(db, track, request.queue_analysis)
 
     # Old track → SKIPPED
@@ -718,5 +737,6 @@ async def update_track_metadata(
     updates = request.model_dump(exclude_none=True)
     for key, value in updates.items():
         setattr(track, key, value)
+    track.metadata_overrides = metadata_overrides.record(track.metadata_overrides, updates)
     await db.commit()
     return {"status": "updated", "track_id": str(track_id)}

@@ -52,6 +52,23 @@ def record(existing: dict[str, Any] | None, changes: dict[str, Any]) -> dict[str
     return merged
 
 
+def forget(existing: dict[str, Any] | None, fields: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    """Drop fields from the record, so they follow the file again.
+
+    **An undo is a retraction, not a new opinion** (ADR-0051 point 7). Undoing an accepted proposed
+    change puts the old value back, and recording *that* as an override would pin the field to a
+    value nobody chose — the first accepted suggestion would freeze it forever and the undo would be
+    a lie.
+
+    This is currently the only way a field stops being overridden, which ADR-0051 point 8 states
+    outright rather than leaving to be discovered.
+    """
+    remaining = dict(existing or {})
+    for field in fields:
+        remaining.pop(field, None)
+    return remaining
+
+
 def apply(track: Any, overrides: dict[str, Any] | None) -> list[str]:
     """Put a person's corrections back on a track after its tags were re-read from the file.
 
