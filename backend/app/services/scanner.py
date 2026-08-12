@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AUDIO_EXTENSIONS, settings
 from app.db.models import Track, TrackAnalysis, TrackStatus
+from app.services import metadata_overrides
 from app.services.artist_resolver import resolve_canonical_artist
 
 
@@ -882,6 +883,22 @@ class LibraryScanner:
             metadata.get("album_artist"),
             None,
         )
+
+        # **A correction made in Familiar wins over the file.**
+        #
+        # Everything above assigns straight from the file's tags, which is right for a field nobody
+        # has touched and wrong for one somebody deliberately fixed. Re-tagging a file in another
+        # app, re-encoding it, or replacing it changes its hash and brings us here — and until this
+        # existed, that silently restored the old spelling with nothing to show it had happened.
+        #
+        # Applied last, after the canonical artist ids are resolved from the file, because those
+        # resolve identity from the tag the file carries; the override then corrects the display
+        # fields on top. A field with no override is untouched and still follows the file.
+        restored = metadata_overrides.apply(track, track.metadata_overrides)
+        if restored:
+            logger.info(
+                f"KEPT EDITS: {Path(track.file_path).name} — {', '.join(sorted(restored))}"
+            )
 
         # Only reset analysis status if requested (when file content changed)
         if reset_analysis:

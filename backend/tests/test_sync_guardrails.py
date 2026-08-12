@@ -93,3 +93,57 @@ class TestSyncProgressReporterResilience:
         assert isinstance(reporter.phase_requeue_attempts, dict)
         assert isinstance(reporter.phase_stall_recoveries, dict)
         assert isinstance(reporter.phase_forced_exit_reasons, dict)
+
+
+class TestSyncLeavesEditedMetadataAlone:
+    """A sync must not re-read tags for files that have not changed.
+
+    This is a *user-visible promise*, not an implementation detail. The Mac's track editor and its
+    library sync pane both say edits are kept, and the only thing making that true is
+    `reread_unchanged` defaulting to False — `LibraryScanner._update_track` assigns title, artist,
+    album, album_artist, the numbers, year and genre straight from the file and never consults the
+    `user_overrides` column, so any path that reaches it discards deliberate corrections.
+
+    The screens originally said the opposite — that a sync undoes your edits — which was wrong and
+    went unchecked until Jeff asked. Both directions of that claim need something holding them still,
+    because the copy is written once and the default can move underneath it.
+    """
+
+    def test_the_scanner_does_not_reread_unchanged_files_by_default(self) -> None:
+        import inspect
+
+        from app.services.scanner import LibraryScanner
+
+        default = inspect.signature(LibraryScanner.scan).parameters["reread_unchanged"].default
+        assert default is False, (
+            "LibraryScanner.scan now re-reads unchanged files by default, which silently discards "
+            "metadata edited in Familiar. The Mac's editor and sync pane both promise otherwise."
+        )
+
+    def test_the_sync_endpoint_does_not_reread_unchanged_files_by_default(self) -> None:
+        import inspect
+
+        from app.api.routes.library_sync import start_sync
+
+        default = inspect.signature(start_sync).parameters["reread_unchanged"].default
+        assert default is False, (
+            "POST /library/sync now re-reads unchanged files by default. The Mac's Sync Now button "
+            "sends no parameters, so this default is exactly what that button does."
+        )
+
+    def test_metadata_is_overwritten_only_when_asked_or_when_the_file_changed(self) -> None:
+        """The condition itself, read from the source.
+
+        Asserted against the text because the branch has no seam to call: `_update_track` runs deep
+        inside a scan over a real directory. A brittle test that names the rule beats no test for a
+        rule two screens quote to a listener.
+        """
+        from pathlib import Path
+
+        from app.services import scanner
+
+        source = Path(scanner.__file__).read_text()
+        assert "if reread_unchanged or file_changed:" in source, (
+            "the guard that keeps edited metadata has moved or changed shape — check what the Mac's "
+            "track editor and sync pane now promise"
+        )

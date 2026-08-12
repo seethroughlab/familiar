@@ -19,6 +19,7 @@ from app.db.models import (
     ProposedChange,
     Track,
 )
+from app.services import metadata_overrides
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,13 @@ class ProposedChangesService:
         for track in tracks:
             if hasattr(track, field):
                 setattr(track, field, new_value)
+                # Accepting a suggestion is a choice, so it outranks the file like any other edit
+                # (ADR-0051 point 7). Without this, a corrected artist name from an accepted change
+                # was undone by the next rescan of a re-tagged file — the same defect as a hand
+                # edit, reached by a different route.
+                track.metadata_overrides = metadata_overrides.record(
+                    track.metadata_overrides, {field: new_value}
+                )
         await self.db.commit()
 
     async def apply_batch(
@@ -390,10 +398,21 @@ class ProposedChangesService:
                         old_val = change.old_value.get(str(track.id))
                         if old_val is not None and hasattr(track, change.field):
                             setattr(track, change.field, old_val)
+                            track.metadata_overrides = metadata_overrides.forget(
+                                track.metadata_overrides, [change.field]
+                            )
                 else:
                     for track in tracks:
                         if hasattr(track, change.field):
                             setattr(track, change.field, change.old_value)
+                            track.metadata_overrides = metadata_overrides.forget(
+                                track.metadata_overrides, [change.field]
+                            )
+
+                # **An undo is a retraction, not a new opinion** (ADR-0051 point 7). The field goes
+                # back to following the file rather than being pinned to a value nobody chose —
+                # otherwise the first accepted suggestion would freeze it forever and this button
+                # would be a lie. This is currently the only way a field stops being overridden.
 
             # Mark as pending again (can be re-applied if needed)
             change.status = ChangeStatus.PENDING
