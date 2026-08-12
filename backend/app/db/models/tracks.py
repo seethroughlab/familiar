@@ -130,6 +130,23 @@ class Track(Base):
     # Example: {"bpm": 124.0, "key": "Am"} - overrides analysis.features values
     user_overrides: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
 
+    # Tag fields a person corrected in Familiar, and what they set them to.
+    # Example: {"album": "Selenography", "year": None}
+    #
+    # These win over the file. `LibraryScanner._update_track` re-reads a file's tags when its hash
+    # changes and would otherwise overwrite a deliberate correction with whatever the file says —
+    # which is how a re-tag or a re-encode elsewhere silently undid work done here.
+    #
+    # Separate from `user_overrides` on purpose: that one overrides *analysis* values and is merged
+    # only where the key already exists in the feature set. This one answers a different question,
+    # namely who wins between the library and the file, and the answer is recorded per field so an
+    # untouched field still follows the file.
+    #
+    # A null value is a real entry meaning "the person cleared this", not an absent one.
+    metadata_overrides: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
     # Analysis status
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
     analysis_error: Mapped[str | None] = mapped_column(String(500))

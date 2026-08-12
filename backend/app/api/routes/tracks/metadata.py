@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import DbSession
 from app.api.exceptions import TrackNotFoundError
 from app.db.models import Track
+from app.services import metadata_overrides
 
 from . import TrackFeaturesResponse
 
@@ -259,6 +260,10 @@ async def update_track_metadata(
     for field, value in update_data.items():
         if hasattr(track, field):
             setattr(track, field, value)
+
+    # Remember that these were chosen rather than read off the file, so a rescan cannot undo them.
+    # Assigned rather than mutated in place: SQLAlchemy does not notice in-place changes to JSONB.
+    track.metadata_overrides = metadata_overrides.record(track.metadata_overrides, update_data)
 
     # Commit database changes
     await db.commit()
