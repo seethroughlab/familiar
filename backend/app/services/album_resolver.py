@@ -197,9 +197,16 @@ async def resolve_canonical_album(
         return None
 
     # 1. A verified release id.
+    #
+    # `claim_release_id` goes false when one is already spoken for by a record whose
+    # title disagrees. Without that, falling through would try to create a second album
+    # carrying the same id and hit the unique constraint — an IntegrityError that would
+    # abort a scan over one badly tagged file.
+    claim_release_id = bool(musicbrainz_release_id)
     if musicbrainz_release_id:
         existing = await _album_by_release_id(db, musicbrainz_release_id)
         if existing is not None:
+            claim_release_id = False
             # A release id that disagrees with the title is somebody else's record;
             # fall through to the alias path rather than folding two albums together.
             if not tag or _titles_match(tag, existing.name):
@@ -235,7 +242,7 @@ async def resolve_canonical_album(
         name=name,
         sort_name=_compute_sort_name(name),
         album_artist_id=album_artist_id,
-        musicbrainz_release_id=musicbrainz_release_id or None,
+        musicbrainz_release_id=musicbrainz_release_id if claim_release_id else None,
         year=year,
     )
     db.add(album)

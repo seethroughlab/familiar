@@ -59,9 +59,9 @@ def upgrade() -> None:
             ),
         )
 
-    if not index_exists("albums", "ix_albums_sort_name"):
+    if not index_exists("ix_albums_sort_name"):
         op.create_index("ix_albums_sort_name", "albums", ["sort_name"])
-    if not index_exists("albums", "ix_albums_album_artist_id"):
+    if not index_exists("ix_albums_album_artist_id"):
         op.create_index("ix_albums_album_artist_id", "albums", ["album_artist_id"])
 
     if not table_exists("album_aliases"):
@@ -88,7 +88,7 @@ def upgrade() -> None:
             ),
         )
 
-    if not index_exists("album_aliases", "ix_album_aliases_album_id"):
+    if not index_exists("ix_album_aliases_album_id"):
         op.create_index("ix_album_aliases_album_id", "album_aliases", ["album_id"])
 
     if not column_exists("tracks", "canonical_album_id"):
@@ -101,7 +101,7 @@ def upgrade() -> None:
                 nullable=True,
             ),
         )
-    if not index_exists("tracks", "ix_tracks_canonical_album_id"):
+    if not index_exists("ix_tracks_canonical_album_id"):
         op.create_index("ix_tracks_canonical_album_id", "tracks", ["canonical_album_id"])
 
 

@@ -171,7 +171,7 @@ async def get_artwork_status(album_hash: str) -> ArtworkStatusResponse:
     thumb_path = get_artwork_path(album_hash, "thumb")
 
     return ArtworkStatusResponse(
-        album_key=album_hash,
+        album_hash=album_hash,
         exists=full_path.exists() and thumb_path.exists(),
     )
 
