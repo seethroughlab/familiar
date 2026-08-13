@@ -56,6 +56,16 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --exclude '__pycache__' \
         --exclude '*.pyc' \
         backend/migrations/ jeff@$NAS_HOST:$REMOTE_PATH/backend/migrations/
+
+    # scripts/ too. It was left out until 2026-08-12, when the ADR-0052 artwork
+    # migration had to be `docker cp`-ed in by hand — the container was still carrying
+    # whatever `scripts/` the image was built with, which is the sort of staleness that
+    # only shows up when you finally need one of them.
+    echo "Syncing scripts to $NAS_HOST..."
+    rsync -avz \
+        --exclude '__pycache__' \
+        --exclude '*.pyc' \
+        backend/scripts/ jeff@$NAS_HOST:$REMOTE_PATH/backend/scripts/
 fi
 
 echo "Restarting container..."
@@ -81,6 +91,9 @@ fi
 if [ "$DEPLOY_BACKEND" = true ]; then
     echo "Syncing migrations into container..."
     ssh jeff@$NAS_HOST "docker cp $REMOTE_PATH/backend/migrations/. familiar-api:/app/migrations/"
+
+    echo "Syncing scripts into container..."
+    ssh jeff@$NAS_HOST "docker cp $REMOTE_PATH/backend/scripts/. familiar-api:/app/scripts/"
 
     echo "Running database migrations..."
     ssh jeff@$NAS_HOST "docker exec -w /app -e PYTHONPATH=/app familiar-api alembic upgrade head" || {
