@@ -101,3 +101,8 @@ demo-library/
 
 # Intermediate output of the visualizer bundle build; the artifact is vendored into familiar-apple.
 packages/web/dist-visualizer/
+
+# Generated-illustration sources: 2 MB JPEGs the marks are cut from. Kept out of site/
+# because everything there is copied straight to Cloudflare, and out of git because the
+# committed PNGs, the prompts and extract-marks.py are enough to reproduce them.
+art-sources/
