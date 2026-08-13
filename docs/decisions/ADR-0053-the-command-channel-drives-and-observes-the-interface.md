@@ -66,10 +66,17 @@ render *its own* windows with no permission at all, and that is the only thing t
    "the client did not answer in time" rather than hanging — ADR-0044 point 5's rule, which is
    ADR-0017 point 4's rule one layer further out. Nothing on this channel may spin.
 
-6. **A capture is the application drawing its own window, never a screen recording.** `cacheDisplay`
-   over the window's own content view. No permission prompt, and by construction it cannot
-   photograph anything but Familiar — which matters because the machine this runs on is somebody's
-   desktop, with their mail on it.
+6. **A capture is the application drawing its own window, never a screen recording.** No permission
+   prompt, and by construction it cannot photograph anything but Familiar — which matters because
+   the machine this runs on is somebody's desktop, with their mail on it.
+
+   **Through the window's `CALayer`, not through `cacheDisplay`.** This was written the other way
+   round and corrected by running it: `cacheDisplay(in:to:)` drives `draw(_:)` down the view tree,
+   and SwiftUI's macOS views are layer-backed and mostly do not implement it — so the capture came
+   back with the sidebar entirely black while the track table, an `NSTableView` underneath, drew
+   fine. Deterministically; two consecutive captures were byte-identical, so it was not a race.
+   `CALayer.render(in:)` walks the tree that actually holds the pixels, and needs its context
+   flipped first or the whole window arrives upside down.
 
 7. **Both are capability-gated**, per ADR-0044 point 12. `navigate` and `screenshot` join the
    declaration a client makes when it subscribes, so the tool surface offers them only when the
@@ -118,8 +125,13 @@ render *its own* windows with no permission at all, and that is the only thing t
 - **Tradeoff:** the channel is no longer purely one-way at the system level, even though the SSE
   stream still is. ADR-0044 point 2's sentence needs reading alongside this ADR rather than alone.
 - **Tradeoff:** a capture is the app's own drawing, so it will not show window chrome, the menu bar,
-  or anything overlapping it. For screenshots of the interface that is arguably better; for
-  reproducing a visual bug involving a system control it is worse.
+  or anything overlapping it — the title-bar strip comes back empty. For screenshots of the
+  interface that is arguably better; for reproducing a visual bug involving a system control it is
+  worse.
+- **Tradeoff:** rendering a layer tree is not the same as what the compositor puts on screen.
+  Anything the window server draws on top — a sheet from another process, a tooltip, the
+  title bar — is absent by construction, and a capture is therefore evidence about the app's own
+  view tree rather than about what a person saw.
 - **Tradeoff:** two more capabilities to keep honest. A build that declares `screenshot` and cannot
   produce one is exactly the failure point 7 exists to prevent, and nothing but care enforces it.
 - **Follow-up:** the phone could declare `screenshot` too — `UIGraphicsImageRenderer` over the key
