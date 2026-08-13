@@ -1,8 +1,29 @@
 # ADR-0052: Albums Are a First-Class Entity
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-12
+
+Implementation:
+- Accepted 2026-08-12, after the work it describes was built, deployed and measured on the live
+  library — the numbers below are outcomes rather than estimates.
+- Points 1–7 are built and deployed (`familiar` #159). **4,274 albums** created (3,902 titled, 372
+  folder-derived) and **all 26,422 active tracks placed, none unresolved**, in 18 seconds.
+- **297 compilations became one album each**, covering 3,813 tracks that between them had been
+  holding 2,304 separate artwork slots. The worst, "New Wave Club Class-X Box", had 49 distinct track
+  artists and therefore 49 covers; it now has one.
+- Artwork slots went 6,221 → 3,577. Of 12,017 files on disk, 12,017 remain: 7,814 re-keyed in place,
+  3,349 merged away and 854 orphaned, all quarantined rather than deleted.
+- **Point 4 verified end to end on real data.** An album renamed through the endpoint the Mac's
+  editor uses kept its `canonical_album_id` and served byte-identical artwork either side of the
+  rename. Before this, that rename moved the hash and lost the cover.
+- Two defects found while building it, both fixed here: `normalize_for_matching` never folded curly
+  quotes (both character classes held their ASCII form twice), which gave 16 albums a second artwork
+  slot; and `aggregate_album_features` matched artist and album case-sensitively, so generated art
+  for a compilation came from a fraction of the record.
+- **Not done, and listed under Consequences:** the read cutover, exposing the id in `AlbumSummary`,
+  an album merge UI, and `album_id` operands for smart playlists. The six `GROUP BY` definitions of
+  "album" in the backend are all still there and still disagree with each other.
 
 Extends [ADR-0051](ADR-0051-edited-metadata-outranks-file-tags.md)
 
