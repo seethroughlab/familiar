@@ -1,121 +1,164 @@
-# The illustration set — brief
+# Illustration prompts
 
-ADR-0039 point 4, as amended by [ADR-0054](../docs/decisions/ADR-0054-the-illustration-set-is-dark-theme-only.md).
-Read those first; this is the working spec for producing the set, not the decision.
+Paste one at a time into Gemini. Each is self-contained — the style block is repeated in every
+prompt on purpose, because a generator drifts within a few images once the description stops being
+in front of it, and drift across the set is the one failure ADR-0039 point 4 actually cares about.
 
-> **An illustration set is commissioned or drawn once, named, and used consistently.** Black cats,
-> crows, and witchy-but-playful marks. […] This is called out as a decision because an illustration
-> style adopted for a hero and then abandoned for every other section is worse than having none —
-> the inconsistency reads as unfinished in a way plain typography never does.
+Save each result as `site/assets/marks/<name>.png`, using the name in the heading.
 
-**ADR-0054 dropped the theme-awareness requirement.** The site has no light mode and none is
-planned, and demanding `currentColor` made every mark monochrome — which is right for an icon and
-wrong for a black cat. Colour is available. What survives, and what actually matters, is that the
-set is one set.
+**Two settings matter more than the wording.** Ask for a **transparent background** every time — the
+site's panels are `#18181b` on a `#0a0a0a` page, so a baked background shows its own rectangle on
+one of them. And generate at **at least 512×512**, so a mark stays clean when it is shown at 40px.
 
-## The register — decide this once, before generating anything
+---
 
-Everything below hangs off a single choice, and **the set must commit to one of these entirely.**
-Colour illustrations beside monochrome stroked icons is point 4's failure mode arriving by a
-different route.
+## 1 · cat
 
-**A. Drawn illustrations, in colour.** Raster, generated or painted. This is the register that gets
-you charm — a cat with an expression rather than a cat-shaped outline. Heavier files, fixed at their
-rendered size.
+> A flat vector illustration of a sitting black cat seen from the front, tail curled around its
+> paws, drawn in a witchy but playful style — rounded shapes, no sharp horror. Thick confident
+> outlines in warm violet (#a855f7), body filled near-black (#0a0a0a) with subtle violet rim light
+> on one edge. Two calm almond eyes in pale green (#22c55e). Centred in a square frame with generous
+> margin. Transparent background. Flat colour only — no gradients, no shading, no texture, no drop
+> shadow, no text. Simple enough to read clearly at 40 pixels.
 
-**B. Flat vector marks, in colour.** SVG paths with two or three fills from the site palette. Sharper,
-far smaller, and consistent almost for free, but limited to shapes that can be described as paths —
-which in practice means the tools read better than the animals.
+## 2 · cat-ear
 
-There is no wrong answer, only a wrong mixture. **Pick one and produce all fifteen in it.**
+> A flat vector illustration of a single black cat's ear, turned and tilted as if listening intently
+> toward a sound off to one side, with three small concentric sound arcs beside it. Witchy but
+> playful, rounded shapes. Thick confident outlines in warm violet (#a855f7), ear filled near-black
+> (#0a0a0a), inner ear a muted rose. Sound arcs in pale green (#22c55e). Centred in a square frame
+> with generous margin. Transparent background. Flat colour only — no gradients, no shading, no
+> texture, no drop shadow, no text. Simple enough to read clearly at 40 pixels.
 
-## If you go with A — raster
+## 3 · paw-trail
 
-- **2×** for the displays this is read on. A mark shown at 20px is generated at 40px; a hero mark at
-  120px is generated at 240px.
-- **Transparent background, always.** The site's panels are `#18181b` on a `#0a0a0a` page, so a mark
-  with a baked background will show its own rectangle on one of them.
-- **PNG.** These are flat-ish art with hard edges and transparency, which is what PNG is for; JPEG
-  will fringe the edges and cannot carry alpha.
-- Watch the total. The page already carries five screenshots; fifteen marks at 40px cost nothing,
-  fifteen at 240px do not.
+> A flat vector illustration of three cat paw prints in a curving trail, walking away from the
+> viewer and getting slightly smaller, as if one is leading to the next. Witchy but playful, rounded
+> shapes. Paw prints filled near-black (#0a0a0a) with thick warm violet (#a855f7) outlines; the
+> furthest print fades to violet only. Centred in a square frame with generous margin. Transparent
+> background. Flat colour only — no gradients, no shading, no texture, no drop shadow, no text.
+> Simple enough to read clearly at 40 pixels.
 
-## If you go with B — vector
+## 4 · crow
 
-```
-viewBox="0 0 24 24"     stroke-linecap="round"    stroke-linejoin="round"
-```
+> A flat vector illustration of a crow in profile carrying a small vinyl record in its beak, wings
+> tucked, standing alert. Witchy but playful, rounded shapes, characterful rather than menacing.
+> Thick confident outlines in warm violet (#a855f7), body filled near-black (#0a0a0a) with a violet
+> sheen mark on the wing. One pale green (#22c55e) eye. Centred in a square frame with generous
+> margin. Transparent background. Flat colour only — no gradients, no shading, no texture, no drop
+> shadow, no text. Simple enough to read clearly at 40 pixels.
 
-- Fills from the palette below. Strokes only where a line is the drawing.
-- **No `id` attributes and no `<style>` blocks.** These are inlined into one page, so ids collide and
-  a style block leaks into everything after it.
-- **Readable at 20px**, which is the size on a feature card.
+## 5 · moon-phases
 
-## The palette
+> A flat vector illustration of three moons in a horizontal row showing a crescent, a half and a
+> full moon, evenly spaced and the same size. Witchy but playful. Thick confident outlines in warm
+> violet (#a855f7); lit portions filled off-white (#fafafa), unlit portions filled near-black
+> (#0a0a0a). Centred in a square frame with generous margin. Transparent background. Flat colour
+> only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to read
+> clearly at 40 pixels.
 
-Taken from `site/assets/site.css`, so the marks belong to the page rather than sitting on it.
+## 6 · constellation
 
-| | |
-|---|---|
-| page | `#0a0a0a` |
-| panel | `#18181b` |
-| text | `#fafafa` |
-| muted | `#71717a` |
-| purple | `#a855f7` |
-| green | `#22c55e` |
-| blue | `#3b82f6` |
-| red | `#f87171` |
+> A flat vector illustration of a small constellation — six stars of varying sizes joined by thin
+> straight lines into a loose cluster, like a star chart. Witchy but playful. Lines in warm violet
+> (#a855f7); stars filled off-white (#fafafa) with violet outlines; two of the stars pale green
+> (#22c55e). Centred in a square frame with generous margin. Transparent background. Flat colour
+> only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to read
+> clearly at 40 pixels.
 
-Purple is the closest thing Familiar has to a signature; it is the safest lead for a witchy set.
-Anything that needs to read as *live* — playing, listening, connected — takes green.
+## 7 · orb
 
-## The motifs
+> A flat vector illustration of a crystal ball resting on a small clawed stand, with three tiny
+> stars floating inside the sphere. Witchy but playful, rounded shapes. Thick confident outlines in
+> warm violet (#a855f7); sphere filled deep near-black (#0a0a0a) with a single off-white (#fafafa)
+> crescent highlight; stand filled violet. Stars pale green (#22c55e). Centred in a square frame
+> with generous margin. Transparent background. Flat colour only — no gradients, no shading, no
+> texture, no drop shadow, no text. Simple enough to read clearly at 40 pixels.
 
-A *familiar* is a witch's animal companion, which is the idea the whole set hangs off. Animals for
-the things that act on your behalf; tools for the things you operate.
+## 8 · eye
 
-| Mark | Where it goes | Why |
-|---|---|---|
-| `cat` | Bring your own assistant | The familiar itself. The one mark that could carry the hero. |
-| `cat-ear` | Semantic audio search | Listening, turned toward a sound. Not a magnifying glass. |
-| `paw-trail` | Find similar | Three prints leading off — one track leading to the next. |
-| `crow` | Discover / new releases | The bird that brings you things. |
-| `moon-phases` | Mood Grid | Three phases in a row. Moods as a spectrum, not categories. |
-| `constellation` | Music Map | Stars with lines drawn between them; that *is* the map. |
-| `orb` | 3D Explorer | A scrying sphere on a stand. Depth, and looking into it. |
-| `eye` | CLAP embeddings | What the analysis does: listens once, and knows. |
-| `tuning-fork` | Musical features | The one honest instrument in a set of magic. |
-| `cauldron` | Smart playlists | A rule set, brewing, filling itself. |
-| `lantern` | Offline | Light you carry when there is no supply. |
-| `key` | Remote access | Tailscale, a password on a session. |
-| `hearth` | Community cache | Shared warmth, nothing personal given away. |
-| `moon-reel` | Music videos | A film reel whose sprockets are a crescent. |
-| `two-cats` | Listening sessions | Two familiars, one fire. Company. |
+> A flat vector illustration of a single stylised eye, almond shaped, with a small crescent moon as
+> the pupil and three short eyelash strokes above. Witchy but playful, calm rather than staring.
+> Thick confident outlines in warm violet (#a855f7); eye white filled off-white (#fafafa); pupil
+> near-black (#0a0a0a). Centred in a square frame with generous margin. Transparent background. Flat
+> colour only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to read
+> clearly at 40 pixels.
 
-Fifteen. If the generator does better on some than others, keep the good ones and commission the
-rest — a set of twelve that match beats fifteen that do not.
+## 9 · tuning-fork
 
-## Naming and placement
+> A flat vector illustration of a two-pronged tuning fork standing upright, with two small
+> vibration arcs on each side of the prongs. Witchy but playful, rounded shapes. Thick confident
+> outlines in warm violet (#a855f7); fork filled off-white (#fafafa); vibration arcs pale green
+> (#22c55e). Centred in a square frame with generous margin. Transparent background. Flat colour
+> only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to read
+> clearly at 40 pixels.
 
-Named as in the table. Raster goes to `site/assets/marks/<name>.png`; vector goes into
-`site/assets/marks.svg` as a `<symbol id="mark-<name>">`, inlined at the top of `<body>` so a `<use>`
-costs no request.
+## 10 · cauldron
 
-Each use sits in the heading it belongs to and carries `alt=""` or `aria-hidden="true"` — every mark
-is beside a heading that already says what it is, and repeating that to a screen reader is noise.
+> A flat vector illustration of a small round cauldron on three stubby legs, with a musical note
+> rising out of it on a curl of vapour. Witchy but playful, rounded shapes. Thick confident outlines
+> in warm violet (#a855f7); cauldron filled near-black (#0a0a0a); the brew inside and the rising
+> note pale green (#22c55e). Centred in a square frame with generous margin. Transparent background.
+> Flat colour only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to
+> read clearly at 40 pixels.
 
-## Before committing a generated set
+## 11 · lantern
 
-Look at the page at 100% and squint. The test is not whether each mark is good; it is whether any
-one of them looks like it came from somewhere else — different weight, different palette, different
-level of detail. That is the only failure point 4 actually cares about.
+> A flat vector illustration of a small hanging lantern with a ring handle, glass panels, and a
+> steady flame inside. Witchy but playful, rounded shapes. Thick confident outlines in warm violet
+> (#a855f7); lantern frame filled near-black (#0a0a0a); glass panels a faint violet; flame pale
+> green (#22c55e). Centred in a square frame with generous margin. Transparent background. Flat
+> colour only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to read
+> clearly at 40 pixels.
 
-Then check the obvious mechanical things: transparent backgrounds on every raster mark, no baked
-panel colour, and nothing so fine it disappears at 20px.
+## 12 · key
 
-## The reference mark
+> A flat vector illustration of an ornate old iron key seen side on, with a looping decorative bow
+> at the top and two simple teeth at the bottom. Witchy but playful, rounded shapes. Thick confident
+> outlines in warm violet (#a855f7); key filled off-white (#fafafa) with a near-black (#0a0a0a)
+> keyhole shape cut into the bow. Centred in a square frame with generous margin. Transparent
+> background. Flat colour only — no gradients, no shading, no texture, no drop shadow, no text.
+> Simple enough to read clearly at 40 pixels.
 
-`mark-cat` in `site/assets/marks.svg` was drawn under the old monochrome constraint. **It is a
-grammar reference, not a style reference** — useful for weight and framing, and superseded the
-moment the set commits to a register. ADR-0054's last follow-up is to redraw or drop it, because a
-stroked monochrome cat beside a colour set is exactly what point 4 forbids.
+## 13 · hearth
+
+> A flat vector illustration of a small stone hearth or fireplace arch with a contented fire burning
+> inside it. Witchy but playful, rounded shapes, warm rather than grand. Thick confident outlines in
+> warm violet (#a855f7); stonework filled near-black (#0a0a0a); flames pale green (#22c55e).
+> Centred in a square frame with generous margin. Transparent background. Flat colour only — no
+> gradients, no shading, no texture, no drop shadow, no text. Simple enough to read clearly at 40
+> pixels.
+
+## 14 · moon-reel
+
+> A flat vector illustration of a film reel seen face on, where the sprocket holes around its edge
+> are crescent moon shapes instead of circles. Witchy but playful. Thick confident outlines in warm
+> violet (#a855f7); reel filled near-black (#0a0a0a); crescent holes off-white (#fafafa); centre hub
+> pale green (#22c55e). Centred in a square frame with generous margin. Transparent background. Flat
+> colour only — no gradients, no shading, no texture, no drop shadow, no text. Simple enough to read
+> clearly at 40 pixels.
+
+## 15 · two-cats
+
+> A flat vector illustration of two black cats sitting side by side facing the viewer, shoulders
+> touching, their tails curling toward each other to meet in a loose heart shape at the bottom.
+> Witchy but playful, rounded shapes. Thick confident outlines in warm violet (#a855f7); bodies
+> filled near-black (#0a0a0a); four calm eyes in pale green (#22c55e). Centred in a square frame
+> with generous margin. Transparent background. Flat colour only — no gradients, no shading, no
+> texture, no drop shadow, no text. Simple enough to read clearly at 40 pixels.
+
+---
+
+## If a result drifts
+
+The usual failures, and what to add to the prompt:
+
+- **Too detailed to read small** — add *"extremely simplified, minimal detail, bold shapes only"*.
+- **Came back with a background** — add *"isolated on a fully transparent background, no backdrop,
+  no ground shadow, PNG with alpha"*.
+- **Shaded or glossy** — add *"flat 2D vector art, completely flat fills, no lighting"*.
+- **Wrong weight against the others** — name the one it should match: *"same line weight and level
+  of detail as this"*, and attach an accepted mark.
+
+Generate `cat` first and get it right. Once one is good, attach it to every subsequent prompt as the
+style reference — matching a real image holds a set together far better than matching a description.
