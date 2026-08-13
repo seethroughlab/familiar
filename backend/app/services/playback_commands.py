@@ -55,6 +55,11 @@ KNOWN_CAPABILITIES = frozenset(
         "visualizer",
         "shuffle_weights",
         "normalization",
+        # ADR-0053. `navigate` roots the client's interface on a `LibraryRoute`; `screenshot` has
+        # it draw its own window and upload the result. Both are declared, not assumed, so a tool
+        # is offered only where something can actually carry it out.
+        "navigate",
+        "screenshot",
     }
 )
 
@@ -231,3 +236,94 @@ _channel = PlaybackCommandChannel()
 
 def get_channel() -> PlaybackCommandChannel:
     return _channel
+
+
+# ---------------------------------------------------------------------------
+# Artifacts (ADR-0053)
+# ---------------------------------------------------------------------------
+
+
+class ArtifactTimeout(Exception):
+    """The client never uploaded what it was asked for.
+
+    Raised so a tool can *answer* — "the client did not respond in time" — rather than hang.
+    ADR-0044 point 5's rule, which nothing on this channel is exempt from.
+    """
+
+
+class ArtifactStore:
+    """Outstanding requests for something the client has to send back.
+
+    **Held in memory and dropped once read** (ADR-0053 point 8). A screenshot of somebody's
+    library is not a thing to accumulate on a server because deleting it was more work than
+    keeping it: there is no table, no directory, and therefore no retention rule to get wrong.
+
+    One entry is one unanswered question. The id names the question, not the device — it lives
+    for as long as the asking does, which is why this does not reopen ADR-0029 point 5's decision
+    to leave device identity uninvented.
+    """
+
+    def __init__(self) -> None:
+        self._waiting: dict[str, asyncio.Future[tuple[bytes, str]]] = {}
+        # Whose question each id belongs to. The upload endpoint is profile-scoped like every
+        # other mutating route here, and this is what lets it check rather than merely require:
+        # holding *a* profile is not the same as holding the one that asked.
+        self._owners: dict[str, UUID] = {}
+
+    def open(self, request_id: str, profile_id: UUID) -> asyncio.Future[tuple[bytes, str]]:
+        future: asyncio.Future[tuple[bytes, str]] = asyncio.get_running_loop().create_future()
+        self._waiting[request_id] = future
+        self._owners[request_id] = profile_id
+        return future
+
+    def deliver(
+        self, request_id: str, data: bytes, content_type: str, *, profile_id: UUID
+    ) -> bool:
+        """Hand an upload to whoever asked. False when nobody did — a late or unknown answer.
+
+        **The entry is left in place rather than popped**, and `wait` removes it once it has read
+        the result. Popping here looked tidier and lost screenshots: a client fast enough to upload
+        before the tool reached its `await` would resolve a future nobody was holding any more, and
+        the tool would then find no outstanding request and report a timeout for an image that had
+        already arrived. Rare, load-dependent, and invisible — the worst combination.
+
+        A late upload is still discarded. The question it answered has been answered with a
+        timeout, and keeping the image would be keeping it forever (point 8).
+        """
+        future = self._waiting.get(request_id)
+        if future is None or future.done():
+            return False
+        if self._owners.get(request_id) != profile_id:
+            # A profile answering somebody else's question. Refused rather than accepted, and
+            # reported to the caller the same way a late upload is — there is nothing useful it
+            # could do with the difference, and saying "wrong profile" would confirm the id exists.
+            return False
+        future.set_result((data, content_type))
+        return True
+
+    async def wait(self, request_id: str, timeout: float) -> tuple[bytes, str]:
+        future = self._waiting.get(request_id)
+        if future is None:
+            raise ArtifactTimeout(f"No outstanding request {request_id}")
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), timeout=timeout)
+        except TimeoutError as exc:
+            raise ArtifactTimeout(
+                f"The client did not answer within {timeout:.0f}s"
+            ) from exc
+        finally:
+            # Read or not, the question is over: nothing is kept for a later reader, because there
+            # is never a later reader and the artifact is a picture of somebody's library.
+            self._waiting.pop(request_id, None)
+            self._owners.pop(request_id, None)
+
+    def cancel(self, request_id: str) -> None:
+        self._waiting.pop(request_id, None)
+        self._owners.pop(request_id, None)
+
+
+_artifacts = ArtifactStore()
+
+
+def get_artifact_store() -> ArtifactStore:
+    return _artifacts

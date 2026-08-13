@@ -1814,6 +1814,20 @@
         "title": "Body_library_import_preview",
         "type": "object"
       },
+      "Body_playback_upload_artifact": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_playback_upload_artifact",
+        "type": "object"
+      },
       "Body_profiles_upload_avatar": {
         "properties": {
           "file": {
@@ -23400,6 +23414,97 @@
         "summary": "Unskip Track",
         "tags": [
           "pending-review"
+        ]
+      }
+    },
+    "/api/v1/playback/artifacts/{request_id}": {
+      "post": {
+        "description": "Hand back something a command asked this client to produce (ADR-0053 point 3).\n\nThe return half of the channel, and deliberately not on the channel: the SSE stream stays\none-way, and this is a request the client makes when it has something to send. That keeps\nADR-0044 point 2's reasoning intact rather than reversing it.\n\n`request_id` names one outstanding question. It is minted by the server when it issues the\ncommand, it is not a device identity, and it dies when the question is answered or times out \u2014\nwhich is why this does not reopen ADR-0029 point 5.\n\n**Profile-scoped, and checked rather than merely required.** The store remembers which profile\nasked, so holding *a* profile is not enough to answer somebody else's question. Caught by\n`lint_profile_contracts.py`, which is the rule this route was quietly outside.\n\nA late or unknown upload is **discarded, not stored** (point 8). The question it answers has\nalready been answered with a timeout, and keeping the image would mean keeping it forever.\n204 either way: the client cannot do anything useful with the difference, and telling it its\nscreenshot was too slow would only invite a retry nothing is waiting for.",
+        "operationId": "playback_upload_artifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_playback_upload_artifact"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Upload Artifact",
+        "tags": [
+          "playback"
         ]
       }
     },
