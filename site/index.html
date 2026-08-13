@@ -4,22 +4,52 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Familiar — self-hosted streaming for your own music library</title>
-  <meta name="description" content="Host your own music streaming service for the library you already own. AI listens to every track and builds playlists from your collection, not a streaming catalog.">
+  <meta name="description" content="Host your own music streaming service for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
   <link rel="stylesheet" href="./assets/site.css">
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="Familiar — self-hosted streaming for your own music library">
-  <meta property="og:description" content="Host your own music streaming service for the library you already own. AI listens to every track and builds playlists from your collection, not a streaming catalog.">
-  <meta property="og:image" content="https://familiar.seethroughlab.com/assets/og-image.png">
+  <meta property="og:description" content="Host your own music streaming service for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.">
+  <meta property="og:image" content="https://familiar.seethroughlab.com/assets/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
   <meta property="og:url" content="https://familiar.seethroughlab.com/">
   <meta property="og:site_name" content="Familiar">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Familiar — self-hosted streaming for your own music library">
-  <meta name="twitter:description" content="Host your own music streaming service for the library you already own. AI listens to every track and builds playlists from your collection, not a streaming catalog.">
-  <meta name="twitter:image" content="https://familiar.seethroughlab.com/assets/og-image.png">
+  <meta name="twitter:description" content="Host your own music streaming service for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.">
+  <meta name="twitter:image" content="https://familiar.seethroughlab.com/assets/og-image.jpg">
 </head>
 <body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <!--
+    The illustration set (ADR-0039 point 4). One file, one symbol per mark, inlined into the page.
+
+    Every mark draws with `currentColor` and hardcodes no colour, which is what makes the set
+    theme-aware without a second copy of every file — the property point 4 asks for and the one a
+    raster set cannot have.
+
+    `mark-cat` is the reference. See site/ILLUSTRATIONS.md for the grammar and the motif map; give
+    this symbol to a generator as the example to match, because matching a real mark produces a more
+    consistent set than matching a description.
+  -->
+  <symbol id="mark-cat" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Ears, then the head, drawn as one continuous silhouette so it reads at 20px. -->
+    <path d="M6.5 8.2 5.6 4.4l3.3 2.1" />
+    <path d="M17.5 8.2l0.9-3.8-3.3 2.1" />
+    <path d="M6.5 8.2a6.6 6.6 0 0 1 11 0 6 6 0 0 1-11 0Z" />
+    <!-- Eyes: solid, because two open dots at this size read as holes rather than eyes. -->
+    <path d="M9.8 10.1v0.9" />
+    <path d="M14.2 10.1v0.9" />
+    <!-- Muzzle. -->
+    <path d="M12 12.4v0.9" />
+    <path d="M10.7 14.1a1.7 1.7 0 0 0 2.6 0" />
+    <!-- Tail, curled — the flourish that makes it playful rather than a pictogram. -->
+    <path d="M17.2 13.4c1.9 1.4 2.6 3.4 1.6 5-0.9 1.5-3 1.6-3.7 0.3-0.5-1 0.2-2 1.2-1.9" />
+  </symbol>
+</svg>
 
 <nav class="topnav" aria-label="Primary">
   <a class="topnav-brand" href="#top">
@@ -43,7 +73,7 @@
   <img src="./assets/icon.svg" alt="Familiar" class="hero-logo">
   <div class="hero-body">
     <h1 class="hero-title">Familiar</h1>
-    <p class="hero-tagline">Host your own music streaming service — for the library you already own. AI listens to every track and builds playlists from your collection, not a streaming catalog.</p>
+    <p class="hero-tagline">Host your own music streaming service — for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.</p>
     <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
       <span class="version-dot"></span> v0.1.0-alpha2 · 2026-04-17
     </a>
@@ -74,8 +104,12 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 <section id="screenshots">
   <h2>Screenshots</h2>
   <div class="screenshot-grid">
+    <figure class="shot"><a href="./screenshots/mac-albums.png" target="_blank" rel="noopener"><img src="./screenshots/mac-albums.png" alt="The Mac app showing the albums grid" loading="lazy"></a><figcaption>Mac app — albums</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/mac-artists.png" target="_blank" rel="noopener"><img src="./screenshots/mac-artists.png" alt="The Mac app showing the artists grid" loading="lazy"></a><figcaption>Mac app — artists</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/mac-discover.png" target="_blank" rel="noopener"><img src="./screenshots/mac-discover.png" alt="The Mac app showing new releases from your artists" loading="lazy"></a><figcaption>Mac app — discover</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/mac-music-map.png" target="_blank" rel="noopener"><img src="./screenshots/mac-music-map.png" alt="The Mac app showing the music map" loading="lazy"></a><figcaption>Mac app — music map</figcaption></figure>
+    <figure class="shot"><a href="./screenshots/mac-smart-playlists.png" target="_blank" rel="noopener"><img src="./screenshots/mac-smart-playlists.png" alt="The Mac app showing smart playlists and their rules" loading="lazy"></a><figcaption>Mac app — smart playlists</figcaption></figure>
     <figure class="shot"><a href="./screenshots/01-library-tracks.png" target="_blank" rel="noopener"><img src="./screenshots/01-library-tracks.png" alt="Library — tracks" loading="lazy"></a><figcaption>Library — tracks</figcaption></figure>
-    <figure class="shot"><a href="./screenshots/08-chat-panel.png" target="_blank" rel="noopener"><img src="./screenshots/08-chat-panel.png" alt="AI chat panel" loading="lazy"></a><figcaption>AI chat panel</figcaption></figure>
     <figure class="shot"><a href="./screenshots/04-library-mood-grid.png" target="_blank" rel="noopener"><img src="./screenshots/04-library-mood-grid.png" alt="Mood grid" loading="lazy"></a><figcaption>Mood grid</figcaption></figure>
     <figure class="shot"><a href="./screenshots/05-library-music-map.png" target="_blank" rel="noopener"><img src="./screenshots/05-library-music-map.png" alt="Music map" loading="lazy"></a><figcaption>Music map</figcaption></figure>
     <figure class="shot"><a href="./screenshots/06-library-explorer.png" target="_blank" rel="noopener"><img src="./screenshots/06-library-explorer.png" alt="3D explorer" loading="lazy"></a><figcaption>3D explorer</figcaption></figure>
@@ -105,8 +139,8 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
       <p>Describe the sound: "upbeat with synths", "acoustic and melancholy". Matches on CLAP audio embeddings, not tags.</p>
     </div>
     <div class="feature">
-      <h3>AI chat assistant</h3>
-      <p>Claude with 27 tools for search, playback, metadata correction, and playlist creation.</p>
+      <h3><svg class="mark" aria-hidden="true"><use href="#mark-cat"></use></svg>Bring your own assistant</h3>
+      <p>Familiar speaks MCP. Point Claude Desktop — or any MCP host — at your library and it gets 36 tools for search, playback, metadata and playlists. No API key in Familiar.</p>
     </div>
     <div class="feature">
       <h3>Find similar</h3>
@@ -173,7 +207,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 
 <section id="ask">
   <h2>Ask Familiar…</h2>
-  <p class="section-lede">Real prompts that map to real filters. The AI chat translates phrases like these into audio-feature queries across your library.</p>
+  <p class="section-lede">Real prompts that map to real filters. Connect an MCP host and phrases like these become audio-feature queries across your library.</p>
   <div class="prompt-grid">
     <div class="prompt">
       <p class="prompt-text">"Something chill for late-night coding"</p>
@@ -219,7 +253,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
       </thead>
       <tbody>
         <tr><td>Plays your existing MP3 / FLAC files</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>iCloud Match (replaces files)</td><td class="no">—</td></tr>
-        <tr><td>AI chat + playlist creation</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>MCP server (bring your own AI)</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
         <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
         <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td>Basic</td><td>Basic</td><td>Catalog-only</td><td>Catalog-only</td></tr>
         <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
@@ -271,7 +305,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
     </details>
     <details>
       <summary>Do I need an API key?</summary>
-      <p>Yes for the AI chat — Familiar uses the Anthropic Claude API, and queries typically cost a fraction of a cent. Basic library browsing, playback, search, Mood Grid, Music Map, and 3D Explorer all work without an API key.</p>
+      <p>No. Familiar holds no API key and calls no model. If you want to ask questions in plain language you connect your own MCP host — Claude Desktop, say — and whatever that costs is between you and them. Everything else, including search, Mood Grid, Music Map and the 3D Explorer, is local.</p>
     </details>
     <details>
       <summary>What hardware do I need?</summary>
@@ -279,11 +313,11 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
     </details>
     <details>
       <summary>Does my music or listening data leave my network?</summary>
-      <p>No. The opt-in community cache shares only one-way SHA-256 hashes of audio fingerprints — no track titles, artists, file paths, or listening history. You cannot reconstruct a library from the hashes. AI chat queries go to Anthropic (because that's where Claude runs); your audio files never leave your server.</p>
+      <p>No. The opt-in community cache shares only one-way SHA-256 hashes of audio fingerprints — no track titles, artists, file paths, or listening history. You cannot reconstruct a library from the hashes. If you connect an MCP host, whatever you ask it goes wherever that host sends it — that is your choice and your account. Your audio files never leave your server.</p>
     </details>
     <details>
       <summary>What happens if Claude is down?</summary>
-      <p>The chat panel is disabled until the API comes back. Everything else — browsing, searching, playback, similarity, smart playlists — is local and keeps working.</p>
+      <p>Everything keeps working. Browsing, searching, playback, similarity, smart playlists and analysis are all local — Familiar makes no outbound call to run. An MCP host you have connected is the only part that needs the internet, and only for its own sake.</p>
     </details>
     <details>
       <summary>How long does analysis take?</summary>
@@ -324,7 +358,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 
   <div class="step" data-step="2">
     <h3>Open the UI</h3>
-    <p>Visit <code>http://localhost:4400</code>. The admin page walks you through API keys (Anthropic for AI chat, optional Last.fm and AcoustID).</p>
+    <p>Visit <code>http://localhost:4400</code>. The admin page walks you through the optional API keys — Last.fm and AcoustID, for enrichment. Neither is required, and Familiar needs no model key at all.</p>
   </div>
 
   <div class="step" data-step="3">

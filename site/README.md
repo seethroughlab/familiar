@@ -1,7 +1,7 @@
 # Site
 
 Plain static site for [familiar.seethroughlab.com](https://familiar.seethroughlab.com). Deployed to
-**Cloudflare Pages** on push to `main` (see `.github/workflows/pages.yml`).
+**Cloudflare Pages** on push to `main` (see `.github/workflows/cloudflare-pages.yml`).
 
 No generator and no build step: two HTML files and a stylesheet do not justify a toolchain
 ([ADR-0039](../docs/decisions/ADR-0039-the-website-is-rebuilt-in-place.md) point 1). Release notes,
@@ -26,6 +26,6 @@ using the `CF_API_TOKEN` and `CF_ACCOUNT_ID` secrets.
 
 > **This section used to describe GitHub Pages** — a CNAME file the repository does not contain,
 > and DNS pointing at `seethroughlab.github.io`. None of it was true after the Cloudflare
-> migration; the workflow is still *named* `pages.yml` with a job called Pages, which is presumably
+> migration. The workflow *was* named `pages.yml` with a job called Pages, which is presumably
 > how it survived. Corrected under ADR-0039 point 7. Renaming the workflow would stop this
 > happening again and has not been done.

@@ -828,3 +828,25 @@ footer a { color: var(--text-secondary); }
   margin: 0.4rem 0 0;
   font-size: 0.9rem;
 }
+
+
+/* Illustration marks (ADR-0039 point 4) --------------------------------------
+   Colour is inherited rather than set, which is the whole point: one file works on
+   any background and goes muted or bright with the text it sits beside. */
+.mark {
+  width: 20px;
+  height: 20px;
+  /* Optical rather than metric: a 20px square next to 17px text sits high without this. */
+  vertical-align: -3px;
+  margin-right: 8px;
+  color: var(--accent-purple);
+  flex: none;
+}
+
+.feature h3 .mark { color: var(--accent-purple); }
+
+/* A mark must never be the only thing carrying meaning, so it hides rather than
+   reflows when images are off or the sprite fails to inline. */
+@media (forced-colors: active) {
+  .mark { color: CanvasText; }
+}

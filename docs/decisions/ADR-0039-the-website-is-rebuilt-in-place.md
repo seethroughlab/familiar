@@ -44,6 +44,23 @@ Verified rather than eyeballed: the document parses with every tag balanced, all
 anchors resolve to an id that exists (the nav and section order both changed, so this was the likely
 breakage), and all eighteen referenced local assets are present.
 
+- **Two follow-ups closed, 2026-08-13.**
+
+  The workflow is renamed `cloudflare-pages.yml`, its job commented with why, and `site/README.md`
+  points at the new path. That was the last thing keeping alive the confusion point 7 fixed.
+
+  `og-image.png` was 485 kB and, more to the point, **stale**: it showed the AI Assistant panel that
+  ADR-0048 removed and a "Spotify Library" sidebar item retired on 2026-08-10 — on the one asset
+  that appears whenever anybody shares the link. Replaced with the Mac app on the site's own
+  background at the canonical 1200×630, as `og-image.jpg`, **84 kB**. The follow-up asked for it to
+  be regenerated "with the new illustration set"; the illustration set does not exist yet and the
+  image was actively wrong, so it was regenerated from a screenshot instead. Point 4 still stands
+  and this does not discharge it.
+
+  The screenshot follow-up is also closed: five images of the Mac app are on the page, captured by
+  driving it over the command channel ([ADR-0053](ADR-0053-the-command-channel-drives-and-observes-the-interface.md))
+  and photographing the window with the system tool.
+
 ## Context
 
 `https://familiar.seethroughlab.com/` is live and serves `site/index.html` — **364 lines** of
