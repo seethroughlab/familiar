@@ -1,42 +1,73 @@
 # The illustration set — brief
 
-ADR-0039 point 4. Read that first; this is the working spec for producing the set, not the decision.
+ADR-0039 point 4, as amended by [ADR-0054](../docs/decisions/ADR-0054-the-illustration-set-is-dark-theme-only.md).
+Read those first; this is the working spec for producing the set, not the decision.
 
 > **An illustration set is commissioned or drawn once, named, and used consistently.** Black cats,
-> crows, and witchy-but-playful marks. SVG, inline where small, and theme-aware so the site can have
-> a dark mode without a second set of files. This is called out as a decision because an
-> illustration style adopted for a hero and then abandoned for every other section is worse than
-> having none — the inconsistency reads as unfinished in a way plain typography never does.
+> crows, and witchy-but-playful marks. […] This is called out as a decision because an illustration
+> style adopted for a hero and then abandoned for every other section is worse than having none —
+> the inconsistency reads as unfinished in a way plain typography never does.
 
-## The one constraint that is easy to lose
+**ADR-0054 dropped the theme-awareness requirement.** The site has no light mode and none is
+planned, and demanding `currentColor` made every mark monochrome — which is right for an icon and
+wrong for a black cat. Colour is available. What survives, and what actually matters, is that the
+set is one set.
 
-**Ask for SVG source, not images.** A generator asked for "illustrations" will hand back PNGs, and a
-PNG cannot be theme-aware — it bakes its colours in, so a light mode needs a second set of every
-file, which is precisely what point 4 rules out. What is wanted is *SVG markup*, monochrome, drawing
-its colour from the page.
+## The register — decide this once, before generating anything
 
-Concretely, every mark must use `stroke="currentColor"` and no hardcoded hex anywhere. That one
-property is what makes the set survive a theme change, sit correctly on a card or in a heading, and
-go muted or bright by inheriting from the text beside it.
+Everything below hangs off a single choice, and **the set must commit to one of these entirely.**
+Colour illustrations beside monochrome stroked icons is point 4's failure mode arriving by a
+different route.
 
-## The grammar
+**A. Drawn illustrations, in colour.** Raster, generated or painted. This is the register that gets
+you charm — a cat with an expression rather than a cat-shaped outline. Heavier files, fixed at their
+rendered size.
 
-Every mark, without exception:
+**B. Flat vector marks, in colour.** SVG paths with two or three fills from the site palette. Sharper,
+far smaller, and consistent almost for free, but limited to shapes that can be described as paths —
+which in practice means the tools read better than the animals.
+
+There is no wrong answer, only a wrong mixture. **Pick one and produce all fifteen in it.**
+
+## If you go with A — raster
+
+- **2×** for the displays this is read on. A mark shown at 20px is generated at 40px; a hero mark at
+  120px is generated at 240px.
+- **Transparent background, always.** The site's panels are `#18181b` on a `#0a0a0a` page, so a mark
+  with a baked background will show its own rectangle on one of them.
+- **PNG.** These are flat-ish art with hard edges and transparency, which is what PNG is for; JPEG
+  will fringe the edges and cannot carry alpha.
+- Watch the total. The page already carries five screenshots; fifteen marks at 40px cost nothing,
+  fifteen at 240px do not.
+
+## If you go with B — vector
 
 ```
-viewBox="0 0 24 24"     fill="none"            stroke="currentColor"
-stroke-width="1.5"      stroke-linecap="round" stroke-linejoin="round"
+viewBox="0 0 24 24"     stroke-linecap="round"    stroke-linejoin="round"
 ```
 
-- **No `id` attributes and no `<style>` blocks.** These are inlined into one page, so ids collide
-  and a style block leaks into everything after it.
-- **No `fill` other than `none`**, except where a shape is meant to read as solid — an eye's pupil,
-  a cat's nose — and then `fill="currentColor"`.
-- **Readable at 20px.** That is the size on a feature card. A mark that needs 48px to be legible is
-  the wrong mark, however good it looks large.
-- **One weight throughout.** The most common failure in a generated set is drift: some marks with
-  fine detail and some with three thick strokes. They must look drawn by the same hand on the same
-  day.
+- Fills from the palette below. Strokes only where a line is the drawing.
+- **No `id` attributes and no `<style>` blocks.** These are inlined into one page, so ids collide and
+  a style block leaks into everything after it.
+- **Readable at 20px**, which is the size on a feature card.
+
+## The palette
+
+Taken from `site/assets/site.css`, so the marks belong to the page rather than sitting on it.
+
+| | |
+|---|---|
+| page | `#0a0a0a` |
+| panel | `#18181b` |
+| text | `#fafafa` |
+| muted | `#71717a` |
+| purple | `#a855f7` |
+| green | `#22c55e` |
+| blue | `#3b82f6` |
+| red | `#f87171` |
+
+Purple is the closest thing Familiar has to a signature; it is the safest lead for a witchy set.
+Anything that needs to read as *live* — playing, listening, connected — takes green.
 
 ## The motifs
 
@@ -61,36 +92,30 @@ the things that act on your behalf; tools for the things you operate.
 | `moon-reel` | Music videos | A film reel whose sprockets are a crescent. |
 | `two-cats` | Listening sessions | Two familiars, one fire. Company. |
 
-Fifteen. If the generator does better on some than others, keep the good ones and hand-draw the
+Fifteen. If the generator does better on some than others, keep the good ones and commission the
 rest — a set of twelve that match beats fifteen that do not.
 
-## Naming and layout
+## Naming and placement
 
-One file, `site/assets/marks.svg`, containing a `<symbol>` per mark keyed `mark-<name>` — the names
-in the table above. It is inlined into `index.html` at the top of `<body>` and each use is:
+Named as in the table. Raster goes to `site/assets/marks/<name>.png`; vector goes into
+`site/assets/marks.svg` as a `<symbol id="mark-<name>">`, inlined at the top of `<body>` so a `<use>`
+costs no request.
 
-```html
-<svg class="mark" aria-hidden="true"><use href="#mark-cat"></use></svg>
-```
+Each use sits in the heading it belongs to and carries `alt=""` or `aria-hidden="true"` — every mark
+is beside a heading that already says what it is, and repeating that to a screen reader is noise.
 
-`aria-hidden` because every one of these sits beside a heading that already says what it is. A mark
-that repeats the heading to a screen reader is noise.
+## Before committing a generated set
+
+Look at the page at 100% and squint. The test is not whether each mark is good; it is whether any
+one of them looks like it came from somewhere else — different weight, different palette, different
+level of detail. That is the only failure point 4 actually cares about.
+
+Then check the obvious mechanical things: transparent backgrounds on every raster mark, no baked
+panel colour, and nothing so fine it disappears at 20px.
 
 ## The reference mark
 
-`mark-cat` is drawn and in place on "Bring your own assistant". **Give it to the generator as the
-example to match** — matching a real mark produces a more consistent set than matching a
-description, and it is already proven to sit correctly at 20px on a card.
-
-## Checking the result
-
-Before committing a generated set:
-
-```bash
-grep -o 'stroke="[^"]*"' site/assets/marks.svg | sort -u   # currentColor only
-grep -c 'id="' site/assets/marks.svg                        # symbols only, no stray ids
-grep -o 'fill="[^"]*"' site/assets/marks.svg | sort -u      # none, or currentColor
-```
-
-Then look at the page at 100% and squint. The test is not whether each mark is good; it is whether
-any one of them looks like it came from somewhere else.
+`mark-cat` in `site/assets/marks.svg` was drawn under the old monochrome constraint. **It is a
+grammar reference, not a style reference** — useful for weight and framing, and superseded the
+moment the set commits to a register. ADR-0054's last follow-up is to redraw or drop it, because a
+stroked monochrome cat beside a colour set is exactly what point 4 forbids.

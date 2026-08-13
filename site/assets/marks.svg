@@ -2,13 +2,16 @@
   <!--
     The illustration set (ADR-0039 point 4). One file, one symbol per mark, inlined into the page.
 
-    Every mark draws with `currentColor` and hardcodes no colour, which is what makes the set
-    theme-aware without a second copy of every file — the property point 4 asks for and the one a
-    raster set cannot have.
+    **This predates ADR-0054, which dropped the theme-awareness requirement.** `mark-cat` was drawn
+    with `currentColor` because point 4 asked for one set that worked in light and dark; the site has
+    no light mode and none is planned, and the constraint made every mark monochrome — right for an
+    icon, wrong for a black cat.
 
-    `mark-cat` is the reference. See site/ILLUSTRATIONS.md for the grammar and the motif map; give
-    this symbol to a generator as the example to match, because matching a real mark produces a more
-    consistent set than matching a description.
+    It survives as a *grammar* reference: weight, framing, and what reads at 20px. It is not a style
+    reference, and ADR-0054's last follow-up is to redraw or drop it once the set commits to a
+    register, because a stroked monochrome cat beside a colour set is point 4's own failure mode.
+
+    See site/ILLUSTRATIONS.md for the register choice, the palette and the motif map.
   -->
   <symbol id="mark-cat" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
