@@ -242,7 +242,7 @@ async def handle(
         request_id = uuid4().hex
         store = get_artifact_store()
         # Opened *before* the command goes out, or a fast client could answer into nothing.
-        store.open(request_id)
+        store.open(request_id, profile_id)
         try:
             player = channel.send(
                 profile_id,

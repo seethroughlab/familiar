@@ -136,7 +136,9 @@ async def playback_commands(
 
 
 @router.post("/artifacts/{request_id}", status_code=204)
-async def upload_artifact(request_id: str, file: UploadFile) -> None:
+async def upload_artifact(
+    profile: RequiredProfile, request_id: str, file: UploadFile
+) -> None:
     """Hand back something a command asked this client to produce (ADR-0053 point 3).
 
     The return half of the channel, and deliberately not on the channel: the SSE stream stays
@@ -146,6 +148,10 @@ async def upload_artifact(request_id: str, file: UploadFile) -> None:
     `request_id` names one outstanding question. It is minted by the server when it issues the
     command, it is not a device identity, and it dies when the question is answered or times out —
     which is why this does not reopen ADR-0029 point 5.
+
+    **Profile-scoped, and checked rather than merely required.** The store remembers which profile
+    asked, so holding *a* profile is not enough to answer somebody else's question. Caught by
+    `lint_profile_contracts.py`, which is the rule this route was quietly outside.
 
     A late or unknown upload is **discarded, not stored** (point 8). The question it answers has
     already been answered with a timeout, and keeping the image would mean keeping it forever.
@@ -162,7 +168,10 @@ async def upload_artifact(request_id: str, file: UploadFile) -> None:
         )
 
     delivered = get_artifact_store().deliver(
-        request_id, data, file.content_type or "application/octet-stream"
+        request_id,
+        data,
+        file.content_type or "application/octet-stream",
+        profile_id=profile.id,
     )
     if not delivered:
         logger.info(

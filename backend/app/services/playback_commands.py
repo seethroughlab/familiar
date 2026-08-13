@@ -265,13 +265,20 @@ class ArtifactStore:
 
     def __init__(self) -> None:
         self._waiting: dict[str, asyncio.Future[tuple[bytes, str]]] = {}
+        # Whose question each id belongs to. The upload endpoint is profile-scoped like every
+        # other mutating route here, and this is what lets it check rather than merely require:
+        # holding *a* profile is not the same as holding the one that asked.
+        self._owners: dict[str, UUID] = {}
 
-    def open(self, request_id: str) -> asyncio.Future[tuple[bytes, str]]:
+    def open(self, request_id: str, profile_id: UUID) -> asyncio.Future[tuple[bytes, str]]:
         future: asyncio.Future[tuple[bytes, str]] = asyncio.get_running_loop().create_future()
         self._waiting[request_id] = future
+        self._owners[request_id] = profile_id
         return future
 
-    def deliver(self, request_id: str, data: bytes, content_type: str) -> bool:
+    def deliver(
+        self, request_id: str, data: bytes, content_type: str, *, profile_id: UUID
+    ) -> bool:
         """Hand an upload to whoever asked. False when nobody did — a late or unknown answer.
 
         **The entry is left in place rather than popped**, and `wait` removes it once it has read
@@ -285,6 +292,11 @@ class ArtifactStore:
         """
         future = self._waiting.get(request_id)
         if future is None or future.done():
+            return False
+        if self._owners.get(request_id) != profile_id:
+            # A profile answering somebody else's question. Refused rather than accepted, and
+            # reported to the caller the same way a late upload is — there is nothing useful it
+            # could do with the difference, and saying "wrong profile" would confirm the id exists.
             return False
         future.set_result((data, content_type))
         return True
@@ -303,9 +315,11 @@ class ArtifactStore:
             # Read or not, the question is over: nothing is kept for a later reader, because there
             # is never a later reader and the artifact is a picture of somebody's library.
             self._waiting.pop(request_id, None)
+            self._owners.pop(request_id, None)
 
     def cancel(self, request_id: str) -> None:
         self._waiting.pop(request_id, None)
+        self._owners.pop(request_id, None)
 
 
 _artifacts = ArtifactStore()
