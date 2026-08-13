@@ -1,4 +1,4 @@
-name: Deploy Pages
+name: Deploy site to Cloudflare Pages
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
     paths:
       - "site/**"
       - "screenshots/**"
-      - ".github/workflows/pages.yml"
+      - ".github/workflows/cloudflare-pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -14,13 +14,17 @@ permissions:
   deployments: write
 
 concurrency:
-  group: pages
+  group: cloudflare-pages
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # Named for where it deploys. It was `pages.yml` with a job called "Deploy Pages" while
+  # deploying to Cloudflare, which is how `site/README.md` came to describe GitHub Pages, a CNAME
+  # this repository does not contain, and DNS pointing at seethroughlab.github.io. ADR-0039 point 7
+  # fixed the README and left this, noting it was the only thing keeping the confusion alive.
   deploy:
     runs-on: ubuntu-latest
     steps:
