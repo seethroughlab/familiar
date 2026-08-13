@@ -13,24 +13,68 @@ never needed it, since it was itself the player.
 
 from __future__ import annotations
 
+import base64
 import logging
 import time
 from copy import deepcopy
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import mcp.types as types
 
 from app.services.now_playing import get_registry as get_now_playing_registry
-from app.services.playback_commands import NoPlayerAttached, get_channel
+from app.services.playback_commands import (
+    ArtifactTimeout,
+    NoPlayerAttached,
+    get_artifact_store,
+    get_channel,
+)
 
 logger = logging.getLogger(__name__)
 
 #: Handled here rather than dispatched to `ToolExecutor`.
-PLAYBACK_TOOLS = {"queue_tracks", "control_playback", "list_players", "get_now_playing"}
+PLAYBACK_TOOLS = {
+    "queue_tracks",
+    "control_playback",
+    "list_players",
+    "get_now_playing",
+    # ADR-0053: driving and photographing the interface, not just the audio.
+    "navigate_app",
+    "capture_screenshot",
+}
+
+#: The destinations a client can be rooted on. Mirrors `LibraryRoute` in FamiliarKit — a closed
+#: list on purpose, so an unknown destination is refused by the schema instead of accepted and
+#: quietly dropped (ADR-0053 point 2).
+NAVIGATION_DESTINATIONS = [
+    "home",
+    "tracks",
+    "albums",
+    "artists",
+    "playlists",
+    "smart_playlists",
+    "music_map",
+    "discover",
+    "pending_review",
+    "proposed_changes",
+    "mixtapes",
+    "favorites",
+    "downloads",
+    "settings",
+]
 
 #: What a client must have declared to receive each command (ADR-0044 point 12).
-_REQUIRES = {"queue_tracks": "queue", "control_playback": "play"}
+_REQUIRES = {
+    "queue_tracks": "queue",
+    "control_playback": "play",
+    "navigate_app": "navigate",
+    "capture_screenshot": "screenshot",
+}
+
+#: How long to wait for a client to send a screenshot back. Generous — the app has to draw and
+#: encode a window — but bounded, because a tool that never answers is the defect ADR-0044 point 5
+#: exists to prevent.
+_CAPTURE_TIMEOUT_SECONDS = 15.0
 
 _TARGET_PROPERTY = {
     "type": "string",
@@ -52,6 +96,48 @@ def list_players_tool() -> types.Tool:
             "when the listener has more than one device and you need to name one."
         ),
         input_schema={"type": "object", "properties": {}},
+    )
+
+
+def navigate_tool() -> types.Tool:
+    return types.Tool(
+        name="navigate_app",
+        description=(
+            "Show a particular screen in the listener's Familiar app — the Mac or phone client, "
+            "not the web page. Use it to put the app somewhere before asking about it or "
+            "photographing it, or when the listener asks to be taken to a part of their library. "
+            "Delivered to a running client, so it needs one attached; call list_players if this "
+            "reports none. This roots the app on a destination and does not open a specific album "
+            "or playlist."
+        ),
+        input_schema=add_target_property(
+            "target",
+            {
+                "type": "object",
+                "properties": {
+                    "destination": {
+                        "type": "string",
+                        "enum": NAVIGATION_DESTINATIONS,
+                        "description": "Which screen to show.",
+                    }
+                },
+                "required": ["destination"],
+            },
+        ),
+    )
+
+
+def capture_screenshot_tool() -> types.Tool:
+    return types.Tool(
+        name="capture_screenshot",
+        description=(
+            "Photograph the listener's Familiar app window and return the image. The app draws "
+            "its own window, so this captures Familiar and nothing else on their machine — no "
+            "other applications, no desktop, no menu bar. Use it to see what a screen actually "
+            "looks like, to check your own work after navigating, or to produce images of the "
+            "interface. Pair it with navigate_app to choose the screen first."
+        ),
+        input_schema=add_target_property("target", {"type": "object", "properties": {}}),
     )
 
 
@@ -130,6 +216,70 @@ async def handle(
         }
 
     target = arguments.pop("player", None) or None
+
+    if name == "navigate_app":
+        destination = str(arguments.get("destination", "")).strip()
+        if destination not in NAVIGATION_DESTINATIONS:
+            # Refused rather than sent. A destination the app has no case for would arrive, be
+            # decoded to nothing, and leave the tool reporting success against a screen that never
+            # changed (ADR-0053 point 2).
+            return {
+                "error": f"Unknown destination {destination!r}.",
+                "destinations": NAVIGATION_DESTINATIONS,
+            }
+        try:
+            player = channel.send(
+                profile_id,
+                {"type": "navigate", "destination": destination},
+                target=target,
+                requires=_REQUIRES[name],
+            )
+        except NoPlayerAttached as exc:
+            return _no_player_answer(exc, profile_id)
+        return {"delivered": True, "destination": destination, "player": player.describe()}
+
+    if name == "capture_screenshot":
+        request_id = uuid4().hex
+        store = get_artifact_store()
+        # Opened *before* the command goes out, or a fast client could answer into nothing.
+        store.open(request_id)
+        try:
+            player = channel.send(
+                profile_id,
+                {"type": "screenshot", "request_id": request_id},
+                target=target,
+                requires=_REQUIRES[name],
+            )
+        except NoPlayerAttached as exc:
+            store.cancel(request_id)
+            return _no_player_answer(exc, profile_id)
+
+        try:
+            data, content_type = await store.wait(request_id, _CAPTURE_TIMEOUT_SECONDS)
+        except ArtifactTimeout as exc:
+            # Answers rather than hanging (ADR-0044 point 5). The client is attached and declared
+            # the capability, so this is worth reporting as a fault rather than as "unavailable".
+            return {
+                "error": str(exc),
+                "player": player.describe(),
+                "note": (
+                    "The client is attached and says it can take screenshots, so it either failed "
+                    "to draw its window or could not upload the result."
+                ),
+            }
+
+        return {
+            "image": {
+                "data": base64.b64encode(data).decode("ascii"),
+                "mime_type": content_type,
+                "bytes": len(data),
+            },
+            "player": player.describe(),
+            "note": (
+                "This is the Familiar window as the app drew it — no other application, desktop "
+                "or menu bar is in it."
+            ),
+        }
 
     if name == "control_playback":
         action = str(arguments.get("action", "")).strip()

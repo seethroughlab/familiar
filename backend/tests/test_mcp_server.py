@@ -42,7 +42,15 @@ def _ctx(headers: dict[str, str] | None = None) -> SimpleNamespace:
 
 
 #: Tools this layer adds that have no MUSIC_TOOLS entry.
-MCP_ONLY_TOOLS = {"list_players", "get_now_playing"}
+# Tools that exist only on the MCP surface, with no MUSIC_TOOLS ancestor: the chat client was the
+# player and the interface, so it never had to ask which device to reach or what a screen looked
+# like. An MCP host does (ADR-0044 point 4, ADR-0053).
+MCP_ONLY_TOOLS = {
+    "list_players",
+    "get_now_playing",
+    "navigate_app",
+    "capture_screenshot",
+}
 
 
 class TestToolSurface:

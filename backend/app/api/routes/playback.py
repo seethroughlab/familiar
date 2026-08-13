@@ -1,11 +1,14 @@
-"""The playback command channel's HTTP surface (ADR-0044).
+"""The playback command channel's HTTP surface (ADR-0044, ADR-0053).
 
-One endpoint: a client subscribes and receives imperatives until it goes away. There is no send
-endpoint — the sender is the MCP tool layer, in-process (ADR-0043), and adding an HTTP way to make
-somebody else's music play is a decision nothing has taken.
+Two endpoints now. A client subscribes and receives imperatives until it goes away; and, since
+ADR-0053, it uploads anything a command asked it to produce. There is still no *send* endpoint —
+the sender is the MCP tool layer, in-process (ADR-0043), and adding an HTTP way to make somebody
+else's music play is a decision nothing has taken.
 
-SSE rather than a WebSocket (point 2): commands are one-way, so a socket's return half would go
-unused, and this codebase already runs three SSE endpoints while having no WebSocket route at all.
+SSE rather than a WebSocket (ADR-0044 point 2): commands are one-way, so a socket's return half
+would go unused. **That is still true of the stream.** A screenshot travels the other way as an
+ordinary upload the client makes when it has something to send, which is why the transport did not
+have to change to gain a return path (ADR-0053 point 3).
 """
 
 from __future__ import annotations
@@ -16,17 +19,21 @@ import logging
 import time
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, UploadFile
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import DbSession, RequiredProfile, release_connection
 from app.services.playback_commands import (
     AttachedPlayer,
     UnknownCapability,
+    get_artifact_store,
     get_channel,
 )
 
 logger = logging.getLogger(__name__)
+
+# A window capture at Retina scale is a few hundred KB; this is a bound, not a target.
+_MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
 
 router = APIRouter(prefix="/playback", tags=["playback"])
 
@@ -126,3 +133,39 @@ async def playback_commands(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/artifacts/{request_id}", status_code=204)
+async def upload_artifact(request_id: str, file: UploadFile) -> None:
+    """Hand back something a command asked this client to produce (ADR-0053 point 3).
+
+    The return half of the channel, and deliberately not on the channel: the SSE stream stays
+    one-way, and this is a request the client makes when it has something to send. That keeps
+    ADR-0044 point 2's reasoning intact rather than reversing it.
+
+    `request_id` names one outstanding question. It is minted by the server when it issues the
+    command, it is not a device identity, and it dies when the question is answered or times out —
+    which is why this does not reopen ADR-0029 point 5.
+
+    A late or unknown upload is **discarded, not stored** (point 8). The question it answers has
+    already been answered with a timeout, and keeping the image would mean keeping it forever.
+    204 either way: the client cannot do anything useful with the difference, and telling it its
+    screenshot was too slow would only invite a retry nothing is waiting for.
+    """
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="Empty artifact")
+    if len(data) > _MAX_ARTIFACT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Artifact exceeds {_MAX_ARTIFACT_BYTES // 1024 // 1024}MB",
+        )
+
+    delivered = get_artifact_store().deliver(
+        request_id, data, file.content_type or "application/octet-stream"
+    )
+    if not delivered:
+        logger.info(
+            "playback_artifact_discarded",
+            extra={"request_id": request_id, "bytes": len(data)},
+        )

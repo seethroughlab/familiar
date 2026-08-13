@@ -14,7 +14,7 @@ divided everything an MCP host might want into three categories: server-side sta
 actions, and device-local preferences. Two of those three travel on the channel.
 
 **Navigating the interface is a fourth category, and the vocabulary for it already exists.**
-`LibraryRoute` in `FamiliarKit` enumerates every destination the Mac and phone can be rooted on —
+`SidebarItem` in `FamiliarKit` enumerates every destination the Mac and phone can be rooted on —
 `home`, `section(.tracks/.albums/.artists/.playlists)`, `smartPlaylists`, `musicMap`, `discover`,
 `pendingReview`, `proposedChanges`, `mixtapes`, `favorites`, `downloads`, `settings`. A "show me the
 albums" imperative is the same shape as "play", against a list that is already closed and named.
@@ -44,10 +44,10 @@ render *its own* windows with no permission at all, and that is the only thing t
 ## Decision
 
 1. **The channel gains a fourth category: interface navigation.** An imperative naming a
-   `LibraryRoute`, applied by the client to its own root selection. Server-side state is still
+   `SidebarItem`, applied by the client to its own root selection. Server-side state is still
    written directly and still needs no channel; this joins transient actions and preferences.
 
-2. **The destination vocabulary is `LibraryRoute`, not free text.** The tool advertises exactly the
+2. **The destination vocabulary is `SidebarItem`, not free text.** The tool advertises exactly the
    cases that exist, so an unknown destination is refused by the schema rather than accepted and
    dropped. A "navigate" that lands nowhere is the affordance-with-no-destination defect this
    project has hit five times.
