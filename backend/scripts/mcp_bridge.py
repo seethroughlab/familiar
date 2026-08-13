@@ -12,10 +12,24 @@ bridge onto the listener's machine to reach their own music server is the wrong 
 Tools are the whole surface Familiar exposes, so forwarding `tools/list` and `tools/call` forwards
 everything. Add prompts or resources to the server and they need forwarding here too.
 
+**One tool is served here rather than forwarded**, and it is the exception that proves where the
+rest belong. ADR-0044's implementation note records the one thing the design cannot do: *the server
+cannot open the app.* A command is addressed to a client that is already subscribed, so with
+Familiar closed the host correctly reports "no player attached" and has no way to fix it. This
+process runs on the listener's own machine, which is the only place that can, so `launch_familiar`
+is handled locally. It is offered **only on macOS**, because a tool whose destination is not mounted
+failing silently is a defect this project has hit repeatedly — see ADR-0053 point 2.
+
+That is the whole rule for what goes here: **locality has to be the point.** Anything that reads or
+writes the library belongs upstream, next to the database, where it cannot drift from `MUSIC_TOOLS`.
+
     FAMILIAR_MCP_URL=http://openmediavault:4400/mcp \\
     uv run --project backend python backend/scripts/mcp_bridge.py
 
 `FAMILIAR_MCP_PROFILE_ID` is optional — send it only if the server has more than one profile.
+
+`FAMILIAR_APP_PATH` names an explicit `.app` for `launch_familiar` to open. Set it if you build the
+app yourself — otherwise the bundle-id lookup may prefer an Xcode build over `/Applications`.
 
 `FAMILIAR_MCP_TOKEN` is the server token (ADR-0045). Optional while the server has none configured;
 required once it does, and the failure without it is a 401 at connect rather than a tool error, so
@@ -41,6 +55,82 @@ from mcp.server.stdio import stdio_server
 URL = os.environ.get("FAMILIAR_MCP_URL", "http://localhost:4400/mcp")
 PROFILE = os.environ.get("FAMILIAR_MCP_PROFILE_ID", "")
 TOKEN = os.environ.get("FAMILIAR_MCP_TOKEN", "")
+
+#: The Mac and phone apps share one App Store Connect record (`familiar-apple`).
+BUNDLE_ID = "com.familiar.player"
+#: An explicit `.app` to open, overriding the bundle-id lookup.
+#:
+#: On a machine that has ever built the app, the bundle id is registered several times over —
+#: `/Applications`, every Xcode DerivedData build, any `.xcarchive` — and `open -b` launches
+#: whichever LaunchServices currently prefers, which is usually the most recently registered rather
+#: than the installed one. That is the right default for a listener and the wrong one for whoever
+#: is developing the app, so it is an override rather than a hardcoded path.
+APP_PATH = os.environ.get("FAMILIAR_APP_PATH", "")
+LAUNCH_TOOL = "launch_familiar"
+#: `open` returns as soon as the app is handed off to LaunchServices, so this only has to cover a
+#: cold process spawn. It is not how long the app takes to attach to the command channel.
+LAUNCH_TIMEOUT = 20.0
+
+
+def _launch_tool() -> types.Tool:
+    return types.Tool(
+        name=LAUNCH_TOOL,
+        description=(
+            "Open the Familiar app on this listener's Mac. Use it when a play, queue or navigate "
+            "request reports that no player is attached, or when list_players comes back empty — "
+            "commands are delivered to a running client and are never stored, so nothing can be "
+            "played until Familiar is open somewhere.\n"
+            "The app attaches to the command channel by itself a few seconds after launching, so "
+            "call list_players again before giving up. This returns as soon as the launch is "
+            "handed off, not once the app is ready."
+        ),
+        input_schema={"type": "object", "properties": {}},
+    )
+
+
+async def _launch() -> types.CallToolResult:
+    """Open the app, and say what happened either way.
+
+    Nothing here may spin (ADR-0053 point 5), so the subprocess carries a deadline and a timeout is
+    reported as a timeout rather than as a launch that might still be coming.
+    """
+    target = ["-a", APP_PATH] if APP_PATH else ["-b", BUNDLE_ID]
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "open",
+            *target,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as exc:  # `open` missing, which should not happen on a Mac
+        return _text(f"Could not run `open`: {exc}", is_error=True)
+
+    try:
+        _, stderr = await asyncio.wait_for(process.communicate(), timeout=LAUNCH_TIMEOUT)
+    except TimeoutError:
+        process.kill()
+        return _text(
+            f"Launching Familiar did not finish within {LAUNCH_TIMEOUT:.0f}s. It may still be "
+            "opening — call list_players to check.",
+            is_error=True,
+        )
+
+    if process.returncode != 0:
+        detail = stderr.decode(errors="replace").strip() or f"exit code {process.returncode}"
+        # The common case is that Familiar simply is not installed on this machine, and `open`
+        # says so in a sentence worth passing through verbatim rather than paraphrasing.
+        return _text(f"Could not open Familiar ({APP_PATH or BUNDLE_ID}): {detail}", is_error=True)
+
+    return _text(
+        "Familiar is opening. It attaches to the command channel a few seconds later — call "
+        "list_players to confirm before sending playback commands."
+    )
+
+
+def _text(message: str, *, is_error: bool = False) -> types.CallToolResult:
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=message)], is_error=is_error
+    )
 
 
 async def main() -> None:
@@ -70,14 +160,30 @@ async def main() -> None:
                 raise
             print(f"[familiar-mcp] bridging {URL} ({init.server_info.name})", file=sys.stderr)
 
+            # Offered only where it can work, and only if the server has not grown a tool of its
+            # own by that name — upstream owns the namespace, and a local tool shadowing a real one
+            # would be invisible from the host's side. Settled once per connection rather than per
+            # call: the upstream surface is `exposed_tools()`, which does not change under a running
+            # process, and the host restarts this bridge whenever it reconnects anyway.
+            serve_launch = sys.platform == "darwin" and not any(
+                t.name == LAUNCH_TOOL for t in (await upstream.list_tools()).tools
+            )
+            if serve_launch:
+                print(f"[familiar-mcp] serving {LAUNCH_TOOL} locally", file=sys.stderr)
+
             async def on_list_tools(
                 _ctx: Any, _params: types.PaginatedRequestParams | None
             ) -> types.ListToolsResult:
-                return types.ListToolsResult(tools=(await upstream.list_tools()).tools)
+                tools = list((await upstream.list_tools()).tools)
+                if serve_launch:
+                    tools.append(_launch_tool())
+                return types.ListToolsResult(tools=tools)
 
             async def on_call_tool(
                 _ctx: Any, params: types.CallToolRequestParams
             ) -> types.CallToolResult:
+                if serve_launch and params.name == LAUNCH_TOOL:
+                    return await _launch()
                 return await upstream.call_tool(params.name, params.arguments or {})
 
             # The upstream's instructions are forwarded too. ADR-0043 point 3 leans on them, and a

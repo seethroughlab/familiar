@@ -23,6 +23,10 @@ dependencies = [
     "pillow>=10.0.0",
     # HTTP client
     "httpx>=0.26.0",
+    # `mcp`'s own client stack, used directly by scripts/mcp_bridge.py. It arrives transitively
+    # with `mcp`, so this line changes nothing today — it declares a direct import rather than
+    # leaving the bridge to break on an `mcp` release that drops it.
+    "httpx2>=2.9.1",
     # Configuration
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
