@@ -132,6 +132,23 @@ render *its own* windows with no permission at all, and that is the only thing t
   Anything the window server draws on top — a sheet from another process, a tooltip, the
   title bar — is absent by construction, and a capture is therefore evidence about the app's own
   view tree rather than about what a person saw.
+
+  **Measured, and worse than "no chrome" suggests.** Against the same window in one session, the
+  sidebar rendered on some destinations and came back black on others, and the smart-playlists
+  screen came back blank and byte-identical across two attempts twelve seconds apart —
+  deterministic rather than flaky, and unexplained. A layer walk sees what the app *asked* to be
+  drawn, not what was drawn.
+
+- **The two jobs separate, and only one of them is this ADR's.** For website screenshots,
+  `screencapture -o -x -l <windowid>` — the system tool, aimed at one window — produced every
+  destination correctly on the first attempt, chrome included, with no black sidebars and no blank
+  screens, because it reads what the compositor produced. It needs the Screen Recording permission,
+  which is exactly what point 6 refuses to make the *application* ask for. A person capturing on
+  their own machine is not the application and can grant it to a terminal for a minute.
+
+  So: the in-app capture stays the MCP tool — permission-free, and good enough for an assistant
+  checking its own work. Marketing screenshots use the system tool, with navigation still driven
+  over this channel so nothing has to be clicked.
 - **Tradeoff:** two more capabilities to keep honest. A build that declares `screenshot` and cannot
   produce one is exactly the failure point 7 exists to prevent, and nothing but care enforces it.
 - **Follow-up:** the phone could declare `screenshot` too — `UIGraphicsImageRenderer` over the key
