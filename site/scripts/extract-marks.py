@@ -140,7 +140,7 @@ def extract(src: Path, dst: Path, size: int, colours: int) -> str:
     # mottling JPEG leaves inside a "flat" fill is what stops PNG compressing it — 167 KB
     # for a mark that is really five colours. Snapping to a small palette both restores
     # the flatness the art was drawn with and takes it to about 10 KB.
-    out = out.quantize(colors=colours, method=Image.FASTOCTREE)
+    out = out.quantize(colors=colours, method=Image.FASTOCTREE, dither=Image.Dither.NONE)
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     out.save(dst, optimize=True)

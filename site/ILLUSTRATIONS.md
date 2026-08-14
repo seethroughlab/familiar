@@ -11,15 +11,23 @@ Fourteen of the first fifteen marks came back that way. The prompts below ask fo
 instead: no mark uses cyan, and its nearest neighbour in the palette is the green accent, ~174 away
 in RGB, so it keys out cleanly.
 
-Cut the background off afterwards, which also crops, resizes and shrinks each file to about 10 KB:
+Then trace it, which cuts the background off, crops, and normalises the outline weight so the set
+reads as one set rather than fifteen separate commissions:
 
 ```
-uv run site/scripts/extract-marks.py --out site/assets/marks cat=path/to/download.jpeg
+uv run site/scripts/trace-marks.py --out site/assets/marks cat=path/to/download.jpeg
 ```
 
 It reads the background off the image itself, so it handles both the cyan ones and the
-checkerboards already generated. Keep the source JPEGs out of `site/` — everything there is copied
-straight to Cloudflare, and they are 2 MB each.
+checkerboards already generated. `--stroke` sets the target outline width in source pixels
+(default 30, the set's median); `--stroke 0` leaves each mark as drawn.
+
+`extract-marks.py` beside it does the same cut to PNG. Prefer the tracer: the raster path has to
+erode a couple of pixels off every edge to avoid a bright fringe on a dark page, which costs a 30px
+outline nothing and destroys a 10px one — it took 17% of the constellation's artwork.
+
+Keep the source JPEGs out of `site/` — everything there is copied straight to Cloudflare, and they
+are 2 MB each.
 
 Generate at **at least 1024x1024**, so a mark stays clean when it is shown at 40px.
 
