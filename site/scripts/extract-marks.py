@@ -3,39 +3,42 @@
 # requires-python = ">=3.11"
 # dependencies = ["pillow", "numpy", "scipy"]
 # ///
-"""Cut the background off a generated mark and write a transparent PNG.
+"""Cut the background off a generated illustration and write a transparent PNG.
 
 Gemini returns **JPEG**, and JPEG has no alpha channel. Asked for a transparent
 background it therefore does the only thing the format allows: it *draws* the grey
 checkerboard, because that is the visual signifier of transparency it has seen. Those
-squares are real pixels. No amount of prompting removes them — see ILLUSTRATIONS.md,
-which now asks for a flat cyan background instead.
+squares are real pixels, and no amount of prompting removes them. So the prompts ask for
+a background this can key instead — see ILLUSTRATIONS.md.
 
-This script handles both, picking the mode from the image itself:
+The mode is chosen from the image itself:
 
-  solid        the border is one flat colour (cyan, or the white Gemini sometimes
-               returns anyway). Every pixel near that colour is background.
+  black ground  the current register: light ink on pure black. Exact, and the reason to
+                prefer it. Over black the observed pixel is the ink premultiplied by its
+                own coverage, so coverage is just how bright it got, and dividing that
+                back out recovers the ink. A one-pixel hatch line keeps correct partial
+                alpha instead of being cut or eroded.
 
-  checkerboard the border alternates two tones. Matching on colour alone is not
-               enough: in some images the checkerboard's light square lands on 253-255
-               while the artwork's own off-white is 250, and JPEG will not hold a
-               5-value gap.
+  solid         the border is one flat colour. Every pixel near that colour is
+                background; edges are matted by distance from it and the background's
+                colour divided back out, so a soft edge does not become a pale halo.
 
-               What separates them is that only ONE of the two tones is ambiguous. The
-               darker square is a mid-grey, and no mark uses mid-grey — so every dark
-               pixel is certainly background. A light pixel is background only when it
-               is **connected** to a dark one through same-coloured pixels. The
-               checkerboard is one such region; the key's off-white body is not,
-               because its violet outline breaks the path. Enclosed holes still go —
-               the gap between the crow's legs has dark squares of its own.
+  checkerboard  the border alternates two tones. Colour alone is not enough: in some
+                images the checkerboard's light square lands on 253-255 while the
+                artwork's own off-white is 250, and JPEG will not hold a 5-value gap.
+                What separates them is that only ONE tone is ambiguous — the dark square
+                is a mid-grey no artwork uses — so every dark pixel is certainly
+                background, and a light pixel is background only when connected to a
+                dark one. Enclosed holes still go: the gap between a crow's legs has
+                dark squares of its own, and no flood fill from a corner ever reaches it.
 
-Both modes key on colour rather than flood-filling from the corners, which matters for
-holes: the gap between the crow's legs is background, fully enclosed by the bird, and a
-corner fill can never reach it.
+`--split RxC` carves a model sheet into its poses, cutting at the emptiest rows and
+columns. That is how the recurring characters stay consistent: four poses drawn in one
+generation agree with each other by construction, where four separate generations do not.
 
 Usage:
-    python3 extract-marks.py --out ../assets/marks cat=IMG_1234.jpeg crow=IMG_5678.jpeg
-    python3 extract-marks.py --out ../assets/marks IMG_1234.jpeg          # keeps stem
+    extract-marks.py --out ../assets/marks --split 2x2 cat=IMG_1234.jpeg   # -> cat-1..4
+    extract-marks.py --out ../assets/marks crow=IMG_5678.jpeg
 """
 
 from __future__ import annotations
@@ -135,12 +138,13 @@ def luma_matte(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.clip(ink, 0, 255), alpha
 
 
-def extract(src: Path, dst: Path, size: int, colours: int) -> str:
+def extract(src: Path, dst: Path, size: int, colours: int, grid: tuple[int, int]) -> str:
     a = np.asarray(Image.open(src).convert("RGB")).astype(int)
 
     tones = _border_tones(a)
     if tones and max(tones[0]) < 40:
-        return _write(*luma_matte(a), dst, size, colours, f"black ground rgb{tones[0]}")
+        ink, alpha = luma_matte(a)
+        return _emit(ink, alpha, dst, size, colours, f"black ground rgb{tones[0]}", grid)
 
     bg, mode = background_mask(a)
 
@@ -166,7 +170,63 @@ def extract(src: Path, dst: Path, size: int, colours: int) -> str:
     a = np.where((alpha > 0)[..., None], np.clip(unmixed, 0, 255), a)
     alpha = (alpha * 255).astype(np.uint8)
 
-    return _write(a, alpha / 255.0, dst, size, colours, mode)
+    return _emit(a, alpha / 255.0, dst, size, colours, mode, grid)
+
+
+def _emit(a: np.ndarray, alpha: np.ndarray, dst: Path, size: int, colours: int,
+          mode: str, grid: tuple[int, int]) -> str:
+    """One mark, or a model sheet carved into its poses."""
+    rows, cols = grid
+    if rows * cols <= 1:
+        return _write(a, alpha, dst, size, colours, mode)
+
+    lines = []
+    for i, (sub_a, sub_alpha) in enumerate(split_sheet(a, alpha, rows, cols), start=1):
+        if sub_alpha.max() < 0.05:
+            continue
+        part = dst.with_name(f"{dst.stem}-{i}{dst.suffix}")
+        lines.append(_write(sub_a, sub_alpha, part, size, colours, f"{mode} [{i}/{rows*cols}]"))
+    return "\n".join(lines)
+
+
+def _gaps(profile: np.ndarray, want: int) -> list[int]:
+    """Cut points splitting `profile` into `want` bands, at its emptiest runs.
+
+    A model sheet is drawn as a grid with clear space between the poses, so the empty
+    rows and columns are where it should be cut. Runs of empty are ranked by length and
+    the longest are used, which is what separates a real gutter from the incidental gap
+    between a cat's ear and its tail.
+    """
+    if want < 2:
+        return []
+    empty = profile <= profile.max() * 0.01
+    runs, start = [], None
+    for i, e in enumerate(empty):
+        if e and start is None:
+            start = i
+        elif not e and start is not None:
+            runs.append((i - start, (start + i) // 2))
+            start = None
+    if start is not None:
+        runs.append((len(empty) - start, (start + len(empty)) // 2))
+
+    # Ignore the margins: the frame's own empty border is longer than any gutter.
+    inner = [r for r in runs if 0.08 < r[1] / len(profile) < 0.92]
+    inner.sort(key=lambda r: -r[0])
+    return sorted(c for _, c in inner[:want - 1])
+
+
+def split_sheet(a: np.ndarray, alpha: np.ndarray, rows: int, cols: int):
+    """Carve a model sheet into its individual poses, reading order."""
+    ys = _gaps(alpha.sum(axis=1), rows)
+    xs = _gaps(alpha.sum(axis=0), cols)
+    y_edges = [0, *ys, alpha.shape[0]]
+    x_edges = [0, *xs, alpha.shape[1]]
+    for r in range(len(y_edges) - 1):
+        for c in range(len(x_edges) - 1):
+            y0, y1 = y_edges[r], y_edges[r + 1]
+            x0, x1 = x_edges[c], x_edges[c + 1]
+            yield a[y0:y1, x0:x1], alpha[y0:y1, x0:x1]
 
 
 def _write(a: np.ndarray, alpha: np.ndarray, dst: Path, size: int, colours: int,
@@ -207,8 +267,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("images", nargs="+", help="path, or name=path to rename the output")
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--size", type=int, default=512)
+    ap.add_argument("--size", type=int, default=1024)
     ap.add_argument("--colours", type=int, default=16, help="palette size (default 16)")
+    ap.add_argument("--split", default="1x1", metavar="RxC",
+                    help="carve a model sheet into poses, e.g. 2x2 (default 1x1)")
     args = ap.parse_args()
 
     for item in args.images:
@@ -217,7 +279,9 @@ def main() -> int:
         if not src.exists():
             print(f"missing: {src}", file=sys.stderr)
             return 1
-        print(extract(src, args.out / f"{name or src.stem}.png", args.size, args.colours))
+        rows, cols = (int(v) for v in args.split.lower().split("x"))
+        print(extract(src, args.out / f"{name or src.stem}.png", args.size, args.colours,
+                      (rows, cols)))
     return 0
 
 

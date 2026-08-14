@@ -30,90 +30,67 @@ a 40px feature-card icon — that is a different job, and this set will not do i
 the merchandise. The register is fair to borrow; the mark is not. That is why there is no eye prompt
 below — the cat's eyes carry it instead.
 
-## Keeping the cat and the crow consistent
+## The characters come from model sheets, not from separate prompts
 
-This is the part a generator is worst at, and prompt wording will not fix it. Two things that do:
+Consistency across generations is the thing a generator is worst at, and prompt wording does not
+fix it. So the cat and the crow are each **one prompt producing four poses in a single image**.
+Poses drawn in the same generation agree with each other by construction; four separate
+generations do not, however carefully the description is repeated.
 
-1. **Get `cat` right first**, then attach that image to every later prompt as a style and character
-   reference. Matching a real picture holds a set together far better than matching a description.
-2. For the poses, ask for a **model sheet** — one image containing the same cat four times — and cut
-   the poses apart afterwards. Consistency is then structural rather than hoped for. The prompt for
-   that is `cat-poses` below.
+Cut them apart with the same script:
+
+```
+uv run site/scripts/extract-marks.py --out site/assets/marks --split 2x2 cat=path/to/sheet.jpeg
+```
+
+That writes `cat-1.png` through `cat-4.png` in reading order — sitting, walking, curled, stretching
+for the cat sheet below. Rename them to something meaningful once you have looked at them.
+
+If a sheet comes back with one bad pose, regenerate the whole sheet rather than patching that pose
+separately, for the same reason the sheet exists.
+
+`cat-and-crow` is the exception and stays a single image: it needs both characters in one
+composition, which no single-character sheet can give. Attach an approved cat pose *and* an approved
+crow pose to that prompt as references.
+
+The objects are individual prompts. They have no character to keep consistent — only a style, and
+the style block handles that.
 
 ---
 
-## 1 · cat
+## 1 · cat  (model sheet — 4 poses, split 2x2)
 
-> A hand-inked illustration of a sitting black cat seen from the front, tail curled around its
-> paws, ears alert, expression calm and knowing. Drawn in the style of a screen-printed indie tour
-> poster: loose confident pen-and-brush line of varying weight, visibly drawn by hand, with breaks,
-> overshoots and wobble — never a uniform traced outline. All shading built from crosshatching and
-> stippling; no flat fills, no gradients, no airbrush. Three inks only — pale pink (#fce7f3) for
-> highlights, magenta (#e879f9) for the body, violet (#a855f7) for the deepest tone. Every drawn
-> element sits in that light range; black is negative space, never something drawn with. Solid pure
-> black (#000000) background, edge to edge, nothing else in the frame. Centred with generous margin.
-> No text, no lettering, no signature. Eerie but warm, deadpan rather than spooky.
+> A model sheet: the same hand-inked black cat drawn four times in one image, arranged in a 2x2
+> grid, evenly spaced with a wide band of clear black space between the rows and between the
+> columns. The four poses: sitting front-on with its tail curled around its paws and ears alert;
+> walking in profile, tail up; curled asleep in a tight spiral with its nose tucked under its tail;
+> and standing with its back arched in a long stretch. Identical cat in every pose — same
+> proportions, same face, same markings, same line weight. Drawn in the style of a screen-printed
+> indie tour poster: loose confident pen-and-brush line of varying weight, visibly drawn by hand,
+> with breaks, overshoots and wobble — never a uniform traced outline. All shading built from
+> crosshatching and stippling; no flat fills, no gradients, no airbrush. Three inks only — pale pink
+> (#fce7f3) for highlights, magenta (#e879f9) for the body, violet (#a855f7) for the deepest tone.
+> Every drawn element sits in that light range; black is negative space, never something drawn with.
+> Solid pure black (#000000) background, edge to edge. No text, no labels, no frames or borders
+> around the poses. Eerie but warm, deadpan rather than spooky.
 
-## 2 · cat-poses
+## 2 · crow  (model sheet — 4 poses, split 2x2)
 
-> A model sheet: the same hand-inked black cat drawn four times in one image, in a 2x2 grid, evenly
-> spaced with clear black space between each — sitting front-on, walking in profile, curled asleep,
-> and stretching with its back arched. Identical cat in every pose: same proportions, same face,
-> same line weight. Drawn in the style of a screen-printed indie tour poster: loose confident
-> pen-and-brush line of varying weight, visibly drawn by hand, with breaks and wobble, never a
-> uniform traced outline. All shading built from crosshatching and stippling; no flat fills, no
-> gradients. Three inks only — pale pink (#fce7f3), magenta (#e879f9), violet (#a855f7). Every drawn
-> element sits in that light range; black is negative space. Solid pure black (#000000) background.
-> No text, no labels, no borders between the poses. Eerie but warm, deadpan rather than spooky.
+> A model sheet: the same hand-inked crow drawn four times in one image, arranged in a 2x2 grid,
+> evenly spaced with a wide band of clear black space between the rows and between the columns. The
+> four poses: standing alert in profile with a small vinyl record held in its beak; in flight seen
+> from the side with wings fully spread; head cocked and beak open, mid-call; and hopping forward
+> with wings half open. Identical crow in every pose — same proportions, same head, same line
+> weight. Feathers built from directional hatching. Drawn in the style of a screen-printed indie
+> tour poster: loose confident pen-and-brush line of varying weight, visibly drawn by hand, with
+> breaks, overshoots and wobble — never a uniform traced outline. All shading built from
+> crosshatching and stippling; no flat fills, no gradients, no airbrush. Three inks only — pale pink
+> (#fce7f3) for highlights, magenta (#e879f9) for the body, violet (#a855f7) for the deepest tone.
+> Every drawn element sits in that light range; black is negative space, never something drawn with.
+> Solid pure black (#000000) background, edge to edge. No text, no labels, no frames or borders
+> around the poses. Eerie but warm, deadpan rather than spooky.
 
-## 3 · cat-listening
-
-> A hand-inked illustration of a black cat sitting in profile with its head tilted and one ear
-> swivelled toward a sound off to the side, eyes half closed, utterly absorbed. Three faint arcs in
-> the air beside the ear suggest the sound. Drawn in the style of a screen-printed indie tour
-> poster: loose confident pen-and-brush line of varying weight, visibly drawn by hand, with breaks
-> and wobble, never a uniform traced outline. All shading built from crosshatching and stippling; no
-> flat fills, no gradients. Three inks only — pale pink (#fce7f3) for highlights, magenta (#e879f9)
-> for the body, violet (#a855f7) for the deepest tone. Every drawn element sits in that light range;
-> black is negative space. Solid pure black (#000000) background, edge to edge. Centred with
-> generous margin. No text. Eerie but warm, deadpan rather than spooky.
-
-## 4 · cat-curled
-
-> A hand-inked illustration of a black cat curled asleep in a tight spiral on top of a small stack
-> of vinyl records, nose tucked under its tail, entirely content. Drawn in the style of a
-> screen-printed indie tour poster: loose confident pen-and-brush line of varying weight, visibly
-> drawn by hand, with breaks and wobble, never a uniform traced outline. All shading built from
-> crosshatching and stippling; no flat fills, no gradients. Three inks only — pale pink (#fce7f3)
-> for highlights, magenta (#e879f9) for the body, violet (#a855f7) for the deepest tone. Every drawn
-> element sits in that light range; black is negative space. Solid pure black (#000000) background,
-> edge to edge. Centred with generous margin. No text. Eerie but warm, deadpan rather than spooky.
-
-## 5 · crow
-
-> A hand-inked illustration of a crow in profile standing alert, wings tucked, a small vinyl record
-> held in its beak, one eye fixed on the viewer with obvious opinions. Drawn in the style of a
-> screen-printed indie tour poster: loose confident pen-and-brush line of varying weight, visibly
-> drawn by hand, with breaks, overshoots and wobble — never a uniform traced outline. Feathers built
-> from directional hatching. All shading from crosshatching and stippling; no flat fills, no
-> gradients. Three inks only — pale pink (#fce7f3) for highlights, magenta (#e879f9) for the body,
-> violet (#a855f7) for the deepest tone. Every drawn element sits in that light range; black is
-> negative space. Solid pure black (#000000) background, edge to edge. Centred with generous margin.
-> No text. Eerie but warm, deadpan rather than spooky.
-
-## 6 · crow-flight
-
-> A hand-inked illustration of a crow in flight seen from the side, wings fully spread, carrying a
-> small vinyl record in its beak, a few loose feathers trailing behind it. Drawn in the style of a
-> screen-printed indie tour poster: loose confident pen-and-brush line of varying weight, visibly
-> drawn by hand, with breaks and wobble, never a uniform traced outline. Flight feathers drawn as
-> long confident strokes, shading from crosshatching; no flat fills, no gradients. Three inks only —
-> pale pink (#fce7f3) for highlights, magenta (#e879f9) for the body, violet (#a855f7) for the
-> deepest tone. Every drawn element sits in that light range; black is negative space. Solid pure
-> black (#000000) background, edge to edge. Centred with generous margin. No text. Eerie but warm,
-> deadpan rather than spooky.
-
-## 7 · cat-and-crow
+## 3 · cat-and-crow  (single image — the hero)
 
 > A hand-inked illustration of a black cat and a crow side by side on a low ridge, the cat sitting
 > upright and the crow perched beside it at the cat's shoulder height, both looking out at the same
@@ -126,7 +103,7 @@ This is the part a generator is worst at, and prompt wording will not fix it. Tw
 > tone. Every drawn element sits in that light range; black is negative space. Solid pure black
 > (#000000) background, edge to edge. No text. Eerie but warm, deadpan rather than spooky.
 
-## 8 · moon-phases
+## 4 · moon-phases
 
 > A hand-inked illustration of three moons in a horizontal row — a thin crescent, a half moon and a
 > full moon — evenly spaced and the same size, each with a cratered, hand-stippled surface. Drawn in
@@ -138,7 +115,7 @@ This is the part a generator is worst at, and prompt wording will not fix it. Tw
 > black negative space rather than drawn. Solid pure black (#000000) background, edge to edge. No
 > text. Eerie but warm, deadpan rather than spooky.
 
-## 9 · lantern
+## 5 · lantern
 
 > A hand-inked illustration of a small hanging lantern with a ring handle, glass panels and a
 > steady flame inside, hanging slightly crooked. Drawn in the style of a screen-printed indie tour
@@ -150,7 +127,7 @@ This is the part a generator is worst at, and prompt wording will not fix it. Tw
 > negative space. Solid pure black (#000000) background, edge to edge. Centred with generous margin.
 > No text. Eerie but warm, deadpan rather than spooky.
 
-## 10 · cauldron
+## 6 · cauldron
 
 > A hand-inked illustration of a small round cauldron on three stubby legs, with a single musical
 > note rising out of it on a curl of vapour. Drawn in the style of a screen-printed indie tour
@@ -162,7 +139,7 @@ This is the part a generator is worst at, and prompt wording will not fix it. Tw
 > (#000000) background, edge to edge. Centred with generous margin. No text. Eerie but warm, deadpan
 > rather than spooky.
 
-## 11 · tuning-fork
+## 7 · tuning-fork
 
 > A hand-inked illustration of a two-pronged tuning fork standing upright, still ringing, with two
 > loose vibration arcs on each side of the prongs. Drawn in the style of a screen-printed indie tour
@@ -173,7 +150,7 @@ This is the part a generator is worst at, and prompt wording will not fix it. Tw
 > element sits in that light range; black is negative space. Solid pure black (#000000) background,
 > edge to edge. Centred with generous margin. No text. Eerie but warm, deadpan rather than spooky.
 
-## 12 · constellation
+## 8 · constellation
 
 > A hand-inked illustration of a small constellation — six stars of varying sizes joined by thin
 > ruled lines into a loose cluster, like a hand-drawn star chart, with a scatter of tiny stipple
