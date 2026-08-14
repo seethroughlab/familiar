@@ -179,8 +179,18 @@ a:hover { text-decoration: underline; }
   height: auto;
 }
 
+/* A secondary page's illustration: beside the title, where the app icon sits on the
+   landing page, so the page still opens on its own first line of content. */
+.page-art {
+  flex: none;
+  width: 132px;
+  height: auto;
+  align-self: flex-start;
+}
+
 @media (max-width: 760px) {
   .section-art { display: none; }
+  .page-art { width: 96px; }
   .hero-art { max-width: 100%; }
   .hero-main { flex-direction: column; align-items: flex-start; }
 }

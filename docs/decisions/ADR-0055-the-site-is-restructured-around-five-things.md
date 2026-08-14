@@ -78,9 +78,15 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
    the pictures move into the feature sections that make claims about them, where a reader meets
    each one beside the sentence it supports.
 
-5. **The comparison table and the FAQ move off the landing page.** Both are real and both are
-   answering a reader who has already decided to care. They belong in `docs/`, linked, not between
-   a visitor and the install command. This is the specific reversal of `0039` point 2.
+5. **The FAQ becomes its own page; the comparison table stays.** They looked like the same problem
+   and are not. The table is an *argument* — it is the page's answer to "why not Jellyfin, why not
+   Plex", which is a question a first-time visitor is actively holding, so it earns its place in
+   front of them. The eight FAQ entries answer someone who has already decided to care and is now
+   checking specifics; that reader will follow a link, and the entries were costing a third of the
+   page's length to serve them. `site/faq.html`, linked from the nav and the footer.
+
+   This is the specific reversal of `0039` point 2, and it is a partial one: `0039` put both on the
+   landing page, and only the FAQ leaves.
 
 6. **Every screenshot on the page is regenerated before it ships**, and the illustrations
    (ADR-0054) carry the sections that have no honest screenshot. A four-month-old picture of a

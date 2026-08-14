@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FAQ — Familiar</title>
+  <meta name="description" content="Common questions about Familiar: hardware, privacy, API keys, analysis time, and running it away from home.">
+  <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
+  <link rel="stylesheet" href="./assets/site.css">
+</head>
+<body>
+
+<nav class="topnav" aria-label="Primary">
+  <a class="topnav-brand" href="./">
+    <img src="./assets/icon.svg" alt="" aria-hidden="true">
+    <span>Familiar</span>
+  </a>
+  <div class="topnav-links">
+    <a href="./#screenshots">Screenshots</a>
+    <a href="./#features">Features</a>
+    <a href="./#ask">Ask</a>
+    <a href="./#comparison">Compare</a>
+    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
+    <a href="./#install" class="topnav-install">Install</a>
+  </div>
+</nav>
+
+<main id="top">
+
+<header class="hero" style="padding-bottom: 24px;">
+  <div class="hero-main">
+    <!-- Beside the title rather than above it: this is a secondary page, and a stacked
+         illustration pushed the first question most of a screen down. -->
+    <img class="page-art" src="./assets/marks/cat-sitting.webp" alt="" aria-hidden="true"
+         width="479" height="689">
+    <div class="hero-body">
+      <h1 class="hero-title">Questions</h1>
+      <p class="hero-tagline">The things people ask before installing it. If yours isn't here, <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">open an issue</a>.</p>
+    </div>
+  </div>
+</header>
+
+<section id="faq">
+<div class="faq">
+    <details>
+      <summary>Why not just use Apple Music or Spotify for this?</summary>
+      <p>Familiar isn't a streaming service — it plays the files you already own. If you've got a folder of MP3s/FLACs going back to 2002, Apple Music either won't accept them or will iCloud-Match them to its own catalog versions (sometimes the wrong remaster, occasionally DRM-locked, occasionally just gone). Spotify only plays its own catalog; its Local Files feature syncs from a desktop to a phone on the same network, not remotely. Neither runs semantic search or AI playlists across <em>your</em> library — only theirs. Familiar runs on your hardware, leaves your files alone, and points its AI at your collection.</p>
+    </details>
+    <details>
+      <summary>Do I need an API key?</summary>
+      <p>No. Familiar holds no API key and calls no model. If you want to ask questions in plain language you connect your own MCP host — Claude Desktop, say — and whatever that costs is between you and them. Everything else, including search, Mood Grid, Music Map and the 3D Explorer, is local.</p>
+    </details>
+    <details>
+      <summary>What hardware do I need?</summary>
+      <p>See the <a href="./#install">Requirements</a> callout above. A small NAS works — the author runs a 23k-track library on an OpenMediaVault box. Analysis is the heaviest workload; once a track is analyzed it doesn't need to be re-analyzed.</p>
+    </details>
+    <details>
+      <summary>Does my music or listening data leave my network?</summary>
+      <p>No. The opt-in community cache shares only one-way SHA-256 hashes of audio fingerprints — no track titles, artists, file paths, or listening history. You cannot reconstruct a library from the hashes. If you connect an MCP host, whatever you ask it goes wherever that host sends it — that is your choice and your account. Your audio files never leave your server.</p>
+    </details>
+    <details>
+      <summary>What happens if Claude is down?</summary>
+      <p>Everything keeps working. Browsing, searching, playback, similarity, smart playlists and analysis are all local — Familiar makes no outbound call to run. An MCP host you have connected is the only part that needs the internet, and only for its own sake.</p>
+    </details>
+    <details>
+      <summary>How long does analysis take?</summary>
+      <p>Roughly 1 second per track on modern hardware, so a 20,000-track library is around 6 hours. The community cache short-circuits tracks that have been analyzed elsewhere, which can reduce a cold-start scan to minutes for popular music.</p>
+    </details>
+    <details>
+      <summary>Can I use the PWA on cellular / away from home?</summary>
+      <p>Yes — see <a href="./#remote-access">Listen from anywhere</a>. Tailscale + HTTPS is the easiest path, and it's what unlocks "Add to Home Screen" on iOS and Android.</p>
+    </details>
+    <details>
+      <summary>Is there an iOS app?</summary>
+      <p>Yes — <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar Player</a> is on the App Store. First launch connects to a public demo backend so you can browse the UI with a small Creative Commons library; to use your own music, point it at your self-hosted Familiar server in Settings → Backend Server (Tailscale HTTPS works great for this).</p>
+    </details>
+  </div>
+</section>
+
+<section id="get-started" class="closing-cta">
+  <h2>Get started</h2>
+  <p>One <code>compose up</code> against the music you already own.</p>
+  <div class="closing-cta-actions">
+    <a href="./#install" class="primary">Install the server</a>
+    <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">Try the demo</a>
+  </div>
+</section>
+
+<footer>
+  <p>MIT-licensed · <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener">seethroughlab/familiar</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+</footer>
+
+</main>
+
+</body>
+</html>
