@@ -26,6 +26,10 @@ ground, so it should show the page rather than carry its own black rectangle ont
 wants a few big illustrations rather than a grid of small icons. Generate at 2048 and don't plan on
 a 40px feature-card icon — that is a different job, and this set will not do it.
 
+They are also **not cheap**: hatching stored in an alpha channel is close to incompressible, and the
+fourteen marks come to 2.8 MB even as lossless WebP, against 485 KB for the whole page before. Pick
+the handful the page actually uses rather than shipping the set.
+
 **Do not reproduce the Night Vale eye-and-crescent.** It is their actual logo, on the book cover and
 the merchandise. The register is fair to borrow; the mark is not. That is why there is no eye prompt
 below — the cat's eyes carry it instead.
@@ -43,8 +47,15 @@ Cut them apart with the same script:
 uv run site/scripts/extract-marks.py --out site/assets/marks --split 2x2 cat=path/to/sheet.jpeg
 ```
 
-That writes `cat-1.png` through `cat-4.png` in reading order — sitting, walking, curled, stretching
-for the cat sheet below. Rename them to something meaningful once you have looked at them.
+That writes `cat-1.webp` through `cat-4.webp` in reading order — sitting, walking, curled,
+stretching for the cat sheet below. Rename them once you have looked at them; the set on disk is
+`cat-sitting`, `cat-walking`, `cat-curled`, `cat-stretching` and `crow-record`, `crow-flight`,
+`crow-calling`, `crow-hopping`.
+
+The split groups the drawing's parts by where their centres of mass fall rather than cutting at
+empty rows, because on a real sheet there are none: on the cat sheet the walking cat's tail and the
+stretching cat's tail both cross the horizontal middle, and a projection cut left two cats per
+image. So the poses do not need to be boxed, only recognisably apart.
 
 If a sheet comes back with one bad pose, regenerate the whole sheet rather than patching that pose
 separately, for the same reason the sheet exists.

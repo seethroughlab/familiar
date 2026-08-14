@@ -189,44 +189,63 @@ def _emit(a: np.ndarray, alpha: np.ndarray, dst: Path, size: int, colours: int,
     return "\n".join(lines)
 
 
-def _gaps(profile: np.ndarray, want: int) -> list[int]:
-    """Cut points splitting `profile` into `want` bands, at its emptiest runs.
-
-    A model sheet is drawn as a grid with clear space between the poses, so the empty
-    rows and columns are where it should be cut. Runs of empty are ranked by length and
-    the longest are used, which is what separates a real gutter from the incidental gap
-    between a cat's ear and its tail.
-    """
-    if want < 2:
-        return []
-    empty = profile <= profile.max() * 0.01
-    runs, start = [], None
-    for i, e in enumerate(empty):
-        if e and start is None:
-            start = i
-        elif not e and start is not None:
-            runs.append((i - start, (start + i) // 2))
-            start = None
-    if start is not None:
-        runs.append((len(empty) - start, (start + len(empty)) // 2))
-
-    # Ignore the margins: the frame's own empty border is longer than any gutter.
-    inner = [r for r in runs if 0.08 < r[1] / len(profile) < 0.92]
-    inner.sort(key=lambda r: -r[0])
-    return sorted(c for _, c in inner[:want - 1])
+def _cluster_1d(values: np.ndarray, weights: np.ndarray, k: int) -> np.ndarray:
+    """Assign each value to one of k groups along a single axis."""
+    if k < 2:
+        return np.zeros(len(values), dtype=int)
+    centres = np.quantile(values, np.linspace(0, 1, k * 2 + 1)[1::2])
+    for _ in range(32):
+        which = np.argmin(np.abs(values[:, None] - centres[None, :]), axis=1)
+        moved = centres.copy()
+        for i in range(k):
+            sel = which == i
+            if sel.any():
+                moved[i] = np.average(values[sel], weights=weights[sel])
+        if np.allclose(moved, centres):
+            break
+        centres = moved
+    # Relabel so group 0 is topmost/leftmost, giving reading order.
+    return np.argsort(np.argsort(centres))[np.argmin(np.abs(values[:, None] - centres[None, :]), axis=1)]
 
 
 def split_sheet(a: np.ndarray, alpha: np.ndarray, rows: int, cols: int):
-    """Carve a model sheet into its individual poses, reading order."""
-    ys = _gaps(alpha.sum(axis=1), rows)
-    xs = _gaps(alpha.sum(axis=0), cols)
-    y_edges = [0, *ys, alpha.shape[0]]
-    x_edges = [0, *xs, alpha.shape[1]]
-    for r in range(len(y_edges) - 1):
-        for c in range(len(x_edges) - 1):
-            y0, y1 = y_edges[r], y_edges[r + 1]
-            x0, x1 = x_edges[c], x_edges[c + 1]
-            yield a[y0:y1, x0:x1], alpha[y0:y1, x0:x1]
+    """Carve a model sheet into its individual poses, in reading order.
+
+    Groups the drawing's connected parts by where their centres of mass fall, rather than
+    cutting the frame at empty rows and columns. The obvious projection method fails on a
+    real sheet: on the cat sheet there is no empty row anywhere, because the walking cat's
+    tail and the stretching cat's tail both cross the horizontal middle. Nothing is wrong
+    with that drawing — poses simply are not boxed — so it split into two columns and left
+    two cats in each.
+
+    Centres of mass separate cleanly even when the poses' extents overlap, and a pose made
+    of several pieces (a detached whisker, a floating note) still lands with the piece it
+    belongs to, because each piece joins the nearest group.
+    """
+    labels, count = ndimage.label(alpha > 0.05)
+    if not count:
+        return
+    areas = ndimage.sum_labels(alpha, labels, range(1, count + 1))
+    keep = np.arange(1, count + 1)[areas > areas.max() * 0.001]
+    if not len(keep):
+        return
+
+    centres = np.array(ndimage.center_of_mass(alpha, labels, keep))
+    mass = areas[keep - 1]
+    row_of = _cluster_1d(centres[:, 0], mass, rows)
+    col_of = _cluster_1d(centres[:, 1], mass, cols)
+
+    for r in range(rows):
+        for c in range(cols):
+            members = keep[(row_of == r) & (col_of == c)]
+            if not len(members):
+                continue
+            cell = np.isin(labels, members)
+            ys, xs = np.where(cell)
+            y0, y1, x0, x1 = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
+            # Zero anything from a neighbouring pose that reaches into this bounding box.
+            masked = np.where(cell[y0:y1, x0:x1], alpha[y0:y1, x0:x1], 0)
+            yield a[y0:y1, x0:x1], masked
 
 
 def _write(a: np.ndarray, alpha: np.ndarray, dst: Path, size: int, colours: int,
@@ -257,7 +276,14 @@ def _write(a: np.ndarray, alpha: np.ndarray, dst: Path, size: int, colours: int,
     out = Image.merge("RGBA", (*rgb.split(), a8))
 
     dst.parent.mkdir(parents=True, exist_ok=True)
-    out.save(dst, optimize=True)
+    # WebP lossless. The hatching lives in the alpha channel, and an 8-bit alpha full of
+    # fine cross-hatch is close to incompressible in PNG — half a megabyte for one mark.
+    # Lossy WebP does not help either, because it stores alpha losslessly regardless; only
+    # WebP's lossless mode, which has a real alpha codec, does, at roughly half the size.
+    if dst.suffix == ".webp":
+        out.save(dst, lossless=True, method=6)
+    else:
+        out.save(dst, optimize=True)
     kept = alpha.mean() / 255 * 100
     kb = dst.stat().st_size / 1024
     return f"{dst.name:<20} {mode:<44} {out.width}x{out.height}  {kept:>2.0f}% opaque  {kb:>5.0f} KB"
@@ -269,6 +295,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--size", type=int, default=1024)
     ap.add_argument("--colours", type=int, default=16, help="palette size (default 16)")
+    ap.add_argument("--ext", default="webp", choices=("webp", "png"))
     ap.add_argument("--split", default="1x1", metavar="RxC",
                     help="carve a model sheet into poses, e.g. 2x2 (default 1x1)")
     args = ap.parse_args()
@@ -280,7 +307,7 @@ def main() -> int:
             print(f"missing: {src}", file=sys.stderr)
             return 1
         rows, cols = (int(v) for v in args.split.lower().split("x"))
-        print(extract(src, args.out / f"{name or src.stem}.png", args.size, args.colours,
+        print(extract(src, args.out / f"{name or src.stem}.{args.ext}", args.size, args.colours,
                       (rows, cols)))
     return 0
 
