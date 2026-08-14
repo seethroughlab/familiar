@@ -96,17 +96,9 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 
   <div class="feature-block">
     <div class="feature-copy">
-      <h3>Find music by how it sounds</h3>
-      <p>Every track is listened to, not just tagged. Ask for "upbeat with synths" or "acoustic and melancholy" and the search runs against CLAP audio embeddings — so it finds the right song even when nothing in its metadata says so.</p>
-    </div>
-    <img class="feature-art" src="./assets/marks/tuning-fork.webp" alt="" aria-hidden="true"
-         loading="lazy" width="1024" height="559">
-  </div>
-
-  <div class="feature-block">
-    <div class="feature-copy">
-      <h3>Bring your own assistant</h3>
-      <p>Familiar speaks MCP. Point Claude Desktop, or any MCP host, at your library and it gets 36 tools for search, playback, metadata and playlists. Familiar holds no API key and calls no model — whatever you use is your account and your choice.</p>
+      <h3>Ask for music by how it sounds</h3>
+      <p>Every track is listened to, not just tagged. Point Claude Desktop — or any MCP host — at your library and ask for "upbeat with synths" or "acoustic and melancholy": the search runs against CLAP audio embeddings, so it finds the right song when nothing in the metadata says so. Thirty-six tools in all, for search, playback, metadata and playlists.</p>
+      <p class="feature-note">Familiar holds no API key and calls no model. Whatever you connect is your account and your choice.</p>
     </div>
     <img class="feature-art" src="./assets/marks/crow-record.webp" alt="" aria-hidden="true"
          loading="lazy" width="982" height="707">
@@ -147,13 +139,9 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
   <h3 class="more-features-head">Also included</h3>
   <ul class="more-features">
     <li><strong>Find similar</strong> — surface sonically close tracks from any song</li>
-    <li><strong>Mood Grid</strong> — your library scattered by energy and valence</li>
-    <li><strong>3D Explorer</strong> — fly through artist space, hover to preview</li>
     <li><strong>Musical features</strong> — BPM, key, energy, danceability, acousticness</li>
     <li><strong>Community cache</strong> — opt-in, skips hours of analysis on a new library</li>
     <li><strong>Web app for setup</strong> — library scanning, analysis, backup, Last.fm, diagnostics, in any browser</li>
-    <li><strong>Music videos</strong> — attach video files to tracks and play them in the full player</li>
-    <li><strong>Listening sessions</strong> — stream what you are playing to friends over WebRTC</li>
   </ul>
 </section>
 
@@ -216,7 +204,6 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
         <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td>Basic</td><td>Basic</td><td>Catalog-only</td><td>Catalog-only</td></tr>
         <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
         <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Music video playback</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Catalog-only</td><td class="no">—</td></tr>
         <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td></tr>
       </tbody>
     </table>

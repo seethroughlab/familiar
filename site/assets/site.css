@@ -211,6 +211,14 @@ a:hover { text-decoration: underline; }
    it the same weight as evidence overstates it. */
 .feature-art { flex: 0 0 240px; width: 240px; height: auto; }
 
+.feature-note {
+  font-size: 14px;
+  color: var(--text-muted);
+  border-left: 2px solid var(--border-color);
+  padding-left: 12px;
+  margin-top: 12px;
+}
+
 .more-features-head { margin-top: 8px; }
 
 .more-features {

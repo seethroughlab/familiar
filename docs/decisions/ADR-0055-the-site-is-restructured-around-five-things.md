@@ -74,10 +74,22 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
    key and calls no model. A claim nobody re-reads becomes a lie by attrition, and the privacy page
    is exactly where that costs the most.
 
-   Not everything was wrong: "36 tools" is right (34 in `MUSIC_TOOLS` plus `list_players` and
-   `now_playing`), CLAP is 512-dimensional, and both the demo and App Store links resolve. The PWA
-   is also still real — `vite-plugin-pwa`, `public/manifest.json` and a registered `/sw.js` — so if
-   it leaves the page it leaves as a positioning decision, not a correction.
+   **"Checked" has a definition, because the first attempt at this failed.** It passed "Music
+   videos — attach video files to tracks" on the strength of `grep -rl "video"` returning
+   `routes/videos.py`. A filename is not a feature. A claim is resolved against these, first that
+   answers wins: `docs/WEB-PARITY.md`'s per-surface row; the browser-only tag list in the same file
+   (a tag outside `VENDORED_TAGS` cannot be reached natively); its "Retired" table; then
+   reachability — route mounted, wrapper present, **and a UI caller that is itself reachable**;
+   then the backend for claims with no surface.
+
+   Verdicts are `true`, `false`, `misdescribed`, `browser-only` and `unverifiable`. `misdescribed`
+   exists because that is the category the first audit collapsed — the video feature was real and
+   the sentence still wrong. `unverifiable` exists so a claim about something outside this
+   repository is recorded as unchecked rather than quietly passing; the comparison table's 28
+   competitor assertions are all of them.
+
+   The ledger is `docs/SITE-CLAIMS.md` and the mechanical half is `site/scripts/check-claims.py`.
+   An audit that leaves no artefact has already expired.
 
 3. **The page is built from five things, in this order**: what it is, what it looks like, what it
    does, how to get it, and how to get it again. Everything currently on the page either belongs to
