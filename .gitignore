@@ -106,3 +106,7 @@ packages/web/dist-visualizer/
 # because everything there is copied straight to Cloudflare, and out of git because the
 # committed PNGs, the prompts and extract-marks.py are enough to reproduce them.
 art-sources/
+
+# Local preview only: the deploy copies screenshots/ into _site itself (cloudflare-pages.yml),
+# so this symlink exists to make `python3 -m http.server` in site/ resolve them and must not ship.
+site/screenshots

@@ -179,6 +179,64 @@ a:hover { text-decoration: underline; }
 .section-head > div { flex: 1; min-width: 0; }
 .section-head h2 { margin-top: 0; }
 
+/* ADR-0055 point 3: a feature is a claim with a picture of itself, alternating sides so the
+   eye has somewhere to go. Below 760px it stacks, copy first — the sentence is the point and
+   the picture is the evidence, so the evidence should not arrive first. */
+.feature-block {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  margin: 0 0 56px;
+}
+
+.feature-block:nth-of-type(even) { flex-direction: row-reverse; }
+
+.feature-copy { flex: 1 1 42%; min-width: 0; }
+.feature-copy h3 { margin-top: 0; }
+
+.feature-shot {
+  flex: 1 1 58%;
+  min-width: 0;
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  line-height: 0;
+}
+
+.feature-shot img { width: 100%; height: auto; display: block; }
+.feature-shot:hover { border-color: var(--accent-purple); }
+
+/* Illustrations sit smaller than screenshots on purpose: a drawing is atmosphere, and giving
+   it the same weight as evidence overstates it. */
+.feature-art { flex: 0 0 240px; width: 240px; height: auto; }
+
+.more-features-head { margin-top: 8px; }
+
+.more-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px 32px;
+}
+
+.more-features li {
+  font-size: 15px;
+  color: var(--text-secondary);
+  padding-left: 14px;
+  border-left: 2px solid var(--border-color);
+}
+
+.more-features strong { color: var(--text-primary); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .feature-block,
+  .feature-block:nth-of-type(even) { flex-direction: column; gap: 20px; margin-bottom: 40px; }
+  .feature-art { flex: none; width: 180px; align-self: center; }
+}
+
 .section-art {
   flex: none;
   width: 210px;
