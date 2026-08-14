@@ -124,8 +124,9 @@ a:hover { text-decoration: underline; }
 
 .hero {
   display: flex;
+  flex-direction: column;
   gap: 24px;
-  align-items: flex-start;
+  align-items: stretch;
   padding: 40px 32px;
   background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
   border: 1px solid var(--border-color);
@@ -142,6 +143,47 @@ a:hover { text-decoration: underline; }
 }
 
 .hero-body { flex: 1; min-width: 0; }
+
+.hero-main {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+/* ADR-0054. Capped rather than full-bleed: the drawing is hatched, and stretched past its own
+   resolution the hatching turns to moire rather than simply going soft. */
+.hero-art {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* A section's illustration sits beside its heading, not above the content, so it costs a column
+   rather than a screenful. It is decorative — `aria-hidden`, no alt — so it is allowed to vanish
+   on a narrow screen without taking meaning with it. */
+.section-head {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-head > div { flex: 1; min-width: 0; }
+.section-head h2 { margin-top: 0; }
+
+.section-art {
+  flex: none;
+  width: 210px;
+  height: auto;
+}
+
+@media (max-width: 760px) {
+  .section-art { display: none; }
+  .hero-art { max-width: 100%; }
+  .hero-main { flex-direction: column; align-items: flex-start; }
+}
 
 .hero-title {
   font-size: 42px;
@@ -833,15 +875,6 @@ footer a { color: var(--text-secondary); }
 /* Illustration marks (ADR-0039 point 4) --------------------------------------
    Colour is inherited rather than set, which is the whole point: one file works on
    any background and goes muted or bright with the text it sits beside. */
-.mark {
-  width: 20px;
-  height: 20px;
-  /* Optical rather than metric: a 20px square next to 17px text sits high without this. */
-  vertical-align: -3px;
-  margin-right: 8px;
-  color: var(--accent-purple);
-  flex: none;
-}
 
 .feature h3 .mark { color: var(--accent-purple); }
 

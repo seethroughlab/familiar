@@ -22,34 +22,6 @@
   <meta name="twitter:image" content="https://familiar.seethroughlab.com/assets/og-image.jpg">
 </head>
 <body>
-<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
-  <!--
-    The illustration set (ADR-0039 point 4). One file, one symbol per mark, inlined into the page.
-
-    Every mark draws with `currentColor` and hardcodes no colour, which is what makes the set
-    theme-aware without a second copy of every file — the property point 4 asks for and the one a
-    raster set cannot have.
-
-    `mark-cat` is the reference. See site/ILLUSTRATIONS.md for the grammar and the motif map; give
-    this symbol to a generator as the example to match, because matching a real mark produces a more
-    consistent set than matching a description.
-  -->
-  <symbol id="mark-cat" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Ears, then the head, drawn as one continuous silhouette so it reads at 20px. -->
-    <path d="M6.5 8.2 5.6 4.4l3.3 2.1" />
-    <path d="M17.5 8.2l0.9-3.8-3.3 2.1" />
-    <path d="M6.5 8.2a6.6 6.6 0 0 1 11 0 6 6 0 0 1-11 0Z" />
-    <!-- Eyes: solid, because two open dots at this size read as holes rather than eyes. -->
-    <path d="M9.8 10.1v0.9" />
-    <path d="M14.2 10.1v0.9" />
-    <!-- Muzzle. -->
-    <path d="M12 12.4v0.9" />
-    <path d="M10.7 14.1a1.7 1.7 0 0 0 2.6 0" />
-    <!-- Tail, curled — the flourish that makes it playful rather than a pictogram. -->
-    <path d="M17.2 13.4c1.9 1.4 2.6 3.4 1.6 5-0.9 1.5-3 1.6-3.7 0.3-0.5-1 0.2-2 1.2-1.9" />
-  </symbol>
-</svg>
 
 <nav class="topnav" aria-label="Primary">
   <a class="topnav-brand" href="#top">
@@ -70,8 +42,14 @@
 <main id="top">
 
 <header class="hero">
-  <img src="./assets/icon.svg" alt="Familiar" class="hero-logo">
-  <div class="hero-body">
+  <!-- ADR-0054. The illustration is the hero, the way Fork's is: it says what this feels like
+       before a word is read. Decorative, so no alt text — the h1 below is the accessible name, and
+       describing it twice only makes a screen reader slower. -->
+  <img class="hero-art" src="./assets/marks/cat-and-crow.webp" alt="" aria-hidden="true"
+       width="1024" height="559" fetchpriority="high">
+  <div class="hero-main">
+    <img src="./assets/icon.svg" alt="Familiar" class="hero-logo">
+    <div class="hero-body">
     <h1 class="hero-title">Familiar</h1>
     <p class="hero-tagline">Host your own music streaming service — for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.</p>
     <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
@@ -97,9 +75,16 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
       <a href="#screenshots" class="primary">See it</a>
       <a href="#features">Features</a>
       <a href="#ask">Ask Familiar</a>
+      </div>
     </div>
   </div>
 </header>
+
+<section id="intro">
+  <p><strong>Your music, your server, your AI.</strong> Self-host Familiar on your own hardware and point it at your existing library of MP3s and FLACs. No cloud, no subscription, no data leaving your network.</p>
+  <p><strong>Describe what you want to hear.</strong> Familiar listens to every track and understands how it actually <em>sounds</em> — not just tags or genre. Ask for "something that sounds like rain on a window" and it actually works.</p>
+  <p><strong>Community-powered analysis.</strong> Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.</p>
+</section>
 
 <section id="screenshots">
   <h2>Screenshots</h2>
@@ -139,7 +124,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
       <p>Describe the sound: "upbeat with synths", "acoustic and melancholy". Matches on CLAP audio embeddings, not tags.</p>
     </div>
     <div class="feature">
-      <h3><svg class="mark" aria-hidden="true"><use href="#mark-cat"></use></svg>Bring your own assistant</h3>
+      <h3>Bring your own assistant</h3>
       <p>Familiar speaks MCP. Point Claude Desktop — or any MCP host — at your library and it gets 36 tools for search, playback, metadata and playlists. No API key in Familiar.</p>
     </div>
     <div class="feature">
@@ -206,8 +191,14 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 </section>
 
 <section id="ask">
-  <h2>Ask Familiar…</h2>
-  <p class="section-lede">Real prompts that map to real filters. Connect an MCP host and phrases like these become audio-feature queries across your library.</p>
+  <div class="section-head">
+    <div>
+      <h2>Ask Familiar…</h2>
+      <p class="section-lede">Real prompts that map to real filters. Connect an MCP host and phrases like these become audio-feature queries across your library.</p>
+    </div>
+    <img class="section-art" src="./assets/marks/cauldron.webp" alt="" aria-hidden="true"
+         loading="lazy" width="1024" height="559">
+  </div>
   <div class="prompt-grid">
     <div class="prompt">
       <p class="prompt-text">"Something chill for late-night coding"</p>
@@ -334,14 +325,14 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
   </div>
 </section>
 
-<section id="intro">
-  <p><strong>Your music, your server, your AI.</strong> Self-host Familiar on your own hardware and point it at your existing library of MP3s and FLACs. No cloud, no subscription, no data leaving your network.</p>
-  <p><strong>Describe what you want to hear.</strong> Familiar listens to every track and understands how it actually <em>sounds</em> — not just tags or genre. Ask for "something that sounds like rain on a window" and it actually works.</p>
-  <p><strong>Community-powered analysis.</strong> Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.</p>
-</section>
+
 
 <section id="install">
-  <h2>Install</h2>
+  <div class="section-head">
+    <div><h2>Install</h2></div>
+    <img class="section-art" src="./assets/marks/lantern.webp" alt="" aria-hidden="true"
+         loading="lazy" width="1024" height="559">
+  </div>
 
   <div class="requirements">
     <strong>Requirements.</strong> Docker 24+, 2&nbsp;GB RAM minimum (4&nbsp;GB recommended), x86_64 or ARM64. Tested on macOS, Linux, OpenMediaVault, and Synology NAS. On 8&nbsp;GB Macs, set <code>DISABLE_CLAP_EMBEDDINGS=true</code>.
@@ -410,8 +401,14 @@ cd familiar/docker
      section was first written, and a "Try the demo" button that hangs is worse than no button.
      It went in only after the instance was verified serving 32 tracks and streaming audio. -->
 <section id="get-started" class="closing-cta">
-  <h2>Get started</h2>
-  <p>One <code>compose up</code> against the music you already own.</p>
+  <div class="section-head">
+    <div>
+      <h2>Get started</h2>
+      <p>One <code>compose up</code> against the music you already own.</p>
+    </div>
+    <img class="section-art" src="./assets/marks/cat-curled.webp" alt="" aria-hidden="true"
+         loading="lazy" width="679" height="515">
+  </div>
   <div class="closing-cta-actions">
     <a href="#install" class="primary">Install the server</a>
     <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">Try the demo</a>
