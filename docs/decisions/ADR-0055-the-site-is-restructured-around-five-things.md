@@ -56,11 +56,34 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
 
 ## Decision
 
-1. **The page is built from five things, in this order**: what it is, what it looks like, what it
+1. **The site exists to get one kind of person to run one command.** Someone with a large
+   library of files they own, who is tired of a streaming service refusing to play it or quietly
+   replacing it, and who is comfortable enough to run `docker compose up`. Everything on the page
+   is measured against whether it moves that person toward the install, and the honest answer for
+   most true statements is that it does not.
+
+   This is written down because it never was. `0039` decided the site's *layout* and this ADR
+   decides its *structure*, and neither said who the site is for or what it may claim — which is
+   why the content drifts. With no rule for what belongs, every true thing gets added and nothing
+   is removed when it stops being true.
+
+2. **Every claim on the site is checkable against this repository, and is checked.** The audit that
+   prompted this found a version chip four months and one minor version stale, an iOS app described
+   as a "native Capacitor wrapper" two days after `packages/ios` was deleted, and — worst — a
+   privacy policy telling readers their conversations are sent to Anthropic, when Familiar holds no
+   key and calls no model. A claim nobody re-reads becomes a lie by attrition, and the privacy page
+   is exactly where that costs the most.
+
+   Not everything was wrong: "36 tools" is right (34 in `MUSIC_TOOLS` plus `list_players` and
+   `now_playing`), CLAP is 512-dimensional, and both the demo and App Store links resolve. The PWA
+   is also still real — `vite-plugin-pwa`, `public/manifest.json` and a registered `/sw.js` — so if
+   it leaves the page it leaves as a positioning decision, not a correction.
+
+3. **The page is built from five things, in this order**: what it is, what it looks like, what it
    does, how to get it, and how to get it again. Everything currently on the page either belongs to
    one of those or leaves.
 
-2. **Fewer claims, and a budget rather than a judgement.** The page makes **at most six claims**,
+4. **Fewer claims, and a budget rather than a judgement.** The page makes **at most six claims**,
    in **under 700 words** in `<main>`, against fourteen features and 1,778 words today. A budget is
    the decision because "simplify" is not one — every individual sentence on the page is defensible,
    which is exactly how it got to eleven sections, and without a number the next addition is always
@@ -69,16 +92,16 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
    Density is the specific problem, not length. A reader who cannot tell which two or three things
    matter has been handed the work of editing, and most will decline it.
 
-3. **Features become illustrated sections, not a list.** Five or six, each a heading, one paragraph,
+5. **Features become illustrated sections, not a list.** Five or six, each a heading, one paragraph,
    and one screenshot of that feature — Fork's actual pattern and the part `0039` skipped. The
    fourteen-item text list collapses into a single compact "everything else" group, the way Fork's
    feature overview works.
 
-4. **The screenshot grid is deleted.** Sixteen thumbnails in a wall is a gallery, not an argument;
+6. **The screenshot grid is deleted.** Sixteen thumbnails in a wall is a gallery, not an argument;
    the pictures move into the feature sections that make claims about them, where a reader meets
    each one beside the sentence it supports.
 
-5. **The FAQ becomes its own page; the comparison table stays.** They looked like the same problem
+7. **The FAQ becomes its own page; the comparison table stays.** They looked like the same problem
    and are not. The table is an *argument* — it is the page's answer to "why not Jellyfin, why not
    Plex", which is a question a first-time visitor is actively holding, so it earns its place in
    front of them. The eight FAQ entries answer someone who has already decided to care and is now
@@ -88,16 +111,16 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
    This is the specific reversal of `0039` point 2, and it is a partial one: `0039` put both on the
    landing page, and only the FAQ leaves.
 
-6. **Every screenshot on the page is regenerated before it ships**, and the illustrations
+8. **Every screenshot on the page is regenerated before it ships**, and the illustrations
    (ADR-0054) carry the sections that have no honest screenshot. A four-month-old picture of a
    surface that has since changed is worse than no picture, because it is a claim.
 
-7. **The page states its own age.** The version chip already links `CHANGELOG.md`; screenshots get
+9. **The page states its own age.** The version chip already links `CHANGELOG.md`; screenshots get
    a generated-on date in the repository so the next person can see the drift instead of
    discovering it. Point 5 of `0039` stays — screenshots are still generated, not hand-kept — but
    it acquires a way to notice when it has stopped being true.
 
-8. **One call to action, repeated.** Install. The App Store badge and the demo link ride alongside
+10. **One call to action, repeated.** Install. The App Store badge and the demo link ride alongside
    it rather than competing as peers, which is what four buttons in the hero currently do.
 
 ## Alternatives Considered
