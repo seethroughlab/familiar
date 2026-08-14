@@ -138,8 +138,8 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 
   <div class="feature-block">
     <div class="feature-copy">
-      <h3>Your own library, properly browsable</h3>
-      <p>Albums, artists and tracks on the Mac, the phone and the web, with the artwork and metadata cleaned up as it scans. Your files stay where they are and stay exactly as they were.</p>
+      <h3>Native apps for the Mac and the phone</h3>
+      <p>Listening happens in real apps — background audio, lock-screen controls, offline downloads, your library browsable by album and artist. The browser is where you set Familiar up and look after the library, not where you listen.</p>
     </div>
     <a href="./screenshots/mac-albums.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-albums.png" alt="The Mac app showing the albums grid" loading="lazy"></a>
   </div>
@@ -151,8 +151,7 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
     <li><strong>3D Explorer</strong> — fly through artist space, hover to preview</li>
     <li><strong>Musical features</strong> — BPM, key, energy, danceability, acousticness</li>
     <li><strong>Community cache</strong> — opt-in, skips hours of analysis on a new library</li>
-    <li><strong>Offline PWA</strong> — installs to the home screen, caches tracks to listen offline</li>
-    <li><strong>iOS and Mac apps</strong> — <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener">Familiar Player</a>, native, with background audio and lock-screen controls</li>
+    <li><strong>Web app for setup</strong> — library scanning, analysis, backup, Last.fm, diagnostics, in any browser</li>
     <li><strong>Music videos</strong> — attach video files to tracks and play them in the full player</li>
     <li><strong>Listening sessions</strong> — stream what you are playing to friends over WebRTC</li>
   </ul>
@@ -219,7 +218,6 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
         <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td><td class="no">—</td><td class="no">—</td></tr>
         <tr><td>Music video playback</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Catalog-only</td><td class="no">—</td></tr>
         <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td></tr>
-        <tr><td>Mobile PWA</td><td class="yes">Yes</td><td>Web + apps</td><td>Apps</td><td>Native app</td><td>Native app</td></tr>
       </tbody>
     </table>
   </div>
@@ -233,14 +231,14 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 
 <section id="remote-access">
   <h2>Listen from anywhere</h2>
-  <p class="section-lede">The goal is a private URL you can reach from your phone on cellular — not a public site. Don't port-forward <code>4400</code> to the open internet.</p>
+  <p class="section-lede">The goal is a private address your apps can reach from anywhere — not a public site. Don't port-forward <code>4400</code> to the open internet.</p>
 
   <div class="remote-panel">
     <h3>Recommended: Tailscale</h3>
     <p>Install Tailscale on the server and each device you want to listen from, enable HTTPS certificates in the admin console, then run one command on the server:</p>
 <pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
     <p>Visit <code>https://&lt;your-server&gt;.&lt;tailnet&gt;.ts.net</code> from any signed-in device — iPhone, laptop, TV. Tailscale provisions a Let's Encrypt cert automatically and renews it for you.</p>
-    <p class="remote-why"><strong>Why HTTPS matters:</strong> the iOS/Android PWA install prompt, service-worker caching, and "Add to Home Screen" only work over HTTPS. Plain <code>http://10.0.0.42:4400</code> does not.</p>
+    <p class="remote-why"><strong>Why HTTPS matters:</strong> it is what lets the iOS app reach your server from anywhere. Plain <code>http://10.0.0.42:4400</code> works on your own network and nowhere else.</p>
     <p><a href="https://github.com/seethroughlab/familiar/blob/main/docs/CONFIGURATION.md#tailscale-https" target="_blank" rel="noopener">Full walkthrough in CONFIGURATION.md →</a></p>
   </div>
 
