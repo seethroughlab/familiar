@@ -113,34 +113,88 @@ def background_mask(a: np.ndarray) -> tuple[np.ndarray, str]:
     return keep, f"checkerboard rgb{dark}/rgb{light}"
 
 
+def luma_matte(a: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Alpha and colour for artwork drawn light-on-black.
+
+    Exact, unlike anything that has to guess where a subject ends. Over a black ground
+    the observed pixel *is* the colour premultiplied by its own coverage, so coverage is
+    just how bright it got — and dividing that back out recovers the ink. Anti-aliased
+    edges and fine crosshatch come out with correct partial alpha rather than being cut
+    or eroded, which is the whole reason a hatched style can survive the trip at all.
+
+    The dark inside a shape becomes transparent, and that is right: in this register the
+    darkness is the ground, so it should show the page rather than carry its own black.
+
+    Coverage is taken from the brightest channel rather than luminance, because luminance
+    weights green at 71% and blue at 7% — on a violet-and-magenta set that would matte the
+    blues almost away.
+    """
+    alpha = a.max(axis=2) / 255.0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ink = a / np.maximum(alpha, 1e-6)[..., None]
+    return np.clip(ink, 0, 255), alpha
+
+
 def extract(src: Path, dst: Path, size: int, colours: int) -> str:
     a = np.asarray(Image.open(src).convert("RGB")).astype(int)
+
+    tones = _border_tones(a)
+    if tones and max(tones[0]) < 40:
+        return _write(*luma_matte(a), dst, size, colours, f"black ground rgb{tones[0]}")
+
     bg, mode = background_mask(a)
 
-    # Grow the background by a pixel before cutting. Anti-aliased edge pixels are a
-    # blend of mark and background and match neither tone, so they read as subject and
-    # would leave a bright fringe — which on a near-black page is exactly the halo
-    # everyone recognises as a bad cut-out. Losing a hair of outline is the better trade.
-    alpha = np.where(bg, 0, 255).astype(np.uint8)
-    alpha = np.asarray(Image.fromarray(alpha).filter(ImageFilter.MinFilter(5)))
+    # Matte the edge rather than cutting it.
+    #
+    # An anti-aliased edge pixel is a genuine mixture of mark and background, and the
+    # honest answer for it is partial alpha. The first version instead cut hard and then
+    # eroded a couple of pixels to hide the bright fringe that left — which costs a thick
+    # outline nothing and destroys a thin one. Measured, it removed 17% of the
+    # constellation's artwork. Any style with a finer line loses more.
+    #
+    # Alpha ramps over the width of the anti-aliasing, and then the background's own
+    # colour is divided back out: an edge pixel that is half violet and half white page
+    # is stored as violet at 50%, not as a pale mauve that glows against a dark page.
+    # Without that second step a soft edge is just a halo with extra steps.
+    dist = np.min([np.linalg.norm(a - np.array(t), axis=2) for t in _border_tones(a)], axis=0)
+    alpha = np.clip((dist - TOLERANCE) / TOLERANCE, 0, 1)
+    alpha[bg] = 0
 
+    bg_colour = np.array(_border_tones(a)[0], dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        unmixed = (a - (1 - alpha)[..., None] * bg_colour) / np.maximum(alpha, 1e-6)[..., None]
+    a = np.where((alpha > 0)[..., None], np.clip(unmixed, 0, 255), a)
+    alpha = (alpha * 255).astype(np.uint8)
+
+    return _write(a, alpha / 255.0, dst, size, colours, mode)
+
+
+def _write(a: np.ndarray, alpha: np.ndarray, dst: Path, size: int, colours: int,
+           mode: str) -> str:
     # Drop specks. JPEG leaves the odd pixel that matches nothing, and one stray dot in
     # the corner of an otherwise clean mark survives the crop and moves the bounding box.
-    labels, count = ndimage.label(alpha > 0)
+    labels, count = ndimage.label(alpha > 0.05)
     if count:
         areas = ndimage.sum_labels(np.ones_like(labels), labels, range(1, count + 1))
         too_small = (np.arange(1, count + 1))[areas < alpha.size * 1e-4]
-        alpha = np.where(np.isin(labels, too_small), 0, alpha).astype(np.uint8)
+        alpha = np.where(np.isin(labels, too_small), 0, alpha)
 
+    alpha = (np.clip(alpha, 0, 1) * 255).astype(np.uint8)
     out = Image.fromarray(np.dstack([a.astype(np.uint8), alpha]), mode="RGBA")
     out = out.crop(out.getbbox())
     out.thumbnail((size, size), Image.LANCZOS)
 
-    # Quantise. These are flat-colour illustrations, but they arrive as JPEG, and the
-    # mottling JPEG leaves inside a "flat" fill is what stops PNG compressing it — 167 KB
-    # for a mark that is really five colours. Snapping to a small palette both restores
-    # the flatness the art was drawn with and takes it to about 10 KB.
-    out = out.quantize(colors=colours, method=Image.FASTOCTREE, dither=Image.Dither.NONE)
+    # Quantise the colour, keep the alpha at full depth.
+    #
+    # These are flat-colour illustrations, but they arrive as JPEG, and the mottling JPEG
+    # leaves inside a "flat" fill is what stops PNG compressing it — 167 KB for a mark
+    # that is really five colours. A palette PNG would be smaller still, but palette
+    # transparency is one bit, which would throw away the matted edge. So the colours
+    # collapse and the alpha channel survives intact.
+    rgb, a8 = out.convert("RGB"), out.getchannel("A")
+    rgb = rgb.quantize(colors=colours, method=Image.FASTOCTREE,
+                       dither=Image.Dither.NONE).convert("RGB")
+    out = Image.merge("RGBA", (*rgb.split(), a8))
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     out.save(dst, optimize=True)
