@@ -12,6 +12,7 @@
   --accent-green: #22c55e;
   --accent-green-hover: #16a34a;
   --accent-purple: #a855f7;
+  --accent-purple-hover: #9333ea;
   --accent-blue: #3b82f6;
   --accent-red: #f87171;
 }
@@ -113,8 +114,13 @@ html { scroll-padding-top: 64px; }
   .topnav-github { display: none; }
 }
 
+/* Purple is the page's voice; green is reserved for "act on this" and "yes". Before this,
+   green was the title, every link, the version chip, the table's affirmatives AND the install
+   button, so the one thing worth clicking looked like everything else. The illustrations sit at
+   288deg and this accent at 271deg; the green is 146deg away, which is close enough to
+   complementary to read as a clash rather than a pairing. */
 a {
-  color: var(--accent-green);
+  color: var(--accent-purple);
   text-decoration: none;
 }
 
@@ -200,7 +206,7 @@ a:hover { text-decoration: underline; }
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0 0 10px;
-  background: linear-gradient(135deg, var(--accent-green) 0%, #4ade80 100%);
+  background: linear-gradient(135deg, var(--accent-purple) 0%, #d8b4fe 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -244,14 +250,28 @@ a:hover { text-decoration: underline; }
 
 .nav-links a:active { transform: translateY(1px); }
 
-.nav-links a.primary {
+.closing-cta-actions a {
+  padding: 10px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.closing-cta-actions a:hover { background: var(--bg-tertiary); text-decoration: none; }
+.closing-cta-actions a.app-store-link { padding: 0; border: none; background: none; }
+
+.nav-links a.primary,
+.closing-cta-actions a.primary {
   background: var(--accent-green);
   color: #052e14;
   border-color: var(--accent-green);
   font-weight: 600;
 }
 
-.nav-links a.primary:hover {
+.nav-links a.primary:hover,
+.closing-cta-actions a.primary:hover {
   background: var(--accent-green-hover);
   border-color: var(--accent-green-hover);
 }
@@ -416,7 +436,7 @@ p, li { line-height: 1.65; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-green);
+  background: var(--accent-purple);
   color: #052e14;
   border-radius: 50%;
   font-weight: 700;
@@ -582,7 +602,7 @@ footer a { color: var(--text-secondary); }
 
 .version-chip:hover {
   background: rgba(34, 197, 94, 0.14);
-  border-color: var(--accent-green);
+  border-color: var(--accent-purple);
   text-decoration: none;
   color: var(--text-primary);
 }
@@ -609,7 +629,7 @@ footer a { color: var(--text-secondary); }
 .requirements {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-green);
+  border-left: 3px solid var(--accent-purple);
   border-radius: 8px;
   padding: 12px 16px;
   margin: 0 0 20px;
@@ -701,7 +721,7 @@ footer a { color: var(--text-secondary); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent-green);
+  color: var(--accent-purple);
   font-weight: 700;
   font-size: 16px;
   transition: transform 0.15s;
@@ -718,7 +738,7 @@ footer a { color: var(--text-secondary); }
 .remote-panel {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-green);
+  border-left: 3px solid var(--accent-purple);
   border-radius: 12px;
   padding: 20px 24px;
   margin: 16px 0 20px;
@@ -803,8 +823,8 @@ footer a { color: var(--text-secondary); }
   top: 7px;
   width: 6px;
   height: 6px;
-  border-right: 2px solid var(--accent-green);
-  border-bottom: 2px solid var(--accent-green);
+  border-right: 2px solid var(--accent-purple);
+  border-bottom: 2px solid var(--accent-purple);
   transform: rotate(-45deg);
   transition: transform 0.15s;
 }
