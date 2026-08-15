@@ -14,6 +14,9 @@ Implementation:
   landing route. Following those routes found three affordances still pointing at them, including a
   mobile bottom bar whose every button was a dead link.
 - `familiar` #153 — the matrix updated as point 6 requires.
+- `familiar-apple` #118 — the playlist-editing item in point 6's native backlog is closed for
+  regular playlists: iPhone can now create, rename/delete, remove tracks and move tracks up/down,
+  matching the Mac's regular-playlist editing surface. Smart playlists remain Mac-only by design.
 - **Point 4's permission is now live: the parked browsers may be deleted.** They are named in
   `PARKED_BROWSERS` (`packages/frontend/src/routes.ts`) and amount to roughly 169 files and 35,900
   lines. Not yet done, and deliberately its own change — it is a large diff whose only risk is
@@ -123,6 +126,8 @@ them, including a mobile bottom bar whose every button was a dead link.
 6. **`docs/WEB-PARITY.md` is the reference, and is maintained.** It replaces "keep the code so we
    remember what we had". It is also the native backlog: **"settings only" is not reachable** until
    the Apple clients can edit playlists, edit track metadata, trigger a scan, and create a profile.
+   `familiar-apple` #118 closes the playlist-editing item, leaving track metadata, scan and profile
+   creation as the remaining blockers.
 
 ## Alternatives Considered
 
@@ -157,9 +162,8 @@ them, including a mobile bottom bar whose every button was a dead link.
   most. Accepted, because the measurement says nobody was using it.
 - **Tradeoff** — the web app's own surface and the native clients will drift, and ADR-0002 point 4
   already said parity is not a goal. The matrix is what stops that drift being *silent*.
-- **Follow-up** — the four gaps in point 6, of which playlist editing is cheapest:
-  `playlistsUpdatePlaylist` and `playlistsDeletePlaylist` are generated and uncalled, the same shape
-  as the create gap ADR-0049 closed.
+- **Follow-up** — the remaining gaps in point 6 are track metadata editing, scan triggering and
+  profile creation. Playlist editing was the cheapest and is now covered by `familiar-apple` #118.
 - **Follow-up** — `packages/ios`, the Capacitor app, is superseded by ADR-0001, has had no meaningful
   commits since May, and still ships **100% of `frontend/src`**. It is now the largest consumer of
   the code this ADR is trying to stop maintaining, and deserves its own decision.
