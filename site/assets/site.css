@@ -211,6 +211,23 @@ a:hover { text-decoration: underline; }
    it the same weight as evidence overstates it. */
 .feature-art { flex: 0 0 240px; width: 240px; height: auto; }
 
+/* Two prompt->filter pairs inline, which is what the whole `#ask` section was proving. */
+.feature-examples {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+
+.feature-examples span { color: var(--text-primary); font-style: italic; }
+
+.feature-examples code {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
 .feature-note {
   font-size: 14px;
   color: var(--text-muted);
@@ -366,18 +383,8 @@ a:hover { text-decoration: underline; }
 
 section { margin-bottom: 48px; }
 
-section#intro { margin-top: -12px; }
 
-section#intro p {
-  font-size: 16px;
-  color: var(--text-secondary);
-  margin: 0 0 14px;
-}
 
-section#intro strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
 
 h2 {
   font-size: 24px;
@@ -437,48 +444,12 @@ p, li { line-height: 1.65; }
 
 /* --- Features grid --- */
 
-.features-subhead {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  font-weight: 600;
-  margin: 32px 0 12px;
-}
 
-.features-subhead:first-child { margin-top: 0; }
 
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-}
 
-.feature {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 18px 20px;
-  transition: border-color 0.15s, transform 0.15s;
-}
 
-.feature:hover {
-  border-color: var(--text-muted);
-  transform: translateY(-1px);
-}
 
-.feature h3 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  color: var(--text-primary);
-}
 
-.feature p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
 
 /* --- Install steps --- */
 
@@ -563,45 +534,12 @@ pre code {
 
 /* --- Screenshots --- */
 
-.screenshot-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
 
-.screenshot-grid.mobile {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-}
 
-.shot {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  overflow: hidden;
-  margin: 0;
-  transition: border-color 0.15s, transform 0.15s;
-}
 
-.shot:hover {
-  border-color: var(--text-muted);
-  transform: translateY(-2px);
-}
 
-.shot a { display: block; }
 
-.shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-}
 
-.shot figcaption {
-  padding: 10px 16px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
 
 /* --- Links list --- */
 
@@ -683,12 +621,6 @@ footer a { color: var(--text-secondary); }
 
 /* --- Section lede (used under section titles) --- */
 
-.section-lede {
-  color: var(--text-secondary);
-  font-size: 15px;
-  margin: -8px 0 20px;
-  max-width: 720px;
-}
 
 /* --- Requirements callout --- */
 
@@ -708,52 +640,11 @@ footer a { color: var(--text-secondary); }
 
 /* --- Ask Familiar prompt grid --- */
 
-.prompt-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
-}
 
-.prompt {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px 18px;
-  transition: border-color 0.15s, transform 0.15s;
-}
 
-.prompt:hover {
-  border-color: var(--accent-purple);
-  transform: translateY(-1px);
-}
 
-.prompt-text {
-  margin: 0 0 8px;
-  font-size: 15px;
-  color: var(--text-primary);
-  font-weight: 500;
-  font-style: italic;
-}
 
-.prompt-text::before {
-  content: "→ ";
-  color: var(--accent-purple);
-  font-style: normal;
-  font-weight: 700;
-  margin-right: 2px;
-}
 
-.prompt-map {
-  display: block;
-  margin: 0;
-  padding: 6px 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 
 /* --- Install alt details --- */
 
@@ -801,60 +692,14 @@ footer a { color: var(--text-secondary); }
 
 /* --- Remote access --- */
 
-.remote-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-purple);
-  border-radius: 12px;
-  padding: 20px 24px;
-  margin: 16px 0 20px;
-}
 
-.remote-panel h3 {
-  margin: 0 0 10px;
-  font-size: 17px;
-  color: var(--text-primary);
-}
 
-.remote-panel p {
-  margin: 10px 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
 
-.remote-panel p:first-of-type { margin-top: 0; }
 
-.remote-why {
-  background: rgba(168, 85, 247, 0.06);
-  border: 1px solid rgba(168, 85, 247, 0.24);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin: 14px 0 !important;
-  font-size: 13px !important;
-}
 
-.remote-why strong { color: var(--accent-purple); }
 
-.remote-alts ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
-}
 
-.remote-alts li {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
 
-.remote-alts li strong { color: var(--text-primary); }
 
 /* --- FAQ --- */
 
@@ -922,8 +767,7 @@ footer a { color: var(--text-secondary); }
   .step { padding-left: 60px; padding-right: 20px; }
   .step::before { left: 16px; width: 28px; height: 28px; font-size: 13px; }
 
-  .remote-panel { padding: 16px 18px; }
-
+  
   h2 { font-size: 20px; }
 }
 
@@ -962,17 +806,12 @@ footer a { color: var(--text-secondary); }
 /* The live demo link (ADR-0039 point 8). Sits under the requirements line rather than beside the
    install command: someone who wants to try before installing is making a different decision, and
    should not have to read a shell command to find that out. */
-.hero-demo {
-  margin: 0.4rem 0 0;
-  font-size: 0.9rem;
-}
 
 
 /* Illustration marks (ADR-0039 point 4) --------------------------------------
    Colour is inherited rather than set, which is the whole point: one file works on
    any background and goes muted or bright with the text it sits beside. */
 
-.feature h3 .mark { color: var(--accent-purple); }
 
 /* A mark must never be the only thing carrying meaning, so it hides rather than
    reflows when images are off or the sprite fails to inline. */

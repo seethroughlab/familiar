@@ -20,7 +20,7 @@ it exists because the first audit was ad-hoc greps in a conversation and passed 
 describe it) · `browser-only` (real, but not on a surface the site promotes) · `unverifiable`
 (outside this repository).
 
-Last full sweep: **2026-08-14**.
+Last full sweep: **2026-08-15**, after the page was rebuilt around the install→listen journey.
 
 ## Why the previous audit missed things
 
@@ -35,27 +35,43 @@ construction); the topic was matched rather than the assertion; and nothing was 
 
 | Claim | Verdict | Evidence |
 |---|---|---|
-| Ask for music by how it sounds — CLAP, via an MCP host | **true**, after rewrite | `semantic_search` in `services/llm/tools.py:46`, handler `llm/handlers/search.py:102`. **No REST endpoint and no UI on any client** — it is reachable only through MCP. The block previously read as an in-app search box; it now names the host. |
-| 36 tools | true | 34 in `MUSIC_TOOLS` + `list_players` + `now_playing` (`app/mcp/server.py:exposed_tools`) |
-| Familiar holds no API key, calls no model | true | ADR-0048; no provider call outside `llm/` tool handlers, which run for an MCP host |
-| Music Map | true | Native: `familiar-apple/App/Shared/MusicMapView.swift`, `MusicMapStore.swift`. `WEB-PARITY.md:35` Web ✅ Mac ✅ iPhone ❌. Screenshot is the Mac |
-| Smart playlists are rules, not snapshots | true | `WEB-PARITY.md:33` Web ✅ Mac ✅ iPhone ❌. Mac has CRUD over 25 rule fields |
-| Discover — new releases from your artists | true | `WEB-PARITY.md:36` all three ✅; native is a `WKWebView` on `/embed` |
-| Native apps: background audio, lock-screen, offline downloads | true | `WEB-PARITY.md:45` offline downloads ✅ on all three, background `URLSession` natively |
+| Make a playlist from a track, album, artist or selection, scored from how it sounds | true | `POST /api/v1/playlists/generate`, `routes/playlists/generate.py:84`. Seed is closed to those four forms (ADR-0048 point 2) |
+| …no prompt, no model, no API key | true | ADR-0048 point 1: no English sentence is constructed in any client |
+| **Surface caveat — deliberately not on the page** | **web-only today** | `playlists_generate` is tagged `playlists`, so it IS in the generated Swift client — and **nothing calls it**. Web callers: `ArtistDetail.tsx:855`, `FullPlayer.tsx:514`, +2. Jeff's call to state the capability without naming a surface; the native work is the agreed next task. **Revisit this row first if that slips.** |
+| Real apps: background audio, lock-screen, offline downloads, CarPlay, radio | true | `WEB-PARITY.md:45` offline downloads ✅ all three; `:47` CarPlay iPhone ✅; `:42` Radio ✅ all three (ADR-0040) |
+| A map of the library laid out by how things sound | true | Native `MusicMapView.swift`, `MusicMapStore.swift`; `WEB-PARITY.md:35` Mac ✅ |
+| MCP, 36 tools, searching the audio not the tags | true | 34 `MUSIC_TOOLS` + `list_players` + `now_playing`; `semantic_search` handler `llm/handlers/search.py:102` |
+| The two prompt→filter examples | true | Both map to real feature columns in `ANALYSIS_FEATURE_COLUMNS` |
+| Familiar holds no API key, calls no model | true | ADR-0048; ADR-0043 |
+| Scans, resolves artists and albums, fetches artwork, analyses | true | ADR-0052 (canonical albums), artist resolver, `services/artwork.py` |
+| Fixes stick — a re-scan will not undo them | true | ADR-0051, "edited metadata outranks file tags" |
+| Files are never moved or rewritten | true | scanner reads only; writes go to `metadata_overrides`, not to files |
 | The browser is for setup, not listening | true | ADR-0050 points 1–3 |
 
 ## Also included — `index.html`
 
 | Claim | Verdict | Evidence |
 |---|---|---|
-| Find similar | true | Native `App/Shared/DownloadControls.swift:168` "Play similar"; web `Discovery/hooks/useTrackDiscovery.tsx` |
-| Musical features — BPM, key, energy, danceability, acousticness | true | All present in `ANALYSIS_FEATURE_COLUMNS`, `db/models/tracks.py` |
+| Discover — new releases from artists in your library | true | `WEB-PARITY.md:36` all three ✅; native renders `/embed` in a `WKWebView` |
+| Smart playlists — rules over tags, features, history | true | `WEB-PARITY.md:33` Web ✅ Mac ✅ iPhone ❌ |
+| Find similar | true | Native `DownloadControls.swift:168` "Play similar"; web `useTrackDiscovery.tsx` |
+| Musical features — BPM, key, energy, danceability, acousticness | true | All in `ANALYSIS_FEATURE_COLUMNS`, `db/models/tracks.py` |
 | Community cache | true | `routes/settings.py:59`; UI `components/Settings/CommunityCache.tsx` |
 | Web app for setup | true | ADR-0050 point 3 |
-| ~~Mood Grid~~ | **false — removed** | No component anywhere. `/library/mood-grid` survives only as an icon in `Sidebar.tsx:42`; absent from `LIBRARY_ITEMS` and `BROWSER_ROUTES`; nothing in `familiar-apple`. An affordance whose destination is not mounted |
-| ~~3D Explorer~~ | **false — removed** | Same shape: `Sidebar.tsx:44` icon only |
-| ~~Music videos — "attach video files to tracks"~~ | **misdescribed + browser-only — removed** | Real feature is a *visualizer* that searches YouTube (`Visualizer/visualizers/index.ts:23`). `videos` is not in `VENDORED_TAGS`, so it is browser-only by construction |
-| ~~Listening sessions~~ | **browser-only — removed** | `WEB-PARITY.md:48` Web ✅ Mac ❌ iPhone ❌; web-only *by decision* since ADR-0037 was rejected |
+
+## Removed, with the reason
+
+Kept so nothing is quietly restored later.
+
+| Claim | Why it went |
+|---|---|
+| ~~Try the live demo~~ | **2026-08-15.** ADR-0038 built that instance because *"Apple App Store review requires a working backend server with test data"*. It is a compliance fixture; presenting it as a product tour implied you can try Familiar without your own server. `SetupView.swift` asks for an address on first launch and `familiar-demo` appears nowhere in the Swift. Reverses `0039` point 8 — recorded in ADR-0055 point 10 |
+| ~~faq: "First launch connects to a public demo backend"~~ | **2026-08-15, false.** Same evidence: the app has no demo default |
+| ~~Mood Grid~~ | **2026-08-14, false.** No component anywhere. `/library/mood-grid` survives only as an icon in `Sidebar.tsx:42`; absent from `LIBRARY_ITEMS` and `BROWSER_ROUTES`; nothing native |
+| ~~3D Explorer~~ | **2026-08-14, false.** Same shape, `Sidebar.tsx:44` |
+| ~~Music videos — "attach video files to tracks"~~ | **2026-08-14, misdescribed and browser-only.** Real feature is a visualizer that searches YouTube (`Visualizer/visualizers/index.ts:23`); `videos` is not in `VENDORED_TAGS` |
+| ~~Listening sessions~~ | **2026-08-14, browser-only.** `WEB-PARITY.md:48` Web ✅ Mac ❌ iPhone ❌, web-only by decision since ADR-0037 was rejected |
+| ~~Offline PWA~~ | **2026-08-13, positioning.** Still real (`vite-plugin-pwa`, `public/manifest.json`, `/sw.js`), but ADR-0050 makes the browser a management surface, so it is not promoted as a way to listen |
 
 ## Comparison table — `index.html`
 

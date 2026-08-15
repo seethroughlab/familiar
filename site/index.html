@@ -30,7 +30,6 @@
   </a>
   <div class="topnav-links">
     <a href="#features">Features</a>
-    <a href="#ask">Ask</a>
     <a href="#comparison">Compare</a>
     <a href="./faq.html">FAQ</a>
     <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
@@ -50,7 +49,7 @@
     <img src="./assets/icon.svg" alt="Familiar" class="hero-logo">
     <div class="hero-body">
     <h1 class="hero-title">Familiar</h1>
-    <p class="hero-tagline">Host your own music streaming service — for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.</p>
+    <p class="hero-tagline">Your own music, on your own server, in real apps. Familiar listens to every track you own and builds playlists from how the music actually sounds.</p>
     <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
       <span class="version-dot"></span> v0.2.0-alpha1 · 2026-08-10
     </a>
@@ -62,42 +61,52 @@
 curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql
 MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code></pre>
       <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed · <a href="#install">full instructions</a></p>
-      <!-- ADR-0039 point 8. Held back until ADR-0038's machine was actually up: a "try the demo"
-           button that hangs is worse than no button. Verified serving 32 tracks and streaming audio
-           before this line was written. -->
-      <p class="hero-demo">Or <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">try the live demo</a> — a real instance with 32 CC-licensed tracks, already analysed.</p>
+      <!-- The demo link was here under ADR-0039 point 8 and is deliberately gone. ADR-0038 built
+           that instance because "Apple App Store review requires a working backend server with test
+           data" — it is a compliance fixture, and pointing a visitor at it implied you could try
+           Familiar without your own server. You cannot: the app's first screen asks for an address. -->
     </div>
     <div class="nav-links">
       <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
         <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
       </a>
-      <a href="#features" class="primary">See it</a>
-      <a href="#features">Features</a>
-      <a href="#ask">Ask Familiar</a>
+      <a href="#features" class="primary">See what it does</a>
       </div>
     </div>
   </div>
 </header>
 
-<section id="intro">
-  <p><strong>Your music, your server, your AI.</strong> Self-host Familiar on your own hardware and point it at your existing library of MP3s and FLACs. No cloud, no subscription, no data leaving your network.</p>
-  <p><strong>Describe what you want to hear.</strong> Familiar listens to every track and understands how it actually <em>sounds</em> — not just tags or genre. Ask for "something that sounds like rain on a window" and it actually works.</p>
-  <p><strong>Community-powered analysis.</strong> Share anonymized audio fingerprints with other users. New installations benefit instantly from pre-computed analysis, skipping hours of processing.</p>
-</section>
-
 <section id="features">
   <h2>What it does</h2>
 
-  <!-- ADR-0055 points 3 and 4. Six claims, each with a picture of itself, replacing a
-       fourteen-item text list and a grid of sixteen thumbnails. Only screenshots taken this
-       week are used; the rest of `screenshots/` predates May, and a stale picture is a stale
-       claim. Where there is no current screenshot the illustration carries the section, which
-       is honest about showing a feeling rather than a feature. -->
+  <!-- ADR-0055 points 3 and 4, and the journey the site is meant to describe: install the server,
+       point it at your files in a browser, listen in the apps, connect an assistant if you want
+       one. Four claims, each with a picture of itself. Only screenshots taken this week are used. -->
 
   <div class="feature-block">
     <div class="feature-copy">
-      <h3>Ask for music by how it sounds</h3>
-      <p>Every track is listened to, not just tagged. Point Claude Desktop — or any MCP host — at your library and ask for "upbeat with synths" or "acoustic and melancholy": the search runs against CLAP audio embeddings, so it finds the right song when nothing in the metadata says so. Thirty-six tools in all, for search, playback, metadata and playlists.</p>
+      <h3>Make a playlist from anything</h3>
+      <p>Right-click a track, an album, an artist — or a handful you have picked out — and Familiar builds a playlist around it, scored from how the music actually sounds. No prompt to write, no model to pay for, no API key anywhere.</p>
+    </div>
+    <a href="./screenshots/mac-smart-playlists.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-smart-playlists.png" alt="The Mac app showing playlists and their rules" loading="lazy"></a>
+  </div>
+
+  <div class="feature-block">
+    <div class="feature-copy">
+      <h3>Real apps for the Mac and the phone</h3>
+      <p>Background audio, lock-screen controls, offline downloads, CarPlay, radio that keeps going when the album ends. Your library by album and artist, and a map of it laid out by how things sound.</p>
+    </div>
+    <a href="./screenshots/mac-music-map.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-music-map.png" alt="The Mac app showing the music map" loading="lazy"></a>
+  </div>
+
+  <div class="feature-block">
+    <div class="feature-copy">
+      <h3>Or ask for it in words</h3>
+      <p>Familiar speaks MCP. Point Claude Desktop, or any MCP host, at your library and it gets 36 tools for search, playback, metadata and playlists — searching the audio itself, not the tags.</p>
+      <p class="feature-examples">
+        <span>“Something chill for late-night coding”</span><code>energy &lt; 0.4 · valence 0.3–0.6</code>
+        <span>“Beatmatch-safe house set”</span><code>tempo_cv_max = 0.05</code>
+      </p>
       <p class="feature-note">Familiar holds no API key and calls no model. Whatever you connect is your account and your choice.</p>
     </div>
     <img class="feature-art" src="./assets/marks/crow-record.webp" alt="" aria-hidden="true"
@@ -106,88 +115,21 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
 
   <div class="feature-block">
     <div class="feature-copy">
-      <h3>See the shape of your library</h3>
-      <p>The Music Map lays your artists out by how similar they sound and lets you click any one of them to re-centre the view. It is the fastest way to find the corner of your own collection you had forgotten about.</p>
-    </div>
-    <a href="./screenshots/mac-music-map.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-music-map.png" alt="The Mac app showing the music map" loading="lazy"></a>
-  </div>
-
-  <div class="feature-block">
-    <div class="feature-copy">
-      <h3>Playlists that keep themselves current</h3>
-      <p>Smart playlists are rules, not snapshots: combine tags, audio features and listening history, and the playlist updates itself as your library and your habits change.</p>
-    </div>
-    <a href="./screenshots/mac-smart-playlists.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-smart-playlists.png" alt="The Mac app showing smart playlists and their rules" loading="lazy"></a>
-  </div>
-
-  <div class="feature-block">
-    <div class="feature-copy">
-      <h3>New from the artists you already own</h3>
-      <p>Discover watches for releases from the artists in your library and tells you what came out — without steering you toward a catalogue you do not have.</p>
-    </div>
-    <a href="./screenshots/mac-discover.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-discover.png" alt="The Mac app showing new releases from your artists" loading="lazy"></a>
-  </div>
-
-  <div class="feature-block">
-    <div class="feature-copy">
-      <h3>Native apps for the Mac and the phone</h3>
-      <p>Listening happens in real apps — background audio, lock-screen controls, offline downloads, your library browsable by album and artist. The browser is where you set Familiar up and look after the library, not where you listen.</p>
+      <h3>It looks after the library</h3>
+      <p>Familiar scans your files, works out which artists and albums are really the same one, fetches the artwork, and analyses every track. Fixes you make stick — a re-scan will not undo them. Your files are never moved or rewritten.</p>
     </div>
     <a href="./screenshots/mac-albums.png" target="_blank" rel="noopener" class="feature-shot"><img src="./screenshots/mac-albums.png" alt="The Mac app showing the albums grid" loading="lazy"></a>
   </div>
 
   <h3 class="more-features-head">Also included</h3>
   <ul class="more-features">
+    <li><strong>Discover</strong> — new releases from artists already in your library</li>
+    <li><strong>Smart playlists</strong> — rules over tags, audio features and listening history</li>
     <li><strong>Find similar</strong> — surface sonically close tracks from any song</li>
     <li><strong>Musical features</strong> — BPM, key, energy, danceability, acousticness</li>
     <li><strong>Community cache</strong> — opt-in, skips hours of analysis on a new library</li>
-    <li><strong>Web app for setup</strong> — library scanning, analysis, backup, Last.fm, diagnostics, in any browser</li>
+    <li><strong>Web app for setup</strong> — scanning, analysis, backup, Last.fm, diagnostics</li>
   </ul>
-</section>
-
-<section id="ask">
-  <div class="section-head">
-    <div>
-      <h2>Ask Familiar…</h2>
-      <p class="section-lede">Real prompts that map to real filters. Connect an MCP host and phrases like these become audio-feature queries across your library.</p>
-    </div>
-    <img class="section-art" src="./assets/marks/cauldron.webp" alt="" aria-hidden="true"
-         loading="lazy" width="1024" height="559">
-  </div>
-  <div class="prompt-grid">
-    <div class="prompt">
-      <p class="prompt-text">"Something chill for late-night coding"</p>
-      <code class="prompt-map">energy &lt; 0.4 · valence 0.3–0.6</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"Upbeat and danceable"</p>
-      <code class="prompt-map">energy &gt; 0.6 · valence &gt; 0.6 · danceability &gt; 0.5</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"Melancholy acoustic"</p>
-      <code class="prompt-map">valence &lt; 0.3 · acousticness &gt; 0.4</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"Dreamy / ambient"</p>
-      <code class="prompt-map">energy &lt; 0.3 · acousticness &gt; 0.4 · dynamic_range_min &lt; 10</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"Jazzy with a loose live feel"</p>
-      <code class="prompt-map">swing_min &gt; 0.3 · tempo_character = "breathing"</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"Beatmatch-safe house set"</p>
-      <code class="prompt-map">tempo_cv_max = 0.05</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"French lyrics only"</p>
-      <code class="prompt-map">lyrics_language = "fr"</code>
-    </div>
-    <div class="prompt">
-      <p class="prompt-text">"Aggressive and bright"</p>
-      <code class="prompt-map">energy &gt; 0.8 · brightness &gt; 0.6</code>
-    </div>
-  </div>
 </section>
 
 <section id="comparison">
@@ -207,36 +149,6 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
         <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td></tr>
       </tbody>
     </table>
-  </div>
-</section>
-
-<section id="use-case">
-  <h2>Who Familiar is for</h2>
-  <p><strong>You own your music.</strong> A folder of MP3s and FLACs collected over years — CDs you ripped, albums bought on Bandcamp, live sets, mixtapes, exports from old iPods. Streaming services either won't play your files or quietly replace them with their own catalog versions (sometimes the wrong remaster, sometimes DRM-locked, occasionally just gone).</p>
-  <p><strong>You want to actually find stuff in it.</strong> Semantic search — "something that sounds like rain on a window", "upbeat with synths", "melancholy acoustic" — on the tracks <em>you already own</em>, reachable from your phone on cellular. No re-buying, no re-uploading to a streaming locker, no algorithm steering you back toward a catalog. Point Familiar at your library, wait for analysis to finish, and ask Claude for a playlist.</p>
-</section>
-
-<section id="remote-access">
-  <h2>Listen from anywhere</h2>
-  <p class="section-lede">The goal is a private address your apps can reach from anywhere — not a public site. Don't port-forward <code>4400</code> to the open internet.</p>
-
-  <div class="remote-panel">
-    <h3>Recommended: Tailscale</h3>
-    <p>Install Tailscale on the server and each device you want to listen from, enable HTTPS certificates in the admin console, then run one command on the server:</p>
-<pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
-    <p>Visit <code>https://&lt;your-server&gt;.&lt;tailnet&gt;.ts.net</code> from any signed-in device — iPhone, laptop, TV. Tailscale provisions a Let's Encrypt cert automatically and renews it for you.</p>
-    <p class="remote-why"><strong>Why HTTPS matters:</strong> it is what lets the iOS app reach your server from anywhere. Plain <code>http://10.0.0.42:4400</code> works on your own network and nowhere else.</p>
-    <p><a href="https://github.com/seethroughlab/familiar/blob/main/docs/CONFIGURATION.md#tailscale-https" target="_blank" rel="noopener">Full walkthrough in CONFIGURATION.md →</a></p>
-  </div>
-
-  <div class="remote-alts">
-    <p class="features-subhead">Also works with</p>
-    <ul>
-      <li><strong>Cloudflare Tunnel</strong> — if you want a stable public hostname routed through Cloudflare without opening a port.</li>
-      <li><strong>WireGuard</strong> — roll your own VPN; point your phone at the VPN and use the LAN URL.</li>
-      <li><strong>Reverse proxy</strong> (nginx, Caddy, Traefik) on a box with a real domain and cert.</li>
-      <li><strong>Any VPN you already run</strong> — anything that puts your phone on the same network as the server will do.</li>
-    </ul>
   </div>
 </section>
 
@@ -274,6 +186,13 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
     <strong>Analysis takes time.</strong> Expect roughly 1 second per track on modern hardware. A 20,000-track library is ~6 hours. The community cache short-circuits most of this for music that's already been analyzed elsewhere.
   </div>
 
+  <div class="step" data-step="4">
+    <h3>Reach it from anywhere</h3>
+    <p>Install <a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a> on the server and on each device, turn on HTTPS certificates, and run one command:</p>
+<pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
+    <p>Your apps can then reach <code>https://&lt;server&gt;.&lt;tailnet&gt;.ts.net</code> on cellular, with a certificate that renews itself. Cloudflare Tunnel, WireGuard or any reverse proxy work too — see <a href="./faq.html">the FAQ</a>. Don't port-forward <code>4400</code> to the open internet.</p>
+  </div>
+
   <details class="install-alt">
     <summary>macOS? (journald swap + 8 GB RAM note)</summary>
     <p>The production compose uses <code>journald</code> logging (Linux-only). On macOS, add the override:</p>
@@ -299,20 +218,6 @@ cd familiar/docker
   </ul>
 </section>
 
-<section id="feedback">
-  <h2>Beta feedback</h2>
-  <p>Familiar is in active development. Bug reports, feature requests, performance notes, and UI/UX suggestions are all welcome.</p>
-  <p><a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Open an issue on GitHub →</a></p>
-</section>
-
-<!-- ADR-0039 point 2: the install call to action, repeated before the footer. Fork does this and
-     it is the cheapest thing on the page — someone who read to the bottom has decided, and should
-     not have to scroll back up to act on it.
-
-     The demo link below is ADR-0039 point 8, and it was deliberately absent until the machine
-     existed: `familiar-demo.fly.dev` was scaled to zero and timing out at thirty seconds when this
-     section was first written, and a "Try the demo" button that hangs is worse than no button.
-     It went in only after the instance was verified serving 32 tracks and streaming audio. -->
 <section id="get-started" class="closing-cta">
   <div class="section-head">
     <div>
@@ -324,10 +229,10 @@ cd familiar/docker
   </div>
   <div class="closing-cta-actions">
     <a href="#install" class="primary">Install the server</a>
-    <a href="https://familiar-demo.fly.dev" target="_blank" rel="noopener">Try the demo</a>
     <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
       <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
     </a>
+    <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">Report a bug</a>
   </div>
 </section>
 

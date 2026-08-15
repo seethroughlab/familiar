@@ -132,7 +132,15 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
    discovering it. Point 5 of `0039` stays — screenshots are still generated, not hand-kept — but
    it acquires a way to notice when it has stopped being true.
 
-10. **One call to action, repeated.** Install. The App Store badge and the demo link ride alongside
+10. **The demo link comes off the page, reversing `0039` point 8.** ADR-0038 built that instance
+    because *"Apple App Store review requires a working backend server with test data"* — a
+    reviewer needs something to type into the setup screen. `0039` point 8 then put it on the site
+    as "try the live demo", which turns a compliance fixture into a product tour and implies you
+    can try Familiar without your own server. You cannot: `SetupView.swift` asks for an address on
+    first launch, and the string `familiar-demo` appears nowhere in the Swift. The instance stays
+    up for the reason it exists.
+
+11. **One call to action, repeated.** Install. The App Store badge and the demo link ride alongside
    it rather than competing as peers, which is what four buttons in the hero currently do.
 
 ## Alternatives Considered
