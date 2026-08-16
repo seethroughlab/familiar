@@ -19,11 +19,10 @@ export function ContentToolbar() {
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const pathname = location.pathname;
-  const hasTrackList = pathname.startsWith('/library/')
-    || pathname === '/favorites'
-    || pathname === '/downloads'
-    || pathname.startsWith('/playlists/')
-    || pathname.startsWith('/smart-playlists/');
+  // `/library/` is the only prefix left that shows a track list. `/favorites`, `/downloads`,
+  // `/playlists/` and `/smart-playlists/` were all named here and none of them is a mounted route
+  // — the last two went with ADR-0057, the first two had been dead for longer.
+  const hasTrackList = pathname.startsWith('/library/');
   const searchValue = searchParams.get('search') || '';
 
   const updateSearch = (value: string) => {

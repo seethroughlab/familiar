@@ -61,13 +61,18 @@ export function useAppNavigation() {
   );
 
   /**
-   * Navigate to an artist's detail page
+   * Show one artist's tracks in the fallback player.
+   *
+   * A filter on the flat list, not a detail page. ADR-0057 point 3 makes `/library/tracks` a flat
+   * searchable list and puts browsing on the native clients, so the artist *screen* is gone — but
+   * "show me this artist" is still how you find something to play from a list of 26,000, and it
+   * costs a query parameter rather than a route.
    */
   const navigateToArtist = useCallback(
     (artistName: string) => {
-      navigate(`/library/artists/${encodeURIComponent(artistName)}`);
+      navigateToLibrary({ browser: 'track-list', artist: artistName });
     },
-    [navigate]
+    [navigateToLibrary]
   );
 
   /**
@@ -82,18 +87,6 @@ export function useAppNavigation() {
       });
     },
     [navigateToLibrary]
-  );
-
-  /**
-   * Navigate to album detail view
-   */
-  const navigateToAlbumDetail = useCallback(
-    (artist: string, album: string, params?: Record<string, string>) => {
-      const base = `/library/albums/${encodeURIComponent(artist)}/${encodeURIComponent(album)}`;
-      const search = params ? '?' + new URLSearchParams(params).toString() : '';
-      navigate(base + search);
-    },
-    [navigate]
   );
 
   /**
@@ -168,15 +161,6 @@ export function useAppNavigation() {
     [navigateToLibrary]
   );
 
-  /**
-   * Navigate to a specific playlist
-   */
-  const navigateToPlaylist = useCallback(
-    (playlistId: string) => {
-      navigate(`/playlists/${encodeURIComponent(playlistId)}`);
-    },
-    [navigate]
-  );
 
   /**
    * Navigate to a smart playlist
@@ -249,12 +233,10 @@ export function useAppNavigation() {
     navigateToLibrary,
     navigateToArtist,
     navigateToAlbum,
-    navigateToAlbumDetail,
     navigateToYear,
     navigateToYearRange,
     navigateToMood,
     navigateToGenre,
-    navigateToPlaylist,
     navigateToSmartPlaylist,
     navigateToFavorites,
     navigateToDownloads,

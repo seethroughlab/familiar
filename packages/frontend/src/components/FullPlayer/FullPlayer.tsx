@@ -38,7 +38,6 @@ import { ShuffleWeightPopover } from '../Player/ShuffleWeightPopover';
 import { isMobile, isNativeApp } from '../../utils/platform';
 import { isVisualizerAvailable, areAudioEffectsAvailable } from '../../player/audio/engineInstance';
 import { VISUALIZER_IDS } from '../Visualizer/constants';
-import { useGeneratePlaylist } from '../../hooks/useGeneratePlaylist';
 
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return '0:00';
@@ -53,7 +52,6 @@ interface FullPlayerProps {
 }
 
 export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
-  const { generate: generatePlaylist } = useGeneratePlaylist();
   const [imageError, setImageError] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -506,13 +504,6 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
           onAddToPlaylist={() => {
             if (contextMenu.track) {
               useUIStore.getState().openPlaylistPicker([contextMenu.track.id]);
-            }
-          }}
-          onMakePlaylist={() => {
-            if (contextMenu.track) {
-              // ADR-0048: a track id is already unambiguous, so there is nothing to phrase.
-              void generatePlaylist({ track_id: contextMenu.track.id });
-              onClose();
             }
           }}
           onEditMetadata={() => {

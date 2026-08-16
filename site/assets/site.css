@@ -12,6 +12,7 @@
   --accent-green: #22c55e;
   --accent-green-hover: #16a34a;
   --accent-purple: #a855f7;
+  --accent-purple-hover: #9333ea;
   --accent-blue: #3b82f6;
   --accent-red: #f87171;
 }
@@ -113,8 +114,13 @@ html { scroll-padding-top: 64px; }
   .topnav-github { display: none; }
 }
 
+/* Purple is the page's voice; green is reserved for "act on this" and "yes". Before this,
+   green was the title, every link, the version chip, the table's affirmatives AND the install
+   button, so the one thing worth clicking looked like everything else. The illustrations sit at
+   288deg and this accent at 271deg; the green is 146deg away, which is close enough to
+   complementary to read as a clash rather than a pairing. */
 a {
-  color: var(--accent-green);
+  color: var(--accent-purple);
   text-decoration: none;
 }
 
@@ -124,8 +130,9 @@ a:hover { text-decoration: underline; }
 
 .hero {
   display: flex;
+  flex-direction: column;
   gap: 24px;
-  align-items: flex-start;
+  align-items: stretch;
   padding: 40px 32px;
   background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
   border: 1px solid var(--border-color);
@@ -143,12 +150,152 @@ a:hover { text-decoration: underline; }
 
 .hero-body { flex: 1; min-width: 0; }
 
+.hero-main {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+/* ADR-0054. Capped rather than full-bleed: the drawing is hatched, and stretched past its own
+   resolution the hatching turns to moire rather than simply going soft. */
+.hero-art {
+  display: block;
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* A section's illustration sits beside its heading, not above the content, so it costs a column
+   rather than a screenful. It is decorative — `aria-hidden`, no alt — so it is allowed to vanish
+   on a narrow screen without taking meaning with it. */
+.section-head {
+  display: flex;
+  gap: 32px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-head > div { flex: 1; min-width: 0; }
+.section-head h2 { margin-top: 0; }
+
+/* ADR-0055 point 3: a feature is a claim with a picture of itself, alternating sides so the
+   eye has somewhere to go. Below 760px it stacks, copy first — the sentence is the point and
+   the picture is the evidence, so the evidence should not arrive first. */
+.feature-block {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+  margin: 0 0 56px;
+}
+
+.feature-block:nth-of-type(even) { flex-direction: row-reverse; }
+
+.feature-copy { flex: 1 1 42%; min-width: 0; }
+.feature-copy h3 { margin-top: 0; }
+
+.feature-shot {
+  flex: 1 1 58%;
+  min-width: 0;
+  display: block;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  line-height: 0;
+}
+
+.feature-shot img { width: 100%; height: auto; display: block; }
+.feature-shot:hover { border-color: var(--accent-purple); }
+
+/* Illustrations sit smaller than screenshots on purpose: a drawing is atmosphere, and giving
+   it the same weight as evidence overstates it. */
+.feature-art { flex: 0 0 240px; width: 240px; height: auto; }
+
+/* Two prompt->filter pairs inline, which is what the whole `#ask` section was proving. */
+.feature-examples {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+
+.feature-examples span { color: var(--text-primary); font-style: italic; }
+
+.feature-examples code {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.table-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
+.feature-note {
+  font-size: 14px;
+  color: var(--text-muted);
+  border-left: 2px solid var(--border-color);
+  padding-left: 12px;
+  margin-top: 12px;
+}
+
+.more-features-head { margin-top: 8px; }
+
+.more-features {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px 32px;
+}
+
+.more-features li {
+  font-size: 15px;
+  color: var(--text-secondary);
+  padding-left: 14px;
+  border-left: 2px solid var(--border-color);
+}
+
+.more-features strong { color: var(--text-primary); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .feature-block,
+  .feature-block:nth-of-type(even) { flex-direction: column; gap: 20px; margin-bottom: 40px; }
+  .feature-art { flex: none; width: 180px; align-self: center; }
+}
+
+.section-art {
+  flex: none;
+  width: 210px;
+  height: auto;
+}
+
+/* A secondary page's illustration: beside the title, where the app icon sits on the
+   landing page, so the page still opens on its own first line of content. */
+.page-art {
+  flex: none;
+  width: 132px;
+  height: auto;
+  align-self: flex-start;
+}
+
+@media (max-width: 760px) {
+  .section-art { display: none; }
+  .page-art { width: 96px; }
+  .hero-art { max-width: 100%; }
+  .hero-main { flex-direction: column; align-items: flex-start; }
+}
+
 .hero-title {
   font-size: 42px;
   font-weight: 700;
   letter-spacing: -0.02em;
   margin: 0 0 10px;
-  background: linear-gradient(135deg, var(--accent-green) 0%, #4ade80 100%);
+  background: linear-gradient(135deg, var(--accent-purple) 0%, #d8b4fe 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -192,14 +339,28 @@ a:hover { text-decoration: underline; }
 
 .nav-links a:active { transform: translateY(1px); }
 
-.nav-links a.primary {
+.closing-cta-actions a {
+  padding: 10px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.closing-cta-actions a:hover { background: var(--bg-tertiary); text-decoration: none; }
+.closing-cta-actions a.app-store-link { padding: 0; border: none; background: none; }
+
+.nav-links a.primary,
+.closing-cta-actions a.primary {
   background: var(--accent-green);
   color: #052e14;
   border-color: var(--accent-green);
   font-weight: 600;
 }
 
-.nav-links a.primary:hover {
+.nav-links a.primary:hover,
+.closing-cta-actions a.primary:hover {
   background: var(--accent-green-hover);
   border-color: var(--accent-green-hover);
 }
@@ -228,18 +389,8 @@ a:hover { text-decoration: underline; }
 
 section { margin-bottom: 48px; }
 
-section#intro { margin-top: -12px; }
 
-section#intro p {
-  font-size: 16px;
-  color: var(--text-secondary);
-  margin: 0 0 14px;
-}
 
-section#intro strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
 
 h2 {
   font-size: 24px;
@@ -299,48 +450,12 @@ p, li { line-height: 1.65; }
 
 /* --- Features grid --- */
 
-.features-subhead {
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  font-weight: 600;
-  margin: 32px 0 12px;
-}
 
-.features-subhead:first-child { margin-top: 0; }
 
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-}
 
-.feature {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 18px 20px;
-  transition: border-color 0.15s, transform 0.15s;
-}
 
-.feature:hover {
-  border-color: var(--text-muted);
-  transform: translateY(-1px);
-}
 
-.feature h3 {
-  margin: 0 0 6px;
-  font-size: 15px;
-  color: var(--text-primary);
-}
 
-.feature p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
 
 /* --- Install steps --- */
 
@@ -364,7 +479,7 @@ p, li { line-height: 1.65; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-green);
+  background: var(--accent-purple);
   color: #052e14;
   border-radius: 50%;
   font-weight: 700;
@@ -425,45 +540,12 @@ pre code {
 
 /* --- Screenshots --- */
 
-.screenshot-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
 
-.screenshot-grid.mobile {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-}
 
-.shot {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  overflow: hidden;
-  margin: 0;
-  transition: border-color 0.15s, transform 0.15s;
-}
 
-.shot:hover {
-  border-color: var(--text-muted);
-  transform: translateY(-2px);
-}
 
-.shot a { display: block; }
 
-.shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-  background: var(--bg-primary);
-  border-bottom: 1px solid var(--border-color);
-}
 
-.shot figcaption {
-  padding: 10px 16px;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
 
 /* --- Links list --- */
 
@@ -530,7 +612,7 @@ footer a { color: var(--text-secondary); }
 
 .version-chip:hover {
   background: rgba(34, 197, 94, 0.14);
-  border-color: var(--accent-green);
+  border-color: var(--accent-purple);
   text-decoration: none;
   color: var(--text-primary);
 }
@@ -545,19 +627,13 @@ footer a { color: var(--text-secondary); }
 
 /* --- Section lede (used under section titles) --- */
 
-.section-lede {
-  color: var(--text-secondary);
-  font-size: 15px;
-  margin: -8px 0 20px;
-  max-width: 720px;
-}
 
 /* --- Requirements callout --- */
 
 .requirements {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-green);
+  border-left: 3px solid var(--accent-purple);
   border-radius: 8px;
   padding: 12px 16px;
   margin: 0 0 20px;
@@ -570,52 +646,11 @@ footer a { color: var(--text-secondary); }
 
 /* --- Ask Familiar prompt grid --- */
 
-.prompt-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
-}
 
-.prompt {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px 18px;
-  transition: border-color 0.15s, transform 0.15s;
-}
 
-.prompt:hover {
-  border-color: var(--accent-purple);
-  transform: translateY(-1px);
-}
 
-.prompt-text {
-  margin: 0 0 8px;
-  font-size: 15px;
-  color: var(--text-primary);
-  font-weight: 500;
-  font-style: italic;
-}
 
-.prompt-text::before {
-  content: "→ ";
-  color: var(--accent-purple);
-  font-style: normal;
-  font-weight: 700;
-  margin-right: 2px;
-}
 
-.prompt-map {
-  display: block;
-  margin: 0;
-  padding: 6px 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-muted);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
 
 /* --- Install alt details --- */
 
@@ -649,7 +684,7 @@ footer a { color: var(--text-secondary); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent-green);
+  color: var(--accent-purple);
   font-weight: 700;
   font-size: 16px;
   transition: transform 0.15s;
@@ -663,60 +698,14 @@ footer a { color: var(--text-secondary); }
 
 /* --- Remote access --- */
 
-.remote-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-left: 3px solid var(--accent-green);
-  border-radius: 12px;
-  padding: 20px 24px;
-  margin: 16px 0 20px;
-}
 
-.remote-panel h3 {
-  margin: 0 0 10px;
-  font-size: 17px;
-  color: var(--text-primary);
-}
 
-.remote-panel p {
-  margin: 10px 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
 
-.remote-panel p:first-of-type { margin-top: 0; }
 
-.remote-why {
-  background: rgba(168, 85, 247, 0.06);
-  border: 1px solid rgba(168, 85, 247, 0.24);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin: 14px 0 !important;
-  font-size: 13px !important;
-}
 
-.remote-why strong { color: var(--accent-purple); }
 
-.remote-alts ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 8px;
-}
 
-.remote-alts li {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
 
-.remote-alts li strong { color: var(--text-primary); }
 
 /* --- FAQ --- */
 
@@ -751,8 +740,8 @@ footer a { color: var(--text-secondary); }
   top: 7px;
   width: 6px;
   height: 6px;
-  border-right: 2px solid var(--accent-green);
-  border-bottom: 2px solid var(--accent-green);
+  border-right: 2px solid var(--accent-purple);
+  border-bottom: 2px solid var(--accent-purple);
   transform: rotate(-45deg);
   transition: transform 0.15s;
 }
@@ -784,8 +773,7 @@ footer a { color: var(--text-secondary); }
   .step { padding-left: 60px; padding-right: 20px; }
   .step::before { left: 16px; width: 28px; height: 28px; font-size: 13px; }
 
-  .remote-panel { padding: 16px 18px; }
-
+  
   h2 { font-size: 20px; }
 }
 
@@ -824,26 +812,12 @@ footer a { color: var(--text-secondary); }
 /* The live demo link (ADR-0039 point 8). Sits under the requirements line rather than beside the
    install command: someone who wants to try before installing is making a different decision, and
    should not have to read a shell command to find that out. */
-.hero-demo {
-  margin: 0.4rem 0 0;
-  font-size: 0.9rem;
-}
 
 
 /* Illustration marks (ADR-0039 point 4) --------------------------------------
    Colour is inherited rather than set, which is the whole point: one file works on
    any background and goes muted or bright with the text it sits beside. */
-.mark {
-  width: 20px;
-  height: 20px;
-  /* Optical rather than metric: a 20px square next to 17px text sits high without this. */
-  vertical-align: -3px;
-  margin-right: 8px;
-  color: var(--accent-purple);
-  flex: none;
-}
 
-.feature h3 .mark { color: var(--accent-purple); }
 
 /* A mark must never be the only thing carrying meaning, so it hides rather than
    reflows when images are off or the sprite fails to inline. */

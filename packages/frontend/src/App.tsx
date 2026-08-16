@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { createLogger } from './utils/logger';
@@ -22,9 +22,6 @@ import { LibraryBrowser } from './components/Library/LibraryBrowser';
 
 // Lazy-loaded route components
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
-const ArtistDetail = lazy(() => import('./components/Library/ArtistDetail').then(m => ({ default: m.ArtistDetail })));
-const AlbumDetail = lazy(() => import('./components/Library/AlbumDetail').then(m => ({ default: m.AlbumDetail })));
-const PlaylistDetail = lazy(() => import('./components/Playlists/PlaylistDetail').then(m => ({ default: m.PlaylistDetail })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
 const GuestListener = lazy(() => import('./components/Guest/GuestListener').then(m => ({ default: m.GuestListener })));
@@ -52,88 +49,6 @@ const queryClient = new QueryClient({
  * Redirect legacy hash-based URLs to new path-based routes.
  * e.g. /?browser=track-list#library → /library/tracks
  */
-function LegacyRedirect() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const hash = window.location.hash.slice(1);
-    const params = new URLSearchParams(window.location.search);
-
-    // Only redirect if we have hash-based navigation
-    if (!hash && !params.has('browser') && !params.has('view') && !params.has('playlist') && !params.has('smartPlaylist') && !params.has('artistDetail') && !params.has('albumDetailArtist')) {
-      return;
-    }
-
-    let newPath = '/home'; // default
-
-    // Check for detail views first
-    const artistDetail = params.get('artistDetail');
-    if (artistDetail) {
-      newPath = `/library/artists/${encodeURIComponent(artistDetail)}`;
-      navigate(newPath, { replace: true });
-      return;
-    }
-
-    const albumDetailArtist = params.get('albumDetailArtist');
-    const albumDetailAlbum = params.get('albumDetailAlbum');
-    if (albumDetailArtist && albumDetailAlbum) {
-      newPath = `/library/albums/${encodeURIComponent(albumDetailArtist)}/${encodeURIComponent(albumDetailAlbum)}`;
-      navigate(newPath, { replace: true });
-      return;
-    }
-
-    // Check for playlist views
-    const view = params.get('view');
-    if (view === 'favorites') { navigate('/favorites', { replace: true }); return; }
-    if (view === 'downloads') { navigate('/downloads', { replace: true }); return; }
-
-    const playlistId = params.get('playlist');
-    if (playlistId) { navigate(`/playlists/${playlistId}`, { replace: true }); return; }
-
-    const smartPlaylistId = params.get('smartPlaylist');
-    if (smartPlaylistId) { navigate(`/smart-playlists/${smartPlaylistId}`, { replace: true }); return; }
-
-    // Browser mapping
-    const browserMap: Record<string, string> = {
-      'track-list': '/library/tracks',
-      'artist-list': '/library/artists',
-      'album-grid': '/library/albums',
-      'vibe-map': '/library/music-map',
-      'discover': '/library/discover',
-      'proposed-changes': '/library/proposed-changes',
-    };
-
-    const browser = params.get('browser');
-    if (browser && browserMap[browser]) {
-      newPath = browserMap[browser];
-    } else if (hash === 'settings') {
-      // Settings is now a modal, redirect to default
-      navigate('/home', { replace: true });
-      return;
-    } else if (hash === 'playlists') {
-      // Playlists are now in the sidebar
-      navigate('/home', { replace: true });
-      return;
-    } else if (hash === 'queue') {
-      navigate('/home', { replace: true });
-      return;
-    }
-
-    // Preserve filter params
-    const filterParams = new URLSearchParams();
-    for (const key of ['search', 'artist', 'album', 'genre', 'yearFrom', 'yearTo',
-      'energyMin', 'energyMax', 'valenceMin', 'valenceMax', 'downloadedOnly']) {
-      const val = params.get(key);
-      if (val) filterParams.set(key, val);
-    }
-
-    const filterString = filterParams.toString();
-    navigate(newPath + (filterString ? `?${filterString}` : ''), { replace: true });
-  }, [location, navigate]);
-
-  return null;
-}
 
 import { BROWSER_ROUTES } from './routes';
 
@@ -280,7 +195,6 @@ function App() {
       <WorkerAlert />
       <QueryClientProvider client={queryClient}>
         {/* Legacy URL redirect handler */}
-        <LegacyRedirect />
         {/* Watches in-flight mix tape renders and toasts on terminal state */}
         <MixTapeProgressWatcher />
         <Routes>
@@ -325,27 +239,7 @@ function App() {
                 element={<LibraryBrowser key={browserId} browserId={browserId} />}
               />
             ))}
-
-            {/* Drill-down detail views */}
-            <Route path="/library/artists/:name" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ArtistDetail />
-              </Suspense>
-            } />
-            <Route path="/library/albums/:artist/:album" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <AlbumDetail />
-              </Suspense>
-            } />
-
             {/* Collections */}
-
-            {/* Playlists */}
-            <Route path="/playlists/:id" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <PlaylistDetail />
-              </Suspense>
-            } />
             {/* Mix Tapes */}
 
             {/* Default redirect */}

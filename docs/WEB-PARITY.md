@@ -30,7 +30,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Browse albums / artists | ✅ | ✅ | ✅ | |
 | Album / artist detail | ✅ | ✅ | ✅ | Names containing `/` fall back to a filtered list with a banner |
 | Playlists | ✅ | ✅ | ✅ | |
-| Smart playlists | ✅ | ✅ | ❌ | Mac has full CRUD over 25 server-supplied rule fields |
+| Smart playlists | ✅ | ✅ | ✅ | Browse and play on all three. **Editing is Mac-only** (ADR-0013 point 3): full CRUD over 25 server-supplied rule fields, and the phone shows no pencil and no `+` |
 | Favorites, Downloads | ✅ | ✅ | ✅ | |
 | Music Map | ✅ | ✅ | ❌ | Native `Canvas`, 500-artist cap. Web uses three.js |
 | Discover | ✅ | ✅ | ✅ | **The native ones are a `WKWebView` on `/embed`** (ADR-0016/0017/0019) |
@@ -55,14 +55,14 @@ iPhone by `familiar-apple` #118.
 
 | Capability | Web | Mac | iPhone | Notes |
 |---|---|---|---|---|
-| Create a playlist | ✅ | ✅ | ✅ | ADR-0049; iPhone uses the same editor sheet with a phone toolbar |
+| Create a playlist | ✅ | ✅ | ✅ | ADR-0049; the phone uses the same editor sheet with a phone toolbar (#119) |
 | Create a smart playlist | ✅ | ✅ | ❌ | |
 | Add a track to a playlist | ✅ | ✅ | ✅ | |
 | Remove a track from a playlist | ✅ | ✅ | ✅ | Row menu, playlist screens only. Removes *every* occurrence, so the view reloads rather than guessing which rows went |
 | Rename / delete a playlist | ✅ | ✅ | ✅ | Sidebar or playlist actions menu. Delete is confirmed; removing a track is not |
-| Reorder playlist tracks | ✅ | ✅ | ✅ | Move up/down row menu, using per-occurrence playlist-track ids |
+| Reorder playlist tracks | ✅ | ✅ | ✅ | `BrowseStores.reorder`, from Move Up / Move Down row menu items rather than drag — reachable by keyboard and VoiceOver, which a `Table` drag is not. Uses per-occurrence playlist-track ids |
 | Delete a smart playlist | ✅ | ✅ | ❌ | |
-| **Reorder the queue / remove from it** | ✅ | ❌ | ❌ | `QueueView` has no `onMove`/`onDelete`; the only removal is rejecting a radio suggestion |
+| Reorder the queue / remove from it | ✅ | ✅ | ✅ | `FamiliarPlayer.moveQueuedTrack` / `removeQueuedTrack`, from `QueueView`'s row menu (#103) |
 | Save the queue as a playlist | ✅ | ❌ | ❌ | |
 
 **`/playlists/:id` no longer has a native-parity reason to stay mounted.** Regular playlist editing is
@@ -76,12 +76,12 @@ rename/delete, remove and move up/down controls. Smart playlists stay Mac-only b
 | Pending Review | ✅ | ✅ | ❌ | Mac works at folder-group level |
 | Proposed Changes | ✅ | ✅ | ❌ | |
 | Mixtapes | ✅ | ✅ | ❌ | |
-| **Edit track metadata** | ✅ | ❌ | ❌ | No write path exists natively at all |
+| Edit track metadata | ✅ | ✅ | ❌ | `RowActions.saveMetadata` (#105). Mac only — the phone stays on the listening path (ADR-0013 point 2). Sends only changed fields; a cleared text field travels as `""` |
 | **Artist cleanup / merge duplicates** | ✅ | ❌ | ❌ | `/library/artist-cleanup` |
-| **Trigger a library scan / re-index** | ✅ | ❌ | ❌ | No endpoint is generated; Pending Review only shows what a scan already found |
+| Trigger a library scan / re-index | ✅ | ✅ | ❌ | `LibrarySyncStore` → `libraryStartSync` (#106). The `library` tag was vendored all along |
 | **Analysis settings and runs** | ✅ | ❌ | ❌ | |
 | **Backup / restore** | ✅ | ❌ | ❌ | Export with options, restore with preview and merge modes |
-| **Create or edit a profile** | ✅ | ❌ | ❌ | `SetupView` says outright: *"Create one in the web app first"* |
+| Create a profile | ✅ | ✅ | ✅ | `SetupView.createProfile` (#104), on the setup screen where a server with no profiles is discovered |
 | **Last.fm OAuth link** | ✅ | ❌ | ❌ | |
 | **Community cache, update channel, diagnostics** | ✅ | ❌ | ❌ | |
 | **Listening history / stats** | ✅ | ❌ | ❌ | The clients *write* play events and never read any back |
@@ -115,9 +115,17 @@ Against a full app of 313 files / 60,682 lines, the genuinely app-only remainder
 
 ## API surface the native clients cannot reach
 
-Eleven tags are generated into the Swift client (`VENDORED_TAGS` in
-`backend/scripts/lint_openapi.py`). These 22 are not, so anything they serve is browser-only by
-construction:
+Eleven tags are generated into the Swift client, plus **nine named `outputs` operations** — the
+filter lives in `Sources/FamiliarAPI/openapi-generator-config.yaml` in `familiar-apple`, and
+`backend/scripts/lint_openapi.py` reads it so the two cannot drift.
+
+**`openapi.json` itself is not filtered.** It is the whole artifact, copied verbatim, so all 32 tags
+appear in that file. Counting tags in the vendored schema therefore proves nothing about what the
+apps can reach — a check that was run during this re-verification and briefly suggested the whole
+list was wrong.
+
+These are the tags with nothing generated, so anything they serve is browser-only by construction —
+with the one exception noted:
 
 ```
 admin  settings  s3-backup  export-import  analysis  background  artwork
@@ -125,6 +133,12 @@ deduplicate  "Library Organization"  diagnostics  download  updates  videos
 lastfm  new-releases  bandcamp  external-albums  ambient  outputs  playback
 auth  health
 ```
+
+**`outputs` is the exception and is listed above only because it has no tag entry.** Nine of its
+twenty-four operations *are* generated, by name — list, discover-all, get, play, pause, resume,
+stop, seek, set-volume (ADR-0031). The nine zone operations and the AirPlay discovery are excluded
+deliberately, which is why the filter names operations rather than the tag: adding `outputs` to
+`tags:` would re-admit all twenty-four, and the config says so in a comment.
 
 ## Retired, and deliberately not coming back
 
@@ -134,6 +148,43 @@ auth  health
 | Spotify favorites import | Retired 2026-08-10; the UI had been unreachable |
 | Server-synced playback queue | ADR-0028 |
 | Capacitor iOS app (`packages/ios`) | **Deleted 2026-08-11** (ADR-0001 point 6). It had been the largest consumer of `frontend/src` |
+
+## Removed from the browser 2026-08-16 (ADR-0057)
+
+| Capability | Where it went |
+|---|---|
+| Playlist detail (`/playlists/:id`) | Native, both platforms. Point 3 of ADR-0050 kept it "until the Apple clients can edit a playlist"; they can |
+| Artist detail (`/library/artists/:name`) | Native. ADR-0057 point 3 makes the fallback player a flat list, so "Go to artist" now filters `/library/tracks` instead |
+| Album detail (`/library/albums/:artist/:album`) | Native. Same — the track context menu's album entry filters the list |
+| Seeded playlists in the browser | Native as of `familiar-apple` #120. Five affordances and `useGeneratePlaylist` went with the route they navigated to |
+| Sidebar playlist and smart-playlist sections | Their only destinations were the routes above and `/smart-playlists/:id`, which was never mounted |
+
+`LegacyRedirect` went too — 82 lines migrating a hash/query-param URL scheme to `/home`,
+`/favorites`, `/downloads`, `/library/music-map`, `/library/discover` and
+`/library/proposed-changes`, **none of which has been a mounted route for some time**.
+
+## Re-verified 2026-08-16
+
+Checked row by row against the code, after a claim in this file turned out to be eight rows stale
+and produced a wrong statement in a source comment two repositories away.
+
+**Eight rows moved, all in the same direction: native had more than this said.** Playlist reorder,
+queue reorder and removal, track metadata editing, library scan, profile creation, playlist
+creation on the phone, removing a track from a playlist, and smart playlists. Each shipped in a
+numbered PR — #103, #104, #105, #106, #119, #123 — and none of them updated this file.
+
+**That means ADR-0050 point 6's condition is met.** It said "settings only" is not reachable until
+the Apple clients can edit playlists, edit track metadata, trigger a scan, and create a profile.
+All four are done. The remaining browser-only capabilities are the ones in genuinely ungenerated
+tags — artist cleanup, analysis, backup and restore, Last.fm OAuth, community cache, diagnostics,
+listening history — plus listen-together, which is web-only by decision since ADR-0037 was rejected.
+
+**How to check a row, so the next re-verification is cheaper.** Grep for the capability's *generated
+operation* in `familiar-apple`, not for a word: a filename or a comment matching "restore" or
+"diagnostics" proves nothing, and three false positives were produced that way during this pass.
+Then confirm a caller that is itself reachable — `LIBRARY_ITEMS` and `BROWSER_ROUTES` in
+`packages/frontend/src/routes.ts` for the web, `LibraryRootList.swift` for the phone. A capability
+with no affordance is what `.smartPlaylists` was: routable, stored, rendered, and unreachable.
 
 ## Changes since first written
 
