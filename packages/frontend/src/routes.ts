@@ -39,9 +39,11 @@ export const PARKED_BROWSERS: Record<string, string> = {
 };
 
 /** Where the app opens. Settings, because that is what the browser is for now. */
+/// Where the app opens. The library, since ADR-0058 point 1 — it was `/settings`, which opened an
+/// administration tool on a form rather than on the thing being administered.
 export const HOME_ROUTE = {
-  path: '/settings',
-  label: 'Settings',
+  path: '/',
+  label: 'Library',
 } as const;
 
 /** Sidebar library navigation items. */

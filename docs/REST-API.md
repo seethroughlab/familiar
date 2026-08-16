@@ -374,13 +374,25 @@ curl "http://localhost:4400/api/v1/library/stats"
   "total_tracks": 1295,
   "total_albums": 156,
   "total_artists": 89,
-  "albums": 1100,
-  "compilations": 150,
-  "soundtracks": 45,
+  "albums": 1295,
+  "compilations": 0,
+  "soundtracks": 0,
   "analyzed_tracks": 1250,
-  "pending_analysis": 45
+  "pending_analysis": 45,
+  "pending_backfill": 0,
+  "pending_melodic": 0,
+  "pending_mood_tags": 0
 }
 ```
+
+The three totals count active tracks only, and agree with `/library/albums` and `/library/artists`
+— same grouping, same canonical tables. `tests/test_library_stats.py` asserts that agreement.
+
+**`albums`, `compilations` and `soundtracks` are deprecated and should not be displayed.** Nothing
+writes `Track.album_type`, so every row keeps the column default: `albums` always equals
+`total_tracks` and the other two are always `0`. This example previously showed `150` compilations
+and `45` soundtracks, which no instance has ever returned. They remain on the wire only because
+`library` is a generated tag (ADR-0007) and removing required fields breaks the Swift client.
 
 ### Start Library Sync
 
