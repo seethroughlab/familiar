@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToTab, navigateToView, waitForSyncComplete } from './helpers';
+import { ensureProfile, navigateToDestination, navigateToView, waitForSyncComplete } from './helpers';
 
 /**
  * Library sync E2E tests
@@ -18,20 +18,14 @@ test.describe('Library Sync', () => {
     await ensureProfile(page);
   });
 
-  test('Library section is visible in Settings', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
-
-    // Find Library section heading (the actual text in the UI)
-    const librarySection = page.getByText('Library').first();
-    await expect(librarySection).toBeVisible({ timeout: 5000 });
-
-    // Should show Library Sync component
+  // Scan and sync moved off Settings and onto the Library destination, which is where the app now
+  // opens (ADR-0058 point 2). `page.goto('/')` in beforeEach already lands there.
+  test('Library sync is visible on the Library destination', async ({ page }) => {
     const syncSection = page.getByText('Library Sync');
-    await expect(syncSection).toBeVisible({ timeout: 5000 });
+    await expect(syncSection).toBeVisible({ timeout: 10000 });
   });
 
   test('Sync Now button is present and clickable', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
 
     // Find sync button - it may say "Sync Now" or just "Sync"
     const syncButton = page.locator('button').filter({
@@ -47,7 +41,7 @@ test.describe('Library Sync', () => {
   });
 
   test('Sync button triggers scan and shows progress', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+    // Already on Library from beforeEach — that is where sync lives now (ADR-0058 point 2).
 
     // Find sync button
     const syncButton = page.locator('button').filter({
@@ -94,7 +88,8 @@ test.describe('Library Sync', () => {
   });
 
   test('Sync status reflects in system health', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+    // System health is on the Server destination now, not Settings.
+    await navigateToDestination(page, 'Server');
 
     // Navigate to Debug section if available
     const debugSection = page.locator('text=/debug/i').first();

@@ -108,6 +108,13 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              /*
+               * The destination is the name; the description is a hint beneath it. Without this the
+               * accessible name is "Tools Run something against the library" — which is what a
+               * screen reader announces for a nav link, and what `getByRole('link', {name})` has to
+               * match. The description stays visible and is still reachable as content.
+               */
+              aria-label={item.label}
               className={`flex items-start gap-3 px-2 py-2 rounded-lg text-sm transition-colors ${
                 isActive(item.path) ? activeClass : `${textClass} ${hoverClass}`
               }`}

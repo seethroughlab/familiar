@@ -29,6 +29,8 @@ export function ToolsPage() {
       <AdminSection title="Playback">
         <Link
           to="/library/tracks"
+          // The label is the name; the description is a hint beneath it. See the sidebar for why.
+          aria-label="Track list"
           className="flex items-center gap-3 bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 hover:bg-zinc-800 transition-colors"
         >
           <List className="w-5 h-5 text-cyan-400 flex-shrink-0" />

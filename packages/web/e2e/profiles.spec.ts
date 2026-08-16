@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToTab } from './helpers';
+import { ensureProfile, navigateToDestination } from './helpers';
 
 test.describe('Profiles', () => {
   test('profile selector appears on first load', async ({ page }) => {
@@ -34,16 +34,18 @@ test.describe('Profiles', () => {
     await page.getByRole('button', { name: 'Create' }).click();
 
     // Should transition to main app
-    await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 5000 });
+    // The destinations of ADR-0058 point 2 — this used to wait on "Tracks"/"Artists", which the
+    // sidebar stopped listing when it stopped listing browsers.
+    await page.waitForSelector('a:has-text("Library"), a:has-text("Tools")', { timeout: 5000 });
   });
 
-  test('settings has profile section', async ({ page }) => {
+  test('the Server destination has a profile section', async ({ page }) => {
     await page.goto('/');
     await ensureProfile(page);
-    await navigateToTab(page, 'Settings');
+    // Profiles are infrastructural (ADR-0057 point 2) and live on Server now, not in Settings.
+    await navigateToDestination(page, 'Server');
 
-    // Settings page should have PROFILE section heading
-    const profileHeading = page.getByRole('heading', { name: 'Profile' });
+    const profileHeading = page.getByRole('heading', { name: 'Profiles' });
     await expect(profileHeading).toBeVisible({ timeout: 5000 });
 
     // Should have Switch button
@@ -63,7 +65,9 @@ test.describe('Profiles', () => {
       // Click a profile
       await profileButtons.first().click();
       // Should navigate to main app
-      await page.waitForSelector('a:has-text("Tracks"), a:has-text("Artists")', { timeout: 5000 });
+      // The destinations of ADR-0058 point 2 — this used to wait on "Tracks"/"Artists", which the
+    // sidebar stopped listing when it stopped listing browsers.
+    await page.waitForSelector('a:has-text("Library"), a:has-text("Tools")', { timeout: 5000 });
     } else {
       test.skip(true, 'No existing profiles to select');
     }

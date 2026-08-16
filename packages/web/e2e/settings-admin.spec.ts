@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToTab } from './helpers';
+import { ensureProfile, navigateToDestination, navigateToTab } from './helpers';
 
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
@@ -15,8 +15,9 @@ test.describe('Settings', () => {
     await expect(settingsContent).toBeVisible({ timeout: 5000 });
   });
 
-  test('API key status is visible in settings', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+  test('API key status is visible on the Server destination', async ({ page }) => {
+    // Keys are infrastructural (ADR-0057 point 2) and moved to Server with ADR-0058 point 2.
+    await navigateToDestination(page, 'Server');
 
     // Should see the API Keys section
     const apiKeysHeading = page.getByText('API Keys', { exact: true });
@@ -31,8 +32,8 @@ test.describe('Settings', () => {
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
-  test('community cache is visible in settings', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+  test('community cache is visible on the Tools destination', async ({ page }) => {
+    await navigateToDestination(page, 'Tools');
 
     // Should see the Community Cache section
     const cacheHeading = page.getByText('Community Cache', { exact: true });
@@ -109,18 +110,20 @@ test.describe('UI Elements', () => {
   });
 
   test('main sidebar navigation works', async ({ page }) => {
-    // Test sidebar navigation links are accessible.
-    //
-    // Artists and Albums used to be the choice here, as steadier than the virtualized Tracks view.
-    // Both are unmounted now — the web app keeps only what the native clients cannot do
-    // (docs/WEB-PARITY.md) — so these are what the sidebar actually offers.
-    const sidebarLinks = ['Tracks', 'Cleanup'] as const;
+    // The sidebar lists destinations now, not browsers (ADR-0058 point 2). Tracks and Cleanup are
+    // still reachable — from the Tools and Library pages — which the navigation helpers cover;
+    // what this asserts is that each destination is mounted and renders its own heading, the
+    // failure `navigationIntegrity.test.ts` guards statically.
+    const destinations = [
+      { link: 'Tools', heading: 'Tools' },
+      { link: 'Server', heading: 'Server' },
+      { link: 'Library', heading: 'Library' },
+    ] as const;
 
-    for (const linkText of sidebarLinks) {
-      const link = page.locator(`a:has-text("${linkText}")`).first();
-      await expect(link).toBeVisible({ timeout: 5000 });
-      await link.click();
-      await page.waitForLoadState('domcontentloaded');
+    for (const { link, heading } of destinations) {
+      await navigateToDestination(page, link);
+      await expect(page.getByRole('heading', { name: heading, exact: true }).first())
+        .toBeVisible({ timeout: 10000 });
     }
 
     // Verify Settings button works
