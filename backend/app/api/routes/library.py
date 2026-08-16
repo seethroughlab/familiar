@@ -83,12 +83,14 @@ async def get_library_stats(db: DbSession) -> LibraryStats:
     # Mirrors ``library_albums.list_albums``' base query: coalesce album_artist to artist, group
     # case-insensitively on both halves. Counting the grouped subquery is what makes it agree.
     album_artist_col = func.coalesce(func.nullif(Track.album_artist, ""), Track.artist)
-    album_groups = (
-        select(literal_column("1"))
-        .where(active, Track.album.isnot(None), Track.album != "")
-        .group_by(func.lower(album_artist_col), func.lower(Track.album))
-    )
-    total_albums = await db.scalar(select(func.count()).select_from(album_groups.subquery())) or 0
+    total_albums = await db.scalar(
+        select(func.count()).select_from(
+            select(literal_column("1"))
+            .where(active, Track.album.isnot(None), Track.album != "")
+            .group_by(func.lower(album_artist_col), func.lower(Track.album))
+            .subquery()
+        )
+    ) or 0
 
     # Mirrors ``library_artists.list_artists``: canonical artists that have at least one active
     # track. Tracks with no ``canonical_artist_id`` are scanner-failed and excluded there too.
