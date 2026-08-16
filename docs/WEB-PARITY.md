@@ -4,7 +4,7 @@
 nothing is lost on the way to native clients. This document is that record, so the code no longer has
 to be. Code is a poor inventory: you cannot read it as a list, and it rots without saying so.
 
-Written 2026-08-10, last updated 2026-08-11. Verified against the repos at that date — every "no"
+Written 2026-08-10, last updated 2026-08-14. Verified against the repos at that date — every "no"
 below was checked by looking for the call, not by assuming.
 
 **This is maintained, not a snapshot.** ADR-0050 point 6 makes it the reference the code used to be,
@@ -50,26 +50,24 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 
 ## Playlist editing
 
-Was "the biggest gap". Mostly closed on the Mac, 2026-08-11.
+Was "the biggest gap". Mostly closed on the Mac, 2026-08-11, and closed for regular playlists on
+iPhone by `familiar-apple` #118.
 
 | Capability | Web | Mac | iPhone | Notes |
 |---|---|---|---|---|
-| Create a playlist | ✅ | ✅ | ✅ | ADR-0049. The phone got its own affordances in #119 |
+| Create a playlist | ✅ | ✅ | ✅ | ADR-0049; the phone uses the same editor sheet with a phone toolbar (#119) |
 | Create a smart playlist | ✅ | ✅ | ❌ | |
 | Add a track to a playlist | ✅ | ✅ | ✅ | |
 | Remove a track from a playlist | ✅ | ✅ | ✅ | Row menu, playlist screens only. Removes *every* occurrence, so the view reloads rather than guessing which rows went |
-| Rename / delete a playlist | ✅ | ✅ | ❌ | Sidebar row context menu. Delete is confirmed; removing a track is not |
-| Reorder playlist tracks | ✅ | ✅ | ✅ | `BrowseStores.reorder`, from Move Up / Move Down row menu items rather than drag — reachable by keyboard and VoiceOver, which a `Table` drag is not |
+| Rename / delete a playlist | ✅ | ✅ | ✅ | Sidebar or playlist actions menu. Delete is confirmed; removing a track is not |
+| Reorder playlist tracks | ✅ | ✅ | ✅ | `BrowseStores.reorder`, from Move Up / Move Down row menu items rather than drag — reachable by keyboard and VoiceOver, which a `Table` drag is not. Uses per-occurrence playlist-track ids |
 | Delete a smart playlist | ✅ | ✅ | ❌ | |
 | Reorder the queue / remove from it | ✅ | ✅ | ✅ | `FamiliarPlayer.moveQueuedTrack` / `removeQueuedTrack`, from `QueueView`'s row menu (#103) |
 | Save the queue as a playlist | ✅ | ❌ | ❌ | |
 
-**`/playlists/:id` is still mounted in the browser, and reorder is the only reason left.** It was
-kept because the Mac's playlist detail looked equivalent and was nearly read-only — that is no longer
-true, and when reorder lands the route can go.
-
-**iPhone remains unable to edit playlists at all**, or to create one: every editor is
-`#if os(macOS)`. That is ADR-0013 point 2's listening-path rule, not an oversight.
+**`/playlists/:id` no longer has a native-parity reason to stay mounted.** Regular playlist editing is
+now covered by the Apple clients: the Mac has sidebar/list/detail affordances, and iPhone has create,
+rename/delete, remove and move up/down controls. Smart playlists stay Mac-only by design.
 
 ## Library management
 
@@ -195,8 +193,11 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   `familiar-apple` shipped version 1.2 build 14.
 
 - **2026-08-11** — the Mac gained remove-a-track, rename and delete for playlists
-  (`familiar-apple` #100). Only reorder is still browser-only, and it is the last thing keeping
-  `/playlists/:id` mounted.
+  (`familiar-apple` #100). At that point reorder and iPhone editing still kept `/playlists/:id`
+  mounted.
+- **2026-08-14** — the iPhone gained regular playlist create, rename/delete, remove and move up/down
+  reorder controls (`familiar-apple` #118). The playlist-editing row is no longer part of the
+  "settings only" gate in ADR-0050 point 6.
 - **2026-08-11** — the web app was reduced to management (`familiar` #151, ADR-0050): it opens on
   Settings and twelve listening-path routes are unmounted. **The Web column below still describes
   what the code can do, not what is currently routed** — `PARKED_BROWSERS` in

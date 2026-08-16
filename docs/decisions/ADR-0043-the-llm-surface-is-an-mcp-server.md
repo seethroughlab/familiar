@@ -32,19 +32,26 @@ Implementation:
   is the way in until then, because stdio needs no auth. Two red herrings were fixed on the way to
   establishing that, both real: `.well-known` probes were being answered `200 text/html` by the SPA
   catch-all, which reads as "yes, I have an authorisation server".
-- **The surface is now 36 tools, not the 26 point 2 counts.** Point 2's *rule* is unchanged and
-  still produces the surface — everything in `MUSIC_TOOLS` except the client-bound and the withheld
-  — but three things have moved under it since acceptance, and the arithmetic in the Decision is a
-  snapshot of the day it was written rather than a cap. `MUSIC_TOOLS` grew from 30 to 36 (playlist
-  read and append, favourites, listening history, radio); `get_now_playing` and `list_players` are
-  MCP-only and are not in `MUSIC_TOOLS` at all, which is why the exposed count equals it exactly
-  rather than falling two short. The exclusions are still exactly two: `get_visible_tracks` and
-  `fetch_webpage`.
-- **Adding those six required no change to the MCP layer**, which is the strongest evidence for
-  point 2's design so far. `exposed_tools()` iterates `MUSIC_TOOLS`, so a schema, a handler and a
-  dispatch line were the whole cost; nothing under `app/mcp/` was touched. The chat-era tool
-  registry turning out to be the right seam is why the port was cheap in the direction this ADR did
-  not have to argue.
+- **The surface is 38 tools, not the 26 point 2 counts** (re-measured 2026-08-13). Point 2's *rule*
+  is unchanged and still produces the surface — everything in `MUSIC_TOOLS` except the client-bound
+  and the withheld — but the arithmetic in the Decision is a snapshot of the day it was written
+  rather than a cap. It reconciles as **34 in `MUSIC_TOOLS` plus 4 that are not in it at all**:
+  `list_players` and `get_now_playing` (ADR-0044), then `navigate_app` and `capture_screenshot`
+  ([ADR-0053](ADR-0053-the-command-channel-drives-and-observes-the-interface.md)). The chat client
+  never needed any of the four, because it was itself the player and the screen.
+
+  **`EXCLUDED` is now empty, and that is the finished state rather than a gap.** An earlier note here
+  said the exclusions were "still exactly two"; that stopped being true when point 5 retired the chat
+  clients, which left `get_visible_tracks` and `fetch_webpage` with no caller at all, so both were
+  deleted rather than left excluded. The set is kept as the seam where a future client-bound tool
+  goes — `exposed_tools()` reads it — and `app/mcp/server.py` carries the same record.
+
+  Do not re-derive this by hand. The counts move, and `exposed_tools()` is the answer.
+- **Adding the six tools of #129 required no change to the MCP layer** — playlist read and append,
+  favourites, listening history and radio — which is the strongest evidence for point 2's design so
+  far. `exposed_tools()` iterates `MUSIC_TOOLS`, so a schema, a handler and a dispatch line were the
+  whole cost; nothing under `app/mcp/` was touched. The chat-era tool registry turning out to be the
+  right seam is why the port was cheap in the direction this ADR did not have to argue.
 - **Nothing destructive is exposed, by decision rather than by omission** — no delete, no removal,
   no reorder. An LLM acting on a misread has no undo, and the same operation in the app takes two
   seconds. Read this as a standing constraint on the additions point 2 permits, not as a gap.

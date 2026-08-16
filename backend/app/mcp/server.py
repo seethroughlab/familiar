@@ -35,7 +35,9 @@ from app.mcp.guidance import GUIDANCE, INSTRUCTIONS
 from app.mcp.playback import (
     PLAYBACK_TOOLS,
     add_target_property,
+    capture_screenshot_tool,
     list_players_tool,
+    navigate_tool,
     now_playing_tool,
 )
 from app.services.llm.tools import MUSIC_TOOLS
@@ -105,6 +107,9 @@ def exposed_tools() -> list[types.Tool]:
     # because it was the player. An MCP host has to ask (ADR-0044 point 4).
     tools.append(list_players_tool())
     tools.append(now_playing_tool())
+    # ADR-0053: the channel drives and observes the interface, not only the audio.
+    tools.append(navigate_tool())
+    tools.append(capture_screenshot_tool())
     return tools
 
 
