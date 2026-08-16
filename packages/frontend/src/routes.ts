@@ -46,11 +46,47 @@ export const HOME_ROUTE = {
   label: 'Library',
 } as const;
 
+/**
+ * The three destinations (ADR-0058 point 2).
+ *
+ * Replaces a sidebar that listed library *browsers* — a shape left over from being a music player.
+ * An administration tool is organised by what you are administering: the library, the tools you run
+ * against it, and the server underneath.
+ *
+ * **Every destination here renders content that exists today.** `navigationIntegrity.test.ts`
+ * asserts each has a route, because a destination whose page is not mounted is the defect this
+ * codebase has shipped three times over (`familiar` #70, #74, #76) and the one ADR-0057 point 5
+ * exists to prevent. Two things ADR-0058 point 2 names are deliberately *not* linked, for exactly
+ * that reason — see `UNBUILT_DESTINATION_ITEMS`.
+ */
+export const DESTINATIONS = [
+  { path: '/', label: 'Library', description: 'Size, analysis and listening' },
+  { path: '/tools', label: 'Tools', description: 'Run something against the library' },
+  { path: '/server', label: 'Server', description: 'Health, profiles and keys' },
+] as const;
+
+/**
+ * Named in ADR-0058 point 2, absent from the navigation, and why.
+ *
+ * The same bookkeeping `PARKED_BROWSERS` does above: written down rather than silently omitted, so
+ * the gap between the ADR and the app is a record instead of a discrepancy someone rediscovers.
+ */
+export const UNBUILT_DESTINATION_ITEMS: Record<string, string> = {
+  'pending-review': 'no web component — `api/pendingTracks.ts` is a wrapper nothing calls',
+  duplicates: 'ADR-0058 phase 4 — `POST /library/deduplicate/preview` has no UI yet',
+  organiser: 'ADR-0058 phase 4 — the `organizer` routes have no UI yet',
+  'artwork-coverage': 'ADR-0058 phase 5 — no endpoint counts albums without art',
+};
+
 /** Sidebar library navigation items. */
 export const LIBRARY_ITEMS = [
   // Kept as the "simple player": a browser can still find a track and play it, which is what a guest
   // machine or a second computer needs, and it keeps `WebAudioEngine` and the effects chain
   // exercised rather than rotting untested.
+  //
+  // It reaches these from the Tools page rather than the sidebar (ADR-0058 point 3): the player is
+  // scheduled for deletion, and a top-level destination is not what you give something on the way
+  // out. `LIBRARY_ITEMS` stays as the route/label pairing both pages read.
   { path: '/library/tracks', label: 'Tracks' },
   { path: '/library/artist-cleanup', label: 'Cleanup' },
 ] as const;

@@ -6,16 +6,24 @@
  */
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Music, Settings as SettingsIcon, MoreHorizontal } from 'lucide-react';
+import { House, Wrench, Server, Settings as SettingsIcon, MoreHorizontal } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { MobileMoreSheet } from './MobileMoreSheet';
 
-// All three of these — Home, Artists, Favorites — were unmounted when the web app was reduced to
-// management (docs/WEB-PARITY.md), and a bottom bar of buttons that redirect is worse than a short
-// one. These are what is still there.
+/**
+ * The same three destinations the sidebar shows (ADR-0058 point 2), plus Settings.
+ *
+ * Home, Artists and Favorites were unmounted when the web app was reduced to management, and a
+ * bottom bar of buttons that redirect is worse than a short one. What replaced them was
+ * `/library/tracks` — one *browser*, with no route to Tools or Server at all, so a phone browser
+ * could not reach two of the three destinations. The track list is still reachable, from Tools,
+ * exactly as on desktop.
+ */
 const NAV_ITEMS = [
-  { path: '/library/tracks', label: 'Tracks', icon: Music, match: '/library/tracks' },
+  { path: '/', label: 'Library', icon: House, match: '/' },
+  { path: '/tools', label: 'Tools', icon: Wrench, match: '/tools' },
+  { path: '/server', label: 'Server', icon: Server, match: '/server' },
   { path: '/settings', label: 'Settings', icon: SettingsIcon, match: '/settings' },
 ] as const;
 
@@ -31,7 +39,12 @@ export function MobileBottomNav() {
 
   const light = resolvedTheme === 'light';
 
-  const isActive = (match: string) => location.pathname.startsWith(match);
+  // `/` is exact, or it matches every path. It also owns `/library/*`, which is reached from the
+  // Library and Tools pages rather than from this bar.
+  const isActive = (match: string) =>
+    match === '/'
+      ? location.pathname === '/' || location.pathname.startsWith('/library/')
+      : location.pathname.startsWith(match);
   const isMoreActive = !NAV_ITEMS.some(item => isActive(item.match));
 
   return (
