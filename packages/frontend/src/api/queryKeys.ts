@@ -25,6 +25,12 @@ export const queryKeys = {
     detail: (trackId: string) => ['track-discover', trackId] as const,
   },
 
+  // ── Library ───────────────────────────────────────────────────────────
+  library: {
+    stats: () => ['library', 'stats'] as const,
+    playStats: (limit: number) => ['library', 'play-stats', limit] as const,
+  },
+
   // ── Albums ────────────────────────────────────────────────────────────
   albums: {
     all: ['library-albums'] as const,

@@ -4764,7 +4764,7 @@
         "type": "object"
       },
       "LibraryStats": {
-        "description": "Library statistics.",
+        "description": "Library statistics.\n\nThe three totals agree with the list endpoints that show the same things, and are counted the\nsame way \u2014 see ``get_library_stats``. They did not until 2026-08-16.",
         "properties": {
           "albums": {
             "title": "Albums",
@@ -18593,7 +18593,7 @@
     },
     "/api/v1/library/stats": {
       "get": {
-        "description": "Get library statistics in a single query using conditional aggregation.",
+        "description": "Get library statistics.\n\n**These are the same counts the list endpoints return, counted the same way**, because a\ndashboard figure that disagrees with the screen it links to is worse than no figure\n(ADR-0058 point 6). Verified against the 26k-track library on 2026-08-16, when all three\ndisagreed:\n\n- ``total_tracks`` counted every row regardless of status, so 66 missing/deleted tracks were\n  reported as library size (26,488 against ``/tracks``' 26,422).\n- ``total_albums`` was ``count(distinct Track.album)`` \u2014 a *string* distinct, which merges\n  same-titled albums by different artists. ``library_albums`` groups by\n  ``(album_artist, album)`` case-insensitively, and said 3,927 against this query's 3,873.\n- ``total_artists`` was ``count(distinct Track.artist)`` over raw tag strings, so \"The\n  Beatles\" and \"Beatles, The\" counted twice and features counted separately.\n  ``library_artists`` reads the canonical ``Artist`` table (ADR-0052) and said 3,477 against\n  this query's 3,664.\n\n``tests/test_library_stats.py`` asserts the agreement rather than the arithmetic, so a future\nchange to either side has to move both.",
         "operationId": "library_get_library_stats",
         "responses": {
           "200": {
