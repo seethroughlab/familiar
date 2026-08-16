@@ -1009,6 +1009,35 @@
         "title": "ArtistTrack",
         "type": "object"
       },
+      "ArtworkCoverageResponse": {
+        "description": "How much of the library has real cover art.\n\n`total_albums` is counted the way `/library/albums` and `/library/stats` count, so the three\nagree (ADR-0058 point 6). It would have been easier to count canonical `Album` rows, and it\nwould have been wrong: the dashboard tile beside this one says 3,927, and a coverage figure over\na different denominator is the \"plausible-looking number\" that point exists to forbid.\n\n`generated` is broken out rather than folded into `with_artwork` because a generated placeholder\nis what the app draws when it has nothing \u2014 counting it as coverage would report a library with\nno cover art at all as fully covered.",
+        "properties": {
+          "generated": {
+            "title": "Generated",
+            "type": "integer"
+          },
+          "total_albums": {
+            "title": "Total Albums",
+            "type": "integer"
+          },
+          "with_artwork": {
+            "title": "With Artwork",
+            "type": "integer"
+          },
+          "without_artwork": {
+            "title": "Without Artwork",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_albums",
+          "with_artwork",
+          "generated",
+          "without_artwork"
+        ],
+        "title": "ArtworkCoverageResponse",
+        "type": "object"
+      },
       "ArtworkQueueBatchRequest": {
         "description": "Request to queue multiple artworks for download.",
         "properties": {
@@ -11450,6 +11479,78 @@
           }
         },
         "summary": "Check Artwork Exists",
+        "tags": [
+          "artwork"
+        ]
+      }
+    },
+    "/api/v1/artwork/coverage": {
+      "get": {
+        "description": "Count albums with, without, and with only placeholder cover art.\n\nADR-0058 phase 5. Artwork existence is a fact about the filesystem, not the database \u2014 there is\nno column recording it \u2014 so this stats one thumbnail path per album. That is ~4k stat calls on\nJeff's library, which is why it runs in a worker thread rather than blocking the event loop, and\nwhy it is its own endpoint rather than three more fields on `/library/stats`: the dashboard\nshould not pay for a filesystem sweep on every load.",
+        "operationId": "artwork_get_artwork_coverage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtworkCoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Artwork Coverage",
         "tags": [
           "artwork"
         ]
