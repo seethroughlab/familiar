@@ -73,9 +73,8 @@ export const DESTINATIONS = [
  */
 export const UNBUILT_DESTINATION_ITEMS: Record<string, string> = {
   'pending-review': 'no web component — `api/pendingTracks.ts` is a wrapper nothing calls',
-  duplicates: 'ADR-0058 phase 4 — `POST /library/deduplicate/preview` has no UI yet',
-  organiser: 'ADR-0058 phase 4 — the `organizer` routes have no UI yet',
-  'artwork-coverage': 'ADR-0058 phase 5 — no endpoint counts albums without art',
+  // Duplicates, the organiser and artwork coverage were here. All three shipped in phases 4 and 5;
+  // their lines are deleted rather than marked done, so this stays a list of what is missing.
 };
 
 /** Sidebar library navigation items. */

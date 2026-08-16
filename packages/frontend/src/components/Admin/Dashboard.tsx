@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Disc3, Users, Music, Activity, Clock, AlertTriangle } from 'lucide-react';
+import { Disc3, Users, Music, Activity, Clock, AlertTriangle, Image } from 'lucide-react';
 
 import { libraryApi } from '../../api/library';
 import { playTrackingApi, type PlayStatsResponse } from '../../api/profiles';
@@ -13,11 +13,14 @@ import { useOfflineStatus } from '../../hooks/useOfflineStatus';
  * The app used to open on Settings — a form, with playback controls above library health, which
  * told the operator its own subject was secondary. This opens on the state of the library instead.
  *
- * **Every number here comes from a real query** (point 6). Both endpoints already existed and both
- * already had a client wrapper that nothing called: `libraryApi.getStats` over `/library/stats` and
- * `playTrackingApi.getStats` over `/tracks/stats/plays`. Nothing on this screen is derived from a
- * sample or rounded into a nicer shape, and a count that does not exist does not get a tile —
- * artwork coverage is absent for exactly that reason and needs an endpoint first.
+ * **Every number here comes from a real query** (point 6). Two of the three endpoints already
+ * existed with a client wrapper that nothing called: `libraryApi.getStats` over `/library/stats`
+ * and `playTrackingApi.getStats` over `/tracks/stats/plays`. Nothing on this screen is derived from
+ * a sample or rounded into a nicer shape.
+ *
+ * The third had to be written. Artwork coverage was held back to phase 5 precisely because a count
+ * that does not exist does not get a tile — `/artwork/coverage` now provides it, counting albums
+ * the same way the Albums tile does so the two agree.
  */
 export function Dashboard() {
   const { isOffline } = useOfflineStatus();
@@ -32,6 +35,22 @@ export function Dashboard() {
     queryKey: queryKeys.library.playStats(5),
     queryFn: () => playTrackingApi.getStats(5),
     retry: offlineAwareRetry(isOffline),
+  });
+
+  /**
+   * Artwork coverage (ADR-0058 phase 5) — the tile that could not exist until an endpoint did.
+   *
+   * `total_albums` here is counted the same way the Albums tile above counts, which is the whole
+   * reason the endpoint groups tracks rather than counting canonical `Album` rows: two numbers
+   * side by side over different denominators is what point 6 forbids.
+   */
+  const { data: artwork } = useQuery({
+    queryKey: queryKeys.library.artworkCoverage(),
+    queryFn: () => libraryApi.getArtworkCoverage(),
+    retry: offlineAwareRetry(isOffline),
+    // It stats one file per album. Fresh once a session is plenty for a number that moves when a
+    // scan runs, not when the page is opened.
+    staleTime: 5 * 60 * 1000,
   });
 
   const analysed = library ? library.analyzed_tracks : 0;
@@ -96,6 +115,7 @@ export function Dashboard() {
               <AlertTriangle className="w-4 h-4 text-amber-400" />
               <span>Waiting</span>
             </div>
+
             {queues.map((q) => (
               <div key={q.label} className="flex items-center justify-between bg-zinc-900/50 rounded p-2">
                 <span className="text-sm text-zinc-300 dark:text-zinc-300 light:text-zinc-700">{q.label}</span>
@@ -107,6 +127,37 @@ export function Dashboard() {
           </div>
         )}
       </section>
+
+      {artwork && artwork.total_albums > 0 && (
+        <section className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <Image className="w-5 h-5 text-cyan-400" />
+            <h3 className="font-medium text-white dark:text-white light:text-zinc-900">Cover art</h3>
+            <span className="ml-auto text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 tabular-nums">
+              {artwork.with_artwork.toLocaleString()} of {artwork.total_albums.toLocaleString()}
+            </span>
+          </div>
+
+          <div className="h-2 rounded bg-zinc-700/50 overflow-hidden">
+            <div
+              className="h-full bg-cyan-500 transition-[width] duration-500"
+              style={{ width: `${Math.round((artwork.with_artwork / artwork.total_albums) * 100)}%` }}
+            />
+          </div>
+
+          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+            {artwork.without_artwork.toLocaleString()} albums have no cover
+            {/*
+              * Placeholders are named separately because they are what the app draws when it has
+              * nothing. Counting them as coverage would report a library with no real art at all
+              * as fully covered — true of the filesystem, false of what anyone sees.
+              */}
+            {artwork.generated > 0 &&
+              `, and ${artwork.generated.toLocaleString()} show a generated placeholder`}
+            .
+          </p>
+        </section>
+      )}
 
       {plays && plays.total_plays > 0 && (
         <section className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
