@@ -30,7 +30,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Browse albums / artists | ✅ | ✅ | ✅ | |
 | Album / artist detail | ✅ | ✅ | ✅ | Names containing `/` fall back to a filtered list with a banner |
 | Playlists | ✅ | ✅ | ✅ | |
-| Smart playlists | ✅ | ✅ | ❌ | Mac has full CRUD over 25 server-supplied rule fields |
+| Smart playlists | ✅ | ✅ | ✅ | Browse and play on all three. **Editing is Mac-only** (ADR-0013 point 3): full CRUD over 25 server-supplied rule fields, and the phone shows no pencil and no `+` |
 | Favorites, Downloads | ✅ | ✅ | ✅ | |
 | Music Map | ✅ | ✅ | ❌ | Native `Canvas`, 500-artist cap. Web uses three.js |
 | Discover | ✅ | ✅ | ✅ | **The native ones are a `WKWebView` on `/embed`** (ADR-0016/0017/0019) |
