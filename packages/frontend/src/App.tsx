@@ -21,6 +21,7 @@ import { AppShell } from './components/AppShell';
 import { LibraryBrowser } from './components/Library/LibraryBrowser';
 
 // Lazy-loaded route components
+const Dashboard = lazy(() => import('./components/Admin/Dashboard').then(m => ({ default: m.Dashboard })));
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
@@ -243,8 +244,14 @@ function App() {
             {/* Mix Tapes */}
 
             {/* Default redirect */}
-            <Route index element={<Navigate to="/settings" replace />} />
-            <Route path="*" element={<Navigate to="/settings" replace />} />
+            {/* ADR-0058 point 1: the administrator lands on the thing being administered, not on a
+                form. This was `Navigate to="/settings"`. */}
+            <Route index element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <Dashboard />
+              </Suspense>
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </QueryClientProvider>
