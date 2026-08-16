@@ -22,6 +22,84 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/artwork", tags=["artwork"])
 
 
+class ArtworkCoverageResponse(BaseModel):
+    """How much of the library has real cover art.
+
+    `total_albums` is counted the way `/library/albums` and `/library/stats` count, so the three
+    agree (ADR-0058 point 6). It would have been easier to count canonical `Album` rows, and it
+    would have been wrong: the dashboard tile beside this one says 3,927, and a coverage figure over
+    a different denominator is the "plausible-looking number" that point exists to forbid.
+
+    `generated` is broken out rather than folded into `with_artwork` because a generated placeholder
+    is what the app draws when it has nothing — counting it as coverage would report a library with
+    no cover art at all as fully covered.
+    """
+
+    total_albums: int
+    with_artwork: int
+    generated: int
+    without_artwork: int
+
+
+@router.get("/coverage", response_model=ArtworkCoverageResponse)
+async def get_artwork_coverage(db: DbSession) -> ArtworkCoverageResponse:
+    """Count albums with, without, and with only placeholder cover art.
+
+    ADR-0058 phase 5. Artwork existence is a fact about the filesystem, not the database — there is
+    no column recording it — so this stats one thumbnail path per album. That is ~4k stat calls on
+    Jeff's library, which is why it runs in a worker thread rather than blocking the event loop, and
+    why it is its own endpoint rather than three more fields on `/library/stats`: the dashboard
+    should not pay for a filesystem sweep on every load.
+    """
+    import asyncio
+
+    from sqlalchemy import TEXT, cast, func, select
+
+    from app.db.models import Track, TrackStatus
+    from app.services.artwork import compute_album_hash, is_generated_artwork
+
+    # Same grouping as `library_albums.list_albums` and `library.get_library_stats`. The id is cast
+    # to text for the same reason that module casts: PostgreSQL has no `max()` over uuid.
+    album_artist_col = func.coalesce(func.nullif(Track.album_artist, ""), Track.artist)
+    result = await db.execute(
+        select(
+            func.max(cast(Track.canonical_album_id, TEXT)).label("album_id"),
+            func.max(album_artist_col).label("artist"),
+            func.max(Track.album).label("album"),
+        )
+        .where(
+            Track.status == TrackStatus.ACTIVE,
+            Track.album.isnot(None),
+            Track.album != "",
+        )
+        .group_by(func.lower(album_artist_col), func.lower(Track.album))
+    )
+    rows = result.all()
+
+    def survey() -> tuple[int, int]:
+        """Stat every album's thumbnail. Runs off the event loop."""
+        found = 0
+        placeholder = 0
+        for row in rows:
+            # Mirrors `album_key_for_track`: the canonical id when the resolver placed the album,
+            # the legacy hash when it could not.
+            key = row.album_id or compute_album_hash(row.artist, row.album)
+            if get_artwork_path(key, "thumb").exists():
+                found += 1
+                if is_generated_artwork(key):
+                    placeholder += 1
+        return found, placeholder
+
+    with_artwork, generated = await asyncio.to_thread(survey)
+
+    return ArtworkCoverageResponse(
+        total_albums=len(rows),
+        with_artwork=with_artwork,
+        generated=generated,
+        without_artwork=len(rows) - with_artwork,
+    )
+
+
 class ArtworkQueueRequest(BaseModel):
     """Request to queue artwork for download."""
 

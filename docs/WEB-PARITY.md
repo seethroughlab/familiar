@@ -215,6 +215,11 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
   Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
   screen and false of the numbers.
+- **2026-08-16** — duplicates, the organiser and artwork coverage reached the browser (`familiar`
+  #170, ADR-0058 phases 4–5). All browser-only and all infrastructural under ADR-0057 point 2.
+  The first two are preview-only because the server has no apply route for either; the third needed
+  a new endpoint, `GET /artwork/coverage`. `organizerApi` had existed uncalled — the fourth such
+  wrapper this ADR turned up.
 - **2026-08-16** — the web app became an administration tool with three destinations (`familiar`
   #169, ADR-0058): Library, Tools, Server. Settings keeps only theme, playback and offline. Four
   settings panels were **deleted** rather than unmounted — see the Settings section above.

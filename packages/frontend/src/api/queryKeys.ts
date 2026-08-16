@@ -29,6 +29,9 @@ export const queryKeys = {
   library: {
     stats: () => ['library', 'stats'] as const,
     playStats: (limit: number) => ['library', 'play-stats', limit] as const,
+    // Its own key, not part of `stats`: coverage stats one file per album (~4k on Jeff's library),
+    // and the dashboard should not pay for a filesystem sweep on every load.
+    artworkCoverage: () => ['library', 'artwork-coverage'] as const,
   },
 
   // ── Albums ────────────────────────────────────────────────────────────

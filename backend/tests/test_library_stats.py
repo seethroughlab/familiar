@@ -150,3 +150,91 @@ async def test_pending_analysis_is_never_negative(async_db):
     assert stats.total_tracks == 1
     assert stats.analyzed_tracks == 1
     assert stats.pending_analysis == 0
+
+
+@pytest.mark.asyncio
+async def test_artwork_coverage_denominator_matches_the_album_total(async_db, tmp_path, monkeypatch):
+    """Coverage counts the same albums the dashboard tile counts (ADR-0058 point 6).
+
+    The easy implementation counts canonical `Album` rows, which is a different number from the
+    one shown beside it — a coverage percentage over a denominator nobody can see is exactly the
+    plausible-looking figure point 6 forbids.
+    """
+    from app.api.routes.artwork import get_artwork_coverage
+
+    # Patched on the *route* module, not the service: `artwork.py` does `from app.services.artwork
+    # import get_artwork_path` at module level, so patching the service leaves the route's own
+    # global bound to the original and the test passes without controlling anything.
+    monkeypatch.setattr(
+        "app.api.routes.artwork.get_artwork_path",
+        lambda key, size="full": tmp_path / f"{key}-{size}.jpg",
+    )
+
+    a = await ar.resolve_canonical_artist(async_db, "Alpha", do_mb_lookup=False)
+    b = await ar.resolve_canonical_artist(async_db, "Beta", do_mb_lookup=False)
+    # Two same-titled albums by different artists, one of them spanning a case variant.
+    async_db.add(_track(file="t1", artist_id=a.id, artist="Alpha", album="Greatest Hits"))
+    async_db.add(_track(file="t2", artist_id=b.id, artist="Beta", album="Greatest Hits"))
+    async_db.add(_track(file="t3", artist_id=a.id, artist="Alpha", album="greatest hits"))
+    # A non-active track must not add an album to either count.
+    async_db.add(
+        _track(
+            file="gone",
+            artist_id=b.id,
+            artist="Beta",
+            album="Vanished",
+            status=TrackStatus.MISSING,
+        )
+    )
+    await async_db.commit()
+
+    stats = await get_library_stats(db=async_db)
+    coverage = await get_artwork_coverage(db=async_db)
+
+    assert coverage.total_albums == stats.total_albums == 2
+    assert coverage.without_artwork == 2
+    assert coverage.with_artwork == 0
+    assert coverage.generated == 0
+
+
+@pytest.mark.asyncio
+async def test_artwork_coverage_counts_files_and_placeholders_apart(async_db, tmp_path, monkeypatch):
+    """An album with a generated placeholder is covered *and* counted as generated.
+
+    Folding placeholders into `with_artwork` would report a library with no real cover art at all
+    as fully covered — the number would be true of the filesystem and false of what a person sees.
+    """
+    from app.api.routes import artwork as artwork_route
+
+    monkeypatch.setattr(
+        artwork_route,
+        "get_artwork_path",
+        lambda key, size="full": tmp_path / f"{key}-{size}.jpg",
+    )
+    # "Alpha / Real Art" gets a file; the placeholder marker names only the second album.
+    monkeypatch.setattr(
+        "app.services.artwork.is_generated_artwork",
+        lambda key: key in generated_keys,
+    )
+
+    a = await ar.resolve_canonical_artist(async_db, "Alpha", do_mb_lookup=False)
+    async_db.add(_track(file="t1", artist_id=a.id, artist="Alpha", album="Real Art"))
+    async_db.add(_track(file="t2", artist_id=a.id, artist="Alpha", album="Placeholder"))
+    async_db.add(_track(file="t3", artist_id=a.id, artist="Alpha", album="Nothing"))
+    await async_db.commit()
+
+    # Work out the keys the endpoint will compute, then create thumbs for two of the three.
+    from app.services.artwork import compute_album_hash
+
+    real_key = compute_album_hash("Alpha", "Real Art")
+    placeholder_key = compute_album_hash("Alpha", "Placeholder")
+    generated_keys = {placeholder_key}
+    for key in (real_key, placeholder_key):
+        (tmp_path / f"{key}-thumb.jpg").write_bytes(b"x")
+
+    coverage = await artwork_route.get_artwork_coverage(db=async_db)
+
+    assert coverage.total_albums == 3
+    assert coverage.with_artwork == 2
+    assert coverage.generated == 1
+    assert coverage.without_artwork == 1

@@ -213,6 +213,34 @@ curl "http://localhost:4400/api/v1/tracks/{id}/artwork?size=thumb" -o cover.jpg
 
 Returns JPEG image with 1-year cache header.
 
+### Artwork Coverage
+
+```
+GET /artwork/coverage
+```
+
+How much of the library has real cover art (ADR-0058 phase 5).
+
+```json
+{
+  "total_albums": 3927,
+  "with_artwork": 3568,
+  "generated": 661,
+  "without_artwork": 359
+}
+```
+
+`total_albums` is counted the way `/library/albums` and `/library/stats` count, so all three agree.
+
+`generated` is a **subset of `with_artwork`**, not a fourth category: those albums have a thumbnail
+on disk, but it is a placeholder Familiar drew rather than a real cover. Real art is
+`with_artwork - generated`. Reporting them as covered would call a library with no real art at all
+fully covered.
+
+Artwork existence is a filesystem fact — no column records it — so this stats one thumbnail per
+album in a worker thread. Roughly 4k stat calls answer in under a second, but it is a separate
+endpoint from `/library/stats` so the dashboard does not sweep the disk on every load.
+
 ### Get Lyrics
 
 ```
