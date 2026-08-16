@@ -5,8 +5,11 @@
  * Catches bugs like a sidebar link pointing to a route that doesn't exist
  * (which silently falls through to the catch-all redirect).
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, it, expect, beforeAll } from 'vitest';
-import { BROWSER_ROUTES, LIBRARY_ITEMS, PARKED_BROWSERS } from '../routes';
+import { BROWSER_ROUTES, DESTINATIONS, LIBRARY_ITEMS, PARKED_BROWSERS } from '../routes';
 import { getBrowser, getBrowsers } from '../components/Library/types';
 
 // Trigger all browser registrations via side-effect imports
@@ -89,6 +92,75 @@ describe('navigation integrity', () => {
         route.browserId in PARKED_BROWSERS,
         `"${route.browserId}" has a route and is also parked — one of the two is wrong`,
       ).toBe(false);
+    }
+  });
+});
+
+/**
+ * Links are checked against the routes that actually exist in `App.tsx`.
+ *
+ * The suite above already claimed to catch "a sidebar link pointing to a route that doesn't exist"
+ * — and did not. `/favorites` and `/downloads` sat in the sidebar for the whole of the ADR-0057
+ * strip, silently redirecting to the catch-all, because they were **hardcoded in the component**
+ * rather than declared in `routes.ts`, and the guard only ever read the registry.
+ *
+ * So this reads the source instead. A registry can only vouch for what someone remembered to put in
+ * it; the JSX is where the affordance really is.
+ */
+describe('navigation links resolve to mounted routes', () => {
+  // `import.meta.url` is not a file URL under vitest's transform, so paths resolve from the
+  // package root (vitest's cwd) instead.
+  const readSource = (relative: string) =>
+    readFileSync(resolve(process.cwd(), 'src', relative), 'utf-8');
+
+  const appSource = readSource('App.tsx');
+
+  /** Absolute paths `App.tsx` mounts, plus the `/library/:path` routes it maps from the registry. */
+  const mountedPaths = new Set<string>([
+    ...Array.from(appSource.matchAll(/path="(\/[^"*]*)"/g), (m) => m[1]),
+    ...BROWSER_ROUTES.map((r) => `/library/${r.path}`),
+    // `<Route index>` is the destination for '/', and carries no `path` attribute to match.
+    ...(/<Route index/.test(appSource) ? ['/'] : []),
+  ]);
+
+  /** Strip route params so `/listen/:code?` covers a link to `/listen/abc`. */
+  const isMounted = (target: string) =>
+    mountedPaths.has(target) ||
+    [...mountedPaths].some((p) => p.includes(':') && new RegExp(
+      `^${p.replace(/:[^/?]+\??/g, '[^/]*').replace(/\/$/, '')}/?$`,
+    ).test(target));
+
+  it('every destination in the sidebar is mounted', () => {
+    for (const d of DESTINATIONS) {
+      expect(
+        isMounted(d.path),
+        `Destination "${d.label}" (${d.path}) has no route in App.tsx — it would hit the catch-all`,
+      ).toBe(true);
+    }
+  });
+
+  it.each([
+    'components/Sidebar/Sidebar.tsx',
+    'components/Admin/LibraryPage.tsx',
+    'components/Admin/ToolsPage.tsx',
+  ])('every internal link in %s is mounted', (relative) => {
+    const source = readSource(relative);
+    // Both forms, because a component navigates either way and only one of them is a `<Link>`.
+    // The sidebar's `<Link to={item.path}>` is dynamic and covered by the destinations test above;
+    // its `navigate('/settings')` is a string literal and covered here.
+    const targets = [
+      ...Array.from(source.matchAll(/\bto="(\/[^"]*)"/g), (m) => m[1]),
+      ...Array.from(source.matchAll(/\bnavigate\(\s*['"](\/[^'"]*)['"]/g), (m) => m[1]),
+    ];
+
+    // A page with no links is a red flag for this guard, not a pass: these three all navigate.
+    expect(targets.length).toBeGreaterThan(0);
+
+    for (const target of targets) {
+      expect(
+        isMounted(target),
+        `${relative} links to "${target}", which App.tsx does not mount — it would silently redirect`,
+      ).toBe(true);
     }
   });
 });

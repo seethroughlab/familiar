@@ -4,7 +4,7 @@
 nothing is lost on the way to native clients. This document is that record, so the code no longer has
 to be. Code is a poor inventory: you cannot read it as a list, and it rots without saying so.
 
-Written 2026-08-10, last updated 2026-08-11. Verified against the repos at that date — every "no"
+Written 2026-08-10, last updated 2026-08-16. Verified against the repos at that date — every "no"
 below was checked by looking for the call, not by assuming.
 
 **This is maintained, not a snapshot.** ADR-0050 point 6 makes it the reference the code used to be,
@@ -96,10 +96,18 @@ API keys and library paths are **not** configurable from any client — they are
 Native settings are three tabs (Playback, Effects, Downloads) plus Server on the phone. Everything
 under System, Library, Integrations, Data and Developer is browser-only.
 
-Roughly a third of the web's 25 settings files configure *the web player itself* —
-`AudioEffectsSettings`, `OfflineSettings`, `OfflineTracksPanel`, `StorageQuotaDisplay`,
-`PlaybackSettings`, `QueueSyncSettings`, `ThemeSettings`. Those retire with the player they
-configure; they are not part of the management surface.
+Roughly a third of the web's settings files configure *the web player itself* — `OfflineSettings`,
+`OfflineTracksPanel`, `StorageQuotaDisplay`, `PlaybackSettings`, `ThemeSettings`. Those retire with
+the player they configure; they are not part of the management surface. `ThemeSettings` is the
+exception that outlives it, because it styles the administration interface (ADR-0058 point 5).
+
+**Four are already gone.** `ShuffleWeightSettings`, `RadioSettings`, `AudioEffectsSettings` and
+`QueueSyncSettings` were **deleted** — not unmounted — by ADR-0058 point 5, so unlike everything in
+`PARKED_BROWSERS` their code no longer exists. The capabilities they configured are unaffected: the
+native clients own them per-device (ADR-0029), and in the browser they remain reachable from the
+player's own chrome — `ShuffleWeightPopover` and `EffectsQuickAccess` — which retires with the
+player. Queue sync keeps its store and service; only its switch went, and the persisted flag is
+forced back off so no device is left syncing with nothing to turn it off.
 
 ## What the native clients load *from* the web bundle
 
@@ -202,6 +210,18 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   what the code can do, not what is currently routed** — `PARKED_BROWSERS` in
   `packages/frontend/src/routes.ts` is the list of what is unmounted, and points 4 of ADR-0050 makes
   deleting it a consequence of accepting that ADR.
+- **2026-08-16** — `/library/stats` was corrected (`familiar` #168). It had disagreed with
+  `/library/albums`, `/library/artists` and `/tracks` on all three totals for as long as nothing
+  called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
+  Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
+  screen and false of the numbers.
+- **2026-08-16** — the web app became an administration tool with three destinations (`familiar`
+  #169, ADR-0058): Library, Tools, Server. Settings keeps only theme, playback and offline. Four
+  settings panels were **deleted** rather than unmounted — see the Settings section above.
+  Rewriting the sidebar turned up three more affordances that led nowhere: `/favorites` and
+  `/downloads` had been linked with no route mounted since the ADR-0057 strip, and the mixtape
+  export modal's only setter was its own `onClose`. `navigationIntegrity.test.ts` now reads
+  `App.tsx` and fails on a link to an unmounted path, which is what the registry-only guard missed.
 
 ## Dead at the time of writing
 

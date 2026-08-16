@@ -55,9 +55,9 @@ export function Dashboard() {
     : [];
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
-      <h2 className="text-xl font-bold text-white dark:text-white light:text-zinc-900">Library</h2>
-
+    // Page chrome (title, padding, width) belongs to `LibraryPage`; this is content only, so the
+    // same tiles can sit under a heading it does not own.
+    <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <Stat icon={<Music className="w-5 h-5 text-cyan-400" />} label="Tracks"
               value={library?.total_tracks} loading={libraryLoading} />
