@@ -140,15 +140,16 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
         <tr><th></th><th>Familiar</th><th>Jellyfin</th><th>Plex</th><th>Apple Music</th><th>Spotify</th></tr>
       </thead>
       <tbody>
-        <tr><td>Plays your existing MP3 / FLAC files</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>iCloud Match (replaces files)</td><td class="no">—</td></tr>
+        <tr><td>Plays your existing MP3 / FLAC files</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td>iCloud Match (may replace with catalog version)</td><td>Local Files — MP3 only, same Wi-Fi</td></tr>
         <tr><td>MCP server (bring your own AI)</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Semantic audio search</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td>Basic</td><td>Basic</td><td>Catalog-only</td><td>Catalog-only</td></tr>
+        <tr><td>Search by describing the sound</td><td class="yes">Yes (CLAP)</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
+        <tr><td>Audio feature analysis</td><td class="yes">BPM, key, energy, mood</td><td>Basic</td><td>Sonic analysis (Plex Pass)</td><td>Catalog-only</td><td>Catalog-only</td></tr>
         <tr><td>Community analysis cache</td><td class="yes">Yes</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
         <tr><td>Self-hosted / no cloud</td><td class="yes">Yes</td><td class="yes">Yes</td><td>Partial</td><td class="no">—</td><td class="no">—</td></tr>
-        <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td class="no">—</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td></tr>
+        <tr><td>Smart playlists</td><td class="yes">Rules-based</td><td>Community plugin</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">—</td></tr>
       </tbody>
     </table>
+    <p class="table-note">Competitor capabilities checked against each product's own documentation on 2026-08-16. They change; if something here is out of date, <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">tell us</a>.</p>
   </div>
 </section>
 

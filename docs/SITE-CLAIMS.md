@@ -75,9 +75,19 @@ Kept so nothing is quietly restored later.
 
 ## Comparison table — `index.html`
 
-Familiar's own column is checked. **Every competitor cell is `unverifiable`** — nothing in this
-repository can settle what Jellyfin, Plex, Apple Music or Spotify do, and ADR-0055 point 2 forbids
-passing them as checked. 7 rows × 4 competitors = **28 assertions awaiting review**.
+Familiar's own column is checked. The competitor cells were filed as **unverifiable** on
+2026-08-14, on the grounds that nothing in this repository settles what Plex does. That was a
+mistake — true about the repository, and irrelevant, because these products publish documentation.
+Checked against it on **2026-08-16**, and two cells were wrong **in Familiar's favour**:
+
+| Cell | Was | Now | Source |
+|---|---|---|---|
+| Plex, audio feature analysis | "Basic" | "Sonic analysis (Plex Pass)" | Plex runs a neural network placing tracks in an N-dimensional space for sonic similarity, track radio and mixes. Calling that basic understated the nearest competitor on the axis Familiar claims as its own |
+| Spotify, plays your own files | "—" | "Local Files — MP3 only, same Wi-Fi" | Local Files plays MP3/MP4/M4P and syncs to mobile over the same network. No FLAC and not remotely, which is the honest distinction — and the site's own FAQ already said so while the table contradicted it |
+| Jellyfin, smart playlists | "—" | "Community plugin" | Not built in; several maintained plugins provide it |
+| Row label "Semantic audio search" | — | "Search by describing the sound" | Plex's sonic similarity is track-to-track and real. What Familiar does differently is text-to-audio, so the row now says that rather than implying nobody analyses audio |
+
+The table now carries the date it was checked and an invitation to correct it.
 
 | Row | Familiar's cell | Verdict |
 |---|---|---|
@@ -90,8 +100,9 @@ passing them as checked. 7 rows × 4 competitors = **28 assertions awaiting revi
 | Smart playlists | Rules-based | true |
 | ~~Music video playback~~ | — | **removed**, browser-only |
 
-**What would settle the competitor cells:** a dated check against each product's own documentation,
-recorded here with the date. Until then the table ships as-is and this ledger is the worklist.
+**Re-check when a competitor ships something.** Plex Pass features and Spotify's Local Files both
+move. The date on the table is the promise being made — it does not claim to be current, it claims
+to have been true on a stated day, which is a promise that can actually be kept.
 
 ## `faq.html`
 
@@ -114,6 +125,5 @@ recorded here with the date. Until then the table ships as-is and this ledger is
 
 ## Open
 
-- 28 competitor assertions in the comparison table — Jeff to confirm or correct.
 - Analysis timing claim — needs a measured run.
 - `privacy.html` third-party bullets — the field lists each integration sends are unverified.

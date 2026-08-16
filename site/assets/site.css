@@ -228,6 +228,12 @@ a:hover { text-decoration: underline; }
   margin-bottom: 8px;
 }
 
+.table-note {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+
 .feature-note {
   font-size: 14px;
   color: var(--text-muted);

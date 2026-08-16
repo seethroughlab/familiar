@@ -84,9 +84,16 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
 
    Verdicts are `true`, `false`, `misdescribed`, `browser-only` and `unverifiable`. `misdescribed`
    exists because that is the category the first audit collapsed — the video feature was real and
-   the sentence still wrong. `unverifiable` exists so a claim about something outside this
-   repository is recorded as unchecked rather than quietly passing; the comparison table's 28
-   competitor assertions are all of them.
+   the sentence still wrong.
+
+   **`unverifiable` means nobody can check it, not that it is outside this repository**, and that
+   distinction was got wrong once already. The comparison table's 28 competitor assertions were
+   filed as unverifiable on the grounds that nothing in this repo settles what Plex does. True, and
+   irrelevant: Plex publishes documentation. Checked against it, two cells were wrong in Familiar's
+   favour — Plex's neural sonic analysis was written off as "Basic", and Spotify was shown as unable
+   to play your own files when Local Files does exactly that. A comparison table that is only ever
+   audited against its own author's repository will drift towards flattering its author, and that is
+   worse than being out of date.
 
    The ledger is `docs/SITE-CLAIMS.md` and the mechanical half is `site/scripts/check-claims.py`.
    An audit that leaves no artefact has already expired.
