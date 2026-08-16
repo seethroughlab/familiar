@@ -21,7 +21,9 @@ import { AppShell } from './components/AppShell';
 import { LibraryBrowser } from './components/Library/LibraryBrowser';
 
 // Lazy-loaded route components
-const Dashboard = lazy(() => import('./components/Admin/Dashboard').then(m => ({ default: m.Dashboard })));
+const LibraryPage = lazy(() => import('./components/Admin/LibraryPage').then(m => ({ default: m.LibraryPage })));
+const ToolsPage = lazy(() => import('./components/Admin/ToolsPage').then(m => ({ default: m.ToolsPage })));
+const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => ({ default: m.ServerPage })));
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
@@ -220,16 +222,29 @@ function App() {
 
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
-            {/* Settings is the point of the web app now (docs/WEB-PARITY.md), so it is a page
-                with a URL rather than a modal you could not link to or bookmark. */}
+            {/* Settings is no longer the point of the web app — the three destinations below are
+                (ADR-0058 point 2). It keeps its URL and its heading: the E2E helper waits on that
+                heading, so it is load-bearing as well as ordinary good sense. What it still holds
+                is theme, plus the playback and offline sections scheduled to leave with the
+                player (point 5). */}
             <Route path="/settings" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-                  {/* A page needs a title where the modal had a chrome header. The E2E helper also
-                      waits on this heading, so it is load-bearing as well as ordinary good sense. */}
                   <h2 className="text-lg font-semibold mb-4">Settings</h2>
                   <SettingsPanel />
                 </div>
+              </Suspense>
+            } />
+
+            {/* The other two destinations. Library is the index route below. */}
+            <Route path="/tools" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ToolsPage />
+              </Suspense>
+            } />
+            <Route path="/server" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ServerPage />
               </Suspense>
             } />
             {/* Library browser views */}
@@ -248,7 +263,7 @@ function App() {
                 form. This was `Navigate to="/settings"`. */}
             <Route index element={
               <Suspense fallback={<LazyLoadSpinner />}>
-                <Dashboard />
+                <LibraryPage />
               </Suspense>
             } />
             <Route path="*" element={<Navigate to="/" replace />} />

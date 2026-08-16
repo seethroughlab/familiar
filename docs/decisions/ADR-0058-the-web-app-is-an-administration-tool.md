@@ -1,6 +1,6 @@
 # ADR-0058: The Web App Is an Administration Tool
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-16
 
@@ -92,6 +92,24 @@ below depends on not investing in it.
 7. **The four pending-analysis queues are shown separately.** `analysis`, `backfill`, `melodic` and
    `mood_tags` are distinct backlogs with distinct versions, and a single "pending" number hides
    which one is stuck. This is the whole reason to have a dashboard rather than a progress bar.
+
+## Implementation
+
+- **Phase 1** — the dashboard (`familiar` #168, branch `admin/dashboard`). Points 1, 6, 7. Turned
+  into a backend change: see the Context table above. `tests/test_library_stats.py` asserts the
+  stats endpoint against the list endpoints rather than against constants.
+- **Phases 2 and 3 together** — destinations and settings (`familiar` #169, branch
+  `admin/destinations`). Points 2, 3, 5. **Deliberately not shipped separately**, though the plan
+  had them apart: routing `/tools` and `/server` before moving content into them would have created
+  destinations with nothing mounted, which is the defect point 2's own guard exists to prevent.
+  Rewriting the sidebar found three affordances that already led nowhere — `/favorites` and
+  `/downloads` linked with no route since the ADR-0057 strip, and a mixtape modal whose only setter
+  was its own `onClose`. `navigationIntegrity.test.ts` now reads `App.tsx` source and fails on a
+  link to an unmounted path; the previous guard read only the registry, which is why affordances
+  hardcoded in the component escaped it.
+- **Phases 4 and 5** — duplicates and organiser, then artwork coverage. Not started. Both are
+  recorded in `UNBUILT_DESTINATION_ITEMS` in `routes.ts` so the gap between this ADR's point 2 and
+  the running app is written down rather than rediscovered.
 
 ## Alternatives Considered
 

@@ -1,148 +1,54 @@
-import { LastfmSettings } from './LastfmSettings';
+/**
+ * What is left of Settings after ADR-0058.
+ *
+ * Nine sections became three. The rest did not disappear — they moved to the destination they
+ * belong to (point 2): system, keys, profiles, Last.fm and diagnostics to **Server**; sync,
+ * analysis and cleanup to **Library**; backup and community cache to **Tools**.
+ *
+ * **Four were deleted outright** (point 5): shuffle weights, radio, audio effects and queue sync.
+ * They are listener preferences the native clients own per-device under ADR-0029, and they do not
+ * configure the fallback player in any useful sense — they configure a listening experience the
+ * browser no longer provides.
+ *
+ * What remains is the two waves point 5 describes. **Theme** outlives the player, because it
+ * applies to this administration interface itself. **Playback** and **Offline** leave *with* the
+ * player, and are deliberately left where they are rather than rehoused: moving them into a new
+ * information architecture is work on something already condemned.
+ */
 import { OfflineSettings } from './OfflineSettings';
 import { ThemeSettings } from './ThemeSettings';
 import { PlaybackSettings } from './PlaybackSettings';
-import { AudioEffectsSettings } from './AudioEffectsSettings';
-import { ProfileSettings } from './ProfileSettings';
-import { SystemStatus } from './SystemStatus';
-import { LibrarySync } from './LibrarySync';
-import { AnalysisSettings } from './AnalysisSettings';
-import { InstallStatus } from '../PWA/InstallPrompt';
-import { DebugSettings } from './DebugSettings';
-import { RemoteLogsPanel } from './RemoteLogsPanel';
-import { DataManagement } from './DataManagement';
-import { ApiKeyStatus } from './ApiKeyStatus';
-import { CommunityCache } from './CommunityCache';
-import { ServerSettings } from './ServerSettings';
-import { ServerTokenSettings } from './ServerTokenSettings';
-import { ShuffleWeightSettings } from './ShuffleWeightSettings';
-import { RadioSettings } from './RadioSettings';
-import { QueueSyncSettings } from './QueueSyncSettings';
-import { isNativeApp } from '../../utils/platform';
-import { areAudioEffectsAvailable } from '../../player/audio/engineInstance';
 
 export function SettingsPanel() {
-  // Developer tools are hidden by default. Shown in dev builds, or on any build
-  // by setting localStorage 'familiar:devTools' = '1'.
-  const showDevTools =
-    import.meta.env.DEV ||
-    (typeof localStorage !== 'undefined' && localStorage.getItem('familiar:devTools') === '1');
-
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-white dark:text-white light:text-zinc-900 mb-2">Settings</h2>
-        <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">Manage your integrations and preferences</p>
-      </div>
+    <div className="space-y-6">
+      <section>
+        <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
+          Appearance
+        </h3>
+        <div className="space-y-4">
+          <ThemeSettings />
+        </div>
+      </section>
 
-      <div className="space-y-6">
-        {/* System Status at the top for visibility */}
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            System
-          </h3>
-          <div className="space-y-4">
-            <SystemStatus />
-            <ApiKeyStatus />
-            {isNativeApp() && <ServerSettings />}
-            {/* Unlike ServerSettings, this is not native-only: the web app is same-origin and so
-                needs no URL, but it still has to present a token once the server has one. */}
-            <ServerTokenSettings />
-          </div>
-        </section>
+      {/* Both sections below are scheduled to leave with the fallback player (point 5). */}
+      <section>
+        <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
+          Playback
+        </h3>
+        <div className="space-y-4">
+          <PlaybackSettings />
+        </div>
+      </section>
 
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Library
-          </h3>
-          <div className="space-y-4">
-            <LibrarySync />
-            <AnalysisSettings />
-            <CommunityCache />
-          </div>
-        </section>
-
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Profile
-          </h3>
-          <div className="space-y-4">
-            <ProfileSettings />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            App
-          </h3>
-          <div className="space-y-4">
-            <InstallStatus />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Appearance
-          </h3>
-          <div className="space-y-4">
-            <ThemeSettings />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Playback
-          </h3>
-          <div className="space-y-4">
-            <PlaybackSettings />
-            <ShuffleWeightSettings />
-            <RadioSettings />
-            {areAudioEffectsAvailable() && <AudioEffectsSettings />}
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Integrations
-          </h3>
-          <div className="space-y-4">
-            <LastfmSettings />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Offline & Storage
-          </h3>
-          <div className="space-y-4">
-            <OfflineSettings />
-            <QueueSyncSettings />
-          </div>
-        </section>
-
-        <section>
-          <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-            Data
-          </h3>
-          <div className="space-y-4">
-            <DataManagement />
-          </div>
-        </section>
-
-        {showDevTools && (
-          <section>
-            <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
-              Developer
-            </h3>
-            <div className="space-y-4">
-              <DebugSettings />
-              <RemoteLogsPanel />
-            </div>
-          </section>
-        )}
-
-      </div>
+      <section>
+        <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
+          Offline &amp; Storage
+        </h3>
+        <div className="space-y-4">
+          <OfflineSettings />
+        </div>
+      </section>
     </div>
   );
 }

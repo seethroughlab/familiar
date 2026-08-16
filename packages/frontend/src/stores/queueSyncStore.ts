@@ -23,6 +23,21 @@ export const useQueueSyncStore = create<QueueSyncState>()(
       enabled: false,
       setEnabled: (enabled) => set({ enabled }),
     }),
-    { name: 'familiar-queue-sync' }
+    {
+      name: 'familiar-queue-sync',
+      /**
+       * Version 1 forces the gate back off, because ADR-0058 point 5 removed the only control.
+       *
+       * The flag is persisted, so a device where it had been switched on would otherwise keep
+       * mirroring its queue forever with nothing left to turn it off — an invisible behaviour with
+       * no affordance, which is the same defect as an affordance with no behaviour. Off is also
+       * where it started: the docstring above calls it a rollout gate, not a preference.
+       *
+       * `setEnabled` stays on the store: `queueSyncService` and its tests drive it directly, and
+       * the gate itself is not being removed — only its settings-page switch.
+       */
+      version: 1,
+      migrate: (persisted) => ({ ...(persisted as QueueSyncState), enabled: false }),
+    }
   )
 );
