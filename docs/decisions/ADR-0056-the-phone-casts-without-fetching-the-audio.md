@@ -95,14 +95,28 @@ and this ADR should not be accepted until it has been run.
    while casting, and that answer corrects the timer. ADR-0031 point 8 already says a play that
    cannot be confirmed is reported as unconfirmed; this gives that rule something to read.
 
-5. **This ADR is not accepted until the drain is measured**, because point 7 says so. The
-   measurement, on a phone, cast to a real device, over at least twenty minutes:
-   - battery percentage and Settings → Battery attribution before and after,
-   - network bytes for the app across the session,
-   - the same again with the decoupled timeline, on the same track list, same output, same volume.
+5. **This ADR is not accepted until the discarded stream is measured**, because point 7 says so.
 
-   The number that decides it is bytes transferred, not CPU. If a casting session costs about what
-   an idle app costs, point 7's concern is answered rather than argued with.
+   **It is measured on the Mac, not the phone, and that is not a compromise.** The first draft of
+   this point asked for a casting phone — which cannot exist until this ADR ships, so it was a
+   measurement that could only be taken after the decision it was meant to inform. The Mac casts
+   today, pulls the same discarded stream from the same server, and the number in question is bytes
+   over the wire, which does not care which machine asked.
+
+   Cast from the Mac to a real device and watch the app's own throughput for one track:
+
+   ```
+   nettop -P -p $(pgrep -x Familiar) -L 0
+   ```
+
+   Three readings, same track, same output, same volume: playing locally, casting, and idle. The
+   claim this ADR rests on is that **casting costs about as much as playing locally** — a second
+   full stream — rather than about as much as idling. If casting turns out to be near idle, the
+   discarded fetch is not happening the way this ADR reads the code, and it should be rejected
+   rather than reworded.
+
+   The phone's battery figure is worth having eventually, but it is a consequence of the bytes, not
+   independent evidence, and it cannot be collected until there is something to collect it from.
 
 6. **`PlayableTrack` gains a duration**, since a timer cannot be seeded without one. Optional, so
    nothing that constructs a track today breaks, and a nil duration falls back to the current
