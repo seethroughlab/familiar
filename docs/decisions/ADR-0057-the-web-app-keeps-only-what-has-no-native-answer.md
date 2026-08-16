@@ -1,6 +1,6 @@
 # ADR-0057: The Web App Keeps Only What Has No Native Answer
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-16
 

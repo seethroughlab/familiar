@@ -11,7 +11,6 @@ import { downloadApi } from '../api';
 import { showLoading, showError } from '../stores/toastStore';
 import { toast } from 'sonner';
 import type { Track } from '../types';
-import { useGeneratePlaylist } from './useGeneratePlaylist';
 
 interface UseTrackContextMenuOptions {
   /** Called to play the context menu track. Receives the track. */
@@ -55,11 +54,10 @@ interface UseTrackContextMenuOptions {
 }
 
 export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
-  const { generate: generatePlaylist } = useGeneratePlaylist();
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const setQueue = usePlayerStore((s) => s.setQueue);
-  const { navigateToArtist, navigateToAlbumDetail } = useAppNavigation();
+  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
@@ -169,7 +167,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
             const albumArtist = track.album_artist || track.artist;
             if (albumArtist && track.album) {
               options.beforeNavigate?.();
-              navigateToAlbumDetail(albumArtist, track.album);
+              navigateToAlbum(albumArtist, track.album);
             }
           }
         }}
@@ -183,13 +181,6 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
         }}
         onAddToPlaylist={() => {
           useUIStore.getState().openPlaylistPicker([track.id]);
-        }}
-        onMakePlaylist={() => {
-          // ADR-0048. **This is the most-used "Make a playlist" in the app** — `TrackListBrowser`,
-          // `ArtistDetail`, `PlaylistTrackList` and `AlbumDetail` all reach it through this hook —
-          // and the ADR's table of affordances does not mention it.
-          options.beforeNavigate?.();
-          void generatePlaylist({ track_id: track.id });
         }}
         onEditMetadata={() => {
           if (options.onEditMetadata) {
@@ -224,7 +215,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
     );
   }, [
     contextMenu, options, closeContextMenu, addToQueue, setQueue,
-    navigateToArtist, navigateToAlbumDetail, isFavorite, toggleFavorite,
+    navigateToArtist, navigateToAlbum, isFavorite, toggleFavorite,
   ]);
 
   return {

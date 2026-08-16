@@ -5,19 +5,13 @@
  * that don't fit in the 4-item bottom nav bar.
  */
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import {
   List, FileText,
-  Settings, Waves,
-  ListMusic, X,
+  Settings, Waves, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { getAmbientSynthBridge } from '../../player/ambient/ambientSynthBridge';
 import { useThemeStore } from '../../stores/themeStore';
-import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { playlistsApi } from '../../api';
-import { queryKeys } from '../../api/queryKeys';
-import { offlineAwareRetry } from '../../api/queryDefaults';
 
 interface Props {
   onClose: () => void;
@@ -39,15 +33,8 @@ export function MobileMoreSheet({ onClose }: Props) {
   const setShowSettings = useUIStore((s) => s.setShowSettings);
   const setShowAmbientScreen = useUIStore((s) => s.setShowAmbientScreen);
   const hasAmbientSynth = getAmbientSynthBridge() !== null;
-  const { isOffline } = useOfflineStatus();
 
-  const { data: playlists } = useQuery({
-    // Every playlist. This filtered to `is_auto_generated`, so a playlist made by hand was
-    // invisible on mobile entirely — the exact inverse of the desktop sidebar, which showed them all.
-    queryKey: queryKeys.playlists.all,
-    queryFn: () => playlistsApi.list(true),
-    retry: offlineAwareRetry(isOffline),
-  });
+
 
   const light = resolvedTheme === 'light';
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
@@ -118,23 +105,6 @@ export function MobileMoreSheet({ onClose }: Props) {
             </button>
           ))}
 
-          {/* Playlists */}
-          {playlists && playlists.length > 0 && (
-            <>
-              <div className={sectionClass}>Playlists</div>
-              {playlists.map((pl) => (
-                <button
-                  key={pl.id}
-                  onClick={() => handleNav(`/playlists/${pl.id}`)}
-                  className={itemClass(`/playlists/${pl.id}`)}
-                >
-                  <ListMusic className="w-5 h-5 flex-shrink-0" />
-                  <span className="flex-1 truncate">{pl.name}</span>
-                  <span className={`text-xs ${light ? 'text-zinc-400' : 'text-zinc-500'}`}>{pl.track_count}</span>
-                </button>
-              ))}
-            </>
-          )}
 
           {/* Smart playlists */}
 

@@ -151,6 +151,20 @@ deliberately, which is why the filter names operations rather than the tag: addi
 | Server-synced playback queue | ADR-0028 |
 | Capacitor iOS app (`packages/ios`) | **Deleted 2026-08-11** (ADR-0001 point 6). It had been the largest consumer of `frontend/src` |
 
+## Removed from the browser 2026-08-16 (ADR-0057)
+
+| Capability | Where it went |
+|---|---|
+| Playlist detail (`/playlists/:id`) | Native, both platforms. Point 3 of ADR-0050 kept it "until the Apple clients can edit a playlist"; they can |
+| Artist detail (`/library/artists/:name`) | Native. ADR-0057 point 3 makes the fallback player a flat list, so "Go to artist" now filters `/library/tracks` instead |
+| Album detail (`/library/albums/:artist/:album`) | Native. Same — the track context menu's album entry filters the list |
+| Seeded playlists in the browser | Native as of `familiar-apple` #120. Five affordances and `useGeneratePlaylist` went with the route they navigated to |
+| Sidebar playlist and smart-playlist sections | Their only destinations were the routes above and `/smart-playlists/:id`, which was never mounted |
+
+`LegacyRedirect` went too — 82 lines migrating a hash/query-param URL scheme to `/home`,
+`/favorites`, `/downloads`, `/library/music-map`, `/library/discover` and
+`/library/proposed-changes`, **none of which has been a mounted route for some time**.
+
 ## Re-verified 2026-08-16
 
 Checked row by row against the code, after a claim in this file turned out to be eight rows stale
