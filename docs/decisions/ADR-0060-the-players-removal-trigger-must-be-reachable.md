@@ -1,6 +1,6 @@
 # ADR-0060: The Player's Removal Trigger Must Be Reachable
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-17
 
