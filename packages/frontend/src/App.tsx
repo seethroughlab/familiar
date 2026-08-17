@@ -23,6 +23,8 @@ import { LibraryBrowser } from './components/Library/LibraryBrowser';
 // Lazy-loaded route components
 const LibraryPage = lazy(() => import('./components/Admin/LibraryPage').then(m => ({ default: m.LibraryPage })));
 const ToolsPage = lazy(() => import('./components/Admin/ToolsPage').then(m => ({ default: m.ToolsPage })));
+const DuplicatesPage = lazy(() => import('./components/Admin/DuplicatesPage').then(m => ({ default: m.DuplicatesPage })));
+const OrganizePage = lazy(() => import('./components/Admin/OrganizePage').then(m => ({ default: m.OrganizePage })));
 const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => ({ default: m.ServerPage })));
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
@@ -240,6 +242,17 @@ function App() {
             <Route path="/tools" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <ToolsPage />
+              </Suspense>
+            } />
+            {/* Phase 4. Both preview-only — the server exposes no apply route for either. */}
+            <Route path="/tools/duplicates" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <DuplicatesPage />
+              </Suspense>
+            } />
+            <Route path="/tools/organize" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <OrganizePage />
               </Suspense>
             } />
             <Route path="/server" element={

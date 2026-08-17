@@ -107,9 +107,23 @@ below depends on not investing in it.
   was its own `onClose`. `navigationIntegrity.test.ts` now reads `App.tsx` source and fails on a
   link to an unmounted path; the previous guard read only the registry, which is why affordances
   hardcoded in the component escaped it.
-- **Phases 4 and 5** — duplicates and organiser, then artwork coverage. Not started. Both are
-  recorded in `UNBUILT_DESTINATION_ITEMS` in `routes.ts` so the gap between this ADR's point 2 and
-  the running app is written down rather than rediscovered.
+- **Phases 4 and 5** — duplicates, organiser, artwork coverage (`familiar` #170, branch
+  `admin/tools`). Both phase-4 tools are **preview-only, and that is the server's shape rather than
+  caution in the UI**: `library_deduplicate.py` exposes one route and `organizer.py` three, none of
+  which move or delete a file. `organizerApi` turned out to be a fourth built-and-uncalled wrapper,
+  after `libraryApi.getStats`, `playTrackingApi.getStats` and `api/pendingTracks.ts`.
+
+  Phase 5 needed the endpoint point 6 predicted. `GET /artwork/coverage` groups tracks the same way
+  `/library/albums` and `/library/stats` do rather than counting canonical `Album` rows, so the
+  coverage denominator equals the Albums tile beside it — 3,927 on the real library, verified.
+  Artwork existence is a filesystem fact with no column behind it, so it stats one thumbnail per
+  album off the event loop; 3,927 stats answer in 0.27s.
+
+  **Generated placeholders are counted apart from real art**, and the live numbers show why: 3,568
+  albums have a thumbnail, but 661 of those are placeholders. Folding them in would have reported
+  91% coverage on a library where 74% has real art.
+
+  `UNBUILT_DESTINATION_ITEMS` now lists only pending review.
 
 ## Alternatives Considered
 
@@ -153,7 +167,16 @@ below depends on not investing in it.
   is at hand — or the column and the three response fields go. Until then `albums`, `compilations`
   and `soundtracks` stay on the wire, deprecated in the model and in `types/index.ts`, displayed
   nowhere. Removing them is a cross-repo break: `library` is a generated tag under ADR-0007.
-- **Follow-up:** artwork coverage needs a count endpoint before its tile can exist.
+- **Follow-up:** ~~artwork coverage needs a count endpoint before its tile can exist~~ — done in
+  phase 5, `GET /artwork/coverage`.
+- **Follow-up:** the organiser's templates key on `{artist}`, which is per-track, so previewing a
+  compilation proposes dropping the performer from the filename — `07 Stratis - Herzlos.mp3` becomes
+  `07 - Herzlos.mp3`. Observed on the real library while verifying phase 4. Harmless while the tool
+  is preview-only; it is a prerequisite for ever adding an apply, and `{album_artist}` is the
+  obvious fix.
+- **Follow-up:** 661 of the library's 3,927 albums show a *generated* cover rather than real art.
+  Nothing surfaced that before this ADR, and there is no tool to re-fetch them in bulk —
+  `/artwork/regenerate-stale` exists and has no caller.
 - **Follow-up:** when the player is removed, `0050`'s reasoning that it keeps `WebAudioEngine` and
   the effects chain "exercised rather than rotting untested" needs re-examining rather than assuming
   it evaporates — `/embed` and `/visualizer` pin much of `player/` regardless.

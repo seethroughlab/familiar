@@ -288,9 +288,60 @@ export interface LetterIndexResponse {
   total: number;
 }
 
+/** Duplicate groups from a whole-library scan. Preview only — the server has no apply route. */
+export interface DuplicateTrackInfo {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  file_path: string;
+  format: string | null;
+  quality: string;
+  format_tier: number;
+  metadata_completeness: number;
+  created_at: string;
+}
+
+export interface DuplicateGroup {
+  normalized_key: string;
+  keep: DuplicateTrackInfo;
+  remove: DuplicateTrackInfo[];
+}
+
+export interface DeduplicatePreview {
+  total_groups: number;
+  total_duplicates: number;
+  groups: DuplicateGroup[];
+}
+
+export interface ArtworkCoverage {
+  total_albums: number;
+  with_artwork: number;
+  generated: number;
+  without_artwork: number;
+}
+
 export const libraryApi = {
   getStats: async (): Promise<LibraryStats> => {
     const { data } = await api.get('/library/stats');
+    return data;
+  },
+
+  getArtworkCoverage: async (): Promise<ArtworkCoverage> => {
+    const { data } = await api.get('/artwork/coverage');
+    return data;
+  },
+
+  /**
+   * Find duplicate tracks. **A POST that scans the whole library**, so it is never called on
+   * page load — ADR-0058 phase 4 puts it behind an explicit button for that reason.
+   */
+  deduplicatePreview: async (params?: {
+    search?: string;
+    artist?: string;
+    album?: string;
+  }): Promise<DeduplicatePreview> => {
+    const { data } = await api.post('/library/deduplicate/preview', null, { params });
     return data;
   },
 
