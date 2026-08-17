@@ -11,41 +11,8 @@ import {
 import { getApiUrl } from '../api/base';
 import { trackFetchError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
-import { isNativeApp } from '../utils/platform';
 
 const log = createLogger('Offline');
-
-export type FilesystemProvider = {
-  writeFile(options: { path: string; data: string; directory?: string; recursive?: boolean }): Promise<void>;
-  deleteFile(options: { path: string; directory?: string }): Promise<void>;
-  getUri(options: { path: string; directory?: string }): Promise<{ uri: string }>;
-};
-
-let _filesystemProvider: FilesystemProvider | null = null;
-
-export function registerFilesystemProvider(provider: FilesystemProvider): void {
-  _filesystemProvider = provider;
-}
-
-async function getCapacitorFilesystem(): Promise<FilesystemProvider | null> {
-  return _filesystemProvider;
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      resolve(dataUrl.split(',')[1]); // strip "data:...;base64," prefix
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-function nativeTrackPath(trackId: string): string {
-  return `offline-tracks/${trackId}.bin`;
-}
 
 function notifyOfflineTracksUpdated(): void {
   if (typeof window === 'undefined') return;
@@ -150,7 +117,6 @@ async function downloadAndStoreAudio(
   trackId: string,
   partial: PartialDownload | undefined,
   onProgress: DownloadProgressCallback | undefined,
-  fs: FilesystemProvider | null,
 ): Promise<void> {
   const resumeFrom = partial?.bytesDownloaded || 0;
   const existingChunks: Blob[] = partial?.chunks || [];
@@ -289,29 +255,10 @@ async function downloadAndStoreAudio(
     }
   }
 
-  if (fs) {
-    const path = nativeTrackPath(trackId);
-    log.info('Storing track in Capacitor filesystem:', trackId, path);
-    try {
-      await fs.writeFile({
-        path,
-        data: await blobToBase64(blob),
-        directory: 'DATA',
-        recursive: true,
-      });
-      await db.offlineTracks.put({
-        id: trackId,
-        nativePath: path,
-        sizeBytes: blob.size,
-        cachedAt: new Date(),
-      });
-      notifyOfflineTracksUpdated();
-    } catch (error) {
-      log.error('Failed to store native offline track:', trackId, error);
-      throw error;
-    }
-  } else {
-    // Web/PWA path: store blob in IndexedDB
+  {
+    // A Capacitor Filesystem branch wrote the blob to disk here and recorded a `nativePath`.
+    // Nothing ever registered a filesystem provider, and the app that would have was deleted on
+    // 2026-08-11 (ADR-0001 point 6), so IndexedDB was always the path taken.
     const offlineTrack: OfflineTrack = {
       id: trackId,
       audio: blob,
@@ -373,15 +320,7 @@ export async function downloadTrackForOffline(
   }
 
   const partial = await getPartialDownload(trackId);
-  const fs = await getCapacitorFilesystem();
-
-  // On native iOS, Filesystem plugin should always be available — fail fast
-  if (!fs && isNativeApp()) {
-    log.error('downloadTrack: Filesystem plugin unavailable on native app, aborting download for %s', trackId);
-    throw new Error('Native filesystem unavailable — cannot download track');
-  }
-
-  await downloadAndStoreAudio(trackId, partial, onProgress, fs);
+  await downloadAndStoreAudio(trackId, partial, onProgress);
   // blob is now out of scope — GC-eligible before the steps below
 
   await clearPartialDownload(trackId);
@@ -409,26 +348,6 @@ export async function getOfflineTrack(trackId: string): Promise<Blob | null> {
   return track?.audio || null;
 }
 
-export async function getOfflineTrackNativeUri(trackId: string): Promise<string | null> {
-  const track = await db.offlineTracks.get(trackId);
-  if (!track?.nativePath) {
-    log.debug('getOfflineTrackNativeUri: no nativePath for %s', trackId);
-    return null;
-  }
-  const fs = await getCapacitorFilesystem();
-  if (!fs) {
-    log.warn('getOfflineTrackNativeUri: no filesystem plugin for %s', trackId);
-    return null;
-  }
-  try {
-    const { uri } = await fs.getUri({ path: track.nativePath, directory: 'DATA' });
-    return uri;
-  } catch (e) {
-    log.warn('getOfflineTrackNativeUri: getUri failed for %s path=%s', trackId, track.nativePath, e);
-    return null;
-  }
-}
-
 /**
  * Check if a track is available offline.
  */
@@ -441,17 +360,6 @@ export async function isTrackOffline(trackId: string): Promise<boolean> {
  * Remove a track from offline storage.
  */
 export async function removeOfflineTrack(trackId: string): Promise<void> {
-  const track = await db.offlineTracks.get(trackId);
-  if (track?.nativePath) {
-    const fs = await getCapacitorFilesystem();
-    if (fs) {
-      try {
-        await fs.deleteFile({ path: track.nativePath, directory: 'DATA' });
-      } catch {
-        // best-effort
-      }
-    }
-  }
   await db.offlineTracks.delete(trackId);
   notifyOfflineTracksUpdated();
 }
@@ -562,15 +470,6 @@ export async function getOfflineStorageUsage(): Promise<{
  * Clear all offline tracks and artwork.
  */
 export async function clearAllOfflineTracks(): Promise<void> {
-  const fs = await getCapacitorFilesystem();
-  if (fs) {
-    const tracks = await db.offlineTracks.toArray();
-    await Promise.allSettled(
-      tracks
-        .filter((t) => !!t.nativePath)
-        .map((t) => fs.deleteFile({ path: t.nativePath!, directory: 'DATA' }))
-    );
-  }
   await db.offlineTracks.clear();
   await db.offlineArtwork.clear();
   notifyOfflineTracksUpdated();

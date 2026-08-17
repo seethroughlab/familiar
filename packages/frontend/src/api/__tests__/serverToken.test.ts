@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import api, {
   getServerToken,
   initServerToken,
-  registerPreferencesProvider,
   setServerToken,
 } from '../base';
 
@@ -31,7 +30,6 @@ function requestConfig(token: string) {
 describe('server token', () => {
   beforeEach(async () => {
     localStorage.clear();
-    registerPreferencesProvider({ get: async () => null, set: async () => {} });
     await setServerToken('');
   });
 
@@ -47,27 +45,18 @@ describe('server token', () => {
     expect(getServerToken()).toBe('tok-abc');
   });
 
-  it('falls back to the preferences provider when localStorage is empty', async () => {
-    // The native clients reinstall with an empty localStorage but a populated Preferences store.
-    localStorage.clear();
-    registerPreferencesProvider({
-      get: async (key) => (key === 'familiar_server_token' ? 'from-prefs' : null),
-      set: async () => {},
-    });
-
-    await initServerToken();
-
-    expect(getServerToken()).toBe('from-prefs');
-    expect(localStorage.getItem('familiar_server_token')).toBe('from-prefs');
-  });
-
-  it('mirrors into the preferences provider so a reinstall keeps it', async () => {
-    const set = vi.fn(async () => {});
-    registerPreferencesProvider({ get: async () => null, set });
-
+  // Two cases covering the Capacitor Preferences store used to live here — a fallback read and a
+  // mirrored write. Both went with `registerPreferencesProvider`: the app that would have supplied
+  // one was deleted on 2026-08-11 (ADR-0001 point 6), and nothing ever registered a provider, so
+  // they asserted a path no build could take. localStorage is now the only store.
+  it('clears from storage when set to empty', async () => {
     await setServerToken('tok-xyz');
+    expect(localStorage.getItem('familiar_server_token')).toBe('tok-xyz');
 
-    expect(set).toHaveBeenCalledWith('familiar_server_token', 'tok-xyz');
+    await setServerToken('');
+
+    expect(getServerToken()).toBe('');
+    expect(localStorage.getItem('familiar_server_token')).toBeNull();
   });
 
   it('clears on an empty string rather than storing one', async () => {

@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { apiErrorTracker, extractAxiosError } from '../utils/apiErrorTracker';
 import { createLogger } from '../utils/logger';
-import { isNativeApp } from '../utils/platform';
 
 const log = createLogger('ApiBase');
 
@@ -20,13 +19,6 @@ let _apiOrigin = '';
 // Keeps @capacitor/preferences out of the shared package.
 // ============================================================================
 
-type PreferencesProvider = {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string): Promise<void>;
-};
-
-let _preferencesProvider: PreferencesProvider | null = null;
-
 // ============================================================================
 // Profile Provider — Registration Pattern
 // Breaks circular dependency: api/base should not import from services/.
@@ -44,92 +36,30 @@ export function registerProfileProvider(p: ProfileProvider): void {
   _profileProvider = p;
 }
 
-export function registerPreferencesProvider(p: PreferencesProvider): void {
-  _preferencesProvider = p;
-}
-
 /**
  * Initialize the API origin. Must be called once at app boot.
- * On native, loads the backend URL from the registered preferences provider
- * and caches it in localStorage for synchronous access.
+ *
+ * Always empty, meaning "same origin as this document" — which is right for the web app and for
+ * the embedded Discover page, both served by the server they talk to. The branch that read a
+ * stored URL existed for the Capacitor app, which was deleted on 2026-08-11 (ADR-0001 point 6).
+ *
+ * `/visualizer` is the exception and sets its origin explicitly via `setApiOrigin`: it is read out
+ * of the Mac app's bundle over a custom URL scheme (ADR-0034 point 4) and has no server in its own
+ * location to infer one from.
  */
 export async function initApiOrigin(): Promise<void> {
-  if (!isNativeApp()) {
-    _apiOrigin = '';
-    return;
-  }
-
-  // Try localStorage first (synchronous cache)
-  const cached = localStorage.getItem(BACKEND_URL_KEY);
-  if (cached) {
-    _apiOrigin = cached.replace(/\/+$/, '');
-    log.info('API origin from cache:', _apiOrigin);
-    return;
-  }
-
-  // Try registered preferences provider
-  if (_preferencesProvider) {
-    try {
-      const value = await _preferencesProvider.get(BACKEND_URL_KEY);
-      if (value) {
-        _apiOrigin = value.replace(/\/+$/, '');
-        localStorage.setItem(BACKEND_URL_KEY, _apiOrigin);
-        log.info('API origin from Preferences:', _apiOrigin);
-      }
-    } catch {
-      log.warn('Could not load backend URL from preferences provider');
-    }
-  }
-
-  if (!_apiOrigin) {
-    log.warn('initApiOrigin: no cached or stored origin — API calls will fail until ServerSettings sets one');
-  }
+  _apiOrigin = '';
 }
 
 /**
- * Compile-time default backend URL baked into release builds via
- * VITE_DEFAULT_BACKEND_URL. Returned as a *suggestion* for the server-
- * connect screen — the user still has to confirm before it's persisted.
- * Returns empty string in dev builds (no default baked in).
- */
-export function getDefaultApiOrigin(): string {
-  const baked = import.meta.env.VITE_DEFAULT_BACKEND_URL as string | undefined;
-  return baked ? baked.replace(/\/+$/, '') : '';
-}
-
-/**
- * Save a backend URL (called from ServerSettings).
- * Persists to both localStorage and the registered preferences provider.
+ * Point this document at a server.
+ *
+ * Only `/visualizer` calls this, for the reason above. It caches to localStorage, which the custom
+ * scheme has because it is a real origin — a `file://` or `loadHTMLString` page would not.
  */
 export async function setApiOrigin(url: string): Promise<void> {
   _apiOrigin = url.replace(/\/+$/, '');
   localStorage.setItem(BACKEND_URL_KEY, _apiOrigin);
-
-  if (isNativeApp() && _preferencesProvider) {
-    try {
-      await _preferencesProvider.set(BACKEND_URL_KEY, _apiOrigin);
-    } catch {
-      // localStorage is sufficient as fallback
-    }
-  }
-}
-
-/**
- * Forget the stored backend URL. Used by the "Change Server" action so the
- * app drops back to the Connect-to-Server screen. Does NOT touch IndexedDB —
- * downloaded tracks remain on disk (but orphan relative to a new backend).
- */
-export async function clearApiOrigin(): Promise<void> {
-  _apiOrigin = '';
-  localStorage.removeItem(BACKEND_URL_KEY);
-
-  if (isNativeApp() && _preferencesProvider) {
-    try {
-      await _preferencesProvider.set(BACKEND_URL_KEY, '');
-    } catch {
-      // localStorage removal is sufficient as fallback
-    }
-  }
 }
 
 // ============================================================================
@@ -151,24 +81,15 @@ const SERVER_TOKEN_KEY = 'familiar_server_token';
 
 let _serverToken = '';
 
-/** Load the stored server token. Call at boot, beside `initApiOrigin`. */
+/**
+ * Load the stored server token. Call at boot, beside `initApiOrigin`.
+ *
+ * localStorage only. The second source was the Capacitor Preferences plugin, reached through a
+ * registered provider — and the Capacitor app was deleted on 2026-08-11 (ADR-0001 point 6), so
+ * nothing ever registered one.
+ */
 export async function initServerToken(): Promise<void> {
-  const cached = localStorage.getItem(SERVER_TOKEN_KEY);
-  if (cached) {
-    _serverToken = cached;
-    return;
-  }
-  if (_preferencesProvider) {
-    try {
-      const value = await _preferencesProvider.get(SERVER_TOKEN_KEY);
-      if (value) {
-        _serverToken = value;
-        localStorage.setItem(SERVER_TOKEN_KEY, value);
-      }
-    } catch {
-      log.warn('Could not load server token from preferences provider');
-    }
-  }
+  _serverToken = localStorage.getItem(SERVER_TOKEN_KEY) ?? '';
 }
 
 /** Persist a server token. Empty string clears it. */
@@ -178,13 +99,6 @@ export async function setServerToken(token: string): Promise<void> {
     localStorage.setItem(SERVER_TOKEN_KEY, _serverToken);
   } else {
     localStorage.removeItem(SERVER_TOKEN_KEY);
-  }
-  if (_preferencesProvider) {
-    try {
-      await _preferencesProvider.set(SERVER_TOKEN_KEY, _serverToken);
-    } catch {
-      // localStorage is sufficient as fallback
-    }
   }
 }
 

@@ -13,13 +13,11 @@
 import { AdminPage, AdminSection } from './AdminPage';
 import { SystemStatus } from '../Settings/SystemStatus';
 import { ApiKeyStatus } from '../Settings/ApiKeyStatus';
-import { ServerSettings } from '../Settings/ServerSettings';
 import { ServerTokenSettings } from '../Settings/ServerTokenSettings';
 import { ProfileSettings } from '../Settings/ProfileSettings';
 import { LastfmSettings } from '../Settings/LastfmSettings';
 import { DebugSettings } from '../Settings/DebugSettings';
 import { RemoteLogsPanel } from '../Settings/RemoteLogsPanel';
-import { isNativeApp } from '../../utils/platform';
 
 export function ServerPage() {
   // Developer tools are hidden by default. Shown in dev builds, or on any build by setting
@@ -36,9 +34,10 @@ export function ServerPage() {
 
       <AdminSection title="Access">
         <ApiKeyStatus />
-        {isNativeApp() && <ServerSettings />}
-        {/* Unlike ServerSettings, this is not native-only: the web app is same-origin and so
-            needs no URL, but it still has to present a token once the server has one. */}
+        {/* No server-URL field: this page is served by the server it administers. The one that
+            was here rendered only when `isNativeApp()` was true, which has been false since the
+            Capacitor app was deleted (ADR-0001 point 6). The token is a different matter — a
+            same-origin app still has to present one once the server has one (ADR-0045). */}
         <ServerTokenSettings />
       </AdminSection>
 

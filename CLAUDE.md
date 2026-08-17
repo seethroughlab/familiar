@@ -214,12 +214,20 @@ docs/
 
 ## Frontend Architecture
 
-The frontend uses a **registration pattern** for platform-specific code. The shared `@familiar/frontend` package has zero `@capacitor` dependencies:
+The frontend uses a **registration pattern** for platform-specific code:
 
 - **`createEngine.ts`** — `registerEngineFactory(fn)` sets the audio engine constructor
-- **`api/base.ts`** — `registerPreferencesProvider(p)` for Capacitor Preferences
 
-The web entry point (`packages/web/src/main.tsx`) registers its implementations before calling `renderApp()`. It is the only one left: the Capacitor app that was the other was retired with ADR-0001 point 6, and the registration pattern stays because `/embed` and `/visualizer` still use it.
+`packages/web/src/main.tsx` registers its implementation before calling `renderApp()`, and is now
+the only registrar. The pattern stays because `/embed` and `/visualizer` are separate entry points
+that need different engines — not because a second platform exists.
+
+**There is no Capacitor anything.** That app was deleted on 2026-08-11 (ADR-0001 point 6), and the
+detection that outlived it — `isNativeApp()`, which tested `window.Capacitor` — was permanently
+false while still gating real code. It was removed along with `registerPreferencesProvider`, a
+filesystem provider nothing registered, an AirPlay bridge with no registrar, and the
+Connect-to-Server screen. If you find yourself adding a `isNativeApp`-shaped check, the answer is
+that the native clients live in `familiar-apple` and do not run this bundle.
 
 ## Common Tasks
 
@@ -396,6 +404,6 @@ release-testflight` and `make deploy-device` still exist here and print this, th
 - SmartPlaylistService uses `**kwargs` with `setattr()` for flexible updates - new model fields work automatically
 - Offline-first: `offlineService.ts` manages IndexedDB track storage, `playlistCache.ts` caches playlists, `downloadStore.ts` manages download queue with persistence and resume
 - iOS Safari flexbox: nested `flex-1` inside `flex-col` needs explicit `min-h-0` for `overflow-y-auto` to work - add at every level of the flex chain
-- Platform-specific code uses registration pattern — never import `@capacitor` packages in `@familiar/frontend`
+- Platform-specific code uses the registration pattern; `@capacitor` packages are gone entirely and must not come back (ADR-0001 point 6)
 
 - When fixing a bug, ask yourself: can we add a test that could have caught this?

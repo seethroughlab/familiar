@@ -3,8 +3,6 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'node:path'
 
-const isCapacitorBuild = process.env.BUILD_TARGET === 'capacitor';
-
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -18,15 +16,14 @@ export default defineConfig({
       // `index.html` here is required as soon as `input` is set at all — Vite's default single
       // entry stops applying.
       //
-      // Not built for Capacitor: the iOS app is the listening path (ADR-0013 point 2) and embeds
-      // nothing, so the extra documents would be dead weight in the bundle it ships.
-      input: isCapacitorBuild
-        ? { index: resolve(__dirname, 'index.html') }
-        : {
-            index: resolve(__dirname, 'index.html'),
-            embed: resolve(__dirname, 'embed.html'),
-            visualizer: resolve(__dirname, 'visualizer.html'),
-          },
+      // A `BUILD_TARGET=capacitor` variant used to drop the extra two. The Capacitor app was
+      // deleted on 2026-08-11 (ADR-0001 point 6), and both documents are loaded by the Apple
+      // clients today, so there is no build that wants fewer.
+      input: {
+        index: resolve(__dirname, 'index.html'),
+        embed: resolve(__dirname, 'embed.html'),
+        visualizer: resolve(__dirname, 'visualizer.html'),
+      },
       output: {
         manualChunks(id) {
           // Vendor chunks - split large dependencies

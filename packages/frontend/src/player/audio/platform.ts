@@ -1,5 +1,5 @@
 import { createLogger } from '../../utils/logger';
-import { isNativeApp, isMobile } from '../../utils/platform';
+import { isMobile } from '../../utils/platform';
 
 // ============================================================================
 // Platform Detection
@@ -9,15 +9,10 @@ export const log = createLogger('AudioEngine', { forceVerbose: true });
 
 export const isMobilePlatform = isMobile();
 
-// Capacitor native app detection
-export const isCapacitorNative = isNativeApp();
-
-// On Capacitor native, bypass Web Audio entirely — iOS suspends AudioContext in background.
-// Use plain HTMLAudioElement.volume for playback (direct mode). Desktop uses Web Audio (effects + visualizer).
-export const useWebAudioOnThisPlatform = !isCapacitorNative;
-
-// Capacitor native uses AVAudioEngine plugin for playback + effects (no HTMLAudioElement at all)
-export const useNativeAudioEngine = isCapacitorNative;
+// `isCapacitorNative`, `useWebAudioOnThisPlatform` and `useNativeAudioEngine` were here. The first
+// tested for a Capacitor app deleted on 2026-08-11 (ADR-0001 point 6), so it was permanently false;
+// the other two were derived from it and had no consumers at all. Every remaining audio path is
+// Web Audio in an ordinary browser.
 
 // Track last logged time to avoid spamming (log every 10 seconds)
 export let lastDebugLogTime = 0;
@@ -32,9 +27,4 @@ export function setLastLoggedTrackId(id: string | null): void {
 }
 
 // Log version and platform detection on load
-log.info('v8 - native-audio-engine', {
-  isMobilePlatform,
-  isCapacitorNative,
-  useWebAudioOnThisPlatform,
-  useNativeAudioEngine,
-});
+log.info('v9 - web audio only', { isMobilePlatform });
