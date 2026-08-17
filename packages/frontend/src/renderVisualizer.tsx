@@ -43,9 +43,9 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
   // come from the server — and yields an empty string here. Origin-relative URLs would then resolve
   // against the custom scheme and fetch nothing, so artwork would silently never load.
   //
-  // `setApiOrigin` is the same function `ServerSettings` uses; it also caches to localStorage,
-  // which the custom scheme has because it is a real origin (a `file://` or `loadHTMLString` page
-  // would not).
+  // `setApiOrigin` caches to localStorage, which the custom scheme has because it is a real origin
+  // (a `file://` or `loadHTMLString` page would not). This page is now its only caller — the
+  // Connect-to-Server screen that used to share it went with the Capacitor app (ADR-0001 point 6).
   const params = new URLSearchParams(window.location.search);
 
   // **Which visualizer to draw, chosen by the host.**

@@ -9,10 +9,8 @@ const log = createLogger('App');
 
 import { ProfileSelector } from './components/Profiles';
 import { WorkerAlert } from './components/WorkerAlert';
-import { ServerSettings } from './components/Settings/ServerSettings';
-import { getApiOrigin } from './api/base';
 import { MobileAppRedirect } from './components/MobileAppRedirect';
-import { isIOS, isNativeApp } from './utils/platform';
+import { isIOS } from './utils/platform';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
 import { initializeProfile, type Profile } from './services/profileService';
 
@@ -88,13 +86,9 @@ function App() {
   // music, and this page administers a server. The `!isPWA()` term went with ADR-0059 — there is
   // no installed copy to be already inside.
   const [showMobileRedirect] = useState(
-    () => isIOS() && !isNativeApp() && !sessionStorage.getItem('familiar-continue-in-browser')
+    () => isIOS() && !sessionStorage.getItem('familiar-continue-in-browser')
   );
   const [mobileRedirectDismissed, setMobileRedirectDismissed] = useState(false);
-
-  const [serverConfigured, setServerConfigured] = useState(
-    () => !isNativeApp() || !!getApiOrigin()
-  );
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
@@ -126,23 +120,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!serverConfigured) return;
     checkProfile();
     const handleInvalidated = () => setProfile(null);
     window.addEventListener('profile-invalidated', handleInvalidated);
     return () => window.removeEventListener('profile-invalidated', handleInvalidated);
-  }, [checkProfile, serverConfigured]);
-
-  // "Change Server" in Settings dispatches this — drop back to the
-  // Connect-to-Server screen without needing to restart the app.
-  useEffect(() => {
-    const handleReset = () => {
-      setProfile(null);
-      setServerConfigured(false);
-    };
-    window.addEventListener('server-reset', handleReset);
-    return () => window.removeEventListener('server-reset', handleReset);
-  }, []);
+  }, [checkProfile]);
 
   useUpdateNotification();
 
@@ -157,21 +139,9 @@ function App() {
     );
   }
 
-  if (!serverConfigured) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-6">
-          <div className="text-center space-y-2">
-            <h1 className="text-2xl font-bold text-white">Connect to Server</h1>
-            <p className="text-zinc-400 text-sm">
-              Enter the URL of your Familiar server to get started.
-            </p>
-          </div>
-          <ServerSettings onConnected={() => setServerConfigured(true)} />
-        </div>
-      </div>
-    );
-  }
+  // No Connect-to-Server screen. It only ever appeared when `isNativeApp()` was true, and that
+  // tested for `window.Capacitor` — an app deleted on 2026-08-11 (ADR-0001 point 6). The web app
+  // is same-origin, so there is no URL to ask for.
 
   if (checkingProfile) {
     return (

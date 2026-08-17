@@ -9,7 +9,7 @@ import { useConnectivityStore } from '@familiar/frontend/src/stores/connectivity
 import { EffectsChain, initEffectsChain } from './audioEffects';
 import { prefetchService } from '@familiar/frontend/src/services/prefetchService';
 import { showError } from '@familiar/frontend/src/stores/toastStore';
-import { isCapacitorNative, log } from '@familiar/frontend/src/player/audio/platform';
+import { log } from '@familiar/frontend/src/player/audio/platform';
 import {
   shouldHandleEnded,
   getErrorAction,
@@ -55,8 +55,6 @@ export class WebAudioEngine implements AudioEngine {
   // URL tracking
   private currentOfflineUrl: string | null = null;
   private nextOfflineUrl: string | null = null;
-  private currentBlobUrl: string | null = null;
-  private nextBlobUrl: string | null = null;
 
   // Playback state
   private loadedTrackId: string | null = null;
@@ -181,8 +179,6 @@ export class WebAudioEngine implements AudioEngine {
 
     this.cleanupElement(this.elementA, this.currentOfflineUrl);
     this.cleanupElement(this.elementB, this.nextOfflineUrl);
-    this.revokeBlobUrl(this.currentBlobUrl);
-    this.revokeBlobUrl(this.nextBlobUrl);
 
     this.handlers.clear();
   }
@@ -203,24 +199,18 @@ export class WebAudioEngine implements AudioEngine {
       revokeOfflineTrackUrl(this.currentOfflineUrl);
       this.currentOfflineUrl = null;
     }
-    this.revokeBlobUrl(this.currentBlobUrl);
-    this.currentBlobUrl = null;
 
     const isOffline = options?.isOffline ?? false;
     const isExternal = options?.isExternal ?? false;
 
     if (isOffline) this.currentOfflineUrl = url;
 
-    // On Capacitor web view, fetch audio as blob to bypass CORS
-    const resolvedUrl = await this.resolveAudioUrl(url, isOffline);
-    if (!isOffline && isCapacitorNative) {
-      this.currentBlobUrl = resolvedUrl;
-    }
+    const resolvedUrl = url;
 
     // External preview URLs don't send CORS headers
     if (isExternal) {
       el.removeAttribute('crossorigin');
-    } else if (!el.crossOrigin && !isCapacitorNative) {
+    } else if (!el.crossOrigin) {
       el.crossOrigin = 'anonymous';
     }
 
@@ -407,18 +397,11 @@ export class WebAudioEngine implements AudioEngine {
         revokeOfflineTrackUrl(this.nextOfflineUrl);
         this.nextOfflineUrl = null;
       }
-      this.revokeBlobUrl(this.nextBlobUrl);
-      this.nextBlobUrl = null;
 
       const isOffline = opts?.isOffline ?? false;
       if (isOffline) this.nextOfflineUrl = url;
 
-      const resolvedUrl = await this.resolveAudioUrl(url, isOffline);
-      if (!isOffline && isCapacitorNative) {
-        this.nextBlobUrl = resolvedUrl;
-      }
-
-      nextEl.src = resolvedUrl;
+      nextEl.src = url;
       nextEl.setAttribute('data-track-id', trackId);
       nextEl.load();
 
@@ -538,8 +521,6 @@ export class WebAudioEngine implements AudioEngine {
 
     this.cleanupElement(this.getNextElement(), this.nextOfflineUrl);
     this.nextOfflineUrl = null;
-    this.revokeBlobUrl(this.nextBlobUrl);
-    this.nextBlobUrl = null;
 
     if (this.crossfadeTimeoutId) clearTimeout(this.crossfadeTimeoutId);
     this.crossfadeActive = false;
@@ -637,19 +618,10 @@ export class WebAudioEngine implements AudioEngine {
   private createAudioElement(): HTMLAudioElement {
     const el = new Audio();
     el.preload = 'auto';
-    if (!isCapacitorNative) {
-      el.crossOrigin = 'anonymous';
-    }
+    el.crossOrigin = 'anonymous';
     el.style.display = 'none';
     document.body.appendChild(el);
     return el;
-  }
-
-  private async resolveAudioUrl(url: string, isOffline: boolean): Promise<string> {
-    if (isOffline || !isCapacitorNative) return url;
-    const response = await fetch(url);
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
   }
 
   private cleanupElement(element: HTMLAudioElement | null, offlineUrl: string | null): void {
@@ -664,22 +636,15 @@ export class WebAudioEngine implements AudioEngine {
     }
   }
 
-  private revokeBlobUrl(url: string | null): void {
-    if (url) URL.revokeObjectURL(url);
-  }
-
   private completeCrossfade(onComplete: () => void): void {
     if (!this.crossfadeActive) return;
 
     const oldElement = this.getCurrentElement();
     this.cleanupElement(oldElement, this.currentOfflineUrl);
-    this.revokeBlobUrl(this.currentBlobUrl);
 
     // Promote next to current
     this.currentOfflineUrl = this.nextOfflineUrl;
     this.nextOfflineUrl = null;
-    this.currentBlobUrl = this.nextBlobUrl;
-    this.nextBlobUrl = null;
     this.currentIsA = !this.currentIsA;
 
     this.crossfadeActive = false;

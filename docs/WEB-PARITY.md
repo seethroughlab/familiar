@@ -45,8 +45,8 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Offline downloads | ✅ | ✅ | ✅ | Independent implementations — Dexie vs background `URLSession` |
 | Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ❌ | AirPlay deliberately left to the OS picker |
 | CarPlay | — | — | ✅ | |
-| Listen-together (guest sessions) | ✅ | ❌ | ❌ | ADR-0036 built the server half; **ADR-0037 was rejected**, so this is web-only by decision |
-| Sleep timer, playback speed | ❌ | ❌ | ❌ | Exists nowhere |
+| Listen-together (guest sessions) | ✅ | ❌ | ❌ | **not a blocker:** web-only by decision — ADR-0036 built the server half and **ADR-0037 was rejected** (ADR-0060 point 1) |
+| Sleep timer, playback speed | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere, including the web app, so it is not a reason to keep it (ADR-0060 point 1) |
 
 ## Playlist editing
 

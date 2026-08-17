@@ -35,7 +35,7 @@ import { useArtworkPrefetch } from '../../hooks/useArtworkPrefetch';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useShuffleWeightStore } from '../../stores/shuffleWeightStore';
 import { ShuffleWeightPopover } from '../Player/ShuffleWeightPopover';
-import { isMobile, isNativeApp } from '../../utils/platform';
+import { isMobile } from '../../utils/platform';
 import { isVisualizerAvailable, areAudioEffectsAvailable } from '../../player/audio/engineInstance';
 import { VISUALIZER_IDS } from '../Visualizer/constants';
 
@@ -243,7 +243,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
         <div className="flex items-center gap-1">
           <OutputSelector />
-          {!isMobile() && !isNativeApp() && (
+          {!isMobile() && (
             <button
               onClick={toggleFullscreen}
               className="p-2 hover:bg-white/10 rounded-full transition-colors"
@@ -365,10 +365,10 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             <button
               ref={shuffleButtonRef}
               onClick={toggleShuffle}
-              onContextMenu={isNativeApp() ? undefined : handleShuffleContextMenu}
-              onPointerDown={isNativeApp() ? undefined : handleShufflePointerDown}
-              onPointerUp={isNativeApp() ? undefined : handleShufflePointerUp}
-              onPointerLeave={isNativeApp() ? undefined : handleShufflePointerUp}
+              onContextMenu={handleShuffleContextMenu}
+              onPointerDown={handleShufflePointerDown}
+              onPointerUp={handleShufflePointerUp}
+              onPointerLeave={handleShufflePointerUp}
               className={`p-3 rounded-full transition-colors ${
                 shuffle && weightedEnabled ? 'text-amber-400' : shuffle ? 'text-green-500' : 'text-zinc-400 hover:text-white'
               }`}
@@ -377,14 +377,12 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             >
               <Shuffle className="w-5 h-5" />
             </button>
-            {!isNativeApp() && (
-              <ShuffleWeightPopover
-                isOpen={shufflePopoverOpen}
-                onClose={() => setShufflePopoverOpen(false)}
-                buttonRef={shuffleButtonRef}
-                position="above"
-              />
-            )}
+            <ShuffleWeightPopover
+              isOpen={shufflePopoverOpen}
+              onClose={() => setShufflePopoverOpen(false)}
+              buttonRef={shuffleButtonRef}
+              position="above"
+            />
           </div>
 
           <button
@@ -428,7 +426,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
             <Repeat className="w-5 h-5" />
           </button>
 
-          {!isMobile() && !isNativeApp() && (
+          {!isMobile() && (
             <button
               onClick={toggleConsume}
               className={`p-3 rounded-full transition-colors ${

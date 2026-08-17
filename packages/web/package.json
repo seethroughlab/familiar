@@ -7,7 +7,6 @@
     "dev": "vite",
     "dev:remote": "VITE_API_TARGET=http://openmediavault:4400 vite",
     "build": "vite build",
-    "build:cap": "BUILD_TARGET=capacitor vite build",
     "check:bundle-budgets": "node ./scripts/check-bundle-budgets.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",

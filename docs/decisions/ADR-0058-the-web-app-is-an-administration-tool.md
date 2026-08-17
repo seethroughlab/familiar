@@ -95,6 +95,13 @@ below depends on not investing in it.
 
 ## Implementation
 
+- **Point 4 is replaced by [ADR-0060](ADR-0060-the-players-removal-trigger-must-be-reachable.md).**
+  The trigger as written here — no ❌ in the Mac and iPhone columns of `WEB-PARITY.md`'s Listening
+  table — is checkable and **unreachable**: two of its five ❌ rows can never clear, because
+  listen-together is web-only by an accepted decision (`ADR-0037`, rejected) and sleep timer exists
+  on no client at all. The Decision below is left as written, per the convention, because the
+  reasoning for having a mechanical trigger is still the right reasoning; only the trigger is wrong.
+
 - **Phase 1** — the dashboard (`familiar` #168, branch `admin/dashboard`). Points 1, 6, 7. Turned
   into a backend change: see the Context table above. `tests/test_library_stats.py` asserts the
   stats endpoint against the list endpoints rather than against constants.

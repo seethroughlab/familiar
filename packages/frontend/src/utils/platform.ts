@@ -38,17 +38,6 @@ export function isMobile(): boolean {
 }
 
 /**
- * Check if the app is running as a Capacitor native app.
- */
-export function isNativeApp(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  return !!(window as unknown as Record<string, unknown>).Capacitor &&
-    (window as unknown as { Capacitor: { isNativePlatform?: () => boolean } })
-      .Capacitor.isNativePlatform?.() === true;
-}
-
-/**
  * Check if background downloads are supported.
  * Returns true for desktop browsers, false for iOS.
  */

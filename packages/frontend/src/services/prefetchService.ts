@@ -4,14 +4,12 @@
  * Subscribes to playerStore queue/index changes and downloads the next N tracks
  * in the background so they're already local when the engine needs them.
  *
- * Web: stores Blobs in memory, returns blob URLs.
- * iOS (Capacitor): writes to filesystem at prefetch-tracks/{trackId}.bin.
+ * Stores Blobs in memory and returns blob URLs.
  */
 import { usePlayerStore } from '../player/playerStore';
 import { useConnectivityStore } from '../stores/connectivityStore';
 import { isTrackOffline } from './offlineService';
 import { getApiUrl } from '../api/base';
-import { isNativeApp } from '../utils/platform';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Prefetch');
@@ -24,34 +22,13 @@ interface PrefetchEntry {
   trackId: string;
   status: PrefetchStatus;
   blobUrl?: string;
-  nativeUri?: string;
   abortController?: AbortController;
   blob?: Blob; // hold reference to prevent GC on web
 }
 
-type CapacitorFilesystemPlugin = {
-  writeFile(options: { path: string; data: string; directory?: string; recursive?: boolean }): Promise<void>;
-  deleteFile(options: { path: string; directory?: string }): Promise<void>;
-  getUri(options: { path: string; directory?: string }): Promise<{ uri: string }>;
-};
-
-function nativePrefetchPath(trackId: string): string {
-  return `prefetch-tracks/${trackId}.bin`;
-}
-
-async function getCapacitorFilesystem(): Promise<CapacitorFilesystemPlugin | null> {
-  if (!isNativeApp()) return null;
-  const cap = (window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor;
-  const fs = cap?.Plugins?.Filesystem as CapacitorFilesystemPlugin | undefined;
-  return fs ?? null;
-}
-
-function toBase64(data: ArrayBuffer): string {
-  const bytes = new Uint8Array(data);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
-}
+// A Capacitor Filesystem branch wrote prefetched audio to disk on iOS and handed back a
+// `nativeUri`. The Capacitor app was deleted on 2026-08-11 (ADR-0001 point 6), so that path was
+// unreachable; prefetching is a blob URL in an ordinary browser.
 
 class PrefetchService {
   private cache = new Map<string, PrefetchEntry>();
@@ -108,7 +85,7 @@ class PrefetchService {
     const entry = this.cache.get(trackId);
     if (!entry || entry.status !== 'ready') return null;
 
-    const url = entry.blobUrl || entry.nativeUri;
+    const url = entry.blobUrl;
     if (!url) return null;
 
     return { url, isOffline: true };
@@ -239,29 +216,9 @@ class PrefetchService {
       // Check if we were evicted during download
       if (!this.cache.has(trackId) || this.cache.get(trackId) !== entry) return;
 
-      if (isNativeApp()) {
-        // iOS: write to Capacitor filesystem
-        const fs = await getCapacitorFilesystem();
-        if (fs) {
-          const base64 = toBase64(data);
-          await fs.writeFile({
-            path: nativePrefetchPath(trackId),
-            data: base64,
-            directory: 'CACHE',
-            recursive: true,
-          });
-          const { uri } = await fs.getUri({
-            path: nativePrefetchPath(trackId),
-            directory: 'CACHE',
-          });
-          entry.nativeUri = uri;
-        }
-      } else {
-        // Web: create blob URL
-        const blob = new Blob([data], { type: response.headers.get('content-type') || 'audio/mpeg' });
-        entry.blob = blob;
-        entry.blobUrl = URL.createObjectURL(blob);
-      }
+      const blob = new Blob([data], { type: response.headers.get('content-type') || 'audio/mpeg' });
+      entry.blob = blob;
+      entry.blobUrl = URL.createObjectURL(blob);
 
       entry.status = 'ready';
       entry.abortController = undefined;
@@ -292,13 +249,6 @@ class PrefetchService {
     // Revoke blob URL (web)
     if (e.blobUrl) {
       URL.revokeObjectURL(e.blobUrl);
-    }
-
-    // Delete temp file (iOS) — fire and forget
-    if (e.nativeUri) {
-      getCapacitorFilesystem().then(fs => {
-        fs?.deleteFile({ path: nativePrefetchPath(trackId), directory: 'CACHE' }).catch(() => {});
-      }).catch(() => {});
     }
 
     this.cache.delete(trackId);
