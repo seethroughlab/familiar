@@ -4,20 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
-    <!-- PWA Meta Tags -->
+    <!--
+      No manifest and no `apple-mobile-web-app-*` tags: ADR-0059 retired the PWA. This is an
+      administration page for a server, not something to install to a home screen.
+
+      `apple-itunes-app` stays and is the point — a Smart App Banner sends an iPhone visitor to
+      the real listening client, which is what ADR-0050 says the phone should be using.
+    -->
     <meta name="theme-color" content="#18181b" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Familiar" />
-    <meta name="description" content="LLM-powered local music player" />
+    <meta name="description" content="Administration for a Familiar music server" />
     <meta name="apple-itunes-app" content="app-id=6759879772" />
 
-    <!-- Icons -->
+    <!-- Icons. Still used by the favicon and the App Store hand-off screen. -->
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-
-    <!-- Manifest -->
-    <link rel="manifest" href="/manifest.json" />
 
     <title>Familiar</title>
   </head>

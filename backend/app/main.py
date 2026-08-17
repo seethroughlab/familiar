@@ -79,7 +79,7 @@ logger = get_logger(__name__)
 class RequestIDMiddleware:
     """Add unique request ID and request timing to each request."""
 
-    _SKIP_TIMING_PREFIXES = ("/health", "/assets/", "/icons/", "/sw.js", "/manifest.json", "/workbox-")
+    _SKIP_TIMING_PREFIXES = ("/health", "/assets/", "/icons/", "/sw.js")
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -699,22 +699,16 @@ if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
     app.mount("/icons", StaticFiles(directory=STATIC_DIR / "icons"), name="icons")
 
-    # Serve PWA files
-    @app.get("/manifest.json")
-    async def manifest() -> FileResponse:
-        return FileResponse(STATIC_DIR / "manifest.json")
-
+    # The PWA is retired (ADR-0059) — no manifest, no `registerSW.js`, no `workbox-*` chunks.
+    #
+    # `/sw.js` stays, and must. It now serves a tombstone worker whose whole job is to unregister
+    # the Workbox worker earlier versions installed. Letting this 404 would fall through to the SPA
+    # catch-all and answer with `index.html`, and a browser told its service worker is now an HTML
+    # document behaves less predictably than one handed a script that removes itself. See
+    # `packages/web/public/sw.js`.
     @app.get("/sw.js")
     async def service_worker() -> FileResponse:
         return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
-
-    @app.get("/registerSW.js")
-    async def register_sw() -> FileResponse:
-        return FileResponse(STATIC_DIR / "registerSW.js", media_type="application/javascript")
-
-    @app.get("/workbox-{path:path}")
-    async def workbox(path: str) -> FileResponse:
-        return FileResponse(STATIC_DIR / f"workbox-{path}", media_type="application/javascript")
 
     # Serve index.html for root
     @app.get("/")

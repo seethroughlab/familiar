@@ -194,8 +194,8 @@ Features planned for future releases:
 ### Multi-Room Audio
 Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
 
-### Native Google Gemini provider
-Familiar already supports Anthropic and any OpenAI-compatible endpoint. A native Gemini provider would add Google's models without going through an OpenAI-compat shim - see [docs/OTHER_LLMS.md](docs/OTHER_LLMS.md).
+### Bring your own assistant
+Familiar has no built-in LLM provider. It exposes its library as an [MCP](https://modelcontextprotocol.io) server (ADR-0043), so Claude Desktop, Claude Code, or any other MCP client can search the library, inspect the analysis and build playlists using your own subscription. Nothing here holds an API key on your behalf.
 
 ## Beta Feedback
 

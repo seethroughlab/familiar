@@ -216,6 +216,14 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
   Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
   screen and false of the numbers.
+- **2026-08-17** — the PWA was retired (ADR-0059). No manifest, no service worker, no install
+  prompt, and `vite-plugin-pwa` is gone. `/sw.js` still exists and must: it serves a **tombstone**
+  worker that unregisters the Workbox worker earlier versions installed, because deleting a service
+  worker does not remove it — a browser that registered one keeps serving the old shell cache-first
+  forever, and the unregistration code in `main.tsx` would never run. Verified by seeding a
+  Workbox-style cache, registering the worker, and watching both the cache and the registration
+  disappear. **The browser-only listener loses offline access to already-downloaded tracks**: the
+  tracks are untouched in IndexedDB, but the shell no longer loads without a server.
 - **2026-08-16** — duplicates, the organiser and artwork coverage reached the browser (`familiar`
   #170, ADR-0058 phases 4–5). All browser-only and all infrastructural under ADR-0057 point 2.
   The first two are preview-only because the server has no apply route for either; the third needed

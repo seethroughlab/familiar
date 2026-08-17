@@ -73,6 +73,8 @@ export const DESTINATIONS = [
  */
 export const UNBUILT_DESTINATION_ITEMS: Record<string, string> = {
   'pending-review': 'no web component — `api/pendingTracks.ts` is a wrapper nothing calls',
+  'update-channel':
+    'never existed — the Server slot held `InstallStatus` (PWA install state), retired by ADR-0059',
   // Duplicates, the organiser and artwork coverage were here. All three shipped in phases 4 and 5;
   // their lines are deleted rather than marked done, so this stays a list of what is missing.
 };
