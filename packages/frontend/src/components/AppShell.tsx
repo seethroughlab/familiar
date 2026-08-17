@@ -18,7 +18,6 @@ import { PlayerBar } from './Player/PlayerBar';
 import { Sidebar } from './Sidebar/Sidebar';
 import { ContentToolbar } from './ContentToolbar';
 import { ErrorBoundary } from './ErrorBoundary';
-import { InstallPrompt } from './PWA/InstallPrompt';
 import { OfflineIndicator } from './PWA/OfflineIndicator';
 import { TrackEditModal } from './TrackEdit';
 import { MobileBottomNav } from './MobileNav';
@@ -249,8 +248,8 @@ export function AppShell() {
           </div>
         )}
 
-        {/* PWA install prompt */}
-        <InstallPrompt />
+        {/* No install prompt: ADR-0059 retired the PWA. The OfflineIndicator stays — it reports
+            that the *server* is unreachable, which an administration tool needs to say. */}
         <OfflineIndicator />
 
         {/* Track edit modal */}

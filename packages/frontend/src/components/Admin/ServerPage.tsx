@@ -1,9 +1,14 @@
 /**
  * The Server destination (ADR-0058 point 2) — the machine under the library.
  *
- * Health, diagnostics, profiles, Last.fm, API keys, update channel. These are ADR-0057 point 2's
- * "infrastructural" exception: things done to the *server* rather than to someone's listening, which
- * stay in the browser regardless of what the native clients gain.
+ * Health, diagnostics, profiles, Last.fm, API keys. These are ADR-0057 point 2's "infrastructural"
+ * exception: things done to the *server* rather than to someone's listening, which stay in the
+ * browser regardless of what the native clients gain.
+ *
+ * ADR-0058 point 2 also named an **update channel** for this destination. The only thing that ever
+ * filled that slot was `InstallStatus` — PWA install state, not an update channel — and ADR-0059
+ * retired it with the rest of the PWA. Recorded in `UNBUILT_DESTINATION_ITEMS` rather than left as
+ * an empty section.
  */
 import { AdminPage, AdminSection } from './AdminPage';
 import { SystemStatus } from '../Settings/SystemStatus';
@@ -14,7 +19,6 @@ import { ProfileSettings } from '../Settings/ProfileSettings';
 import { LastfmSettings } from '../Settings/LastfmSettings';
 import { DebugSettings } from '../Settings/DebugSettings';
 import { RemoteLogsPanel } from '../Settings/RemoteLogsPanel';
-import { InstallStatus } from '../PWA/InstallPrompt';
 import { isNativeApp } from '../../utils/platform';
 
 export function ServerPage() {
@@ -44,10 +48,6 @@ export function ServerPage() {
 
       <AdminSection title="Integrations">
         <LastfmSettings />
-      </AdminSection>
-
-      <AdminSection title="App">
-        <InstallStatus />
       </AdminSection>
 
       {showDevTools && (

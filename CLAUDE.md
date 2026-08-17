@@ -173,7 +173,9 @@ backend/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)
 │   ├── db/models/         # SQLAlchemy models (tracks, profiles, playlists, artists, ...)
 │   └── services/          # Business logic
-│       └── llm/           # LLM module (service.py, executor.py, tools.py, providers.py)
+│       └── llm/           # Tool definitions and execution (tools.py, executor.py, handlers/).
+│                          # No provider layer: ADR-0048 removed service.py, providers.py and
+│                          # both SDKs when chat was replaced by the MCP server (ADR-0043).
 ├── migrations/versions/   # Alembic database migrations
 └── tests/                 # pytest tests
 docs/

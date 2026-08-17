@@ -12,7 +12,7 @@ import { WorkerAlert } from './components/WorkerAlert';
 import { ServerSettings } from './components/Settings/ServerSettings';
 import { getApiOrigin } from './api/base';
 import { MobileAppRedirect } from './components/MobileAppRedirect';
-import { isIOS, isNativeApp, isPWA } from './utils/platform';
+import { isIOS, isNativeApp } from './utils/platform';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
 import { initializeProfile, type Profile } from './services/profileService';
 
@@ -84,9 +84,11 @@ if (typeof window !== 'undefined') {
 }
 
 function App() {
+  // Send an iPhone visitor to the real listening client (ADR-0050): the phone's job is playing
+  // music, and this page administers a server. The `!isPWA()` term went with ADR-0059 — there is
+  // no installed copy to be already inside.
   const [showMobileRedirect] = useState(
-    () => isIOS() && !isNativeApp() && !isPWA() &&
-          !sessionStorage.getItem('familiar-continue-in-browser')
+    () => isIOS() && !isNativeApp() && !sessionStorage.getItem('familiar-continue-in-browser')
   );
   const [mobileRedirectDismissed, setMobileRedirectDismissed] = useState(false);
 

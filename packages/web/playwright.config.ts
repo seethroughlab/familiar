@@ -23,6 +23,10 @@ export default defineConfig({
     // toggle depended on that endpoint, CI's provider-less backend answered "not configured", the
     // toggle correctly disappeared, and seven specs failed against an app that was behaving exactly
     // as designed.
+    // Kept after ADR-0059 retired the PWA. The app now ships only a tombstone worker that
+    // unregisters itself, so there is nothing left to swallow a mocked GET — but blocking is
+    // still the honest setting for a test run, and it is what stops this class of bug returning
+    // if a worker is ever reintroduced.
     serviceWorkers: 'block',
   },
   projects: [
