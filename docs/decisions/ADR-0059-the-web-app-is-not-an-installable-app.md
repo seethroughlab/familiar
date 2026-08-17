@@ -1,6 +1,6 @@
 # ADR-0059: The Web App Is Not an Installable App
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-17
 
@@ -108,8 +108,10 @@ machines nobody is testing.
   and ADR-0058 point 5 already schedules offline settings to leave with the player.
 - **Tradeoff:** a tombstone file that looks like dead code has to survive future cleanups. Mitigated
   by point 4 and by the comment in the file, not by hoping.
-- **Follow-up:** `isNativeApp()` tests for `window.Capacitor`, and the Capacitor app was deleted on
-  2026-08-11. It is now **always false**, which makes `{isNativeApp() && <ServerSettings />}` on the
-  Server destination unreachable, along with branches in `FullPlayer`, `colorExtraction` and the
-  "Connect to Server" screen in `App.tsx`. Same shape as this ADR — a platform layer outliving its
-  platform — and deliberately not bundled in, because it touches the player.
+- **Follow-up:** ~~`isNativeApp()` tests for `window.Capacitor`, and the Capacitor app was deleted on
+  2026-08-11~~ — done. [ADR-0060](ADR-0060-the-players-removal-trigger-must-be-reachable.md) shipped
+  the removal alongside its own subject: `isNativeApp`, the Connect-to-Server screen,
+  `ServerSettings`, `AirPlayButton` and its unregistered bridge, the preferences provider, the
+  filesystem layer in `offlineService`/`prefetchService`, `isCapacitorNative` and the
+  `BUILD_TARGET=capacitor` variant. Same shape as this ADR — a platform layer outliving its
+  platform.
