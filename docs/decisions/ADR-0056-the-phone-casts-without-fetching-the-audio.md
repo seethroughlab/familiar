@@ -76,6 +76,43 @@ Playback measurement on this project needs a person: the Mac app cannot be drive
 `ps %cpu` reports a lifetime average that lies about a session. The protocol is in point 5 below,
 and this ADR should not be accepted until it has been run.
 
+## Measurement (2026-08-17)
+
+Point 5 asked for `nettop` on the Mac. What was run instead is the same quantity observed at the
+other end — the server's own access log, which records **who** asked as well as how much, and so
+answers a question `nettop` cannot: whether a second client fetched the *same track*.
+
+Casting from the Mac to a WiiM Amp Ultra, playing a track confirmed absent from the Mac's download
+store:
+
+```
+172.19.0.1   GET /api/v1/tracks/f4bcb3b5…/stream   200   ← the Mac
+10.0.0.233   GET /api/v1/tracks/f4bcb3b5…/stream   206   ← the WiiM
+```
+
+**The premise holds.** Two clients, one track, one of them a machine playing at volume zero. The
+Mac's `200` is the whole file: `NativeAudioEngine` uses `URLSession.downloadTask`, so it does not
+even stream progressively — it pulls the entire track up front and discards it. The speaker
+range-requests as it plays.
+
+Identification, because both were initially misread: this Mac is `10.0.0.15` on the LAN but reaches
+the server over Tailscale and arrives NAT'd as the Docker bridge gateway `172.19.0.1`, verified by
+sending a marked request and finding it in the log. `10.0.0.233` self-identifies over UPnP as
+`WiiM Amp Ultra-4DF2`, Linkplay Technology.
+
+**And a correction to this ADR, found by the measurement failing first.** An earlier run of the same
+observation showed *fifteen* consecutive track starts fetched only by the speaker, and none by the
+Mac — which reads as the premise being false. The cause is that all fifteen were already downloaded:
+`FamiliarPlayer` resolves through `PlaybackSource.resolve(streamURL:downloadedFileURL:)`, so a
+downloaded track plays from disk and never touches the network.
+
+That invalidates the reasoning used to reject the "decode from a cached file" alternative below,
+which dismissed it because downloaded tracks are "a minority of a library". They are a minority by
+count — 1,765 of 26,422 — but **fifteen of fifteen tracks actually cast were among them**. So for
+real listening the discarded *fetch* frequently does not happen and only the discarded *decode*
+does. The saving this ADR claims is therefore smaller on the Mac than point 2 implies, and larger on
+a phone only to the extent the phone holds fewer downloads.
+
 ## Decision
 
 1. **Casting comes to the phone**, for `sonos`, `upnp` and `chromecast` — the same three ADR-0031
