@@ -1,6 +1,6 @@
 # ADR-0056: The Phone Casts Without Fetching the Audio
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-16
 
@@ -38,10 +38,27 @@ Read from `familiar-apple` at the time of writing:
 So a casting phone would pull **a second, complete copy of the audio over the network, decode it, and
 discard it**, purely to learn when the track ends.
 
-**The decode is the cheap half.** On a phone the expensive half is the radio: a continuous audio
-stream over wifi or cellular for the length of a listening session, thrown away on arrival. Point 7
-frames the cost as CPU and a held audio session. The stream is the larger number and the one that
-scales with session length, and it is not mentioned.
+**This ADR originally argued that the decode is the cheap half** — that the radio is the expensive
+one, a continuous stream thrown away on arrival, and that point 7 had understated it by framing the
+cost as CPU and a held audio session.
+
+**The measurement below says point 7 had it right and this ADR had it wrong.** The discarded fetch is
+real, but it happens in the one place where it costs least, and not at all where bandwidth is scarce:
+
+- **A downloaded track is never fetched.** `FamiliarPlayer` resolves through
+  `PlaybackSource.resolve(streamURL:downloadedFileURL:)`, so it plays from disk. Fifteen of fifteen
+  tracks observed being cast were downloaded.
+- **Casting requires the *device* to reach the server**, which confines it to the home network.
+  `_device_stream_url` in `outputs.py` exists precisely because "the browser is on Tailscale but the
+  WiiM is only on the LAN". At a friend's house their speaker cannot reach the NAS at all, so the
+  case where bandwidth is scarce is the case where casting does not happen. AirPlay serves that
+  scenario, and it is the OS's job (ADR-0031 point 3).
+
+So the discarded stream is LAN traffic, on a link that is not the constraint. **What remains is
+exactly what ADR-0031 point 7 named**: a full decode running silently for the length of a session,
+an audio session held for output nobody hears, and on a phone, battery. That is the cost this ADR
+removes, and it is worth removing on its own — but the reasoning is point 7's, not a correction of
+it.
 
 ### The option nobody considered
 
@@ -119,10 +136,14 @@ a phone only to the extent the phone holds fewer downloads.
    point 4 adopted, and for the same reason: they are the devices the OS cannot route to. AirPlay
    remains the OS picker's job (point 3), now reachable from inside the app.
 
-2. **The timeline is decoupled from the decoder.** A casting client does not open the audio stream
-   at all. It advances on a timer seeded from the track's duration and corrected by polling the
-   device, rather than by decoding audio it discards. This is the substance of the ADR; point 1
-   without it is the thing point 7 declined.
+2. **The timeline is decoupled from the decoder.** A casting client does not load the track at all
+   — no fetch, no decode, no silent playback. It advances on a timer seeded from the track's
+   duration and corrected by polling the device. This is the substance of the ADR; point 1 without
+   it is the thing point 7 declined.
+
+   **The saving is CPU, battery and a held audio session — not bandwidth.** A downloaded track was
+   never fetched anyway, and casting only works on the home LAN. Stated this way round because the
+   first draft argued the opposite and the measurement contradicted it.
 
 3. **Both platforms move together.** The Mac adopts the same timeline, rather than the phone getting
    a second implementation. Two mechanisms for one behaviour is how the web and native drifted in
