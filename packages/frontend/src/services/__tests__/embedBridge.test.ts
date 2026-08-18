@@ -6,8 +6,7 @@ import {
   postNavigateIntent,
   isEmbedSurfaceDocument,
   BRIDGE_HANDLER,
-  type PlayIntent,
-} from '../embedBridge';
+  type PlayIntent, autoSelectFromURL } from '../embedBridge';
 
 /**
  * The seam ADR-0016 names as the main risk of embedding: two clients that were independent now share
@@ -222,5 +221,30 @@ describe('postNavigateIntent', () => {
     });
     expect(() => postNavigateIntent({ to: 'artist', artist: 'M83' })).not.toThrow();
     expect(postNavigateIntent({ to: 'artist', artist: 'M83' })).toBe(false);
+  });
+});
+
+describe('autoSelectFromURL', () => {
+  it('is null when the host says nothing, so the page keeps its own setting', () => {
+    expect(autoSelectFromURL('?visualizer=lyrics')).toBeNull();
+    expect(autoSelectFromURL('')).toBeNull();
+  });
+
+  it('reads the switch on', () => {
+    expect(autoSelectFromURL('?autoSelect=1')).toBe(true);
+    expect(autoSelectFromURL('?autoSelect=true')).toBe(true);
+    expect(autoSelectFromURL('?autoSelect=TRUE')).toBe(true);
+  });
+
+  // The bug this exists to prevent: `"0"` is a non-empty string, so a truthy check at the call
+  // site would read "off" as "on" and the native toggle could never be switched back off.
+  it('reads the switch off, rather than treating "0" as a non-empty string', () => {
+    expect(autoSelectFromURL('?autoSelect=0')).toBe(false);
+    expect(autoSelectFromURL('?autoSelect=false')).toBe(false);
+  });
+
+  it('treats an empty value as nothing said', () => {
+    expect(autoSelectFromURL('?autoSelect=')).toBeNull();
+    expect(autoSelectFromURL('?autoSelect=%20')).toBeNull();
   });
 });
