@@ -22,12 +22,21 @@ that are missing are the good ones.
 
 **Two constraints shape every answer, and neither is negotiable.**
 
-*The browser has no drop-in folder.* `visualizerPluginHost.discover()` returns null in an ordinary
-browser — its own comment says "a browser has no drop-in directory" — because the folder is a native
-filesystem the page is told about by the host. So the built-ins cannot simply move out to disk: the
-web app would have no visualizers at all, and `/visualizer` is a surface
-[ADR-0057](ADR-0057-the-web-app-keeps-only-what-has-no-native-answer.md) point 6 keeps out of every
-shrinking decision.
+*The browser has no drop-in **folder** — but that is not the same as having no plugins, and the
+first version of this ADR conflated the two.* `discover()` fetches `plugins/index.json` with
+`new URL(path, window.location.href)`, which is **the document's own origin**. On the Apple clients
+that is the app bundle, served by `VisualizerSchemeHandler` — whose own comment says it serves "the
+visualizer document out of the app bundle, and the drop-in plugins beside it". In a browser it is
+the web app's origin, where nothing is published, so the fetch 404s and `discover()` returns null.
+
+That is a missing *file*, not a missing capability. If the web build emits the same bundles as
+static assets, discovery works in the browser with **no code change at all**. `ADR-0034` point 4
+already names the two sources this needs — shipped and local — and the browser simply has the first
+and not the second.
+
+**The rejected premise mattered**, because it is what the first version of this ADR used to justify
+keeping a compiled copy of every visualizer alongside the drop-in one. That would have meant each
+visualizer shipping twice, built two ways, with nothing checking the two stayed in step.
 
 *Shadowing is currently refused, for a reason that still holds.* `ADR-0034`'s Implementation records
 it: `registerVisualizer` overwrites by id and `visualizerRegistry` has no removal, so a plugin
@@ -54,9 +63,14 @@ playback state and network access in a public plugin API.
    re-registered when a local copy disappears; either way the invariant is that **deleting the
    folder restores the original**, and that is what makes the reversal safe where it was not before.
 
-3. **The compiled visualizers remain, on every client.** They are the fallback, and on the web app
-   they are the only copy — the browser has no folder. A shadowing copy is an override, never a
-   migration.
+3. **Each visualizer is built once and shipped once.** There is no compiled copy kept alongside the
+   drop-in one: the IIFE bundle is the artefact, and the platforms differ only in how it is
+   delivered — from the app bundle over the custom scheme on the Apple clients, and as a static
+   asset on the web app's own origin in a browser. Both are the `shipped` source `ADR-0034` point 4
+   already defines.
+
+   **This is the point of the exercise.** Two builds of one visualizer would drift, and nothing in
+   CI could see it: the app would quietly draw last week's scene while the source said otherwise.
 
 4. **A shadowed built-in is visible as shadowed.** The picker already has the vocabulary:
    `ADR-0034`'s Implementation made a shipped bundle losing to a local one report as `shadowed`
@@ -73,9 +87,10 @@ playback state and network access in a public plugin API.
    merely incomplete, because an author will believe it and pick a worse id. The reserved-id row
    changes, and the shadowing behaviour and its fallback are documented beside it.
 
-7. **A broken local copy falls back rather than failing.** `ADR-0034` point 8 already unloads a
-   visualizer that throws; here the fallback is specifically the compiled version of the same id, not
-   the album-art square, because one exists and is known good.
+7. **A broken local copy falls back to the shipped bundle of the same id.** `ADR-0034` point 8
+   already unloads a visualizer that throws; the fallback here is the shipped copy rather than the
+   album-art square, because one exists and is known good. That is what point 2's "delete the folder
+   and get the original back" means in the case where the folder was not deleted but broken.
 
 ## Alternatives Considered
 
@@ -85,11 +100,18 @@ playback state and network access in a public plugin API.
   and nothing happens, which is a worse kind of confusion than an empty folder — it looks like it
   should work.
 
-- **Move the built-ins out of the app entirely and make everything a drop-in.** The cleanest
-  architecture on paper, and it would make the plugin path the only path, which is the best way to
-  keep it working. Rejected on the first constraint: the browser has no folder, so the web
-  visualizer would have nothing to draw, and a fresh install would depend on seeding having
-  succeeded for the app to have any visualizer at all.
+- **Keep a compiled copy of each visualizer alongside the drop-in one, as a floor.** This is what
+  the first version of this ADR decided, on the belief that a browser could not load plugins at all.
+  That belief was wrong — see the Context — and the cost was concrete: every visualizer built twice,
+  by two toolchains, with nothing able to tell you they had diverged. Rejected once the premise was
+  corrected. What it was protecting against is real but smaller than it looked, and point 3's
+  tradeoff below states it plainly.
+
+- **Move the built-ins out of the app entirely and load them only from the user's folder.** Distinct
+  from point 3, which keeps them in the app bundle as the `shipped` source. Rejected because a fresh
+  install would then depend on seeding having succeeded to have any visualizer at all, and
+  `ADR-0065` deliberately seeds *once* — so a failed first launch would leave a permanently empty
+  player with no way back except Settings.
 
 - **Keep the reserved-id refusal and ship the copies under different ids** — `reactive-terrain-example`
   and so on. No registry change, no shadowing, no risk to the compiled set. Rejected because the
@@ -119,11 +141,17 @@ playback state and network access in a public plugin API.
 - **Tradeoff:** Point 2 widens what third-party code can do: a dropped-in plugin can now replace a
   visualizer the user chose rather than only adding one. `ADR-0034` refused exactly this, and the
   mitigation is point 4's visibility rather than a restriction.
-- **Tradeoff:** The app bundle grows by four more bundles, on top of the 3.3 MB inlined document
-  they are already inside. They are shipped twice — compiled into the page and again as drop-in
-  copies — and nothing is watching that total.
-- **Follow-up:** Whether the shipped-as-example copies should be built in CI and diffed against the
-  compiled sources, so a stale one fails a build rather than silently drawing last week's scene.
+- **Positive:** The inlined visualizer document gets *smaller*, not larger. The four visualizers
+  leave the page bundle and become separate artefacts fetched beside it, which is the opposite of
+  what the first version of this ADR predicted.
+- **Tradeoff:** **There is no longer a compiled floor.** If the shipped bundles cannot be read —
+  a corrupt resource, a scheme handler that stops serving them — the player has no visualizers at
+  all, where before it had four that could not fail independently of the app itself. The mitigation
+  is that shipped bundles are read from the app bundle or the app's own origin, which is about as
+  reliable as compiled code; the risk is not zero and is accepted deliberately.
+- **Follow-up:** The web build has to emit `plugins/index.json` and the bundles as static assets, or
+  the browser keeps 404ing and has no visualizers. Nothing in the page changes; this is a build
+  output that does not exist yet, and it is the one piece of new machinery this decision needs.
 - **Follow-up:** `ADR-0065` point 7 says a seeded example is not a supported artefact and may stop
   loading across an `apiVersion` bump. That is a comfortable thing to say about a sample and an
   uncomfortable one to say about `reactive-terrain`; point 3's compiled fallback is what makes it
