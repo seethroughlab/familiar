@@ -84,8 +84,18 @@ export interface ArtworkQueueBatchResponse {
 }
 
 export interface ArtworkStatusBatchResponse {
+  /** hash → whether *a file* exists, which a placeholder satisfies. See `generated`. */
   status: Record<string, boolean>;
+  /** Hashes whose fetch failed outright — stop polling these. */
   failed: string[];
+  /**
+   * Hashes whose cover Familiar drew rather than fetched.
+   *
+   * **The server has always sent this and the type omitted it**, so no caller could act on it —
+   * which is a large part of why 661 albums sat on placeholders unnoticed. Present now so a
+   * surface that wants to distinguish real art from a stand-in can.
+   */
+  generated: string[];
 }
 
 export interface ArtworkUploadResponse {

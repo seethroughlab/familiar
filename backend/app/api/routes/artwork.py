@@ -1,6 +1,7 @@
 """Artwork endpoints for proactive artwork downloading."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -191,6 +192,21 @@ class ArtworkStatusResponse(BaseModel):
     exists: bool
     queued: bool = False
 
+    #: True when the cover on disk is one Familiar drew, not one it fetched.
+    #:
+    #: **`exists` alone cannot answer "does this album have artwork".** A placeholder is a real file,
+    #: so it says yes — which is how 661 albums sat on drawn covers without anything noticing, and
+    #: why the queue routes could report "exists" for art nobody had ever found. The batch endpoint
+    #: below has always distinguished the two; this one did not, so a caller's answer depended on
+    #: which of the two it happened to ask.
+    generated: bool = False
+
+    #: When the placeholder was drawn, which is also when the internet was last asked.
+    #:
+    #: Present so a caller can tell "we tried yesterday and found nothing" from "we tried a year
+    #: ago" without knowing `ARTWORK_REFETCH_INTERVAL`. Null for real art.
+    generated_at: datetime | None = None
+
 
 @router.post("/queue", status_code=202)
 async def queue_artwork_download(
@@ -317,13 +333,33 @@ async def queue_artwork_batch(
 
 @router.get("/status/{album_hash}")
 async def get_artwork_status(album_hash: str) -> ArtworkStatusResponse:
-    """Check if artwork exists for an album hash."""
+    """Check whether artwork exists for an album hash, and whether it is real.
+
+    Reports the same provenance the batch endpoint reports. It did not, and the asymmetry is what
+    let a placeholder pass for artwork everywhere a caller used this one.
+    """
+    from app.services.artwork import _generated_marker_path, is_generated_artwork
+
     full_path = get_artwork_path(album_hash, "full")
     thumb_path = get_artwork_path(album_hash, "thumb")
+    generated = is_generated_artwork(album_hash)
+
+    generated_at: datetime | None = None
+    if generated:
+        try:
+            generated_at = datetime.fromtimestamp(
+                _generated_marker_path(album_hash).stat().st_mtime, tz=UTC
+            )
+        except OSError:
+            # Raced with a real cover landing and clearing the marker. Not an error: the album
+            # simply has real art now, which the next call will report.
+            generated = False
 
     return ArtworkStatusResponse(
         album_hash=album_hash,
         exists=full_path.exists() and thumb_path.exists(),
+        generated=generated,
+        generated_at=generated_at,
     )
 
 
