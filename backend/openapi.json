@@ -7648,6 +7648,30 @@
         "title": "RecommendedTrackResponse",
         "type": "object"
       },
+      "RefetchGeneratedResponse": {
+        "description": "What a bulk placeholder re-fetch queued.",
+        "properties": {
+          "considered": {
+            "title": "Considered",
+            "type": "integer"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "skipped_recent": {
+            "title": "Skipped Recent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "considered",
+          "queued",
+          "skipped_recent"
+        ],
+        "title": "RefetchGeneratedResponse",
+        "type": "object"
+      },
       "RelocateRequest": {
         "description": "Request to search a folder for missing files.",
         "properties": {
@@ -11719,6 +11743,78 @@
           }
         },
         "summary": "Queue Artwork Batch",
+        "tags": [
+          "artwork"
+        ]
+      }
+    },
+    "/api/v1/artwork/refetch-generated": {
+      "post": {
+        "description": "Ask the internet again for every album currently showing a placeholder.\n\n**Bulk, because the per-album path only fires when an album scrolls into view.** Fixing the\nqueue routes makes browsing self-healing, but reaching 661 placeholders that way means browsing\npast 661 albums. This queues them in one go.\n\nPlaceholders only. An album with real art is never touched, and one whose placeholder was drawn\ninside `ARTWORK_REFETCH_INTERVAL` is left for later \u2014 `should_refetch_online` is the same rule\nthe queue routes use, so a button press cannot bypass the rate limit that protects Last.fm and\nMusicBrainz from being asked about an artless album every day.\n\nGrouped exactly as `/artwork/coverage` groups, so \"queued\" is comparable with the \"generated\"\nfigure shown beside the button. `/artwork/regenerate-stale` groups by bare `Track.artist` with\nno status filter and therefore agrees with neither; that is a separate defect, left alone here.",
+        "operationId": "artwork_refetch_generated_artwork",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefetchGeneratedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Refetch Generated Artwork",
         "tags": [
           "artwork"
         ]

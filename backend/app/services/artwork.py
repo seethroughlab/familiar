@@ -3,6 +3,8 @@
 import hashlib
 import subprocess
 import tempfile
+import time
+from datetime import timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -42,6 +44,40 @@ def mark_as_generated(album_key: str) -> None:
     """Create a .generated marker file with current art version."""
     settings.art_path.mkdir(parents=True, exist_ok=True)
     _generated_marker_path(album_key).write_text(str(GENERATIVE_ART_VERSION))
+
+
+#: How long a placeholder stands before the internet is asked again.
+#:
+#: A generated cover means "Last.fm and MusicBrainz had nothing when we asked". That can stop being
+#: true — art gets added, and a tag correction changes what we ask for — so it is worth asking again,
+#: but not often: an album that genuinely has no art online would otherwise be looked up every time
+#: it scrolled into view, forever. Thirty days is roughly twenty lookups a day across a 4k library.
+ARTWORK_REFETCH_INTERVAL = timedelta(days=30)
+
+
+def should_refetch_online(album_key: str) -> bool:
+    """True when the art on disk is a placeholder old enough to try the internet again.
+
+    **This is the rule that decides whether artwork already on disk counts as "done".** It exists
+    because the obvious test — does the file exist — answers yes for a picture Familiar drew itself,
+    which is how 661 albums came to be permanently stuck on placeholders: both queue routes
+    short-circuited on ``full_path.exists()`` and reported ``"exists"``, so the fetcher's own
+    allowance for re-queueing generated art was unreachable through the API.
+
+    Real art returns ``False`` — no marker, nothing to retry, and a successful fetch is never redone.
+
+    The marker's mtime is "when we last tried online", which needs no new file and no migration:
+    ``mark_as_generated`` writes it at the end of every failed fetch. Note that re-drawing a
+    placeholder (``/artwork/regenerate``) rewrites the marker and so restarts the clock — acceptable,
+    because a redraw is also a deliberate act on that album.
+    """
+    marker = _generated_marker_path(album_key)
+    try:
+        age = time.time() - marker.stat().st_mtime
+    except OSError:
+        # No marker: either real art, or nothing at all. Neither is a placeholder to replace.
+        return False
+    return age >= ARTWORK_REFETCH_INTERVAL.total_seconds()
 
 
 def is_generated_art_current(album_key: str) -> bool:

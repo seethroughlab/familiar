@@ -6,7 +6,7 @@
  * **preview-only, because the server has no apply route for either**.
  */
 import { Link } from 'react-router-dom';
-import { List, Copy, FolderTree, ChevronRight } from 'lucide-react';
+import { List, Copy, FolderTree, Image, ChevronRight } from 'lucide-react';
 
 import { AdminPage, AdminSection } from './AdminPage';
 import { DataManagement } from '../Settings/DataManagement';
@@ -21,6 +21,12 @@ export function ToolsPage() {
           icon={<Copy className="w-5 h-5 text-cyan-400 flex-shrink-0" />}
           label="Duplicates"
           description="Find tracks that appear more than once, and which copy is better"
+        />
+        <ToolLink
+          to="/tools/artwork"
+          icon={<Image className="w-5 h-5 text-cyan-400 flex-shrink-0" />}
+          label="Cover art"
+          description="See what has real artwork, and re-fetch placeholders"
         />
         <ToolLink
           to="/tools/organize"
