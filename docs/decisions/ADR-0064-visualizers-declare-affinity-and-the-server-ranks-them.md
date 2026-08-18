@@ -228,10 +228,20 @@ server therefore cannot know which visualizers a given device has installed**, b
 - **Tradeoff:** A track with no analysis, or one still awaiting a features re-run, has nothing to
   rank against. The behaviour has to be "keep the current visualizer", not "pick arbitrarily", and
   on a large library mid-sync that will be a meaningful fraction of tracks.
-- **Follow-up:** The catalog published as `window.__familiarVisualizers` must carry the affinity
-  block for the native host to forward it, which extends `VisualizerCatalog.swift` and the
-  `evaluateJavaScript` probe `0034` added rather than adding a message handler. *The page half is
-  done — the catalog carries `affinity`; the Swift half is what remains.*
+- **Follow-up:** ~~The catalog published as `window.__familiarVisualizers` must carry the affinity
+  block for the native host to forward it, which extends `VisualizerCatalog.swift`.~~ — **this was
+  wrong, and the Apple clients needed no such thing.** It assumed the *host* would gather candidates
+  and call the endpoint. It does not need to: the embedded page already has the server's origin and
+  the profile, already renders `AudioVisualizer`, and already knows what it registered — including
+  drop-in plugins the app has only ever seen as folders. Ranking from Swift would have been the same
+  rule in a second language, which `0034` says is how the menu comes to disagree with what loaded.
+  What was actually missing was a *switch*: `autoSelect` is off by default and the embedded surface
+  has no picker. So the app gained a menu toggle that travels on the URL beside `visualizer`, and
+  `VisualizerCatalog` is unchanged. The catalog does carry `affinity` — harmless, and it is what the
+  page sends — but nothing on the native side reads it, which a test now pins.
+
+  The general shape worth keeping: **before building a second implementation for another client,
+  check whether the shared page already does the work.** Here it had done it for a week.
 - **Follow-up:** ~~`docs/VISUALIZER_API.md` documents the manifest and will need the `affinity`
   block before `ADR-0063` publishes it.~~ — done, along with the three defects that ADR names: the
   six absent components, `useAudioAnalyser`'s three sources, and the fifth reserved id. The 48-tag

@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { initApiOrigin, registerProfileProvider, setApiOrigin } from './api/base';
-import { profileFromURL } from './services/embedBridge';
+import { autoSelectFromURL, profileFromURL } from './services/embedBridge';
 import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
 import { installVisualizerSink } from './services/visualizerSink';
 import { useVisualizerStore } from './stores/visualizerStore';
@@ -56,6 +56,18 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
   // answer and whichever wrote last would win.
   const visualizer = params.get('visualizer');
   if (visualizer) useVisualizerStore.getState().setVisualizerId(visualizer);
+
+  // **Whether to let the server pick one to suit each track** (ADR-0064 point 7), for the same
+  // reason and by the same route: the toggle lives in the native menu, so the app is the source of
+  // truth and the page is told rather than remembering its own answer.
+  //
+  // The *ranking* is done here rather than by the host. This page already has the server's origin
+  // and the profile, and `AudioVisualizer` already asks — so a host-side implementation would be a
+  // second copy of candidate-gathering in Swift, which is how the two come to disagree about what
+  // is loaded. The host supplies the switch; the page, which knows what it actually registered,
+  // supplies the candidates.
+  const autoSelect = autoSelectFromURL(window.location.search);
+  if (autoSelect !== null) useVisualizerStore.getState().setAutoSelect(autoSelect);
 
   const api = params.get('api');
   registerProfileProvider({
