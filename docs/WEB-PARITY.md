@@ -32,9 +32,9 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Playlists | ✅ | ✅ | ✅ | |
 | Smart playlists | ✅ | ✅ | ✅ | Browse and play on all three. **Editing is Mac-only** (ADR-0013 point 3): full CRUD over 25 server-supplied rule fields, and the phone shows no pencil and no `+` |
 | Favorites, Downloads | ✅ | ✅ | ✅ | |
-| Music Map | ✅ | ✅ | ❌ | Native `Canvas`, 500-artist cap. Web uses three.js |
+| Music Map | ✅ | ✅ | ❌ | **not a blocker:** desktop-only by decision — a dense field of labels navigated by pinch and pan wants a large screen and hover (ADR-0062). Native `Canvas`, 500-artist cap; web uses three.js |
 | Discover | ✅ | ✅ | ✅ | **The native ones are a `WKWebView` on `/embed`** (ADR-0016/0017/0019) |
-| New Releases detail | ✅ | ❌ | ❌ | The embed bridge only understands `openArtist` / `openAlbum` |
+| New Releases detail | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere. The web screen was deleted by ADR-0050 (`35ba672`) and this row went on claiming it; the "See all" link that reached it was dead on all three until 2026-08-18. The *section* still renders, on all three |
 | Home | ✅ | ✅ | ✅ | ADR-0032 |
 | Queue | ✅ | ✅ | ✅ | See "reorder" below |
 | Shuffle | ✅ | ✅ | ✅ | Native adds four server-drawn weighted presets (ADR-0035) |
@@ -44,7 +44,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Visualizer | ✅ | ✅ | ✅ | **A `WKWebView`**, bundled *inside* the app (3.4 MB `VisualizerBundle.html`) |
 | Visualizer auto-select | ✅ | ✅ | ✅ | ADR-0064. **The page does the ranking on all three** — it knows the server, the profile and what it registered; the app supplies a menu toggle that travels on the URL |
 | Offline downloads | ✅ | ✅ | ✅ | Independent implementations — Dexie vs background `URLSession` |
-| Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ❌ | AirPlay deliberately left to the OS picker |
+| Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ✅ | ADR-0056 brought casting to the phone. AirPlay stays the OS picker's job (ADR-0031 point 3), reachable from the same merged control |
 | CarPlay | — | — | ✅ | |
 | Listen-together (guest sessions) | ✅ | ❌ | ❌ | **not a blocker:** web-only by decision — ADR-0036 built the server half and **ADR-0037 was rejected** (ADR-0060 point 1) |
 | Sleep timer, playback speed | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere, including the web app, so it is not a reason to keep it (ADR-0060 point 1) |
@@ -217,6 +217,32 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
   Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
   screen and false of the numbers.
+- **2026-08-18** — **New Releases detail was never a native gap: it exists nowhere.** The web
+  screen (`NewReleasesDetail.tsx`) was deleted by ADR-0050 in `35ba672`, and the Web column went on
+  saying ✅ for eight days. The "See all" link that reached it was therefore dead on every platform —
+  redirecting home in a browser, and inside the embedded Discover WebView changing the URL while
+  leaving the same page on screen, because a react-router `Link` is a `pushState` the native side
+  never sees. The link is now removed; the section, the count, dismiss and the purchase links all
+  stay and all work.
+
+  **This empties the player's removal countdown.** Under ADR-0060 point 1's second rule a row that
+  is ❌ in the Web column too cannot be a reason to keep the browser, and no rule was bent to get
+  here — the ✅ was simply false. `docs/WEB-PARITY.md`'s Listening table now shows no ❌ in the Mac
+  or iPhone columns that is not excluded, which is the condition ADR-0058 point 4 set for removing
+  the web player.
+- **2026-08-18** — the Music Map became **desktop-only by decision** (ADR-0062) rather than an
+  unfinished row. No ADR had ever said the phone should have one — ADR-0016 is Mac-scoped — so the
+  ❌ recorded "nobody decided" and the countdown read it as "not yet done". **One row now remains**:
+  New Releases detail, which needs a decision about the embed bridge before it needs code.
+- **2026-08-18** — casting reached the phone (`familiar-apple` #125 and #127, ADR-0056), so
+  **Network output goes native-✅ and leaves the player's removal countdown**. Two rows remain in the
+  Listening table under ADR-0060's rule: Music Map on iPhone, and New Releases detail on Mac and
+  iPhone. Both are `familiar-apple` work; nothing in the web app blocks its own player now.
+
+  The ADR is worth reading for what the measurement did to it: it argued the discarded *stream* was
+  the cost, and the server log said otherwise — a downloaded track is never fetched, and casting
+  only works on the home LAN where bandwidth is not the constraint. What it actually removes is the
+  full decode ADR-0031 point 7 named in the first place.
 - **2026-08-17** — the PWA was retired (ADR-0059). No manifest, no service worker, no install
   prompt, and `vite-plugin-pwa` is gone. `/sw.js` still exists and must: it serves a **tombstone**
   worker that unregisters the Workbox worker earlier versions installed, because deleting a service

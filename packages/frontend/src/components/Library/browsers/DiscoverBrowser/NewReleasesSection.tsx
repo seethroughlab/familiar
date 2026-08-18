@@ -8,9 +8,8 @@
  * Polls /new-releases/status every 2s while a check is running.
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Disc3, Loader2, RefreshCw, ChevronRight } from 'lucide-react';
+import { Disc3, Loader2, RefreshCw } from 'lucide-react';
 import { newReleasesApi, externalAlbumsApi } from '../../../../api/discovery';
 import { queryKeys } from '../../../../api/queryKeys';
 import { STALE_TIME } from '../../../../api/queryDefaults';
@@ -121,15 +120,17 @@ export function NewReleasesSection() {
             </span>
           )}
         </div>
-        {releases.length > 0 && (
-          <Link
-            to="/library/discover/new-releases"
-            className="flex items-center gap-1 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-          >
-            See all
-            <ChevronRight className="w-4 h-4" />
-          </Link>
-        )}
+        {/*
+          * No "See all". It linked to `/library/discover/new-releases`, whose screen was deleted
+          * when ADR-0050 made the web app a management surface — so in a browser it redirected
+          * home, and inside the Mac and iPhone Discover WebView it changed the URL and left you on
+          * the same page, because a react-router `Link` is a pushState rather than a navigation the
+          * native side ever sees.
+          *
+          * A visible affordance reaching a screen that no longer exists is the defect this codebase
+          * has shipped repeatedly (`familiar` #70, #74, #76). The count beside the heading still
+          * says how many there are; nothing now offers to show them.
+          */}
       </div>
 
       {listQuery.isLoading ? (
