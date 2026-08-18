@@ -135,6 +135,16 @@ has to be readable without a network or a decision.
   could not fix from where it stood.
 - **Positive:** The folder explains itself. Opening it shows what a plugin is made of — a manifest
   and a built bundle — which is what the button revealing it implies.
+- **Tradeoff:** **The folder is inside the app's sandbox container**, and its path is not the one
+  anybody would guess. The Mac app declares `com.apple.security.app-sandbox`, so the Application
+  Support directory `ADR-0034` point 4 names resolves to
+  `~/Library/Containers/com.familiar.player/Data/Library/Application Support/Familiar/Visualizers`.
+  A plain `~/Library/Application Support/Familiar/Visualizers` also exists on this machine, is
+  empty, and is not the one the app reads — which is exactly how "I put a plugin in the folder and
+  nothing happened" would arrive. Settings shows the real path and its button opens the real place,
+  so the only way to be misled is to navigate there by hand, which is what happened while this was
+  being written.
+
 - **Tradeoff:** The app bundle grows by the examples. Measured today they are 24 KB of `dist/` plus
   two manifests, against a 3.3 MB visualizer document and a 72 MB app, so the cost is nil — but it
   is a cost that grows with every example added, and nothing is watching it.
