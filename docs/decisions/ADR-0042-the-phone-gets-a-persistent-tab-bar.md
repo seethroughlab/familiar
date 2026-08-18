@@ -1,11 +1,20 @@
 # ADR-0042: The Phone Gets a Persistent Tab Bar
 
-Status: accepted
+Status: accepted — **point 2 superseded by [ADR-0061](ADR-0061-the-phones-tabs-are-home-search-and-library.md)**
+
 
 Date: 2026-08-07
 
 Supersedes [ADR-0018](ADR-0018-the-phone-navigates-from-a-root-list.md) points 1 and 5.
 Extends [ADR-0032](ADR-0032-the-apple-clients-get-a-home-destination.md).
+
+## Implementation
+
+- **Point 2's four tabs never shipped.** The phone has three — Home, Search and Library — which
+  arrived in `familiar-apple` `6ca7e44` without reference to this ADR. `ADR-0061` supersedes point 2
+  and records why the shipped arrangement is the better one: it has Search, which this ADR never
+  considered, and Tracks and Favorites are one tap away with counts under point 3's untouched root
+  list. Everything else here stands.
 
 ## Context
 
