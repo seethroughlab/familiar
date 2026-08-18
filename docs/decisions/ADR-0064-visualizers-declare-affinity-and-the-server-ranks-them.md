@@ -11,6 +11,48 @@ two sources, the refusal rules — stands unchanged. Independent of
 [ADR-0063](ADR-0063-the-visualizer-api-is-published-for-outside-authors.md), and should ship before
 them so the manifest is settled before it is published.
 
+## Implementation
+
+Points 1–10 shipped on `adr/open-visualizer-platform`, in four commits. The `familiar-apple` half —
+the catalog carrying `affinity` so the native host can send candidates — is the remaining follow-up,
+and `docs/WEB-PARITY.md` carries the row marked **not a blocker** until it lands, so shipping the
+web half first does not extend the web player's countdown under
+[ADR-0060](ADR-0060-the-players-removal-trigger-must-be-reachable.md) point 1.
+
+**Point 9 needed no backend work**, which this ADR did not know. `GET /tracks/{id}` already
+populates all fifteen `TrackFeatures` fields and `tracksApi.get` already wraps it. The trap was the
+obvious fix: `playerStore.currentTrack` comes from `tracksApi.list`, which fills `features` only
+when the caller passes `include_features`, and the only caller that does is the track-list browser.
+Passing `currentTrack.features` would have worked on exactly one screen.
+
+**Point 10's endpoint went under the existing `tracks` tag**, not a new `visualizers` one. That
+avoids editing `VENDORED_TAGS` and the Swift generator config, and since `tracks` is already in the
+generated surface the operation reaches the Apple clients on the next regeneration with no
+cross-repo change.
+
+Four things were decided here that the ADR left open:
+
+1. **Unrecognised means excluded from the denominator, not scored zero.** Point 3 said "inert" and
+   the arithmetic had to make it true: a typo in an optional field must not change a score at all.
+   Nothing declared, and a track with no mood tags, both score neutral rather than last — but
+   declaring something that does *not* fit can lose to declaring nothing, so there is no advantage
+   in claiming everything.
+2. **`music-video` declares no affinity, deliberately.** Point 4 says the built-ins declare too, and
+   this one has nothing honest to say: it plays a video rather than drawing the audio, so no
+   property of the analysis makes it more apt.
+3. **`instrumentalness` and `speechiness` are not used as signals**, though they are the obvious
+   choice for the two lyric visualizers. The detector finds speech rather than singing, so it does
+   not separate an instrumental track from a sung one; the CLAP-derived `vocal/choir` tag is the
+   better proxy. This is now recorded in `VISUALIZER_API.md` so a plugin author does not repeat it.
+4. **A manual pick switches auto-select off.** Point 7 forbids silently overriding a chosen
+   visualizer, and leaving the toggle on would have let the *next* track do exactly that.
+
+**One defect this created and the ADR did not anticipate.** Auto-select introduces a second answer
+to "which visualizer is on", and `FullPlayer` gates its whole layout on whether Music Video is
+playing — read from the stored id, so an auto-selected Music Video would have drawn album art over
+a playing video. Resolved with one shared `useActiveVisualizerId`; the lesson is the general one,
+that adding a second source for an existing answer means auditing every reader of the first.
+
 ## Context
 
 **A visualizer is currently a setting somebody picks once.** The whole of the state is one id, and
@@ -188,10 +230,12 @@ server therefore cannot know which visualizers a given device has installed**, b
   on a large library mid-sync that will be a meaningful fraction of tracks.
 - **Follow-up:** The catalog published as `window.__familiarVisualizers` must carry the affinity
   block for the native host to forward it, which extends `VisualizerCatalog.swift` and the
-  `evaluateJavaScript` probe `0034` added rather than adding a message handler.
-- **Follow-up:** `docs/VISUALIZER_API.md` documents the manifest and will need the `affinity` block
-  before `ADR-0063` publishes it. That ADR's point 2 already requires the document to be correct
-  first; this adds to what "correct" means.
+  `evaluateJavaScript` probe `0034` added rather than adding a message handler. *The page half is
+  done — the catalog carries `affinity`; the Swift half is what remains.*
+- **Follow-up:** ~~`docs/VISUALIZER_API.md` documents the manifest and will need the `affinity`
+  block before `ADR-0063` publishes it.~~ — done, along with the three defects that ADR names: the
+  six absent components, `useAudioAnalyser`'s three sources, and the fifth reserved id. The 48-tag
+  vocabulary is listed there and was verified against `mood_tags.DESCRIPTORS` at write time.
 - **Follow-up:** The `"visualizer"` entry in `KNOWN_CAPABILITIES` remains declared and unused after
   this ADR, per point 10. It should either acquire a producer or be removed, and this is the second
   time it has been looked at and left.
