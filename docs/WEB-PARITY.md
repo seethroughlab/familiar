@@ -43,7 +43,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Audio effects (EQ, reverb, delay…) | ✅ | ✅ | ✅ | Web `EffectsChain`; native its own DSP |
 | Visualizer | ✅ | ✅ | ✅ | **A `WKWebView`**, bundled *inside* the app (3.4 MB `VisualizerBundle.html`) |
 | Offline downloads | ✅ | ✅ | ✅ | Independent implementations — Dexie vs background `URLSession` |
-| Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ❌ | AirPlay deliberately left to the OS picker |
+| Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ✅ | ADR-0056 brought casting to the phone. AirPlay stays the OS picker's job (ADR-0031 point 3), reachable from the same merged control |
 | CarPlay | — | — | ✅ | |
 | Listen-together (guest sessions) | ✅ | ❌ | ❌ | **not a blocker:** web-only by decision — ADR-0036 built the server half and **ADR-0037 was rejected** (ADR-0060 point 1) |
 | Sleep timer, playback speed | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere, including the web app, so it is not a reason to keep it (ADR-0060 point 1) |
@@ -216,6 +216,15 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
   Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
   screen and false of the numbers.
+- **2026-08-18** — casting reached the phone (`familiar-apple` #125 and #127, ADR-0056), so
+  **Network output goes native-✅ and leaves the player's removal countdown**. Two rows remain in the
+  Listening table under ADR-0060's rule: Music Map on iPhone, and New Releases detail on Mac and
+  iPhone. Both are `familiar-apple` work; nothing in the web app blocks its own player now.
+
+  The ADR is worth reading for what the measurement did to it: it argued the discarded *stream* was
+  the cost, and the server log said otherwise — a downloaded track is never fetched, and casting
+  only works on the home LAN where bandwidth is not the constraint. What it actually removes is the
+  full decode ADR-0031 point 7 named in the first place.
 - **2026-08-17** — the PWA was retired (ADR-0059). No manifest, no service worker, no install
   prompt, and `vite-plugin-pwa` is gone. `/sw.js` still exists and must: it serves a **tombstone**
   worker that unregisters the Workbox worker earlier versions installed, because deleting a service
