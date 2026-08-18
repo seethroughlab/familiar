@@ -9,6 +9,7 @@ import { getVisualizers } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
 import { useVisualizerAutoSelectStore } from '../../stores/visualizerAutoSelectStore';
+import { useActiveVisualizerId } from '../../hooks/useAutoSelectedVisualizer';
 
 // Icon mapping for visualizers
 const visualizerIcons: Record<string, typeof Sparkles> = {
@@ -43,14 +44,14 @@ function ProblemRow({ title, detail }: { title: string; detail: string }) {
 export function VisualizerPicker() {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { visualizerId, setVisualizerId, glowLevel, setGlowLevel, autoSelect, setAutoSelect } =
+  const { setVisualizerId, glowLevel, setGlowLevel, autoSelect, setAutoSelect } =
     useVisualizerStore();
   const { chosenId, unranked, ignoredByVisualizer } = useVisualizerAutoSelectStore();
 
   const visualizers = getVisualizers();
 
-  // What is actually drawing: auto-select's choice when it has one, the listener's otherwise.
-  const activeId = (autoSelect && chosenId) || visualizerId;
+  // What is actually drawing — shared with `FullPlayer`, which gates its layout on the same answer.
+  const activeId = useActiveVisualizerId();
   const currentVisualizer = visualizers.find(v => v.metadata.id === activeId);
 
   const records = useVisualizerPluginStore((s) => s.records);

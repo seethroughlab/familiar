@@ -12,7 +12,7 @@ import { getVisualizer } from './types';
 import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
-import { useAutoSelectedVisualizer } from '../../hooks/useAutoSelectedVisualizer';
+import { useAutoSelectedVisualizer, useActiveVisualizerId } from '../../hooks/useAutoSelectedVisualizer';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 // Import all visualizers to register them
@@ -89,14 +89,19 @@ export function AudioVisualizer({
   const { visualizerId } = useVisualizerStore();
   const markPluginFailed = useVisualizerPluginStore((s) => s.markFailed);
 
-  // ADR-0064 point 7. Null whenever auto-select is off, or on but with no opinion yet — so the
-  // listener's own choice is what shows unless something actively decided otherwise. Wired here
-  // rather than at each call site because both surfaces render through this component.
-  const autoSelectedId = useAutoSelectedVisualizer(track?.id);
+  // ADR-0064 point 7. **This is the only caller**, so the ranking is asked for once per track no
+  // matter how many things want to know the answer — wired here rather than at each call site
+  // because both surfaces render through this component. The value is read back through
+  // `useActiveVisualizerId` so the "which visualizer is on" rule has exactly one definition.
+  useAutoSelectedVisualizer(track?.id);
+  // The id we are *asking* for, which is not necessarily the one that resolves — see `activeId`
+  // below, which is what actually rendered after the fallbacks.
+  const requestedId = useActiveVisualizerId();
 
-  // Get the current visualizer component
+  // Falls back to the listener's own choice before the built-in default, so an auto-chosen plugin
+  // that has since been removed lands on what they picked rather than on Reactive Terrain.
   const visualizer =
-    getVisualizer(autoSelectedId ?? visualizerId) ||
+    getVisualizer(requestedId) ||
     getVisualizer(visualizerId) ||
     getVisualizer(DEFAULT_VISUALIZER_ID);
   const activeId = visualizer?.metadata.id;

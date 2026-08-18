@@ -111,7 +111,8 @@ interface Track {
 
 ### TrackFeatures
 
-Audio analysis data (available when track has been analyzed):
+Audio analysis, present once the track has been analysed. A track that has not been — or one part
+way through a re-analysis — arrives as `null`, so read every field defensively.
 
 ```typescript
 interface TrackFeatures {
@@ -123,8 +124,19 @@ interface TrackFeatures {
   acousticness: number | null;     // 0-1, acoustic vs electronic
   instrumentalness: number | null; // 0-1, vocals vs instrumental
   speechiness: number | null;      // 0-1, spoken word presence
+  brightness: number | null;       // Spectral centroid
+  harmonic_complexity: number | null;
+  swing_ratio: number | null;
+  syncopation: number | null;
+  loudness_lufs: number | null;    // Integrated loudness
+  track_peak: number | null;
+  replaygain_track_gain: number | null;
 }
 ```
+
+**`instrumentalness` and `speechiness` are not reliable for "does this have singing on it".** The
+detector finds *speech*, not singing, so an instrumental track and a sung one are not dependably
+separated. The `vocal/choir` mood tag is the better signal; see the affinity vocabulary below.
 
 ### LyricLine
 
@@ -153,11 +165,24 @@ import {
 
 ### useAudioAnalyser
 
-Real-time audio frequency data from Web Audio API.
+Real-time audio data for the frame being drawn.
 
 ```typescript
 const audioData = useAudioAnalyser(enabled: boolean = true);
 ```
+
+**There are three sources behind this, and a visualizer is written against none of them in
+particular.** In the browser it reads a Web Audio `AnalyserNode` off the playing engine. Embedded in
+the Mac or iPhone app it reads frames the native side pushes across the bridge, because that page
+runs a null audio engine and constructs no `AudioContext` at all
+([ADR-0033](decisions/ADR-0033-the-embed-bridge-gains-a-return-channel.md),
+[ADR-0017](decisions/ADR-0017-the-embedded-surface-gets-a-null-audio-engine.md)). And when nothing
+is playing it reads zeroes. All three fill the same buffers, which is what lets one visualizer run
+unmodified on every client.
+
+The practical consequence: **the native channel runs at about 10 Hz**, a platform floor rather than
+a tuning choice, while the browser's runs per animation frame. Anything that looks jerky when
+embedded and smooth in a browser is this — interpolate between values rather than stepping to them.
 
 **Returns:**
 
@@ -550,15 +575,23 @@ registerVisualizer(
 
 ## Existing Visualizers
 
-| Visualizer | Description | Key Features |
-|------------|-------------|--------------|
-| `CosmicOrb` | Glowing orb with particle field | GPU particles, custom shaders, waveform ring |
-| `FrequencyBars` | Spectrum analyzer | 128 bars, gradient colors, reflective floor |
-| `AlbumKaleidoscope` | Kaleidoscope from artwork | Shader-based mirroring, twist effects, sparkles |
-| `ColorFlow` | Flowing color particles | Palette extraction, flow field, glowing rings |
-| `LyricStorm` | 3D floating lyrics | drei Text, depth sorting, current line highlight |
-| `LyricPulse` | Pulsing current lyric | BPM sync, glow effects, progress bar |
-| `TypographyWave` | Animated text waves | Canvas 2D, per-character animation |
+These are the five compiled into the app, registered in
+`components/Visualizer/visualizers/index.ts`. **Their ids are reserved**: a plugin claiming one is
+refused rather than allowed to shadow it, because the registry has no removal and the built-in would
+be unrecoverable short of deleting the file.
+
+| id | Component | What it draws |
+|----|-----------|---------------|
+| `reactive-terrain` | `ReactiveTerrain` | Neon wireframe landscape driven by the spectrum, flashing on every beat |
+| `beat-tiles` | `BeatTiles` | Album cover split into tiles that pop to the beat |
+| `lyrics` | `ScrollingLyrics` | Scrolling synced lyrics over a drifting field of the song's words |
+| `music-video` | `MusicVideo` | Searches and plays a synced music video from YouTube |
+| `lyric-storm` | `LyricStorm` | The song's own words drifting through a dark 3D space |
+
+*Corrected 2026-08-18. This table previously listed seven components — `CosmicOrb`, `FrequencyBars`,
+`AlbumKaleidoscope`, `ColorFlow`, `LyricPulse` and `TypographyWave` — of which only `LyricStorm` was
+real. Recorded rather than quietly replaced, because anyone who read the old table went looking for
+six things that do not exist, and may still have notes that say so.*
 
 ---
 
@@ -626,18 +659,62 @@ my-visualizer/
   "description": "Surreal 3D models drifting through fog",
   "main": "dist/index.js",
   "familiar": { "apiVersion": 1 },
-  "icon": "Building2"
+  "icon": "Building2",
+  "affinity": {
+    "tags": ["ambient", "dreamy", "electronic"],
+    "ranges": [{ "feature": "energy", "maximum": 0.5 }]
+  }
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `id` | yes | Lowercase letters, digits and hyphens. Must match the id your bundle registers, and must not be one of the built-ins (`reactive-terrain`, `beat-tiles`, `lyrics`, `music-video`). |
+| `id` | yes | Lowercase letters, digits and hyphens. Must match the id your bundle registers, and must not be one of the five built-ins (`reactive-terrain`, `beat-tiles`, `lyrics`, `music-video`, `lyric-storm`). |
 | `name` | yes | Shown in the picker. |
 | `type` | yes | Must be `visualizer`. Library browsers are out of scope. |
 | `main` | yes | Path to the bundle, relative to this folder. It may not point outside it. |
 | `familiar.apiVersion` | yes | Must equal the version the app implements — currently **1**. A missing or mismatched value is refused before the bundle is run. |
 | `version`, `description`, `icon`, `author` | no | `icon` is a [lucide](https://lucide.dev) name, used by the web picker only. |
+| `affinity` | no | What kind of music your visualizer suits. See below. |
+
+### Affinity — what your visualizer suits
+
+Optional, and nothing is lost by omitting it. It is read when the listener turns on **Match to the
+music**, which asks the server to pick a visualizer for each track from what that device actually
+has installed.
+
+```json
+"affinity": {
+  "tags": ["ambient", "dreamy"],
+  "ranges": [
+    { "feature": "energy", "maximum": 0.4 },
+    { "feature": "bpm", "minimum": 60, "maximum": 100 }
+  ]
+}
+```
+
+- **`tags`** are matched against the tags the analysis assigned the track. They come from a fixed
+  vocabulary of 48 — sixteen moods (`happy`, `sad`, `angry`, `calm`, `dark`, `bright`, `dreamy`,
+  `energetic`, `romantic`, `mysterious`, `nostalgic`, `triumphant`, `playful`, `anxious`, `serene`,
+  `rebellious`), sixteen genres (`jazz`, `electronic`, `rock`, `classical`, `hip-hop`, `folk`,
+  `metal`, `ambient`, `blues`, `funk`, `reggae`, `soul`, `country`, `punk`, `world`, `pop`), eight
+  instrumentation (`piano`, `acoustic guitar`, `bass-heavy`, `strings`, `brass/sax`, `synthesizer`,
+  `drums`, `vocal/choir`) and eight energy (`slow`, `mid-tempo`, `fast`, `building`, `sparse`,
+  `dense`, `danceable`, `freeform`). **Spell them exactly** — several are not identifiers.
+- **`ranges`** bound any numeric field of `TrackFeatures`. Either end may be omitted for an open
+  range, and both ends are inclusive. A range over `key` or another text field means nothing and is
+  ignored.
+
+**Anything not understood is ignored, never a refusal.** A misspelled tag, a field that does not
+exist, a range over a text field, a range with no numeric bound: each contributes nothing, is left
+out of the scoring entirely so it cannot drag your score down, and is listed under *Ignored in
+manifest* in the picker so you can find it. A bad affinity block never costs you a working
+visualizer.
+
+Scoring is charitable in both directions. Declaring nothing scores neutral rather than last, so an
+undescribed visualizer is not effectively removed — but declaring something that does not fit *can*
+lose to declaring nothing, so there is no advantage in claiming everything. A track with no analysis
+yet is not ranked at all, and whatever is on stays on.
 
 ### Building the bundle
 

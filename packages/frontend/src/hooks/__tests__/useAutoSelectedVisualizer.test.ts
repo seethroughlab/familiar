@@ -8,7 +8,11 @@
  */
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useAutoSelectedVisualizer, SWITCH_MARGIN } from '../useAutoSelectedVisualizer';
+import {
+  useAutoSelectedVisualizer,
+  useActiveVisualizerId,
+  SWITCH_MARGIN,
+} from '../useAutoSelectedVisualizer';
 import { tracksApi } from '../../api';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerAutoSelectStore } from '../../stores/visualizerAutoSelectStore';
@@ -211,5 +215,58 @@ describe('what the picker is told', () => {
         alpha: ['not-a-tag'],
       })
     );
+  });
+});
+
+/**
+ * The active id is what anything outside the visualizer itself must read. `FullPlayer` gates its
+ * entire layout on whether Music Video is playing, and reading the *stored* id would lay album art
+ * over a playing video the moment auto-select chose it.
+ */
+describe('useActiveVisualizerId', () => {
+  beforeEach(() => {
+    useVisualizerStore.setState({ visualizerId: 'alpha', autoSelect: false });
+    useVisualizerAutoSelectStore.getState().reset();
+  });
+
+  it('is the stored id while auto-select is off', () => {
+    const { result } = renderHook(() => useActiveVisualizerId());
+    expect(result.current).toBe('alpha');
+  });
+
+  it('is still the stored id when auto-select is on but has not chosen', () => {
+    useVisualizerStore.setState({ autoSelect: true });
+    const { result } = renderHook(() => useActiveVisualizerId());
+    expect(result.current).toBe('alpha');
+  });
+
+  it('is the auto-chosen id once there is one', () => {
+    useVisualizerStore.setState({ autoSelect: true });
+    useVisualizerAutoSelectStore.getState().recordChoice({
+      trackId: 'T1',
+      chosenId: 'beta',
+      unranked: false,
+      ignoredByVisualizer: {},
+    });
+    const { result } = renderHook(() => useActiveVisualizerId());
+    expect(result.current).toBe('beta');
+  });
+
+  it('reverts to the stored id when auto-select is switched off', () => {
+    useVisualizerAutoSelectStore.getState().recordChoice({
+      trackId: 'T1',
+      chosenId: 'beta',
+      unranked: false,
+      ignoredByVisualizer: {},
+    });
+    useVisualizerStore.setState({ autoSelect: false });
+    const { result } = renderHook(() => useActiveVisualizerId());
+    expect(result.current).toBe('alpha');
+  });
+
+  it('asks for no ranking of its own', () => {
+    useVisualizerStore.setState({ autoSelect: true });
+    renderHook(() => useActiveVisualizerId());
+    expect(rank).not.toHaveBeenCalled();
   });
 });

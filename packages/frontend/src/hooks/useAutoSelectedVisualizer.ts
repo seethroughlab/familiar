@@ -27,6 +27,25 @@ import { useVisualizerAutoSelectStore } from '../stores/visualizerAutoSelectStor
 /** How much better a rival must be before the visualizer changes. */
 export const SWITCH_MARGIN = 0.1;
 
+/**
+ * The visualizer actually drawing — auto-select's choice when it has one, the listener's otherwise.
+ *
+ * **One definition, because there is more than one consumer.** Auto-select introduces a second
+ * possible answer to "which visualizer is on", and anything still reading `visualizerId` directly
+ * gets the wrong one: `FullPlayer` gates its whole layout on whether Music Video is playing, and
+ * would have laid album art over a video the moment auto-select chose it. Re-deriving this at each
+ * call site is how those two answers come apart.
+ *
+ * Reads state only — it never triggers a ranking. `useAutoSelectedVisualizer` is what asks, and it
+ * is called once, by `AudioVisualizer`.
+ */
+export function useActiveVisualizerId(): string {
+  const visualizerId = useVisualizerStore((s) => s.visualizerId);
+  const autoSelect = useVisualizerStore((s) => s.autoSelect);
+  const chosenId = useVisualizerAutoSelectStore((s) => s.chosenId);
+  return (autoSelect && chosenId) || visualizerId;
+}
+
 export function useAutoSelectedVisualizer(trackId: string | null | undefined): string | null {
   const autoSelect = useVisualizerStore((s) => s.autoSelect);
 
