@@ -34,7 +34,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Favorites, Downloads | ✅ | ✅ | ✅ | |
 | Music Map | ✅ | ✅ | ❌ | **not a blocker:** desktop-only by decision — a dense field of labels navigated by pinch and pan wants a large screen and hover (ADR-0062). Native `Canvas`, 500-artist cap; web uses three.js |
 | Discover | ✅ | ✅ | ✅ | **The native ones are a `WKWebView` on `/embed`** (ADR-0016/0017/0019) |
-| New Releases detail | ✅ | ❌ | ❌ | The embed bridge only understands `openArtist` / `openAlbum` |
+| New Releases detail | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere. The web screen was deleted by ADR-0050 (`35ba672`) and this row went on claiming it; the "See all" link that reached it was dead on all three until 2026-08-18. The *section* still renders, on all three |
 | Home | ✅ | ✅ | ✅ | ADR-0032 |
 | Queue | ✅ | ✅ | ✅ | See "reorder" below |
 | Shuffle | ✅ | ✅ | ✅ | Native adds four server-drawn weighted presets (ADR-0035) |
@@ -216,6 +216,19 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
   Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
   screen and false of the numbers.
+- **2026-08-18** — **New Releases detail was never a native gap: it exists nowhere.** The web
+  screen (`NewReleasesDetail.tsx`) was deleted by ADR-0050 in `35ba672`, and the Web column went on
+  saying ✅ for eight days. The "See all" link that reached it was therefore dead on every platform —
+  redirecting home in a browser, and inside the embedded Discover WebView changing the URL while
+  leaving the same page on screen, because a react-router `Link` is a `pushState` the native side
+  never sees. The link is now removed; the section, the count, dismiss and the purchase links all
+  stay and all work.
+
+  **This empties the player's removal countdown.** Under ADR-0060 point 1's second rule a row that
+  is ❌ in the Web column too cannot be a reason to keep the browser, and no rule was bent to get
+  here — the ✅ was simply false. `docs/WEB-PARITY.md`'s Listening table now shows no ❌ in the Mac
+  or iPhone columns that is not excluded, which is the condition ADR-0058 point 4 set for removing
+  the web player.
 - **2026-08-18** — the Music Map became **desktop-only by decision** (ADR-0062) rather than an
   unfinished row. No ADR had ever said the phone should have one — ADR-0016 is Mac-scoped — so the
   ❌ recorded "nobody decided" and the countdown read it as "not yet done". **One row now remains**:

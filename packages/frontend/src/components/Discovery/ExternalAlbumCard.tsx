@@ -4,8 +4,11 @@
  * Used by:
  *   - Discover page "New releases from your artists" section (#3)
  *   - Discover page "Albums you might want" section (listening-profile #2)
- *   - /library/discover/new-releases detail page (#3 detail)
  *   - Playlist drawer (#2 per-playlist, Pass 4)
+ *
+ * The `/library/discover/new-releases` detail page was here too. It was deleted when ADR-0050 made
+ * the web app a management surface, and this list went on naming it — which is how the "See all"
+ * link that reached it survived being dead on every platform.
  *
  * Visually mirrors DiscoveryCard's grid look, but adds external-album-specific
  * affordances: dismiss button, context label, release type/date, purchase links.
