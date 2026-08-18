@@ -327,6 +327,22 @@ export const libraryApi = {
     return data;
   },
 
+  /**
+   * Ask the internet again for every album showing a placeholder.
+   *
+   * Explicit, never automatic: it queues hundreds of external lookups. The server applies the same
+   * 30-day rule the per-album path uses, so pressing this twice in a day does nothing the second
+   * time — the button cannot bypass the rate limit.
+   */
+  refetchGeneratedArtwork: async (): Promise<{
+    considered: number;
+    queued: number;
+    skipped_recent: number;
+  }> => {
+    const { data } = await api.post('/artwork/refetch-generated');
+    return data;
+  },
+
   getArtworkCoverage: async (): Promise<ArtworkCoverage> => {
     const { data } = await api.get('/artwork/coverage');
     return data;

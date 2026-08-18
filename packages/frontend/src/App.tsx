@@ -23,6 +23,7 @@ const LibraryPage = lazy(() => import('./components/Admin/LibraryPage').then(m =
 const ToolsPage = lazy(() => import('./components/Admin/ToolsPage').then(m => ({ default: m.ToolsPage })));
 const DuplicatesPage = lazy(() => import('./components/Admin/DuplicatesPage').then(m => ({ default: m.DuplicatesPage })));
 const OrganizePage = lazy(() => import('./components/Admin/OrganizePage').then(m => ({ default: m.OrganizePage })));
+const ArtworkPage = lazy(() => import('./components/Admin/ArtworkPage').then(m => ({ default: m.ArtworkPage })));
 const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => ({ default: m.ServerPage })));
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
@@ -220,6 +221,11 @@ function App() {
             <Route path="/tools/duplicates" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <DuplicatesPage />
+              </Suspense>
+            } />
+            <Route path="/tools/artwork" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ArtworkPage />
               </Suspense>
             } />
             <Route path="/tools/organize" element={

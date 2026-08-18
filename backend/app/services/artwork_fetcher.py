@@ -150,12 +150,16 @@ class ArtworkFetcher:
 
         Returns True if queued, False if skipped (already exists, failed recently, in progress, or already queued).
         """
-        # Skip if artwork already exists (unless it's generated — allow re-queue
-        # so real art can replace generated art on retry)
+        # Skip if artwork already exists — unless it is a placeholder due another try.
+        #
+        # This allowance has always been here, and was unreachable: both queue routes answered
+        # "exists" on a bare `full_path.exists()` before the service was ever consulted, so a
+        # generated cover could never be replaced. The condition now lives in one place
+        # (`should_refetch_online`) precisely so the route and the service cannot disagree again.
         full_path = get_artwork_path(request.album_key, "full")
         if full_path.exists():
-            from app.services.artwork import is_generated_artwork
-            if not is_generated_artwork(request.album_key):
+            from app.services.artwork import should_refetch_online
+            if not should_refetch_online(request.album_key):
                 return False
 
         # Skip if recently failed
@@ -192,9 +196,12 @@ class ArtworkFetcher:
                 # Remove from queued set
                 self._queued_keys.discard(request.album_key)
 
-                # Skip if already processed (may have been queued multiple times)
+                # Skip if already processed (may have been queued multiple times) — same
+                # placeholder exemption as `queue`, or the worker would drop every retry the
+                # routes now let through.
+                from app.services.artwork import should_refetch_online
                 full_path = get_artwork_path(request.album_key, "full")
-                if full_path.exists():
+                if full_path.exists() and not should_refetch_online(request.album_key):
                     self._queue.task_done()
                     self._update_progress()
                     continue

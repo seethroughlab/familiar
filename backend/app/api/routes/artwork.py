@@ -14,7 +14,7 @@ from app.api.exceptions import (
     ValidationError,
 )
 from app.services.album_resolver import album_key_for_tags
-from app.services.artwork import get_artwork_path
+from app.services.artwork import get_artwork_path, should_refetch_online
 from app.services.background import get_background_manager
 
 logger = logging.getLogger(__name__)
@@ -39,6 +39,76 @@ class ArtworkCoverageResponse(BaseModel):
     with_artwork: int
     generated: int
     without_artwork: int
+
+
+class RefetchGeneratedResponse(BaseModel):
+    """What a bulk placeholder re-fetch queued."""
+
+    considered: int
+    queued: int
+    skipped_recent: int
+
+
+@router.post("/refetch-generated", response_model=RefetchGeneratedResponse)
+async def refetch_generated_artwork(db: DbSession) -> RefetchGeneratedResponse:
+    """Ask the internet again for every album currently showing a placeholder.
+
+    **Bulk, because the per-album path only fires when an album scrolls into view.** Fixing the
+    queue routes makes browsing self-healing, but reaching 661 placeholders that way means browsing
+    past 661 albums. This queues them in one go.
+
+    Placeholders only. An album with real art is never touched, and one whose placeholder was drawn
+    inside `ARTWORK_REFETCH_INTERVAL` is left for later — `should_refetch_online` is the same rule
+    the queue routes use, so a button press cannot bypass the rate limit that protects Last.fm and
+    MusicBrainz from being asked about an artless album every day.
+
+    Grouped exactly as `/artwork/coverage` groups, so "queued" is comparable with the "generated"
+    figure shown beside the button. `/artwork/regenerate-stale` groups by bare `Track.artist` with
+    no status filter and therefore agrees with neither; that is a separate defect, left alone here.
+    """
+    from sqlalchemy import TEXT, cast, func, select
+
+    from app.db.models import Track, TrackStatus
+    from app.services.artwork import compute_album_hash, is_generated_artwork
+
+    album_artist_col = func.coalesce(func.nullif(Track.album_artist, ""), Track.artist)
+    result = await db.execute(
+        select(
+            func.max(cast(Track.canonical_album_id, TEXT)).label("album_id"),
+            func.max(album_artist_col).label("artist"),
+            func.max(Track.album).label("album"),
+        )
+        .where(
+            Track.status == TrackStatus.ACTIVE,
+            Track.album.isnot(None),
+            Track.album != "",
+        )
+        .group_by(func.lower(album_artist_col), func.lower(Track.album))
+    )
+
+    bg = get_background_manager()
+    considered = 0
+    queued = 0
+    skipped_recent = 0
+
+    for row in result.all():
+        key = row.album_id or compute_album_hash(row.artist, row.album)
+        if not is_generated_artwork(key):
+            continue
+        considered += 1
+        if not should_refetch_online(key):
+            skipped_recent += 1
+            continue
+        if await bg.queue_artwork_fetch(key, row.artist or "", row.album or ""):
+            queued += 1
+
+    logger.info(
+        "Placeholder re-fetch: %d placeholders, %d queued, %d still inside the retry interval",
+        considered, queued, skipped_recent,
+    )
+    return RefetchGeneratedResponse(
+        considered=considered, queued=queued, skipped_recent=skipped_recent
+    )
 
 
 @router.get("/coverage", response_model=ArtworkCoverageResponse)
@@ -132,9 +202,11 @@ async def queue_artwork_download(
     """
     album_hash = await album_key_for_tags(db, request.artist, request.album)
 
-    # Check if artwork already exists
+    # Artwork already exists — unless it is a placeholder due another try (ADR-free bug fix; see
+    # `should_refetch_online`). Testing `exists()` alone reported "done" for a picture Familiar drew
+    # itself, which is what made a generated cover permanent.
     full_path = get_artwork_path(album_hash, "full")
-    if full_path.exists():
+    if full_path.exists() and not should_refetch_online(album_hash):
         return {
             "status": "exists",
             "album_hash": album_hash,
@@ -203,9 +275,10 @@ async def queue_artwork_batch(
             continue
         seen_hashes.add(album_key)
 
-        # Check if artwork already exists
+        # Same rule as the single-album route above — these two have drifted before, so the
+        # condition is shared rather than restated.
         full_path = get_artwork_path(album_key, "full")
-        if full_path.exists():
+        if full_path.exists() and not should_refetch_online(album_key):
             exists.append(album_key)
             record("exists")
             continue
