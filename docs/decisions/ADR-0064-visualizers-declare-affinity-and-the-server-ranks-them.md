@@ -1,6 +1,6 @@
 # ADR-0064: Visualizers Declare Affinity, and the Server Ranks Them
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-17
 
