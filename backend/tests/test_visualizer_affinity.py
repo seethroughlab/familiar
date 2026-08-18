@@ -210,3 +210,53 @@ class TestRanking:
             tags(("ambient", 0.95)),
         )
         assert ranked[0].id == "silent"
+
+
+class TestTagNormalisation:
+    """The scale the tag term is measured on. Got wrong once; these pin the correction.
+
+    `compute_mood_tags` returns up to five tags with near-equal confidences, so dividing by their
+    *total* meant a good claim could never score well — a visualizer naming the track's two
+    strongest tags landed below one that declared nothing, and only over-claiming scored highly.
+    These use a real tag set from the library rather than invented numbers.
+    """
+
+    REAL = tags(
+        ("rebellious", 0.511),
+        ("rock", 0.500),
+        ("hip-hop", 0.489),
+        ("blues", 0.485),
+        ("country", 0.465),
+    )
+
+    def test_naming_the_two_strongest_tags_scores_at_the_top(self):
+        result = score_candidate(candidate("c", tags_=["rebellious", "rock"]), {}, self.REAL)
+        assert result.matched_tags == ("rebellious", "rock")
+        assert result.score == pytest.approx(WEIGHTS["tags"] * 1.0 + WEIGHTS["ranges"] * NEUTRAL)
+
+    def test_a_good_match_beats_declaring_nothing(self):
+        """The regression. A perfect claim scoring below silence made the feature pointless."""
+        good = score_candidate(candidate("good", tags_=["rebellious", "rock"]), {}, self.REAL)
+        silent = score_candidate(candidate("silent"), {}, self.REAL)
+        assert good.score > silent.score
+
+    def test_naming_one_tag_well_is_not_punished_for_being_selective(self):
+        """A visualizer that suits rock should not have to also claim blues and country."""
+        selective = score_candidate(candidate("one", tags_=["rock"]), {}, self.REAL)
+        silent = score_candidate(candidate("silent"), {}, self.REAL)
+        assert selective.score > silent.score
+
+    def test_over_claiming_scores_below_a_selective_match(self):
+        """Every extra guess widens the denominator, so shotgunning the vocabulary costs."""
+        selective = score_candidate(candidate("one", tags_=["rebellious"]), {}, self.REAL)
+        shotgun = score_candidate(
+            candidate("many", tags_=["rebellious", "classical", "jazz", "metal", "reggae"]),
+            {},
+            self.REAL,
+        )
+        assert selective.score > shotgun.score
+
+    def test_matching_nothing_still_scores_worst(self):
+        miss = score_candidate(candidate("miss", tags_=["classical", "serene"]), {}, self.REAL)
+        silent = score_candidate(candidate("silent"), {}, self.REAL)
+        assert miss.score < silent.score

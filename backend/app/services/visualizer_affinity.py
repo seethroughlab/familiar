@@ -126,12 +126,21 @@ def _tag_term(
     declared: tuple[str, ...],
     track_tags: list[dict],
 ) -> tuple[float, tuple[str, ...], tuple[str, ...]]:
-    """How much of this track's character the visualizer claims.
+    """How well the visualizer's claim matches this track, against the best claim of that size.
 
-    Scored as the share of the track's total tag confidence that the visualizer declared, so a
-    visualizer naming the track's strongest tags scores near 1 and one naming only a weak tag
-    scores low. Counting matched tags instead would rate "matched one incidental tag" the same as
-    "matched the defining one".
+    **Measured against the track's strongest *n* tags, where n is how many the visualizer declared**
+    — not against the track's total confidence. That distinction was got wrong once and the
+    correction is the reason this docstring is long.
+
+    `compute_mood_tags` returns up to five tags with near-equal confidences (a real example: 0.511,
+    0.500, 0.489, 0.485, 0.465). Dividing by their sum meant a visualizer that named the track's two
+    strongest tags scored 0.41 — **below the 0.5 a visualizer that declared nothing gets** — and the
+    only way to score well was to claim nearly every tag. That is precisely the over-claiming the
+    design says must carry no advantage, so the arithmetic was rewarding what the rule forbids.
+
+    Comparing against the best *n* tags asks the right question: given that you named two things,
+    how close did you come to naming the two that fit best? Naming the top two scores 1.0; naming
+    five to catch one scores low, because the denominator grows with every guess.
     """
     ignored = tuple(t for t in declared if t not in KNOWN_TAGS)
     recognised = {t for t in declared if t in KNOWN_TAGS}
@@ -140,17 +149,23 @@ def _tag_term(
         t for t in track_tags
         if isinstance(t, dict) and isinstance(t.get("tag"), str)
     ]
-    total = sum(float(t.get("confidence") or 0.0) for t in usable)
 
     # Nothing declared that we understand, or a track nothing was tagged on: no opinion.
-    if not recognised or total <= 0.0:
+    if not recognised or not usable:
+        return NEUTRAL, (), ignored
+
+    confidences = sorted(
+        (float(t.get("confidence") or 0.0) for t in usable), reverse=True
+    )
+    best_possible = sum(confidences[: len(recognised)])
+    if best_possible <= 0.0:
         return NEUTRAL, (), ignored
 
     matched = tuple(t["tag"] for t in usable if t["tag"] in recognised)
     claimed = sum(
         float(t.get("confidence") or 0.0) for t in usable if t["tag"] in recognised
     )
-    return min(1.0, claimed / total), matched, ignored
+    return min(1.0, claimed / best_possible), matched, ignored
 
 
 def _range_term(
