@@ -128,3 +128,46 @@ def _fixed_key(key: str):
         return key
 
     return _resolve
+
+
+class TestProvenanceIsReportable:
+    """`exists` alone cannot answer "does this album have artwork"."""
+
+    def test_status_reports_a_placeholder_as_generated(self, client, art_dir):
+        _write_art("drawn", generated=True, age_days=3)
+
+        body = client.get("/api/v1/artwork/status/drawn").json()
+
+        assert body["exists"] is True, "a placeholder is a real file, which is the whole problem"
+        assert body["generated"] is True
+        assert body["generated_at"] is not None
+
+    def test_status_reports_real_art_as_not_generated(self, client, art_dir):
+        _write_art("fetched", generated=False)
+
+        body = client.get("/api/v1/artwork/status/fetched").json()
+
+        assert body["exists"] is True
+        assert body["generated"] is False
+        assert body["generated_at"] is None
+
+    def test_the_two_status_endpoints_agree(self, client, art_dir):
+        """They disagreed, and that is why a placeholder passed for artwork.
+
+        The batch endpoint has always separated `generated`; the single one reported only
+        `exists`. Which answer a caller got depended on which endpoint it happened to ask.
+        """
+        _write_art("drawn", generated=True, age_days=3)
+        _write_art("fetched", generated=False)
+
+        single = {
+            key: client.get(f"/api/v1/artwork/status/{key}").json()["generated"]
+            for key in ("drawn", "fetched")
+        }
+        batch = client.post(
+            "/api/v1/artwork/status/batch", json={"hashes": ["drawn", "fetched"]}
+        ).json()
+
+        assert single == {"drawn": True, "fetched": False}
+        assert set(batch["generated"]) == {"drawn"}
+
