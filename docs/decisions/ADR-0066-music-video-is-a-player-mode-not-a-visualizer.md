@@ -68,7 +68,14 @@ not contain every visualizer, and the answer kept having to except this one.
    today. Whichever way this lands, `docs/WEB-PARITY.md` gets a row for it — it currently has none,
    which is how a feature with five endpoints came to have its reachability undiscussed.
 
-5. **Nothing about the backend changes.** No endpoint moves, no route is renamed, no data migrates.
+5. **`docs/VISUALIZER_API.md` stops listing it as a visualizer.** Its "Existing Visualizers" table
+   names `music-video` as one of five, and its manifest table reserves five built-in ids against
+   plugins — both become four. That document is the contract
+   [ADR-0063](ADR-0063-the-visualizer-api-is-published-for-outside-authors.md) point 2 requires to
+   be correct before it is published to outside authors, and leaving it naming a visualizer that is
+   no longer one is the same defect that ADR corrected six entries ago.
+
+6. **Nothing about the backend changes.** No endpoint moves, no route is renamed, no data migrates.
    This is a decision about where a feature is reached from, and the argument for it is that the
    present answer costs a special case in the player and an exception in every rule about
    visualizers.

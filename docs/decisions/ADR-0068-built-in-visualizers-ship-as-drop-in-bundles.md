@@ -67,7 +67,13 @@ playback state and network access in a public plugin API.
    "Restore Example Visualizers" restores them too. A built-in restored from Settings is byte-identical
    to the compiled one, which makes restore the way out of a broken edit.
 
-6. **A broken local copy falls back rather than failing.** `ADR-0034` point 8 already unloads a
+6. **`docs/VISUALIZER_API.md` records the reversal, not just the new capability.** Its manifest
+   table currently tells authors an id "must not be one of the built-ins", which point 2 makes
+   false — and a document that forbids something the loader now permits is worse than one that is
+   merely incomplete, because an author will believe it and pick a worse id. The reserved-id row
+   changes, and the shadowing behaviour and its fallback are documented beside it.
+
+7. **A broken local copy falls back rather than failing.** `ADR-0034` point 8 already unloads a
    visualizer that throws; here the fallback is specifically the compiled version of the same id, not
    the album-art square, because one exists and is known good.
 
