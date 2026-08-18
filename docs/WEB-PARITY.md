@@ -42,6 +42,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Radio | ✅ | ✅ | ✅ | ADR-0040 |
 | Audio effects (EQ, reverb, delay…) | ✅ | ✅ | ✅ | Web `EffectsChain`; native its own DSP |
 | Visualizer | ✅ | ✅ | ✅ | **A `WKWebView`**, bundled *inside* the app (3.4 MB `VisualizerBundle.html`) |
+| Visualizer auto-select | ✅ | ❌ | ❌ | **not a blocker:** ADR-0064's ranking endpoint and page half are built; the native menu has still to send its catalog as candidates, which is the ADR's own follow-up on `VisualizerCatalog.swift`. Shipping the web half first must not extend the player's countdown (ADR-0060 point 1) |
 | Offline downloads | ✅ | ✅ | ✅ | Independent implementations — Dexie vs background `URLSession` |
 | Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ❌ | AirPlay deliberately left to the OS picker |
 | CarPlay | — | — | ✅ | |

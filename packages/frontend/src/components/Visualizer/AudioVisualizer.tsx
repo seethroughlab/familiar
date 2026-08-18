@@ -12,6 +12,7 @@ import { getVisualizer } from './types';
 import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
+import { useAutoSelectedVisualizer } from '../../hooks/useAutoSelectedVisualizer';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 // Import all visualizers to register them
@@ -88,8 +89,16 @@ export function AudioVisualizer({
   const { visualizerId } = useVisualizerStore();
   const markPluginFailed = useVisualizerPluginStore((s) => s.markFailed);
 
+  // ADR-0064 point 7. Null whenever auto-select is off, or on but with no opinion yet — so the
+  // listener's own choice is what shows unless something actively decided otherwise. Wired here
+  // rather than at each call site because both surfaces render through this component.
+  const autoSelectedId = useAutoSelectedVisualizer(track?.id);
+
   // Get the current visualizer component
-  const visualizer = getVisualizer(visualizerId) || getVisualizer(DEFAULT_VISUALIZER_ID);
+  const visualizer =
+    getVisualizer(autoSelectedId ?? visualizerId) ||
+    getVisualizer(visualizerId) ||
+    getVisualizer(DEFAULT_VISUALIZER_ID);
   const activeId = visualizer?.metadata.id;
 
   // ADR-0034 point 8: the picker marks the plugin as failed. A built-in id is not in the plugin
