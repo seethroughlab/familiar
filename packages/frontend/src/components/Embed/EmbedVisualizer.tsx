@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { AudioVisualizer } from '../Visualizer/AudioVisualizer';
 import { getVisualizerState, subscribeToVisualizerState } from '../../services/visualizerSink';
+import { useTrackDetail } from '../../hooks/useTrackDetail';
 import { tracksApi } from '../../api/tracks';
 import type { Track } from '../../types';
 
@@ -19,7 +20,14 @@ import type { Track } from '../../types';
 export function EmbedVisualizer() {
   const state = useSyncExternalStore(subscribeToVisualizerState, getVisualizerState);
 
-  const track: Track | null = state.track
+  // The frame carries four identity fields and no analysis — deliberately, since a channel that
+  // carries everything has no shape (ADR-0033). Artwork and lyrics are already fetched by the page
+  // rather than pushed, so the analysis is fetched the same way (ADR-0064 point 9).
+  const detail = useTrackDetail(state.track?.id ?? null);
+
+  // Until that resolves — and if it never does, because the page is offline — fall back to the
+  // frame's own fields. Partial, and cast as such; it is what this surface has always drawn with.
+  const fallback: Track | null = state.track
     ? ({
         id: state.track.id,
         title: state.track.title ?? 'Unknown',
@@ -28,9 +36,12 @@ export function EmbedVisualizer() {
       } as Track)
     : null;
 
+  const track = detail ?? fallback;
+
   return (
     <AudioVisualizer
       track={track}
+      features={detail?.features ?? null}
       artworkUrl={state.track ? tracksApi.getArtworkUrl(state.track.id) : null}
       isPlaying={state.playing}
       currentTime={state.position}

@@ -12,6 +12,7 @@ import { getVisualizer } from './types';
 import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
+import { useAutoSelectedVisualizer, useActiveVisualizerId } from '../../hooks/useAutoSelectedVisualizer';
 import { ErrorBoundary } from '../ErrorBoundary';
 
 // Import all visualizers to register them
@@ -88,8 +89,21 @@ export function AudioVisualizer({
   const { visualizerId } = useVisualizerStore();
   const markPluginFailed = useVisualizerPluginStore((s) => s.markFailed);
 
-  // Get the current visualizer component
-  const visualizer = getVisualizer(visualizerId) || getVisualizer(DEFAULT_VISUALIZER_ID);
+  // ADR-0064 point 7. **This is the only caller**, so the ranking is asked for once per track no
+  // matter how many things want to know the answer — wired here rather than at each call site
+  // because both surfaces render through this component. The value is read back through
+  // `useActiveVisualizerId` so the "which visualizer is on" rule has exactly one definition.
+  useAutoSelectedVisualizer(track?.id);
+  // The id we are *asking* for, which is not necessarily the one that resolves — see `activeId`
+  // below, which is what actually rendered after the fallbacks.
+  const requestedId = useActiveVisualizerId();
+
+  // Falls back to the listener's own choice before the built-in default, so an auto-chosen plugin
+  // that has since been removed lands on what they picked rather than on Reactive Terrain.
+  const visualizer =
+    getVisualizer(requestedId) ||
+    getVisualizer(visualizerId) ||
+    getVisualizer(DEFAULT_VISUALIZER_ID);
   const activeId = visualizer?.metadata.id;
 
   // ADR-0034 point 8: the picker marks the plugin as failed. A built-in id is not in the plugin

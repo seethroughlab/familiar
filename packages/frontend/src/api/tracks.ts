@@ -8,6 +8,35 @@ export interface TrackIdsResponse {
   total: number;
 }
 
+/** One visualizer offered for ranking, with whatever affinity it declared (ADR-0064). */
+export interface VisualizerRankingCandidate {
+  id: string;
+  affinity?: {
+    tags: string[];
+    ranges: { feature: string; minimum?: number; maximum?: number }[];
+  };
+}
+
+/** One visualizer's placing, and why. `ignored` is what the server did not recognise. */
+export interface RankedVisualizer {
+  id: string;
+  score: number;
+  matched_tags: string[];
+  matched_ranges: string[];
+  unmatched_ranges: string[];
+  ignored: string[];
+}
+
+export interface VisualizerRankingResponse {
+  visualizers: RankedVisualizer[];
+  /**
+   * False when the track has no analysis to rank against — an ordinary state on a library still
+   * being analysed, **not** an error. The client must keep whatever it is showing rather than
+   * pick, so `visualizers` comes back in the order it was submitted.
+   */
+  ranked: boolean;
+}
+
 export const tracksApi = {
   list: async (params?: {
     page?: number;
@@ -79,6 +108,21 @@ export const tracksApi = {
 
   get: async (id: string): Promise<Track> => {
     const { data } = await api.get(`/tracks/${id}`);
+    return data;
+  },
+
+  /**
+   * Ask the server which of *these* visualizers suits this track (ADR-0064).
+   *
+   * The candidates travel from the client because the server cannot know what is installed on a
+   * device — ADR-0029 point 5 leaves device identity uninvented, and drop-in bundles live in a
+   * directory on the device the server is never told about.
+   */
+  rankVisualizers: async (
+    trackId: string,
+    candidates: VisualizerRankingCandidate[]
+  ): Promise<VisualizerRankingResponse> => {
+    const { data } = await api.post(`/tracks/${trackId}/visualizer-ranking`, { candidates });
     return data;
   },
 

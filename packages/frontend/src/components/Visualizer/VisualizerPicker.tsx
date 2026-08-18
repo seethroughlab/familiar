@@ -8,6 +8,8 @@ import { ChevronDown, Sparkles, Image, Type, Video, AlertTriangle, CloudLightnin
 import { getVisualizers } from './types';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
+import { useVisualizerAutoSelectStore } from '../../stores/visualizerAutoSelectStore';
+import { useActiveVisualizerId } from '../../hooks/useAutoSelectedVisualizer';
 
 // Icon mapping for visualizers
 const visualizerIcons: Record<string, typeof Sparkles> = {
@@ -18,17 +20,56 @@ const visualizerIcons: Record<string, typeof Sparkles> = {
   'lyric-storm': CloudLightning,
 };
 
+/**
+ * A row that cannot be selected, because there is nothing to select — it exists so a problem has
+ * somewhere to be said. Shared by the two such sections rather than written twice: a refused plugin
+ * (ADR-0034 point 7) and a loaded plugin whose affinity was partly unreadable (ADR-0064 point 3)
+ * look the same and mean different things, and filtering one list two ways would have conflated
+ * them, since ignored declarations belong to plugins that *did* load.
+ */
+function ProblemRow({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex items-start gap-3 p-3 text-left">
+      <div className="p-2 rounded-lg bg-zinc-800">
+        <AlertTriangle className="w-4 h-4 text-amber-500" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-zinc-400">{title}</div>
+        <div className="text-xs text-zinc-500 mt-0.5">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
 export function VisualizerPicker() {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const { visualizerId, setVisualizerId, glowLevel, setGlowLevel } = useVisualizerStore();
+  const { setVisualizerId, glowLevel, setGlowLevel, autoSelect, setAutoSelect } =
+    useVisualizerStore();
+  const { chosenId, unranked, ignoredByVisualizer } = useVisualizerAutoSelectStore();
 
   const visualizers = getVisualizers();
-  const currentVisualizer = visualizers.find(v => v.metadata.id === visualizerId);
+
+  // What is actually drawing — shared with `FullPlayer`, which gates its layout on the same answer.
+  const activeId = useActiveVisualizerId();
+  const currentVisualizer = visualizers.find(v => v.metadata.id === activeId);
+
+  const records = useVisualizerPluginStore((s) => s.records);
 
   // ADR-0034 points 7 and 8: a plugin that was refused, or that crashed, says so here. Anything
   // that loaded is already in `visualizers` above and needs no separate row.
-  const troubled = useVisualizerPluginStore((s) => s.records).filter((r) => r.status !== 'loaded');
+  const troubled = records.filter((r) => r.status !== 'loaded');
+
+  // ADR-0064 point 3: declarations that were not understood, from both halves — the client checks
+  // structure while parsing the manifest, the server checks the tag vocabulary it owns. Neither is
+  // a refusal; these plugins are loaded and in the list above.
+  const ignoredEntries = visualizers
+    .map(({ metadata }) => {
+      const fromManifest = records.find((r) => r.id === metadata.id)?.ignored ?? [];
+      const fromServer = ignoredByVisualizer[metadata.id] ?? [];
+      return { id: metadata.id, name: metadata.name, ignored: [...fromManifest, ...fromServer] };
+    })
+    .filter((entry) => entry.ignored.length > 0);
 
   // Close on click outside
   useEffect(() => {
@@ -58,6 +99,10 @@ export function VisualizerPicker() {
 
   const handleSelect = (id: string) => {
     setVisualizerId(id);
+    // **Choosing one turns auto-select off.** Leaving it on would let the next track overrule the
+    // choice that was just made, which is the silent override ADR-0064 point 7 rules out — and
+    // picking from this list is about as explicit as a preference gets.
+    setAutoSelect(false);
     setIsOpen(false);
   };
 
@@ -95,6 +140,25 @@ export function VisualizerPicker() {
           </div>
 
           <div className="px-3 py-2.5 border-b border-zinc-700">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="min-w-0">
+                <span className="text-xs text-zinc-400 block">Match to the music</span>
+                <span className="text-[11px] text-zinc-500 block mt-0.5">
+                  {unranked
+                    ? 'This track has not been analysed yet'
+                    : 'Pick a visualizer to suit each track'}
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={autoSelect}
+                onChange={(e) => setAutoSelect(e.target.checked)}
+                className="w-4 h-4 shrink-0 rounded accent-purple-500 cursor-pointer"
+              />
+            </label>
+          </div>
+
+          <div className="px-3 py-2.5 border-b border-zinc-700">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs text-zinc-400">Glow</span>
               <span className="text-xs text-zinc-500 tabular-nums">{glowLevel}%</span>
@@ -112,7 +176,8 @@ export function VisualizerPicker() {
           <div className="max-h-80 overflow-y-auto">
             {visualizers.map(({ metadata }) => {
               const Icon = visualizerIcons[metadata.id] || Sparkles;
-              const isSelected = metadata.id === visualizerId;
+              const isSelected = metadata.id === activeId;
+              const isAutoChoice = autoSelect && chosenId === metadata.id;
 
               return (
                 <button
@@ -134,6 +199,11 @@ export function VisualizerPicker() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium flex items-center gap-2">
                       {metadata.name}
+                      {isAutoChoice && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/30 text-emerald-300 rounded">
+                          AUTO
+                        </span>
+                      )}
                       {metadata.usesMetadata && (
                         <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/30 text-purple-300 rounded">
                           METADATA
@@ -162,22 +232,28 @@ export function VisualizerPicker() {
                   </span>
                 </div>
                 {troubled.map((record, index) => (
-                  <div
+                  <ProblemRow
                     key={`${record.id ?? 'unnamed'}-${index}`}
-                    className="flex items-start gap-3 p-3 text-left"
-                  >
-                    <div className="p-2 rounded-lg bg-zinc-800">
-                      <AlertTriangle className="w-4 h-4 text-amber-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-zinc-400">
-                        {record.name ?? record.id ?? 'Unnamed plugin'}
-                      </div>
-                      <div className="text-xs text-zinc-500 mt-0.5">
-                        {record.detail}
-                      </div>
-                    </div>
-                  </div>
+                    title={record.name ?? record.id ?? 'Unnamed plugin'}
+                    detail={record.detail ?? ''}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* ADR-0064 point 3. These plugins work and are in the list above — this is only the
+                part of what they declared that nothing understood. An author whose typo vanished
+                silently has no way to find it, and refusing the visualizer over it would be a far
+                worse trade. */}
+            {ignoredEntries.length > 0 && (
+              <div className="border-t border-zinc-700">
+                <div className="px-3 pt-3 pb-1">
+                  <span className="text-xs text-zinc-500 uppercase tracking-wide">
+                    Ignored in manifest
+                  </span>
+                </div>
+                {ignoredEntries.map((entry) => (
+                  <ProblemRow key={entry.id} title={entry.name} detail={entry.ignored.join(', ')} />
                 ))}
               </div>
             )}

@@ -7531,6 +7531,53 @@
         "title": "QueueStats",
         "type": "object"
       },
+      "RankedVisualizer": {
+        "description": "One visualizer's placing, with enough detail to explain it.\n\n`ignored` is per-candidate rather than global because a declaration belongs to the visualizer\nthat made it \u2014 it is what the picker shows an author whose tag did not land.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ignored": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored",
+            "type": "array"
+          },
+          "matched_ranges": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Ranges",
+            "type": "array"
+          },
+          "matched_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Tags",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "unmatched_ranges": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Ranges",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "score"
+        ],
+        "title": "RankedVisualizer",
+        "type": "object"
+      },
       "RecommendationsResponse": {
         "description": "Recommendations response.",
         "properties": {
@@ -10614,6 +10661,108 @@
           "has_video"
         ],
         "title": "VideoStatusResponse",
+        "type": "object"
+      },
+      "VisualizerAffinity": {
+        "description": "What a visualizer says it suits, as declared in its manifest.",
+        "properties": {
+          "ranges": {
+            "items": {
+              "$ref": "#/components/schemas/VisualizerFeatureRange"
+            },
+            "title": "Ranges",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "VisualizerAffinity",
+        "type": "object"
+      },
+      "VisualizerCandidate": {
+        "description": "One visualizer the client reports having loaded.",
+        "properties": {
+          "affinity": {
+            "$ref": "#/components/schemas/VisualizerAffinity"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "VisualizerCandidate",
+        "type": "object"
+      },
+      "VisualizerFeatureRange": {
+        "description": "A bound a visualizer declares over one numeric analysis column.\n\nEither end may be omitted for an open range. A feature this server does not know, one that\nholds a string, and one this track was never analysed for are all inert \u2014 see\n`services/visualizer_affinity`.",
+        "properties": {
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "feature"
+        ],
+        "title": "VisualizerFeatureRange",
+        "type": "object"
+      },
+      "VisualizerRankingRequest": {
+        "description": "The visualizers this client actually has, in the order it would otherwise use.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/VisualizerCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          }
+        },
+        "title": "VisualizerRankingRequest",
+        "type": "object"
+      },
+      "VisualizerRankingResponse": {
+        "description": "Candidates best-first, or unranked when there was nothing to rank against.",
+        "properties": {
+          "ranked": {
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "visualizers": {
+            "items": {
+              "$ref": "#/components/schemas/RankedVisualizer"
+            },
+            "title": "Visualizers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "visualizers",
+          "ranked"
+        ],
+        "title": "VisualizerRankingResponse",
         "type": "object"
       },
       "VolumeRequest": {
@@ -33516,6 +33665,105 @@
           }
         },
         "summary": "Stream Track",
+        "tags": [
+          "tracks"
+        ]
+      }
+    },
+    "/api/v1/tracks/{track_id}/visualizer-ranking": {
+      "post": {
+        "description": "Rank the client's visualizers by how well each suits this track.\n\nA track that does not exist is a 404. A track that exists but has never been analysed is **not**\n\u2014 it returns the candidates in the order they were submitted with `ranked: false`, because\n\"nothing to rank against\" is an ordinary state on a library that is still being analysed, and\nan error would push the client into treating it as a failure.",
+        "operationId": "tracks_rank_visualizers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "track_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Track Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualizerRankingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualizerRankingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Rank Visualizers",
         "tags": [
           "tracks"
         ]

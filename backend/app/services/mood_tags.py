@@ -71,6 +71,12 @@ DESCRIPTORS: list[dict[str, str]] = [
     {"tag": "freeform", "category": "energy", "description": "freeform improvised experimental music"},
 ]
 
+# The vocabulary as a membership test. Added for ADR-0064, where a visualizer declares the tags it
+# suits and the server has to decide whether it recognises one — several of these are not
+# identifiers (`acoustic guitar`, `brass/sax`, `hip-hop`, `mid-tempo`, `bass-heavy`, `vocal/choir`),
+# so anything matching against them has to use these strings verbatim rather than a normalised form.
+KNOWN_TAGS: frozenset[str] = frozenset(d["tag"] for d in DESCRIPTORS)
+
 # Cache for descriptor text embeddings (computed once, kept in memory)
 _descriptor_embeddings: np.ndarray | None = None
 _descriptor_embeddings_failed = False
