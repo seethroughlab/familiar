@@ -32,7 +32,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Playlists | ✅ | ✅ | ✅ | |
 | Smart playlists | ✅ | ✅ | ✅ | Browse and play on all three. **Editing is Mac-only** (ADR-0013 point 3): full CRUD over 25 server-supplied rule fields, and the phone shows no pencil and no `+` |
 | Favorites, Downloads | ✅ | ✅ | ✅ | |
-| Music Map | ✅ | ✅ | ❌ | Native `Canvas`, 500-artist cap. Web uses three.js |
+| Music Map | ✅ | ✅ | ❌ | **not a blocker:** desktop-only by decision — a dense field of labels navigated by pinch and pan wants a large screen and hover (ADR-0062). Native `Canvas`, 500-artist cap; web uses three.js |
 | Discover | ✅ | ✅ | ✅ | **The native ones are a `WKWebView` on `/embed`** (ADR-0016/0017/0019) |
 | New Releases detail | ✅ | ❌ | ❌ | The embed bridge only understands `openArtist` / `openAlbum` |
 | Home | ✅ | ✅ | ✅ | ADR-0032 |
@@ -216,6 +216,10 @@ with no affordance is what `.smartPlaylists` was: routable, stored, rendered, an
   called it: no active-status filter, a string distinct for albums, raw tag strings for artists.
   Nothing in the matrix changes; noted because "the web app can show library stats" was true of the
   screen and false of the numbers.
+- **2026-08-18** — the Music Map became **desktop-only by decision** (ADR-0062) rather than an
+  unfinished row. No ADR had ever said the phone should have one — ADR-0016 is Mac-scoped — so the
+  ❌ recorded "nobody decided" and the countdown read it as "not yet done". **One row now remains**:
+  New Releases detail, which needs a decision about the embed bridge before it needs code.
 - **2026-08-18** — casting reached the phone (`familiar-apple` #125 and #127, ADR-0056), so
   **Network output goes native-✅ and leaves the player's removal countdown**. Two rows remain in the
   Listening table under ADR-0060's rule: Music Map on iPhone, and New Releases detail on Mac and
