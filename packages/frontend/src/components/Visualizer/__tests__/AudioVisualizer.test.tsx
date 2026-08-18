@@ -46,4 +46,27 @@ describe('AudioVisualizer prop wiring', () => {
     expect(lastProps!.currentTime).toBe(0);
     expect(lastProps!.duration).toBe(0);
   });
+
+  // ADR-0064 point 9. `features` was declared on VisualizerProps, defaulted to null here and
+  // forwarded — and passed by neither call site, so ReactiveTerrain (its only reader) always took
+  // its `?? 0.4` / `?? 0.5` fallbacks. Nothing asserted the prop arrived, which is why it could be
+  // dead for that long.
+  it('forwards features to the visualizer', () => {
+    useVisualizerStore.getState().setVisualizerId(CAPTURE_ID);
+    const features = { energy: 0.82, valence: 0.19 } as VisualizerProps['features'];
+
+    render(<AudioVisualizer features={features} />);
+
+    expect(lastProps).not.toBeNull();
+    expect(lastProps!.features).toBe(features);
+  });
+
+  it('defaults features to null when not provided', () => {
+    useVisualizerStore.getState().setVisualizerId(CAPTURE_ID);
+
+    render(<AudioVisualizer />);
+
+    expect(lastProps).not.toBeNull();
+    expect(lastProps!.features).toBeNull();
+  });
 });

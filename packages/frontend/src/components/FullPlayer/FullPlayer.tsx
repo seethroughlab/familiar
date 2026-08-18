@@ -23,6 +23,7 @@ import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useAudioControls } from '../../hooks/useAudioControls';
 import { useAppNavigation } from '../../hooks/useAppNavigation';
 import { useSyncedLyrics } from '../../hooks/useSyncedLyrics';
+import { useTrackDetail } from '../../hooks/useTrackDetail';
 import { tracksApi } from '../../api';
 import { useUIStore } from '../../stores/uiStore';
 import { AudioVisualizer, VisualizerPicker } from '../Visualizer';
@@ -131,6 +132,9 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
 
   // Fetch lyrics for the visualizer (race-safe across track skips).
   const lyrics = useSyncedLyrics(currentTrack?.id ?? null);
+
+  // And the analysis, which `currentTrack` does not reliably carry — see `useTrackDetail`.
+  const trackDetail = useTrackDetail(currentTrack?.id ?? null);
 
   // Reset image error when track changes
   useEffect(() => {
@@ -275,6 +279,7 @@ export function FullPlayer({ isOpen, onClose }: FullPlayerProps) {
         ) : (
           <AudioVisualizer
             track={currentTrack}
+            features={trackDetail?.features ?? null}
             artworkUrl={artworkUrl}
             lyrics={lyrics}
             isPlaying={isPlaying}
