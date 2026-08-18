@@ -44,6 +44,26 @@ export interface VisualizerPluginManifest {
   icon?: string;
   author?: { name?: string; url?: string };
   familiar?: { apiVersion?: number };
+  /**
+   * What this visualizer suits (ADR-0064). **Optional, and its absence is not a refusal** — which
+   * is why adding it did not bump `VISUALIZER_API_VERSION`: a bump refuses every manifest declaring
+   * the old version, so raising it for an additive field would have refused both working samples to
+   * add a feature neither uses.
+   */
+  affinity?: VisualizerAffinity;
+}
+
+/** One bound a visualizer declares over a numeric analysis column. Either end may be open. */
+export interface VisualizerFeatureRange {
+  feature: string;
+  minimum?: number;
+  maximum?: number;
+}
+
+/** What a visualizer says it suits — matched against a track's analysis by the server. */
+export interface VisualizerAffinity {
+  tags: string[];
+  ranges: VisualizerFeatureRange[];
 }
 
 /** One entry as the native host lists it, before anything has been checked. */
@@ -76,7 +96,18 @@ export type PluginRefusal =
   | 'registered-nothing';
 
 export type PluginVerdict =
-  | { ok: true; source: VisualizerPluginSource; manifest: VisualizerPluginManifest }
+  | {
+      ok: true;
+      source: VisualizerPluginSource;
+      manifest: VisualizerPluginManifest;
+      /**
+       * Declarations dropped while parsing, for a plugin that loaded anyway (ADR-0064 point 3).
+       * Not a refusal and deliberately not one: an unusable optional field is not a reason to
+       * withhold a working visualizer. It rides on the *ok* verdict because that is the case it
+       * describes — a refused plugin has a `detail` instead.
+       */
+      ignored: string[];
+    }
   | {
       ok: false;
       source: VisualizerPluginSource;
@@ -95,11 +126,78 @@ function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Parse the optional `affinity` block (ADR-0064 point 1).
+ *
+ * **Structure only.** Whether `"dreamy"` is a tag this server knows, or `energy` a column it can
+ * range over, is decided where the analysis lives — the server, which reports back what it ignored.
+ * Checking it here as well would put the 48-descriptor vocabulary in TypeScript and in Python, and
+ * ADR-0034 already names the consequence: "two copies of that rule in two languages is how the
+ * picker comes to disagree with what actually loaded."
+ *
+ * So this drops only what cannot be sent at all, and says which, because an author whose typo
+ * vanished silently has no way to find it.
+ */
+export function parseAffinity(raw: unknown): { affinity?: VisualizerAffinity; ignored: string[] } {
+  if (raw === undefined) return { ignored: [] };
+  if (!isRecord(raw)) return { ignored: ['affinity (not an object)'] };
+
+  const ignored: string[] = [];
+  const tags: string[] = [];
+  const ranges: VisualizerFeatureRange[] = [];
+
+  const rawTags = Array.isArray(raw.tags) ? raw.tags : [];
+  if (raw.tags !== undefined && !Array.isArray(raw.tags)) ignored.push('affinity.tags (not an array)');
+  for (const tag of rawTags) {
+    const value = nonEmptyString(tag);
+    if (value) tags.push(value);
+    else ignored.push(`affinity.tags entry ${JSON.stringify(tag)}`);
+  }
+
+  const rawRanges = Array.isArray(raw.ranges) ? raw.ranges : [];
+  if (raw.ranges !== undefined && !Array.isArray(raw.ranges)) {
+    ignored.push('affinity.ranges (not an array)');
+  }
+  for (const entry of rawRanges) {
+    if (!isRecord(entry)) {
+      ignored.push(`affinity.ranges entry ${JSON.stringify(entry)}`);
+      continue;
+    }
+    const feature = nonEmptyString(entry.feature);
+    if (!feature) {
+      ignored.push('affinity.ranges entry with no "feature"');
+      continue;
+    }
+    const minimum = finiteNumber(entry.minimum);
+    const maximum = finiteNumber(entry.maximum);
+    if (minimum === null && maximum === null) {
+      // Bounds neither of which is a number constrains nothing; sending it would only produce a
+      // server-side "ignored" a step further from the author.
+      ignored.push(`affinity.ranges "${feature}" (no numeric minimum or maximum)`);
+      continue;
+    }
+    ranges.push({
+      feature,
+      ...(minimum === null ? {} : { minimum }),
+      ...(maximum === null ? {} : { maximum }),
+    });
+  }
+
+  if (tags.length === 0 && ranges.length === 0) return { ignored };
+  return { affinity: { tags, ranges }, ignored };
+}
+
 /**
  * Parse and validate one manifest. Returns the reason as a string rather than throwing, because
  * every caller wants to show it rather than handle it.
  */
-export function parseManifest(raw: unknown): { manifest: VisualizerPluginManifest } | { error: string } {
+export function parseManifest(
+  raw: unknown
+): { manifest: VisualizerPluginManifest; ignored: string[] } | { error: string } {
   if (!isRecord(raw)) return { error: 'The manifest is not a JSON object.' };
 
   const id = nonEmptyString(raw.id);
@@ -131,6 +229,10 @@ export function parseManifest(raw: unknown): { manifest: VisualizerPluginManifes
     ? { name: nonEmptyString(raw.author.name) ?? undefined, url: nonEmptyString(raw.author.url) ?? undefined }
     : undefined;
 
+  // Parsed rather than copied: this function rebuilds the manifest field by field, so anything it
+  // does not name is dropped. An `affinity` block that was never parsed here would reach nothing.
+  const { affinity, ignored } = parseAffinity(raw.affinity);
+
   return {
     manifest: {
       id,
@@ -142,7 +244,9 @@ export function parseManifest(raw: unknown): { manifest: VisualizerPluginManifes
       icon: nonEmptyString(raw.icon) ?? undefined,
       author,
       familiar: apiVersion === undefined ? undefined : { apiVersion },
+      affinity,
     },
+    ignored,
   };
 }
 
@@ -256,7 +360,7 @@ export function reviewPlugins(
     }
 
     claimed.add(manifest.id);
-    verdicts.push({ ok: true, source: entry.source, manifest });
+    verdicts.push({ ok: true, source: entry.source, manifest, ignored: parsed.ignored });
   }
 
   return verdicts;

@@ -54,6 +54,9 @@ describe('parseManifest', () => {
         familiar: { apiVersion: 1 },
         icon: 'Building2',
       }),
+      // A real sample manifest predates `affinity` and declares none — which is not a problem,
+      // so nothing is ignored (ADR-0064 point 2: the block is optional and its absence is silent).
+      ignored: [],
     });
   });
 
@@ -140,5 +143,89 @@ describe('reviewPlugins', () => {
     const [verdict] = reviewPlugins([local({ name: 'Broken' })]);
     expect(verdict).toMatchObject({ ok: false, refusal: 'malformed', id: null });
     expect((verdict as { detail: string }).detail).toBeTruthy();
+  });
+});
+
+/**
+ * ADR-0064: the optional `affinity` block.
+ *
+ * The vocabulary check is deliberately **not** here. Whether `"dreamy"` is a tag the server knows
+ * is decided where the analysis lives; duplicating the 48 descriptors into TypeScript is the
+ * "two copies of that rule in two languages" ADR-0034 warns about. These cover structure only.
+ */
+describe('parseAffinity', () => {
+  function affinityOf(block: unknown) {
+    const result = parseManifest({ ...nonPlaces, affinity: block });
+    if ('error' in result) throw new Error(`unexpected refusal: ${result.error}`);
+    return result;
+  }
+
+  it('reads tags and ranges', () => {
+    const { manifest, ignored } = affinityOf({
+      tags: ['ambient', 'dreamy'],
+      ranges: [{ feature: 'energy', minimum: 0.1, maximum: 0.4 }],
+    });
+    expect(manifest.affinity).toEqual({
+      tags: ['ambient', 'dreamy'],
+      ranges: [{ feature: 'energy', minimum: 0.1, maximum: 0.4 }],
+    });
+    expect(ignored).toEqual([]);
+  });
+
+  it('keeps an open-ended range', () => {
+    const { manifest } = affinityOf({ ranges: [{ feature: 'bpm', minimum: 120 }] });
+    expect(manifest.affinity?.ranges).toEqual([{ feature: 'bpm', minimum: 120 }]);
+  });
+
+  // The reason this had to be parsed rather than copied: `parseManifest` rebuilds the object field
+  // by field, so a block it does not name never reaches anyone.
+  it('survives parseManifest, which drops anything it does not name', () => {
+    const { manifest } = affinityOf({ tags: ['calm'] });
+    expect(manifest.affinity).toBeDefined();
+  });
+
+  it('is absent, and silent, when not declared', () => {
+    const result = parseManifest(nonPlaces);
+    if ('error' in result) throw new Error('unexpected refusal');
+    expect(result.manifest.affinity).toBeUndefined();
+    expect(result.ignored).toEqual([]);
+  });
+
+  it.each([
+    ['not an object', 'nope'],
+    ['an array', ['ambient']],
+    ['a number', 7],
+  ])('reports a block that is %s', (_label, block) => {
+    const { manifest, ignored } = affinityOf(block);
+    expect(manifest.affinity).toBeUndefined();
+    expect(ignored.length).toBeGreaterThan(0);
+  });
+
+  it('drops a non-string tag and says so', () => {
+    const { manifest, ignored } = affinityOf({ tags: ['ambient', 42] });
+    expect(manifest.affinity?.tags).toEqual(['ambient']);
+    expect(ignored.join(' ')).toContain('42');
+  });
+
+  it('drops a range with no feature', () => {
+    const { manifest, ignored } = affinityOf({ ranges: [{ minimum: 1 }] });
+    expect(manifest.affinity).toBeUndefined();
+    expect(ignored.join(' ')).toContain('feature');
+  });
+
+  it('drops a range bounded by nothing numeric', () => {
+    const { manifest, ignored } = affinityOf({
+      ranges: [{ feature: 'energy', minimum: 'loud' }],
+    });
+    expect(manifest.affinity).toBeUndefined();
+    expect(ignored.join(' ')).toContain('energy');
+  });
+
+  // The point of ADR-0064 point 3, at the parse layer: a bad optional field must never cost the
+  // author a working visualizer.
+  it('never refuses the plugin over an unusable affinity block', () => {
+    const [verdict] = reviewPlugins([local({ ...nonPlaces, affinity: 'rubbish' })]);
+    expect(verdict.ok).toBe(true);
+    expect((verdict as { ignored: string[] }).ignored.length).toBeGreaterThan(0);
   });
 });

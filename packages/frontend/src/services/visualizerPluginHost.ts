@@ -26,7 +26,12 @@ import * as ReactThreeFiber from '@react-three/fiber';
 import * as Drei from '@react-three/drei';
 
 import { createLogger } from '../utils/logger';
-import { registerVisualizer, getVisualizer, getVisualizers } from '../components/Visualizer/types';
+import {
+  registerVisualizer,
+  getVisualizer,
+  getVisualizers,
+  visualizerRegistry,
+} from '../components/Visualizer/types';
 import { useAudioAnalyser, getAudioData } from '../hooks/useAudioAnalyser';
 import { useArtworkPalette } from '../components/Visualizer/hooks/useArtworkPalette';
 import { useBeatSync, getBeatPhase, getBeatSine } from '../components/Visualizer/hooks/useBeatSync';
@@ -205,13 +210,26 @@ async function evaluate(
   // cleanly, the picker shows no new entry, and there is no error anywhere to explain it — which is
   // the exact failure shape this codebase keeps producing. The usual cause is a manifest whose `id`
   // does not match the id the bundle passes to `registerVisualizer`.
-  if (!getVisualizer(manifest.id)) {
+  const registered = getVisualizer(manifest.id);
+  if (!registered) {
     return {
       ...base,
       status: 'refused',
       refusal: 'registered-nothing',
       detail: `The bundle loaded but registered no visualizer with the id "${manifest.id}".`,
     };
+  }
+
+  // **The manifest declares affinity; the bundle registers metadata; neither knows the other**
+  // (ADR-0064 point 1). A plugin's `registerVisualizer` call is written against the same API a
+  // built-in uses and has no access to its own manifest, so the two halves are joined here — after
+  // the bundle has run, which is the first moment both exist. Without this the catalog would carry
+  // affinity for the built-ins only, and every plugin would rank neutral for ever.
+  if (manifest.affinity) {
+    visualizerRegistry.set(manifest.id, {
+      ...registered,
+      metadata: { ...registered.metadata, affinity: manifest.affinity },
+    });
   }
 
   return { ...base, status: 'loaded' };
@@ -242,7 +260,10 @@ export async function loadVisualizerPlugins(builtInIds: Iterable<string>): Promi
   // other order and the picker would describe the one that lost.
   for (const verdict of verdicts) {
     if (verdict.ok) {
-      records.push(await evaluate(verdict.manifest, verdict.source));
+      const record = await evaluate(verdict.manifest, verdict.source);
+      // Carried whatever the outcome: a plugin refused for an unrelated reason still had its
+      // affinity read, and an author fixing one problem should see the other already listed.
+      records.push(verdict.ignored.length > 0 ? { ...record, ignored: verdict.ignored } : record);
     } else {
       records.push({
         id: verdict.id,
@@ -300,6 +321,10 @@ export function publishCatalog(): void {
       // Absent for the compile-time visualizers, which is how the host tells them apart without
       // being given the list twice.
       source: bySource.get(metadata.id)?.source,
+      // What each visualizer suits (ADR-0064). The native host cannot ask the server to rank
+      // without this: the server has no way to know what is installed on a device, so the
+      // candidates and their declarations travel from here.
+      affinity: metadata.affinity,
     })),
     problems: records
       .filter((r) => r.status !== 'loaded')

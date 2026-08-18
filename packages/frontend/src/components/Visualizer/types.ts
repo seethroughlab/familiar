@@ -8,6 +8,7 @@
 import type { ComponentType } from 'react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
+import type { VisualizerAffinity } from '../../services/visualizerPlugins';
 
 /**
  * Metadata about a visualizer for the picker UI.
@@ -21,6 +22,15 @@ export interface VisualizerMetadata {
   author?: string;
   /** Optional: preview image URL */
   previewUrl?: string;
+  /**
+   * What this visualizer suits, for auto-selection (ADR-0064).
+   *
+   * **The built-ins declare this too**, per point 4: a ranker holding five unlabelled candidates
+   * and one labelled plugin would hand the plugin every track, which is indistinguishable from
+   * favouritism. A plugin's block arrives on its *manifest* rather than here — the bundle registers
+   * its own metadata and knows nothing about its manifest — so the loader merges the two.
+   */
+  affinity?: VisualizerAffinity;
 }
 
 /**

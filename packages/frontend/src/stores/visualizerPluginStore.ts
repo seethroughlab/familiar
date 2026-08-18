@@ -16,6 +16,14 @@ export interface VisualizerPluginRecord {
   /** Present for `refused` and `failed`. What a person reads in the picker. */
   detail?: string;
   refusal?: PluginRefusal;
+  /**
+   * Affinity declarations dropped while parsing the manifest (ADR-0064 point 3).
+   *
+   * **Belongs to a `loaded` plugin**, which is why it sits apart from `detail` and `refusal`: the
+   * plugin works and is in the picker, and this is only the part of its manifest that did not. An
+   * author whose typo vanished silently has no way to find it.
+   */
+  ignored?: string[];
 }
 
 interface VisualizerPluginState {

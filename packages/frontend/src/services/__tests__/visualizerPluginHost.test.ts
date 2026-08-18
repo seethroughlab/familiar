@@ -196,3 +196,75 @@ describe('markFailed', () => {
     });
   });
 });
+
+/**
+ * ADR-0064: affinity has to survive the trip from a plugin's manifest to the catalog the native
+ * host reads. Nothing tested `publishCatalog` at all before this.
+ */
+describe('publishCatalog', () => {
+  beforeEach(() => {
+    visualizerRegistry.clear();
+    useVisualizerPluginStore.setState({ records: [], scanned: false });
+    delete window.Familiar;
+    delete (window as unknown as Record<string, unknown>).__familiarVisualizers;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function catalog() {
+    const read = (window as unknown as Record<string, () => string>).__familiarVisualizers;
+    expect(read).toBeInstanceOf(Function);
+    return JSON.parse(read());
+  }
+
+  const AFFINITY = { tags: ['ambient'], ranges: [{ feature: 'energy', maximum: 0.4 }] };
+
+  it('carries a plugin affinity declared in its manifest', async () => {
+    vi.stubGlobal(
+      'fetch',
+      server([{ source: 'local', manifest: manifest({ affinity: AFFINITY }) }], {
+        demo: bundleFor('demo'),
+      })
+    );
+
+    await loadVisualizerPlugins([]);
+
+    const entry = catalog().visualizers.find((v: { id: string }) => v.id === 'demo');
+    // **The asymmetry this covers:** the bundle calls `registerVisualizer` with its own metadata
+    // and cannot see its manifest, so without an explicit merge the affinity would be parsed,
+    // stored, and never reach the catalog — every plugin ranking neutral for ever.
+    expect(entry.affinity).toEqual(AFFINITY);
+  });
+
+  it('leaves affinity absent for a plugin that declares none', async () => {
+    vi.stubGlobal(
+      'fetch',
+      server([{ source: 'local', manifest: manifest() }], { demo: bundleFor('demo') })
+    );
+
+    await loadVisualizerPlugins([]);
+
+    const entry = catalog().visualizers.find((v: { id: string }) => v.id === 'demo');
+    expect(entry.affinity).toBeUndefined();
+    expect(entry.source).toBe('local');
+  });
+
+  it('records an unusable affinity block as ignored, and still loads the plugin', async () => {
+    vi.stubGlobal(
+      'fetch',
+      server([{ source: 'local', manifest: manifest({ affinity: { tags: [7] } }) }], {
+        demo: bundleFor('demo'),
+      })
+    );
+
+    await loadVisualizerPlugins([]);
+
+    const record = useVisualizerPluginStore
+      .getState()
+      .records.find((r) => r.id === 'demo');
+    expect(record?.status).toBe('loaded');
+    expect(record?.ignored?.length).toBeGreaterThan(0);
+  });
+});
