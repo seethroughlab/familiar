@@ -148,6 +148,28 @@ compatibility branch alive for one API. **Adopting `NavigationStack` is delibera
 — that is the payoff, recorded as a follow-up, and a navigation rewrite should not ride along with a
 deployment-target bump.
 
+**`ADR-0085`–`ADR-0086` bring music videos to the Mac as a function of their own** (both `proposed`,
+2026-08-18). **Execution order is `0086` then `0085`** — server work every client inherits first.
+`0086` makes the existing feature a real resource: `track_videos` has been declared, exported and
+created by the baseline's `create_all` while being read and written by nothing, the stream handler
+advertises `Accept-Ranges` and never parses a `Range`, and `videos` is not one of the eleven
+vendored tags, so no generated client can reach it. `0085` then says the thing the PWA got wrong:
+**a music video is a way of playing a track, not a visualizer**. The evidence is that the visualizer
+route was never wired on this host — `VisualizerChoice` already offers `music-video`, but
+`MusicVideo.tsx` reads `usePlayerStore` instead of the `currentTime` prop the native frame feeds, so
+the Mac's copy never seeks. That is the **fourth** instance of the mounted-affordance defect
+`ADR-0017`'s record tracks, and the first to arrive through a hand-mirrored list rather than a
+missing screen.
+
+**Point 9 — deleting the web visualizer — is where three things meet, so read it before severing
+it.** It removes one of the two `queueStore` pins `docs/REMOVING-THE-WEB-PLAYER.md` records; it is
+the premise `ADR-0067` and `ADR-0068` each rest on ("the whole reason this ADR is modest"); and it
+is what makes point 10's parity row ❌ in the Web column, which excludes music video from the
+player's removal countdown under `ADR-0060` point 1's second rule. Keep the web visualizer and the
+row becomes ✅ ✅ ❌, which *joins* the countdown and blocks the player's removal. **The phone loses
+music video either way** — `VisualizerChoice.musicVideo` lives in the shared `FullPlayerView`, and
+the four replacement surfaces are Mac-only by `ADR-0013` point 2.
+
 ## Key Directories
 
 ```
