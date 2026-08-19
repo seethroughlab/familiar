@@ -1,6 +1,6 @@
 # ADR-0071: The Embedded Surfaces Go Online-Only
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 

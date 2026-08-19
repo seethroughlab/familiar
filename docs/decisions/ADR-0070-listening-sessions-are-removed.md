@@ -1,6 +1,6 @@
 # ADR-0070: Listening Sessions Are Removed
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
