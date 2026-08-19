@@ -109,29 +109,7 @@ describe('queueStore', () => {
       expect(usePlaybackStore.getState().currentTrack).toBeNull();
     });
 
-    it('enforces downloaded-only queue when offline mode is active', () => {
-      mockConnectivityState.offlineModeActive = true;
-      mockConnectivityState.offlineTrackIds = new Set(['1', '3']);
 
-      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')];
-      useQueueStore.getState().setQueue(tracks, 1);
-
-      const ids = useQueueStore.getState().queue.map(q => q.track.id);
-      expect(ids).toEqual(['1', '3']);
-      expect(usePlaybackStore.getState().currentTrack?.id).toBe('3');
-    });
-
-    it('setQueueByTrackId falls back to downloaded track in offline mode', () => {
-      mockConnectivityState.offlineModeActive = true;
-      mockConnectivityState.offlineTrackIds = new Set(['1', '3']);
-
-      const tracks = [createMockTrack('1'), createMockTrack('2'), createMockTrack('3')];
-      useQueueStore.getState().setQueueByTrackId(tracks, '2');
-
-      const ids = useQueueStore.getState().queue.map(q => q.track.id);
-      expect(ids).toEqual(['1', '3']);
-      expect(usePlaybackStore.getState().currentTrack?.id).toBe('1');
-    });
 
     it('should track queue source', () => {
       useQueueStore.getState().setQueue([createMockTrack('1')], 0, { type: 'playlist', id: 'playlist-123' });
@@ -176,15 +154,6 @@ describe('queueStore', () => {
       expect(shuffleOrder).toContain(2);
     });
 
-    it('blocks non-downloaded tracks when offline mode is active', () => {
-      mockConnectivityState.offlineModeActive = true;
-      mockConnectivityState.offlineTrackIds = new Set(['1']);
-
-      useQueueStore.getState().setQueue([createMockTrack('1')], 0);
-      useQueueStore.getState().addToQueue(createMockTrack('2'));
-
-      expect(useQueueStore.getState().queue).toHaveLength(1);
-    });
 
     it('allows downloaded tracks to be added while offline mode is active', () => {
       mockConnectivityState.offlineModeActive = true;

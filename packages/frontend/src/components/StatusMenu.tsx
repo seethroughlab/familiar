@@ -12,21 +12,17 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Activity, AlertCircle, AlertTriangle, Check, ChevronDown, Download, FileEdit,
-  Image, Loader2, Music, CassetteTape, CloudUpload, Smartphone, X,
+  Activity, AlertCircle, AlertTriangle, ChevronDown, FileEdit,
+  Image, Loader2, Music, CassetteTape, CloudUpload, X,
 } from 'lucide-react';
 import { useHealthStore } from '../stores/healthStore';
 import { useBackgroundJobsStore } from '../stores/backgroundJobsStore';
-import { useDownloadStore, type DownloadJob, restoreDownloadQueue } from '../stores/downloadStore';
 import { useMixtapesList, PHASE_LABELS } from '../hooks/useMixtapes';
 import { proposedChangesApi } from '../api';
 import type { BackgroundJob, MixTape } from '../api';
 import { queryKeys } from '../api/queryKeys';
 import { useAppNavigation } from '../hooks/useAppNavigation';
-import { isIOS } from '../utils/platform';
-import { createLogger } from '../utils/logger';
 
-const log = createLogger('StatusMenu');
 
 // ---- Background jobs presentation --------------------------------------------
 
@@ -89,53 +85,6 @@ function JobProgressBar({ job }: { job: BackgroundJob }) {
   );
 }
 
-// ---- Download presentation ---------------------------------------------------
-
-function DownloadRow({ job }: { job: DownloadJob }) {
-  const { cancelDownload } = useDownloadStore();
-  const completedCount = job.completedIds.length;
-  const totalCount = job.trackIds.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-  return (
-    <div className="flex items-center gap-3 p-2 bg-zinc-800 rounded-lg">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          {job.status === 'downloading' && <Loader2 className="w-4 h-4 animate-spin text-blue-400 flex-shrink-0" />}
-          {job.status === 'queued' && <Download className="w-4 h-4 text-zinc-400 flex-shrink-0" />}
-          {job.status === 'completed' && <Check className="w-4 h-4 text-green-400 flex-shrink-0" />}
-          {job.status === 'failed' && <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
-          {job.status === 'cancelled' && <X className="w-4 h-4 text-zinc-500 flex-shrink-0" />}
-          <span className="text-sm font-medium truncate">{job.name}</span>
-        </div>
-        {(job.status === 'downloading' || job.status === 'queued') && (
-          <div className="mt-1">
-            <div className="h-1 bg-zinc-700 rounded-full overflow-hidden">
-              <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${progressPercent}%` }} />
-            </div>
-            <div className="text-xs text-zinc-500 mt-0.5">{completedCount}/{totalCount} tracks</div>
-          </div>
-        )}
-        {job.status === 'completed' && (
-          <div className="text-xs text-green-400 mt-0.5">Downloaded {totalCount} tracks</div>
-        )}
-        {job.status === 'failed' && job.error && (
-          <div className="text-xs text-red-400 mt-0.5">{job.error}</div>
-        )}
-      </div>
-      {(job.status === 'downloading' || job.status === 'queued') && (
-        <button
-          onClick={() => cancelDownload(job.id)}
-          className="p-1.5 hover:bg-zinc-700 rounded transition-colors"
-          title="Cancel download"
-        >
-          <X className="w-4 h-4 text-zinc-400" />
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ---- Mix-tape render presentation --------------------------------------------
 
 function mixtapeInFlight(mt: MixTape): boolean {
@@ -189,8 +138,6 @@ export function StatusMenu() {
   const { status: healthStatus, warnings, startPolling: startHealth, stopPolling: stopHealth } = useHealthStore();
   // Background jobs
   const { jobs: bgJobs, activeCount: bgActiveCount, startPolling: startJobs, stopPolling: stopJobs } = useBackgroundJobsStore();
-  // Downloads
-  const { jobs: downloadJobsMap } = useDownloadStore();
   // Mix-tape renders
   const { data: mixtapes } = useMixtapesList();
   // Proposed changes
@@ -201,7 +148,6 @@ export function StatusMenu() {
   });
 
   const [open, setOpen] = useState(false);
-  const [showIOSWarning, setShowIOSWarning] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
@@ -210,24 +156,15 @@ export function StatusMenu() {
   useEffect(() => {
     startHealth();
     startJobs();
-    restoreDownloadQueue().catch((error) => log.error('Failed to restore queue:', error));
     return () => {
       stopHealth();
       stopJobs();
     };
   }, [startHealth, stopHealth, startJobs, stopJobs]);
 
-  useEffect(() => {
-    setShowIOSWarning(isIOS());
-  }, []);
-
   // Derive per-category active state.
   const healthActive = healthStatus !== 'healthy' && healthStatus !== 'loading';
   const healthError = healthStatus === 'unhealthy' || healthStatus === 'error';
-
-  const downloadJobs = Array.from(downloadJobsMap.values());
-  const downloadsDownloading = downloadJobs.some((j) => j.status === 'downloading' || j.status === 'queued');
-  const downloadsActive = downloadJobs.length > 0;
 
   const inFlightMixtapes = (mixtapes ?? []).filter(mixtapeInFlight);
   const mixtapeActive = inFlightMixtapes.length > 0;
@@ -235,8 +172,8 @@ export function StatusMenu() {
   const proposedCount = proposedStats?.pending ?? 0;
   const proposedActive = proposedCount > 0;
 
-  const anyInProgress = bgActiveCount > 0 || downloadsDownloading || mixtapeActive;
-  const anyActive = healthActive || downloadsActive || bgActiveCount > 0 || mixtapeActive || proposedActive;
+  const anyInProgress = bgActiveCount > 0 || mixtapeActive;
+  const anyActive = healthActive || bgActiveCount > 0 || mixtapeActive || proposedActive;
 
   // Close popover automatically once nothing is active.
   useEffect(() => {
@@ -283,12 +220,10 @@ export function StatusMenu() {
     ? AlertTriangle
     : proposedActive
     ? FileEdit
-    : downloadsActive
-    ? Check
     : Activity;
 
   const totalCount =
-    bgActiveCount + (downloadsDownloading ? 1 : 0) + inFlightMixtapes.length + proposedCount + warnings.length;
+    bgActiveCount + inFlightMixtapes.length + proposedCount + warnings.length;
 
   const popover = open && menuPosition && createPortal(
     <div
@@ -327,22 +262,6 @@ export function StatusMenu() {
           >
             View System Status
           </button>
-        </Section>
-      )}
-
-      {downloadsActive && (
-        <Section icon={<Download className="w-3.5 h-3.5 text-blue-400" />} title="Downloads">
-          {showIOSWarning && downloadsDownloading && (
-            <div className="flex items-start gap-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-              <Smartphone className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-200">
-                <span className="font-medium">Keep Familiar open</span>
-                <br />
-                <span className="text-amber-300/80">iOS pauses downloads when you switch apps. Downloads will resume if interrupted.</span>
-              </div>
-            </div>
-          )}
-          {downloadJobs.map((job) => <DownloadRow key={job.id} job={job} />)}
         </Section>
       )}
 

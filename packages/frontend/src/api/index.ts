@@ -16,7 +16,6 @@ export * from './mixtapes';
 export * from './importSession';
 export * from './diagnosticsLogs';
 export * from './mapStream';
-export * from './ambient';
 export * from './outputs';
 export * from './pendingTracks';
 export * from './discovery';

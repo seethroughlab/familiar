@@ -18,11 +18,9 @@ import { useClientAlphabetBar } from './useClientAlphabetBar';
 import { AlphabetBar } from '../Library/AlphabetBar';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
 import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
-import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { useScrollContainer } from '../../hooks/useScrollContainer';
 import { formatDuration } from '../../utils/format';
-import { FavoriteButton } from '../Library/browsers/trackList/FavoriteButton';
+import { FavoriteButton } from './FavoriteButton';
 import type { Track } from '../../types';
 import { resolveTrackRowIntent } from './trackRowInteraction';
 import { PlaylistRow, type TrackRowContext } from './PlaylistRow';
@@ -110,16 +108,9 @@ export function PlaylistTrackList<T>({
   sortPersistKey,
   defaultSortBy,
 }: PlaylistTrackListProps<T>) {
-  const { isOffline } = useOfflineStatus();
-  const { offlineIds } = useOfflineTrackIds();
-
-  const visibleItems = useMemo(() => {
-    if (!isOffline) return items;
-    return items.filter((item) => {
-      const track = getTrack(item);
-      return !!track && offlineIds.has(track.id);
-    });
-  }, [isOffline, items, getTrack, offlineIds]);
+  // Every item is visible. This used to hide anything not downloaded while offline; ADR-0071
+  // removed the download store, so there is no cached subset to filter to.
+  const visibleItems = items;
 
   // Player state
   const currentTrack = usePlayerStore((s) => s.currentTrack);

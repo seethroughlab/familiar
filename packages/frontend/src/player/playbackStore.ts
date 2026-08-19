@@ -90,10 +90,9 @@ export interface PlaybackActions {
   registerFailureAdvance: () => boolean;
 }
 
-// Lazy persistence hook — set by persistenceAdapter to avoid circular imports
-let persistHook: (() => void) | null = null;
-export function _setPersistHook(fn: () => void) { persistHook = fn; }
-const persist = () => { persistHook?.(); };
+// Persistence is gone (ADR-0071 deleted the Dexie store), so this is a no-op rather than a hook
+// nothing sets. Kept as one call site so the places that used to persist still read the same.
+const persist = () => {};
 
 export const usePlaybackStore = create<PlaybackState & PlaybackActions>((set, get) => ({
   currentTrack: null,

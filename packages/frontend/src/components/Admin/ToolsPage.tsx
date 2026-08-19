@@ -1,12 +1,14 @@
 /**
  * The Tools destination (ADR-0058 point 2) — things you run against the library.
  *
- * Duplicates, organiser, backup and restore, community cache, and the fallback player. Everything
- * point 2 named for this destination now exists; the two that arrived in phase 4 are both
- * **preview-only, because the server has no apply route for either**.
+ * Duplicates, organiser, artwork, backup and restore, and the community cache. Duplicates and the
+ * organiser are both **preview-only, because the server has no apply route for either**.
+ *
+ * The fallback player's "Track list" link left with the player itself — ADR-0057 point 5, a
+ * capability and its affordances leave together.
  */
 import { Link } from 'react-router-dom';
-import { List, Copy, FolderTree, Image, ChevronRight } from 'lucide-react';
+import { Copy, FolderTree, Image, ChevronRight } from 'lucide-react';
 
 import { AdminPage, AdminSection } from './AdminPage';
 import { DataManagement } from '../Settings/DataManagement';
@@ -41,20 +43,6 @@ export function ToolsPage() {
         <CommunityCache />
       </AdminSection>
 
-      {/*
-        * The fallback player lives here rather than in the sidebar (ADR-0058 point 3). It is a
-        * stop-gap for a guest machine, scheduled for deletion when `docs/WEB-PARITY.md` shows no ❌
-        * in the Mac and iPhone columns of its Listening table (point 4) — and a top-level
-        * destination is not what you give something on the way out. No redesign, no new controls.
-        */}
-      <AdminSection title="Playback">
-        <ToolLink
-          to="/library/tracks"
-          icon={<List className="w-5 h-5 text-cyan-400 flex-shrink-0" />}
-          label="Track list"
-          description="Search the library and play something in this browser"
-        />
-      </AdminSection>
     </AdminPage>
   );
 }

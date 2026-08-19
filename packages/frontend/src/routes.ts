@@ -14,7 +14,6 @@
 
 /** Maps URL path segments to browser registry IDs. */
 export const BROWSER_ROUTES = [
-  { path: 'tracks', browserId: 'track-list' },
   // No native equivalent, and its API tag (`Library Organization`) is not in the generated Swift
   // client — so this is genuinely browser-only work, not a duplicate of something on the Mac.
   { path: 'artist-cleanup', browserId: 'artist-cleanup' },
@@ -82,12 +81,5 @@ export const UNBUILT_DESTINATION_ITEMS: Record<string, string> = {
 /** Sidebar library navigation items. */
 export const LIBRARY_ITEMS = [
   // Kept as the "simple player": a browser can still find a track and play it, which is what a guest
-  // machine or a second computer needs, and it keeps `WebAudioEngine` and the effects chain
-  // exercised rather than rotting untested.
-  //
-  // It reaches these from the Tools page rather than the sidebar (ADR-0058 point 3): the player is
-  // scheduled for deletion, and a top-level destination is not what you give something on the way
-  // out. `LIBRARY_ITEMS` stays as the route/label pairing both pages read.
-  { path: '/library/tracks', label: 'Tracks' },
   { path: '/library/artist-cleanup', label: 'Cleanup' },
 ] as const;

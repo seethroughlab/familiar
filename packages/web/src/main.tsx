@@ -1,8 +1,6 @@
 import '@familiar/frontend/src/index.css';
-import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
 import { createLogger } from '@familiar/frontend/src/utils/logger';
 import { renderApp } from '@familiar/frontend/src/renderApp';
-import { WebAudioEngine } from './WebAudioEngine';
 
 const log = createLogger('App');
 
@@ -10,15 +8,10 @@ const log = createLogger('App');
 declare const __BUILD_TIME__: string;
 console.log(`[App] Build: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev'}`);
 
-// Register Web Audio engine
-// Capabilities are declared here as well as on the engine, so that asking what audio can do never
-// builds an audio graph — see `engineInstance.ts`. They are checked against the real engine the
-// first time one is constructed.
-registerEngineFactory(() => new WebAudioEngine(), {
-  crossfade: true,
-  visualizer: true,
-  effects: 'web',
-});
+// **No engine is registered here, and that is the point.** The administration tool does not play
+// audio, so it constructs nothing that could. `/embed` and `/visualizer` register a null engine on
+// their own entry points (ADR-0017); this one registers none at all, and `createEngine()` throwing
+// is the correct outcome for a call that should never happen on this document.
 
 // Global handler for unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
@@ -66,8 +59,9 @@ if ('serviceWorker' in navigator) {
   });
 
   // Workbox's precache and runtime caches survive unregistration, so they go too. Named caches
-  // only — `caches.keys()` here is this origin's, but being explicit keeps it obvious that the
-  // Dexie track store (a different storage API entirely) is untouched.
+  // only, and deliberately still explicit: this is the Cache API, and naming what it deletes keeps
+  // the blast radius readable. There is no longer an IndexedDB store to be careful of — ADR-0071
+  // deleted it — but a future one would be equally untouched by this.
   if (typeof caches !== 'undefined') {
     caches.keys().then((keys) => {
       for (const key of keys) {

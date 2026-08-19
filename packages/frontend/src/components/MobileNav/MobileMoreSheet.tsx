@@ -7,10 +7,9 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   List, FileText,
-  Settings, Waves, X,
+  Settings, X,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
-import { getAmbientSynthBridge } from '../../player/ambient/ambientSynthBridge';
 import { useThemeStore } from '../../stores/themeStore';
 
 interface Props {
@@ -31,8 +30,6 @@ export function MobileMoreSheet({ onClose }: Props) {
   const location = useLocation();
   const resolvedTheme = useThemeStore((s) => s.resolvedTheme);
   const setShowSettings = useUIStore((s) => s.setShowSettings);
-  const setShowAmbientScreen = useUIStore((s) => s.setShowAmbientScreen);
-  const hasAmbientSynth = getAmbientSynthBridge() !== null;
 
 
 
@@ -107,20 +104,6 @@ export function MobileMoreSheet({ onClose }: Props) {
 
 
           {/* Smart playlists */}
-
-          {/* Ambient mode (mobile only, requires native synth) */}
-          {hasAmbientSynth && (
-            <>
-              <div className={`my-2 mx-4 border-t ${light ? 'border-zinc-200' : 'border-zinc-800'}`} />
-              <button
-                onClick={() => { setShowAmbientScreen(true); onClose(); }}
-                className={`flex items-center gap-3 px-4 py-3 w-full ${light ? 'text-purple-600 active:bg-purple-50' : 'text-purple-400 active:bg-zinc-800'}`}
-              >
-                <Waves className="w-5 h-5 flex-shrink-0" />
-                <span>Ambient</span>
-              </button>
-            </>
-          )}
 
           {/* Utility items */}
           <div className={`my-2 mx-4 border-t ${light ? 'border-zinc-200' : 'border-zinc-800'}`} />

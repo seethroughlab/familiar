@@ -556,8 +556,8 @@ jobs:
       - name: Lint
         run: pnpm --filter @familiar/frontend run lint
 
-      - name: Audio Guardrail Checks
-        run: pnpm --filter @familiar/frontend run check:audio-guardrails
+      - name: Embed Guardrail Checks
+        run: pnpm --filter @familiar/frontend run check:embed-guardrails
 
       - name: Dependency Boundary Checks
         run: pnpm --filter @familiar/frontend run check:boundaries

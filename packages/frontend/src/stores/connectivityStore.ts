@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { getApiUrl } from '../api/base';
-import { getOfflineTrackIds } from '../services/offlineService';
 import { createLogger } from '../utils/logger';
 
 const log = createLogger('Connectivity');
@@ -27,12 +26,10 @@ interface ConnectivityState {
   lastReachableAt: number | null;
   consecutiveNetworkFailures: number;
   consecutiveProbeFailures: number;
-  offlineTrackIds: Set<string>;
   counters: ConnectivityCounters;
 
   startMonitoring: () => void;
   stopMonitoring: () => void;
-  refreshOfflineTrackIds: () => Promise<void>;
   noteStreamLoadFailure: (category: 'network-unreachable' | 'offline-unavailable' | 'other') => void;
   noteStreamLoadSuccess: () => void;
   incrementCounter: (name: keyof ConnectivityCounters) => void;
@@ -201,7 +198,6 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
   lastReachableAt: null,
   consecutiveNetworkFailures: 0,
   consecutiveProbeFailures: 0,
-  offlineTrackIds: new Set<string>(),
   counters: defaultCounters(),
 
   startMonitoring: () => {
@@ -224,11 +220,6 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
 
     window.addEventListener('online', browserOnlineListener);
     window.addEventListener('offline', browserOfflineListener);
-    window.addEventListener('offline-tracks-updated', () => {
-      get().refreshOfflineTrackIds().catch(() => {});
-    });
-
-    get().refreshOfflineTrackIds().catch(() => {});
     void setupNativeNetworkListener();
     scheduleProbe(0);
   },
@@ -248,11 +239,6 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
       networkListenerRemove();
       networkListenerRemove = null;
     }
-  },
-
-  refreshOfflineTrackIds: async () => {
-    const ids = await getOfflineTrackIds();
-    set({ offlineTrackIds: new Set(ids) });
   },
 
   noteStreamLoadFailure: (category) => {
