@@ -45,13 +45,65 @@ Confident, and self-contained:
 - Everything under `components/Visualizer/`, `services/visualizerPluginHost.ts`, `visualizerSink.ts`
 - `/listen/:code` and `components/Guest/` — web-only by decision (ADR-0037 rejected)
 
-## The real question to answer first
+## The real question to answer first — measured
 
-**How much of `player/` (9,439 lines) is reachable from `/embed` and `/visualizer`?** Nobody has
-measured it. The honest sequence is:
+**How much of `player/` is reachable from `/embed` and `/visualizer`?** Measured on 2026-08-18 by
+building `embed.html` + `visualizer.html` with `index.html` dropped from `rollupOptions.input`, and
+dumping every module id rollup emitted (`generateBundle`, 2,529 modules transformed). The source
+graph was then walked separately, because type-only imports never reach the bundle and still have to
+compile.
 
-1. Build `/embed` and `/visualizer` with the app entry point removed, and see what the bundler
-   demands. That is a mechanical answer, not a judgement call.
+Of `player/`'s 28 non-test files — 5,229 lines, with a further 4,181 in 15 test files:
+
+| | files | lines | |
+|---|---|---|---|
+| **In the embed/visualizer bundle** | 11 | 2,471 | `audio/{analysisDiagnostics,analysisMetrics,createEngine,engineInstance,nativeAnalysisBuffers}`, `persistence`, `persistenceAdapter`, `playbackInterceptor`, `playbackStore`, `playerStore`, `queueStore` |
+| **Type-only — compiles, never bundles** | 3 | 224 | `audio/types`, `playerStore.types`, `ambient/types` |
+| **Unreachable from either entry** | 14 | 2,534 | all of `ambient/`, `radio/radioController`, `useAudioEngine` (970), `useAudioControls`, `audioSettingsStore`, `audio/eventHandlers`, `audio/platform`, `index.ts` |
+
+So **just under half of `player/` goes**, and `useAudioEngine.ts` — the file the whole subsystem is
+named for — is on the removable side. The two pins that matter:
+
+- The **visualizer** pins `playerStore` → `queueStore` → `persistenceAdapter` → `persistence`, via
+  `MusicVideo.tsx` → `stores/playerStore`. `queueStore` alone is 1,193 lines.
+- The **embed** pins `audio/{createEngine,engineInstance}` through `renderEmbed` and
+  `hooks/useAudioAnalyser`.
+
+`player/index.ts` is itself unreachable: every surviving import names the module directly, and
+`stores/playerStore.ts` re-exports `../player/playerStore`, not the barrel. Deleting the barrel is
+what makes the 14 unreachable files stay unreachable rather than being dragged back by a re-export.
+
+### The list above was wrong about three files
+
+`db/index.ts`, `services/offlineService.ts` and `services/playlistCache.ts` are under "What goes",
+and **all three are in the embed bundle.** So is `services/syncService.ts`, which the list does not
+mention at all. The chains are short and real:
+
+```
+renderEmbed → EmbedDiscover → DiscoverBrowser → useOfflineStatus → connectivityStore → offlineService → db/index
+renderEmbed → EmbedDiscover → DiscoverBrowser → Discovery → DiscoverTrackList → PlaylistTrackList
+                            → useTrackContextMenu → useFavorites → {playlistCache, offlineService, syncService} → db/index
+renderVisualizer → visualizers → MusicVideo → stores/playerStore → playerStore → queueStore → persistenceAdapter → persistence → db/index
+```
+
+Three independent pins on Dexie: offline status on the Discover header, favorites-with-offline-cache
+in the track context menu, and queue persistence. `PlaylistTrackList` also pulls `useOfflineTrack`.
+
+That is a decision, not a measurement, so it is recorded here rather than settled: **either keep
+`db/` and the offline stack, or give `useFavorites` and `connectivityStore` an online-only path
+first.** The second is the honest version — an embedded page inside a native app has no use for a
+Dexie track cache, and `connectivityStore.startMonitoring()` is running reachability polling inside
+a web view whose host already knows whether it is online — but it is its own change, and it edits
+code the Mac and iPhone Discover tab runs.
+
+Everything else on the "What goes" list is confirmed unreachable from both entry points:
+`FullPlayer/`, `Player/`, `WebAudioEngine.ts`, `audioEffects/` (14 files), `downloadStore`,
+`offlineManifestService`, `queueSyncService`, `queueSyncStore`, `PlaybackSettings`,
+`OfflineSettings`, `TrackListBrowser`.
+
+Remaining sequence:
+
+1. ~~Measure.~~ Done, above.
 2. Delete what is genuinely unreachable.
 3. Leave the rest, and record *why* each survivor survives — otherwise the next person meets the
    same ambiguity with less context than we have now.
@@ -59,6 +111,12 @@ measured it. The honest sequence is:
 Do **not** start by deleting `player/` and fixing the errors. The dependency runs through
 `playerStore`, so the errors will appear in Discovery components that must keep working, and the
 temptation will be to stub them.
+
+**Reproducing the measurement:** add a `generateBundle` plugin that writes `Object.keys(chunk.modules)`
+for every chunk, and build with `input` reduced to `embed.html` + `visualizer.html`. Walk the source
+graph separately for the type-only edges — and strip comments before regexing for imports, or
+`stores/playerStore.ts`'s `// DEPRECATED: import from '../player' instead` fabricates an edge to the
+barrel and makes all 14 dead files look pinned.
 
 ## Verification, once cut
 
