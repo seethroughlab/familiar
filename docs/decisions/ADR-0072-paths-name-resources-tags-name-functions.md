@@ -1,6 +1,6 @@
 # ADR-0072: Paths Name Resources, Tags Name Functions
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
