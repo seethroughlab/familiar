@@ -1,6 +1,6 @@
 # ADR-0078: The Schema Copy Is Verified, Not Trusted
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
