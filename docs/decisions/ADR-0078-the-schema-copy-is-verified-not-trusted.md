@@ -31,7 +31,8 @@ swift-openapi-generator build plugin actually reads. Measured today:
 (`familiar-apple/.github/workflows/ci.yml:47-51`). That proves a client generates from whatever file
 is present — a stale file generates a stale client perfectly well.
 
-**The backend lint already knows, and names the fix.** `scripts/lint_openapi.py:44-58` keeps a
+**The backend lint already knows, and proposes a fix this ADR does not take.**
+`scripts/lint_openapi.py:44-58` keeps a
 vendored copy of the generated surface, compares it against the real Swift config when the sibling
 repo happens to be checked out, and states the limitation rather than leaving it to be discovered:
 
@@ -54,20 +55,29 @@ already silently lost features more than once.
 
 ## Decision
 
-1. **CI verifies the two schema copies are identical.** The `familiar` workflow checks out
-   `familiar-apple` alongside itself and fails if `backend/openapi.json` and
-   `Sources/FamiliarAPI/openapi.json` differ by so much as a byte. Byte equality, not semantic
-   equality: `dump_openapi.py` already renders deterministically with sorted keys, so anything else
-   is drift.
+1. **The consuming repository verifies its own copy, and does it by fetching rather than by
+   checkout.** `familiar-apple`'s CI fetches `backend/openapi.json` from `familiar`'s default branch
+   over the GitHub API and fails if its own `Sources/FamiliarAPI/openapi.json` differs by a byte.
+   Byte equality, not semantic equality: `dump_openapi.py` already renders deterministically with
+   sorted keys, so anything else is drift.
 
-2. **The copy is made by a target, never by hand.** `make vendor-schema` writes the Apple repo's
-   copy from `backend/openapi.json`, and `make vendor-schema-check` is the CI form. Copying by hand
-   is what produced a four-path gap that nobody noticed.
+   **The check belongs on this side, and the reason is `ADR-0079`'s premise.** Putting it in
+   `familiar`'s CI — the first draft of this decision — would fail a backend pull request because
+   *another repository* had not been updated yet, which forces the two into the lockstep that
+   `ADR-0079` establishes is impossible. A schema change must be able to merge on its own. Drift
+   only causes harm when a client is generated from the stale copy, and that happens here.
 
-3. **The tag cross-check runs in CI.** With the sibling repo checked out, the comparison between
-   `VENDORED_TAGS` and the generator config's `filter.tags` — which
-   `lint_openapi.py` documents as never running — runs on every build. This is the check that makes
-   `ADR-0014` point 4's "updated in the same change" enforceable rather than aspirational.
+2. **The copy is made by a target, never by hand.** A target in `familiar-apple` writes
+   `Sources/FamiliarAPI/openapi.json` — from a sibling checkout when there is one, otherwise from the
+   same fetch point 1 uses — with a `--check` form for CI. Copying by hand is what produced a
+   four-path gap that nobody noticed.
+
+3. **The tag cross-check runs on the same side, by the same means.** The comparison between
+   `lint_openapi.py`'s `VENDORED_TAGS` and the generator config's `filter.tags` — which
+   `lint_openapi.py` documents as never running — runs in `familiar-apple`'s CI, fetching the lint's
+   vendored list alongside the schema. This is what makes `ADR-0014` point 4's "updated in the same
+   change" enforceable rather than aspirational, and it is enforced against the repository that owns
+   the config the surface is actually defined in.
 
 4. **`VisualizerBundle.html` records the revision it was built from.** `inline-visualizer.mjs` emits
    the `familiar` commit into a `<meta>` tag, and a check in `familiar-apple` reports when the
@@ -85,10 +95,26 @@ four paths and nine schemas of drift, including the ADR-0064 ranking endpoint, w
 nominally in force. `ADR-0007` point 6 already decided that regressions must fail a build rather than
 be remembered.
 
-**Make the Apple repo consume the schema as a package or submodule** instead of a copy. Genuinely
-tidier, and rejected as too large a change to ride along with a restructure: it changes how the
-SwiftPM build resolves the file, affects offline and CI builds, and would need its own ADR. The
-copy is not the problem; the *unchecked* copy is.
+**Run the check in `familiar`'s CI, with `familiar-apple` checked out beside it.** This was the first
+draft, and it is what `lint_openapi.py:55-58` suggests when it says *"A second checkout in the
+workflow would close that gap."* It has one genuine advantage: drift is caught at the moment of
+divergence rather than at the next Apple build. Rejected because it makes every backend schema change
+conditional on another repository already being current — a lockstep that contradicts `ADR-0079`,
+whose whole premise is that these two version independently. It also produces the least
+actionable failure message in the project: a backend pull request going red because of a file it does
+not contain.
+
+**Make the Apple repo consume the schema as a submodule** rather than a copy. This is the shape that
+removes the problem instead of detecting it, and it gives pinning for free — the submodule SHA
+records exactly which schema a build was made against. Rejected in both available forms.
+Submoduling `familiar` whole means vendoring the backend, the frontend and the site to obtain one
+918 KB file, and every clone needs `--recursive` or the Swift build fails confusingly. A
+schema-only third repository is the clean version and is how this would be done across teams; for
+two repositories and one maintainer it is a third thing to release into. A copy plus point 1's check
+buys the same guarantee for roughly thirty lines of CI, and the copy already exists.
+
+**Publish the schema as a SwiftPM package.** The same trade as the submodule with release ceremony
+added: a tag and a version bump for every schema change, which is heavier than the change usually is.
 
 **Fetch the schema from a URL at build time.** Rejected because it makes the Swift build depend on
 network availability and on a server being current, trading a visible staleness problem for an
@@ -112,13 +138,21 @@ thing that can be subtly wrong.
   starts running, which retroactively gives `ADR-0014` point 4 its enforcement.
 - **Positive** — the four-path drift is repaired as a side effect of adding the check, and the
   ADR-0064 ranking endpoint reaches the Apple copy.
-- **Tradeoff** — `familiar` CI gains a dependency on `familiar-apple` being checked out. That is a
-  second checkout on every backend job, needing credentials the workflow does not have today, and it
-  couples one repository's build to another's availability.
-- **Tradeoff** — point 2 makes the Apple repo's copy a generated file that a `familiar` target
-  writes, which means a change in one repo produces a commit in the other. That is already true in
-  practice; it becomes true on purpose.
-- **Follow-up** — the schema copy check tells you the copies differ, not which side is right. It
-  assumes `backend/openapi.json` is authoritative, which `ADR-0007` already established.
-- **Follow-up** — if the second checkout proves too awkward, the fallback is a scheduled job rather
-  than a per-build one. Slower to catch drift, but still not nothing, which is the current state.
+- **Positive** — backend schema changes stay independently mergeable. Point 1 deliberately does not
+  gate `familiar` on `familiar-apple`, so this ADR does not quietly reintroduce the coupling
+  `ADR-0079` exists to avoid.
+- **Tradeoff** — **drift is detected later than it happens.** Between a backend schema change and the
+  next `familiar-apple` build, the two copies disagree and nothing says so. That window is
+  acceptable because a stale copy is inert until a client is generated from it, but it does mean the
+  check reports an old problem rather than a new one.
+- **Tradeoff** — `familiar-apple`'s CI gains a network dependency on the GitHub API and on
+  `familiar`'s default branch being readable, so its build can now fail for a reason that has nothing
+  to do with its own contents.
+- **Tradeoff** — point 2 makes the copy a generated file, which means a schema change in one repo
+  still produces a commit in the other. That is already true in practice; it becomes true on purpose,
+  and the commit is now mechanical rather than remembered.
+- **Follow-up** — the check tells you the copies differ, not which side is right. It assumes
+  `backend/openapi.json` is authoritative, which `ADR-0007` already established.
+- **Follow-up** — if the detection lag proves to matter, the addition is a scheduled job in
+  `familiar-apple` that runs the same comparison daily, rather than moving the check back to the
+  backend and taking the lockstep with it.
