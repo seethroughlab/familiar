@@ -1,6 +1,6 @@
 # ADR-0079: A Moved Path Keeps an Invisible Alias for One Release
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
