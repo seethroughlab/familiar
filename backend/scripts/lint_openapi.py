@@ -72,10 +72,6 @@ VENDORED_TAGS = {
     "pending-review",
     "proposed-changes",
     "mixtapes",
-    # Listening sessions (ADR-0036, consumed by ADR-0037). Only the REST half is here — session
-    # lookup and ICE configuration. The `WebSocket /sessions/ws` on the same router is not an
-    # operation and never appears in the schema, which is ADR-0036 point 5 rather than an omission.
-    "sessions",
 }
 
 # Casting (ADR-0031), by operation rather than by tag: nine of the twenty-four `outputs` operations
