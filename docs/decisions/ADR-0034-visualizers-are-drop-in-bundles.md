@@ -1,6 +1,7 @@
 # ADR-0034: Visualizers Are Drop-In Bundles
 
-Status: accepted
+Status: accepted — points 1 and 3 superseded by
+[ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md)
 
 Date: 2026-08-06
 

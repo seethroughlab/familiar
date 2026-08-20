@@ -1,6 +1,6 @@
 # ADR-0087: A Visualizer Is a Document, Not a Component
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-20
 
