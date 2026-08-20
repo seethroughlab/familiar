@@ -1,6 +1,7 @@
 # ADR-0087: A Visualizer Is a Document, Not a Component
 
-Status: accepted
+Status: accepted — point 8 superseded by
+[ADR-0088](ADR-0088-every-visualizer-ships-as-a-document.md)
 
 Date: 2026-08-20
 
