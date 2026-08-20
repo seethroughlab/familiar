@@ -121,10 +121,18 @@ barrel and makes all 14 dead files look pinned.
 ## Verification, once cut
 
 ```bash
-cd packages/frontend && npx tsc -p tsconfig.json --noEmit   # baseline 14 errors
-pnpm test                                                    # 63 files / 955 tests
+cd packages/frontend && npx tsc -p tsconfig.json --noEmit   # 7 errors, all pre-existing
+pnpm test                                                    # 41 files / 532 tests
+node ./scripts/check-embed-guardrails.mjs                    # replaces check-audio-guardrails.mjs
 cd ../web && pnpm run build                                  # must still emit embed + visualizer
 ```
+
+**The counts moved, and both directions are expected.** The baseline was 14 tsc errors and
+63 files / 955 tests when this was written; it was 14 and 67 / 1,012 by the time the cut ran. Seven
+of those errors lived in `useKeyboardShortcuts.test.ts` and went with it, leaving 7 — three in
+`engineContract.test.ts`, three in `serverToken.test.ts`, one in `useScrobbling.test.ts`, none of
+them touched by this work. The test files that vanished are the player's, the sessions' and the
+offline stack's own.
 
 Then, and this is the part that actually matters: **open Discover on the Mac and on the phone.**
 Both render the embedded page, both can start playback from it, and a regression there is invisible
