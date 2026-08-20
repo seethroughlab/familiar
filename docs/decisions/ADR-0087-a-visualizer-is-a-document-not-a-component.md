@@ -69,10 +69,20 @@ Support on macOS, `Documents/Visualizers` on iOS (`ADR-0034` point 4) — exists
    browsing context. Whatever is inside it — canvas, WebGL, shaders, p5, three.js, a `<video>`, or
    plain DOM — is the plugin's business.
 
-2. **The host sends data and lends nothing.** Track metadata and audio frames arrive as events on
-   the plugin's own window. There is no `window.Familiar` library surface: no React, no THREE, no
-   `@react-three/fiber`, no `Drei`. What `ADR-0034` point 6 defined as `VisualizerProps` and
-   `AudioData` survives as the *payload*; only the delivery changes.
+2. **The host sends data and lends nothing.** There is no `window.Familiar` library surface: no
+   React, no THREE, no `@react-three/fiber`, no `Drei`. The whole API is three inbound events and
+   one outbound handshake:
+
+   | | |
+   |---|---|
+   | `familiar:track` | the track changed — id, title, artist, album, artwork URL, features, lyrics |
+   | `familiar:audio` | an analysis frame — the `AudioData` shape `ADR-0034` point 6 already defines |
+   | `familiar:state` | playing or paused, and the playhead |
+   | `familiar:ready` (out) | the document is listening, so the host knows a blank frame is loading rather than broken |
+
+   What `ADR-0034` point 6 defined as `VisualizerProps` and `AudioData` survives as the *payload*.
+   Only the delivery changes. **A visualizer that ignores every event and draws nothing is still a
+   valid visualizer** — the contract obliges a plugin to receive, never to implement.
 
 3. **`ADR-0034` point 3 is superseded outright.** "The host provides four libraries and a bundle
    must not carry its own" was the source of the coupling, of the version contract `ADR-0063` was
@@ -92,12 +102,26 @@ Support on macOS, `Documents/Visualizers` on iOS (`ADR-0034` point 4) — exists
    is a traversal surface that a single known filename was not. This is the one place the change
    adds risk rather than removing it, and it is named here so it is designed rather than discovered.
 
-7. **The built-ins become documents too, and sharing becomes something a plugin opts into by URL.**
-   One shape, not two. The shipped visualizers may load a vendored copy of THREE served by the same
-   handler with an ordinary `<script src>` — which is different in kind from an injected global,
-   because it is the plugin's choice, visible in its own source, and versioned by the URL it names.
+7. **There is no sharing mechanism at all, and the existing visualizers are not a constraint on
+   this.** Every visualizer is a document that carries what it needs. No injected globals, no
+   host-vendored library served by URL, no externals in a plugin's build config.
 
-8. **`familiar.apiVersion` (`ADR-0034` point 7) now versions the event contract**, which is a much
+   **This is the point where the decision was made deliberately against the current set.** The
+   simplest contract and the survival of three `@react-three/fiber` scene graphs are in tension: a
+   sharing mechanism exists only to spare them each bundling THREE. Asked directly, the answer was
+   that a solid, simple contract matters more than any particular visualizer. So the hatch is not
+   built, and the three r3f built-ins are rewritten as self-contained documents, demoted to
+   optional drop-ins, or dropped — a question for whoever does the work, not a constraint on the
+   contract.
+
+8. **The shipped set is deliberately small, and elaborate visualizers are drop-ins.** Point 7's cost
+   is paid in the app bundle if the shipped set is large — three self-contained r3f documents is
+   several copies of a 2.4 MB library. The answer is not a sharing mechanism but fewer shipped
+   visualizers: one or two cheap ones that prove the contract and give a fresh install something to
+   look at. Anything heavier is something a listener installs, which is what `ADR-0034` point 4's
+   two sources were for.
+
+9. **`familiar.apiVersion` (`ADR-0034` point 7) now versions the event contract**, which is a much
    smaller thing to keep compatible than four libraries.
 
 ## Alternatives Considered
@@ -116,6 +140,13 @@ ship your own React.
 familiar authoring experience with isolation added. Rejected because injecting a framework into a
 document that could simply `<script src>` it is strictly worse than letting it choose: same version
 contract, more machinery.
+
+**Keep one sharing mechanism — let a plugin load a host-vendored THREE by URL.** This is what
+point 7 said in the first draft, and it exists solely to spare the three r3f built-ins from each
+bundling a 2.4 MB library. Rejected on the explicit steer that a solid, simple contract matters more
+than any particular visualizer: a sharing mechanism is a version contract wearing a different hat,
+and the first plugin that loads a *different* THREE alongside it finds out the hard way. Point 8
+answers the bundle-size worry by shipping fewer visualizers instead.
 
 **Convert plugins to documents but leave the built-ins as components in the host page.** Cheapest
 path, and it is what the code would do if nobody decided otherwise. Rejected under point 7:
@@ -136,9 +167,13 @@ sidestep by deleting the feature's premise.
   no build step. Today the minimum viable plugin is a rollup config that externalises four packages.
 - **Positive** — Lyric Pulse's failure mode becomes unrepresentable.
 - **Positive** — crash isolation stops depending on an error boundary in shared memory.
-- **Tradeoff** — every plugin ships its own libraries, so folders get bigger. On disk that is cheap;
-  for the *shipped* built-ins it is why point 7 allows an opt-in vendored copy rather than three
-  independent 2.4 MB bundles.
+- **Tradeoff** — every plugin ships its own libraries, so folders get bigger. On disk that is cheap.
+  In the *app bundle* it is not, which is why point 8 shrinks the shipped set rather than adding a
+  sharing mechanism to preserve it.
+- **Tradeoff** — **the current visualizers are not preserved by this decision, and that was chosen
+  rather than overlooked.** The three r3f scene graphs are rewritten, demoted to drop-ins, or
+  dropped. Anyone reading this later should not treat their loss as a regression to be fixed by
+  reintroducing shared libraries.
 - **Tradeoff** — **`ADR-0067` and `ADR-0068` were aimed at the wrong contract.** 0067 shrinks to
   almost nothing, which is a good outcome reached by an unwelcome route; 0068's conversion work is
   redirected rather than executed. Both are `proposed`, so nothing shipped is being unwound, but
