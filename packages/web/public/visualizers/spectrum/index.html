@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Spectrum</title>
+<!--
+  A visualizer under ADR-0087: a document that receives events.
+
+  Deliberately the whole thing. No build step, no bundler, no framework, no import from the host —
+  this file is what the contract asks for and nothing more. If a visualizer cannot be written this
+  way, the contract is wrong.
+
+  The host posts three messages and expects one back:
+    familiar:ready  (out)  — sent once, so the host knows to start
+    familiar:track  (in)   — the track changed
+    familiar:state  (in)   — playing/paused and the playhead
+    familiar:audio  (in)   — an analysis frame, on the host's animation loop
+-->
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #title {
+    position: fixed; left: 0; right: 0; bottom: 6vh; text-align: center;
+    font: 500 1.1rem/1.4 system-ui, sans-serif; color: #fff; opacity: .75;
+    text-shadow: 0 2px 20px rgba(0,0,0,.8); pointer-events: none;
+  }
+  #title small { display: block; font-weight: 400; opacity: .7; }
+</style>
+<canvas id="c"></canvas>
+<div id="title"></div>
+<script>
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const titleEl = document.getElementById('title');
+
+  let bars = [];      // smoothed bar heights, 0..1
+  let playing = false;
+  let hue = 200;
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(canvas.clientWidth * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  window.addEventListener('message', (event) => {
+    const message = event.data;
+    if (!message || typeof message !== 'object') return;
+
+    if (message.type === 'familiar:track') {
+      const t = message.payload;
+      titleEl.innerHTML = t.title
+        ? `${escapeHtml(t.title)}<small>${escapeHtml(t.artist || '')}</small>`
+        : '';
+      // Colour follows the track rather than the frame, so it is stable while a song plays.
+      hue = t.id ? (hashOf(t.id) % 360) : 200;
+    }
+
+    if (message.type === 'familiar:state') {
+      playing = message.payload.isPlaying;
+    }
+
+    if (message.type === 'familiar:audio') {
+      const data = message.payload.frequencyData || [];
+      const count = 64;
+      for (let i = 0; i < count; i++) {
+        // The host already reconstructs a smooth signal from a 10 Hz feed, so this only needs a
+        // light ease to keep the bars from stepping.
+        const sampled = (data[Math.floor(i * data.length / count)] || 0) / 255;
+        bars[i] = bars[i] === undefined ? sampled : bars[i] + (sampled - bars[i]) * 0.35;
+      }
+    }
+  });
+
+  function draw() {
+    const { width: w, height: h } = canvas;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+
+    const count = bars.length || 64;
+    const barWidth = w / count;
+    for (let i = 0; i < count; i++) {
+      const value = (bars[i] || 0) * (playing ? 1 : 0.25);
+      const barHeight = Math.max(2, value * h * 0.7);
+      ctx.fillStyle = `hsl(${(hue + i * 1.5) % 360} 85% ${35 + value * 35}%)`;
+      ctx.fillRect(i * barWidth + barWidth * 0.15, h - barHeight, barWidth * 0.7, barHeight);
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  function hashOf(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  // Last, so the host never posts into a document that is not listening yet.
+  parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
+</script>
