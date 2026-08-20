@@ -10,6 +10,41 @@ Supersedes [ADR-0034](ADR-0034-visualizers-are-drop-in-bundles.md) points 1 and 
 settled before [ADR-0063](ADR-0063-the-visualizer-api-is-published-for-outside-authors.md) publishes
 the contract to outside authors.
 
+## Implementation
+
+**Point 6 landed first**, on `familiar-apple` `feature/visualizer-documents`: the scheme handler
+serves any file inside a plugin's folder, with content types by extension and containment enforced
+in two places — the router refuses an empty, `.` or `..` component, and `resolve(relativePath:in:)`
+standardises the URL before comparing against the plugin's own directory with a trailing separator.
+Nine tests cover both layers independently. One existing test changed meaning rather than being
+deleted: `testAnythingElseUnderPluginsIsTheDocumentRatherThanAFileRead` had encoded `ADR-0034`'s "no
+request carries a path", which is exactly what this ADR reverses.
+
+**The isolation question was spiked before anything was built on it.** Point 1 says "its own
+browsing context" and the host embeds the plugin in an `<iframe>`; whether that iframe could be
+`sandbox="allow-scripts"` — opaque origin, no ambient authority — was unknown, because a custom
+scheme plus an opaque origin is where a surprise would hide. A standalone `WKWebView` harness ran
+both cases:
+
+| | `sandbox="allow-scripts"` | no sandbox |
+|---|---|---|
+| subresources fetched over the scheme | `index.html`, `style.css`, `app.js` — all | all |
+| script ran, stylesheet applied | yes | yes |
+| `window.origin` | **`null`** | `familiar-visualizer://plugin` |
+| reaches the host's DOM | no | no |
+| `postMessage` both directions | yes | yes |
+
+So the strong form works and is what ships. Two mechanisms stack rather than one doing the work:
+**distinct host components** (`//host` and `//plugin`) already make the plugin a separate origin —
+the control run could not reach the host's DOM either — and **the sandbox attribute** makes it an
+opaque one on top.
+
+**One residual, recorded rather than assumed away.** `allow-scripts` without `allow-same-origin`
+denies cookies, `localStorage` and same-origin access, but **it does not restrict network access**.
+A plugin can still `fetch()` anywhere it likes. The handler serves the plugin document, so it is in
+a position to attach a `Content-Security-Policy` that confines it — that is the next thing to
+decide, not something this ADR has already solved.
+
 ## Context
 
 A visualizer today is a pre-built IIFE, evaluated with `new Function` **inside the host page**,
