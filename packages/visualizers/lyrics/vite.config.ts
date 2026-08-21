@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { copyFileSync, mkdirSync } from 'node:fs';
 
 /**
@@ -18,6 +19,7 @@ import { copyFileSync, mkdirSync } from 'node:fs';
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     {
       // index.html is authored, not processed: it must reference a classic script, which Vite's
       // HTML pipeline will not emit.
@@ -37,6 +39,6 @@ export default defineConfig({
   build: {
     outDir: '../../web/public/visualizers/lyrics',
     emptyOutDir: true,
-    lib: { entry: 'src/main.tsx', formats: ['iife'], name: 'ScrollingLyrics', fileName: () => 'app.js' },
+    lib: { entry: 'src/main.tsx', formats: ['iife'], name: 'ScrollingLyrics', fileName: () => 'app.js', cssFileName: 'style' },
   },
 });

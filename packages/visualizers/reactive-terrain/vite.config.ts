@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { copyFileSync } from 'node:fs';
 
 /**
@@ -18,6 +19,7 @@ import { copyFileSync } from 'node:fs';
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     {
       // index.html is authored, not processed: it must reference a classic script, which Vite's
       // HTML pipeline will not emit.
@@ -26,6 +28,11 @@ export default defineConfig({
         for (const file of ['index.html', 'familiar-plugin.json']) {
           copyFileSync(file, `../../web/public/visualizers/reactive-terrain/${file}`);
         }
+        // **The model, which `emptyOutDir` deletes and nothing put back.** It reached the output
+        // folder by hand once and was committed there, so the build looked fine for as long as
+        // nobody re-ran it — then a rebuild wiped it and the scene lost its car with only a 404 in
+        // a console no one can see. An asset a plugin loads at runtime is part of the plugin.
+        copyFileSync('src/car.glb', '../../web/public/visualizers/reactive-terrain/car.glb');
       },
     },
   ],
@@ -36,6 +43,6 @@ export default defineConfig({
   build: {
     outDir: '../../web/public/visualizers/reactive-terrain',
     emptyOutDir: true,
-    lib: { entry: 'src/main.tsx', formats: ['iife'], name: 'ReactiveTerrain', fileName: () => 'app.js' },
+    lib: { entry: 'src/main.tsx', formats: ['iife'], name: 'ReactiveTerrain', fileName: () => 'app.js', cssFileName: 'style' },
   },
 });

@@ -7,6 +7,7 @@
  */
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import './index.css';
 import BeatTiles from './BeatTiles';
 import { announceReady, usePlaybackState, useTrack } from './familiar';
 
