@@ -1,6 +1,21 @@
 # ADR-0068: Built-In Visualizers Ship as Drop-In Bundles
 
-Status: proposed
+Status: rejected — superseded before acceptance by
+[ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md) and
+[ADR-0088](ADR-0088-every-visualizer-ships-as-a-document.md)
+
+**Rejected because the format it converts to was replaced.** This ADR would have built the four
+built-ins as IIFE bundles against the globals `ADR-0067` exposes, so that shipped and drop-in
+visualizers were one shape. `ADR-0087` deletes that format, and `ADR-0088` reaches the same
+destination by a different route: every visualizer, shipped or dropped in, is a folder with an
+`index.html`.
+
+**Its central argument survived and is why `ADR-0088` exists.** Point 3 said each visualizer should
+be built once and shipped once, because "two builds of one visualizer would drift, and nothing in CI
+could see it". That is precisely the reasoning `ADR-0088` used to refuse a smaller shipped set with
+the rest demoted to drop-ins — two categories that drift are no better than two builds that do.
+Point 2's reversal, letting a local plugin shadow a built-in, is inherited unchanged: with one shape
+there is nothing special about a shipped id.
 
 Date: 2026-08-18
 
