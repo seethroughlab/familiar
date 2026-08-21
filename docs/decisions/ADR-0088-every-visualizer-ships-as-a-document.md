@@ -31,9 +31,14 @@ otherwise careful about.
 
 ## Decision
 
-1. **All five existing visualizers are converted to documents and all of them ship.** Nothing is
-   demoted to a drop-in and nothing is dropped. The shipped set is exactly what a fresh install has
-   today, in the new shape.
+1. **Every visualizer is converted to a document and all of them ship.** Nothing is demoted to a
+   drop-in and nothing is dropped.
+
+   **That is four built-ins plus `spectrum`, and it does not include music video.** `ADR-0066`
+   point 2 already removes `music-video` from the registry — *"Four built-ins remain:
+   `reactive-terrain`, `beat-tiles`, `lyrics` and `lyric-storm`"* — and `ADR-0085` makes it a native
+   Mac player mode instead. It is spelled out because the registry in the code still lists it, so
+   anything counting the current state gets five and includes the one that is leaving.
 
 2. **The duplication is accepted rather than engineered around.** Three of them are
    `@react-three/fiber` scenes, so three folders each carry their own THREE. That is the cost of
@@ -77,7 +82,7 @@ different THREE finds out what "shipped visualizers are special" means.
 - **Tradeoff** — the app bundle grows by roughly the size of two extra copies of THREE, before
   tree-shaking. This is the cost `ADR-0087` point 8 was avoiding, now paid deliberately.
 - **Tradeoff** — five conversions instead of one, three of them r3f scenes that need their own build
-  configuration. That is the bulk of the work `ADR-0087` implies, and it now all has to happen
+  configuration (`reactive-terrain`, `beat-tiles`, `lyric-storm`). That is the bulk of the work `ADR-0087` implies, and it now all has to happen
   before the registry can be deleted.
 - **Follow-up** — measure the built folders. If tree-shaking does not materially help, point 4's
   optimism should be struck so the next reader does not repeat it.
