@@ -5,7 +5,6 @@
  * contributions with full access to track metadata, audio analysis, and
  * real-time audio data.
  */
-import type { ComponentType } from 'react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
 import type { VisualizerAffinity } from '../../services/visualizerPlugins';
@@ -111,39 +110,5 @@ export interface VisualizerPropsWithAudio extends VisualizerProps {
 /**
  * A registered visualizer with metadata and component.
  */
-export interface RegisteredVisualizer {
-  metadata: VisualizerMetadata;
-  component: ComponentType<VisualizerProps>;
-}
-
-/**
- * Visualizer registry - maps id to visualizer info.
- */
-export const visualizerRegistry: Map<string, RegisteredVisualizer> = new Map();
-
-/**
- * Register a visualizer in the registry.
- */
-export function registerVisualizer(
-  metadata: VisualizerMetadata,
-  component: ComponentType<VisualizerProps>
-): void {
-  visualizerRegistry.set(metadata.id, { metadata, component });
-}
-
-/**
- * Get all registered visualizers.
- */
-export function getVisualizers(): RegisteredVisualizer[] {
-  return Array.from(visualizerRegistry.values());
-}
-
-/**
- * Get a specific visualizer by ID.
- */
-export function getVisualizer(id: string): RegisteredVisualizer | undefined {
-  return visualizerRegistry.get(id);
-}
-
 // Re-export constants for backward compatibility
 export { DEFAULT_VISUALIZER_ID } from './constants';

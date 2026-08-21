@@ -5,7 +5,7 @@
  */
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Sparkles, Image, Type, Video, AlertTriangle, CloudLightning } from 'lucide-react';
-import { getVisualizers } from './types';
+import { useVisualizerCatalog } from './useVisualizerCatalog';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
 import { useVisualizerAutoSelectStore } from '../../stores/visualizerAutoSelectStore';
@@ -48,11 +48,11 @@ export function VisualizerPicker() {
     useVisualizerStore();
   const { chosenId, unranked, ignoredByVisualizer } = useVisualizerAutoSelectStore();
 
-  const visualizers = getVisualizers();
+  const visualizers = useVisualizerCatalog();
 
   // What is actually drawing — shared with `FullPlayer`, which gates its layout on the same answer.
   const activeId = useActiveVisualizerId();
-  const currentVisualizer = visualizers.find(v => v.metadata.id === activeId);
+  const currentVisualizer = visualizers.find(v => v.id === activeId);
 
   const records = useVisualizerPluginStore((s) => s.records);
 
@@ -64,10 +64,10 @@ export function VisualizerPicker() {
   // structure while parsing the manifest, the server checks the tag vocabulary it owns. Neither is
   // a refusal; these plugins are loaded and in the list above.
   const ignoredEntries = visualizers
-    .map(({ metadata }) => {
-      const fromManifest = records.find((r) => r.id === metadata.id)?.ignored ?? [];
-      const fromServer = ignoredByVisualizer[metadata.id] ?? [];
-      return { id: metadata.id, name: metadata.name, ignored: [...fromManifest, ...fromServer] };
+    .map((entry) => {
+      const fromManifest = records.find((r) => r.id === entry.id)?.ignored ?? [];
+      const fromServer = ignoredByVisualizer[entry.id] ?? [];
+      return { id: entry.id, name: entry.name, ignored: [...fromManifest, ...fromServer] };
     })
     .filter((entry) => entry.ignored.length > 0);
 
@@ -107,7 +107,7 @@ export function VisualizerPicker() {
   };
 
   const CurrentIcon = currentVisualizer
-    ? visualizerIcons[currentVisualizer.metadata.id] || Sparkles
+    ? visualizerIcons[currentVisualizer.id] || Sparkles
     : Sparkles;
 
   return (
@@ -123,7 +123,7 @@ export function VisualizerPicker() {
       >
         <CurrentIcon className="w-4 h-4" />
         <span className="text-sm font-medium">
-          {currentVisualizer?.metadata.name || 'Visualizer'}
+          {currentVisualizer?.name || 'Visualizer'}
         </span>
         <ChevronDown
           className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -174,15 +174,15 @@ export function VisualizerPicker() {
           </div>
 
           <div className="max-h-80 overflow-y-auto">
-            {visualizers.map(({ metadata }) => {
-              const Icon = visualizerIcons[metadata.id] || Sparkles;
-              const isSelected = metadata.id === activeId;
-              const isAutoChoice = autoSelect && chosenId === metadata.id;
+            {visualizers.map((entry) => {
+              const Icon = visualizerIcons[entry.id] || Sparkles;
+              const isSelected = entry.id === activeId;
+              const isAutoChoice = autoSelect && chosenId === entry.id;
 
               return (
                 <button
-                  key={metadata.id}
-                  onClick={() => handleSelect(metadata.id)}
+                  key={entry.id}
+                  onClick={() => handleSelect(entry.id)}
                   className={`w-full flex items-start gap-3 p-3 text-left transition-colors ${
                     isSelected
                       ? 'bg-purple-500/20 text-white'
@@ -198,20 +198,20 @@ export function VisualizerPicker() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium flex items-center gap-2">
-                      {metadata.name}
+                      {entry.name}
                       {isAutoChoice && (
                         <span className="text-[10px] px-1.5 py-0.5 bg-emerald-500/30 text-emerald-300 rounded">
                           AUTO
                         </span>
                       )}
-                      {metadata.usesMetadata && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/30 text-purple-300 rounded">
-                          METADATA
-                        </span>
-                      )}
+                      {/*
+                        The METADATA badge went with the registry. `usesMetadata` said whether a
+                        visualizer looked at the track; under ADR-0087 point 2 every document
+                        receives everything and decides for itself, so there is nothing to declare.
+                      */}
                     </div>
                     <div className="text-xs text-zinc-500 mt-0.5">
-                      {metadata.description}
+                      {entry.description}
                     </div>
                   </div>
                   {isSelected && (

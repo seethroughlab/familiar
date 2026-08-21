@@ -2,7 +2,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmbedVisualizer } from '../EmbedVisualizer';
-import { registerVisualizer, type VisualizerProps } from '../../Visualizer/types';
+import { type VisualizerProps } from '../../Visualizer/types';
 import { useVisualizerStore } from '../../../stores/visualizerStore';
 import {
   installVisualizerSink,
@@ -20,16 +20,18 @@ const get = tracksApi.get as ReturnType<typeof vi.fn>;
 
 // Same capture harness as AudioVisualizer.test.tsx: a stub visualizer that records its props, so
 // the assertion is on what actually reached a visualizer rather than on an intermediate component.
+// What the surface hands the visualizer. Under ADR-0087 that is `DocumentVisualizer`, stubbed
+// here to record its props — the assertions are unchanged, because what EmbedVisualizer is
+// responsible for (fetching the detail, falling back to the frame fields) did not change.
 let lastProps: VisualizerProps | null = null;
-const CAPTURE_ID = 'embed-capture';
 
-registerVisualizer(
-  { id: CAPTURE_ID, name: 'Capture', description: 'test', usesMetadata: true },
-  (props: VisualizerProps) => {
+vi.mock('../../Visualizer/DocumentVisualizer', () => ({
+  DocumentVisualizer: (props: VisualizerProps & { src: string }) => {
     lastProps = props;
-    return <div data-testid="capture" />;
-  }
-);
+    return <div data-testid="document-visualizer" data-src={props.src} />;
+  },
+}));
+
 
 /** A frame as the native host sends it. Empty base64 decodes to a zero-length buffer, which is all
  *  this test needs — the spectrum never passes through React. */
@@ -54,13 +56,22 @@ beforeEach(() => {
   get.mockReset();
   resetVisualizerSinkForTesting();
   installVisualizerSink();
-  useVisualizerStore.getState().setVisualizerId(CAPTURE_ID);
+  useVisualizerStore.getState().setVisualizerId('reactive-terrain');
 });
 
 afterEach(() => {
   cleanup();
   lastProps = null;
   resetVisualizerSinkForTesting();
+});
+
+// The registry is gone (ADR-0087): a visualizer is a document, so setup is a catalog of
+// folders rather than components registered into this page.
+vi.mock('../../Visualizer/useVisualizerCatalog', () => {
+  // One array, not a literal per render — the real hook returns React state, and a mock
+  // that hands back a new reference every time makes effects depending on it loop.
+  const catalog = [{ id: 'reactive-terrain', name: 'Reactive Terrain', source: 'shipped', url: '/visualizers/reactive-terrain/index.html' }];
+  return { useVisualizerCatalog: () => catalog, catalogPromise: () => Promise.resolve(catalog) };
 });
 
 describe('EmbedVisualizer', () => {

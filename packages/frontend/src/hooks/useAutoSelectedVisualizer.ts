@@ -20,7 +20,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { tracksApi } from '../api';
-import { getVisualizers } from '../components/Visualizer/types';
+import { useVisualizerCatalog } from '../components/Visualizer/useVisualizerCatalog';
 import { useVisualizerStore } from '../stores/visualizerStore';
 import { useVisualizerAutoSelectStore } from '../stores/visualizerAutoSelectStore';
 
@@ -48,6 +48,7 @@ export function useActiveVisualizerId(): string {
 
 export function useAutoSelectedVisualizer(trackId: string | null | undefined): string | null {
   const autoSelect = useVisualizerStore((s) => s.autoSelect);
+  const catalog = useVisualizerCatalog();
 
   const [chosenId, setChosenId] = useState<string | null>(null);
   // Read inside the effect without making it a dependency — depending on the chosen id would
@@ -63,9 +64,15 @@ export function useAutoSelectedVisualizer(trackId: string | null | undefined): s
     // this effect's whole contract is that it fires once per track.
     const { recordChoice } = useVisualizerAutoSelectStore.getState();
 
-    const candidates = getVisualizers().map(({ metadata }) => ({
-      id: metadata.id,
-      affinity: metadata.affinity,
+    // Normalised rather than passed through: a manifest may omit `tags` or `ranges`, and the
+    // ranking endpoint's candidate wants both present. Declaring nothing scores neutral (ADR-0064),
+    // which is what an absent block should mean — not a request the server has to guess at.
+    const candidates = catalog.map((entry) => ({
+      id: entry.id,
+      affinity: {
+        tags: entry.affinity?.tags ?? [],
+        ranges: entry.affinity?.ranges ?? [],
+      },
     }));
     if (candidates.length === 0) return;
 
@@ -109,7 +116,11 @@ export function useAutoSelectedVisualizer(trackId: string | null | undefined): s
     return () => {
       ignore = true;
     };
-  }, [trackId, autoSelect]);
+  }, [trackId, autoSelect, catalog]);
+  // Depending on `catalog` is safe because `useVisualizerCatalog` returns React state, so its
+  // identity is stable between renders. A version of this that returned a fresh array each render
+  // re-requested the ranking forever — worth knowing, because a test mock that does so looks like
+  // a hook bug rather than a mock bug.
 
   return autoSelect ? chosenId : null;
 }
