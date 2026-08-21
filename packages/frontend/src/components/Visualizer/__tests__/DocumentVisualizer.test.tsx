@@ -1,17 +1,25 @@
 /**
- * ADR-0087 point 2: the event contract, and the two things about it that can fail silently.
+ * ADR-0087 point 2: the event contract, and the three things about it that can fail silently.
  *
  * The handshake, because without it the host talks to a document that has not attached a listener
- * and the first track of a session never arrives — which looks like a broken plugin. And the source
+ * and the first track of a session never arrives — which looks like a broken plugin. The source
  * check, because the plugin has an opaque origin, so identity is the only thing that can be
- * verified and a string comparison would be a check that never matches.
+ * verified and a string comparison would be a check that never matches. And the *subscription* to
+ * the analysis loop, which shipped missing: `getAudioData` is a getter over a buffer that only
+ * moves while something holds a subscription, every visualizer used to hold one by being a React
+ * component, and a document cannot. The buffer stayed empty, every plugin got silent audio, and
+ * nothing anywhere errored.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
 import { DocumentVisualizer, READY, EVENT_API_VERSION } from '../DocumentVisualizer';
 
 const audio = { bass: 0.5, mid: 0.4, treble: 0.3, averageFrequency: 120, frequencyData: new Uint8Array([1, 2, 3]) };
-vi.mock('../hooks', () => ({ getAudioData: () => audio }));
+const subscribe = vi.fn();
+vi.mock('../hooks', () => ({
+  getAudioData: () => audio,
+  useAudioAnalyser: (enabled: boolean) => subscribe(enabled),
+}));
 
 const track = { id: 't1', title: 'A Song', artist: 'An Artist', album: 'An Album' } as never;
 
@@ -119,5 +127,17 @@ describe('DocumentVisualizer', () => {
       // which is the cheapest possible check that this stayed a data contract.
       expect(() => JSON.parse(json)).not.toThrow();
     }
+  });
+});
+
+describe('the analysis subscription', () => {
+  it('subscribes to the analysis loop, rather than only reading its buffer', () => {
+    subscribe.mockClear();
+    mountWithSpy();
+
+    // The regression: `getAudioData()` was called every frame while nothing held a subscription,
+    // so the singleton rAF loop never started and the buffer it reads never filled. Reading is not
+    // subscribing, and the failure is silent — the plugins render, they just never move.
+    expect(subscribe).toHaveBeenCalledWith(true);
   });
 });

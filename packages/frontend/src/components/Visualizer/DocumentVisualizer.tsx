@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
-import { getAudioData } from './hooks';
+import { getAudioData, useAudioAnalyser } from './hooks';
 
 export interface DocumentVisualizerProps {
   /** URL of the plugin's `index.html`. */
@@ -139,6 +139,20 @@ export function DocumentVisualizer({
     send({ type: 'familiar:state', payload: { isPlaying, currentTime } });
   }, [ready, send, isPlaying, currentTime]);
 
+  // **Subscribe, don't just read.** `getAudioData()` is a getter over a buffer that only moves while
+  // the singleton analysis loop is running, and that loop is reference-counted by this hook: "the
+  // first subscriber starts the singleton rAF loop; the last unsubscriber stops it."
+  //
+  // Every visualizer used to be a React component that called this itself, so the loop always had a
+  // subscriber. A document does not — it is in an iframe and cannot call a hook — so when the
+  // registry went, the surface was left with a reader and no subscriber. The buffer never filled,
+  // every plugin received nothing, and `spectrum`, which draws only what it is sent, rendered a
+  // black rectangle. Nothing errored anywhere.
+  //
+  // The return value is ignored on purpose: the frames are read below at animation rate, not
+  // through React.
+  useAudioAnalyser(true);
+
   // Audio frames, on the host's animation loop.
   //
   // **Interpolated rather than raw.** Frames arrive from a native host at 10 Hz and `getAudioData`
@@ -177,7 +191,13 @@ export function DocumentVisualizer({
       title="Visualizer"
       // No `allow-same-origin`: see the note at the top of this file.
       sandbox="allow-scripts"
-      className={`w-full h-full border-0 block ${className}`}
+      // **`absolute inset-0`, not `h-full`.** A percentage height is indeterminate unless every
+      // ancestor has a definite one, and an iframe whose height cannot be resolved falls back to
+      // its intrinsic 150px rather than to zero — so the failure is a short strip of visualizer at
+      // the top of the window, which looks like a broken plugin rather than a broken layout.
+      // Anchoring to the edges removes the whole class: it depends on the positioned ancestor
+      // existing, not on an unbroken chain of heights.
+      className={`absolute inset-0 w-full h-full border-0 block ${className}`}
     />
   );
 }
