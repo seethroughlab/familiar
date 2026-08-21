@@ -44,9 +44,19 @@ interface RawManifest {
   icon?: unknown;
   affinity?: unknown;
   main?: unknown;
-  source?: unknown;
-  folder?: unknown;
   familiar?: { apiVersion?: unknown };
+}
+
+/** One row of a listing, in whichever shape its producer writes. */
+interface RawEntry {
+  /** Native only: the directory's name, and the only label a broken manifest has. */
+  folder?: unknown;
+  /** Native only: why the host could not read this folder's manifest. */
+  problem?: unknown;
+  /** Native only: the manifest, spliced through verbatim. */
+  manifest?: unknown;
+  /** Web: the manifest's own fields sit directly on the row. */
+  [key: string]: unknown;
 }
 
 /**
@@ -54,8 +64,18 @@ interface RawManifest {
  *
  * The native host serves `plugins/index.json` from `VisualizerSchemeHandler`, which enumerates real
  * directories. A browser has no directory to enumerate, so the web build generates
- * `visualizers/index.json` beside the folders. One consumer, two producers — the shapes agree
- * because both are the manifests plus where they were found.
+ * `visualizers/index.json` beside the folders.
+ *
+ * **The two shapes are not the same, and assuming they were emptied the picker.** This comment used
+ * to claim "the shapes agree because both are the manifests plus where they were found". They do
+ * not. The native row wraps the manifest — `{source, folder, manifest: {…}}`, or
+ * `{source, folder, problem: "…"}` when it could not be read — because the host splices the
+ * manifest's bytes through without parsing them. The web row *is* the manifest. Reading `id` off
+ * the row gave `undefined` for every native entry, so every visualizer was refused as malformed and
+ * the app showed "No visualizer available" for all of them.
+ *
+ * `normaliseEntry` is where the two meet, and `visualizerCatalog.test.ts` pins both against
+ * captured output from each producer.
  */
 const INDEX_URLS = ['plugins/index.json', '/visualizers/index.json'];
 
@@ -63,7 +83,30 @@ function resolve(path: string): string {
   return new URL(path, window.location.href).toString();
 }
 
-async function fetchIndex(): Promise<{ plugins: RawManifest[]; base: string } | null> {
+/**
+ * One row, whichever producer wrote it.
+ *
+ * A native row is recognised by carrying `manifest` or `problem` — a web row has neither, because
+ * those keys are not part of `familiar-plugin.json`.
+ */
+export function normaliseEntry(entry: RawEntry): {
+  manifest: RawManifest | null;
+  folder: string | null;
+  problem: string | null;
+} {
+  const folder = typeof entry.folder === 'string' ? entry.folder : null;
+
+  if (typeof entry.problem === 'string') {
+    return { manifest: null, folder, problem: entry.problem };
+  }
+  if (entry.manifest && typeof entry.manifest === 'object') {
+    return { manifest: entry.manifest as RawManifest, folder, problem: null };
+  }
+  // The web shape: the row is the manifest.
+  return { manifest: entry as RawManifest, folder, problem: null };
+}
+
+async function fetchIndex(): Promise<{ plugins: RawEntry[]; base: string } | null> {
   for (const candidate of INDEX_URLS) {
     try {
       // Not the API client: these are the app's own assets, and the client would rewrite the URL
@@ -73,7 +116,7 @@ async function fetchIndex(): Promise<{ plugins: RawManifest[]; base: string } | 
       if (!response.ok) continue;
       const body = (await response.json()) as { plugins?: unknown };
       if (!Array.isArray(body.plugins)) continue;
-      return { plugins: body.plugins as RawManifest[], base: candidate };
+      return { plugins: body.plugins as RawEntry[], base: candidate };
     } catch {
       // Try the next one. A browser with no drop-in directory is not an error.
     }
@@ -115,12 +158,24 @@ export async function loadVisualizerCatalog(): Promise<CatalogEntry[]> {
   const entries: CatalogEntry[] = [];
   const records: VisualizerPluginRecord[] = [];
 
-  for (const manifest of listing.plugins) {
-    const id = typeof manifest.id === 'string' ? manifest.id : null;
-    const name = typeof manifest.name === 'string' ? manifest.name : ((manifest.folder as string) ?? 'a plugin');
-    // The native index still carries a `source` per manifest; under ADR-0089 it is always `local`,
-    // because the app bundle is seed material and nothing is served from it.
+  for (const entry of listing.plugins) {
+    const { manifest, folder, problem } = normaliseEntry(entry);
+    // Under ADR-0089 there is one source, the user's folder — the app bundle is seed material and
+    // nothing is served from it.
     const source: VisualizerPluginSource = 'local';
+
+    // The native host already gave up on this folder. Its sentence names the directory, which is
+    // the only label a folder with an unreadable manifest has.
+    if (problem || !manifest) {
+      records.push({
+        id: null, name: folder ?? 'a plugin', source, status: 'refused',
+        refusal: 'malformed', detail: problem ?? 'the listing entry had no manifest',
+      });
+      continue;
+    }
+
+    const id = typeof manifest.id === 'string' ? manifest.id : null;
+    const name = typeof manifest.name === 'string' ? manifest.name : (folder ?? 'a plugin');
 
     const declared = manifest.familiar?.apiVersion;
     if (typeof declared === 'number' && declared !== VISUALIZER_API_VERSION) {
