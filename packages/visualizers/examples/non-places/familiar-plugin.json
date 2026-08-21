@@ -1,0 +1,15 @@
+{
+  "name": "Non-Places",
+  "id": "non-places",
+  "version": "2.0.0",
+  "type": "visualizer",
+  "description": "Silhouetted everyday objects drifting through fog, in parallax. One file, no build step.",
+  "author": { "name": "Familiar" },
+  "main": "index.html",
+  "familiar": { "apiVersion": 1 },
+  "icon": "Layers",
+  "affinity": {
+    "tags": ["ambient", "dreamy", "dark"],
+    "ranges": [{ "feature": "energy", "maximum": 0.6 }]
+  }
+}

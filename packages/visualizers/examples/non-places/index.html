@@ -1,0 +1,146 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Non-Places</title>
+<!--
+  A worked example of the Familiar visualizer contract (ADR-0087).
+
+  **Deliberately 2D, and deliberately without a build step.** Its predecessor drew the same idea
+  with three.js and GLB models, which under this contract would mean the folder carrying its own
+  copy of three.js — about a megabyte for silhouettes in fog. The original description was
+  "parallax layers of silhouetted mundane objects", and that is a canvas.
+
+  Kept as an example precisely because it is the case where the obvious tool is the wrong one. The
+  shipped `beat-tiles` shows what bundling a 3D library looks like when you actually need one.
+-->
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f14; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+<canvas id="c"></canvas>
+<script>
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  let bass = 0, mid = 0, level = 0;
+  let playing = false;
+  let hue = 205;
+  let t = 0;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(canvas.clientWidth * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ── The objects ────────────────────────────────────────────────────────────
+  // Mundane things, drawn as filled paths in a unit box so a layer can scale them freely.
+  const SHAPES = [
+    // chair
+    (p) => { p.rect(.28,.42,.06,.58); p.rect(.66,.42,.06,.58); p.rect(.24,.36,.52,.08);
+             p.rect(.66,.02,.06,.40); p.rect(.62,.0,.14,.06); },
+    // street lamp
+    (p) => { p.rect(.46,.18,.05,.82); p.moveTo(.46,.2); p.quadraticCurveTo(.46,.04,.68,.06);
+             p.lineTo(.70,.12); p.quadraticCurveTo(.52,.11,.51,.22); },
+    // potted plant
+    (p) => { p.moveTo(.34,.66); p.lineTo(.66,.66); p.lineTo(.60,1); p.lineTo(.40,1);
+             p.moveTo(.5,.66); p.quadraticCurveTo(.22,.44,.34,.20);
+             p.quadraticCurveTo(.50,.40,.5,.66);
+             p.moveTo(.5,.66); p.quadraticCurveTo(.78,.44,.66,.20);
+             p.quadraticCurveTo(.50,.40,.5,.66); },
+    // traffic cone
+    (p) => { p.moveTo(.5,.06); p.lineTo(.72,.88); p.lineTo(.28,.88); p.closePath();
+             p.rect(.18,.88,.64,.12); },
+    // bollard
+    (p) => { p.moveTo(.42,.16); p.quadraticCurveTo(.5,.06,.58,.16); p.lineTo(.60,1);
+             p.lineTo(.40,1); p.closePath(); },
+    // bench
+    (p) => { p.rect(.10,.46,.80,.09); p.rect(.10,.62,.80,.07);
+             p.rect(.16,.55,.05,.45); p.rect(.79,.55,.05,.45); },
+  ];
+
+  // Three layers, far to near. Each has its own speed, size and fog density — which is all parallax
+  // is: the far things move slower and are closer to the fog colour.
+  const LAYERS = [
+    { depth: 0.18, count: 9, scale: 0.10, speed: 0.055, y: 0.62 },
+    { depth: 0.45, count: 6, scale: 0.20, speed: 0.14,  y: 0.76 },
+    { depth: 1.00, count: 4, scale: 0.38, speed: 0.32,  y: 0.98 },
+  ].map((layer, li) => ({
+    ...layer,
+    items: Array.from({ length: layer.count }, (_, i) => ({
+      shape: SHAPES[(i * 2 + li * 3) % SHAPES.length],
+      x: (i + 0.5) / layer.count,
+      jitter: ((i * 37 + li * 11) % 100) / 100,
+    })),
+  }));
+
+  window.addEventListener('message', (event) => {
+    const message = event.data;
+    if (!message || typeof message !== 'object') return;
+
+    if (message.type === 'familiar:track') {
+      hue = message.payload.id ? 190 + (hashOf(message.payload.id) % 70) : 205;
+    }
+    if (message.type === 'familiar:state') playing = message.payload.isPlaying;
+    if (message.type === 'familiar:audio') {
+      const p = message.payload;
+      bass = p.bass; mid = p.mid;
+      level = p.averageFrequency / 255;
+    }
+  });
+
+  function draw() {
+    const w = canvas.width, h = canvas.height;
+    // Only advance while playing, so a paused track settles rather than drifting forever.
+    if (playing) t += 0.0016 + bass * 0.004;
+
+    const sky = ctx.createLinearGradient(0, 0, 0, h);
+    sky.addColorStop(0, `hsl(${hue} 30% ${6 + level * 6}%)`);
+    sky.addColorStop(1, `hsl(${hue + 15} 26% ${14 + level * 10}%)`);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, w, h);
+
+    for (const layer of LAYERS) {
+      // Nearer layers are darker and sharper; far ones sink into the fog.
+      const lightness = 4 + (1 - layer.depth) * 26;
+      ctx.fillStyle = `hsl(${hue + 10} 24% ${lightness}%)`;
+
+      const size = h * layer.scale * (1 + bass * 0.06 * layer.depth);
+      for (const item of layer.items) {
+        // Wrap in [-1, 1) so a shape leaving the left edge reappears on the right.
+        let x = ((item.x - t * layer.speed) % 1 + 1) % 1;
+        const px = x * (w + size * 2) - size;
+        const bob = Math.sin(t * 6 + item.jitter * 9) * size * 0.02 * (0.4 + mid);
+        const py = layer.y * h - size + bob;
+
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(size, size);
+        const path = new Path2D();
+        item.shape(path);
+        ctx.fill(path);
+        ctx.restore();
+      }
+
+      // A fog band over each layer, which is what makes the depth read.
+      const fog = ctx.createLinearGradient(0, layer.y * h - h * 0.22, 0, layer.y * h + h * 0.06);
+      fog.addColorStop(0, `hsl(${hue + 15} 26% ${14 + level * 10}% / 0)`);
+      fog.addColorStop(1, `hsl(${hue + 15} 26% ${14 + level * 10}% / ${0.75 - layer.depth * 0.45})`);
+      ctx.fillStyle = fog;
+      ctx.fillRect(0, layer.y * h - h * 0.22, w, h * 0.28);
+    }
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  function hashOf(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+
+  // Last, once the listener is attached.
+  parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
+</script>
