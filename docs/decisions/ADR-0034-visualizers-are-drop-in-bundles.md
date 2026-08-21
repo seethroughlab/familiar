@@ -1,7 +1,8 @@
 # ADR-0034: Visualizers Are Drop-In Bundles
 
 Status: accepted — points 1 and 3 superseded by
-[ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md)
+[ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md), point 4's two-source model by
+[ADR-0089](ADR-0089-the-app-bundle-seeds-the-folder-and-is-not-a-source.md)
 
 Date: 2026-08-06
 
@@ -163,7 +164,11 @@ permissible at all.
    sample that uses three.js already externalises all four in its rollup config. The other two
    externalise only React, which is not a counter-example: a plugin externalises what it imports.
 
-4. **Two sources, and only two: shipped and local.** Shipped bundles live in the app bundle's
+4. **Two sources, and only two: shipped and local.**
+   *(Superseded by [ADR-0089](ADR-0089-the-app-bundle-seeds-the-folder-and-is-not-a-source.md):
+   there is one source, the folder, and the app bundle seeds it. The per-platform directory this
+   point specifies is unaffected and still governs.)*
+ Shipped bundles live in the app bundle's
    resources and are what a fresh install has. Local bundles live in a `Visualizers/` directory the
    user can open, which a button in Settings reveals in Finder or the Files app. There is no third
    source in this ADR.

@@ -50,6 +50,12 @@ otherwise careful about.
    rather than the user's directory — which is `ADR-0034` point 4's existing distinction and needs
    nothing new.
 
+   > **Superseded by [ADR-0089](ADR-0089-the-app-bundle-seeds-the-folder-and-is-not-a-source.md).**
+   > "Needs nothing new" did not hold: keeping the app bundle as a *runtime source* broke the Xcode
+   > build, stranded the user's drop-ins when the app was sandboxed, and left the picker showing
+   > visualizers that are not in the folder the Settings panel names. The bundle now seeds the folder
+   > and is read by nothing else, so points 1, 2 and 4 stand and this one is how they ship.
+
 4. **Per-plugin builds are expected to tree-shake better than the shared bundle did**, since each
    visualizer imports the part of THREE it actually uses rather than sharing one build sized for all
    of them. This is a reason the cost may be smaller than three times the current figure, not a
