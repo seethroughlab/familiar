@@ -31,7 +31,7 @@ export interface CatalogEntry {
   description?: string;
   icon?: string;
   affinity?: VisualizerAffinity;
-  /** `shipped` (in the app bundle) or `local` (the user's drop-in folder) — ADR-0034 point 4. */
+  /** Always `local` — ADR-0089 point 1 leaves one source, the user's folder. */
   source: VisualizerPluginSource;
   /** Absolute URL of the plugin's document. What the iframe is pointed at. */
   url: string;
@@ -93,8 +93,7 @@ function documentURL(manifest: RawManifest, base: string): string | null {
   if (!id) return null;
 
   if (base.startsWith('plugins/')) {
-    const source = typeof manifest.source === 'string' ? manifest.source : 'local';
-    return resolve(`plugins/${source}/${id}/${main}`);
+    return resolve(`plugins/local/${id}/${main}`);
   }
   return resolve(`/visualizers/${id}/${main}`);
 }
@@ -119,7 +118,9 @@ export async function loadVisualizerCatalog(): Promise<CatalogEntry[]> {
   for (const manifest of listing.plugins) {
     const id = typeof manifest.id === 'string' ? manifest.id : null;
     const name = typeof manifest.name === 'string' ? manifest.name : ((manifest.folder as string) ?? 'a plugin');
-    const source: VisualizerPluginSource = manifest.source === 'shipped' ? 'shipped' : 'local';
+    // The native index still carries a `source` per manifest; under ADR-0089 it is always `local`,
+    // because the app bundle is seed material and nothing is served from it.
+    const source: VisualizerPluginSource = 'local';
 
     const declared = manifest.familiar?.apiVersion;
     if (typeof declared === 'number' && declared !== VISUALIZER_API_VERSION) {
