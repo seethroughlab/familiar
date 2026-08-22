@@ -1,3 +1,17 @@
+# CI.
+#
+# **The runner is a repository variable, not a literal**, so the tenancy can be changed without
+# editing this file. `CI_RUNNER` and `CI_LINUX_RUNNER` are unset in normal operation and every job
+# lands on the self-hosted runner, which is the NAS: it has the 23K-track library, the Docker
+# daemon and the caches, and it is free.
+#
+# Set them to `ubuntu-latest` / `["ubuntu-latest"]` when the NAS is unavailable. It went offline for
+# hours with four PRs queued behind it and nothing could be merged, because a self-hosted runner
+# that is down does not fail a check — it never starts one, so a PR sits at "pending" forever with
+# no signal at all. This repository is public, so GitHub-hosted minutes cost nothing.
+#
+# `macOS Compose Integration` is deliberately left pinned. GitHub's macOS runners have no Docker
+# daemon, so it cannot run there at all.
 name: CI
 
 on:
@@ -29,7 +43,7 @@ concurrency:
 jobs:
   macos-compose-check:
     name: macOS Compose Check
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -193,7 +207,7 @@ jobs:
 
   migration-lint:
     name: Migration Lint
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -216,7 +230,7 @@ jobs:
 
   backend-lint:
     name: Backend Lint
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -266,7 +280,7 @@ jobs:
 
   backend-test-contract:
     name: Backend Test (Contract)
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -351,7 +365,7 @@ jobs:
 
   backend-test-core:
     name: Backend Test (Core)
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -435,7 +449,7 @@ jobs:
 
   backend-test-integration:
     name: Backend Test (Integration)
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 15
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -530,7 +544,7 @@ jobs:
 
   frontend-lint:
     name: Frontend Lint
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
     timeout-minutes: 10
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -564,7 +578,7 @@ jobs:
 
   frontend-test:
     name: Frontend Test
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -592,7 +606,7 @@ jobs:
 
   frontend-build:
     name: Frontend Build
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -646,7 +660,7 @@ jobs:
     # track went from ~1.5s to ~40s and playback stalled outright. On a merge this would
     # re-validate content the PR run already built, so the cost buys nothing.
     if: github.event_name != 'push'
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 60
     # Advisory only: the self-hosted NAS runner's upstream connection is
     # unreliable enough that multi-stage builds (apt + pnpm + uv + torch
@@ -738,7 +752,7 @@ jobs:
     # builds its own frontend and backend, so there is no reason for a flaky NAS network to decide
     # whether the browser tests run.
     if: ${{ github.event_name != 'push' && !cancelled() }}
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 30
     needs: [docker-build]
     # **Deliberately not `continue-on-error`.** It was, and the reason was sound: the job inherited
