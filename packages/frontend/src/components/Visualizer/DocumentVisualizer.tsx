@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
 import { getAudioData, useAudioAnalyser } from './hooks';
+import { recordHostFrame, recordPostedFrame, recordPluginFps } from './visualizerMetrics';
 
 export interface DocumentVisualizerProps {
   /** URL of the plugin's `index.html`. */
@@ -75,8 +76,17 @@ export interface AudioPayload {
   onset: boolean;
 }
 
-/** The one message a plugin sends back. */
+/** The message a plugin must send back. */
 export const READY = 'familiar:ready';
+
+/**
+ * The message a plugin *may* send back: its own frame rate, for the debug panel.
+ *
+ * Optional in the strongest sense — a plugin that never sends it is not degraded in any way, and
+ * the panel shows a dash. It exists because the host has no way to measure what it most wants to
+ * know: a sandboxed document with an opaque origin cannot be reached into and counted.
+ */
+export const STATS = 'familiar:stats';
 
 /** Version of the *event* contract, not of any library (ADR-0087 point 9). */
 export const EVENT_API_VERSION = 1;
@@ -131,8 +141,13 @@ export function DocumentVisualizer({
     function onMessage(event: MessageEvent) {
       // Only this iframe. An opaque origin cannot be checked by string, so identity is the check.
       if (event.source !== frameRef.current?.contentWindow) return;
-      const data = event.data as { type?: unknown } | null;
-      if (data && typeof data === 'object' && data.type === READY) setReady(true);
+      const data = event.data as { type?: unknown; payload?: { fps?: unknown } } | null;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === READY) setReady(true);
+      // Optional, and the only thing a plugin tells the host besides that it is listening. The
+      // host cannot measure a plugin's frame rate — opaque origin — and that is the one number
+      // that matches what a person actually sees.
+      if (data.type === STATS && typeof data.payload?.fps === 'number') recordPluginFps(data.payload.fps);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -174,8 +189,13 @@ export function DocumentVisualizer({
     if (!ready) return;
     let raf = 0;
     const tick = () => {
+      recordHostFrame();
       const data = getAudioData();
       if (data) {
+        recordPostedFrame({
+          bass: data.bass, beat: data.beat, onset: data.onset,
+          averageFrequency: data.averageFrequency,
+        });
         send({
           type: 'familiar:audio',
           payload: {

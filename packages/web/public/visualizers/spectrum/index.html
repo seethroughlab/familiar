@@ -101,6 +101,23 @@
     ));
   }
 
+  // Optional: tell the host our frame rate, for its debug panel. The host cannot measure this
+  // itself -- a sandboxed document has an opaque origin, so nothing outside can count its frames --
+  // and it is the only rate that matches what a person sees.
+  (function reportFrameRate() {
+    let frames = 0, since = performance.now();
+    (function tick() {
+      frames++;
+      const now = performance.now();
+      if (now - since >= 1000) {
+        parent.postMessage({ type: 'familiar:stats', apiVersion: 1,
+                             payload: { fps: Math.round(frames * 1000 / (now - since)) } }, '*');
+        frames = 0; since = now;
+      }
+      requestAnimationFrame(tick);
+    })();
+  })();
+
   // Last, so the host never posts into a document that is not listening yet.
   parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
 </script>

@@ -103,7 +103,38 @@ export function usePlaybackState() {
 }
 
 /** Tell the host this document is listening. Must be last, after the listener is attached. */
+/**
+ * Report this document's frame rate to the host, once a second (ADR-0087, optional).
+ *
+ * **Optional in the strongest sense**: a plugin that omits it loses nothing, and the host's debug
+ * panel simply shows a dash. It exists because the host *cannot* measure this — a sandboxed
+ * document has an opaque origin, so nothing outside can count its frames — and it is the one rate
+ * that matches what a person actually sees. The pipeline can be running at 60 while the scene
+ * crawls.
+ *
+ * Started by `announceReady`, so a plugin using this shim gets it without doing anything.
+ */
+function reportFrameRate(): void {
+  let frames = 0;
+  let since = performance.now();
+  const tick = () => {
+    frames++;
+    const now = performance.now();
+    if (now - since >= 1000) {
+      parent.postMessage(
+        { type: 'familiar:stats', apiVersion: 1, payload: { fps: Math.round((frames * 1000) / (now - since)) } },
+        '*'
+      );
+      frames = 0;
+      since = now;
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 export function announceReady(): void {
+  reportFrameRate();
   parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
 }
 

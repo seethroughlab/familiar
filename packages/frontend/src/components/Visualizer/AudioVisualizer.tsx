@@ -9,6 +9,8 @@ import { RefreshCw } from 'lucide-react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
 import { DocumentVisualizer } from './DocumentVisualizer';
+import { VisualizerDebugPanel } from './VisualizerDebugPanel';
+import { debugPanelEnabled } from './visualizerMetrics';
 import { useVisualizerCatalog } from './useVisualizerCatalog';
 import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
@@ -118,6 +120,7 @@ export function AudioVisualizer({
 
   return (
     <div className={`w-full h-full ${className}`}>
+      {debugPanelEnabled() && <VisualizerDebugPanel />}
       <ErrorBoundary
         // **Keyed by the visualizer**, so switching away from a crashed one gets a fresh boundary.
         // Without it the boundary stays latched and every subsequent choice renders the fallback,
