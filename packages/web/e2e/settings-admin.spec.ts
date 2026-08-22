@@ -43,48 +43,12 @@ test.describe('Settings', () => {
     await expect(page.getByText('Use community cache', { exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Contribute to cache', { exact: true })).toBeVisible({ timeout: 5000 });
   });
-
-  test('library grid/list view toggle', async ({ page }) => {
-    await navigateToTab(page, 'Library');
-
-    // Look for view toggle buttons
-    const gridBtn = page.locator('button[aria-label*="grid" i], [data-testid="grid-view"]');
-    const listBtn = page.locator('button[aria-label*="list" i], [data-testid="list-view"]');
-
-    if (await gridBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await gridBtn.click();
-    }
-
-    if (await listBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await listBtn.click();
-    }
-  });
 });
 
 test.describe('UI Elements', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await ensureProfile(page);
-  });
-
-  test('album artwork displays', async ({ page }) => {
-    await navigateToTab(page, 'Library');
-
-    const trackRow = page.locator('[data-testid="track-row"], .track-row, tr').first();
-    if (!(await trackRow.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip(true, 'No tracks in library');
-      return;
-    }
-
-    // Click to play a track
-    await trackRow.click();
-    await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
-
-    // Look for album art in player bar or now playing
-    const albumArt = page.locator('[data-testid="album-art"], .album-art, img[alt*="album" i], img[alt*="cover" i]');
-    if (await albumArt.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await expect(albumArt).toBeVisible();
-    }
   });
 
   test('no console errors on page load', async ({ page }) => {
@@ -110,10 +74,10 @@ test.describe('UI Elements', () => {
   });
 
   test('main sidebar navigation works', async ({ page }) => {
-    // The sidebar lists destinations now, not browsers (ADR-0058 point 2). Tracks and Cleanup are
-    // still reachable — from the Tools and Library pages — which the navigation helpers cover;
-    // what this asserts is that each destination is mounted and renders its own heading, the
-    // failure `navigationIntegrity.test.ts` guards statically.
+    // The sidebar lists destinations now, not browsers (ADR-0058 point 2). Of the browsers only
+    // Cleanup is still reachable — the track list left with the player (ADR-0057 point 5) — which
+    // the navigation helpers cover; what this asserts is that each destination is mounted and
+    // renders its own heading, the failure `navigationIntegrity.test.ts` guards statically.
     const destinations = [
       { link: 'Tools', heading: 'Tools' },
       { link: 'Server', heading: 'Server' },

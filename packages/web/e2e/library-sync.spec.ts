@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToDestination, navigateToView, waitForSyncComplete } from './helpers';
+import { ensureProfile, navigateToDestination, waitForSyncComplete } from './helpers';
 
 /**
  * Library sync E2E tests
@@ -69,11 +69,14 @@ test.describe('Library Sync', () => {
   });
 
   test('Library shows content after sync', async ({ page }) => {
-    // Tracks, because it is the only library view the web app still mounts — the Mac and iPhone
-    // took over browsing (docs/WEB-PARITY.md). This used to prefer Artists as the steadier of the
-    // two; the assertion below is deliberately tolerant, so the virtualizer's timing does not
-    // decide whether a *sync* test passes.
-    await navigateToView(page, 'Tracks');
+    // The Library destination, because the web app no longer mounts a library *browser* at all —
+    // the track list left with the player (ADR-0057 point 5), and the Mac and iPhone took over
+    // browsing (docs/WEB-PARITY.md). What Library reports is the size of the library, which is
+    // what a sync is supposed to change and all this test ever actually asserted.
+    //
+    // The assertion below stays deliberately tolerant: it accepts a populated library or an
+    // explicitly empty one, so a *sync* test does not fail over how content is counted.
+    await navigateToDestination(page, 'Library');
     await page.locator('text=/\\d+\\s*track/i').first().waitFor({ timeout: 10000 }).catch(() => {});
 
     // Verify the view rendered something rather than an error or a blank column
