@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToTab, waitForAudioReady } from './helpers';
+import { ensureProfile, navigateToTab } from './helpers';
 
 test.describe('Playlists', () => {
   test.beforeEach(async ({ page }) => {
@@ -127,82 +127,6 @@ test.describe('Playlists', () => {
     // Verify playlist count decreased
     const newCount = await playlistItems.count();
     expect(newCount).toBeLessThan(count);
-  });
-
-  test('add tracks to playlist', async ({ page }) => {
-    // Go to Library first to select a track
-    await navigateToTab(page, 'Library');
-
-    const trackRow = page.locator('[data-testid="track-row"], .track-row, tr').first();
-    if (!(await trackRow.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip(true, 'No tracks in library');
-      return;
-    }
-
-    // Right-click track for context menu
-    await trackRow.click({ button: 'right' });
-    await page.locator('[role="menu"], [role="menuitem"]').first().waitFor({ timeout: 2000 }).catch(() => {});
-
-    // Look for "Add to Playlist" option
-    const addToPlaylist = page.locator('text=Add to Playlist, text=Add to playlist');
-    if (!(await addToPlaylist.isVisible({ timeout: 1000 }).catch(() => false))) {
-      test.skip(true, 'Add to playlist option not found');
-      return;
-    }
-
-    await addToPlaylist.hover();
-
-    // Select a playlist from submenu or create new
-    const playlistOption = page.locator('.context-menu li, [role="menuitem"]').first();
-    await playlistOption.waitFor({ timeout: 2000 }).catch(() => {});
-    if (await playlistOption.isVisible()) {
-      await playlistOption.click();
-
-      // Verify success notification or playlist update
-      const _successNotif = page.locator('text=Added, text=added');
-      // Just verify no error - success indicator varies by implementation
-    }
-  });
-
-  test('queue displays correctly', async ({ page }) => {
-    // Navigate to Library
-    await navigateToTab(page, 'Library');
-
-    // Wait for track rows to be visible
-    const firstTrack = page.locator('[data-testid="track-row"]').first();
-    if (!(await firstTrack.isVisible({ timeout: 10000 }).catch(() => false))) {
-      test.skip(true, 'No visible tracks in library');
-      return;
-    }
-
-    const trackRows = page.locator('[data-testid="track-row"]');
-    const count = await trackRows.count();
-
-    if (count < 2) {
-      test.skip(true, 'Need at least 2 tracks for queue test');
-      return;
-    }
-
-    // Play a track
-    await trackRows.first().click();
-    await waitForAudioReady(page).catch(() => {});
-
-    // Look for queue button/panel
-    const queueBtn = page.locator('[data-testid="queue"], button[aria-label*="queue" i], button:has-text("Queue")').first();
-
-    if (await queueBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await queueBtn.click();
-
-      // Queue panel should show upcoming tracks
-      const queuePanel = page.locator('[data-testid="queue-panel"], .queue-panel, [role="dialog"]');
-      await queuePanel.waitFor({ timeout: 3000 });
-      await expect(queuePanel).toBeVisible({ timeout: 3000 });
-
-      // Should have at least one queued track
-      const queueItems = queuePanel.locator('[data-testid="queue-item"], .queue-item, li');
-      const queueCount = await queueItems.count();
-      expect(queueCount).toBeGreaterThan(0);
-    }
   });
 
   test('drag to reorder tracks in playlist', async ({ page }) => {

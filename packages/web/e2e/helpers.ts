@@ -83,15 +83,17 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
 /**
  * Where each view lives now that the sidebar lists destinations rather than browsers.
  *
- * Only two of these are still mounted. The rest were unmounted by ADR-0050 and ADR-0057 —
+ * Only `Cleanup` is still mounted. The rest were unmounted by ADR-0050 and ADR-0057 —
  * `navigateToView(page, 'Artists')` and its siblings have been walking the fallback path for some
  * time, which is why they are mapped to `null`: a spec asking for one should fail saying so,
  * rather than clicking nothing and asserting against whatever page it happened to stay on.
  */
 const VIEW_PATHS: Record<string, { destination: string; link: string } | null> = {
-  // ADR-0058 point 3 moved the track list off the sidebar and onto the Tools page — the player is
-  // scheduled for deletion and does not get a top-level destination.
-  Tracks: { destination: 'Tools', link: 'Track list' },
+  // ADR-0058 point 3 had moved the track list onto the Tools page while the player was still
+  // scheduled for deletion. It has now been deleted, and ADR-0057 point 5 took the "Track list"
+  // link with it — a capability and its affordances leave together. There is no tracks browser
+  // left to reach: `BROWSER_ROUTES` is down to `artist-cleanup` alone.
+  Tracks: null,
   Cleanup: { destination: 'Library', link: 'Artist cleanup' },
   Artists: null,
   Albums: null,
@@ -196,90 +198,47 @@ export async function navigateToView(page: Page, label: string) {
 
 
 /**
- * Navigate to a specific section in the sidebar-based UI
+ * Navigate to a specific section in the sidebar-based UI.
+ *
+ * `Queue` is gone from the union: the queue left with the player (ADR-0057 point 5), and its case
+ * here was already a no-op, so a spec asking for it would have silently asserted against whatever
+ * page it happened to be on. Removing it from the type makes that a compile error instead.
  */
-export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Settings') {
+export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Settings') {
   switch (tabName) {
     case 'Library': {
-      await navigateToView(page, 'Tracks');
+      // Was `navigateToView(page, 'Tracks')`, which reached the track list on the Tools page.
+      // Both are gone; Library is a destination in its own right and is where the app opens
+      // (ADR-0058 points 1 and 2).
+      await navigateToDestination(page, 'Library');
       break;
     }
     case 'Settings': {
-      // Settings is a page now, not a modal, but the same custom event still reaches it — the
-      // handler navigates instead of toggling a flag. Kept as an event because a direct button
-      // click is unreliable in CI behind the player bar overlay.
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event('navigate-to-settings'));
-      });
-      // Wait for the lazy-loaded Settings page to render
+      // Was a `navigate-to-settings` window event. Deleting the player deleted `useAppBootstrap`,
+      // and the listener with it, so the event reached nothing — the test failed here rather than
+      // on an assertion, which is how the dead affordance in `StatusMenu` was found.
+      //
+      // Clicking the sidebar's own Settings control is what a person does, and it fails loudly if
+      // that control ever goes the same way. The old comment justified the event by saying a click
+      // was "unreliable in CI behind the player bar overlay" — there is no player bar now.
+      //
+      // Not `clickNav`: Settings is deliberately not a destination, so it sits in the sidebar
+      // *footer*, outside the `<nav>` that `clickNav`'s button selector is scoped to. Desktop
+      // renders it as a `<button>` (labelled by its text expanded, by `title` collapsed); the
+      // mobile bar renders a `<Link>`. Try both, same as `clickNav` does for destinations.
+      const settingsButton = page.getByRole('button', { name: 'Settings' }).first();
+      if (await settingsButton.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await settingsButton.click();
+      } else {
+        await page.getByRole('link', { name: 'Settings' }).first().click({ timeout: 5000 });
+      }
       await page.waitForSelector('h2:has-text("Settings")', { timeout: 10000 });
       break;
     }
     case 'Playlists':
-    case 'Queue':
-      // These are visible in the sidebar by default, no navigation needed
+      // Visible in the sidebar by default, no navigation needed
       break;
   }
-}
-
-/**
- * Get the audio element from the page
- */
-export async function getAudioElement(page: Page) {
-  return page.locator('audio').first();
-}
-
-/**
- * Check if audio is currently playing
- */
-export async function isAudioPlaying(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? !audio.paused : false;
-  });
-}
-
-/**
- * Get current audio time
- */
-export async function getAudioCurrentTime(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? audio.currentTime : 0;
-  });
-}
-
-/**
- * Get audio duration
- */
-export async function getAudioDuration(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? audio.duration : 0;
-  });
-}
-
-/**
- * Get audio volume
- */
-export async function getAudioVolume(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? audio.volume : 0;
-  });
-}
-
-/**
- * Wait for audio to be ready
- */
-export async function waitForAudioReady(page: Page, timeout = 10000) {
-  await page.waitForFunction(
-    () => {
-      const audio = document.querySelector('audio');
-      return audio && audio.readyState >= 2; // HAVE_CURRENT_DATA
-    },
-    { timeout }
-  );
 }
 
 /**
@@ -374,72 +333,6 @@ export async function waitForAnalysisComplete(page: Page, timeout = 180000) {
 // ============================================================================
 
 /**
- * Get the state of all <audio> elements in the page
- */
-export async function getAllAudioStates(page: Page) {
-  return page.evaluate(() => {
-    const elements = Array.from(document.querySelectorAll('audio'));
-    return elements.map((el, i) => ({
-      index: i,
-      src: el.src,
-      paused: el.paused,
-      currentTime: el.currentTime,
-      duration: el.duration,
-      volume: el.volume,
-      readyState: el.readyState,
-    }));
-  });
-}
-
-/**
- * Check if at least one audio element is not paused
- */
-export async function isAnyAudioPlaying(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const elements = Array.from(document.querySelectorAll('audio'));
-    return elements.some(el => !el.paused);
-  });
-}
-
-/**
- * Seek the currently playing audio element to a specific time
- */
-export async function seekAudio(page: Page, time: number) {
-  await page.evaluate((t) => {
-    const elements = Array.from(document.querySelectorAll('audio'));
-    const playing = elements.find(el => !el.paused);
-    if (playing) {
-      playing.currentTime = t;
-    }
-  }, time);
-}
-
-/**
- * Wait for the displayed track title to change from the current one
- */
-export async function waitForTrackChange(page: Page, currentTitle: string, timeout = 15000) {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    const title = await page.evaluate(() => {
-      // Look for track title in the player bar or full player
-      const el = document.querySelector('[data-testid="track-title"]') ||
-                 document.querySelector('.track-title');
-      return el?.textContent || '';
-    });
-    if (title && title !== currentTitle) {
-      return title;
-    }
-    await page.waitForTimeout(100);
-  }
-  throw new Error(`Track title didn't change from "${currentTitle}" within ${timeout}ms`);
-}
-
-/**
- * Detect if there's a gap in audio playback (all elements paused)
- * during a given monitoring window.
- * Returns true if a gap was detected.
- */
-/**
  * Wait for visual content (images/canvas) to be ready for screenshots.
  */
 export async function waitForContentReady(page: Page, opts?: {
@@ -455,24 +348,4 @@ export async function waitForContentReady(page: Page, opts?: {
   if (opts?.canvas) {
     await page.waitForSelector('canvas', { timeout }).catch(() => {});
   }
-}
-
-export async function detectAudioGap(page: Page, durationMs: number): Promise<boolean> {
-  return page.evaluate(async (ms) => {
-    const pollInterval = 50;
-    const end = Date.now() + ms;
-    let gapDetected = false;
-
-    while (Date.now() < end) {
-      const elements = Array.from(document.querySelectorAll('audio'));
-      const anyPlaying = elements.some(el => !el.paused && el.currentTime > 0);
-      if (!anyPlaying && elements.length > 0) {
-        gapDetected = true;
-        break;
-      }
-      await new Promise(r => setTimeout(r, pollInterval));
-    }
-
-    return gapDetected;
-  }, durationMs);
 }
