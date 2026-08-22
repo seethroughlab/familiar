@@ -4,6 +4,7 @@ Tests resilience to Redis/DB transient failures, broken pools,
 and malformed progress data.
 """
 
+import asyncio
 import json
 import time
 from unittest.mock import MagicMock
@@ -37,8 +38,7 @@ class TestRedisLockFailures:
 
         # is_sync_running catches exception and returns False,
         # but _acquire_sync_lock also catches and returns False
-        import asyncio
-        result = asyncio.get_event_loop().run_until_complete(manager.run_sync())
+        result = asyncio.run(manager.run_sync())
         assert result["status"] == "already_running"
 
     def test_release_lock_redis_down(self):
@@ -62,10 +62,7 @@ class TestBrokenPoolEdgeCases:
         manager._executor_disabled_at = time.monotonic()
 
         with pytest.raises(RuntimeError, match="disabled"):
-            import asyncio
-            asyncio.get_event_loop().run_until_complete(
-                manager.run_cpu_bound(lambda x: x, 1)
-            )
+            asyncio.run(manager.run_cpu_bound(lambda x: x, 1))
 
     def test_broken_pool_reset_rate_limited(self):
         """Rapid consecutive resets should be rate-limited."""
