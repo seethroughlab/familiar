@@ -1,6 +1,6 @@
 # ADR-0090: Discover Is Told What Is Playing
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-22
 
