@@ -132,7 +132,7 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
 // ---- Main component ----------------------------------------------------------
 
 export function StatusMenu() {
-  const { navigateToLibrary } = useAppNavigation();
+  const { navigateToLibrary, navigateToSettings } = useAppNavigation();
 
   // Health
   const { status: healthStatus, warnings, startPolling: startHealth, stopPolling: stopHealth } = useHealthStore();
@@ -257,7 +257,7 @@ export function StatusMenu() {
             </p>
           )}
           <button
-            onClick={() => { setOpen(false); window.dispatchEvent(new CustomEvent('navigate-to-settings')); }}
+            onClick={() => { setOpen(false); navigateToSettings(); }}
             className="text-sm text-blue-400 hover:text-blue-300"
           >
             View System Status
