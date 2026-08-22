@@ -610,6 +610,15 @@ NON_SPA_PREFIXES = (
     "openapi.json",
     "health",
     "mcp",
+    # Visualizer documents (ADR-0087). Normally the `/visualizers` mount answers these and nothing
+    # here is reached — this is the backstop for the build that has no such folder, where the SPA
+    # would otherwise return `index.html` with **HTTP 200** for a plugin document. An iframe then
+    # loads the entire web app, never sends `familiar:ready`, and the failure looks like a broken
+    # handshake rather than a missing file. A missing visualizer should look missing.
+    #
+    # This is also the half of the fix a test can hold onto: the mount only exists when `static/`
+    # does, which is never the case under pytest, so `spa_fallback` is the only reachable seam.
+    "visualizers/",
     # An MCP host probes these before connecting, to find out whether the server has an
     # authorisation server. **A 404 is the answer that means "no, connect anonymously."** Served by
     # the SPA they returned `200 text/html`, which reads as "yes, here it is" — so Claude Desktop
@@ -694,6 +703,24 @@ if STATIC_DIR.exists():
     # Serve static assets
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
     app.mount("/icons", StaticFiles(directory=STATIC_DIR / "icons"), name="icons")
+
+    # Every visualizer is a folder of files under here (ADR-0087), so this must be a mount and not a
+    # route: `index.html` sits beside a manifest and whatever assets the document brings with it.
+    #
+    # Unmounted, `/visualizers/spectrum/index.html` fell through to the SPA catch-all and came back
+    # as **`index.html` with HTTP 200** — the whole web app, in the iframe, in place of the plugin
+    # document. It never sends `familiar:ready`, so the handshake simply never happened and the
+    # contract spec timed out against a page that had loaded perfectly well. This is the failure
+    # `serve_visualizer` below already describes for `/visualizer`; the folders that ADR-0087 added
+    # needed the same protection and did not get it.
+    #
+    # `check_dir=False` so a server whose build predates these folders still answers **404** here
+    # rather than handing back the SPA. A missing visualizer should look missing.
+    app.mount(
+        "/visualizers",
+        StaticFiles(directory=STATIC_DIR / "visualizers", check_dir=False),
+        name="visualizers",
+    )
 
     # The PWA is retired (ADR-0059) — no manifest, no `registerSW.js`, no `workbox-*` chunks.
     #
