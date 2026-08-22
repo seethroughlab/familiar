@@ -129,9 +129,20 @@ Sent on the host's animation loop while something is playing.
     treble: number,           // 0..1
     averageFrequency: number, // 0..255
     frequencyData: number[],  // 0..255 per bin
+    beat: number,             // 0..1 — spikes on an onset, then decays
+    onset: boolean,           // true only on the frame a transient is detected
   }
 }
 ```
+
+**`beat` and `onset` are what you want for anything rhythmic.** `bass` follows the low end
+continuously, which is not the same thing: a track with a sustained bass note holds `bass` high and
+produces no beats at all. `beat` is an envelope that spikes and falls, so it reads as pulse; `onset`
+is a single-frame flag, which is what you spawn a ripple or flip a tile on.
+
+These two were missing from the first version of this contract while the host computed them all
+along — so a visualizer keying off them rendered perfectly and never moved. If you are debugging a
+plugin that looks frozen, log the payload before assuming your own maths is wrong.
 
 **Already smoothed.** Frames reach the host from a native player at about 10 Hz — macOS clamps the
 audio tap — and the host reconstructs a 60 Hz signal before sending. You do not need to interpolate

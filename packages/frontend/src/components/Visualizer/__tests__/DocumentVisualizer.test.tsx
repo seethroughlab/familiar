@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, cleanup, act } from '@testing-library/react';
 import { DocumentVisualizer, READY, EVENT_API_VERSION } from '../DocumentVisualizer';
 
-const audio = { bass: 0.5, mid: 0.4, treble: 0.3, averageFrequency: 120, frequencyData: new Uint8Array([1, 2, 3]) };
+const audio = { bass: 0.5, mid: 0.4, treble: 0.3, averageFrequency: 120, beat: 0.9, onset: true, frequencyData: new Uint8Array([1, 2, 3]) };
 const subscribe = vi.fn();
 vi.mock('../hooks', () => ({
   getAudioData: () => audio,
@@ -139,5 +139,28 @@ describe('the analysis subscription', () => {
     // so the singleton rAF loop never started and the buffer it reads never filled. Reading is not
     // subscribing, and the failure is silent — the plugins render, they just never move.
     expect(subscribe).toHaveBeenCalledWith(true);
+  });
+});
+
+describe('the audio payload', () => {
+  it('forwards beat and onset, which the host computes and used not to send', async () => {
+    const { frame } = mountWithSpy();
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: READY, apiVersion: EVENT_API_VERSION },
+        source: frame.contentWindow,
+      }));
+    });
+    await act(async () => { await new Promise((r) => requestAnimationFrame(() => r(null))); });
+
+    const audioFrames = sentMessages(frame).filter((m) => m.type === 'familiar:audio');
+    expect(audioFrames.length).toBeGreaterThan(0);
+
+    // The gap that made Beat Tiles static: `beat` and `onset` are in `AudioAnalysisData` and were
+    // simply not copied into the message, so every plugin reading them saw `undefined` and its own
+    // `?? 0` turned that into a visualizer that renders and never moves.
+    const payload = audioFrames[0].payload as Record<string, unknown>;
+    expect(payload.beat).toBe(0.9);
+    expect(payload.onset).toBe(true);
   });
 });

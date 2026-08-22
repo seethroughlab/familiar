@@ -16,6 +16,10 @@ export interface AudioData {
   treble: number;
   averageFrequency: number;
   frequencyData: Uint8Array;
+  /** Decaying beat envelope, 0–1: spikes on an onset, then falls away. */
+  beat: number;
+  /** True only on the single frame a transient is detected. */
+  onset: boolean;
 }
 
 export interface TrackInfo {
@@ -31,6 +35,7 @@ export interface TrackInfo {
 
 const EMPTY: AudioData = {
   bass: 0, mid: 0, treble: 0, averageFrequency: 0, frequencyData: new Uint8Array(64),
+  beat: 0, onset: false,
 };
 
 let latest: AudioData = EMPTY;
@@ -50,6 +55,10 @@ window.addEventListener('message', (event: MessageEvent) => {
       latest = {
         bass: p.bass, mid: p.mid, treble: p.treble,
         averageFrequency: p.averageFrequency,
+        // Defaulted rather than assumed present: a plugin built against this shim should keep
+        // working on an older host that does not send them yet.
+        beat: p.beat ?? 0,
+        onset: p.onset ?? false,
         frequencyData: Uint8Array.from(p.frequencyData ?? []),
       };
       break;

@@ -62,6 +62,17 @@ export interface AudioPayload {
   treble: number;
   averageFrequency: number;
   frequencyData: number[];
+  /**
+   * Decaying beat envelope, 0–1: spikes to 1 on a detected onset, then falls away.
+   *
+   * **Omitted from the first version of this payload, which is why Beat Tiles did not beat.** The
+   * host has computed `beat` and `onset` all along; they were simply not among the fields copied
+   * into the message, so every plugin reading them got `undefined` and its own `?? 0` turned that
+   * into a visualizer that renders correctly and never moves. Four of the five read one or both.
+   */
+  beat: number;
+  /** True only on the single frame a transient is detected. What a plugin spawns a ripple on. */
+  onset: boolean;
 }
 
 /** The one message a plugin sends back. */
@@ -172,6 +183,8 @@ export function DocumentVisualizer({
             mid: data.mid,
             treble: data.treble,
             averageFrequency: data.averageFrequency,
+            beat: data.beat,
+            onset: data.onset,
             // A plain array: structured clone handles typed arrays, but a plugin that JSON-parses
             // its way through a framework boundary gets an object with numeric keys instead.
             frequencyData: Array.from(data.frequencyData ?? []),
