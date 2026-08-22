@@ -2,6 +2,7 @@ import '@familiar/frontend/src/index.css';
 import { registerEngineFactory } from '@familiar/frontend/src/audio/createEngine';
 import { registerPlaybackInterceptor } from '@familiar/frontend/src/audio/playbackInterceptor';
 import { postPlayIntent } from '@familiar/frontend/src/services/embedBridge';
+import { installNowPlayingSink } from '@familiar/frontend/src/services/nowPlayingSink';
 import { renderEmbed } from '@familiar/frontend/src/renderEmbed';
 import { NullAudioEngine } from './NullAudioEngine';
 
@@ -45,5 +46,8 @@ registerEngineFactory(() => new NullAudioEngine(), {
 registerPlaybackInterceptor(({ tracks, startingAt }) =>
     postPlayIntent({ trackIds: tracks.map((t) => t.id), startingAt })
 );
+
+// Before React renders, so a frame arriving during startup is not dropped (ADR-0090).
+installNowPlayingSink();
 
 renderEmbed();
