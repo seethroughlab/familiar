@@ -36,8 +36,27 @@ const HARNESS = `<!doctype html><meta charset="utf-8">
 
 test.describe('the visualizer document contract (ADR-0087)', () => {
   test('a plugin document handshakes, receives events, and draws — sandboxed', async ({ page, baseURL }) => {
+    /**
+     * One error here is the harness, not the subject, and it is thrown *because* the isolation
+     * asserted at the bottom of this test works.
+     *
+     * `serviceWorkers: 'block'` in `playwright.config.ts` installs an init script into every frame,
+     * and that script reads `navigator.serviceWorker`. In a frame sandboxed without
+     * `allow-same-origin` the origin is opaque, and reading that property is a `SecurityError` —
+     * so Playwright's own instrumentation throws inside the plugin document. Confirmed by flipping
+     * the option: with `serviceWorkers: 'allow'` the error does not appear, and nothing about the
+     * app or the plugin changes.
+     *
+     * Filtered by exact cause rather than relaxed to a count, so a real uncaught error in a
+     * visualizer still fails this test.
+     */
+    const HARNESS_SERVICE_WORKER_ERROR = /Failed to read the 'serviceWorker' property from 'Navigator'/;
+
     const errors: string[] = [];
-    page.on('pageerror', (e) => errors.push(String(e)));
+    page.on('pageerror', (e) => {
+      if (HARNESS_SERVICE_WORKER_ERROR.test(String(e))) return;
+      errors.push(String(e));
+    });
 
     await page.goto(`${baseURL}/`);
     await page.setContent(HARNESS);
