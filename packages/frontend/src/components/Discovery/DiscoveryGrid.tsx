@@ -1,12 +1,19 @@
 import type { DiscoveryItem } from './types';
 import { DiscoveryCard } from './DiscoveryCard';
-import { usePlayerStore } from '../../stores/playerStore';
 
 interface DiscoveryGridProps {
   items: DiscoveryItem[];
   columns?: 2 | 3 | 4 | 5 | 6;
   onItemClick?: (item: DiscoveryItem) => void;
   onItemPlay?: (item: DiscoveryItem) => void;
+  /**
+   * What the native player is on, when the parent knows (ADR-0083 point 1). Optional: a surface
+   * with no transport passes neither, and no item is marked as playing.
+   */
+  currentTrackId?: string | null;
+  isPlaying?: boolean;
+  /** Toggle the current item. Absent where there is nothing to toggle. */
+  onTogglePlay?: () => void;
   className?: string;
 }
 
@@ -20,18 +27,18 @@ export function DiscoveryGrid({
   onItemClick,
   onItemPlay,
   className = '',
+  currentTrackId = null,
+  isPlaying = false,
+  onTogglePlay,
 }: DiscoveryGridProps) {
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
 
   const isItemPlaying = (item: DiscoveryItem): boolean => {
-    return !!(item.id && currentTrack?.id === item.id && isPlaying);
+    return !!(item.id && currentTrackId === item.id && isPlaying);
   };
 
   const handlePlay = (item: DiscoveryItem) => {
-    if (item.id && currentTrack?.id === item.id) {
-      setIsPlaying(!isPlaying);
+    if (item.id && currentTrackId === item.id) {
+      onTogglePlay?.();
     } else {
       onItemPlay?.(item);
     }

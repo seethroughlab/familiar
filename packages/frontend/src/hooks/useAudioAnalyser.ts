@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { getAudioAnalyser, getAudioContext } from '../player/audio/engineInstance';
-import { usePlayerStore } from '../stores/playerStore';
 import { isMobile } from '../utils/platform';
 import {
   computeFrequencyBands,
@@ -88,8 +87,6 @@ let lastBeatUpdate = 0;
 
 // Silence watchdog: warn once if we're "playing" but the analyser reads silence
 // for a sustained period (suspended AudioContext, broken routing, CORS taint…).
-let lastSignalTime = 0;
-let silenceWarned = false;
 
 /**
  * The tuned half of onset detection: adaptive threshold, refractory, decaying envelope.
@@ -205,7 +202,6 @@ function computeOnset(freq: Uint8Array, now: number): void {
     sharedData!.beat = 0;
     sharedData!.onset = false;
     lastBeatUpdate = now;
-    lastSignalTime = now;
     return;
   }
 
@@ -224,19 +220,17 @@ function computeOnset(freq: Uint8Array, now: number): void {
 
   applyFlux(flux, now);
 
-  // Silence watchdog (only meaningful while the player thinks it's playing).
-  const playing = usePlayerStore.getState().isPlaying;
-  if (!playing || maxV > 3) {
-    lastSignalTime = now;
-    silenceWarned = false;
-  } else if (now - lastSignalTime > 1500 && !silenceWarned) {
-    silenceWarned = true;
-    // eslint-disable-next-line no-console
-    console.warn(
-      '[Visualizer] AnalyserNode is receiving silence during playback — ' +
-        'check AudioContext state / audio routing / CORS on the stream.'
-    );
-  }
+  // A silence watchdog stood here, gated on `usePlayerStore.getState().isPlaying`, warning that the
+  // analyser was receiving silence during playback.
+  //
+  // **It could never fire where it was aimed.** The surface it names in its own message is the
+  // visualizer, and that surface mounts no player store — so `isPlaying` was false every time it was
+  // read and the branch was unreachable. Removing it is also what frees `/visualizer` from the
+  // player graph (ADR-0083 point 3): this was the last edge.
+  //
+  // What replaces it is better than a console warning nobody could see: the debug panel reports
+  // analysis frames per second and how long since the last one, and says in words when the player
+  // has stopped feeding the page.
 }
 
 function analyseLoop() {
