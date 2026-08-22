@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
-import { getAudioAnalyser, getAudioContext } from '../player/audio/engineInstance';
+import { getAudioAnalyser, getAudioContext } from '../audio/engineInstance';
 import { isMobile } from '../utils/platform';
 import {
   computeFrequencyBands,
-} from '../player/audio/analysisMetrics';
-import { recordConsumedAnalysisFrame } from '../player/audio/analysisDiagnostics';
+} from '../audio/analysisMetrics';
+import { recordConsumedAnalysisFrame } from '../audio/analysisDiagnostics';
 
 const mobile = isMobile();
 
@@ -47,7 +47,7 @@ import {
   setNativeAnalysisBuffers,
   clearNativeAnalysisBuffers,
   getNativeAnalysisBuffers,
-} from '../player/audio/nativeAnalysisBuffers';
+} from '../audio/nativeAnalysisBuffers';
 
 export { setNativeAnalysisBuffers, clearNativeAnalysisBuffers };
 

@@ -1,4 +1,4 @@
-import { setNativeAnalysisBuffers } from '../player/audio/nativeAnalysisBuffers';
+import { setNativeAnalysisBuffers } from '../audio/nativeAnalysisBuffers';
 import { recordAnalysisFrame } from '../components/Visualizer/visualizerMetrics';
 
 /**

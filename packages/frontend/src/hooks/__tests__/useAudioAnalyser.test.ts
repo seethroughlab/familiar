@@ -2,13 +2,13 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../player/audio/engineInstance', () => ({
+vi.mock('../../audio/engineInstance', () => ({
   getAudioAnalyser: () => null,
   getAudioContext: () => null,
 }));
 
-import { getAudioAnalysisDiagnosticsSnapshot, setVisualizerDebugEnabled } from '../../player/audio/analysisDiagnostics';
-import { clearNativeAnalysisBuffers, setNativeAnalysisBuffers } from '../../player/audio/nativeAnalysisBuffers';
+import { getAudioAnalysisDiagnosticsSnapshot, setVisualizerDebugEnabled } from '../../audio/analysisDiagnostics';
+import { clearNativeAnalysisBuffers, setNativeAnalysisBuffers } from '../../audio/nativeAnalysisBuffers';
 import { getAudioData, resetOnsetDetectorForTesting, useAudioAnalyser } from '../useAudioAnalyser';
 
 describe('useAudioAnalyser native buffer integration', () => {

@@ -8,13 +8,13 @@ import {
   areAudioEffectsAvailable,
   isVisualizerAvailable,
   getCurrentMode,
-} from '../../player/audio/engineInstance';
+} from '../../audio/engineInstance';
 import {
   getAudioAnalysisDiagnosticsSnapshot,
   isVisualizerDebugEnabled,
   setVisualizerDebugEnabled,
   type AudioAnalysisDiagnosticsSnapshot,
-} from '../../player/audio/analysisDiagnostics';
+} from '../../audio/analysisDiagnostics';
 import { apiErrorTracker } from '../../utils/apiErrorTracker';
 import type { TrackedError } from '../../utils/apiErrorTracker';
 // Build timestamp injected by Vite at build time

@@ -1,6 +1,6 @@
 import '@familiar/frontend/src/index.css';
-import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
-import { registerPlaybackInterceptor } from '@familiar/frontend/src/player/playbackInterceptor';
+import { registerEngineFactory } from '@familiar/frontend/src/audio/createEngine';
+import { registerPlaybackInterceptor } from '@familiar/frontend/src/audio/playbackInterceptor';
 import { postPlayIntent } from '@familiar/frontend/src/services/embedBridge';
 import { renderEmbed } from '@familiar/frontend/src/renderEmbed';
 import { NullAudioEngine } from './NullAudioEngine';
