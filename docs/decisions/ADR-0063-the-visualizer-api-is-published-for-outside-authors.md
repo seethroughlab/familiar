@@ -7,7 +7,7 @@ Date: 2026-08-17
 Extends [ADR-0034](ADR-0034-visualizers-are-drop-in-bundles.md), which decided what a visualizer
 *is* and how a client loads one. That format, its two sources and its refusal rules all stand. This
 decides who the contract is written for and where it is read, which `0034` did not address.
-Depends on [ADR-0062](ADR-0062-the-site-adopts-a-static-site-generator.md) for the rendering.
+Depends on [ADR-0069](ADR-0069-the-site-adopts-a-static-site-generator.md) for the rendering.
 
 ## Context
 
@@ -57,9 +57,9 @@ turns on.
 ## Decision
 
 1. **`docs/VISUALIZER_API.md` becomes a published, versioned contract, rendered as a section of the
-   site under `ADR-0062`.** It is already the shared contract for every client per `0034` point 6.
+   site under `ADR-0069`.** It is already the shared contract for every client per `0034` point 6.
    Publishing changes who it is addressed to, not what it says, and the document stays in `docs/`
-   as its single source — `0062` point 2 renders it in place rather than copying it.
+   as its single source — `0069` point 2 renders it in place rather than copying it.
 
 2. **It is corrected before it is published, and the correction is part of this work rather than a
    follow-up.** All three defects in the Context: the six absent components, `useAudioAnalyser`'s
@@ -137,7 +137,7 @@ turns on.
 
 - **Write a new authoring guide rather than publishing the existing document.** The existing one is
   719 lines aimed at someone reading the repository. Rejected because two documents describing one
-  contract is the drift `0062` point 2 refuses, and because the existing document's problem is that
+  contract is the drift `0069` point 2 refuses, and because the existing document's problem is that
   three specific things in it are wrong, not that it is the wrong document.
 
 ## Consequences

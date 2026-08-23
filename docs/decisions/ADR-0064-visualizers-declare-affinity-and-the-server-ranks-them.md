@@ -7,7 +7,7 @@ Date: 2026-08-17
 Extends [ADR-0034](ADR-0034-visualizers-are-drop-in-bundles.md), whose manifest this adds one
 optional block to. Everything `0034` decided — the IIFE format, evaluation only inside the web view,
 two sources, the refusal rules — stands unchanged. Independent of
-[ADR-0062](ADR-0062-the-site-adopts-a-static-site-generator.md) and
+[ADR-0069](ADR-0069-the-site-adopts-a-static-site-generator.md) and
 [ADR-0063](ADR-0063-the-visualizer-api-is-published-for-outside-authors.md), and should ship before
 them so the manifest is settled before it is published.
 

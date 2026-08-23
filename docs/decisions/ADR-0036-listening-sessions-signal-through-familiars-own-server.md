@@ -1,6 +1,6 @@
 # ADR-0036: Listening Sessions Signal Through Familiar's Own Server
 
-Status: accepted
+Status: superseded by ADR-0070
 
 Date: 2026-08-06
 
