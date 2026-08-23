@@ -25,38 +25,40 @@
 
 ## Screenshots
 
-| Library | Discover |
-|:--:|:--:|
-| ![Library](screenshots/01-library-tracks.png) | ![Discover](screenshots/07-library-discover.png) |
+**Listening happens in the Mac and iPhone apps** ([`familiar-apple`](https://github.com/seethroughlab/familiar-apple)). The browser is the management surface — the two are deliberately different tools, not the same app twice.
 
-| Artists | 3D Explorer |
-|:--:|:--:|
-| ![Artists](screenshots/02-library-artists.png) | ![Explorer](screenshots/06-library-explorer.png) |
+### The apps
 
-| Music Map | Mood Grid |
+| Discover | Artists |
 |:--:|:--:|
-| ![Music Map](screenshots/05-library-music-map.png) | ![Mood Grid](screenshots/04-library-mood-grid.png) |
+| ![Discover](screenshots/mac-discover.png) | ![Artists](screenshots/mac-artists.png) |
+
+| Music Map | Albums |
+|:--:|:--:|
+| ![Music Map](screenshots/mac-music-map.png) | ![Albums](screenshots/mac-albums.png) |
+
+### The web app
+
+Three destinations — the library, the tools you run against it, and the server underneath.
+
+| Library | Tools |
+|:--:|:--:|
+| ![Library](screenshots/01-library.png) | ![Tools](screenshots/02-tools.png) |
 
 <details>
 <summary><strong>More screenshots</strong></summary>
 
-| Albums | Discover |
+| Server | Settings |
 |:--:|:--:|
-| ![Albums](screenshots/03-library-albums.png) | ![Discover](screenshots/07-library-discover.png) |
+| ![Server](screenshots/03-server.png) | ![Settings](screenshots/04-settings.png) |
 
-| Full Player | Playlist Detail |
+| Duplicates | Artist cleanup |
 |:--:|:--:|
-| ![Full Player](screenshots/10-full-player.png) | ![Playlist](screenshots/09-playlist-detail.png) |
+| ![Duplicates](screenshots/05-tools-duplicates.png) | ![Artist cleanup](screenshots/06-artist-cleanup.png) |
 
-| Settings | Admin Setup |
+| Smart playlists (Mac) | Mobile |
 |:--:|:--:|
-| ![Settings](screenshots/12-settings.png) | ![Admin Setup](screenshots/13-admin-setup.png) |
-
-### Mobile Interface
-
-| Library (Mobile) | Full Player (Mobile) |
-|:--:|:--:|
-| ![Mobile Library](screenshots/14-mobile-library.png) | ![Mobile Full Player](screenshots/15-mobile-full-player.png) |
+| ![Smart playlists](screenshots/mac-smart-playlists.png) | ![Mobile](screenshots/07-mobile-library.png) |
 
 </details>
 
