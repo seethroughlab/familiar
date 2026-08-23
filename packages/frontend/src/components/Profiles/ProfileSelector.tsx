@@ -72,7 +72,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
     try {
       setLoading(true);
       setUsingCache(false);
-      const profileList = await listProfiles({ allowCache: true });
+      const profileList = await listProfiles();
       setProfiles(profileList);
 
       // Check if we got cached profiles (network failed but cache succeeded)

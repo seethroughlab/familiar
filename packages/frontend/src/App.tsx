@@ -28,7 +28,6 @@ const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => 
 const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
-const GuestListener = lazy(() => import('./components/Guest/GuestListener').then(m => ({ default: m.GuestListener })));
 
 import { MixTapeProgressWatcher } from './components/MixTape';
 
@@ -176,24 +175,6 @@ function App() {
         {/* Watches in-flight mix tape renders and toasts on terminal state */}
         <MixTapeProgressWatcher />
         <Routes>
-          {/*
-            The guest listener (ADR-0036), and deliberately *outside* `AppShell`.
-
-            A guest has no profile, no library and no player — they have a code someone sent them.
-            Mounting this inside the shell would give them a sidebar to nothing and construct the
-            audio engine for a page whose audio arrives over a peer connection.
-
-            **This route has never existed here before.** The share link used to point at
-            `familiar-sessions.fly.dev/listen/{code}`, which the relay served itself; retiring the
-            relay leaves `buildShareLink` pointing at this origin, and without this the one thing a
-            host hands to a friend would 404. That is the shape of defect this codebase keeps
-            shipping, and it would have been introduced by the fix.
-          */}
-          <Route path="/listen/:code?" element={
-            <Suspense fallback={<LazyLoadSpinner />}>
-              <GuestListener />
-            </Suspense>
-          } />
 
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>

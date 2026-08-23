@@ -8,9 +8,16 @@
 
     <!-- How the native host proves it got *this* document and not the app, and not the Discover
          surface either. A server built before this existed has no `/visualizer` route, and its
-         single-page-app fallback answers that path with `index.html` — HTTP 200, the full web app,
-         `WebAudioEngine` and all, which would then hold an audio session inside a web view inside
-         an app that is already playing. That is exactly what ADR-0016 point 4 exists to prevent.
+         single-page-app fallback answers that path with `index.html` — HTTP 200, and the wrong
+         document rendered inside a web view in an app that is already playing.
+
+         That used to be worse than wrong: `index.html` registered a real `WebAudioEngine`, so the
+         fallback would hold a second audio session, which is what ADR-0016 point 4 exists to
+         prevent. ADR-0071 removed the web player and its engine, so the app document now registers
+         none at all — but the marker is not thereby less necessary. A probe that cannot tell which
+         document it received cannot tell a working surface from a silent one, which is the defect
+         ADR-0017's record keeps finding on this surface. -->
+
 
          Note the content differs from the Discover surface's `embed`. The marker was a single flat
          value until this document existed; two surfaces need to be told apart, or the probe cannot

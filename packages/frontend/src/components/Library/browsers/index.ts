@@ -6,7 +6,6 @@
  */
 
 // Import and register browsers
-import './TrackListBrowser';
 import './ArtistCleanupBrowser';
 // **Registered but not routed.** `EmbedDiscover` renders this inside the WKWebView both Apple
 // clients use for Discover (ADR-0016/0017/0019), so it outlives the app route that was unmounted

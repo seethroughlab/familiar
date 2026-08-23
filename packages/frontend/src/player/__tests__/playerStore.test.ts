@@ -270,33 +270,7 @@ describe('playerStore', () => {
       expect(state.queue).toHaveLength(0)
     })
 
-    it('enforces downloaded-only queue when offline mode is active', () => {
-      const track1 = createMockTrack('1', 'First')
-      const track2 = createMockTrack('2', 'Second')
-      const track3 = createMockTrack('3', 'Third')
-      mockConnectivityState.offlineModeActive = true
-      mockConnectivityState.offlineTrackIds = new Set(['1', '3'])
 
-      usePlayerStore.getState().setQueue([track1, track2, track3], 1)
-
-      const state = usePlayerStore.getState()
-      expect(state.queue.map((q) => q.track.id)).toEqual(['1', '3'])
-      expect(state.currentTrack?.id).toBe('3')
-    })
-
-    it('setQueueByTrackId falls back to downloaded track in offline mode', () => {
-      const track1 = createMockTrack('1', 'First')
-      const track2 = createMockTrack('2', 'Second')
-      const track3 = createMockTrack('3', 'Third')
-      mockConnectivityState.offlineModeActive = true
-      mockConnectivityState.offlineTrackIds = new Set(['1', '3'])
-
-      usePlayerStore.getState().setQueueByTrackId([track1, track2, track3], '2')
-
-      const state = usePlayerStore.getState()
-      expect(state.queue.map((q) => q.track.id)).toEqual(['1', '3'])
-      expect(state.currentTrack?.id).toBe('1')
-    })
   })
 
   describe('addToQueue', () => {
@@ -335,20 +309,6 @@ describe('playerStore', () => {
       expect(shuffleOrder).toContain(2) // New track index should be in order
     })
 
-    it('blocks non-downloaded tracks when offline mode is active', () => {
-      const track1 = createMockTrack('1')
-      const track2 = createMockTrack('2')
-      mockConnectivityState.offlineModeActive = true
-      mockConnectivityState.offlineTrackIds = new Set(['1'])
-
-      const { setQueue, addToQueue } = usePlayerStore.getState()
-      setQueue([track1], 0)
-      addToQueue(track2)
-
-      const state = usePlayerStore.getState()
-      expect(state.queue).toHaveLength(1)
-      expect(state.queue[0].track.id).toBe('1')
-    })
 
     it('allows downloaded tracks to be added while offline mode is active', () => {
       const track1 = createMockTrack('1')

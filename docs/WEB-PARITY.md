@@ -46,7 +46,6 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Offline downloads | ✅ | ✅ | ✅ | Independent implementations — Dexie vs background `URLSession` |
 | Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ✅ | ADR-0056 brought casting to the phone. AirPlay stays the OS picker's job (ADR-0031 point 3), reachable from the same merged control |
 | CarPlay | — | — | ✅ | |
-| Listen-together (guest sessions) | ✅ | ❌ | ❌ | **not a blocker:** web-only by decision — ADR-0036 built the server half and **ADR-0037 was rejected** (ADR-0060 point 1) |
 | Sleep timer, playback speed | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere, including the web app, so it is not a reason to keep it (ADR-0060 point 1) |
 
 ## Playlist editing
@@ -157,6 +156,8 @@ deliberately, which is why the filter names operations rather than the tag: addi
 | Spotify favorites import | Retired 2026-08-10; the UI had been unreachable |
 | Server-synced playback queue | ADR-0028 |
 | Capacitor iOS app (`packages/ios`) | **Deleted 2026-08-11** (ADR-0001 point 6). It had been the largest consumer of `frontend/src` |
+| Listen-together (guest sessions) | **Deleted 2026-08-18** (ADR-0070), both halves. ADR-0036 built the server side for ADR-0037, which was rejected the same day; with the fallback player gone, `/listen/:code` would have been the only route in the app that plays music |
+| The fallback player | **Deleted 2026-08-18.** ADR-0058 point 4's trigger was met. `WebAudioEngine`, the effects chain, the queue and the Dexie offline store went with it (ADR-0071) |
 
 ## Removed from the browser 2026-08-16 (ADR-0057)
 
@@ -186,7 +187,8 @@ numbered PR — #103, #104, #105, #106, #119, #123 — and none of them updated 
 the Apple clients can edit playlists, edit track metadata, trigger a scan, and create a profile.
 All four are done. The remaining browser-only capabilities are the ones in genuinely ungenerated
 tags — artist cleanup, analysis, backup and restore, Last.fm OAuth, community cache, diagnostics,
-listening history — plus listen-together, which is web-only by decision since ADR-0037 was rejected.
+listening history. Listen-together used to be on that list, web-only by decision since ADR-0037 was
+rejected; ADR-0070 deleted it instead, so nothing is browser-only by decision any more.
 
 **How to check a row, so the next re-verification is cheaper.** Grep for the capability's *generated
 operation* in `familiar-apple`, not for a word: a filename or a comment matching "restore" or

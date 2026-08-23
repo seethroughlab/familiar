@@ -4,123 +4,17 @@
  * Manages selectable profiles that work across devices.
  * No passwords needed - protected by Tailscale.
  */
-import { db, type CachedProfile, isIndexedDBAvailable } from '../db';
 import { profilesApi, type ProfileResponse, type ProfileCreate } from '../api/profiles';
 import { useConnectivityStore } from '../stores/connectivityStore';
-import { createLogger } from '../utils/logger';
 import {
   getSelectedProfileId,
   selectProfile,
   clearSelectedProfile,
 } from './profileSelection';
 
-const log = createLogger('ProfileService');
 
 export type Profile = ProfileResponse;
 export type { ProfileCreate };
-
-export interface ListProfilesOptions {
-  allowCache?: boolean;
-}
-
-export interface ValidateProfileOptions {
-  requireOnline?: boolean;
-}
-
-// ============================================================================
-// Profile Caching Functions (for offline support)
-// ============================================================================
-
-/**
- * Cache a profile in IndexedDB for offline access.
- * Silently fails if IndexedDB isn't available.
- */
-export async function cacheProfile(profile: Profile): Promise<void> {
-  const idbAvailable = await isIndexedDBAvailable();
-  if (!idbAvailable) {
-    return; // Silently skip caching
-  }
-
-  try {
-    const cached: CachedProfile = {
-      id: profile.id,
-      name: profile.name,
-      color: profile.color,
-      avatar_url: profile.avatar_url,
-      has_lastfm: profile.has_lastfm,
-      cachedAt: new Date(),
-    };
-    await db.cachedProfiles.put(cached);
-  } catch (error) {
-    log.warn('Failed to cache profile:', error);
-  }
-}
-
-/**
- * Get a single cached profile by ID.
- * Returns undefined if IndexedDB isn't available.
- */
-export async function getCachedProfile(profileId: string): Promise<CachedProfile | undefined> {
-  const idbAvailable = await isIndexedDBAvailable();
-  if (!idbAvailable) {
-    return undefined;
-  }
-
-  try {
-    return await db.cachedProfiles.get(profileId);
-  } catch (error) {
-    log.warn('Failed to get cached profile:', error);
-    return undefined;
-  }
-}
-
-/**
- * Get all cached profiles.
- * Returns empty array if IndexedDB isn't available.
- */
-export async function getCachedProfiles(): Promise<CachedProfile[]> {
-  const idbAvailable = await isIndexedDBAvailable();
-  if (!idbAvailable) {
-    return [];
-  }
-
-  try {
-    return await db.cachedProfiles.toArray();
-  } catch (error) {
-    log.warn('Failed to get cached profiles:', error);
-    return [];
-  }
-}
-
-/**
- * Clear a cached profile.
- */
-export async function clearCachedProfile(profileId: string): Promise<void> {
-  const idbAvailable = await isIndexedDBAvailable();
-  if (!idbAvailable) {
-    return;
-  }
-
-  try {
-    await db.cachedProfiles.delete(profileId);
-  } catch (error) {
-    log.warn('Failed to clear cached profile:', error);
-  }
-}
-
-/**
- * Convert CachedProfile to Profile format.
- */
-function cachedToProfile(cached: CachedProfile): Profile {
-  return {
-    id: cached.id,
-    name: cached.name,
-    color: cached.color,
-    avatar_url: cached.avatar_url,
-    has_lastfm: cached.has_lastfm,
-    created_at: cached.cachedAt.toISOString(),
-  };
-}
 
 // ============================================================================
 // Profile Selection Functions
@@ -129,26 +23,13 @@ export { getSelectedProfileId, selectProfile, clearSelectedProfile };
 
 /**
  * List all available profiles from the server.
- * When offline with allowCache, falls back to cached profiles.
+ *
+ * Server-only. Profiles used to be mirrored into IndexedDB so the picker worked with no server;
+ * ADR-0071 removed that store, and ADR-0059 had already accepted that the administration tool
+ * does not open offline.
  */
-export async function listProfiles(options?: ListProfilesOptions): Promise<Profile[]> {
-  try {
-    const profiles = await profilesApi.list();
-
-    // Cache all profiles for offline use
-    await Promise.all(profiles.map((p) => cacheProfile(p)));
-
-    return profiles;
-  } catch (error) {
-    // If offline and cache allowed, return cached profiles
-    if (options?.allowCache) {
-      const cached = await getCachedProfiles();
-      if (cached.length > 0) {
-        return cached.map(cachedToProfile);
-      }
-    }
-    throw error;
-  }
+export async function listProfiles(): Promise<Profile[]> {
+  return profilesApi.list();
 }
 
 /**
@@ -160,35 +41,21 @@ export async function createProfile(data: ProfileCreate): Promise<Profile> {
 
 /**
  * Get profile by ID.
- * Caches on success, falls back to cache on network error.
+ *
+ * Returns null when the server says the profile is gone, and throws when it cannot be asked.
+ * The two are different: a 404 means it was deleted and the selection should be cleared; a
+ * network error means we do not know. There is no cache to fall back to (ADR-0071).
  */
-export async function getProfile(
-  profileId: string,
-  options?: { allowCache?: boolean }
-): Promise<Profile | null> {
+export async function getProfile(profileId: string): Promise<Profile | null> {
   try {
-    const profile = await profilesApi.get(profileId);
-
-    // Cache for offline use
-    await cacheProfile(profile);
-
-    return profile;
+    return await profilesApi.get(profileId);
   } catch (error: unknown) {
-    // Profile deleted on server - clear cache
     if (
       typeof error === 'object' && error !== null &&
       'response' in error &&
       (error as { response?: { status?: number } }).response?.status === 404
     ) {
-      await clearCachedProfile(profileId);
       return null;
-    }
-    // If offline and cache allowed, return cached profile
-    if (options?.allowCache) {
-      const cached = await getCachedProfile(profileId);
-      if (cached) {
-        return cachedToProfile(cached);
-      }
     }
     throw error;
   }
@@ -218,43 +85,29 @@ export async function deleteProfile(profileId: string): Promise<void> {
  * Validate that the selected profile still exists.
  * Returns the profile if valid, null otherwise.
  *
- * When offline (requireOnline=false), uses cached profile data.
+ * Throws when the server cannot be reached; returns null when it says the profile is gone.
  */
-export async function validateSelectedProfile(
-  options?: ValidateProfileOptions
-): Promise<Profile | null> {
+export async function validateSelectedProfile(): Promise<Profile | null> {
   const profileId = await getSelectedProfileId();
   if (!profileId) {
     return null;
   }
 
-  const requireOnline = options?.requireOnline ?? true;
-
-  try {
-    const profile = await getProfile(profileId, { allowCache: !requireOnline });
-    if (!profile) {
-      // Profile was deleted, clear the selection
-      await clearSelectedProfile();
-      return null;
-    }
-    return profile;
-  } catch (error) {
-    // Network error - if we don't require online, try cache
-    if (!requireOnline) {
-      const cached = await getCachedProfile(profileId);
-      if (cached) {
-        return cachedToProfile(cached);
-      }
-    }
-    throw error;
+  const profile = await getProfile(profileId);
+  if (!profile) {
+    // Profile was deleted, clear the selection
+    await clearSelectedProfile();
+    return null;
   }
+  return profile;
 }
 
 /**
  * Initialize profile on app startup.
- * Returns the selected profile if valid, null if profile selector should be shown.
+ * Returns the selected profile if valid, null if the profile selector should be shown.
  *
- * When offline, uses cached profile data and schedules background validation.
+ * With no server there is no cached profile to fall back to (ADR-0071), so an unreachable server
+ * schedules a re-check and shows the selector rather than guessing who is looking.
  */
 export async function initializeProfile(): Promise<Profile | null> {
   const profileId = await getSelectedProfileId();
@@ -263,16 +116,9 @@ export async function initializeProfile(): Promise<Profile | null> {
   }
 
   try {
-    // Try online validation first
-    return await validateSelectedProfile({ requireOnline: true });
+    return await validateSelectedProfile();
   } catch {
-    // Network error - try cached profile
-    const cached = await getCachedProfile(profileId);
-    if (cached) {
-      // Schedule background validation when online
-      scheduleBackgroundValidation(profileId);
-      return cachedToProfile(cached);
-    }
+    scheduleBackgroundValidation(profileId);
     return null;
   }
 }
@@ -289,7 +135,6 @@ function scheduleBackgroundValidation(profileId: string): void {
       if (!profile) {
         // Profile was deleted on server
         await clearSelectedProfile();
-        await clearCachedProfile(profileId);
         window.dispatchEvent(new CustomEvent('profile-invalidated'));
       }
     } catch {

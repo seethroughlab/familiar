@@ -1,5 +1,5 @@
 import { Heart } from 'lucide-react';
-import { useFavorites } from '../../../../hooks/useFavorites';
+import { useFavorites } from '../../hooks/useFavorites';
 
 export function FavoriteButton({ trackId }: { trackId: string }) {
   const { isFavorite, toggle } = useFavorites();

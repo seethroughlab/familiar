@@ -1,2 +1,1 @@
-export { DownloadsDetail } from './DownloadsDetail';
-export { FavoritesDetail } from './FavoritesDetail';
+export { PlaylistPickerModal } from './PlaylistPickerModal';

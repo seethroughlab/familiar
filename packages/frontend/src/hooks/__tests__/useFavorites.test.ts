@@ -18,27 +18,12 @@ vi.mock('../../api', () => ({
 
 // Mock offline status
 const mockIsOffline = { value: false };
-vi.mock('../useOfflineStatus', () => ({
-  useOfflineStatus: () => ({ isOffline: mockIsOffline.value }),
-}));
 
 // Mock playlist cache
-vi.mock('../../services/playlistCache', () => ({
-  cacheFavorites: vi.fn(() => Promise.resolve()),
-  cacheTrackMetadata: vi.fn(() => Promise.resolve()),
-  getCachedFavorites: vi.fn(() => Promise.resolve(null)),
-  resolveTrackIds: vi.fn(() => Promise.resolve([])),
-}));
 
 // Mock offline service
-vi.mock('../../services/offlineService', () => ({
-  downloadTrackForOffline: vi.fn(() => Promise.resolve()),
-}));
 
 // Mock sync service
-vi.mock('../../services/syncService', () => ({
-  queueAction: vi.fn(() => Promise.resolve()),
-}));
 
 // Mock profile service
 vi.mock('../../services/profileService', () => ({
@@ -160,61 +145,5 @@ describe('useFavorites', () => {
     expect(result.current.favoriteIds.size).toBe(0);
   });
 
-  it('should queue action when offline', async () => {
-    mockIsOffline.value = true;
-    const { queueAction } = await import('../../services/syncService');
 
-    const { result } = renderHook(() => useFavorites(), { wrapper: createWrapper() });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    act(() => {
-      result.current.toggle('track-1');
-    });
-
-    await waitFor(() => {
-      expect(queueAction).toHaveBeenCalledWith('favorite_toggle', { trackId: 'track-1' });
-    });
-  });
-
-  it('hydrates offline favorites metadata from cached tracks', async () => {
-    mockIsOffline.value = true;
-    mockList.mockRejectedValueOnce(new Error('offline'));
-
-    const { getCachedFavorites, resolveTrackIds } = await import('../../services/playlistCache');
-    vi.mocked(getCachedFavorites).mockResolvedValueOnce({
-      profileId: 'profile-1',
-      trackIds: ['track-1'],
-      cachedAt: new Date(),
-    });
-    vi.mocked(resolveTrackIds).mockResolvedValueOnce([
-      {
-        id: 'track-1',
-        title: 'Cached Song',
-        artist: 'Cached Artist',
-        album: 'Cached Album',
-        albumArtist: null,
-        genre: null,
-        year: 2024,
-        durationSeconds: 210,
-        trackNumber: 1,
-        discNumber: 1,
-        cachedAt: new Date(),
-      },
-    ]);
-
-    const { result } = renderHook(() => useFavorites(), { wrapper: createWrapper() });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.usingCachedData).toBe(true);
-    expect(result.current.favorites).toHaveLength(1);
-    expect(result.current.favorites[0].title).toBe('Cached Song');
-    expect(result.current.favorites[0].artist).toBe('Cached Artist');
-    expect(result.current.favorites[0].album).toBe('Cached Album');
-  });
 });

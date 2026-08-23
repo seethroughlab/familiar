@@ -7,9 +7,8 @@
  */
 import { Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Download, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { SelectionIndicator } from './SelectionIndicator';
 import {
   getBrowser,
@@ -34,7 +33,6 @@ export function LibraryView({ browserId }: LibraryViewProps) {
     clearSelection,
     setEditingTrackId,
   } = useSelectionStore();
-  const { offlineIds } = useOfflineTrackIds();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Filters - read from URL query params
@@ -204,25 +202,6 @@ export function LibraryView({ browserId }: LibraryViewProps) {
   return (
     <div className="flex flex-col md:h-full md:min-h-0">
       {/* Filter toolbar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-zinc-800/50">
-        {/* Downloaded only filter toggle */}
-        <button
-          onClick={() => setFilters({ ...filters, downloadedOnly: !filters.downloadedOnly })}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${
-            filters.downloadedOnly
-              ? 'bg-green-600 text-white'
-              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white'
-          }`}
-          title={filters.downloadedOnly ? 'Show all tracks' : 'Show only downloaded tracks'}
-        >
-          <Download className="w-4 h-4" />
-          <span className="hidden sm:inline">Downloaded</span>
-          {filters.downloadedOnly && offlineIds.size > 0 && (
-            <span className="text-xs opacity-75">({offlineIds.size})</span>
-          )}
-        </button>
-      </div>
-
       {/* Filter breadcrumbs */}
       {(filters.artist || filters.album || filters.genre || filters.yearFrom || filters.energyMin !== undefined || filters.fx) && (
         <div className="flex items-center gap-2 px-4 py-2 text-sm bg-zinc-800/50">
@@ -308,7 +287,6 @@ export function LibraryView({ browserId }: LibraryViewProps) {
               onEditTrack={handleEditTrack}
               filters={filters}
               onFilterChange={handleFilterChange}
-              offlineTrackIds={offlineIds}
             />
           </Suspense>
         ) : (

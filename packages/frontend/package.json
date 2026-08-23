@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "lint": "eslint .",
-    "check:audio-guardrails": "node ./scripts/check-audio-guardrails.mjs",
+    "check:embed-guardrails": "node ./scripts/check-embed-guardrails.mjs",
     "check:boundaries": "depcruise --validate .dependency-cruiser.cjs src/",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -18,7 +18,6 @@
     "@tanstack/react-query": "^5.90.12",
     "@tanstack/react-virtual": "^3.13.18",
     "axios": "^1.13.2",
-    "dexie": "^4.2.1",
     "fflate": "^0.8.2",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",

@@ -2,9 +2,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { useConnectivityStore } from '../connectivityStore';
 
-vi.mock('../../services/offlineService', () => ({
-  getOfflineTrackIds: vi.fn(async () => []),
-}));
 
 vi.mock('../../api/base', () => ({
   getApiUrl: (path: string) => path,
@@ -40,7 +37,6 @@ describe('connectivityStore', () => {
       lastReachableAt: null,
       consecutiveNetworkFailures: 0,
       consecutiveProbeFailures: 0,
-      offlineTrackIds: new Set<string>(),
       counters: defaultCounters(),
     });
   });
@@ -179,17 +175,6 @@ describe('connectivityStore', () => {
     expect(useConnectivityStore.getState().consecutiveNetworkFailures).toBe(0);
   });
 
-  it('refreshOfflineTrackIds updates the Set', async () => {
-    const { getOfflineTrackIds } = await import('../../services/offlineService');
-    (getOfflineTrackIds as ReturnType<typeof vi.fn>).mockResolvedValueOnce(['a', 'b']);
-
-    await useConnectivityStore.getState().refreshOfflineTrackIds();
-
-    const ids = useConnectivityStore.getState().offlineTrackIds;
-    expect(ids.has('a')).toBe(true);
-    expect(ids.has('b')).toBe(true);
-    expect(ids.size).toBe(2);
-  });
 
   it('browser offline event sets offlineModeActive', async () => {
     useConnectivityStore.getState().startMonitoring();
