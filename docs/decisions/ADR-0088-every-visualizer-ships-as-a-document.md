@@ -1,6 +1,6 @@
 # ADR-0088: Every Visualizer Ships as a Document
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-20
 

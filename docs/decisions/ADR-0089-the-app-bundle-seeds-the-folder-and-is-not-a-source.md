@@ -1,6 +1,6 @@
 # ADR-0089: The App Bundle Seeds the Folder, and Is Not a Source
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-20
 
