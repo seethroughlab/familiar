@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lyric Storm</title>
+<style>html,body,#root{margin:0;height:100%;background:#000;overflow:hidden}</style>
+<!--
+  The plugin's own stylesheet. `<link>` is not CORS-checked, unlike a module script, so it
+  loads from this folder under the opaque origin a sandboxed document has.
+-->
+<link rel="stylesheet" href="./style.css">
+<div id="root"></div>
+<!--
+  A classic script, deliberately. This document is loaded in a sandboxed iframe with an opaque
+  origin, and `type="module"` would make the browser fetch it with CORS — refused, because the
+  request carries `Origin: null`. See vite.config.ts.
+-->
+<script src="./app.js"></script>

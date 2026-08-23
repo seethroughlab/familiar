@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Lyric Pulse</title>
+<!--
+  A worked example of the Familiar visualizer contract (ADR-0087).
+
+  **The whole plugin is this file.** No build step, no bundler, no framework, no libraries — and
+  nothing borrowed from the host, because the host lends nothing. It reads three events and draws
+  with CSS.
+
+  Its predecessor was a React component compiled to an IIFE against globals the host injected. It
+  crashed on its first frame, because its build passed `React` in as a JSX runtime and React does
+  not export `jsx`. That failure is the reason the contract changed, so this version deliberately
+  demonstrates the opposite: the least machinery that can still look good.
+-->
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #05000f;
+    font: 600 clamp(1.5rem, 5vw, 3.5rem)/1.25 system-ui, -apple-system, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    /* Keeps a long line from touching the edges on a phone-sized window. */
+    padding: 0 8vw; text-align: center;
+    color: #fff;
+  }
+  #stage { max-width: 22ch; }
+  #line {
+    /* `--pulse` and `--hue` are written from JS on every audio frame; everything else is CSS.
+       Driving custom properties rather than restyling means the browser animates, not us. */
+    --pulse: 0;
+    --hue: 265;
+    display: block;
+    transform: scale(calc(1 + var(--pulse) * 0.12));
+    color: hsl(var(--hue) 90% calc(72% + var(--pulse) * 18%));
+    text-shadow:
+      0 0 calc(12px + var(--pulse) * 46px) hsl(var(--hue) 95% 65% / calc(0.35 + var(--pulse) * 0.5)),
+      0 0 calc(4px + var(--pulse) * 14px) hsl(calc(var(--hue) + 40) 95% 75% / 0.6);
+    transition: transform 90ms ease-out;
+  }
+  #next {
+    display: block; margin-top: 1.1em;
+    font-size: 0.42em; font-weight: 500;
+    color: hsl(var(--hue, 265) 40% 70% / 0.45);
+  }
+  #idle { opacity: .35; font-size: .5em; font-weight: 500; }
+</style>
+
+<div id="stage">
+  <span id="line"></span>
+  <span id="next"></span>
+  <span id="idle">waiting for a track…</span>
+</div>
+
+<script>
+  const lineEl = document.getElementById('line');
+  const nextEl = document.getElementById('next');
+  const idleEl = document.getElementById('idle');
+
+  let lyrics = null;
+  let currentTime = 0;
+  let playing = false;
+  let pulse = 0;
+
+  window.addEventListener('message', (event) => {
+    const message = event.data;
+    if (!message || typeof message !== 'object') return;
+
+    if (message.type === 'familiar:track') {
+      lyrics = message.payload.lyrics;
+      // Hue from the track id, so a song keeps its colour instead of flickering per frame.
+      lineEl.style.setProperty('--hue', String(hashOf(message.payload.id || '') % 360));
+      idleEl.textContent = lyrics && lyrics.length
+        ? ''
+        : `${message.payload.title || 'this track'} has no synced lyrics`;
+    }
+
+    if (message.type === 'familiar:state') {
+      playing = message.payload.isPlaying;
+      currentTime = message.payload.currentTime;
+      render();
+    }
+
+    if (message.type === 'familiar:audio') {
+      // Bass drives the glow. The payload is already smoothed against the host's render loop, so
+      // this only needs a decay to stop it snapping back between frames.
+      pulse = Math.max(message.payload.bass, pulse * 0.82);
+      lineEl.style.setProperty('--pulse', pulse.toFixed(3));
+    }
+  });
+
+  function render() {
+    if (!lyrics || !lyrics.length) { lineEl.textContent = ''; nextEl.textContent = ''; return; }
+    idleEl.textContent = '';
+
+    // The last line whose start has passed. Linear because a lyric sheet is a few hundred entries
+    // and this runs on transport updates, not per frame.
+    let index = -1;
+    for (let i = 0; i < lyrics.length; i++) {
+      if (lyrics[i].startTime <= currentTime) index = i; else break;
+    }
+
+    lineEl.textContent = index >= 0 ? lyrics[index].text : '';
+    nextEl.textContent = index + 1 < lyrics.length ? lyrics[index + 1].text : '';
+    lineEl.style.opacity = playing ? '1' : '0.55';
+  }
+
+  function hashOf(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
+
+  // Last, once the listener is attached — otherwise the first track arrives at a document that is
+  // not listening yet, and the scene never learns what is playing.
+  parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
+</script>

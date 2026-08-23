@@ -1,0 +1,12 @@
+{
+  "name": "Lyric Pulse",
+  "id": "lyric-pulse",
+  "version": "2.0.0",
+  "type": "visualizer",
+  "description": "The current lyric line, glowing on the beat. One file, no build step.",
+  "author": { "name": "Familiar" },
+  "main": "index.html",
+  "familiar": { "apiVersion": 1 },
+  "icon": "Type",
+  "affinity": { "tags": ["vocal/choir"], "ranges": [] }
+}

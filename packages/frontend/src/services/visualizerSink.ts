@@ -1,4 +1,5 @@
 import { setNativeAnalysisBuffers } from '../player/audio/nativeAnalysisBuffers';
+import { recordAnalysisFrame } from '../components/Visualizer/visualizerMetrics';
 
 /**
  * Receives analysis frames from the native host (ADR-0033).
@@ -60,6 +61,7 @@ function receive(frame: AnalysisFrame): void {
   flux.set(frame.flux);
 
   setNativeAnalysisBuffers(frequency, timeDomain, flux, frame.fluxInterval);
+  recordAnalysisFrame();
 
   // **Only notify on a change React would care about.** This runs ten times a second for the length
   // of a track; publishing every frame would re-render the visualizer tree at the channel's rate,

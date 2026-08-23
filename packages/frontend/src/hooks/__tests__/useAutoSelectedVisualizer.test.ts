@@ -16,7 +16,6 @@ import {
 import { tracksApi } from '../../api';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerAutoSelectStore } from '../../stores/visualizerAutoSelectStore';
-import { registerVisualizer, visualizerRegistry } from '../../components/Visualizer/types';
 import type { VisualizerRankingResponse } from '../../api/tracks';
 
 vi.mock('../../api', () => ({ tracksApi: { rankVisualizers: vi.fn() } }));
@@ -39,10 +38,6 @@ function ranking(...pairs: [string, number][]): VisualizerRankingResponse {
 
 beforeEach(() => {
   rank.mockReset();
-  visualizerRegistry.clear();
-  for (const id of ['alpha', 'beta']) {
-    registerVisualizer({ id, name: id, description: '', usesMetadata: false }, () => null);
-  }
   useVisualizerStore.setState({ autoSelect: true });
   useVisualizerAutoSelectStore.getState().reset();
 });
@@ -55,6 +50,17 @@ afterEach(() => {
   cleanup();
   useVisualizerStore.setState({ autoSelect: false });
   vi.clearAllMocks();
+});
+
+// The registry is gone (ADR-0087): candidates come from the catalog of plugin folders.
+vi.mock('../../components/Visualizer/useVisualizerCatalog', () => {
+  // One array, not a literal per render — the real hook returns React state, and a mock
+  // that hands back a new reference every time makes effects depending on it loop.
+  const catalog = [
+    { id: 'alpha', name: 'alpha', source: 'shipped', url: '/visualizers/alpha/index.html' },
+    { id: 'beta', name: 'beta', source: 'shipped', url: '/visualizers/beta/index.html' },
+  ];
+  return { useVisualizerCatalog: () => catalog, catalogPromise: () => Promise.resolve(catalog) };
 });
 
 describe('useAutoSelectedVisualizer', () => {

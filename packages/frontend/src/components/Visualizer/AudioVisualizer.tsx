@@ -4,19 +4,19 @@
  * Dynamically renders the selected visualizer from the registry.
  * Passes the full VisualizerProps API to each visualizer component.
  */
-import { Suspense, useCallback } from 'react';
+import { useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
-import { getVisualizer } from './types';
+import { DocumentVisualizer } from './DocumentVisualizer';
+import { VisualizerDebugPanel } from './VisualizerDebugPanel';
+import { debugPanelEnabled } from './visualizerMetrics';
+import { useVisualizerCatalog } from './useVisualizerCatalog';
 import { DEFAULT_VISUALIZER_ID } from './constants';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../stores/visualizerPluginStore';
 import { useAutoSelectedVisualizer, useActiveVisualizerId } from '../../hooks/useAutoSelectedVisualizer';
 import { ErrorBoundary } from '../ErrorBoundary';
-
-// Import all visualizers to register them
-import './visualizers';
 
 interface AudioVisualizerProps {
   track?: Track | null;
@@ -29,14 +29,6 @@ interface AudioVisualizerProps {
   /** Track duration in seconds */
   duration?: number;
   className?: string;
-}
-
-function LoadingFallback() {
-  return (
-    <div className="w-full h-full bg-[#0a0015] flex items-center justify-center">
-      <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
 }
 
 /**
@@ -87,6 +79,7 @@ export function AudioVisualizer({
   className = '',
 }: AudioVisualizerProps) {
   const { visualizerId } = useVisualizerStore();
+  const catalog = useVisualizerCatalog();
   const markPluginFailed = useVisualizerPluginStore((s) => s.markFailed);
 
   // ADR-0064 point 7. **This is the only caller**, so the ranking is asked for once per track no
@@ -98,13 +91,15 @@ export function AudioVisualizer({
   // below, which is what actually rendered after the fallbacks.
   const requestedId = useActiveVisualizerId();
 
-  // Falls back to the listener's own choice before the built-in default, so an auto-chosen plugin
-  // that has since been removed lands on what they picked rather than on Reactive Terrain.
+  // Falls back to the listener's own choice before the default, so an auto-chosen plugin that has
+  // since been removed lands on what they picked rather than on Reactive Terrain.
+  const byId = (id: string | undefined) => (id ? catalog.find((entry) => entry.id === id) : undefined);
   const visualizer =
-    getVisualizer(requestedId) ||
-    getVisualizer(visualizerId) ||
-    getVisualizer(DEFAULT_VISUALIZER_ID);
-  const activeId = visualizer?.metadata.id;
+    byId(requestedId) ||
+    byId(visualizerId) ||
+    byId(DEFAULT_VISUALIZER_ID) ||
+    catalog[0];
+  const activeId = visualizer?.id;
 
   // ADR-0034 point 8: the picker marks the plugin as failed. A built-in id is not in the plugin
   // records and `markFailed` ignores it, so this is safe to call for whatever crashed.
@@ -123,10 +118,9 @@ export function AudioVisualizer({
     );
   }
 
-  const VisualizerComponent = visualizer.component;
-
   return (
     <div className={`w-full h-full ${className}`}>
+      {debugPanelEnabled() && <VisualizerDebugPanel />}
       <ErrorBoundary
         // **Keyed by the visualizer**, so switching away from a crashed one gets a fresh boundary.
         // Without it the boundary stays latched and every subsequent choice renders the fallback,
@@ -136,17 +130,21 @@ export function AudioVisualizer({
         onError={handleError}
         fallback={<VisualizerErrorFallback artworkUrl={artworkUrl} />}
       >
-        <Suspense fallback={<LoadingFallback />}>
-          <VisualizerComponent
-            track={track}
-            artworkUrl={artworkUrl}
-            lyrics={lyrics}
-            currentTime={currentTime}
-            duration={duration}
-            isPlaying={isPlaying}
-            features={features}
-          />
-        </Suspense>
+        {/*
+          A document, not a component (ADR-0087 point 1). The boundary above now catches only what
+          *this* page does — a plugin that throws takes down its own frame and nothing else, which
+          is point 5's isolation being structural rather than defensive.
+        */}
+        <DocumentVisualizer
+          src={visualizer.url}
+          track={track}
+          features={features}
+          artworkUrl={artworkUrl}
+          lyrics={lyrics}
+          currentTime={currentTime}
+          duration={duration}
+          isPlaying={isPlaying}
+        />
       </ErrorBoundary>
     </div>
   );
@@ -155,4 +153,4 @@ export function AudioVisualizer({
 // Re-export picker and types for convenience
 export { VisualizerPicker } from './VisualizerPicker';
 // eslint-disable-next-line react-refresh/only-export-components -- Re-exporting utility functions alongside component
-export { getVisualizers, getVisualizer, type VisualizerMetadata } from './types';
+export { type VisualizerMetadata } from './types';

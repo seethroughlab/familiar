@@ -1,0 +1,12 @@
+{
+  "name": "Spectrum",
+  "id": "spectrum",
+  "version": "1.0.0",
+  "type": "visualizer",
+  "description": "Frequency bars on a canvas. One file, no build step, no libraries.",
+  "author": { "name": "Familiar" },
+  "main": "index.html",
+  "familiar": { "apiVersion": 1 },
+  "icon": "AudioLines",
+  "affinity": { "tags": [], "ranges": [] }
+}

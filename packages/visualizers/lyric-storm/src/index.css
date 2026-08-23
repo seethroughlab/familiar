@@ -1,0 +1,13 @@
+/*
+ * This plugin's own Tailwind build (ADR-0087 point 7).
+ *
+ * **A document is lent nothing, and that includes CSS.** The component below was written inside
+ * the host app, where Tailwind was ambient, so it lays itself out with `w-full h-full` and centres
+ * text with `flex items-center justify-center`. In a standalone document those class names match
+ * no rule at all: they are not an error, they simply do nothing. The scene collapsed to the 150px
+ * a canvas defaults to, inside a frame that was the full size of the window.
+ *
+ * Tailwind v4 scans this package's own source and emits only what it finds, so the cost is a few
+ * kilobytes per plugin rather than a shared stylesheet nobody owns.
+ */
+@import "tailwindcss";

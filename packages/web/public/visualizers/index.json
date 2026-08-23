@@ -1,0 +1,135 @@
+{
+  "plugins": [
+    {
+      "name": "Beat Tiles",
+      "id": "beat-tiles",
+      "version": "1.0.0",
+      "type": "visualizer",
+      "description": "Reflective tiles pulsing with the beat, over the album cover.",
+      "author": {
+        "name": "Familiar"
+      },
+      "main": "index.html",
+      "familiar": {
+        "apiVersion": 1
+      },
+      "icon": "Grid3x3",
+      "affinity": {
+        "tags": [
+          "danceable",
+          "drums",
+          "funk",
+          "hip-hop"
+        ],
+        "ranges": [
+          {
+            "feature": "danceability",
+            "minimum": 0.5
+          }
+        ]
+      },
+      "folder": "beat-tiles",
+      "source": "shipped"
+    },
+    {
+      "name": "Lyric Storm",
+      "id": "lyric-storm",
+      "version": "1.0.0",
+      "type": "visualizer",
+      "description": "The song's own words drifting through a dark 3D space, reacting to the music.",
+      "author": {
+        "name": "Familiar"
+      },
+      "main": "index.html",
+      "familiar": {
+        "apiVersion": 1
+      },
+      "icon": "CloudLightning",
+      "affinity": {
+        "tags": [
+          "vocal/choir",
+          "dreamy",
+          "dark",
+          "ambient"
+        ],
+        "ranges": [
+          {
+            "feature": "energy",
+            "maximum": 0.7
+          }
+        ]
+      },
+      "folder": "lyric-storm",
+      "source": "shipped"
+    },
+    {
+      "name": "Lyrics",
+      "id": "lyrics",
+      "version": "1.0.0",
+      "type": "visualizer",
+      "description": "Scrolling synced lyrics over a drifting field of the song's words.",
+      "author": {
+        "name": "Familiar"
+      },
+      "main": "index.html",
+      "familiar": {
+        "apiVersion": 1
+      },
+      "icon": "Type",
+      "affinity": {
+        "tags": [
+          "vocal/choir"
+        ],
+        "ranges": []
+      },
+      "folder": "lyrics",
+      "source": "shipped"
+    },
+    {
+      "name": "Reactive Terrain",
+      "id": "reactive-terrain",
+      "version": "1.0.0",
+      "type": "visualizer",
+      "description": "A wireframe landscape driven by the music, with a car on an endless road.",
+      "author": {
+        "name": "Familiar"
+      },
+      "main": "index.html",
+      "familiar": {
+        "apiVersion": 1
+      },
+      "icon": "Mountain",
+      "affinity": {
+        "tags": [
+          "ambient",
+          "dreamy",
+          "electronic"
+        ],
+        "ranges": []
+      },
+      "folder": "reactive-terrain",
+      "source": "shipped"
+    },
+    {
+      "name": "Spectrum",
+      "id": "spectrum",
+      "version": "1.0.0",
+      "type": "visualizer",
+      "description": "Frequency bars on a canvas. One file, no build step, no libraries.",
+      "author": {
+        "name": "Familiar"
+      },
+      "main": "index.html",
+      "familiar": {
+        "apiVersion": 1
+      },
+      "icon": "AudioLines",
+      "affinity": {
+        "tags": [],
+        "ranges": []
+      },
+      "folder": "spectrum",
+      "source": "shipped"
+    }
+  ]
+}

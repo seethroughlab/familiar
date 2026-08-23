@@ -10,23 +10,13 @@
  * Plain DOM assertions rather than `toBeInTheDocument`: this package installs no jest-dom matchers.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VisualizerPicker } from '../VisualizerPicker';
-import { registerVisualizer, visualizerRegistry } from '../types';
 import { useVisualizerStore } from '../../../stores/visualizerStore';
 import { useVisualizerPluginStore } from '../../../stores/visualizerPluginStore';
 import { useVisualizerAutoSelectStore } from '../../../stores/visualizerAutoSelectStore';
 
 beforeEach(() => {
-  visualizerRegistry.clear();
-  registerVisualizer(
-    { id: 'alpha', name: 'Alpha', description: 'the alpha scene', usesMetadata: false },
-    () => null
-  );
-  registerVisualizer(
-    { id: 'beta', name: 'Beta', description: 'the beta scene', usesMetadata: false },
-    () => null
-  );
   useVisualizerStore.setState({ visualizerId: 'alpha', autoSelect: false });
   useVisualizerPluginStore.setState({ records: [], scanned: true });
   useVisualizerAutoSelectStore.getState().reset();
@@ -49,6 +39,18 @@ function row(description: string): HTMLElement {
 
 const checkbox = () => screen.getByRole('checkbox') as HTMLInputElement;
 const text = (pattern: RegExp | string) => screen.queryByText(pattern);
+
+// The registry is gone (ADR-0087): a visualizer is a document, so setup is a catalog of
+// folders rather than components registered into this page.
+vi.mock('../useVisualizerCatalog', () => {
+  // One array, not a literal per render — the real hook returns React state, and a mock
+  // that hands back a new reference every time makes effects depending on it loop.
+  const catalog = [
+    { id: 'alpha', name: 'Alpha', description: 'the alpha scene', source: 'shipped', url: '/visualizers/alpha/index.html' },
+    { id: 'beta', name: 'Beta', description: 'the beta scene', source: 'shipped', url: '/visualizers/beta/index.html' },
+  ];
+  return { useVisualizerCatalog: () => catalog, catalogPromise: () => Promise.resolve(catalog) };
+});
 
 describe('auto-select', () => {
   it('is off by default', () => {

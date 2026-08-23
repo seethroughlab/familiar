@@ -6,13 +6,11 @@ import { autoSelectFromURL, profileFromURL } from './services/embedBridge';
 import { EmbedVisualizer } from './components/Embed/EmbedVisualizer';
 import { installVisualizerSink } from './services/visualizerSink';
 import { useVisualizerStore } from './stores/visualizerStore';
-import { loadVisualizerPlugins } from './services/visualizerPluginHost';
-import { getVisualizers } from './components/Visualizer/types';
-// Side-effect import: registers the compile-time visualizers. **Explicit here, and before the
-// plugin loader runs**, because the loader needs their ids to refuse a drop-in plugin that would
-// otherwise overwrite one (ADR-0034). `AudioVisualizer` imports the same module, but that happens
-// at mount — far too late to be the thing the loader consults.
-import './components/Visualizer/visualizers';
+// **No side-effect import, and nothing to register.** This used to pull in the compile-time
+// visualizers so the plugin loader could refuse a drop-in that shadowed one. Under ADR-0087 there
+// are no compile-time visualizers: every one is a folder, shipped or local, and the catalog is a
+// listing rather than whatever managed to register itself first.
+import { catalogPromise } from './components/Visualizer/useVisualizerCatalog';
 
 /**
  * Boots the embedded visualizer surface (ADR-0033).
@@ -91,15 +89,14 @@ export function renderVisualizer(options?: { onReady?: () => void }): void {
   // with an origin-relative empty string.
   const ready = api ? setApiOrigin(api) : initApiOrigin();
 
-  // **Drop-in visualizers, before the first render** (ADR-0034). They have to be in the registry
-  // by the time `AudioVisualizer` looks up the chosen id, or a plugin the host was told to draw
-  // would fall back to the default on every launch and only appear after some later re-render.
+  // **The catalog, before the first render** (ADR-0034, ADR-0087). It has to be known by the time
+  // `AudioVisualizer` looks up the chosen id, or a plugin the host was told to draw would fall back
+  // to the default on every launch and only appear after some later re-render.
   //
-  // `catch` rather than trust: `loadVisualizerPlugins` is written never to reject, and if that ever
-  // stops being true the cost is a page that never mounts — a black rectangle with no error, which
-  // is the failure this surface produces over and over. A plugin problem must not be able to take
-  // the visualizer down with it.
-  const plugins = loadVisualizerPlugins(getVisualizers().map((v) => v.metadata.id)).catch(() => {});
+  // `catch` rather than trust: the loader is written never to reject, and if that ever stops being
+  // true the cost is a page that never mounts — a black rectangle with no error, which is the
+  // failure this surface produces over and over. A plugin problem must not take the visualizer down.
+  const plugins = catalogPromise().catch(() => []);
 
   Promise.all([ready, plugins]).then(() => {
     options?.onReady?.();
