@@ -1,4 +1,4 @@
-# ADR-0062: The Site Adopts a Static Site Generator
+# ADR-0069: The Site Adopts a Static Site Generator
 
 Status: proposed
 
