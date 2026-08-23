@@ -1,6 +1,18 @@
 # ADR-0067: The Plugin API Exposes What a First-Party Visualizer Uses
 
-Status: proposed
+Status: rejected — superseded before acceptance by
+[ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md)
+
+**Rejected because its subject no longer exists.** This ADR decided *what* the host should expose on
+`window.Familiar` — React, THREE, `@react-three/fiber`, drei and a set of hooks — having concluded
+that the list should be what a first-party visualizer actually uses. `ADR-0087` removes the global
+entirely: a visualizer is a document that brings its own libraries, so there is nothing left to
+choose the contents of.
+
+Its reasoning was sound for the contract it was written against, and one observation outlived it:
+the note that Music Video was the only built-in needing `playerStore` and an API client, and that its
+absence is what kept this surface small. That was evidence the component contract was wrong, and
+`ADR-0087` cites it as such.
 
 Date: 2026-08-18
 
