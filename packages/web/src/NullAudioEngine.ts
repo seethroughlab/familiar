@@ -1,4 +1,4 @@
-import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familiar/frontend/src/player/audio/types';
+import type { AudioEngine, AudioEngineCapabilities, EngineEvent } from '@familiar/frontend/src/audio/types';
 
 /**
  * An `AudioEngine` that does nothing, for the embedded surface (ADR-0017).

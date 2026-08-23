@@ -1,5 +1,5 @@
 import '@familiar/frontend/src/index.css';
-import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
+import { registerEngineFactory } from '@familiar/frontend/src/audio/createEngine';
 import { renderVisualizer } from '@familiar/frontend/src/renderVisualizer';
 import { NullAudioEngine } from './NullAudioEngine';
 

@@ -6,7 +6,7 @@
 import api from './base';
 import type { RequestOptions } from './base';
 import type { Track } from '../types';
-import type { QueueSource } from '../player/playerStore.types';
+import type { QueueSource } from '../audio/queueSource.types';
 
 export interface QueueSuggestionsRequest {
   current_track_id: string;

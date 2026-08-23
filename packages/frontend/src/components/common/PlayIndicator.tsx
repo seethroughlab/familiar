@@ -4,17 +4,20 @@
  * Hover state shows Play/Pause icons.
  */
 import { Play, Pause, Loader2 } from 'lucide-react';
-import { usePlayerStore } from '../../stores/playerStore';
 
 interface PlayIndicatorProps {
+  /** Whether this row's audio is still loading. Optional; no surface currently knows. */
+  isLoadingAudio?: boolean;
   isCurrent: boolean;
   isPlaying: boolean;
   index: number; // 1-based display number
 }
 
-export function PlayIndicator({ isCurrent, isPlaying, index }: PlayIndicatorProps) {
-  const isLoadingAudio = usePlayerStore((s) => s.isLoadingAudio);
-  const isLoading = isCurrent && isLoadingAudio;
+export function PlayIndicator({ isCurrent, isPlaying, index , isLoadingAudio}: PlayIndicatorProps) {
+  // Was a `playerStore` selector. Every other input to this component is already a prop, and this
+  // one is the reason a row list on `/embed` — where no player store is mounted — dragged the whole
+  // player graph in behind it. It read `false` there forever.
+  const isLoading = isCurrent && (isLoadingAudio ?? false);
 
   return (
     <>
@@ -56,15 +59,19 @@ export function PlayIndicator({ isCurrent, isPlaying, index }: PlayIndicatorProp
  * Uses md:group-hover responsive prefixes instead of plain group-hover.
  */
 interface MobilePlayIndicatorProps {
+  /** Whether this row's audio is still loading. Optional; no surface currently knows. */
+  isLoadingAudio?: boolean;
   isCurrent: boolean;
   isPlaying: boolean;
   isSelected: boolean;
   index: number; // 1-based display number
 }
 
-export function MobilePlayIndicator({ isCurrent, isPlaying, isSelected, index }: MobilePlayIndicatorProps) {
-  const isLoadingAudio = usePlayerStore((s) => s.isLoadingAudio);
-  const isLoading = isCurrent && isLoadingAudio;
+export function MobilePlayIndicator({ isCurrent, isPlaying, isSelected, index, isLoadingAudio }: MobilePlayIndicatorProps) {
+  // Was a `playerStore` selector. Every other input to this component is already a prop, and this
+  // one is the reason a row list on `/embed` — where no player store is mounted — dragged the whole
+  // player graph in behind it. It read `false` there forever.
+  const isLoading = isCurrent && (isLoadingAudio ?? false);
 
   if (isLoading) {
     return (

@@ -3,10 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PlaylistTrackList } from '../PlaylistTrackList';
 
-vi.mock('../../../stores/playerStore', () => ({
-  usePlayerStore: (selector: (state: { currentTrack: null; isPlaying: false }) => unknown) =>
-    selector({ currentTrack: null, isPlaying: false }),
-}));
+// The `playerStore` mock that stood here is gone with the store itself (ADR-0083). It outlived its
+// subject silently — `PlaylistTrackList` stopped importing that store, the module was deleted, and
+// the mock kept passing because a factory mock nothing imports is simply never consulted.
 
 vi.mock('../../../stores/columnStore', () => ({
   useColumnStore: (selector: (state: { columns: never[] }) => unknown) =>

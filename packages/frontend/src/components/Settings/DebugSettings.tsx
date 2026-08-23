@@ -8,14 +8,13 @@ import {
   areAudioEffectsAvailable,
   isVisualizerAvailable,
   getCurrentMode,
-} from '../../player/audio/engineInstance';
+} from '../../audio/engineInstance';
 import {
   getAudioAnalysisDiagnosticsSnapshot,
   isVisualizerDebugEnabled,
   setVisualizerDebugEnabled,
   type AudioAnalysisDiagnosticsSnapshot,
-} from '../../player/audio/analysisDiagnostics';
-import { usePlayerStore } from '../../stores/playerStore';
+} from '../../audio/analysisDiagnostics';
 import { apiErrorTracker } from '../../utils/apiErrorTracker';
 import type { TrackedError } from '../../utils/apiErrorTracker';
 // Build timestamp injected by Vite at build time
@@ -77,8 +76,6 @@ export function DebugSettings() {
   const [visualizerDiagnostics, setVisualizerDiagnostics] = useState<AudioAnalysisDiagnosticsSnapshot>(
     getAudioAnalysisDiagnosticsSnapshot(),
   );
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
 
   // Subscribe to API errors
   useEffect(() => {
@@ -213,15 +210,12 @@ export function DebugSettings() {
                 {analyser ? 'exists' : 'null'}
               </div>
 
-              <div className="text-zinc-400">isPlaying:</div>
-              <div className={isPlaying ? 'text-green-400' : 'text-zinc-400'}>
-                {String(isPlaying)}
-              </div>
-
-              <div className="text-zinc-400">currentTrack:</div>
-              <div className="text-zinc-200 truncate">
-                {currentTrack ? currentTrack.title : 'none'}
-              </div>
+              {/*
+                `isPlaying` and `currentTrack` were reported here until ADR-0083. They described a
+                player the admin app has not had since ADR-0071 removed it, so both rows had been
+                showing `false` and `none` for every session — a diagnostic that could only ever
+                give one answer, on the screen people go to when something is wrong.
+              */}
             </div>
           </div>
 
