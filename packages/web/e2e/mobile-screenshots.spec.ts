@@ -1,25 +1,30 @@
 /**
- * Mobile screenshot capture for identifying responsive design issues.
+ * Mobile screenshot capture, for spotting responsive problems across device widths.
  *
- * Captures screenshots at various mobile viewport sizes.
+ * A development tool, not README material — the output goes to `screenshots/mobile/` and nothing
+ * links to it. Its value is the sweep: five widths against the same screens, where a layout that
+ * only breaks at 360px shows up.
  *
- * Prerequisites:
- * 1. Backend running on port 4400
- * 2. Frontend dev server or served by backend
+ * **`player-bar` and `full-player` were removed**, along with the `Playlists` screen. They drove a
+ * player this app no longer has (ADR-0057 point 5, ADR-0071) by double-clicking a track row to
+ * start audio — every one of them was photographing whatever happened to be on screen after a
+ * click that did nothing.
  *
- * Run with: npx playwright test mobile-screenshots
+ * Run with the same setup as `screenshots.spec.ts`; see that file's header.
  */
 import { test } from '@playwright/test';
-import { ensureProfile, navigateToTab, waitForContentReady } from './helpers';
+import { ensureProfile, navigateToDestination, navigateToTab } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SCREENSHOT_DIR = path.join(__dirname, '..', '..', 'screenshots', 'mobile');
+// Three levels up, not two. `__dirname` is `packages/web/e2e`, so the old two-level path resolved
+// to `packages/screenshots/mobile` — a directory nobody knew existed, which is where every mobile
+// screenshot this file has ever taken actually went.
+const SCREENSHOT_DIR = path.join(__dirname, '..', '..', '..', 'screenshots', 'mobile');
 
-// Common mobile viewport sizes
 const MOBILE_VIEWPORTS = {
   'iphone-se': { width: 375, height: 667 },
   'iphone-14': { width: 390, height: 844 },
@@ -28,20 +33,28 @@ const MOBILE_VIEWPORTS = {
   'galaxy-s21': { width: 360, height: 800 },
 };
 
-// Screens to capture
-const SCREENS = [
-  { name: 'library', tab: 'Library' },
-  { name: 'playlists', tab: 'Playlists' },
-  { name: 'settings', tab: 'Settings' },
-] as const;
-
 test.beforeAll(async () => {
   if (!fs.existsSync(SCREENSHOT_DIR)) {
     fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   }
 });
 
-// Test each viewport size
+/** See `screenshots.spec.ts` for why this is not `waitForContentReady({ images: true })`. */
+async function waitForSettled(page: import('@playwright/test').Page, budgetMs = 12000) {
+  const settled = page
+    .waitForFunction(
+      () => {
+        if (document.querySelector('.animate-spin')) return false;
+        const text = document.body.innerText || '';
+        return !/Loading\.\.\.|Checking system status|Loading…/i.test(text);
+      },
+      { timeout: budgetMs },
+    )
+    .catch(() => {});
+  await Promise.race([settled, new Promise((resolve) => setTimeout(resolve, budgetMs + 1000))]);
+  await page.waitForTimeout(600);
+}
+
 for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
   test.describe(`Mobile - ${deviceName} (${viewport.width}x${viewport.height})`, () => {
     test.beforeEach(async ({ page }) => {
@@ -50,55 +63,22 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
       await ensureProfile(page);
     });
 
-    for (const screen of SCREENS) {
-      test(`${screen.name}`, async ({ page }) => {
-        await navigateToTab(page, screen.tab as 'Library' | 'Playlists' | 'Settings');
-        await waitForContentReady(page, { images: true }).catch(() => {});
-
+    for (const destination of ['Library', 'Tools', 'Server'] as const) {
+      test(`${destination.toLowerCase()} screenshot`, async ({ page }) => {
+        await navigateToDestination(page, destination);
+        await waitForSettled(page);
         await page.screenshot({
-          path: path.join(SCREENSHOT_DIR, `${deviceName}-${screen.name}.png`),
+          path: path.join(SCREENSHOT_DIR, `${deviceName}-${destination.toLowerCase()}.png`),
           fullPage: false,
         });
       });
     }
 
-    // Player bar test
-    test('player-bar', async ({ page }) => {
-      await navigateToTab(page, 'Library');
-
-      // Try to play a track
-      const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
-      if (await trackRow.isVisible()) {
-        await trackRow.dblclick();
-        await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
-      }
-
+    test('settings screenshot', async ({ page }) => {
+      await navigateToTab(page, 'Settings');
+      await waitForSettled(page);
       await page.screenshot({
-        path: path.join(SCREENSHOT_DIR, `${deviceName}-player-bar.png`),
-        fullPage: false,
-      });
-    });
-
-    // Full player test
-    test('full-player', async ({ page }) => {
-      await navigateToTab(page, 'Library');
-
-      // Play a track
-      const trackRow = page.locator('tr[data-track-id], [role="row"]').first();
-      if (await trackRow.isVisible()) {
-        await trackRow.dblclick();
-        await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
-      }
-
-      // Expand to full player
-      const expandButton = page.locator('button[aria-label="Expand player"]').first();
-      if (await expandButton.isVisible()) {
-        await expandButton.click();
-        await waitForContentReady(page, { images: true }).catch(() => {});
-      }
-
-      await page.screenshot({
-        path: path.join(SCREENSHOT_DIR, `${deviceName}-full-player.png`),
+        path: path.join(SCREENSHOT_DIR, `${deviceName}-settings.png`),
         fullPage: false,
       });
     });

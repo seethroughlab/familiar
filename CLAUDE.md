@@ -275,19 +275,32 @@ def upgrade():
 3. Add to settings tabs in main Settings component
 
 ### Regenerate README screenshots
-Screenshots for the README are auto-generated using Playwright:
 
-1. Ensure backend is running: `cd backend && make run`
-2. Start frontend dev server: `cd packages/web && pnpm dev`
-3. Run screenshot script: `cd packages/web && BASE_URL=http://localhost:3000 npx playwright test --grep="screenshot"`
+**The web app's screenshots are of an administration tool** — the three destinations and Settings
+(ADR-0058 point 2). The listening screenshots are `mac-*.png`, taken from the Mac app by hand;
+there is no script for those, because the browser cannot render them.
 
-Screenshots are saved to `screenshots/` directory. The script is in `packages/web/e2e/screenshots.spec.ts`.
+1. Backend with a library. Against the demo server: `familiar-demo.fly.dev` (~32 tracks).
+2. Frontend pointed at it: `cd packages/web && VITE_API_TARGET=https://familiar-demo.fly.dev pnpm dev`
+3. `cd packages/web && BASE_URL=http://localhost:3000 npx playwright test --grep="screenshot"`
 
-To add new screenshots:
-1. Add a new test case to `screenshots.spec.ts`
-2. Use the `selectBrowser()` helper to switch library views
-3. Use `navigateToTab()` helper to switch between Library/Playlists/Settings
-4. Update README.md to include the new screenshot
+**Against a server you do not own, run with a config that has no `globalSetup`.** The repo config's
+`e2e/global-setup.ts` POSTs `/api/v1/library/sync` — fine against CI fixtures, a write against
+anyone else's server.
+
+Output goes to `screenshots/` (README) and `screenshots/mobile/` (a responsive sweep across five
+device widths, linked from nowhere and used for spotting layout breakage).
+
+To add one:
+1. Add a test to `screenshots.spec.ts` whose title contains `screenshot` — the CI exclusion and the
+   run command both match on that word.
+2. Navigate with `navigateToDestination()` (Library/Tools/Server) or `navigateToTab()`
+   (Library/Playlists/Settings). There is no `selectBrowser()`; the library browsers were unmounted
+   by ADR-0050 and ADR-0057.
+3. Use the file's `takeScreenshot()`, which waits for spinners and "Loading…" to clear. **Do not use
+   `waitForContentReady({ images: true })`** — it does not honour the timeout it is given while a
+   page is re-rendering (asked for 8s, measured at 27s).
+4. Update README.md to include it.
 
 ## Configuration
 
