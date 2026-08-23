@@ -24,20 +24,26 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-  # **Pin the interpreter to a patch release, because a minor-level pin is not a pin.**
+  # **CI runs the interpreter production runs, pinned to the patch.**
   #
-  # The six `uv python install 3.12` steps below only make an interpreter available — they do not
-  # decide the one `uv run` selects, and `requires-python = ">=3.11"` lets it choose freely. On
-  # 2026-08-22 that resolved to 3.12.13 on the NAS and 3.12.14 on a GitHub-hosted runner, with
-  # byte-identical dependency sets (pytest 9.0.2, pytest-asyncio 1.3.0), and two tests that pass on
-  # .13 failed on .14: `asyncio.get_event_loop()` no longer creates a loop when none is running.
+  # This must stay equal to the tag in `docker/Dockerfile`. There is no way to share one value
+  # between a workflow and a Dockerfile, so they are kept in step by hand — change both together.
   #
-  # So the divergence this file exists to prevent was a *patch* release apart. `UV_PYTHON` is what
-  # `uv run` actually honours; the value must stay patch-level or the same drift returns.
+  # Two separate lessons are baked into this line, both learned on 2026-08-22:
   #
-  # Note this is 3.12 while `docker/Dockerfile` ships `python:3.11-slim` — CI does not currently
-  # test the interpreter production runs. That predates this pin and is left alone deliberately.
-  UV_PYTHON: "3.12.14"
+  # 1. **A minor-level pin is not a pin.** The six `uv python install` steps below only make an
+  #    interpreter *available*; they never decided the one `uv run` selects, and
+  #    `requires-python = ">=3.11"` is a floor, not a choice. That resolved to 3.12.13 on the NAS
+  #    and 3.12.14 on a GitHub-hosted runner, with byte-identical dependency sets (pytest 9.0.2,
+  #    pytest-asyncio 1.3.0), and two tests passed on .13 and failed on .14 —
+  #    `asyncio.get_event_loop()` no longer creates a loop when none is running. One patch release
+  #    was the whole difference, so `UV_PYTHON` carries the patch.
+  #
+  # 2. **CI was testing an interpreter nothing ships.** The first pin landed on 3.12 while
+  #    production has always been `python:3.11-slim` — a whole minor version that no test could
+  #    see. Point 1 is the evidence for why that mattered: if two *patch* releases can disagree
+  #    about a core stdlib call, a minor gap between CI and production is not a detail.
+  UV_PYTHON: "3.11.15"
 
 # **One run per branch; a new push cancels the one it supersedes.**
 #

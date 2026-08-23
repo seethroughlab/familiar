@@ -36,7 +36,11 @@ RUN pnpm --filter @familiar/web run build
 # =============================================================================
 # Stage 2: Python base with uv
 # =============================================================================
-FROM python:3.11-slim AS python-base
+# Pinned to the patch, and **must stay equal to `UV_PYTHON` in `.github/workflows/ci.yml`** — that
+# is what makes CI test the interpreter this image ships. `3.11-slim` floated, so the two could
+# drift a patch apart without either file changing; on 2026-08-22 a single patch release was enough
+# to flip two tests, so a floating tag is not close enough. Bump both together.
+FROM python:3.11.15-slim AS python-base
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
