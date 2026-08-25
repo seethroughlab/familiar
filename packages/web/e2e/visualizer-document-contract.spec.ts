@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 /**
  * ADR-0087: a visualizer is a document that receives events.
@@ -10,8 +13,23 @@ import { test, expect } from '@playwright/test';
  *
  * The harness is written inline rather than shipped in `public/`, so the assertions and the thing
  * they assert against cannot drift apart.
+ *
+ * **The document is served from disk, not by the server** (ADR-0091 point 2). The `/visualizers`
+ * mount existed only for this test and left with the rest of the server's visualizer surfaces; in
+ * production these paths are answered by `VisualizerSchemeHandler` out of the app bundle, never
+ * over HTTP. Reading the file here tests the same bytes the app ships and lets the spec move to
+ * `familiar-apple` under ADR-0092 as a file rather than a rewrite.
  */
 const PLUGIN = '/visualizers/spectrum/index.html';
+
+const PLUGIN_FILE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'public',
+  'visualizers',
+  'spectrum',
+  'index.html',
+);
 
 const HARNESS = `<!doctype html><meta charset="utf-8">
 <style>html,body{margin:0;height:100%}iframe{width:640px;height:360px;border:0}</style>
@@ -57,6 +75,17 @@ test.describe('the visualizer document contract (ADR-0087)', () => {
       if (HARNESS_SERVICE_WORKER_ERROR.test(String(e))) return;
       errors.push(String(e));
     });
+
+    // The document, from disk. Without this the path falls through to the SPA catch-all and comes
+    // back as `index.html` with HTTP 200 — the whole web app in the iframe, which loads fine and
+    // never sends `familiar:ready`. That is the defect the mount used to paper over.
+    await page.route(`**${PLUGIN}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html; charset=utf-8',
+        body: fs.readFileSync(PLUGIN_FILE, 'utf8'),
+      }),
+    );
 
     await page.goto(`${baseURL}/`);
     await page.setContent(HARNESS);
