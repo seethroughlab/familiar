@@ -1,12 +1,18 @@
 # ADR-0091: Visualizers Leave the Server Repo
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-25
 
-Extends [ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md) and supersedes
-[ADR-0088](ADR-0088-every-visualizer-ships-as-a-document.md) point 2's choice of *where* the shipped
-set lives. It does not touch [ADR-0064](ADR-0064-visualizers-declare-affinity-and-the-server-ranks-them.md).
+Extends [ADR-0087](ADR-0087-a-visualizer-is-a-document-not-a-component.md) and
+[ADR-0088](ADR-0088-every-visualizer-ships-as-a-document.md). It does not touch
+[ADR-0064](ADR-0064-visualizers-declare-affinity-and-the-server-ranks-them.md).
+
+**It supersedes nothing, and that is the finding.** Neither ADR-0087 nor ADR-0088 ever decided where
+the shipped set lives — checked 2026-08-25, and neither mentions `packages/web/public/visualizers`,
+a source of truth, or a repository at all. ADR-0088's four points are about *what* ships and how it
+is built, not where it sits. The location was never chosen; it followed the build, which was in the
+web repo because the browser once rendered visualizers.
 
 ## Context
 
@@ -40,10 +46,11 @@ fix a real defect — the SPA catch-all was answering `200` with `index.html` fo
 and its only consumer is `packages/web/e2e/visualizer-document-contract.spec.ts`. It fixed the test,
 and the test was the only thing that needed it.
 
-**A contradicted premise, recorded so it is not re-derived.** ADR-0088 put the shipped set in the
-web repo because that is where the build was, and at the time the browser still rendered
-visualizers. The second half stopped being true when the player was deleted; only the build
-remained, and a build is a reason to keep a *toolchain* somewhere, not a source of truth.
+**A contradicted premise, recorded so it is not re-derived.** It is tempting to say ADR-0088 put the
+shipped set in the web repo; it did not, and no ADR did. The set is there because the *build* is
+there, and the build is there because the browser once rendered visualizers. That second reason
+stopped being true when the player was deleted, leaving only the build — and a build is a reason to
+keep a *toolchain* somewhere, not a source of truth.
 
 **What the server legitimately keeps.** `POST /tracks/{id}/visualizers/rank` and
 `services/visualizer_affinity.py` stay exactly as they are. ADR-0064's shape is that *the client
