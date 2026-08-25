@@ -60,67 +60,62 @@ mention visualizers, not visualizer hosting.
 
 ## Decision
 
-1. **`familiar-apple` owns the shipped visualizer set.** `App/Shared/Visualizers.bundle/` becomes
-   the source of truth rather than a vendored copy, and `scripts/vendor-visualizers.sh` is deleted
-   along with `packages/web/public/visualizers/`.
+**Scope narrowed before merge.** The proposal bundled the server removal with moving the build and
+the plugin folders into `familiar-apple`. Implementation showed those are not alike: the folders are
+authored in place and cheap to move, but `VisualizerBundle.html` is a React app whose source reaches
+through `renderVisualizer` into `EmbedVisualizer`, `visualizerSink`, `visualizerStore`, `api/base`,
+`embedBridge`, `index.css` and Tailwind. Moving it means moving a subtree of `packages/frontend` —
+which contradicted this ADR's own Tradeoff, where the fate of those modules was explicitly *not*
+being decided. Both could not be true. The relocation is now
+[ADR-0092](ADR-0092-the-visualizer-document-build-moves-to-the-app.md), where a React subtree can get
+the alternatives it deserves. What is left here is the part that stands on its own.
 
-2. **The build moves with the sources it builds.** `vite.visualizer.config.ts`,
-   `scripts/inline-visualizer.mjs` and `scripts/build-visualizer.sh` move to `familiar-apple`, which
-   gains a `package.json` used only to produce `VisualizerBundle.html` and the plugin folders. Xcode
-   still must not require a build step — the artifacts stay committed, as ADR-0087 point 6 requires.
-
-3. **The server stops serving visualizer content.** `/visualizer`, the `/visualizers` mount and the
+1. **The server stops serving visualizer content.** `/visualizer`, the `/visualizers` mount and the
    `visualizers/` entry in `NON_SPA_PREFIXES` are removed from `backend/app/main.py`, along with
-   `serve_visualizer`.
+   `serve_visualizer`. This is the whole of the finding in Context: neither surface has a caller.
 
-4. **The document contract test moves too.** `visualizer-document-contract.spec.ts` follows the
-   documents into `familiar-apple`. It is the only check that the ADR-0087 handshake still works,
-   and ADR-0087's own note that *"nothing else tests it"* is the reason it must not simply be
-   deleted with the mount it depends on.
+2. **The contract test loses its dependency on the server, and stays.** It is the only check that
+   the ADR-0087 handshake works, and that ADR says so itself. Rather than being deleted with the
+   mount, it serves the plugin document to the page directly. It moves to `familiar-apple` under
+   ADR-0092, with the documents it tests.
 
-5. **`ADR-0064`'s ranking endpoint is untouched.** The server keeps scoring affinity declarations
-   against analysis. Point 3 removes content, not ranking.
+3. **`ADR-0064`'s ranking endpoint is untouched.** The server keeps scoring affinity declarations
+   against analysis. Point 1 removes content, not ranking.
 
 ## Alternatives Considered
 
-**Leave it as it is.** Costs nothing today, and the vendoring works. Rejected because it already
-misleads: this session resolved a merge conflict in `VisualizerBundle.html` by re-running a
-generator in a *different repository*, and added a server mount whose only consumer is a test. Both
-are symptoms of the source of truth being in the wrong place, and both will recur.
+**Leave both surfaces in place.** Costs nothing today. Rejected because it already misleads: the
+`/visualizers` mount was added three weeks ago to fix a real defect and its only consumer turned out
+to be a test, which is precisely the shape ADR-0077 names. A surface kept alive for its own test is
+not a surface.
 
-**Move the visualizers to their own repository.** The precedent exists —
-`familiar-plugin-lyric-pulse` and `familiar-plugin-non-places` are real repositories. Rejected for
-the shipped set specifically: a third repository has to be checked out, released and versioned in
-step with the app that embeds it, and ADR-0087 point 6 already forbids the app requiring another
-checkout to build. Drop-in plugins authored elsewhere keep working exactly as they do now — that is
-what the folder in the user's directory is for.
+**Delete `/visualizer` but keep `/visualizers`.** Tempting, since the mount is new and fixed a real
+bug. Rejected for the same reason: the bug it fixed was the SPA catch-all answering `200` with
+`index.html`, and once nothing fetches plugin documents from the server there is nothing left to
+answer wrongly.
 
-**Keep the build in `familiar` and vendor only.** The status quo with the mount deleted. Rejected
-because it leaves the awkward half in place: `familiar-apple` would still be unable to change a
-visualizer without a commit in another repository and a script run, which is the friction this ADR
-exists to remove.
+**Delete the contract test along with the mount.** The cheapest option, and wrong. ADR-0087 says
+outright that nothing else tests the handshake, and the surface it guards is rendered inside a
+`WKWebView` on two platforms. Point 2 removes its dependency on the server instead, which is what
+made deleting it look necessary.
 
-**Delete `/visualizer` but keep `/visualizers`.** Tempting, because the mount is three weeks old and
-fixes a real bug. Rejected: keeping a static mount alive for a test is the shape ADR-0077 names, and
-point 4 moves the test rather than stranding it.
+**Move the folders and the build now, as first proposed.** Rejected on discovering the two halves
+are not alike — see the note above the points. Deferred to ADR-0092 rather than abandoned.
 
 ## Consequences
 
-- **Positive.** A visualizer change is one commit in one repository, with no cross-repo script run
-  and no chance of the two copies disagreeing.
-- **Positive.** The server loses two surfaces with no callers, and `main.py`'s static-serving block
-  gets smaller rather than continuing to accumulate special cases.
-- **Positive.** ADR-0087's contract test ends up beside the documents it tests, where a change to
-  either is visible in one diff.
-- **Tradeoff.** `familiar-apple` gains a Node toolchain it did not have. It is build-time only and
-  never required by Xcode, but it is a second ecosystem in a Swift repository.
-- **Tradeoff.** The web repo's `visualizerPlugins.ts`, `visualizerCatalog.ts` and the three
-  visualizer stores become unreferenced once the documents leave. Deciding their fate is deliberately
-  **not** part of this ADR — they are the host side of a page that no longer has a home in the
-  browser, and that is a separate question.
-- **Follow-up.** `packages/web/dist-visualizer` is listed in `.gitignore` and was tracked anyway
-  until `git rm -r --cached` on 2026-08-08. Whatever moves should not bring that back.
+- **Positive.** Two surfaces with no callers are gone, and `main.py`'s static-serving block stops
+  accumulating special cases for content nothing requests.
+- **Positive.** The contract test no longer needs a server to run, which is what lets it move
+  repositories cleanly under ADR-0092.
+- **Positive.** The server's remaining relationship to visualizers is exactly one thing — ranking,
+  under ADR-0064 — and it is a pure function of analysis and posted candidates.
+- **Tradeoff.** `packages/web/public/visualizers/` and `scripts/vendor-visualizers.sh` stay for now,
+  so the web repo is still where a visualizer is edited. That friction is the thing ADR-0092
+  removes; this ADR only stops the server serving them.
+- **Follow-up.** ADR-0092 moves the folders, the build and the contract test. Until it lands, the
+  vendoring script is still the way a change reaches the app.
 - **Follow-up.** Neither `familiar-plugin-lyric-pulse` nor `familiar-plugin-non-places` has been
   ported to a document — both are still `"main": "dist/index.js"` components from ADR-0034. If the
-  worked examples ADR-0065 asks for are still wanted, porting them belongs after this move, in the
+  worked examples ADR-0065 asks for are still wanted, porting them belongs after the move, in the
   repository that will then own them.
