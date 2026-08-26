@@ -12,6 +12,8 @@ import pytest
 
 from app.services.ambient import AmbientDescriptor
 from app.services.playlist_generation import (
+    HNSW_EF_SEARCH,
+    POOL_SIZE,
     ResolvedSeed,
     _diverse_in_order,
     _mean_descriptor,
@@ -179,3 +181,29 @@ class TestSeedLabels:
     def test_album_prefers_the_requested_name(self):
         rows = self._rows([("Artist", "Stored Name")])
         assert _seed_label("album", rows, artist=None, album="Asked Name") == "Asked Name"
+
+
+class TestCandidatePool:
+    """`POOL_SIZE` is only real if `hnsw.ef_search` is raised to match it.
+
+    pgvector caps an HNSW scan at `ef_search` — default **40** — whatever the `LIMIT` says. Measured
+    on the 26k library, `ORDER BY embedding <=> … LIMIT 400` returned exactly 40 rows, so this
+    module's pool had been a tenth of its documented size since ADR-0048 shipped. Nothing made it
+    visible: the query is correct, the plan looks right, and a short pool reads as a small library.
+    """
+
+    def test_ef_search_is_at_least_the_pool_size(self):
+        assert HNSW_EF_SEARCH >= POOL_SIZE, "ef_search below POOL_SIZE just moves the cap"
+
+    def test_the_pool_query_sets_it(self):
+        """Asserted on the source because the alternative is a 26k-row fixture.
+
+        A unit-sized library cannot show the difference between a cap of 40 and a cap of 400 — which
+        is exactly why this went unnoticed for so long.
+        """
+        import inspect
+
+        from app.services import playlist_generation
+
+        source = inspect.getsource(playlist_generation.generate_seeded_playlist)
+        assert "hnsw.ef_search" in source
