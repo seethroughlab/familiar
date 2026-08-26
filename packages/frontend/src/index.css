@@ -8,8 +8,10 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Dark theme (default) */
-:root, .dark {
+/* The one theme. ADR-0080: the administration interface is dark only — the light palette flipped
+   a handful of backgrounds while `text-white` stayed everywhere else, because the 78 `light:`
+   utility classes it depended on were never a registered variant and compiled to nothing. */
+:root {
   --bg-primary: #0a0a0a;
   --bg-secondary: #18181b;
   --bg-tertiary: #27272a;
@@ -17,17 +19,6 @@
   --text-secondary: #a1a1aa;
   --text-muted: #71717a;
   --border-color: #3f3f46;
-}
-
-/* Light theme */
-.light {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f4f4f5;
-  --bg-tertiary: #e4e4e7;
-  --text-primary: #18181b;
-  --text-secondary: #52525b;
-  --text-muted: #71717a;
-  --border-color: #d4d4d8;
 }
 
 /* Scrollbar styling */
@@ -112,16 +103,8 @@ body {
   .pt-safe-top {
     padding-top: calc(env(safe-area-inset-top) + 0.5rem);
   }
-  /* Combined safe padding for fixed bottom elements (like PlayerBar) */
-  .pb-safe-bottom {
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-  }
-  /* Safe padding only on desktop (md+) — avoids double padding when MobileBottomNav is present */
-  @media (min-width: 768px) {
-    .pb-safe-bottom-desktop {
-      padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
-    }
-  }
+  /* No bottom-edge utilities: the player bar and the mobile bottom nav were the only elements
+     pinned to it, and both are gone (ADR-0071, ADR-0080 point 1). */
 }
 
 /* iOS PWA standalone mode adjustments */

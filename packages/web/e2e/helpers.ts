@@ -117,10 +117,11 @@ export async function navigateToDestination(
 }
 
 /**
- * Click a link or nav button by its visible text, desktop or mobile.
+ * Click a navigation link by its accessible name.
  *
- * The sidebar renders `<Link>`s; the mobile bottom bar renders `<button>`s. Both carry the same
- * labels, so one helper covers both viewports.
+ * There is one bar at every width now (ADR-0080 point 1), and it renders `<Link>`s, so the first
+ * branch is the one that fires. The `nav button` fallback is kept because it costs nothing and is
+ * what covered the deleted mobile bottom bar — if a future bar renders buttons, this still works.
  */
 async function clickNav(page: Page, label: string) {
   const link = page.getByRole('link', { name: label, exact: true }).first();
@@ -198,13 +199,15 @@ export async function navigateToView(page: Page, label: string) {
 
 
 /**
- * Navigate to a specific section in the sidebar-based UI.
+ * Navigate to a specific section of the administration tool.
  *
- * `Queue` is gone from the union: the queue left with the player (ADR-0057 point 5), and its case
- * here was already a no-op, so a spec asking for it would have silently asserted against whatever
- * page it happened to be on. Removing it from the type makes that a compile error instead.
+ * `Queue` was removed from the union when the queue left with the player (ADR-0057 point 5), and
+ * **`Settings` is gone the same way**: ADR-0080 deleted the destination once the theme picker was
+ * the only control left on it, so a spec asking for it would navigate nowhere and then assert
+ * against whatever page it happened to be on. Removing it from the type makes that a compile error
+ * rather than a confident false pass — the same reason `Queue` went.
  */
-export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Settings') {
+export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists') {
   switch (tabName) {
     case 'Library': {
       // Was `navigateToView(page, 'Tracks')`, which reached the track list on the Tools page.
@@ -213,30 +216,8 @@ export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists'
       await navigateToDestination(page, 'Library');
       break;
     }
-    case 'Settings': {
-      // Was a `navigate-to-settings` window event. Deleting the player deleted `useAppBootstrap`,
-      // and the listener with it, so the event reached nothing — the test failed here rather than
-      // on an assertion, which is how the dead affordance in `StatusMenu` was found.
-      //
-      // Clicking the sidebar's own Settings control is what a person does, and it fails loudly if
-      // that control ever goes the same way. The old comment justified the event by saying a click
-      // was "unreliable in CI behind the player bar overlay" — there is no player bar now.
-      //
-      // Not `clickNav`: Settings is deliberately not a destination, so it sits in the sidebar
-      // *footer*, outside the `<nav>` that `clickNav`'s button selector is scoped to. Desktop
-      // renders it as a `<button>` (labelled by its text expanded, by `title` collapsed); the
-      // mobile bar renders a `<Link>`. Try both, same as `clickNav` does for destinations.
-      const settingsButton = page.getByRole('button', { name: 'Settings' }).first();
-      if (await settingsButton.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await settingsButton.click();
-      } else {
-        await page.getByRole('link', { name: 'Settings' }).first().click({ timeout: 5000 });
-      }
-      await page.waitForSelector('h2:has-text("Settings")', { timeout: 10000 });
-      break;
-    }
     case 'Playlists':
-      // Visible in the sidebar by default, no navigation needed
+      // Visible by default, no navigation needed
       break;
   }
 }
