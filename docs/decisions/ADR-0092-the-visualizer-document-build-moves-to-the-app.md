@@ -1,6 +1,6 @@
 # ADR-0092: The Visualizer Document Build Moves to the App
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-25
 

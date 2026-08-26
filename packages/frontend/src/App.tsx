@@ -25,7 +25,6 @@ const DuplicatesPage = lazy(() => import('./components/Admin/DuplicatesPage').th
 const OrganizePage = lazy(() => import('./components/Admin/OrganizePage').then(m => ({ default: m.OrganizePage })));
 const ArtworkPage = lazy(() => import('./components/Admin/ArtworkPage').then(m => ({ default: m.ArtworkPage })));
 const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => ({ default: m.ServerPage })));
-const SettingsPanel = lazy(() => import('./components/Settings').then(m => ({ default: m.SettingsPanel })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
 
@@ -178,19 +177,6 @@ function App() {
 
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
-            {/* Settings is no longer the point of the web app — the three destinations below are
-                (ADR-0058 point 2). It keeps its URL and its heading: the E2E helper waits on that
-                heading, so it is load-bearing as well as ordinary good sense. What it still holds
-                is theme, plus the playback and offline sections scheduled to leave with the
-                player (point 5). */}
-            <Route path="/settings" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <div className="p-4 sm:p-6 max-w-4xl mx-auto">
-                  <h2 className="text-lg font-semibold mb-4">Settings</h2>
-                  <SettingsPanel />
-                </div>
-              </Suspense>
-            } />
 
             {/* The other two destinations. Library is the index route below. */}
             <Route path="/tools" element={
@@ -232,7 +218,9 @@ function App() {
 
             {/* Default redirect */}
             {/* ADR-0058 point 1: the administrator lands on the thing being administered, not on a
-                form. This was `Navigate to="/settings"`. */}
+                form. This was `Navigate to="/settings"`; there is no settings route at all now —
+                ADR-0080 deleted it once theme was the only control left on it. The catch-all below
+                sends an old bookmark here. */}
             <Route index element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <LibraryPage />

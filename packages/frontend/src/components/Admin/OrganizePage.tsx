@@ -8,7 +8,7 @@
  *
  * **No apply button, and not out of caution.** `organizer.py` exposes `/templates`, `/preview` and
  * `/track/{id}/preview`. There is no route that moves a file, so there is nothing to call. The
- * plan said "no apply until the preview is trusted", which turns out to be the server's position
+ * plan said"no apply until the preview is trusted", which turns out to be the server's position
  * already.
  *
  * Note the paths: the router's prefix is `/library/organize`, not `/organizer` — the plan had it
@@ -55,7 +55,7 @@ export function OrganizePage() {
       subtitle="See where files would move under a naming template — nothing is renamed"
     >
       <AdminSection title="Template">
-        <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
+        <div className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
           {templatesLoading ? (
             <p className="text-sm text-zinc-400">Loading templates…</p>
           ) : (
@@ -63,7 +63,7 @@ export function OrganizePage() {
               <select
                 value={selected ?? ''}
                 onChange={(e) => setTemplate(e.target.value)}
-                className="w-full bg-zinc-900 dark:bg-zinc-900 light:bg-white border border-zinc-700 dark:border-zinc-700 light:border-zinc-300 rounded-lg px-3 py-2 text-sm text-white dark:text-white light:text-zinc-900"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white"
               >
                 {templates?.templates.map((t) => (
                   <option key={t.name} value={t.template}>
@@ -129,14 +129,14 @@ function ResultRow({ result }: { result: OrganizeResult }) {
         : 'bg-zinc-700 text-zinc-400';
 
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-3 flex items-start gap-3">
+    <div className="bg-zinc-800/50 rounded-lg p-3 flex items-start gap-3">
       <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${tone}`}>
         {/* "moved" is the service's word for a *would-move* in preview mode. Saying "moved" on a
             page that moves nothing is the kind of wording that makes people distrust a tool. */}
         {result.status === 'moved' ? 'Would move' : result.status === 'error' ? 'Error' : 'Unchanged'}
       </span>
       <div className="min-w-0 flex-1 text-xs">
-        <div className="text-zinc-400 dark:text-zinc-400 light:text-zinc-600 truncate font-mono">
+        <div className="text-zinc-400 truncate font-mono">
           {result.old_path}
         </div>
         {result.new_path && result.status === 'moved' && (

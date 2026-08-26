@@ -5,7 +5,7 @@
  * Catches bugs like a sidebar link pointing to a route that doesn't exist
  * (which silently falls through to the catch-all redirect).
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -130,7 +130,7 @@ describe('navigation links resolve to mounted routes', () => {
       `^${p.replace(/:[^/?]+\??/g, '[^/]*').replace(/\/$/, '')}/?$`,
     ).test(target));
 
-  it('every destination in the sidebar is mounted', () => {
+  it('every destination in the top bar is mounted', () => {
     for (const d of DESTINATIONS) {
       expect(
         isMounted(d.path),
@@ -139,28 +139,49 @@ describe('navigation links resolve to mounted routes', () => {
     }
   });
 
-  it.each([
-    'components/Sidebar/Sidebar.tsx',
-    'components/Admin/LibraryPage.tsx',
-    'components/Admin/ToolsPage.tsx',
-  ])('every internal link in %s is mounted', (relative) => {
-    const source = readSource(relative);
-    // Both forms, because a component navigates either way and only one of them is a `<Link>`.
-    // The sidebar's `<Link to={item.path}>` is dynamic and covered by the destinations test above;
-    // its `navigate('/settings')` is a string literal and covered here.
-    const targets = [
-      ...Array.from(source.matchAll(/\bto="(\/[^"]*)"/g), (m) => m[1]),
-      ...Array.from(source.matchAll(/\bnavigate\(\s*['"](\/[^'"]*)['"]/g), (m) => m[1]),
-    ];
+  /*
+   * ADR-0080 point 4: the scan reads the whole component tree, not three hand-listed files.
+   *
+   * It read `Sidebar.tsx`, `LibraryPage.tsx` and `ToolsPage.tsx`. That is how `StatusMenu.tsx` kept
+   * a "Proposed Changes" button pointing at `/library/proposed-changes` — unmounted since ADR-0057
+   * — for as long as it did: the guard whose whole purpose is catching a link to nowhere could not
+   * see the file the link was in. A list of files to check is the same shape of mistake as the bug
+   * it is checking for, so there is no list any more.
+   */
+  const componentFiles = (): string[] => {
+    const dir = resolve(process.cwd(), 'src', 'components');
+    return readdirSync(dir, { recursive: true, encoding: 'utf-8' })
+      .filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))
+      .map((f) => `components/${f}`);
+  };
 
-    // A page with no links is a red flag for this guard, not a pass: these three all navigate.
-    expect(targets.length).toBeGreaterThan(0);
+  /** Every internal navigation target in a file: `<Link to="/…">` and `navigate('/…')`. */
+  const linkTargets = (source: string): string[] => [
+    ...Array.from(source.matchAll(/\bto="(\/[^"]*)"/g), (m) => m[1]),
+    ...Array.from(source.matchAll(/\bnavigate\(\s*['"](\/[^'"]*)['"]/g), (m) => m[1]),
+  ];
 
-    for (const target of targets) {
-      expect(
-        isMounted(target),
-        `${relative} links to "${target}", which App.tsx does not mount — it would silently redirect`,
-      ).toBe(true);
+  it('every internal link in every component is mounted', () => {
+    const dead: string[] = [];
+    let total = 0;
+
+    for (const relative of componentFiles()) {
+      for (const target of linkTargets(readSource(relative))) {
+        total++;
+        if (!isMounted(target)) dead.push(`${relative} -> ${target}`);
+      }
     }
+
+    // Finding nothing at all means the regexes stopped matching, not that the app is clean.
+    expect(total).toBeGreaterThan(0);
+    expect(dead, `these links have no route in App.tsx and would silently redirect:\n${dead.join('\n')}`)
+      .toEqual([]);
+  });
+
+  it('the top bar is one of the files that scan reads', () => {
+    // The destinations are `<Link to={item.path}>` — dynamic, so the test above cannot see them and
+    // the destinations test does that job. This asserts the bar is still where the scan looks, so a
+    // rename cannot quietly drop the shell's navigation out of coverage.
+    expect(componentFiles()).toContain('components/TopBar.tsx');
   });
 });
