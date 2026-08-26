@@ -80,6 +80,24 @@ export function DiscoverySectionView({
           sortPersistKey={`discover-${section.id}`}
           currentTrackId={nowPlaying.trackId}
           isPlaying={nowPlaying.playing}
+          /*
+           * **Play went nowhere without this.** `DiscoverTrackList` stopped reaching into
+           * `playerStore` under ADR-0083 and started taking a callback instead — but this parent
+           * was never updated to pass one, and `onPlayTracks?.()` swallowed every click. The two
+           * layouts either side of this branch were wired all along, so it failed only in the
+           * `tracklist` sections: "Unheard in Your Library" and "Deep Cuts".
+           *
+           * A track id is all the embedded surface can act on — it posts an intent for a queue of
+           * one (ADR-0016 point 4, ADR-0090 point 4), so the list is deliberately not forwarded.
+           */
+          onPlayTracks={
+            onItemPlay
+              ? (_tracks, startId) => {
+                  const item = section.items.find((i) => i.playbackContext?.trackId === startId);
+                  if (item) onItemPlay(item);
+                }
+              : undefined
+          }
         />
       ) : layout === 'grid' ? (
         <DiscoveryGrid
