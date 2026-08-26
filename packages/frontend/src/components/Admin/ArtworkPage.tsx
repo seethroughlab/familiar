@@ -44,7 +44,7 @@ export function ArtworkPage() {
 
   // Stated rather than served by the endpoint, because `generated` is deliberately a *subset* of
   // `with_artwork` — an album with a placeholder does have a file. Folding them together is what
-  // would let"91% covered" describe a library where a quarter of the covers are drawn.
+  // would let "91% covered" describe a library where a quarter of the covers are drawn.
   const real = data ? data.with_artwork - data.generated : 0;
 
   return (

@@ -1,6 +1,6 @@
-@import"tailwindcss";
-@source"../../../packages/frontend/src";
-@source"../../../packages/web/src";
+@import "tailwindcss";
+@source "../../../packages/frontend/src";
+@source "../../../packages/web/src";
 
 :root {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

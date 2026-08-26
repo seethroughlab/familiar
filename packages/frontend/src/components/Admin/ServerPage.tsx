@@ -33,11 +33,9 @@ export function ServerPage() {
         <SystemStatus />
       </AdminSection>
 
-      {/* Absent unless something is running. Inherited from the status menu ADR-0080 removed —
-          `artwork_fetch` and `s3_backup` report their progress nowhere else. */}
-      <AdminSection title="Jobs">
-        <BackgroundJobs />
-      </AdminSection>
+      {/* Renders its own section, or nothing at all when idle. Inherited from the status menu
+          ADR-0080 removed — `artwork_fetch` and `s3_backup` report their progress nowhere else. */}
+      <BackgroundJobs />
 
       <AdminSection title="Access">
         <ApiKeyStatus />

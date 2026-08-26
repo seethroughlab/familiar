@@ -9,11 +9,15 @@
  * Library dashboard, but **`artwork_fetch` and `s3_backup` had no indicator anywhere else**, so
  * deleting the menu without this would have taken two long-running jobs' only progress with it.
  *
- * Renders nothing when nothing is running, so the section is absent rather than empty.
+ * **Renders its own `AdminSection`**, heading included, so that when nothing is running the whole
+ * section is absent rather than a "JOBS" heading over empty space. Returning `null` from inside a
+ * section the page had already opened is what produced exactly that, which is the empty-section
+ * defect `ServerPage`'s own comment says this destination does not ship.
  */
 import { useEffect } from 'react';
 import { Image, Music, CloudUpload } from 'lucide-react';
 
+import { AdminSection } from '../Admin/AdminPage';
 import { useBackgroundJobsStore } from '../../stores/backgroundJobsStore';
 import type { BackgroundJob } from '../../api';
 
@@ -88,8 +92,8 @@ export function BackgroundJobs() {
   if (activeCount === 0) return null;
 
   return (
-    <div className="space-y-2">
+    <AdminSection title="Jobs">
       {jobs.map((job) => <JobProgressBar key={job.type} job={job} />)}
-    </div>
+    </AdminSection>
   );
 }

@@ -131,7 +131,7 @@ function ResultRow({ result }: { result: OrganizeResult }) {
   return (
     <div className="bg-zinc-800/50 rounded-lg p-3 flex items-start gap-3">
       <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${tone}`}>
-        {/*"moved" is the service's word for a *would-move* in preview mode. Saying"moved" on a
+        {/* "moved" is the service's word for a *would-move* in preview mode. Saying "moved" on a
             page that moves nothing is the kind of wording that makes people distrust a tool. */}
         {result.status === 'moved' ? 'Would move' : result.status === 'error' ? 'Error' : 'Unchanged'}
       </span>

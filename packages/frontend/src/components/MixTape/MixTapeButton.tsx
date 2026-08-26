@@ -58,7 +58,7 @@ export function MixTapeButton({ source, trackCount, enforceMaxFifteen = false }:
     return (
       <button
         disabled
-        title={`Rendering"${current.name}" — ${phaseLabel}`}
+        title={`Rendering "${current.name}" — ${phaseLabel}`}
         className="flex items-center justify-center gap-2 px-4 py-2 bg-zinc-700 opacity-70 rounded-full cursor-default"
       >
         <Loader2 className="w-4 h-4 text-orange-400 animate-spin" />
@@ -75,7 +75,7 @@ export function MixTapeButton({ source, trackCount, enforceMaxFifteen = false }:
           <button
             onClick={handleDownload}
             disabled={downloading}
-            title={`Download"${current.name}"`}
+            title={`Download "${current.name}"`}
             className="flex items-center justify-center gap-2 pl-4 pr-3 py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 rounded-l-full transition-colors text-white"
           >
             {downloading ? (
