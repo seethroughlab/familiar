@@ -18,6 +18,7 @@ import { ProfileSettings } from '../Settings/ProfileSettings';
 import { LastfmSettings } from '../Settings/LastfmSettings';
 import { DebugSettings } from '../Settings/DebugSettings';
 import { RemoteLogsPanel } from '../Settings/RemoteLogsPanel';
+import { BackgroundJobs } from '../Settings/BackgroundJobs';
 
 export function ServerPage() {
   // Developer tools are hidden by default. Shown in dev builds, or on any build by setting
@@ -30,6 +31,12 @@ export function ServerPage() {
     <AdminPage title="Server" subtitle="Health, access and the machine underneath">
       <AdminSection title="Health">
         <SystemStatus />
+      </AdminSection>
+
+      {/* Absent unless something is running. Inherited from the status menu ADR-0080 removed —
+          `artwork_fetch` and `s3_backup` report their progress nowhere else. */}
+      <AdminSection title="Jobs">
+        <BackgroundJobs />
       </AdminSection>
 
       <AdminSection title="Access">

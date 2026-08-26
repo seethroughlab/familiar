@@ -61,7 +61,7 @@ export function Dashboard() {
    * The four backlogs, named separately (point 7).
    *
    * `analysis`, `backfill`, `melodic` and `mood_tags` have their own version constants and their
-   * own reasons to stall — a single "pending" number hides which one is stuck, which is most of the
+   * own reasons to stall — a single"pending" number hides which one is stuck, which is most of the
    * reason to have this screen rather than a progress bar.
    */
   const queues = library
@@ -83,7 +83,7 @@ export function Dashboard() {
         {/*
           * No albums/compilations/soundtracks breakdown, though `/library/stats` returns one.
           * Nothing writes `Track.album_type`, so every row keeps the column default: the
-          * breakdown reads "26,488 albums · 0 compilations" on a library ADR-0052 found 297
+          * breakdown reads"26,488 albums · 0 compilations" on a library ADR-0052 found 297
           * compilations in. Point 6 forbids exactly this — a figure that looks like data.
           */}
         <Stat icon={<Disc3 className="w-5 h-5 text-cyan-400" />} label="Albums"
@@ -92,11 +92,11 @@ export function Dashboard() {
               value={library?.total_artists} loading={libraryLoading} />
       </div>
 
-      <section className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
+      <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-3">
           <Activity className="w-5 h-5 text-cyan-400" />
-          <h3 className="font-medium text-white dark:text-white light:text-zinc-900">Analysis</h3>
-          <span className="ml-auto text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 tabular-nums">
+          <h3 className="font-medium text-white">Analysis</h3>
+          <span className="ml-auto text-sm text-zinc-400 tabular-nums">
             {libraryLoading ? '—' : `${analysed.toLocaleString()} of ${total.toLocaleString()}`}
           </span>
         </div>
@@ -105,21 +105,21 @@ export function Dashboard() {
           <div className="h-full bg-cyan-500 transition-[width] duration-500"
                style={{ width: `${coverage}%` }} />
         </div>
-        <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+        <p className="text-sm text-zinc-400">
           {libraryLoading ? 'Loading…' : `${coverage}% analysed`}
         </p>
 
         {queues.length > 0 && (
           <div className="pt-1 space-y-1">
-            <div className="flex items-center gap-2 text-sm text-zinc-300 dark:text-zinc-300 light:text-zinc-700">
+            <div className="flex items-center gap-2 text-sm text-zinc-300">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
               <span>Waiting</span>
             </div>
 
             {queues.map((q) => (
               <div key={q.label} className="flex items-center justify-between bg-zinc-900/50 rounded p-2">
-                <span className="text-sm text-zinc-300 dark:text-zinc-300 light:text-zinc-700">{q.label}</span>
-                <span className="text-sm tabular-nums text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+                <span className="text-sm text-zinc-300">{q.label}</span>
+                <span className="text-sm tabular-nums text-zinc-400">
                   {q.value.toLocaleString()}
                 </span>
               </div>
@@ -129,11 +129,11 @@ export function Dashboard() {
       </section>
 
       {artwork && artwork.total_albums > 0 && (
-        <section className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
+        <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
           <div className="flex items-center gap-3">
             <Image className="w-5 h-5 text-cyan-400" />
-            <h3 className="font-medium text-white dark:text-white light:text-zinc-900">Cover art</h3>
-            <span className="ml-auto text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 tabular-nums">
+            <h3 className="font-medium text-white">Cover art</h3>
+            <span className="ml-auto text-sm text-zinc-400 tabular-nums">
               {artwork.with_artwork.toLocaleString()} of {artwork.total_albums.toLocaleString()}
             </span>
           </div>
@@ -145,7 +145,7 @@ export function Dashboard() {
             />
           </div>
 
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+          <p className="text-sm text-zinc-400">
             {artwork.without_artwork.toLocaleString()} albums have no cover
             {/*
               * Placeholders are named separately because they are what the app draws when it has
@@ -160,12 +160,12 @@ export function Dashboard() {
       )}
 
       {plays && plays.total_plays > 0 && (
-        <section className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
+        <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
           <div className="flex items-center gap-3">
             <Clock className="w-5 h-5 text-cyan-400" />
-            <h3 className="font-medium text-white dark:text-white light:text-zinc-900">Listening</h3>
+            <h3 className="font-medium text-white">Listening</h3>
           </div>
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+          <p className="text-sm text-zinc-400">
             {plays.total_plays.toLocaleString()} plays across{' '}
             {plays.unique_tracks.toLocaleString()} tracks · {formatHours(plays.total_play_seconds)}
           </p>
@@ -173,11 +173,11 @@ export function Dashboard() {
             <ol className="space-y-1">
               {plays.top_tracks.map((t: PlayStatsResponse['top_tracks'][number]) => (
                 <li key={t.id} className="flex items-center justify-between bg-zinc-900/50 rounded p-2">
-                  <span className="text-sm truncate text-zinc-300 dark:text-zinc-300 light:text-zinc-700">
+                  <span className="text-sm truncate text-zinc-300">
                     {t.title ?? 'Untitled'}
                     {t.artist ? <span className="text-zinc-500"> — {t.artist}</span> : null}
                   </span>
-                  <span className="text-sm tabular-nums text-zinc-400 dark:text-zinc-400 light:text-zinc-600 pl-3">
+                  <span className="text-sm tabular-nums text-zinc-400 pl-3">
                     {t.play_count}
                   </span>
                 </li>
@@ -198,12 +198,12 @@ function Stat({ icon, label, value, detail, loading }: {
   loading: boolean;
 }) {
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4">
+    <div className="bg-zinc-800/50 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-1">
         {icon}
-        <span className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">{label}</span>
+        <span className="text-sm text-zinc-400">{label}</span>
       </div>
-      <div className="text-2xl font-semibold tabular-nums text-white dark:text-white light:text-zinc-900">
+      <div className="text-2xl font-semibold tabular-nums text-white">
         {loading || value === undefined ? '—' : value.toLocaleString()}
       </div>
       {detail && (

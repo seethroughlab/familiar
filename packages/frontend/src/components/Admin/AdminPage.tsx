@@ -19,9 +19,9 @@ export function AdminPage({
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-white dark:text-white light:text-zinc-900">{title}</h2>
+        <h2 className="text-xl font-bold text-white">{title}</h2>
         {subtitle && (
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600 mt-1">
+          <p className="text-sm text-zinc-400 mt-1">
             {subtitle}
           </p>
         )}
@@ -34,7 +34,7 @@ export function AdminPage({
 export function AdminSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section>
-      <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-400 light:text-zinc-500 uppercase tracking-wider mb-3">
+      <h3 className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-3">
         {title}
       </h3>
       <div className="space-y-4">{children}</div>

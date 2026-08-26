@@ -138,17 +138,17 @@ export function DebugSettings() {
   };
 
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-white rounded-lg p-4">
+    <div className="bg-zinc-800/50 rounded-lg p-4">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3"
       >
         <Bug className="w-5 h-5 text-orange-400" />
         <div className="flex-1 text-left">
-          <h4 className="font-medium text-white dark:text-white light:text-zinc-900">
+          <h4 className="font-medium text-white">
             Debug Info
           </h4>
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+          <p className="text-sm text-zinc-400">
             Build: {BUILD_TIME === 'dev' ? 'dev' : new Date(BUILD_TIME).toLocaleString()}
           </p>
         </div>

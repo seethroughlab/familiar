@@ -172,32 +172,8 @@ export function useAppNavigation() {
     [navigate]
   );
 
-  /**
-   * Navigate to favorites view
-   */
-  const navigateToFavorites = useCallback(() => {
-    navigate('/favorites');
-  }, [navigate]);
 
-  /**
-   * Navigate to downloads view
-   */
-  const navigateToDownloads = useCallback(() => {
-    navigate('/downloads');
-  }, [navigate]);
 
-  /**
-   * Navigate to the settings page.
-   *
-   * This used to be a `navigate-to-settings` window event, dispatched from three places in the
-   * player tree and listened for in `useAppBootstrap`. Deleting the player took the listener with
-   * it and left the dispatchers behind — an affordance whose destination is not mounted, failing
-   * silently, which is the defect ADR-0057 point 5 exists to prevent. A direct call cannot come
-   * apart that way: delete the target and this stops compiling.
-   */
-  const navigateToSettings = useCallback(() => {
-    navigate('/settings');
-  }, [navigate]);
 
   /**
    * Update URL params without changing path
@@ -251,9 +227,6 @@ export function useAppNavigation() {
     navigateToMood,
     navigateToGenre,
     navigateToSmartPlaylist,
-    navigateToFavorites,
-    navigateToDownloads,
-    navigateToSettings,
     updateParams,
     clearParams,
   };

@@ -13,7 +13,7 @@
  * Run with the same setup as `screenshots.spec.ts`; see that file's header.
  */
 import { test } from '@playwright/test';
-import { ensureProfile, navigateToDestination, navigateToTab } from './helpers';
+import { ensureProfile, navigateToDestination } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -73,14 +73,5 @@ for (const [deviceName, viewport] of Object.entries(MOBILE_VIEWPORTS)) {
         });
       });
     }
-
-    test('settings screenshot', async ({ page }) => {
-      await navigateToTab(page, 'Settings');
-      await waitForSettled(page);
-      await page.screenshot({
-        path: path.join(SCREENSHOT_DIR, `${deviceName}-settings.png`),
-        fullPage: false,
-      });
-    });
   });
 }

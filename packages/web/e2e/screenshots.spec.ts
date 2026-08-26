@@ -20,7 +20,7 @@
  * Screenshots are written to `screenshots/` at the repo root.
  */
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToDestination, navigateToTab } from './helpers';
+import { ensureProfile, navigateToDestination } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -112,11 +112,6 @@ test.describe('Admin surfaces', () => {
       timeout: 15000,
     });
     await takeScreenshot(page, '03-server.png');
-  });
-
-  test('04 - Settings screenshot', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
-    await takeScreenshot(page, '04-settings.png');
   });
 
   test('05 - Duplicates screenshot', async ({ page }) => {

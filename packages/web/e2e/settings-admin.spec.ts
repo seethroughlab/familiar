@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToDestination, navigateToTab } from './helpers';
+import { ensureProfile, navigateToDestination } from './helpers';
 
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,12 +7,14 @@ test.describe('Settings', () => {
     await ensureProfile(page);
   });
 
-  test('settings page loads', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
-
-    // Should see settings content
-    const settingsContent = page.locator('[data-testid="settings"], .settings, main');
-    await expect(settingsContent).toBeVisible({ timeout: 5000 });
+  test('a settings URL lands on the dashboard', async ({ page }) => {
+    // ADR-0080 deleted the destination — theme was the only control left on it, and the interface
+    // is one look now. An old bookmark hits the catch-all rather than an error, which is the whole
+    // point of the catch-all; asserting it here keeps that promise honest.
+    await page.goto('/settings');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByRole('heading', { name: 'Library', exact: true }).first())
+      .toBeVisible({ timeout: 10000 });
   });
 
   test('API key status is visible on the Server destination', async ({ page }) => {
@@ -73,8 +75,9 @@ test.describe('UI Elements', () => {
     expect(criticalErrors.length).toBe(0);
   });
 
-  test('main sidebar navigation works', async ({ page }) => {
-    // The sidebar lists destinations now, not browsers (ADR-0058 point 2). Of the browsers only
+  test('main navigation works', async ({ page }) => {
+    // The top bar lists destinations, not browsers (ADR-0058 point 2, ADR-0080 point 1). Of the
+    // browsers only
     // Cleanup is still reachable — the track list left with the player (ADR-0057 point 5) — which
     // the navigation helpers cover; what this asserts is that each destination is mounted and
     // renders its own heading, the failure `navigationIntegrity.test.ts` guards statically.
@@ -89,9 +92,5 @@ test.describe('UI Elements', () => {
       await expect(page.getByRole('heading', { name: heading, exact: true }).first())
         .toBeVisible({ timeout: 10000 });
     }
-
-    // Verify Settings button works
-    const settingsBtn = page.locator('button:has-text("Settings")').first();
-    await expect(settingsBtn).toBeVisible({ timeout: 5000 });
   });
 });
