@@ -18,6 +18,7 @@ import { ProfileSettings } from '../Settings/ProfileSettings';
 import { LastfmSettings } from '../Settings/LastfmSettings';
 import { DebugSettings } from '../Settings/DebugSettings';
 import { RemoteLogsPanel } from '../Settings/RemoteLogsPanel';
+import { BackgroundJobs } from '../Settings/BackgroundJobs';
 
 export function ServerPage() {
   // Developer tools are hidden by default. Shown in dev builds, or on any build by setting
@@ -31,6 +32,10 @@ export function ServerPage() {
       <AdminSection title="Health">
         <SystemStatus />
       </AdminSection>
+
+      {/* Renders its own section, or nothing at all when idle. Inherited from the status menu
+          ADR-0080 removed — `artwork_fetch` and `s3_backup` report their progress nowhere else. */}
+      <BackgroundJobs />
 
       <AdminSection title="Access">
         <ApiKeyStatus />

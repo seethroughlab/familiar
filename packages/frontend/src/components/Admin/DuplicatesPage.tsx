@@ -40,8 +40,8 @@ export function DuplicatesPage() {
       subtitle="Find tracks that appear more than once, and which copy is the better one"
     >
       <AdminSection title="Scan">
-        <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+        <div className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
+          <p className="text-sm text-zinc-400">
             Groups tracks by artist, album and title after normalising them. The copy ranked highest
             on format and metadata completeness is the one it would keep.
           </p>
@@ -54,7 +54,7 @@ export function DuplicatesPage() {
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && runScan()}
                 placeholder="Narrow to a title, artist or album (optional)"
-                className="w-full bg-zinc-900 dark:bg-zinc-900 light:bg-white border border-zinc-700 dark:border-zinc-700 light:border-zinc-300 rounded-lg pl-9 pr-3 py-2 text-sm text-white dark:text-white light:text-zinc-900"
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-lg pl-9 pr-3 py-2 text-sm text-white"
               />
             </div>
             <button
@@ -107,8 +107,8 @@ export function DuplicatesPage() {
 
 function DuplicateGroupCard({ group }: { group: DuplicateGroup }) {
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-2">
-      <div className="text-sm font-medium text-white dark:text-white light:text-zinc-900 truncate">
+    <div className="bg-zinc-800/50 rounded-lg p-4 space-y-2">
+      <div className="text-sm font-medium text-white truncate">
         {group.keep.title ?? 'Untitled'}
         {group.keep.artist && <span className="text-zinc-500"> — {group.keep.artist}</span>}
       </div>
@@ -132,7 +132,7 @@ function TrackRow({ track, verdict }: { track: DuplicateTrackInfo; verdict: 'kee
         {keep ? 'Keep' : 'Duplicate'}
       </span>
       <div className="min-w-0 flex-1">
-        <div className="text-xs text-zinc-400 dark:text-zinc-400 light:text-zinc-600 truncate">
+        <div className="text-xs text-zinc-400 truncate">
           {track.file_path}
         </div>
         <div className="text-xs text-zinc-500 mt-0.5">

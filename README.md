@@ -48,13 +48,13 @@ Three destinations — the library, the tools you run against it, and the server
 <details>
 <summary><strong>More screenshots</strong></summary>
 
-| Server | Settings |
+| Server | Duplicates |
 |:--:|:--:|
-| ![Server](screenshots/03-server.png) | ![Settings](screenshots/04-settings.png) |
+| ![Server](screenshots/03-server.png) | ![Duplicates](screenshots/05-tools-duplicates.png) |
 
-| Duplicates | Artist cleanup |
-|:--:|:--:|
-| ![Duplicates](screenshots/05-tools-duplicates.png) | ![Artist cleanup](screenshots/06-artist-cleanup.png) |
+| Artist cleanup |
+|:--:|
+| ![Artist cleanup](screenshots/06-artist-cleanup.png) |
 
 | Smart playlists (Mac) | Mobile |
 |:--:|:--:|
@@ -151,7 +151,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Access at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
+Access at http://localhost:4400. API keys are configured in your `.env` file — open **Library** in the top bar to manage your library and start a scan.
 
 **Running on macOS?** See the **[macOS Installation Guide](docs/MACOS.md)** — covers Docker Desktop setup, Apple Silicon, and music library paths.
 

@@ -95,6 +95,14 @@ below depends on not investing in it.
 
 ## Implementation
 
+- **Point 5's theme clause is replaced by [ADR-0080](ADR-0080-the-web-app-is-navigated-from-a-top-bar.md).**
+  "Theme outlives both, because it applies to the administration interface itself" assumed there was
+  a light theme to outlive the player. There never was one: no `light` variant was ever registered,
+  so the 78 `light:` classes it depended on compiled to nothing and selecting light produced white
+  text on white. The interface is dark only and `/settings` — by then holding nothing but the picker
+  — is deleted. The Decision below is left as written, per the convention; only the theme half of
+  point 5 is superseded, and the two waves of listener preferences it describes happened as stated.
+
 - **Point 4 is replaced by [ADR-0060](ADR-0060-the-players-removal-trigger-must-be-reachable.md).**
   The trigger as written here — no ❌ in the Mac and iPhone columns of `WEB-PARITY.md`'s Listening
   table — is checkable and **unreachable**: two of its five ❌ rows can never clear, because

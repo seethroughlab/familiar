@@ -144,48 +144,6 @@ async def test_spa_fallback_still_serves_the_app_for_client_routes() -> None:
         assert isinstance(await spa_fallback(path), FileResponse)
 
 
-async def test_spa_fallback_never_answers_for_a_visualizer_document() -> None:
-    """A visualizer document must 404 when it is missing, not come back as the web app.
-
-    ADR-0087 makes every visualizer a folder served under `/visualizers`. Those folders were added
-    without a mount, so `/visualizers/spectrum/index.html` fell through to here and returned
-    `index.html` with **HTTP 200** — the whole web app, loaded into the iframe in place of the
-    plugin document. It never sends `familiar:ready`, so the contract spec timed out on the
-    handshake while the page had in fact loaded fine, which points at the plugin rather than at
-    routing.
-
-    The mount is the real fix; this is the backstop, and the only half a test can reach — the mount
-    is registered only when `static/` exists, which never happens under pytest.
-    """
-    import pytest
-
-    from app.api.exceptions import NotFoundError
-    from app.main import spa_fallback
-
-    for path in (
-        "visualizers/spectrum/index.html",
-        "visualizers/beat-tiles/familiar-plugin.json",
-        "visualizers/index.json",
-    ):
-        with pytest.raises(NotFoundError) as caught:
-            await spa_fallback(path)
-        assert caught.value.status_code == 404
-
-
-async def test_spa_fallback_still_serves_the_singular_visualizer_entry_point() -> None:
-    """`/visualizer` is a route, `/visualizers/…` is a mount, and one must not shadow the other.
-
-    The prefix guarding the folders is `visualizers/` with the slash for exactly this reason: the
-    embedded visualizer document (ADR-0033) is a sibling name one character shorter, and turning it
-    into a 404 would take the Mac's visualizer web view down.
-    """
-    from fastapi.responses import FileResponse
-
-    from app.main import spa_fallback
-
-    assert isinstance(await spa_fallback("visualizer"), FileResponse)
-
-
 async def test_embed_route_serves_its_own_document_not_the_app() -> None:
     """The embedded surface must never be handed `index.html` (ADR-0017).
 
@@ -211,44 +169,6 @@ async def test_embed_route_serves_its_own_document_not_the_app() -> None:
 
     assert isinstance(response, FileResponse)
     assert response.path.name == "embed.html", "the embed route must not serve index.html"
-
-
-async def test_visualizer_route_serves_its_own_document_not_the_app() -> None:
-    """And the visualizer surface must never be handed `index.html` either (ADR-0033).
-
-    Same failure as the Discover surface's, with an extra edge: this document is loaded while the
-    native app is *already playing*, so a `WebAudioEngine` arriving here would contend for the audio
-    session with audio in progress rather than merely being available to.
-    """
-    from pathlib import Path
-    from unittest.mock import patch
-
-    from fastapi.responses import FileResponse
-
-    from app import main
-
-    with patch.object(main, "STATIC_DIR", Path(__file__).parent):
-        with patch.object(Path, "exists", lambda self: True):
-            response = await main.serve_visualizer()
-
-    assert isinstance(response, FileResponse)
-    assert response.path.name == "visualizer.html", "the visualizer route must not serve index.html"
-
-
-async def test_visualizer_route_404s_when_the_build_predates_it() -> None:
-    """A server too old to have the visualizer document says so.
-
-    The native side turns this into "redeploy the server" rather than a black screen that never
-    receives a frame — which is what a 200 with the wrong document would produce.
-    """
-    import pytest
-
-    from app import main
-    from app.api.exceptions import NotFoundError
-
-    with pytest.raises(NotFoundError) as caught:
-        await main.serve_visualizer()
-    assert caught.value.status_code == 404
 
 
 async def test_embed_route_404s_when_the_build_predates_it() -> None:

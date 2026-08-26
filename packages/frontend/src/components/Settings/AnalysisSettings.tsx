@@ -38,23 +38,23 @@ export function AnalysisSettings() {
 
   if (isLoading) {
     return (
-      <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4">
+      <div className="bg-zinc-800/50 rounded-lg p-4">
         <div className="animate-pulse h-16 bg-zinc-700/50 rounded" />
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-4">
+    <div className="bg-zinc-800/50 rounded-lg p-4 space-y-4">
       {/* Main toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Cpu className="w-5 h-5 text-purple-400" />
           <div>
-            <h4 className="font-medium text-white dark:text-white light:text-zinc-900">
+            <h4 className="font-medium text-white">
               CLAP Audio Embeddings
             </h4>
-            <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+            <p className="text-sm text-zinc-400">
               Enable AI-powered audio similarity (Music Map)
             </p>
           </div>
@@ -76,7 +76,7 @@ export function AnalysisSettings() {
       <div className={`flex items-start gap-2 p-3 rounded ${
         isEnabled
           ? 'bg-green-900/20 border border-green-800/50'
-          : 'bg-zinc-700/30 dark:bg-zinc-700/30 light:bg-zinc-200/50'
+          : 'bg-zinc-700/30 '
       }`}>
         {isEnabled ? (
           <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
@@ -84,7 +84,7 @@ export function AnalysisSettings() {
           <Info className="w-4 h-4 text-zinc-400 mt-0.5 flex-shrink-0" />
         )}
         <div className="text-sm">
-          <p className={isEnabled ? 'text-green-300' : 'text-zinc-400 dark:text-zinc-400 light:text-zinc-600'}>
+          <p className={isEnabled ? 'text-green-300' : 'text-zinc-400 '}>
             {clapStatus?.reason || 'Status unknown'}
           </p>
           {ramGb !== null && ramGb !== undefined && (
@@ -134,7 +134,7 @@ export function AnalysisSettings() {
       )}
 
       {/* Info text */}
-      <p className="text-xs text-zinc-500 dark:text-zinc-500 light:text-zinc-500">
+      <p className="text-xs text-zinc-500">
         CLAP embeddings enable the Music Map visualization and audio-based similarity search.
         They require ~2GB additional RAM during analysis.
       </p>

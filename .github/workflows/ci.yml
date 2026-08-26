@@ -228,7 +228,13 @@ jobs:
 
   migration-lint:
     name: Migration Lint
-    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    # **Linux, not bare `self-hosted`.** This job runs `uv`, and `UV_PYTHON` is pinned to a patch
+    # release that python-build-standalone publishes for Linux but not for macOS/arm64 — a bare
+    # `self-hosted` label matches the macOS runner too, and the job then dies on
+    # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
+    # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
+    # hosted Linux and the ambiguity never showed.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -251,7 +257,13 @@ jobs:
 
   backend-lint:
     name: Backend Lint
-    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    # **Linux, not bare `self-hosted`.** This job runs `uv`, and `UV_PYTHON` is pinned to a patch
+    # release that python-build-standalone publishes for Linux but not for macOS/arm64 — a bare
+    # `self-hosted` label matches the macOS runner too, and the job then dies on
+    # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
+    # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
+    # hosted Linux and the ambiguity never showed.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
