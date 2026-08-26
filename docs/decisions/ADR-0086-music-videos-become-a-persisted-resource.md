@@ -65,6 +65,23 @@ nothing to call.
 There are **no functional tests for this feature** on either side. The only test that mentions
 `/videos/` is `tests/test_contract_error_shapes.py`, which asserts an error envelope.
 
+## Implementation
+
+All seven points shipped on `adr/accept-0085-0086`, in two commits.
+
+Point 4 landed as three lines calling `stream_file`, not as a parser — see the correction recorded
+above. Point 5's per-operation vendoring needed the `familiar-apple` half in the same landing, and
+that turned out to need more than the config: the generator throws on an operationId its vendored
+`openapi.json` does not contain, so the schema was re-vendored alongside it. Doing that copy by hand
+is what ADR-0078 point 2 forbids, and **that target did not exist** — `familiar-apple`'s
+`scripts/vendor-schema.sh` was written to satisfy it. ADR-0078's points 1, 3 and 4 are still unbuilt.
+
+One thing the tests found that the ADR did not anticipate: the service opened its own session for
+every database read, and an engine's pool binds to whichever event loop touches it first, so three
+tests failed with "attached to a different loop". Every DB method now takes the caller's session
+except `_record_download`, which cannot — it runs under `BackgroundTasks`, after the request session
+has closed. That is a better shape as well as a working one.
+
 ## Decision
 
 1. **`track_videos` becomes the record of what was downloaded.** A completed download writes a

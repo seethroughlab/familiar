@@ -58,6 +58,36 @@ The synchronisation clock available on this side is `Playhead`
 `ADR-0041` and updated "roughly four times a second while playing". That is the real bound on how
 tight video sync can be, and it is stated here rather than discovered later.
 
+## Implementation
+
+Points 1–3, 5, 7 and 9–10 shipped on `music-videos` in `familiar-apple`, with the web and parity
+halves on `adr/accept-0085-0086` in `familiar`.
+
+Point 3 needed its stated prerequisite first: `onSeek` was a single closure already held by casting,
+so a second consumer would have silently displaced it. It is now keyed registration. The sync
+decision lives in `VideoSyncPolicy` in FamiliarKit rather than beside the `AVPlayer`, because
+`swift test` cannot see `App/Shared` and the threshold is the part worth pinning.
+
+Point 5 is `PlayerBackdrop`, an enum rather than a second boolean, so the impossible state cannot be
+written down. The stored preference migrates from the old `showsVisualizer` key rather than resetting.
+
+Point 7's fourth surface — **fullscreen playback — is delivered by the full player itself rather than
+as a separate presentation.** On macOS `FullPlayerView` is already a window takeover with transport
+controls (`LibraryView`'s `.overlay`), so the video backdrop there *is* the fullscreen surface. No
+`fullScreenCover` or second window was added. Worth stating plainly, because the ADR's phrasing reads
+as though a fifth thing was built and it was not.
+
+Two things the build caught rather than review: adding the destination broke
+`NavigationCommandTests`, which holds a byte-for-byte copy of the server's `NAVIGATION_DESTINATIONS`
+— the drift guard working. And `fullPlayer` is shared by both presentations, so an inline `#if`
+around its arguments left the trailing modifiers attached to nothing on iOS, which surfaces as an
+unrelated-looking type-inference error.
+
+Point 9 cost less than written: `MusicVideo.tsx` had already gone, so the web half was one dead
+constant and two stale comments. The trap was the one the ADR did name — `visualizerID` is stored as
+a bare `String` and never round-trips through the enum, so a profile holding `"music-video"` needed
+an explicit rewrite or the fix would have created a smaller version of the defect it closed.
+
 ## Decision
 
 1. **A music video is a way of playing a track, not a way of decorating one.** On the Mac it is not
