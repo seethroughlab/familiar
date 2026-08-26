@@ -389,7 +389,9 @@ class VideoService:
             delete(TrackVideo).where(TrackVideo.track_id == UUID(track_id))
         )
         await session.commit()
-        deleted = deleted or bool(result.rowcount)
+        # `session.execute` is typed `Result[Any]`; a DELETE really returns a `CursorResult`,
+        # which has `rowcount`. Same ignore the other eight call sites in this codebase use.
+        deleted = deleted or bool(result.rowcount)  # type: ignore[attr-defined]
 
         return deleted
 
