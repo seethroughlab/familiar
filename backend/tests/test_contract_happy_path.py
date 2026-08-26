@@ -16,7 +16,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import TrackStatus
-from app.db.models.spotify import SpotifyImport
 from tests.conftest import make_profile_headers
 from tests.factories import (
     insert_test_analysis,
@@ -94,22 +93,6 @@ async def seeded_db(async_db: AsyncSession):
         "trump_status": None,
     }
 
-    # Spotify import with list-typed favorites/playlists (matches real data shape)
-    spotify = SpotifyImport(
-        profile_id=profile.id,
-        spotify_username="testuser",
-        favorites=[
-            {"uri": "spotify:track:abc", "title": "Fav Song", "artist": "Fav Artist"}
-        ],
-        playlists=[
-            {"name": "My Playlist", "tracks": [{"uri": "spotify:track:def"}]}
-        ],
-        streaming_stats={"total_ms": 12345},
-        match_results={},
-        summary={"total_tracks": 1},
-    )
-    async_db.add(spotify)
-
     await async_db.commit()
 
     return {
@@ -156,7 +139,6 @@ SEEDED_ENDPOINTS = [
     ("GET", "/api/v1/smart-playlists"),
     ("GET", "/api/v1/favorites"),
     ("GET", "/api/v1/proposed-changes"),
-    ("GET", "/api/v1/spotify/import"),
     ("GET", "/api/v1/profiles/me"),
 ]
 
@@ -202,16 +184,3 @@ def test_pending_tracks_with_data(client: TestClient, seeded_db: dict):
     assert len(group["tracks"]) >= 1
 
 
-def test_spotify_import_with_list_data(client: TestClient, seeded_db: dict):
-    """Spotify import serializes correctly when favorites/playlists are lists.
-
-    Regression: SpotifyImportResponse declared `dict` but DB stores `list`,
-    causing a 500 on GET /spotify/import.
-    """
-    headers = make_profile_headers({"id": str(seeded_db["profile"].id)})
-    response = client.get("/api/v1/spotify/import", headers=headers)
-    assert response.status_code == 200
-    data = response.json()
-    assert data is not None
-    assert isinstance(data["favorites"], list)
-    assert isinstance(data["playlists"], list)

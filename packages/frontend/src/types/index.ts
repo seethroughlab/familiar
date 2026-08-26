@@ -61,11 +61,29 @@ export interface LibraryStats {
   total_tracks: number;
   total_albums: number;
   total_artists: number;
+  /**
+   * @deprecated Do not display. Nothing writes `Track.album_type`, so every row keeps the column
+   * default `ALBUM`: `albums` is a track count and the other two are always 0, on a library
+   * ADR-0052 found 297 compilations in. Still on the wire because `library` is a generated tag
+   * (ADR-0007) and dropping required fields breaks the Swift client.
+   */
   albums: number;
+  /** @deprecated Always 0 — see `albums`. */
   compilations: number;
+  /** @deprecated Always 0 — see `albums`. */
   soundtracks: number;
   analyzed_tracks: number;
+  /**
+   * Four separate backlogs, not one (ADR-0058 point 7).
+   *
+   * Each has its own version constant in `config.py` and its own reason to stall, so a single
+   * "pending" number hides which one is stuck. The last three were missing from this type entirely
+   * while the server had been sending them — visible on the wire, invisible to the app.
+   */
   pending_analysis: number;
+  pending_backfill: number;
+  pending_melodic: number;
+  pending_mood_tags: number;
 }
 
 export interface QueueItem {

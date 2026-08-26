@@ -36,10 +36,6 @@ class ExportRequest(BaseModel):
     include_playlists: bool = True
     include_smart_playlists: bool = True
     include_proposed_changes: bool = True
-    chat_history: list[dict[str, Any]] | None = Field(
-        default=None,
-        description="Chat history from frontend IndexedDB (passed through)",
-    )
 
 
 class ProfileImportPreviewResponse(BaseModel):
@@ -114,7 +110,6 @@ async def export_profile_data(
         include_playlists=request.include_playlists,
         include_smart_playlists=request.include_smart_playlists,
         include_proposed_changes=request.include_proposed_changes,
-        chat_history=request.chat_history,
     )
 
     # Generate filename

@@ -212,6 +212,29 @@ export interface PlaylistRecommendations {
   sources_used: string[];
 }
 
+
+/** A structured seed for `POST /playlists/generate` (ADR-0048 point 2). Exactly one shape. */
+export interface GeneratePlaylistSeed {
+  track_id?: string;
+  album?: string;
+  artist?: string;
+  track_ids?: string[];
+  /** A set of artist names — VibeMap's map selection. See ADR-0048's Context. */
+  artists?: string[];
+  limit?: number;
+  max_per_artist?: number;
+  include_seed?: boolean;
+  name?: string;
+}
+
+export interface GeneratedPlaylist {
+  playlist_id: string;
+  name: string;
+  track_count: number;
+  seed_track_ids: string[];
+  pool_size: number;
+}
+
 export const playlistsApi = {
   list: async (includeAuto = true): Promise<Playlist[]> => {
     const { data } = await api.get('/playlists', {
@@ -227,6 +250,17 @@ export const playlistsApi = {
 
   create: async (playlist: PlaylistCreate): Promise<PlaylistDetail> => {
     const { data } = await api.post('/playlists', playlist);
+    return data;
+  },
+
+  /**
+   * Generate a playlist from a structured seed (ADR-0048).
+   *
+   * **No sentence is composed here.** The seed comes from what the listener right-clicked, so there
+   * is nothing to interpret — which is what makes this work on a server with no language model.
+   */
+  generate: async (seed: GeneratePlaylistSeed): Promise<GeneratedPlaylist> => {
+    const { data } = await api.post('/playlists/generate', seed);
     return data;
   },
 

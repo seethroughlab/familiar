@@ -1,4 +1,4 @@
-.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check format backfill-artists
+.PHONY: install dev run reset-db migrate test test-contract lint lint-contracts openapi openapi-check format backfill-artists backfill-albums
 
 # Install dependencies
 install:
@@ -58,3 +58,8 @@ format:
 # Pass ARGS="--dry-run" or ARGS="--no-mb --limit 50" for variants.
 backfill-artists:
 	uv run python -m app.cli.backfill_artists $(ARGS)
+
+# One-shot backfill: populate canonical albums/aliases from existing tracks (ADR-0052).
+# Pass ARGS="--dry-run" first — it reports what it would create and writes nothing.
+backfill-albums:
+	uv run python -m app.cli.backfill_albums $(ARGS)

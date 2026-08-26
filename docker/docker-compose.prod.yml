@@ -104,9 +104,6 @@ services:
       - ART_PATH=/data/art
       - VIDEOS_PATH=/data/videos
       - MIXTAPES_PATH=/data/mixtapes
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID:-}
-      - SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:4400}
       - LASTFM_API_KEY=${LASTFM_API_KEY:-}
       - LASTFM_API_SECRET=${LASTFM_API_SECRET:-}

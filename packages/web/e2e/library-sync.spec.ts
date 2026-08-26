@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToTab, navigateToView, waitForSyncComplete } from './helpers';
+import { ensureProfile, navigateToDestination, waitForSyncComplete } from './helpers';
 
 /**
  * Library sync E2E tests
@@ -18,20 +18,14 @@ test.describe('Library Sync', () => {
     await ensureProfile(page);
   });
 
-  test('Library section is visible in Settings', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
-
-    // Find Library section heading (the actual text in the UI)
-    const librarySection = page.getByText('Library').first();
-    await expect(librarySection).toBeVisible({ timeout: 5000 });
-
-    // Should show Library Sync component
+  // Scan and sync moved off Settings and onto the Library destination, which is where the app now
+  // opens (ADR-0058 point 2). `page.goto('/')` in beforeEach already lands there.
+  test('Library sync is visible on the Library destination', async ({ page }) => {
     const syncSection = page.getByText('Library Sync');
-    await expect(syncSection).toBeVisible({ timeout: 5000 });
+    await expect(syncSection).toBeVisible({ timeout: 10000 });
   });
 
   test('Sync Now button is present and clickable', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
 
     // Find sync button - it may say "Sync Now" or just "Sync"
     const syncButton = page.locator('button').filter({
@@ -47,33 +41,45 @@ test.describe('Library Sync', () => {
   });
 
   test('Sync button triggers scan and shows progress', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+    // Already on Library from beforeEach — that is where sync lives now (ADR-0058 point 2).
 
     // Find sync button
     const syncButton = page.locator('button').filter({
       hasText: /sync/i,
     }).first();
 
-    // Only proceed if button is not disabled
-    const isDisabled = await syncButton.isDisabled();
-    if (!isDisabled) {
-      await syncButton.click();
-      // Use API polling instead of visual progress detection
-      await waitForSyncComplete(page, 30000);
+    // Wait for the button to be actionable rather than checking and then clicking.
+    // `isDisabled()` followed by `click()` is a race: a sync starting in between leaves the
+    // check saying "enabled" and the click waiting out its full actionability timeout, which
+    // is how this test failed while reporting only `<button disabled ...>`.
+    try {
+      await expect(syncButton).toBeEnabled({ timeout: 10000 });
+    } catch {
+      test.skip(true, 'A sync was already running, so this test has nothing to trigger.');
+      return;
     }
 
-    // Verify sync completed by checking status shows idle
-    // If we got here without error, sync either completed or was already idle
-    expect(true).toBe(true);
+    await syncButton.click();
+    await waitForSyncComplete(page, 30000);
+
+    // Assert the sync actually reached a terminal state, rather than asserting nothing.
+    const status = await page.request.get('/api/v1/library/sync/status');
+    expect(status.ok()).toBe(true);
+    expect(['idle', 'complete', 'completed']).toContain((await status.json()).status);
   });
 
   test('Library shows content after sync', async ({ page }) => {
-    // Navigate to Artists view (more reliable than Tracks which uses virtualizer)
-    await navigateToView(page, 'Artists');
-    await page.locator('text=/\\d+\\s*artist/i').first().waitFor({ timeout: 10000 }).catch(() => {});
+    // The Library destination, because the web app no longer mounts a library *browser* at all —
+    // the track list left with the player (ADR-0057 point 5), and the Mac and iPhone took over
+    // browsing (docs/WEB-PARITY.md). What Library reports is the size of the library, which is
+    // what a sync is supposed to change and all this test ever actually asserted.
+    //
+    // The assertion below stays deliberately tolerant: it accepts a populated library or an
+    // explicitly empty one, so a *sync* test does not fail over how content is counted.
+    await navigateToDestination(page, 'Library');
+    await page.locator('text=/\\d+\\s*track/i').first().waitFor({ timeout: 10000 }).catch(() => {});
 
-    // Verify we're on the artists page and it rendered something
-    // The artists view shows "N artists" text when loaded
+    // Verify the view rendered something rather than an error or a blank column
     const pageContent = await page.textContent('body');
     const hasArtistText = /\d+\s*artist/i.test(pageContent || '');
     const hasAlbumText = /\d+\s*album/i.test(pageContent || '');
@@ -85,7 +91,8 @@ test.describe('Library Sync', () => {
   });
 
   test('Sync status reflects in system health', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+    // System health is on the Server destination now, not Settings.
+    await navigateToDestination(page, 'Server');
 
     // Navigate to Debug section if available
     const debugSection = page.locator('text=/debug/i').first();

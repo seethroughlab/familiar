@@ -1,8 +1,6 @@
 import '@familiar/frontend/src/index.css';
-import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
 import { createLogger } from '@familiar/frontend/src/utils/logger';
 import { renderApp } from '@familiar/frontend/src/renderApp';
-import { WebAudioEngine } from './WebAudioEngine';
 
 const log = createLogger('App');
 
@@ -10,15 +8,10 @@ const log = createLogger('App');
 declare const __BUILD_TIME__: string;
 console.log(`[App] Build: ${typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev'}`);
 
-// Register Web Audio engine
-// Capabilities are declared here as well as on the engine, so that asking what audio can do never
-// builds an audio graph — see `engineInstance.ts`. They are checked against the real engine the
-// first time one is constructed.
-registerEngineFactory(() => new WebAudioEngine(), {
-  crossfade: true,
-  visualizer: true,
-  effects: 'web',
-});
+// **No engine is registered here, and that is the point.** The administration tool does not play
+// audio, so it constructs nothing that could. `/embed` and `/visualizer` register a null engine on
+// their own entry points (ADR-0017); this one registers none at all, and `createEngine()` throwing
+// is the correct outcome for a call that should never happen on this document.
 
 // Global handler for unhandled promise rejections
 window.addEventListener('unhandledrejection', (event) => {
@@ -42,46 +35,44 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
-// Service worker update check (web only — no SW in native apps)
+/**
+ * Unregister the service worker this app used to install (ADR-0059).
+ *
+ * **Deleting the worker is not enough.** A browser that registered `/sw.js` keeps running it, and
+ * a Workbox worker serves the app shell cache-first — so every previous visitor would keep getting
+ * the old bundle indefinitely, with no way to reach the new one short of clearing site data. The
+ * app has to actively tear its own worker down, which is why this block outlives the PWA it
+ * belonged to.
+ *
+ * Keep it. It costs one no-op call on a clean browser and is the only thing standing between an
+ * existing install and a permanently stale app.
+ */
 if ('serviceWorker' in navigator) {
-  // Registered here rather than by the PWA plugin's injected script. That injection is per-*build*
-  // and not per-entry, so it also landed in `embed.html` — and the embedded surface is the one
-  // document that must not have a worker (see `vite.config.ts`).
-  //
-  // Registered directly rather than through `virtual:pwa-register`, which pulls in `workbox-window`
-  // — a dependency this app does not have and does not need for this. The generated worker already
-  // carries `skipWaiting` and `clientsClaim` (`registerType: 'autoUpdate'`), and the reload that
-  // follows from them is handled below, by hand, and has been since before this change.
-  navigator.serviceWorker.register('/sw.js').catch((error) => {
-    log.error('SW: registration failed', error);
-  });
-
-  // With registerType: 'autoUpdate' a new SW activates in the background, but an
-  // already-open page (especially a docked PWA) keeps running the old in-memory
-  // bundle until it's reloaded. Reload once the new SW takes control so deploys
-  // go live without a manual relaunch.
-  //
-  // Only reload when a controller was already present at load time: on a first-ever
-  // visit clientsClaim fires controllerchange too, but the page already has the
-  // latest assets, so reloading there would be a pointless extra refresh. Guarded
-  // so it fires at most once.
-  const hadControllerAtLoad = !!navigator.serviceWorker.controller;
-  let reloadingForSwUpdate = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadControllerAtLoad || reloadingForSwUpdate) return;
-    reloadingForSwUpdate = true;
-    log.info('SW: New service worker took control — reloading for fresh assets');
-    window.location.reload();
-  });
-
-  navigator.serviceWorker.getRegistration().then((reg) => {
-    if (reg) {
-      log.info('SW: Checking for updates...');
-      reg.update().then(() => {
-        log.info('SW: Update check complete');
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (const registration of registrations) {
+      registration.unregister().then((ok) => {
+        if (ok) log.info('SW: unregistered a stale service worker (ADR-0059)');
       });
     }
+  }).catch((error) => {
+    log.error('SW: failed to enumerate registrations', error);
   });
+
+  // Workbox's precache and runtime caches survive unregistration, so they go too. Named caches
+  // only, and deliberately still explicit: this is the Cache API, and naming what it deletes keeps
+  // the blast radius readable. There is no longer an IndexedDB store to be careful of — ADR-0071
+  // deleted it — but a future one would be equally untouched by this.
+  if (typeof caches !== 'undefined') {
+    caches.keys().then((keys) => {
+      for (const key of keys) {
+        if (key.startsWith('workbox-') || key.endsWith('-cache') || key.startsWith('familiar-')) {
+          caches.delete(key);
+        }
+      }
+    }).catch(() => {
+      // Non-fatal: a browser that refuses cache enumeration simply keeps some dead bytes.
+    });
+  }
 }
 
 // Render the app

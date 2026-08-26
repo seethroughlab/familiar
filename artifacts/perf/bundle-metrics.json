@@ -1,99 +1,115 @@
 {
-  "generatedAt": "2026-03-13T12:41:50.262Z",
+  "generatedAt": "2026-08-08T23:22:15.521Z",
   "budgets": {
     "entryGzipTargetKb": 300,
-    "entryGzipHardKb": 460,
+    "entryGzipHardKb": 350,
     "lazyGzipTargetKb": 120,
     "lazyGzipHardKb": 180,
     "mainCssGzipTargetKb": 18,
     "mainCssGzipHardKb": 25
   },
+  "entries": [
+    {
+      "src": "index.html",
+      "file": "assets/index-D7LJTutN.js",
+      "gzipBytes": 99242,
+      "gzipKb": 96.92
+    },
+    {
+      "src": "embed.html",
+      "file": "assets/embed-CuVKRiqH.js",
+      "gzipBytes": 1340,
+      "gzipKb": 1.31
+    },
+    {
+      "src": "visualizer.html",
+      "file": "assets/visualizer-CLAqlN0_.js",
+      "gzipBytes": 1042,
+      "gzipKb": 1.02
+    }
+  ],
   "entry": {
-    "file": "assets/index-Dvy_qw_U.js",
-    "rawBytes": 1694224,
-    "gzipBytes": 465790,
-    "gzipKb": 454.87
+    "file": "assets/index-D7LJTutN.js",
+    "rawBytes": 387602,
+    "gzipBytes": 99242,
+    "gzipKb": 96.92
   },
   "largestLazy": {
-    "file": "assets/index-B_PCgeGB.js",
-    "gzipBytes": 73036,
-    "gzipKb": 71.32
+    "file": "assets/PlaylistRow-kG_ggIRt.js",
+    "gzipBytes": 29018,
+    "gzipKb": 28.34
   },
-  "mainCss": {
-    "file": "assets/index-9hqiJINH.css",
-    "gzipBytes": 13961,
-    "gzipKb": 13.63
-  },
+  "mainCss": null,
   "topJsAssets": [
     {
-      "file": "assets/index-Dvy_qw_U.js",
-      "rawBytes": 1694224,
-      "rawKb": 1654.52,
-      "gzipBytes": 465790,
-      "gzipKb": 454.87
+      "file": "assets/vendor-three-D8DgyZ8I.js",
+      "rawBytes": 1065232,
+      "rawKb": 1040.27,
+      "gzipBytes": 297561,
+      "gzipKb": 290.59
     },
     {
-      "file": "assets/index-B_PCgeGB.js",
-      "rawBytes": 223056,
-      "rawKb": 217.83,
-      "gzipBytes": 73036,
-      "gzipKb": 71.32
+      "file": "assets/index-D7LJTutN.js",
+      "rawBytes": 387602,
+      "rawKb": 378.52,
+      "gzipBytes": 99242,
+      "gzipKb": 96.92
     },
     {
-      "file": "assets/vendor-audio-CXPx7eTM.js",
+      "file": "assets/vendor-react-qEhzO5Dk.js",
+      "rawBytes": 230311,
+      "rawKb": 224.91,
+      "gzipBytes": 73442,
+      "gzipKb": 71.72
+    },
+    {
+      "file": "assets/vendor-audio-alqlCz7y.js",
       "rawBytes": 94964,
       "rawKb": 92.74,
-      "gzipBytes": 31919,
+      "gzipBytes": 31921,
       "gzipKb": 31.17
     },
     {
-      "file": "assets/index-gmKv4Kgd.js",
-      "rawBytes": 140179,
-      "rawKb": 136.89,
-      "gzipBytes": 28659,
-      "gzipKb": 27.99
+      "file": "assets/PlaylistRow-kG_ggIRt.js",
+      "rawBytes": 99614,
+      "rawKb": 97.28,
+      "gzipBytes": 29018,
+      "gzipKb": 28.34
     },
     {
-      "file": "assets/vendor-react-Bq1UMS2s.js",
-      "rawBytes": 40855,
-      "rawKb": 39.9,
-      "gzipBytes": 14555,
-      "gzipKb": 14.21
+      "file": "assets/index-DaEA4nrL.js",
+      "rawBytes": 134808,
+      "rawKb": 131.65,
+      "gzipBytes": 27058,
+      "gzipKb": 26.42
     },
     {
-      "file": "assets/vendor-query-CcIar6DF.js",
-      "rawBytes": 44822,
-      "rawKb": 43.77,
-      "gzipBytes": 13690,
-      "gzipKb": 13.37
+      "file": "assets/uiStore-Cfjqt7mo.js",
+      "rawBytes": 44105,
+      "rawKb": 43.07,
+      "gzipBytes": 17434,
+      "gzipKb": 17.03
     },
     {
-      "file": "assets/vendor-icons-DeeEANVr.js",
-      "rawBytes": 30241,
-      "rawKb": 29.53,
-      "gzipBytes": 9781,
-      "gzipKb": 9.55
+      "file": "assets/playerStore-CoIc_o-d.js",
+      "rawBytes": 42870,
+      "rawKb": 41.87,
+      "gzipBytes": 13442,
+      "gzipKb": 13.13
     },
     {
-      "file": "assets/index-Bm4932vQ.js",
-      "rawBytes": 22072,
-      "rawKb": 21.55,
-      "gzipBytes": 7330,
-      "gzipKb": 7.16
+      "file": "assets/vendor-icons-Cj_N8uHg.js",
+      "rawBytes": 34158,
+      "rawKb": 33.36,
+      "gzipBytes": 11034,
+      "gzipKb": 10.78
     },
     {
-      "file": "assets/PlaylistDetail-Demhifen.js",
-      "rawBytes": 15402,
-      "rawKb": 15.04,
-      "gzipBytes": 4994,
-      "gzipKb": 4.88
-    },
-    {
-      "file": "assets/ArtistDetail-DXgxmG5Y.js",
-      "rawBytes": 15090,
-      "rawKb": 14.74,
-      "gzipBytes": 4648,
-      "gzipKb": 4.54
+      "file": "assets/vendor-query-D1pqjCy3.js",
+      "rawBytes": 36452,
+      "rawKb": 35.6,
+      "gzipBytes": 10715,
+      "gzipKb": 10.46
     }
   ]
 }

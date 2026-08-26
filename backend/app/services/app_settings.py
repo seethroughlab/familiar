@@ -17,9 +17,6 @@ Settings by Source
 - music_library_paths
 
 **Admin UI with env fallback**:
-- llm_provider, anthropic_api_key
-- openai_api_key, openai_base_url, openai_chat_model, openai_utility_model
-- spotify_client_id, spotify_client_secret
 - lastfm_api_key, lastfm_api_secret, acoustid_api_key
 - s3_backup_access_key_id, s3_backup_secret_access_key
 - s3_backup_bucket, s3_backup_region, s3_backup_prefix
@@ -49,16 +46,6 @@ class AppSettings(BaseModel):
     # Last.fm
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None
-
-    # LLM Settings
-    # Provider selector: None means "use env var or default to anthropic" (see get_active_provider).
-    # Do NOT set a default value here — it would beat env-var precedence in get_effective().
-    llm_provider: str | None = None  # "anthropic" | "openai"
-    anthropic_api_key: str | None = None
-    openai_api_key: str | None = None
-    openai_base_url: str | None = None  # None => api.openai.com
-    openai_chat_model: str | None = None
-    openai_utility_model: str | None = None
 
     # Audio fingerprinting
     acoustid_api_key: str | None = None  # Get free key at https://acoustid.org/new-application
@@ -109,6 +96,12 @@ class AppSettings(BaseModel):
     # a network the device can't (e.g. Tailscale). Falls back to DEVICE_STREAM_BASE_URL env var.
     device_stream_base_url: str | None = None
 
+    # Inbound authentication (ADR-0045 point 1). The one credential in this file that is *inbound* —
+    # every other secret here is something Familiar presents to somebody else. `None` means no token
+    # is configured and the gate is off, which is the pre-ADR-0045 posture and is what lets this ship
+    # before the clients can present one. See `app/api/auth.py` for why it is stored in the clear.
+    access_token: str | None = None
+
 
 
 class AppSettingsService:
@@ -153,7 +146,12 @@ class AppSettingsService:
         updated_data = current.model_dump()
 
         # Settings that accept None as a valid value (to reset to auto-detect)
-        nullable_settings = {"clap_embeddings_enabled"}
+        #
+        # `access_token` is here because revoking it means setting it to None, and the default
+        # branch below *skips* None — so `update(access_token=None)` would have been a silent no-op
+        # that returned success while the old token kept working. A revoke that reports success and
+        # does nothing is worse than one that fails loudly.
+        nullable_settings = {"clap_embeddings_enabled", "access_token"}
 
         # Only update non-None values (allow explicit empty string to clear)
         # Exception: nullable_settings can be explicitly set to None
@@ -175,10 +173,15 @@ class AppSettingsService:
         settings = self.get()
         data = settings.model_dump()
 
-        # Keys that contain secrets and should be masked
+        # Keys that contain secrets and should be masked.
+        #
+        # This set is an allowlist of things to hide, so a newly added secret field is exposed by
+        # default until someone remembers to add it here — which is worth knowing before adding one.
+        # `tests/test_inbound_auth.py::TestTheTokenIsNotLeaked` covers `access_token` specifically;
+        # the general "any new secret is masked" property is not enforced anywhere.
         secret_keys = {
             "lastfm_api_key", "lastfm_api_secret",
-            "anthropic_api_key", "openai_api_key", "acoustid_api_key",
+            "acoustid_api_key",
             "s3_backup_access_key_id", "s3_backup_secret_access_key",
         }
 
@@ -192,6 +195,13 @@ class AppSettingsService:
                 else:
                     data[key] = "•" * len(val)
 
+        # The inbound token (ADR-0045) is masked *completely* rather than showing a prefix. The
+        # others are outbound credentials whose prefix helps an operator tell which key is loaded;
+        # this one grants access to this server, and `GET /api/v1/auth/token` is the way to read it
+        # — a path that requires already holding it.
+        if data.get("access_token"):
+            data["access_token"] = "•" * 8
+
         return data
 
     def has_lastfm_credentials(self) -> bool:
@@ -199,37 +209,6 @@ class AppSettingsService:
         api_key = self.get_effective("lastfm_api_key")
         api_secret = self.get_effective("lastfm_api_secret")
         return bool(api_key and api_secret)
-
-    def has_anthropic_key(self) -> bool:
-        """Check if Anthropic API key is configured (from settings.json or env vars)."""
-        return bool(self.get_effective("anthropic_api_key"))
-
-    def get_active_provider(self) -> str:
-        """Return the active LLM provider name.
-
-        Defaults to 'anthropic' when unset. The resolution happens here (not as a
-        Pydantic default) so env-var precedence in get_effective() works correctly.
-        """
-        return self.get_effective("llm_provider") or "anthropic"
-
-    def has_openai_config(self) -> bool:
-        """Check if OpenAI-compatible provider is fully configured.
-
-        Requires api key, chat model, and utility model. base_url is optional
-        (empty means api.openai.com).
-        """
-        return bool(
-            self.get_effective("openai_api_key")
-            and self.get_effective("openai_chat_model")
-            and self.get_effective("openai_utility_model")
-        )
-
-    def is_active_provider_configured(self) -> bool:
-        """Check if the selected provider (not any provider) has what it needs."""
-        provider = self.get_active_provider()
-        if provider == "openai":
-            return self.has_openai_config()
-        return self.has_anthropic_key()
 
     def has_acoustid_key(self) -> bool:
         """Check if AcoustID API key is configured (from settings.json or env vars)."""
@@ -253,7 +232,7 @@ class AppSettingsService:
         Precedence: AppSettings (JSON) > Environment variable > Default
 
         Args:
-            key: Setting name (e.g., 'anthropic_api_key', 'spotify_client_id')
+            key: Setting name (e.g., 'lastfm_api_key', 'acoustid_api_key')
 
         Returns:
             The effective value from the highest-priority source that has it set.
@@ -286,12 +265,6 @@ class AppSettingsService:
 
         # Settings that can come from either source
         dual_source_keys = [
-            "llm_provider",
-            "anthropic_api_key",
-            "openai_api_key",
-            "openai_base_url",
-            "openai_chat_model",
-            "openai_utility_model",
             "lastfm_api_key",
             "lastfm_api_secret",
             "acoustid_api_key",

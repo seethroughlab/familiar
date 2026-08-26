@@ -1,4 +1,3 @@
-import { useUIStore } from '../../stores/uiStore';
 /**
  * Context menu for track actions.
  *
@@ -12,7 +11,6 @@ import {
   Disc,
   CheckSquare,
   Square,
-  Sparkles,
   Edit3,
   Map,
   Trash2,
@@ -38,7 +36,6 @@ interface TrackContextMenuProps {
   onExploreSimilarArtists?: () => void;
   onToggleSelect: () => void;
   onAddToPlaylist: () => void;
-  onMakePlaylist: () => void;
   onEditMetadata?: () => void;
   onRemoveFromDownloads?: () => void;
   onRemoveFromPlaylist?: () => void;
@@ -66,7 +63,6 @@ export function TrackContextMenu({
   onExploreSimilarArtists,
   onToggleSelect,
   onAddToPlaylist,
-  onMakePlaylist,
   onEditMetadata,
   onRemoveFromDownloads,
   onRemoveFromPlaylist,
@@ -79,7 +75,6 @@ export function TrackContextMenu({
   onDownloadSelectedAnalyses,
   onClearSelection,
 }: TrackContextMenuProps) {
-  const chatAvailable = useUIStore((s) => s.chatSurfaceAvailable);
   const { downloadAnalysis } = useAnalysis();
 
   const handleAction = (action: () => void) => {
@@ -251,16 +246,6 @@ export function TrackContextMenu({
       />
 
 
-      <MenuDivider />
-
-      {/* AI Actions. Absent without a provider: this item only ever opens the chat panel. */}
-      {chatAvailable && (
-        <MenuItem
-          icon={<Sparkles className="w-4 h-4" />}
-          label="Make Playlist From This..."
-          onClick={() => handleAction(onMakePlaylist)}
-        />
-      )}
     </ContextMenuContainer>
   );
 }

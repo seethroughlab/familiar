@@ -78,6 +78,23 @@ export function profileFromURL(search: string = window.location.search): string 
   return value !== null && value.trim() !== '' ? value : null;
 }
 
+/**
+ * Whether the host has switched auto-select on or off (ADR-0064 point 7).
+ *
+ * `null` means the host said nothing, and the page keeps whatever it had — which is what an
+ * ordinary browser gets, where the toggle lives in the picker beside the visualizer.
+ *
+ * **Absence and `0` are different answers**, which is the whole reason this is a function rather
+ * than a truthy check at the call site: `"0"` is a non-empty string, so `if (params.get(...))`
+ * would read "the host turned this off" as "the host turned this on" — and the switch would be
+ * impossible to switch back off from the native menu.
+ */
+export function autoSelectFromURL(search: string = window.location.search): boolean | null {
+  const value = new URLSearchParams(search).get('autoSelect');
+  if (value === null || value.trim() === '') return null;
+  return value === '1' || value.toLowerCase() === 'true';
+}
+
 interface WebKitBridgeWindow {
   webkit?: {
     messageHandlers?: Record<string, { postMessage: (message: unknown) => void } | undefined>;

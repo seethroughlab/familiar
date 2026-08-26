@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-from uuid import UUID
 
 from app.services.redis_client import ResilientRedisClient, get_resilient_redis
 
@@ -209,7 +208,7 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
 
     async def queue_artwork_fetch(
         self,
-        album_hash: str,
+        album_key: str,
         artist: str,
         album: str,
         track_id: str | None = None,
@@ -219,52 +218,12 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
 
         fetcher = get_artwork_fetcher()
         request = ArtworkFetchRequest(
-            album_hash=album_hash,
+            album_key=album_key,
             artist=artist,
             album=album,
             track_id=track_id,
         )
         return await fetcher.queue(request)
-
-    async def run_spotify_matching(self, task_id: str, profile_id: UUID) -> None:
-        """Run Spotify track matching in the background with Redis progress tracking."""
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-        from app.config import settings as app_settings
-        from app.services.spotify_import import SpotifyImportService
-
-        key = f"familiar:spotify_import:{task_id}"
-        well_known_key = "familiar:spotify_match:progress"
-
-        def _update(message: str, matched: int = 0, total: int = 0) -> None:
-            payload = json.dumps({"status": "processing", "message": message, "matched": matched, "total": total})
-            self.redis.set(key, payload, ex=3600)
-            self.redis.set(well_known_key, payload, ex=3600)
-
-        initial = json.dumps({"status": "processing", "message": "Matching tracks...", "matched": 0, "total": 0})
-        self.redis.set(key, initial, ex=3600)
-        self.redis.set(well_known_key, initial, ex=3600)
-
-        engine = create_async_engine(app_settings.database_url)
-        async_session_factory = async_sessionmaker(engine, class_=AsyncSession)
-        try:
-            async with async_session_factory() as db:
-                service = SpotifyImportService(db)
-                import_ = await service.update_matches(profile_id, progress_cb=_update)
-            if import_ is None:
-                self.redis.set(key, json.dumps({"status": "error", "error": "No Spotify import found"}), ex=3600)
-            else:
-                self.redis.set(key, json.dumps({"status": "completed", "result": import_.summary}), ex=3600)
-        except Exception as e:
-            logger.error(f"Spotify matching task {task_id} failed: {e}", exc_info=True)
-            self.redis.set(key, json.dumps({"status": "error", "error": str(e)}), ex=3600)
-        finally:
-            self.redis.delete(well_known_key)
-            await engine.dispose()
-
-    async def run_spotify_rematch(self, task_id: str, profile_id: UUID) -> None:
-        """Run Spotify rematch in the background with Redis progress tracking."""
-        await self.run_spotify_matching(task_id, profile_id)
 
     async def _startup_update_check(self) -> None:
         """Check for updates on startup after a short delay."""

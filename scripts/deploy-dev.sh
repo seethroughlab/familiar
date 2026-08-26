@@ -29,9 +29,6 @@ done
 # Build frontend if needed
 if [ "$DEPLOY_FRONTEND" = true ]; then
     echo "Building frontend..."
-    # Bake the public listening-sessions relay URL into the bundle. Override by
-    # exporting VITE_SESSIONS_RELAY_URL before invoking this script.
-    export VITE_SESSIONS_RELAY_URL="${VITE_SESSIONS_RELAY_URL:-https://familiar-sessions.fly.dev}"
     pnpm --filter @familiar/web run build
 
     echo "Syncing frontend to $NAS_HOST..."
@@ -59,6 +56,16 @@ if [ "$DEPLOY_BACKEND" = true ]; then
         --exclude '__pycache__' \
         --exclude '*.pyc' \
         backend/migrations/ jeff@$NAS_HOST:$REMOTE_PATH/backend/migrations/
+
+    # scripts/ too. It was left out until 2026-08-12, when the ADR-0052 artwork
+    # migration had to be `docker cp`-ed in by hand — the container was still carrying
+    # whatever `scripts/` the image was built with, which is the sort of staleness that
+    # only shows up when you finally need one of them.
+    echo "Syncing scripts to $NAS_HOST..."
+    rsync -avz \
+        --exclude '__pycache__' \
+        --exclude '*.pyc' \
+        backend/scripts/ jeff@$NAS_HOST:$REMOTE_PATH/backend/scripts/
 fi
 
 echo "Restarting container..."
@@ -68,7 +75,7 @@ ssh jeff@$NAS_HOST "docker restart familiar-api"
 echo "Installing additional dependencies..."
 ssh jeff@$NAS_HOST "docker exec familiar-api sh -c 'which pg_dump > /dev/null 2>&1 || apt-get update -qq && apt-get install -y -qq postgresql-client > /dev/null 2>&1'" || true
 ssh jeff@$NAS_HOST "docker exec familiar-api sh -c 'which deno > /dev/null 2>&1 || (apt-get update -qq && apt-get install -y -qq curl unzip > /dev/null 2>&1 && curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh)'" || true
-ssh jeff@$NAS_HOST "docker exec familiar-api uv pip install 'curl_cffi>=0.7.0' 'trafilatura>=1.6.0' 'boto3>=1.34.0' 'yt-dlp[default]' 'bcrypt>=4.0.0' 'pyloudnorm>=0.1.0' 'soundfile>=0.12.0' 'basic-pitch[onnx]>=0.3.0' 'matplotlib>=3.5.0' 'async-upnp-client>=0.47.0' --python /app/.venv/bin/python -q" || true
+ssh jeff@$NAS_HOST "docker exec familiar-api uv pip install 'curl_cffi>=0.7.0' 'trafilatura>=1.6.0' 'boto3>=1.34.0' 'yt-dlp[default]' 'bcrypt>=4.0.0' 'pyloudnorm>=0.1.0' 'soundfile>=0.12.0' 'basic-pitch[onnx]>=0.3.0' 'matplotlib>=3.5.0' 'async-upnp-client>=0.47.0' 'mcp>=2.0.0' --python /app/.venv/bin/python -q" || true
 
 # Copy code into container (container runs from /app/, not host filesystem)
 if [ "$DEPLOY_BACKEND" = true ]; then
@@ -84,6 +91,9 @@ fi
 if [ "$DEPLOY_BACKEND" = true ]; then
     echo "Syncing migrations into container..."
     ssh jeff@$NAS_HOST "docker cp $REMOTE_PATH/backend/migrations/. familiar-api:/app/migrations/"
+
+    echo "Syncing scripts into container..."
+    ssh jeff@$NAS_HOST "docker cp $REMOTE_PATH/backend/scripts/. familiar-api:/app/scripts/"
 
     echo "Running database migrations..."
     ssh jeff@$NAS_HOST "docker exec -w /app -e PYTHONPATH=/app familiar-api alembic upgrade head" || {

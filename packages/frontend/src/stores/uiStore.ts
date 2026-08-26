@@ -1,84 +1,31 @@
+/**
+ * What is left of the UI store.
+ *
+ * It held eight fields for a music player's chrome. `rightPanel` (queue/session), `showFullPlayer`
+ * and `showAmbientScreen` lost their last readers when the player went (ADR-0070, ADR-0071);
+ * `showSettings` was set by the mobile "More" sheet and read by nothing at all; `sidebarCollapsed`
+ * went with the sidebar (ADR-0080 point 1). All of them are deleted rather than documented, per
+ * ADR-0077.
+ *
+ * `sidebarCollapsed` was also the only key in `partialize`, so the `persist` wrapper and the
+ * `familiar-ui` localStorage key go with it — what remains is one modal's transient state, which
+ * has no business surviving a reload.
+ */
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 interface UIState {
-  /** Which right panel is open, if any. Queue / Chat / Session are mutually exclusive. */
-  rightPanel: 'queue' | 'chat' | 'session' | null;
-  /** Whether the settings modal is showing */
-  showSettings: boolean;
-  /** Whether the sidebar is collapsed to icon-only mode */
-  sidebarCollapsed: boolean;
-  /** Whether the full player overlay is showing */
-  showFullPlayer: boolean;
-  /** Pending chat message to send when chat panel opens */
-  pendingChatMessage: string | null;
   /** Track IDs to show in playlist picker modal */
   playlistPickerTrackIds: string[] | null;
-  /** Whether the ambient screen overlay is showing */
-  showAmbientScreen: boolean;
 
-  // Actions
-  toggleRightPanel: (panel: 'queue' | 'chat' | 'session') => void;
-  closeRightPanel: () => void;
-  setShowSettings: (show: boolean) => void;
-  setSidebarCollapsed: (collapsed: boolean) => void;
-  setShowFullPlayer: (show: boolean) => void;
-  /** Set a pending chat message and open the chat panel */
-  /**
-   * Whether this surface has somewhere for `triggerChat` to go.
-   *
-   * True everywhere `AppShell` renders the right panel — which is the web app. The embedded
-   * surface (ADR-0016) mounts Discover without a shell, so a chat message set here would be
-   * observed by nothing: the prompt would look pressable and do nothing at all.
-   */
-  chatSurfaceAvailable: boolean;
-  setChatSurfaceAvailable: (available: boolean) => void;
-  triggerChat: (message: string) => void;
-  /** Read and clear the pending chat message */
-  consumePendingChatMessage: () => string | null;
   /** Open the playlist picker for the given track IDs */
   openPlaylistPicker: (trackIds: string[]) => void;
   /** Close the playlist picker */
   closePlaylistPicker: () => void;
-  setShowAmbientScreen: (show: boolean) => void;
 }
 
-export const useUIStore = create<UIState>()(
-  persist(
-    (set, get) => ({
-      rightPanel: null,
-      showSettings: false,
-      sidebarCollapsed: false,
-      showFullPlayer: false,
-      pendingChatMessage: null,
-      playlistPickerTrackIds: null,
-      showAmbientScreen: false,
+export const useUIStore = create<UIState>()((set) => ({
+  playlistPickerTrackIds: null,
 
-      toggleRightPanel: (panel) => {
-        const current = get().rightPanel;
-        set({ rightPanel: current === panel ? null : panel });
-      },
-      closeRightPanel: () => set({ rightPanel: null }),
-      setShowSettings: (show) => set({ showSettings: show }),
-      setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-      setShowFullPlayer: (show) => set({ showFullPlayer: show }),
-      chatSurfaceAvailable: true,
-      setChatSurfaceAvailable: (available) => set({ chatSurfaceAvailable: available }),
-      triggerChat: (message) => set({ pendingChatMessage: message, rightPanel: 'chat' }),
-      consumePendingChatMessage: () => {
-        const msg = get().pendingChatMessage;
-        if (msg) set({ pendingChatMessage: null });
-        return msg;
-      },
-      openPlaylistPicker: (trackIds) => set({ playlistPickerTrackIds: trackIds }),
-      closePlaylistPicker: () => set({ playlistPickerTrackIds: null }),
-      setShowAmbientScreen: (show) => set({ showAmbientScreen: show }),
-    }),
-    {
-      name: 'familiar-ui',
-      partialize: (state) => ({
-        sidebarCollapsed: state.sidebarCollapsed,
-      }),
-    }
-  )
-);
+  openPlaylistPicker: (trackIds) => set({ playlistPickerTrackIds: trackIds }),
+  closePlaylistPicker: () => set({ playlistPickerTrackIds: null }),
+}));

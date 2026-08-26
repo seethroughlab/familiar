@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track
+from app.services import metadata_overrides
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +123,12 @@ class BulkEditorService:
                 # Update database
                 for field_name, value in updates.items():
                     setattr(track, field_name, value)
+
+                # Same rule as the single-track edit: a field chosen here beats the file, so a
+                # rescan cannot quietly put the old tags back. See `services/metadata_overrides`.
+                track.metadata_overrides = metadata_overrides.record(
+                    track.metadata_overrides, updates
+                )
 
                 successful += 1
 

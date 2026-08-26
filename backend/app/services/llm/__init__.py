@@ -1,25 +1,25 @@
-"""LLM service package for conversational music discovery.
+"""Tool definitions and execution for Familiar's LLM surface.
 
-This module provides:
-- LLMService: Main service for handling chat interactions
-- ToolExecutor: Executes LLM-called tools against the database
-- MUSIC_TOOLS: Tool definitions for the LLM
-- SYSTEM_PROMPT: System prompt for the music assistant
+**This package no longer runs a conversation.** ADR-0043 replaced Familiar's own chat client with an
+MCP server, and ADR-0043 point 5 retired `service.py` — the tool-and-conversation loop — along with
+the chat route and both chat UIs. What survives is the part an MCP host needs:
 
-Usage:
-    from app.services.llm import LLMService
+- ``MUSIC_TOOLS``: the tool schemas, iterated by ``app.mcp.server.exposed_tools``
+- ``ToolExecutor``: the handlers those schemas dispatch to
+- ``SYSTEM_PROMPT``: retained because it is still the best written description of how these tools
+  are meant to be used together; ``app/mcp/server.py`` sends its own ``INSTRUCTIONS`` to hosts.
 
-    service = LLMService()
-    async for event in service.chat(message, history, db, profile_id):
-        handle(event)
+**The provider layer is gone entirely** — ``providers.py``, ``providers_anthropic.py``,
+``providers_openai.py``, ``models.py`` and both SDK dependencies. ADR-0043 point 5 kept it because
+``library_discover.py`` was a second consumer of ``complete_utility``; ADR-0043 point 6 deleted the
+endpoint that lived in, and ADR-0048 step 3 carried that out. **Familiar now calls no model at
+all**: the host brings one, which is the whole of ADR-0043's argument followed to its end.
 """
 
 from .executor import ToolExecutor
-from .service import LLMService
 from .tools import MUSIC_TOOLS, SYSTEM_PROMPT
 
 __all__ = [
-    "LLMService",
     "ToolExecutor",
     "MUSIC_TOOLS",
     "SYSTEM_PROMPT",

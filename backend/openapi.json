@@ -1009,6 +1009,35 @@
         "title": "ArtistTrack",
         "type": "object"
       },
+      "ArtworkCoverageResponse": {
+        "description": "How much of the library has real cover art.\n\n`total_albums` is counted the way `/library/albums` and `/library/stats` count, so the three\nagree (ADR-0058 point 6). It would have been easier to count canonical `Album` rows, and it\nwould have been wrong: the dashboard tile beside this one says 3,927, and a coverage figure over\na different denominator is the \"plausible-looking number\" that point exists to forbid.\n\n`generated` is broken out rather than folded into `with_artwork` because a generated placeholder\nis what the app draws when it has nothing \u2014 counting it as coverage would report a library with\nno cover art at all as fully covered.",
+        "properties": {
+          "generated": {
+            "title": "Generated",
+            "type": "integer"
+          },
+          "total_albums": {
+            "title": "Total Albums",
+            "type": "integer"
+          },
+          "with_artwork": {
+            "title": "With Artwork",
+            "type": "integer"
+          },
+          "without_artwork": {
+            "title": "Without Artwork",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_albums",
+          "with_artwork",
+          "generated",
+          "without_artwork"
+        ],
+        "title": "ArtworkCoverageResponse",
+        "type": "object"
+      },
       "ArtworkQueueBatchRequest": {
         "description": "Request to queue multiple artworks for download.",
         "properties": {
@@ -1131,6 +1160,19 @@
           "exists": {
             "title": "Exists",
             "type": "boolean"
+          },
+          "generated": {
+            "default": false,
+            "title": "Generated",
+            "type": "boolean"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "queued": {
             "default": false,
@@ -1410,18 +1452,6 @@
       "BackupRequest": {
         "description": "Request to create a backup.",
         "properties": {
-          "chat_history": {
-            "description": "Chat history from frontend IndexedDB",
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Chat History",
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "compress": {
             "default": true,
             "description": "Compress output with gzip",
@@ -1826,6 +1856,20 @@
         "title": "Body_library_import_preview",
         "type": "object"
       },
+      "Body_playback_upload_artifact": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_playback_upload_artifact",
+        "type": "object"
+      },
       "Body_profiles_upload_avatar": {
         "properties": {
           "file": {
@@ -1852,35 +1896,6 @@
           "file"
         ],
         "title": "Body_smart-playlists_import_playlist",
-        "type": "object"
-      },
-      "Body_spotify_upload_spotify_export": {
-        "properties": {
-          "file": {
-            "format": "binary",
-            "title": "File",
-            "type": "string"
-          },
-          "include_favorites": {
-            "default": true,
-            "title": "Include Favorites",
-            "type": "boolean"
-          },
-          "include_playlists": {
-            "default": true,
-            "title": "Include Playlists",
-            "type": "boolean"
-          },
-          "include_streaming": {
-            "default": true,
-            "title": "Include Streaming",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_spotify_upload_spotify_export",
         "type": "object"
       },
       "Body_tracks_upload_track_artwork": {
@@ -2297,123 +2312,6 @@
           "applied"
         ],
         "title": "ChangeStatsResponse",
-        "type": "object"
-      },
-      "ChatMessage": {
-        "description": "A single chat message.",
-        "properties": {
-          "content": {
-            "maxLength": 50000,
-            "title": "Content",
-            "type": "string"
-          },
-          "role": {
-            "pattern": "^(user|assistant)$",
-            "title": "Role",
-            "type": "string"
-          }
-        },
-        "required": [
-          "role",
-          "content"
-        ],
-        "title": "ChatMessage",
-        "type": "object"
-      },
-      "ChatRequest": {
-        "description": "Chat request body.",
-        "properties": {
-          "history": {
-            "default": [],
-            "description": "Chat history, max 100 messages",
-            "items": {
-              "$ref": "#/components/schemas/ChatMessage"
-            },
-            "maxItems": 100,
-            "title": "History",
-            "type": "array"
-          },
-          "message": {
-            "description": "User message, max 10,000 characters",
-            "maxLength": 10000,
-            "minLength": 1,
-            "title": "Message",
-            "type": "string"
-          },
-          "visible_track_ids": {
-            "default": [],
-            "description": "Track IDs currently visible in the library view",
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 100,
-            "title": "Visible Track Ids",
-            "type": "array"
-          }
-        },
-        "required": [
-          "message"
-        ],
-        "title": "ChatRequest",
-        "type": "object"
-      },
-      "ChatResponse": {
-        "properties": {
-          "playback_action": {
-            "additionalProperties": true,
-            "title": "Playback Action",
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "queued_tracks": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Queued Tracks",
-            "type": "array"
-          },
-          "response": {
-            "title": "Response",
-            "type": "string"
-          },
-          "tool_calls": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Tool Calls",
-            "type": "array"
-          }
-        },
-        "required": [
-          "response",
-          "tool_calls",
-          "queued_tracks"
-        ],
-        "title": "ChatResponse",
-        "type": "object"
-      },
-      "ChatStatusResponse": {
-        "properties": {
-          "configured": {
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "provider": {
-            "title": "Provider",
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "configured"
-        ],
-        "title": "ChatStatusResponse",
         "type": "object"
       },
       "ClapStatus": {
@@ -2844,57 +2742,6 @@
           "name"
         ],
         "title": "CreateZoneRequest",
-        "type": "object"
-      },
-      "CuratedPrompt": {
-        "description": "A single AI-generated listening suggestion.",
-        "properties": {
-          "context": {
-            "title": "Context",
-            "type": "string"
-          },
-          "icon": {
-            "title": "Icon",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "prompt": {
-            "title": "Prompt",
-            "type": "string"
-          }
-        },
-        "required": [
-          "prompt",
-          "context"
-        ],
-        "title": "CuratedPrompt",
-        "type": "object"
-      },
-      "CuratedPromptsResponse": {
-        "description": "AI-generated listening suggestions.",
-        "properties": {
-          "generated_at": {
-            "format": "date-time",
-            "title": "Generated At",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "prompts": {
-            "items": {
-              "$ref": "#/components/schemas/CuratedPrompt"
-            },
-            "title": "Prompts",
-            "type": "array"
-          }
-        },
-        "required": [
-          "prompts"
-        ],
-        "title": "CuratedPromptsResponse",
         "type": "object"
       },
       "DbHealthResponse": {
@@ -3522,18 +3369,6 @@
       "ExportRequest": {
         "description": "Request to export profile data.",
         "properties": {
-          "chat_history": {
-            "description": "Chat history from frontend IndexedDB (passed through)",
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "title": "Chat History",
-            "type": [
-              "array",
-              "null"
-            ]
-          },
           "include_favorites": {
             "default": true,
             "title": "Include Favorites",
@@ -3934,6 +3769,128 @@
           "received"
         ],
         "title": "FrontendLogIngestResponse",
+        "type": "object"
+      },
+      "GeneratePlaylistRequest": {
+        "description": "A closed, structured seed \u2014 ADR-0048 point 2.\n\n**Free text is deliberately not accepted.** A sentence would re-introduce interpretation, and\ninterpretation is the one thing that genuinely needed a model. Every caller of this endpoint has\nalready been told the seed by a right-click.",
+        "properties": {
+          "album": {
+            "title": "Album",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "artists": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Artists",
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "include_seed": {
+            "default": false,
+            "title": "Include Seed",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 25,
+            "maximum": 100.0,
+            "minimum": 5.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "max_per_album": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Per Album",
+            "type": "integer"
+          },
+          "max_per_artist": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Per Artist",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 255,
+            "title": "Name",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Track Ids",
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "title": "GeneratePlaylistRequest",
+        "type": "object"
+      },
+      "GeneratePlaylistResponse": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "playlist_id": {
+            "format": "uuid",
+            "title": "Playlist Id",
+            "type": "string"
+          },
+          "pool_size": {
+            "title": "Pool Size",
+            "type": "integer"
+          },
+          "seed_track_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Seed Track Ids",
+            "type": "array"
+          },
+          "track_count": {
+            "title": "Track Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "playlist_id",
+          "name",
+          "track_count",
+          "seed_track_ids",
+          "pool_size"
+        ],
+        "title": "GeneratePlaylistResponse",
         "type": "object"
       },
       "GroupApproveRequest": {
@@ -4800,7 +4757,7 @@
         "type": "object"
       },
       "LibraryStats": {
-        "description": "Library statistics.",
+        "description": "Library statistics.\n\nThe three totals agree with the list endpoints that show the same things, and are counted the\nsame way \u2014 see ``get_library_stats``. They did not until 2026-08-16.",
         "properties": {
           "albums": {
             "title": "Albums",
@@ -7525,6 +7482,53 @@
         "title": "QueueStats",
         "type": "object"
       },
+      "RankedVisualizer": {
+        "description": "One visualizer's placing, with enough detail to explain it.\n\n`ignored` is per-candidate rather than global because a declaration belongs to the visualizer\nthat made it \u2014 it is what the picker shows an author whose tag did not land.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ignored": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored",
+            "type": "array"
+          },
+          "matched_ranges": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Ranges",
+            "type": "array"
+          },
+          "matched_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched Tags",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "unmatched_ranges": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unmatched Ranges",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "score"
+        ],
+        "title": "RankedVisualizer",
+        "type": "object"
+      },
       "RecommendationsResponse": {
         "description": "Recommendations response.",
         "properties": {
@@ -7653,6 +7657,30 @@
           "local_track_id"
         ],
         "title": "RecommendedTrackResponse",
+        "type": "object"
+      },
+      "RefetchGeneratedResponse": {
+        "description": "What a bulk placeholder re-fetch queued.",
+        "properties": {
+          "considered": {
+            "title": "Considered",
+            "type": "integer"
+          },
+          "queued": {
+            "title": "Queued",
+            "type": "integer"
+          },
+          "skipped_recent": {
+            "title": "Skipped Recent",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "considered",
+          "queued",
+          "skipped_recent"
+        ],
+        "title": "RefetchGeneratedResponse",
         "type": "object"
       },
       "RelocateRequest": {
@@ -8306,17 +8334,6 @@
             "title": "Acoustid Configured",
             "type": "boolean"
           },
-          "anthropic_api_key": {
-            "title": "Anthropic Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "anthropic_configured": {
-            "title": "Anthropic Configured",
-            "type": "boolean"
-          },
           "clap_embeddings_enabled": {
             "title": "Clap Embeddings Enabled",
             "type": [
@@ -8364,45 +8381,9 @@
           "library_status": {
             "$ref": "#/components/schemas/LibraryStatus"
           },
-          "llm_provider": {
-            "title": "Llm Provider",
-            "type": "string"
-          },
           "music_library_configured": {
             "title": "Music Library Configured",
             "type": "boolean"
-          },
-          "openai_api_key": {
-            "title": "Openai Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_base_url": {
-            "title": "Openai Base Url",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_chat_model": {
-            "title": "Openai Chat Model",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_configured": {
-            "title": "Openai Configured",
-            "type": "boolean"
-          },
-          "openai_utility_model": {
-            "title": "Openai Utility Model",
-            "type": [
-              "string",
-              "null"
-            ]
           },
           "playlist_discovery_mode": {
             "title": "Playlist Discovery Mode",
@@ -8448,13 +8429,7 @@
           "library_status",
           "lastfm_api_key",
           "lastfm_api_secret",
-          "anthropic_api_key",
           "acoustid_api_key",
-          "llm_provider",
-          "openai_api_key",
-          "openai_base_url",
-          "openai_chat_model",
-          "openai_utility_model",
           "clap_embeddings_enabled",
           "clap_status",
           "external_features_enabled",
@@ -8470,8 +8445,6 @@
           "s3_backup_schedule",
           "update_channel",
           "lastfm_configured",
-          "anthropic_configured",
-          "openai_configured",
           "acoustid_configured",
           "s3_backup_configured",
           "music_library_configured"
@@ -8484,13 +8457,6 @@
         "properties": {
           "acoustid_api_key": {
             "title": "Acoustid Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "anthropic_api_key": {
-            "title": "Anthropic Api Key",
             "type": [
               "string",
               "null"
@@ -8547,41 +8513,6 @@
           },
           "lastfm_api_secret": {
             "title": "Lastfm Api Secret",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "llm_provider": {
-            "title": "Llm Provider",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_api_key": {
-            "title": "Openai Api Key",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_base_url": {
-            "title": "Openai Base Url",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_chat_model": {
-            "title": "Openai Chat Model",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "openai_utility_model": {
-            "title": "Openai Utility Model",
             "type": [
               "string",
               "null"
@@ -8963,336 +8894,53 @@
         "title": "SmartPlaylistUpdate",
         "type": "object"
       },
-      "SpotifyDeleteResponse": {
+      "SuggestedTrackResponse": {
+        "description": "One addable track, and why it is being offered.",
         "properties": {
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ],
-        "title": "SpotifyDeleteResponse",
-        "type": "object"
-      },
-      "SpotifyImportResponse": {
-        "properties": {
-          "favorites": {
-            "anyOf": [
-              {
-                "items": {},
-                "type": "array"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Favorites"
+          "because_of": {
+            "$ref": "#/components/schemas/SuggestionReasonResponse"
           },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "imported_at": {
-            "title": "Imported At",
-            "type": "string"
-          },
-          "match_results": {
-            "additionalProperties": true,
-            "title": "Match Results",
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "matching_task_id": {
-            "title": "Matching Task Id",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "playlists": {
-            "anyOf": [
-              {
-                "items": {},
-                "type": "array"
-              },
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Playlists"
-          },
-          "profile_id": {
-            "title": "Profile Id",
-            "type": "string"
-          },
-          "spotify_username": {
-            "title": "Spotify Username",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "streaming_stats": {
-            "additionalProperties": true,
-            "title": "Streaming Stats",
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "summary": {
-            "additionalProperties": true,
-            "title": "Summary",
-            "type": [
-              "object",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "profile_id",
-          "imported_at"
-        ],
-        "title": "SpotifyImportResponse",
-        "type": "object"
-      },
-      "SpotifyMatchProgressResponse": {
-        "properties": {
-          "matched": {
-            "title": "Matched",
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "message": {
-            "title": "Message",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "phase": {
-            "title": "Phase",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "progress": {
-            "title": "Progress",
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "total": {
-            "title": "Total",
-            "type": [
-              "integer",
-              "null"
-            ]
-          }
-        },
-        "title": "SpotifyMatchProgressResponse",
-        "type": "object"
-      },
-      "SpotifyRematchResponse": {
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "status"
-        ],
-        "title": "SpotifyRematchResponse",
-        "type": "object"
-      },
-      "SpotifyStatsResponse": {
-        "properties": {
-          "imported_at": {
-            "title": "Imported At",
-            "type": "string"
-          },
-          "match_rate": {
-            "title": "Match Rate",
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "matched_favorites": {
-            "title": "Matched Favorites",
-            "type": "integer"
-          },
-          "matched_playlist_tracks": {
-            "title": "Matched Playlist Tracks",
-            "type": "integer"
-          },
-          "matching_status": {
-            "title": "Matching Status",
-            "type": "string"
-          },
-          "total_favorites": {
-            "title": "Total Favorites",
-            "type": "integer"
-          },
-          "total_matched": {
-            "title": "Total Matched",
-            "type": "integer"
-          },
-          "total_playlist_tracks": {
-            "title": "Total Playlist Tracks",
-            "type": "integer"
-          },
-          "total_unique_tracks": {
-            "title": "Total Unique Tracks",
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "total_unmatched": {
-            "title": "Total Unmatched",
-            "type": [
-              "integer",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "total_favorites",
-          "matched_favorites",
-          "total_playlist_tracks",
-          "matched_playlist_tracks",
-          "total_matched",
-          "matching_status",
-          "imported_at"
-        ],
-        "title": "SpotifyStatsResponse",
-        "type": "object"
-      },
-      "SpotifyTaskStatusResponse": {
-        "properties": {
-          "error": {
-            "title": "Error",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "matched": {
-            "title": "Matched",
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
-          "total": {
-            "title": "Total",
-            "type": [
-              "integer",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "SpotifyTaskStatusResponse",
-        "type": "object"
-      },
-      "SpotifyUnmatchedResponse": {
-        "properties": {
-          "limit": {
-            "title": "Limit",
-            "type": "integer"
-          },
-          "offset": {
-            "title": "Offset",
-            "type": "integer"
-          },
-          "total": {
-            "title": "Total",
-            "type": "integer"
-          },
-          "tracks": {
-            "items": {
-              "$ref": "#/components/schemas/SpotifyUnmatchedTrack"
-            },
-            "title": "Tracks",
-            "type": "array"
-          },
-          "warning": {
-            "title": "Warning",
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "tracks",
-          "total",
-          "limit",
-          "offset"
-        ],
-        "title": "SpotifyUnmatchedResponse",
-        "type": "object"
-      },
-      "SpotifyUnmatchedTrack": {
-        "properties": {
-          "album": {
-            "title": "Album",
-            "type": "string"
-          },
-          "artist": {
-            "title": "Artist",
-            "type": "string"
-          },
-          "sources": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Sources",
-            "type": "array"
+          "similarity": {
+            "title": "Similarity",
+            "type": "number"
           },
           "track": {
-            "title": "Track",
-            "type": "string"
+            "$ref": "#/components/schemas/TrackResponse"
+          },
+          "votes": {
+            "title": "Votes",
+            "type": "integer"
           }
         },
         "required": [
-          "artist",
           "track",
-          "album",
-          "sources"
+          "because_of",
+          "similarity",
+          "votes"
         ],
-        "title": "SpotifyUnmatchedTrack",
+        "title": "SuggestedTrackResponse",
+        "type": "object"
+      },
+      "SuggestedTracksResponse": {
+        "description": "Suggestions for one collection, best first.",
+        "properties": {
+          "seed_track_count": {
+            "title": "Seed Track Count",
+            "type": "integer"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedTrackResponse"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions",
+          "seed_track_count"
+        ],
+        "title": "SuggestedTracksResponse",
         "type": "object"
       },
       "Suggestion": {
@@ -9311,6 +8959,35 @@
           "score"
         ],
         "title": "Suggestion",
+        "type": "object"
+      },
+      "SuggestionReasonResponse": {
+        "description": "The track of the listener's own that reached this suggestion.\n\nDeliberately not a full `TrackResponse`: this is a caption, and returning a whole track for every\nsuggestion would double the payload to say \"because you like X\".",
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "track_id"
+        ],
+        "title": "SuggestionReasonResponse",
         "type": "object"
       },
       "SuggestionsRequest": {
@@ -9626,6 +9303,56 @@
           "templates"
         ],
         "title": "TemplatesResponse",
+        "type": "object"
+      },
+      "TokenIssued": {
+        "description": "A newly minted token.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "header": {
+            "default": "X-Familiar-Token",
+            "title": "Header",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "token"
+        ],
+        "title": "TokenIssued",
+        "type": "object"
+      },
+      "TokenStatus": {
+        "description": "Whether inbound authentication is configured, and the token if it is.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "header": {
+            "default": "X-Familiar-Token",
+            "title": "Header",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configured"
+        ],
+        "title": "TokenStatus",
         "type": "object"
       },
       "TopTrackStat": {
@@ -10779,6 +10506,211 @@
         "title": "VideoDeleteResponse",
         "type": "object"
       },
+      "VideoListItem": {
+        "description": "A track that has a video \u2014 the full track, plus which video and when it arrived.\n\nSubclasses `TrackResponse` for the same reason `FavoriteTrackResponse` does: the client drawing\nthis list wants a track row, and reinventing a narrower one guarantees it diverges from every\nother track row in the app.",
+        "properties": {
+          "album": {
+            "title": "Album",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "album_artist": {
+            "title": "Album Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "album_type": {
+            "title": "Album Type",
+            "type": "string"
+          },
+          "analysis_version": {
+            "title": "Analysis Version",
+            "type": "integer"
+          },
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disc_number": {
+            "title": "Disc Number",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "downloaded_at": {
+            "format": "date-time",
+            "title": "Downloaded At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "features": {
+            "$ref": "#/components/schemas/TrackFeaturesResponse"
+          },
+          "file_path": {
+            "title": "File Path",
+            "type": "string"
+          },
+          "file_size_bytes": {
+            "title": "File Size Bytes",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "format": {
+            "title": "Format",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "genre": {
+            "title": "Genre",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_played_at": {
+            "format": "date-time",
+            "title": "Last Played At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "play_count": {
+            "title": "Play Count",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_number": {
+            "title": "Track Number",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "year": {
+            "title": "Year",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "file_path",
+          "title",
+          "artist",
+          "album",
+          "album_artist",
+          "album_type",
+          "track_number",
+          "disc_number",
+          "year",
+          "genre",
+          "duration_seconds",
+          "format",
+          "analysis_version",
+          "source",
+          "source_id"
+        ],
+        "title": "VideoListItem",
+        "type": "object"
+      },
+      "VideoListResponse": {
+        "description": "Paginated list of tracks that have a video.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VideoListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "VideoListResponse",
+        "type": "object"
+      },
       "VideoSearchResultResponse": {
         "description": "Video search result response.",
         "properties": {
@@ -10851,6 +10783,108 @@
           "has_video"
         ],
         "title": "VideoStatusResponse",
+        "type": "object"
+      },
+      "VisualizerAffinity": {
+        "description": "What a visualizer says it suits, as declared in its manifest.",
+        "properties": {
+          "ranges": {
+            "items": {
+              "$ref": "#/components/schemas/VisualizerFeatureRange"
+            },
+            "title": "Ranges",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "title": "VisualizerAffinity",
+        "type": "object"
+      },
+      "VisualizerCandidate": {
+        "description": "One visualizer the client reports having loaded.",
+        "properties": {
+          "affinity": {
+            "$ref": "#/components/schemas/VisualizerAffinity"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "VisualizerCandidate",
+        "type": "object"
+      },
+      "VisualizerFeatureRange": {
+        "description": "A bound a visualizer declares over one numeric analysis column.\n\nEither end may be omitted for an open range. A feature this server does not know, one that\nholds a string, and one this track was never analysed for are all inert \u2014 see\n`services/visualizer_affinity`.",
+        "properties": {
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "maximum": {
+            "title": "Maximum",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "minimum": {
+            "title": "Minimum",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "feature"
+        ],
+        "title": "VisualizerFeatureRange",
+        "type": "object"
+      },
+      "VisualizerRankingRequest": {
+        "description": "The visualizers this client actually has, in the order it would otherwise use.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/VisualizerCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          }
+        },
+        "title": "VisualizerRankingRequest",
+        "type": "object"
+      },
+      "VisualizerRankingResponse": {
+        "description": "Candidates best-first, or unranked when there was nothing to rank against.",
+        "properties": {
+          "ranked": {
+            "title": "Ranked",
+            "type": "boolean"
+          },
+          "visualizers": {
+            "items": {
+              "$ref": "#/components/schemas/RankedVisualizer"
+            },
+            "title": "Visualizers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "visualizers",
+          "ranked"
+        ],
+        "title": "VisualizerRankingResponse",
         "type": "object"
       },
       "VolumeRequest": {
@@ -11105,6 +11139,12 @@
       }
     },
     "securitySchemes": {
+      "FamiliarToken": {
+        "description": "Server token (ADR-0045). Issue one at POST /api/v1/auth/token. When no token is configured the server accepts unauthenticated requests, so generated clients must treat this as optional-but-expected rather than required.",
+        "in": "header",
+        "name": "X-Familiar-Token",
+        "type": "apiKey"
+      },
       "ProfileHeader": {
         "description": "Profile identity. Obtain one from POST /api/v1/profiles/register. Optional on some endpoints, required on most; see each operation.",
         "in": "header",
@@ -11752,6 +11792,78 @@
         ]
       }
     },
+    "/api/v1/artwork/coverage": {
+      "get": {
+        "description": "Count albums with, without, and with only placeholder cover art.\n\nADR-0058 phase 5. Artwork existence is a fact about the filesystem, not the database \u2014 there is\nno column recording it \u2014 so this stats one thumbnail path per album. That is ~4k stat calls on\nJeff's library, which is why it runs in a worker thread rather than blocking the event loop, and\nwhy it is its own endpoint rather than three more fields on `/library/stats`: the dashboard\nshould not pay for a filesystem sweep on every load.",
+        "operationId": "artwork_get_artwork_coverage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtworkCoverageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Artwork Coverage",
+        "tags": [
+          "artwork"
+        ]
+      }
+    },
     "/api/v1/artwork/queue": {
       "post": {
         "description": "Queue a single album for artwork download.\n\nReturns immediately (202 Accepted). Artwork will be fetched in background.",
@@ -11915,6 +12027,78 @@
           }
         },
         "summary": "Queue Artwork Batch",
+        "tags": [
+          "artwork"
+        ]
+      }
+    },
+    "/api/v1/artwork/refetch-generated": {
+      "post": {
+        "description": "Ask the internet again for every album currently showing a placeholder.\n\n**Bulk, because the per-album path only fires when an album scrolls into view.** Fixing the\nqueue routes makes browsing self-healing, but reaching 661 placeholders that way means browsing\npast 661 albums. This queues them in one go.\n\nPlaceholders only. An album with real art is never touched, and one whose placeholder was drawn\ninside `ARTWORK_REFETCH_INTERVAL` is left for later \u2014 `should_refetch_online` is the same rule\nthe queue routes use, so a button press cannot bypass the rate limit that protects Last.fm and\nMusicBrainz from being asked about an artless album every day.\n\nGrouped exactly as `/artwork/coverage` groups, so \"queued\" is comparable with the \"generated\"\nfigure shown beside the button. `/artwork/regenerate-stale` groups by bare `Track.artist` with\nno status filter and therefore agrees with neither; that is a separate defect, left alone here.",
+        "operationId": "artwork_refetch_generated_artwork",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefetchGeneratedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Refetch Generated Artwork",
         "tags": [
           "artwork"
         ]
@@ -12162,7 +12346,7 @@
     },
     "/api/v1/artwork/status/{album_hash}": {
       "get": {
-        "description": "Check if artwork exists for an album hash.",
+        "description": "Check whether artwork exists for an album hash, and whether it is real.\n\nReports the same provenance the batch endpoint reports. It did not, and the asymmetry is what\nlet a placeholder pass for artwork everywhere a caller used this one.",
         "operationId": "artwork_get_artwork_status",
         "parameters": [
           {
@@ -12332,6 +12516,218 @@
         "summary": "Get Artwork By Hash",
         "tags": [
           "artwork"
+        ]
+      }
+    },
+    "/api/v1/auth/token": {
+      "delete": {
+        "description": "Clear the token, returning the server to unauthenticated.\n\nKept because a token that cannot be removed is one an operator will work around by editing JSON\non the NAS \u2014 the thing rotation exists to prevent. It reopens the server, which is why it needs\nthe current token.",
+        "operationId": "auth_revoke_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Revoke Token",
+        "tags": [
+          "auth"
+        ]
+      },
+      "get": {
+        "description": "Read the current token.\n\nReturns the value rather than a mask, because the point of it is to be copied into clients and\nit is already readable in `data/settings.json` by anyone who can call this. Reading it requires\nholding it, once one exists.",
+        "operationId": "auth_get_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Token",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "description": "Mint a token, replacing any existing one.\n\nRotation and first issue are the same operation on purpose: a separate \"rotate\" would be the\nsame code behind a second name, and one endpoint means there is no path where a client rotates\nwhen it meant to create.",
+        "operationId": "auth_issue_token",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenIssued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Issue Token",
+        "tags": [
+          "auth"
         ]
       }
     },
@@ -12610,248 +13006,6 @@
         "summary": "Search Bandcamp",
         "tags": [
           "bandcamp"
-        ]
-      }
-    },
-    "/api/v1/chat": {
-      "post": {
-        "description": "Non-streaming chat endpoint.\n\nReturns the complete response after all tool calls are processed.\nUseful for simpler integrations that don't need streaming.",
-        "operationId": "chat_chat",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Chat",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/v1/chat/status": {
-      "get": {
-        "description": "Check if LLM is configured and available.\n\nReturns configuration status so the frontend can show\nappropriate warnings before the user tries to chat. Reports the *active*\nprovider \u2014 selecting \"openai\" without openai credentials returns\nconfigured=False even if ANTHROPIC_API_KEY is set.",
-        "operationId": "chat_get_chat_status",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ChatStatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Get Chat Status",
-        "tags": [
-          "chat"
-        ]
-      }
-    },
-    "/api/v1/chat/stream": {
-      "post": {
-        "description": "Stream a chat response with tool execution.\n\nReturns Server-Sent Events (SSE) with the following event types:\n- text: LLM text response chunk\n- tool_call: Tool being called (name, input)\n- tool_result: Result of tool execution\n- queue: Tracks to add to queue\n- playback: Playback control action\n- done: Stream complete\n- error: Error occurred",
-        "operationId": "chat_chat_stream",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChatRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {}
-            },
-            "description": "Server-sent events carrying chat deltas and tool calls."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Chat Stream",
-        "tags": [
-          "chat"
         ]
       }
     },
@@ -14790,7 +14944,8 @@
     },
     "/api/v1/favorites/auto-download": {
       "get": {
-        "description": "Get the auto-download setting for favorites.",
+        "deprecated": true,
+        "description": "Get the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).\n\nThe setting moved to the client. Whether to keep 1,700 tracks offline depends on the device's\ndisk, and one boolean per profile meant a phone and a desktop could not disagree. This was the\nonly listener preference the server held; after the move it holds none.\n\nStill served, and still reads the stored value, because both clients call it exactly once per\nprofile to carry the old value across. Removing it would make that seed impossible and silently\nturn the feature off for anyone who had it on. It can go once every client has seeded \u2014 and\nnote that `familiar-apple` commits `openapi.json` verbatim, so removal there means regenerating\nthe Swift client in the same change.",
         "operationId": "favorites_get_favorites_auto_download",
         "responses": {
           "200": {
@@ -14865,7 +15020,8 @@
         ]
       },
       "put": {
-        "description": "Set the auto-download setting for favorites.",
+        "deprecated": true,
+        "description": "Set the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).\n\nNo shipping client writes here any more \u2014 the setting is device-local. Kept so an older build\nthat still writes is not met with a 404, and so the stored value stays a usable seed for a\ndevice that has not been updated yet.",
         "operationId": "favorites_set_favorites_auto_download",
         "requestBody": {
           "content": {
@@ -14945,6 +15101,97 @@
           }
         ],
         "summary": "Set Favorites Auto Download",
+        "tags": [
+          "favorites"
+        ]
+      }
+    },
+    "/api/v1/favorites/suggested-tracks": {
+      "get": {
+        "description": "Tracks from your library that fit your favorites and are not already among them.\n\nEach carries the favourite that reached it, so the list explains itself rather than needing a\nheading nobody can write truthfully (ADR-0093 point 7).\n\n**Registered above `GET /{track_id}`, and it has to stay there.** FastAPI matches in registration\norder, so behind the parameterised route this path is read as a track id and 422s on the UUID\nparse \u2014 the same trap `routes/playlists/__init__.py` documents for `/generate`.",
+        "operationId": "favorites_get_favorites_suggested_tracks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedTracksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Favorites Suggested Tracks",
         "tags": [
           "favorites"
         ]
@@ -17271,96 +17518,6 @@
         ]
       }
     },
-    "/api/v1/library/discover/prompts": {
-      "get": {
-        "description": "Generate AI-powered listening suggestions based on the user's library.",
-        "operationId": "library_get_curated_prompts",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "refresh",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Refresh",
-              "type": "boolean"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CuratedPromptsResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Get Curated Prompts",
-        "tags": [
-          "library",
-          "library"
-        ]
-      }
-    },
     "/api/v1/library/import/preview": {
       "post": {
         "description": "Preview an import - extract and scan files without importing.\n\nUploads file to temp location, extracts if zip, scans metadata,\nand returns preview with session_id for later execution.\n\nSession expires after 24 hours if not executed.",
@@ -19008,7 +19165,7 @@
     },
     "/api/v1/library/stats": {
       "get": {
-        "description": "Get library statistics in a single query using conditional aggregation.",
+        "description": "Get library statistics.\n\n**These are the same counts the list endpoints return, counted the same way**, because a\ndashboard figure that disagrees with the screen it links to is worse than no figure\n(ADR-0058 point 6). Verified against the 26k-track library on 2026-08-16, when all three\ndisagreed:\n\n- ``total_tracks`` counted every row regardless of status, so 66 missing/deleted tracks were\n  reported as library size (26,488 against ``/tracks``' 26,422).\n- ``total_albums`` was ``count(distinct Track.album)`` \u2014 a *string* distinct, which merges\n  same-titled albums by different artists. ``library_albums`` groups by\n  ``(album_artist, album)`` case-insensitively, and said 3,927 against this query's 3,873.\n- ``total_artists`` was ``count(distinct Track.artist)`` over raw tag strings, so \"The\n  Beatles\" and \"Beatles, The\" counted twice and features counted separately.\n  ``library_artists`` reads the canonical ``Artist`` table (ADR-0052) and said 3,477 against\n  this query's 3,664.\n\n``tests/test_library_stats.py`` asserts the agreement rather than the arithmetic, so a future\nchange to either side has to move both.",
         "operationId": "library_get_library_stats",
         "responses": {
           "200": {
@@ -23832,6 +23989,208 @@
         ]
       }
     },
+    "/api/v1/playback/artifacts/{request_id}": {
+      "post": {
+        "description": "Hand back something a command asked this client to produce (ADR-0053 point 3).\n\nThe return half of the channel, and deliberately not on the channel: the SSE stream stays\none-way, and this is a request the client makes when it has something to send. That keeps\nADR-0044 point 2's reasoning intact rather than reversing it.\n\n`request_id` names one outstanding question. It is minted by the server when it issues the\ncommand, it is not a device identity, and it dies when the question is answered or times out \u2014\nwhich is why this does not reopen ADR-0029 point 5.\n\n**Profile-scoped, and checked rather than merely required.** The store remembers which profile\nasked, so holding *a* profile is not enough to answer somebody else's question. Caught by\n`lint_profile_contracts.py`, which is the rule this route was quietly outside.\n\nA late or unknown upload is **discarded, not stored** (point 8). The question it answers has\nalready been answered with a timeout, and keeping the image would mean keeping it forever.\n204 either way: the client cannot do anything useful with the difference, and telling it its\nscreenshot was too slow would only invite a retry nothing is waiting for.",
+        "operationId": "playback_upload_artifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_playback_upload_artifact"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Upload Artifact",
+        "tags": [
+          "playback"
+        ]
+      }
+    },
+    "/api/v1/playback/commands": {
+      "get": {
+        "description": "Subscribe to this profile's playback commands.\n\nSubscribe while you can act and disconnect when you cannot: the subscription is the claim to\nbe a player, and the most recently attached client is the default target.\n\nCapabilities are declared here rather than assumed (point 12). The clients genuinely differ \u2014\nthe Apple clients have no theme, visualizer, normalization or shuffle-weight storage where the\nweb app has all four \u2014 so without a declaration a perfectly well-formed command reaches a\nclient that silently cannot obey it.",
+        "operationId": "playback_playback_commands",
+        "parameters": [
+          {
+            "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
+            "in": "query",
+            "name": "client",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
+              "title": "Client",
+              "type": "string"
+            }
+          },
+          {
+            "description": "e.g. macos, ios, web.",
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "e.g. macos, ios, web.",
+              "title": "Platform",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
+            "in": "query",
+            "name": "capabilities",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
+              "title": "Capabilities",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Playback commands for this profile, until the client disconnects."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Playback Commands",
+        "tags": [
+          "playback"
+        ]
+      }
+    },
     "/api/v1/playlists": {
       "get": {
         "description": "List all playlists for the current profile.",
@@ -24007,6 +24366,93 @@
           }
         ],
         "summary": "Create Playlist",
+        "tags": [
+          "playlists"
+        ]
+      }
+    },
+    "/api/v1/playlists/generate": {
+      "post": {
+        "description": "Generate and save a playlist from a structured seed.\n\nReturns a **saved** playlist, not a preview (point 6): it is reached from a menu item that said\n\"Make a playlist\", and a confirmation step would make the button a lie. It is marked\n`is_auto_generated` so it sorts and filters with the others and is one action to delete.",
+        "operationId": "playlists_generate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeneratePlaylistRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratePlaylistResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Generate Playlist",
         "tags": [
           "playlists"
         ]
@@ -24461,7 +24907,7 @@
     },
     "/api/v1/playlists/{playlist_id}/recommendations": {
       "get": {
-        "description": "Get recommendations based on a playlist's content.\n\nOnly available for auto-generated (AI) playlists.\nUses Last.fm for similar artists/tracks, with Bandcamp as fallback.",
+        "description": "Get recommendations based on a playlist's content.\n\nAvailable for any playlist. Uses Last.fm for similar artists/tracks, with Bandcamp as fallback.\n\n**This used to answer 400 unless the playlist was auto-generated**, on the assumption that a\ngenerated playlist has richer semantics to seed from. It does not \u2014 recommendations come from the\ntracks, and a hand-made playlist has tracks. The gate also contradicted the sibling endpoint\nbelow, whose docstring had already noted it worked \"for any playlist \u2026 unlike the sibling\n``/recommendations`` endpoint which is AI-only\". Someone documented the inconsistency rather than\nremoving it; this removes it.",
         "operationId": "playlists_get_playlist_recommendations",
         "parameters": [
           {
@@ -24678,6 +25124,107 @@
           }
         ],
         "summary": "Get Playlist External Albums",
+        "tags": [
+          "playlists"
+        ]
+      }
+    },
+    "/api/v1/playlists/{playlist_id}/suggested-tracks": {
+      "get": {
+        "description": "Tracks from your library that would fit this playlist and are not already in it.\n\nEach carries the playlist track that reached it, so the list explains itself.",
+        "operationId": "playlists_get_playlist_suggested_tracks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "playlist_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Playlist Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedTracksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Playlist Suggested Tracks",
         "tags": [
           "playlists"
         ]
@@ -29405,698 +29952,6 @@
         ]
       }
     },
-    "/api/v1/spotify/import": {
-      "delete": {
-        "description": "Remove the Spotify import for the profile.",
-        "operationId": "spotify_delete_spotify_import",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyDeleteResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Delete Spotify Import",
-        "tags": [
-          "spotify"
-        ]
-      },
-      "get": {
-        "description": "Get the current Spotify import for the profile.",
-        "operationId": "spotify_get_spotify_import",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyImportResponse",
-                  "title": "Response Spotify Get Spotify Import"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Get Spotify Import",
-        "tags": [
-          "spotify"
-        ]
-      },
-      "post": {
-        "description": "Upload a Spotify data export ZIP. Parses immediately, matches in background.",
-        "operationId": "spotify_upload_spotify_export",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_spotify_upload_spotify_export"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyImportResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Upload Spotify Export",
-        "tags": [
-          "spotify"
-        ]
-      }
-    },
-    "/api/v1/spotify/import/progress": {
-      "get": {
-        "description": "Get live matching progress from Redis (null if not running).",
-        "operationId": "spotify_get_spotify_matching_progress",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyMatchProgressResponse",
-                  "title": "Response Spotify Get Spotify Matching Progress"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Get Spotify Matching Progress",
-        "tags": [
-          "spotify"
-        ]
-      }
-    },
-    "/api/v1/spotify/import/status/{task_id}": {
-      "get": {
-        "description": "Poll the status of a background Spotify matching task.",
-        "operationId": "spotify_get_spotify_import_status",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "task_id",
-            "required": true,
-            "schema": {
-              "title": "Task Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyTaskStatusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "summary": "Get Spotify Import Status",
-        "tags": [
-          "spotify"
-        ]
-      }
-    },
-    "/api/v1/spotify/rematch": {
-      "post": {
-        "description": "Re-run matching against current library without re-uploading (runs in background).",
-        "operationId": "spotify_rematch_spotify_import",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyRematchResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Rematch Spotify Import",
-        "tags": [
-          "spotify"
-        ]
-      }
-    },
-    "/api/v1/spotify/stats": {
-      "get": {
-        "description": "Lightweight match statistics without loading heavy JSONB fields.",
-        "operationId": "spotify_get_spotify_stats",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyStatsResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Get Spotify Stats",
-        "tags": [
-          "spotify"
-        ]
-      }
-    },
-    "/api/v1/spotify/unmatched": {
-      "get": {
-        "description": "Search unmatched Spotify tracks with filtering and pagination.",
-        "operationId": "spotify_get_spotify_unmatched",
-        "parameters": [
-          {
-            "description": "Free-text search across artist, track, album",
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "description": "Free-text search across artist, track, album",
-              "title": "Search",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          {
-            "description": "Filter by artist (case-insensitive contains)",
-            "in": "query",
-            "name": "artist",
-            "required": false,
-            "schema": {
-              "description": "Filter by artist (case-insensitive contains)",
-              "title": "Artist",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          {
-            "description": "Filter by album (case-insensitive contains)",
-            "in": "query",
-            "name": "album",
-            "required": false,
-            "schema": {
-              "description": "Filter by album (case-insensitive contains)",
-              "title": "Album",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 100,
-              "maximum": 1000,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "required": false,
-            "schema": {
-              "default": 0,
-              "minimum": 0,
-              "title": "Offset",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SpotifyUnmatchedResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Get Spotify Unmatched",
-        "tags": [
-          "spotify"
-        ]
-      }
-    },
     "/api/v1/tracks": {
       "get": {
         "description": "List tracks with optional filtering and pagination.",
@@ -33706,7 +33561,7 @@
     },
     "/api/v1/tracks/{track_id}/skipped": {
       "post": {
-        "description": "Record that playback of a track stopped before it was scrobbled.\n\nProfilePlayHistory is not modified \u2014 only completed plays count toward it.\n\nThe outcome is derived rather than assumed: a track abandoned at 95%, or a short\ntrack played in full, is recorded as `completed`, and a failed load is recorded as\n`errored` so it never reaches the taste signal.",
+        "description": "Record that playback of a track stopped before it ran out.\n\nProfilePlayHistory is not modified \u2014 only completed plays count toward it.\n\nThe outcome is derived rather than assumed: a track abandoned at 95%, or a short\ntrack played in full, is recorded as `completed`, and a failed load is recorded as\n`errored` so it never reaches the taste signal.\n\n**A skip can still be a scrobble** (ADR-0030). Last.fm asks for half a track; Familiar's\n`play_count` means the track reached its end. A track abandoned at 60% arrives here and nowhere\nelse, and Last.fm wants it \u2014 which is why scrobbling is decided from the event's own numbers\nrather than from which endpoint it came through.",
         "operationId": "tracks_record_skip",
         "parameters": [
           {
@@ -33803,6 +33658,88 @@
         ]
       }
     },
+    "/api/v1/tracks/{track_id}/started": {
+      "post": {
+        "description": "A track just started playing (ADR-0030 point 6).\n\nThe signal this server has never had. `/played` and `/skipped` both fire at the *end* of a\ntrack, so nothing until now could tell it what a listener is hearing right now.\n\nDeliberately generic rather than a Last.fm endpoint: \"this track just started\" is a fact about\nlistening, and the server is free to do more with it later \u2014 presence, listening-together, a\nrecently-started feed. It forwards to Last.fm as now-playing, and it is also what lets an MCP\nhost answer \"what am I listening to?\" \u2014 the \"later\" this docstring anticipated, costing the\nclients nothing because they already send this.\n\nWrites nothing. There is no database work here at all, which is why it takes no session: a\nnow-playing is a claim about the present that expires in minutes, and the durable record of this\ntrack arrives later on `/played` or `/skipped`.\n\n204 rather than a body: there is nothing a caller can do with the outcome, and a client must not\nwait on it.",
+        "operationId": "tracks_record_start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "track_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Track Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Record Start",
+        "tags": [
+          "tracks"
+        ]
+      }
+    },
     "/api/v1/tracks/{track_id}/stream": {
       "get": {
         "description": "Stream audio file with range request support for seeking.",
@@ -33887,6 +33824,105 @@
           }
         },
         "summary": "Stream Track",
+        "tags": [
+          "tracks"
+        ]
+      }
+    },
+    "/api/v1/tracks/{track_id}/visualizer-ranking": {
+      "post": {
+        "description": "Rank the client's visualizers by how well each suits this track.\n\nA track that does not exist is a 404. A track that exists but has never been analysed is **not**\n\u2014 it returns the candidates in the order they were submitted with `ranked: false`, because\n\"nothing to rank against\" is an ordinary state on a library that is still being analysed, and\nan error would push the client into treating it as a failure.",
+        "operationId": "tracks_rank_visualizers",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "track_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Track Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisualizerRankingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisualizerRankingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Rank Visualizers",
         "tags": [
           "tracks"
         ]
@@ -34033,6 +34069,103 @@
         "summary": "Trigger Update Check",
         "tags": [
           "updates"
+        ]
+      }
+    },
+    "/api/v1/videos": {
+      "get": {
+        "description": "List the tracks that have a downloaded video.\n\nADR-0086 point 3, and the one thing the rest of this surface cannot do: every other operation is\nkeyed by a track id you already have, so a destination that *lists* videos had nothing to call.",
+        "operationId": "videos_list_videos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List Videos",
+        "tags": [
+          "videos"
         ]
       }
     },
@@ -34400,7 +34533,7 @@
     },
     "/api/v1/videos/{track_id}/stream": {
       "get": {
-        "description": "Stream a downloaded video for a track.",
+        "description": "Stream a downloaded video for a track, honouring `Range`.",
         "operationId": "videos_stream_video",
         "parameters": [
           {
@@ -34417,11 +34550,15 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
-              }
+              "video/*": {}
             },
-            "description": "Successful Response"
+            "description": "Whole video file."
+          },
+          "206": {
+            "content": {
+              "video/*": {}
+            },
+            "description": "Partial content for a Range request (seeking, buffering)."
           },
           "400": {
             "content": {
@@ -34453,6 +34590,9 @@
             },
             "description": "Not Found"
           },
+          "416": {
+            "description": "Requested range is not satisfiable."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -34480,5 +34620,10 @@
         ]
       }
     }
-  }
+  },
+  "security": [
+    {
+      "FamiliarToken": []
+    }
+  ]
 }

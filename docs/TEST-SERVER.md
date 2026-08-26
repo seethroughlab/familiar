@@ -1,121 +1,145 @@
-# Deploy Familiar Test Server to Fly.io
+# The Demo Server
 
-## Context
+`https://familiar-demo.fly.dev` — a public, always-on Familiar instance with a small library of
+CC-licensed music. It exists so an **App Store reviewer has a server to type into the setup screen**;
+without one the app is a setup screen, and a submission that reaches a reviewer in that state is
+rejected on functionality regardless of what shipped in it.
 
-Apple App Store review requires a working backend server with test data. A fly.io test server also enables CI/E2E testing against a real environment. The server will host a small library of CC-licensed music, pre-analyzed and ready for reviewers to use.
+It doubles as the public demo the website has never been able to link to.
 
-## Architecture
+> **This document describes what is built.** It previously described a design that was never
+> implemented — an always-on 8 GB machine called `familiar-test`, a `fly/seed-music.sh`, a
+> `deploy-fly.yml`, a `fly.toml` at the repo root — and diverged from the implementation in every
+> particular, with nothing comparing the two. That is how the server came to be off for months
+> without anyone noticing. See [ADR-0038](decisions/ADR-0038-the-demo-server-is-always-on.md).
 
-- Full-stack deploy using existing `docker/Dockerfile` (single container: FastAPI + React frontend)
-- Fly Postgres (pgvector included in Fly Postgres 15+)
-- Upstash Redis (Fly's recommended Redis, free tier sufficient)
-- Single persistent volume at `/data` for music, art, settings
-- Always-on `performance-2x` VM (4 CPU, 8GB RAM) — ~$55/month total
-- Region: `sjc` (San Jose, near Apple in Cupertino)
+**This is a review and demonstration server. It is not hosted Familiar.** No user accounts, no
+uploads, no durability guarantee, and no growth into a service. Familiar is self-hosted software.
 
-## Files to Create
+## As built
 
-### 1. `fly.toml` (repo root)
+| | |
+|---|---|
+| Fly app | `familiar-demo`, region `sjc` |
+| Config | `deploy/fly/fly.toml` — invoked from the repo root, see the comment at its top |
+| Image | `deploy/fly/Dockerfile` (not `docker/Dockerfile`) |
+| VM | `shared-cpu-1x`, 1 GB, one machine, **always on** |
+| Volume | `demo_data` mounted at `/data` |
+| Database | **Neon** Postgres with `pgvector` |
+| Deploy | `.github/workflows/fly-deploy-demo.yml` — on push to `main` under `backend/**` or `deploy/fly/**`, and by hand |
+| Reset | `.github/workflows/fly-reset-demo.yml` — weekly, Sunday 04:00 UTC |
 
-Fly.io app configuration:
-- App name: `familiar-test`
-- Build from `docker/Dockerfile`
-- Mount volume `familiar_data` at `/data`
-- Env: `MUSIC_LIBRARY_PATH=/data/music`, `ART_PATH=/data/art`, `VIDEOS_PATH=/data/videos`
-- Health check: `GET /api/v1/health` every 30s, 60s grace period
-- `auto_stop_machines = "off"`, `min_machines_running = 1` (always-on)
-- VM: `performance-2x` with 8GB RAM
+`deploy/fly/entrypoint.sh` ensures the `pgvector` extension and runs `alembic upgrade head` on every
+boot, so a deploy carries its own migrations.
 
-### 2. `fly/seed-music.sh`
+### Why 1 GB is enough, and why not to "fix" the CLAP flag
 
-Script to download CC-licensed music and trigger library scan:
-- Downloads tracks from incompetech.com (Kevin MacLeod, CC-BY 4.0) and archive.org (public domain classical)
-- Places files in `/data/music/` organized by artist folder
-- Triggers library scan via `POST http://localhost:8000/api/v1/sync`
-- Run via: `fly ssh console -C "bash /app/fly/seed-music.sh"`
+`fly.toml` sets `DISABLE_CLAP_EMBEDDINGS = 'true'`. The CLAP model is ~1.5 GB, so that flag is what
+makes a 1 GB machine plausible — but the important part is what it does *not* disable. It gates
+**computing** embeddings during analysis, not using them: the database arrives pre-seeded with
+vectors, so similarity search and the Music Map work here without the model ever being loaded.
 
-### 3. `.github/workflows/deploy-fly.yml`
+The consequence is that **the demo can never analyse anything new.** A track added to this instance
+gets no features and no embedding, which looks like a bug and is not one.
 
-GitHub Actions workflow for deploying to Fly:
-- Triggers: `workflow_dispatch` (manual) and on version tags (`v*`)
-- Uses `superfly/flyctl-actions/setup-flyctl`
-- Runs `flyctl deploy --remote-only`
-- Requires `FLY_API_TOKEN` secret in GitHub
+## The library
 
-## Files to Modify
-
-### 4. `docker/Dockerfile`
-
-- Add `COPY fly/ ./fly/` after the backend copy step (to include seed script in image)
-
-### 5. `docker/entrypoint.sh`
-
-Add Fly.io detection using `FLY_APP_NAME` env var (always set on Fly machines):
-- **Skip `gosu`**: Fly runs in single-tenant microVMs, root is fine
-- **Volume setup**: `mkdir -p /data/music /data/art /data/videos /data/app_data`
-- **Symlink settings**: `ln -sf /data/app_data /app/data` so `settings.json` survives redeploys
-- **Add missing extensions**: The current entrypoint only creates the `vector` extension. Add `uuid-ossp` and `pg_trgm` (needed by the app, currently created by the Docker Postgres init script but not available on Fly Postgres)
-
-Implementation approach — add at the top of `entrypoint.sh`:
-```bash
-if [ -n "$FLY_APP_NAME" ]; then
-    mkdir -p /data/music /data/art /data/videos /data/app_data
-    [ ! -L /app/data ] && rm -rf /app/data && ln -sf /data/app_data /app/data
-    RUN_AS=""
-else
-    chown -R familiar:familiar /app/data /data/art /data/videos 2>/dev/null || true
-    RUN_AS="gosu familiar"
-fi
-```
-Then replace all `gosu familiar` with `$RUN_AS`.
-
-In the extensions block, add `uuid-ossp` and `pg_trgm` alongside `vector`.
-
-## Infrastructure Setup Sequence (manual, one-time)
+`demo-library/` holds **32 CC-licensed tracks** — Kevin MacLeod, Jahzzar, Hussalonia and Nicolas
+Falcon, CC-BY / CC-BY-SA / public domain, sourced from the Internet Archive — with a generated
+`ATTRIBUTIONS.md`. Three scripts, in order:
 
 ```bash
-# 1. Create app
-fly apps create familiar-test
-
-# 2. Create Postgres (pgvector included)
-fly postgres create --name familiar-test-db --region sjc \
-  --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
-
-# 3. Attach Postgres (auto-sets DATABASE_URL secret)
-fly postgres attach familiar-test-db -a familiar-test
-# Then override with asyncpg driver prefix:
-fly secrets set DATABASE_URL="postgresql+asyncpg://..." -a familiar-test
-
-# 4. Create Upstash Redis
-fly redis create --name familiar-test-redis --region sjc
-fly secrets set REDIS_URL="redis://..." -a familiar-test
-
-# 5. Create persistent volume (3GB)
-fly volumes create familiar_data --size 3 --region sjc -a familiar-test
-
-# 6. Set secrets
-fly secrets set ANTHROPIC_API_KEY="..." FRONTEND_URL="https://familiar-test.fly.dev" -a familiar-test
-
-# 7. Deploy
-fly deploy --remote-only
-
-# 8. Seed test music
-fly ssh console -C "bash /app/fly/seed-music.sh" -a familiar-test
+scripts/fetch-demo-library.sh     # download the tracks
+scripts/analyze-demo-library.sh   # full analysis pass against a throwaway local Docker stack
+scripts/seed-demo-library.sh      # pg_dump the result into Neon
 ```
 
-## Known Issues & Mitigations
+**Use Neon's direct host, never the pooler.** Neon's pgbouncer ignores `ALTER ROLE SET search_path`,
+so anything run through a `-pooler` hostname will not find the schema and fails in a way that looks
+like a corrupt dump. `seed-demo-library.sh` takes `DEMO_NEON_URL` and says so; the reset workflow
+refuses a pooler URL outright.
 
-| Issue | Mitigation |
-|-------|-----------|
-| `DATABASE_URL` format — Fly sets `postgres://`, app needs `postgresql+asyncpg://` | Manually override secret after `fly postgres attach` |
-| DB pool size (40 total) may exceed Fly Postgres shared plan limits (~25 connections) | Single worker + test usage = fine; reduce pool if issues arise |
-| CC music download URLs may break over time | Seed script uses multiple sources; can also manually upload files to the volume |
-| Large Docker image (~4-6GB) | Use `--remote-only` to build on Fly's builders with layer caching |
+## Bringing it up
 
-## Verification
+The repository side is done — `fly.toml` is always-on and the deploy workflow is armed. What remains
+needs a Fly account:
 
-1. `fly status -a familiar-test` — machine running, health checks passing
-2. `curl https://familiar-test.fly.dev/api/v1/health` — 200 OK
-3. Open `https://familiar-test.fly.dev` in browser — app loads, test tracks visible
-4. Play a track — audio streams correctly
-5. Test from iOS app — point at `https://familiar-test.fly.dev`, verify playback
+```bash
+flyctl deploy . \
+    --config deploy/fly/fly.toml \
+    --dockerfile deploy/fly/Dockerfile \
+    --remote-only
+```
+
+Then verify:
+
+```bash
+flyctl status -a familiar-demo                       # one machine, health checks passing
+curl https://familiar-demo.fly.dev/api/v1/health     # 200
+```
+
+### Secrets
+
+| Secret | Where | Notes |
+|---|---|---|
+| `FLY_API_TOKEN` | GitHub Actions | Used by both workflows |
+| `DEMO_DATABASE_URL_DIRECT` | GitHub Actions | Neon, **direct host** — the reset job rejects a `-pooler` URL |
+| `DATABASE_URL`, `REDIS_URL` | Fly | Set with `flyctl secrets set -a familiar-demo` |
+
+### The weekly reset, and the golden seed
+
+`fly-reset-demo.yml` restores the demo every Sunday, because reviewers and anyone with the link
+share one profile and their play counts, favourites and playlists accumulate.
+
+It restores from **`deploy/fly/demo-seed.sql.gz`, committed to this repository** — a `--data-only`
+dump of `profiles`, `artist_info`, `tracks` and `track_analysis`. No secret, no hosting, and it is
+versioned next to the schema that produced it, so a migration that invalidates the seed shows up in
+the same pull request.
+
+Produce or refresh it two ways:
+
+```bash
+# From the live demo — seconds, and the usual case. Reads the app's own secret, so there is no
+# password to retype: the script strips `+asyncpg` and translates `ssl=` to `sslmode=` itself.
+DEMO_NEON_URL="$(flyctl ssh console -a familiar-demo -C 'printenv DATABASE_URL' \
+  | tr -d '\r' | sed 's/-pooler//')" ./scripts/capture-demo-seed.sh
+
+# From scratch, when the library itself changes — hours, needs the analysis stack.
+./scripts/seed-demo-library.sh
+```
+
+Then commit the file.
+
+**Capture from a clean demo.** The script snapshots whatever is there, so running it after people
+have been listening bakes their play counts into the copy the reset restores — the exact thing the
+reset removes. It counts `play_events` and refuses above 25 unless you pass `ALLOW_DIRTY=1`.
+
+**If you change the demo library, re-capture.** The reset compares its track count against the live
+database *before* truncating, and refuses to run when they differ — because nothing on the demo lets
+a visitor add tracks, so a difference means somebody changed the library deliberately, and restoring
+would delete that every Sunday without saying so. The job fails with both numbers and the command to
+run. A week of accumulated play counts is cosmetic; losing a deliberate change is not.
+
+> This used to be a `DEMO_SEED_URL` secret pointing at a published dump. Nothing ever published one,
+> because `seed-demo-library.sh` wrote its dump to `mktemp` with a `trap` deleting it on exit — the
+> golden copy was destroyed every time it was made.
+
+## The review account
+
+The server URL and profile a reviewer types belong beside the App Store Connect metadata, in this
+repository, so that preparing a submission does not begin by working out what they were. That
+location is **not yet chosen** — ADR-0038 point 6, unfinished.
+
+## The Fly footprint
+
+**One app: `familiar-demo`.**
+
+`familiar-sessions.fly.dev` was the WebRTC signalling relay.
+[ADR-0036](decisions/ADR-0036-listening-sessions-signal-through-familiars-own-server.md) retired it —
+signalling runs on the listener's own server now — and it was **destroyed on 2026-08-09**
+(`flyctl apps destroy familiar-sessions`), confirmed by the hostname no longer resolving to
+anything. It had still been running and answering 200 for the hours between the code shipping and
+someone remembering the app existed, which is how it became load-bearing without appearing in any
+decision in the first place.
+
+If a second Fly app ever appears here, it belongs in this section on the day it is created.

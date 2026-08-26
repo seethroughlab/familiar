@@ -1,3 +1,17 @@
+# CI.
+#
+# **The runner is a repository variable, not a literal**, so the tenancy can be changed without
+# editing this file. `CI_RUNNER` and `CI_LINUX_RUNNER` are unset in normal operation and every job
+# lands on the self-hosted runner, which is the NAS: it has the 23K-track library, the Docker
+# daemon and the caches, and it is free.
+#
+# Set them to `ubuntu-latest` / `["ubuntu-latest"]` when the NAS is unavailable. It went offline for
+# hours with four PRs queued behind it and nothing could be merged, because a self-hosted runner
+# that is down does not fail a check — it never starts one, so a PR sits at "pending" forever with
+# no signal at all. This repository is public, so GitHub-hosted minutes cost nothing.
+#
+# `macOS Compose Integration` is deliberately left pinned. GitHub's macOS runners have no Docker
+# daemon, so it cannot run there at all.
 name: CI
 
 on:
@@ -10,10 +24,48 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+  # **CI runs the interpreter production runs, pinned to the patch.**
+  #
+  # This must stay equal to the tag in `docker/Dockerfile`. There is no way to share one value
+  # between a workflow and a Dockerfile, so they are kept in step by hand — change both together.
+  #
+  # Two separate lessons are baked into this line, both learned on 2026-08-22:
+  #
+  # 1. **A minor-level pin is not a pin.** The six `uv python install` steps below only make an
+  #    interpreter *available*; they never decided the one `uv run` selects, and
+  #    `requires-python = ">=3.11"` is a floor, not a choice. That resolved to 3.12.13 on the NAS
+  #    and 3.12.14 on a GitHub-hosted runner, with byte-identical dependency sets (pytest 9.0.2,
+  #    pytest-asyncio 1.3.0), and two tests passed on .13 and failed on .14 —
+  #    `asyncio.get_event_loop()` no longer creates a loop when none is running. One patch release
+  #    was the whole difference, so `UV_PYTHON` carries the patch.
+  #
+  # 2. **CI was testing an interpreter nothing ships.** The first pin landed on 3.12 while
+  #    production has always been `python:3.11-slim` — a whole minor version that no test could
+  #    see. Point 1 is the evidence for why that mattered: if two *patch* releases can disagree
+  #    about a core stdlib call, a minor gap between CI and production is not a detail.
+  UV_PYTHON: "3.11.15"
+
+# **One run per branch; a new push cancels the one it supersedes.**
+#
+# Without this, every commit queues a full CI run and none of them go away. On 2026-08-09 a branch
+# pushed eight commits in an hour and left seven dead runs queued — for commits that were no longer
+# the branch head — on a self-hosted pool of three runners, two of which are the only ones that can
+# take `[self-hosted, Linux]`. The head commit's own jobs then sat behind its own history.
+#
+# Hosted runners hide this because the pool is effectively unbounded. Self-hosted does not.
+#
+# `main` is deliberately excluded from cancellation: those runs gate deploys and a superseded one is
+# still worth having finished. `github.run_id` makes each `main` run its own group, so they queue
+# rather than cancel each other.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   macos-compose-check:
     name: macOS Compose Check
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -45,33 +97,67 @@ jobs:
 
   macos-compose-integration:
     name: macOS Compose Integration
-    # Pull requests only, for the same NAS-contention reason as docker-build. Its
-    # keychain failure is environmental and it is already advisory, so running it on
-    # every merge adds a red check that means nothing.
+    # Pull requests only, for the same NAS-contention reason as docker-build.
     if: github.event_name != 'push'
     runs-on: [self-hosted, macOS]
     timeout-minutes: 15
-    # Advisory: the self-hosted macOS runner runs as a launchd service with
-    # no interactive session, so its login keychain stays locked. Docker
-    # Desktop on macOS ignores credsStore-override workarounds and still
-    # invokes the osxkeychain helper for image-metadata auth, which then
-    # fails. Real fix lives on the runner host — either remove
-    # `"credsStore": "osxkeychain"` from ~/.docker/config.json, or
-    # auto-unlock the keychain at boot. Until then, don't redden CI.
-    continue-on-error: true
+    # **This job had never once passed, for two independent reasons, and the fix for
+    # the first guaranteed the second.** Recorded because the previous comment here
+    # described a cause that was not the cause.
+    #
+    # 1. `error getting credentials — keychain cannot be accessed because the current
+    #    session does not allow user interaction`. Not a locked keychain: it is
+    #    unlocked, with no timeout. The runner's LaunchAgent carried
+    #    `SessionCreate = true`, which puts it in its own security session, and
+    #    securityd will not release an item to a session that cannot prompt. Docker
+    #    Desktop resolves registry auth through its own credential service
+    #    (`credsStore: "desktop"`, not `osxkeychain`), which ignores DOCKER_CONFIG —
+    #    so no amount of config override here could have helped. Fixed on the runner
+    #    host by removing that key from
+    #    ~/Library/LaunchAgents/actions.runner.seethroughlab.jeffbook.plist.
+    #
+    # 2. `DOCKER_BUILDKIT: '0'` was set to route around the above, and the classic
+    #    builder cannot read `RUN --mount=type=cache`, which docker/Dockerfile uses
+    #    at step 23. So the workaround for the first problem made the build fail
+    #    outright. It is gone; BuildKit's auth path works now that the session does.
+    #
+    # `continue-on-error` was also here, and it does not do what it was added for:
+    # the workflow conclusion goes green but the *check run* still reports failure,
+    # which is what a PR shows. It is removed rather than left as a comment that
+    # misdescribes the behaviour — this job either gates or it does not.
     env:
       DOCKER_CONFIG: /tmp/familiar-ci-docker-config
-      # Skip buildkit so the classic builder uses our overridden config
-      # (buildkit's metadata fetcher has its own auth path).
-      DOCKER_BUILDKIT: '0'
     steps:
       - uses: actions/checkout@v4
+
+      # Fails in a second with the remedy, instead of four minutes later inside a Docker
+      # build with an error message that blames a locked keychain. `svc.sh install`
+      # rewrites this key on every runner reinstall, so the fix is one `svc.sh` away from
+      # being silently undone — and the symptom is nowhere near the cause.
+      - name: Check the runner can reach the keychain
+        run: |
+          for plist in "$HOME/Library/LaunchAgents"/actions.runner.seethroughlab.*.plist; do
+            [ -f "$plist" ] || continue
+            value=$(plutil -extract SessionCreate raw "$plist" 2>/dev/null || echo absent)
+            if [ "$value" = "true" ]; then
+              echo "::error::$(basename "$plist" .plist) has SessionCreate=true, so the runner"
+              echo "::error::sits in its own security session and cannot reach the login keychain."
+              echo "::error::Docker Desktop's credential service will fail during the build."
+              echo "::error::Fix on the runner host: ./scripts/fix-macos-runner-session.sh"
+              exit 1
+            fi
+          done
+          echo "Runner session is shared with the login session; the keychain is reachable."
 
       - name: Prepare keychain-free Docker config
         run: |
           rm -rf "$DOCKER_CONFIG"
           mkdir -p "$DOCKER_CONFIG"
-          # `credsStore: ""` tells Docker to skip credential helpers entirely.
+          # `credsStore: ""` tells Docker to skip credential helpers entirely. Kept as
+          # belt and braces rather than as the fix: it verifiably works for the CLI —
+          # a deliberately bogus helper name here does get invoked and does fail — but
+          # Docker Desktop's own credential service never consulted this file, which
+          # is why it never addressed the failure above.
           echo '{"credsStore":"","credHelpers":{},"auths":{}}' > "$DOCKER_CONFIG/config.json"
           # Docker looks up CLI plugins (compose, buildx) under
           # $DOCKER_CONFIG/cli-plugins. Without this symlink, `docker compose`
@@ -142,7 +228,14 @@ jobs:
 
   migration-lint:
     name: Migration Lint
-    runs-on: self-hosted
+    # **Linux, not bare `self-hosted`.** This job runs `uv`, and `UV_PYTHON` is pinned to a patch
+    # release that python-build-standalone publishes for Linux but not for macOS/arm64 — a bare
+    # `self-hosted` label matches the macOS runner too, and the job then dies on
+    # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
+    # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
+    # hosted Linux and the ambiguity never showed.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -156,7 +249,7 @@ jobs:
           enable-cache: false
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$UV_PYTHON"
 
       - name: Lint migrations
         working-directory: backend
@@ -164,7 +257,14 @@ jobs:
 
   backend-lint:
     name: Backend Lint
-    runs-on: self-hosted
+    # **Linux, not bare `self-hosted`.** This job runs `uv`, and `UV_PYTHON` is pinned to a patch
+    # release that python-build-standalone publishes for Linux but not for macOS/arm64 — a bare
+    # `self-hosted` label matches the macOS runner too, and the job then dies on
+    # `No download found for request: cpython-3.11.15-macos-aarch64-none` before running a check.
+    # It only surfaced when `CI_RUNNER` was cleared: while it was `ubuntu-latest` these landed on
+    # hosted Linux and the ambiguity never showed.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
     defaults:
@@ -183,7 +283,7 @@ jobs:
           enable-cache: false
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$UV_PYTHON"
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -213,7 +313,7 @@ jobs:
 
   backend-test-contract:
     name: Backend Test (Contract)
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -256,7 +356,7 @@ jobs:
           enable-cache: false
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$UV_PYTHON"
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -298,7 +398,7 @@ jobs:
 
   backend-test-core:
     name: Backend Test (Core)
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -341,7 +441,7 @@ jobs:
           enable-cache: false
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$UV_PYTHON"
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -382,7 +482,7 @@ jobs:
 
   backend-test-integration:
     name: Backend Test (Integration)
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 15
     env:
       UV_HTTP_TIMEOUT: '120'
@@ -425,7 +525,7 @@ jobs:
           enable-cache: false
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$UV_PYTHON"
 
       - name: Install dependencies
         run: uv sync --extra dev
@@ -477,7 +577,8 @@ jobs:
 
   frontend-lint:
     name: Frontend Lint
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    timeout-minutes: 10
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
       NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
@@ -502,15 +603,16 @@ jobs:
       - name: Lint
         run: pnpm --filter @familiar/frontend run lint
 
-      - name: Audio Guardrail Checks
-        run: pnpm --filter @familiar/frontend run check:audio-guardrails
+      - name: Embed Guardrail Checks
+        run: pnpm --filter @familiar/frontend run check:embed-guardrails
 
       - name: Dependency Boundary Checks
         run: pnpm --filter @familiar/frontend run check:boundaries
 
   frontend-test:
     name: Frontend Test
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
       NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
@@ -537,7 +639,8 @@ jobs:
 
   frontend-build:
     name: Frontend Build
-    runs-on: self-hosted
+    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
       NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT: '120000'
@@ -590,7 +693,7 @@ jobs:
     # track went from ~1.5s to ~40s and playback stalled outright. On a merge this would
     # re-validate content the PR run already built, so the cost buys nothing.
     if: github.event_name != 'push'
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 60
     # Advisory only: the self-hosted NAS runner's upstream connection is
     # unreliable enough that multi-stage builds (apt + pnpm + uv + torch
@@ -682,7 +785,8 @@ jobs:
     # builds its own frontend and backend, so there is no reason for a flaky NAS network to decide
     # whether the browser tests run.
     if: ${{ github.event_name != 'push' && !cancelled() }}
-    runs-on: [self-hosted, Linux]
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
+    timeout-minutes: 30
     needs: [docker-build]
     # **Deliberately not `continue-on-error`.** It was, and the reason was sound: the job inherited
     # docker-build's flakiness, so a NAS hiccup would have blocked unrelated merges. Decoupling the
@@ -732,7 +836,7 @@ jobs:
           enable-cache: false
 
       - name: Set up Python
-        run: uv python install 3.12
+        run: uv python install "$UV_PYTHON"
 
       - name: Install backend dependencies
         working-directory: backend
@@ -788,9 +892,6 @@ jobs:
         working-directory: packages/web
         env:
           BASE_URL: http://localhost:4401
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
           LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
           LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
         # Exclude screenshot specs - they're for README docs, not CI testing

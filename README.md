@@ -25,38 +25,40 @@
 
 ## Screenshots
 
-| Library | AI Chat |
-|:--:|:--:|
-| ![Library](screenshots/01-library-tracks.png) | ![Chat](screenshots/08-chat-panel.png) |
+**Listening happens in the Mac and iPhone apps** ([`familiar-apple`](https://github.com/seethroughlab/familiar-apple)). The browser is the management surface — the two are deliberately different tools, not the same app twice.
 
-| Artists | 3D Explorer |
-|:--:|:--:|
-| ![Artists](screenshots/02-library-artists.png) | ![Explorer](screenshots/06-library-explorer.png) |
+### The apps
 
-| Music Map | Mood Grid |
+| Discover | Artists |
 |:--:|:--:|
-| ![Music Map](screenshots/05-library-music-map.png) | ![Mood Grid](screenshots/04-library-mood-grid.png) |
+| ![Discover](screenshots/mac-discover.png) | ![Artists](screenshots/mac-artists.png) |
+
+| Music Map | Albums |
+|:--:|:--:|
+| ![Music Map](screenshots/mac-music-map.png) | ![Albums](screenshots/mac-albums.png) |
+
+### The web app
+
+Three destinations — the library, the tools you run against it, and the server underneath.
+
+| Library | Tools |
+|:--:|:--:|
+| ![Library](screenshots/01-library.png) | ![Tools](screenshots/02-tools.png) |
 
 <details>
 <summary><strong>More screenshots</strong></summary>
 
-| Albums | Discover |
+| Server | Duplicates |
 |:--:|:--:|
-| ![Albums](screenshots/03-library-albums.png) | ![Discover](screenshots/07-library-discover.png) |
+| ![Server](screenshots/03-server.png) | ![Duplicates](screenshots/05-tools-duplicates.png) |
 
-| Full Player | Playlist Detail |
+| Artist cleanup |
+|:--:|
+| ![Artist cleanup](screenshots/06-artist-cleanup.png) |
+
+| Smart playlists (Mac) | Mobile |
 |:--:|:--:|
-| ![Full Player](screenshots/10-full-player.png) | ![Playlist](screenshots/09-playlist-detail.png) |
-
-| Settings | Admin Setup |
-|:--:|:--:|
-| ![Settings](screenshots/12-settings.png) | ![Admin Setup](screenshots/13-admin-setup.png) |
-
-### Mobile Interface
-
-| Library (Mobile) | Full Player (Mobile) |
-|:--:|:--:|
-| ![Mobile Library](screenshots/14-mobile-library.png) | ![Mobile Full Player](screenshots/15-mobile-full-player.png) |
+| ![Smart playlists](screenshots/mac-smart-playlists.png) | ![Mobile](screenshots/07-mobile-library.png) |
 
 </details>
 
@@ -149,7 +151,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Access at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
+Access at http://localhost:4400. API keys are configured in your `.env` file — open **Library** in the top bar to manage your library and start a scan.
 
 **Running on macOS?** See the **[macOS Installation Guide](docs/MACOS.md)** — covers Docker Desktop setup, Apple Silicon, and music library paths.
 
@@ -194,8 +196,8 @@ Features planned for future releases:
 ### Multi-Room Audio
 Play to Sonos speakers and AirPlay devices in addition to browser audio. Control playback across multiple rooms with per-room volume controls.
 
-### Native Google Gemini provider
-Familiar already supports Anthropic and any OpenAI-compatible endpoint. A native Gemini provider would add Google's models without going through an OpenAI-compat shim - see [docs/OTHER_LLMS.md](docs/OTHER_LLMS.md).
+### Bring your own assistant
+Familiar has no built-in LLM provider. It exposes its library as an [MCP](https://modelcontextprotocol.io) server (ADR-0043), so Claude Desktop, Claude Code, or any other MCP client can search the library, inspect the analysis and build playlists using your own subscription. Nothing here holds an API key on your behalf.
 
 ## Beta Feedback
 

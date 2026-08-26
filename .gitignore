@@ -66,8 +66,6 @@ frontend/dist/
 frontend/.vite/
 
 # Capacitor synced web assets (regenerated on every build)
-packages/ios/native/App/App/public/
-packages/ios/native/App/public/
 
 # Xcode user-local IDE state (which file/scheme is selected, breakpoints, etc.)
 xcuserdata/
@@ -100,3 +98,15 @@ AuthKey*.p8
 # and scripts/analyze-demo-library.sh; not for git).
 demo-library/
 .demo-analysis/
+
+# Intermediate output of the visualizer bundle build; the artifact is vendored into familiar-apple.
+packages/web/dist-visualizer/
+
+# Generated-illustration sources: 2 MB JPEGs the marks are cut from. Kept out of site/
+# because everything there is copied straight to Cloudflare, and out of git because the
+# committed PNGs, the prompts and extract-marks.py are enough to reproduce them.
+art-sources/
+
+# Local preview only: the deploy copies screenshots/ into _site itself (cloudflare-pages.yml),
+# so this symlink exists to make `python3 -m http.server` in site/ resolve them and must not ship.
+site/screenshots

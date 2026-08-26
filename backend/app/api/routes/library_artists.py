@@ -715,7 +715,7 @@ async def get_artist_image(
     """
     from urllib.parse import unquote
 
-    from app.services.artwork import compute_album_hash, extract_and_save_artwork, get_artwork_path
+    from app.services.artwork import album_key_for_track, extract_and_save_artwork, get_artwork_path
     from app.services.lastfm import get_lastfm_service
 
     if size not in ("small", "medium", "large", "extralarge"):
@@ -787,9 +787,9 @@ async def get_artist_image(
     track = (await db.execute(track_query)).scalar_one_or_none()
 
     if track:
-        album_hash = compute_album_hash(track.artist, track.album)
+        album_key = album_key_for_track(track)
         artwork_size = "thumb" if size in ("small", "medium") else "full"
-        artwork_path = get_artwork_path(album_hash, artwork_size)
+        artwork_path = get_artwork_path(album_key, artwork_size)
 
         if artwork_path.exists():
             def stream_artwork():
@@ -804,7 +804,9 @@ async def get_artist_image(
 
         file_path = Path(track.file_path)
         if file_path.exists():
-            extract_and_save_artwork(file_path, track.artist, track.album)
+            extract_and_save_artwork(
+                file_path, track.artist, track.album, album_key=album_key
+            )
             if artwork_path.exists():
                 def stream_artwork():
                     with open(artwork_path, "rb") as f:

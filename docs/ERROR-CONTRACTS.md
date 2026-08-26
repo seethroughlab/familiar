@@ -91,7 +91,6 @@ All custom exceptions inherit from `FamiliarError` (defined in `app/api/exceptio
 | `ServiceUnavailableError` | "Service temporarily unavailable" | External dependency down |
 | `LLMNotConfiguredError` | "AI assistant not configured..." | No API key set |
 | `ExternalServiceError` | "External service request failed" | External API call failure |
-| `SpotifyAPIError` | "Spotify request failed" | Spotify API failure |
 
 ---
 
@@ -129,19 +128,9 @@ All handlers attach the `request_id` from middleware and log at appropriate leve
 
 ## SSE Error Contracts
 
-Two SSE patterns exist, driven by different client consumption models.
+One SSE pattern remains. There were two until ADR-0043 retired the chat stream; what is left is the
+map's, below.
 
-### Chat Stream (`POST /chat/stream`)
-
-Uses raw `data:` lines with typed JSON objects. The frontend parses via `fetch` + line splitting, switching on `event.type`.
-
-**Error shape:**
-```
-data: {"type": "error", "message": "User-friendly message"}
-data: [DONE]
-```
-
-Error messages are sanitized via `sanitize_error_for_client()` before sending.
 
 ### Map Streams (`GET /library/map/stream`, `/map/3d/stream`)
 
@@ -163,7 +152,14 @@ Different consumption patterns justify different wire formats:
 
 ### Pre-Stream Errors
 
-Errors raised *before* `StreamingResponse` is returned (e.g., `LLMNotConfiguredError` in chat, `ServiceUnavailableError` in maps) return the standard REST JSON envelope, not SSE. This is validated by `test_contract_envelope_parity.py`.
+Errors raised *before* `StreamingResponse` is returned (e.g. `ServiceUnavailableError` in maps)
+return the standard REST JSON envelope, not SSE.
+
+**This is no longer covered by a test.** `test_contract_envelope_parity.py` asserted it three times,
+always through `/chat/stream`, and that route is gone. `/library/map/stream` cannot stand in: it
+requires no profile and opens the stream unconditionally, so it has no pre-stream failure to
+provoke. The contract still holds — it is the exception handlers doing the work — but nothing checks
+it. If an SSE route ever gains a pre-stream error path, that is the moment to restore the test.
 
 ---
 

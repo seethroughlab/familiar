@@ -25,7 +25,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "find_similar_tracks",
-        "description": "Find tracks sonically similar to a given track, using audio embeddings. Great for 'play more like this' requests.",
+        "description": "Find tracks that SOUND like a given track — nearest neighbours in the audio embedding space, and nothing else. Use it for 'what else sounds like this?'. For a listening session rather than a similarity list, prefer get_radio_suggestions, which adds this listener's taste and what they have skipped.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -128,6 +128,60 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
         }
     },
     {
+        "name": "generate_playlist",
+        "description": (
+            "Build a playlist from a seed — a track, an album, an artist, or an explicit set of "
+            "tracks — using the library's audio analysis. This is the same implementation the app's "
+            "'Make a playlist' menu items call (ADR-0048), so a host and the app produce identical "
+            "results. Prefer this over composing a playlist by hand from search results: it scores "
+            "the whole library by embedding similarity plus this listener's taste, and enforces "
+            "artist and album diversity. The seed material is excluded from the result unless "
+            "include_seed is set. Provide exactly one seed."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "track_id": {
+                    "type": "string",
+                    "description": "UUID of a single seed track"
+                },
+                "album": {
+                    "type": "string",
+                    "description": "Album name to seed from. Pair with artist when the name is ambiguous."
+                },
+                "artist": {
+                    "type": "string",
+                    "description": "Artist name to seed from, or to disambiguate album"
+                },
+                "track_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Explicit set of seed track UUIDs, averaged into one centroid"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "How many tracks to aim for (default 25)",
+                    "default": 25
+                },
+                "max_per_artist": {
+                    "type": "integer",
+                    "description": "Cap per artist in the result (default 2)",
+                    "default": 2
+                },
+                "include_seed": {
+                    "type": "boolean",
+                    "description": "Include the seed tracks themselves (default false)",
+                    "default": False
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Override the generated name. Omit for a deterministic one."
+                }
+            },
+            "required": []
+        }
+    },
+    {
         "name": "get_library_stats",
         "description": "Get statistics about the music library: total tracks, artists, albums, genres. Use when user asks about their library.",
         "input_schema": {
@@ -182,14 +236,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                     "description": "Filter to a specific category (optional, returns all if omitted)"
                 }
             }
-        }
-    },
-    {
-        "name": "get_visible_tracks",
-        "description": "Get the tracks currently visible in the user's library view. Use this when the user refers to 'these tracks', 'this list', 'what I'm looking at', 'all of these', or wants to queue/analyze the tracks they're currently viewing. Returns track IDs and basic metadata for all tracks in the current view.",
-        "input_schema": {
-            "type": "object",
-            "properties": {}
         }
     },
     {
@@ -364,28 +410,6 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
                     "type": "integer",
                     "description": "Max recommended artists to return (default 8)",
                     "default": 8
-                }
-            }
-        }
-    },
-    {
-        "name": "get_spotify_unmatched",
-        "description": "Find Spotify favorites and playlist tracks that aren't in the user's local library. Requires a prior Spotify data import. Use when the user asks what they're missing from Spotify, what to add next, or wants to compare libraries. Returns unmatched tracks with stats.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "search": {
-                    "type": "string",
-                    "description": "Free-text search across artist, track, and album names"
-                },
-                "artist": {
-                    "type": "string",
-                    "description": "Filter by artist name (case-insensitive)"
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max results to return (default 50)",
-                    "default": 50
                 }
             }
         }
@@ -600,24 +624,124 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
             "required": ["track_ids"]
         }
     },
-    # Web page reading tools
     {
-        "name": "fetch_webpage",
-        "description": "Fetch a web page and extract its readable content. Use this when the user provides a URL to an article, list, or page containing music information (artists, albums, tracks). Returns the page content for analysis.",
+        "name": "list_playlists",
+        "description": (
+            "List this listener's playlists, most recently updated first. Call this BEFORE "
+            "creating a playlist when they refer to one they already have — 'add these to my "
+            "Ambient playlist' needs its id, and creating a second playlist with the same name is "
+            "not what was asked for."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "The URL to fetch"
-                }
+                "include_auto": {
+                    "type": "boolean",
+                    "description": "Include auto-generated playlists. Default true.",
+                },
+                "limit": {"type": "integer", "description": "Maximum playlists to return."},
             },
-            "required": ["url"]
-        }
+        },
+    },
+    {
+        "name": "get_playlist",
+        "description": (
+            "The tracks on one playlist, in order. Use it to see what is already there before "
+            "adding, and to check what you just created."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "playlist_id": {"type": "string", "description": "Playlist UUID, from list_playlists."},
+            },
+            "required": ["playlist_id"],
+        },
+    },
+    {
+        "name": "add_tracks_to_playlist",
+        "description": (
+            "Append tracks to a playlist that already exists. Tracks already on the playlist are "
+            "skipped, so this is safe to repeat. Use this rather than create_playlist_from_items "
+            "whenever the listener names a playlist they already have."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "playlist_id": {"type": "string", "description": "Playlist UUID, from list_playlists."},
+                "track_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Local track UUIDs to append.",
+                },
+            },
+            "required": ["playlist_id", "track_ids"],
+        },
+    },
+    {
+        "name": "set_favorite",
+        "description": (
+            "Mark or unmark a track as a favourite. Setting, not toggling: calling it twice with "
+            "the same value leaves the track in that state, so it is safe to retry. To read "
+            "favourites, use filter_tracks with is_favorite."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "track_id": {"type": "string", "description": "Local track UUID."},
+                "favorite": {
+                    "type": "boolean",
+                    "description": "True to favourite, false to un-favourite. Default true.",
+                },
+            },
+            "required": ["track_id"],
+        },
+    },
+    {
+        "name": "get_recently_played",
+        "description": (
+            "What this listener has actually played, newest first, one entry per play. Use it for "
+            "'what have I been listening to?' and to ground recommendations in recent listening "
+            "rather than all-time counts. Each entry carries an outcome: a skip is a much weaker "
+            "signal of liking something than a completed play. For all-time favourites use "
+            "filter_tracks with sort_by play_count instead."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Maximum plays to return, up to 100."},
+                "days": {
+                    "type": "integer",
+                    "description": "Only plays within this many days. Omit for the most recent regardless of age.",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_radio_suggestions",
+        "description": (
+            "Familiar's own recommender, seeded from one track — what to play NEXT. Unlike "
+            "find_similar_tracks, which is pure sonic similarity, this also weighs this listener's "
+            "taste and the tracks they have skipped, so it is the better choice for building a "
+            "listening session. Needs a seed track id: get one from get_now_playing, "
+            "identify_track, or a previous search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "seed_track_id": {"type": "string", "description": "Local track UUID to seed from."},
+                "limit": {"type": "integer", "description": "How many suggestions, up to 20."},
+                "profile": {
+                    "type": "string",
+                    "enum": ["radio", "ambient"],
+                    "description": "'radio' follows taste more strongly; 'ambient' favours continuity and low disruption.",
+                },
+            },
+            "required": ["seed_track_id"],
+        },
     },
     {
         "name": "create_playlist_from_items",
-        "description": "Create a playlist from a list of music items (artists, albums, tracks). Matches items to local library and creates missing track placeholders for items not found. Use after analyzing web page content with fetch_webpage.",
+        "description": "Create a playlist from a list of music items (artists, albums, tracks). Matches items to local library and creates missing track placeholders for items not found. Use after extracting music references from a web page or any other source.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -852,11 +976,6 @@ Don't ask permission first - just propose the change. The user reviews all propo
 2. Present recommended_artists with Bandcamp links for discovery
 3. Optionally mention unheard_tracks and deep_cuts for re-discovering existing library
 
-**"What Spotify tracks am I missing?"** or **"What should I add from Spotify?"**:
-1. Use get_spotify_unmatched to find unmatched Spotify tracks
-2. Present stats (match rate) and top unmatched tracks
-3. If user asks about a specific artist, use the artist filter
-
 ## Discovery Suggestions
 
 When a user asks for an artist that's NOT in their library:
@@ -872,16 +991,13 @@ Example response format when artist not in library:
 
 ## Web Page Music Discovery
 
-When a user provides a URL to an article, blog post, or list about music:
-1. Use fetch_webpage to get the content
-2. Analyze the content to extract music references (artists, albums, tracks, years)
-3. Use create_playlist_from_items with the extracted data
-4. Report results: how many items found locally vs marked as missing
+When the listener provides a URL to an article, blog post, or list about music, read the page
+yourself — Familiar no longer fetches pages on your behalf (ADR-0043 point 2 withheld that tool and
+ADR-0043 point 5 removed it, because an MCP host's own web access is better than this server's).
+Extract the music references and pass them to create_playlist_from_items:
 
-Example workflow:
-- User: "make me a playlist from this article: https://example.com/best-albums-2024"
-- fetch_webpage(url="https://...")
-- Analyze content, extract: [{"artist": "...", "album": "...", "year": 2024}, ...]
+- Listener: "make me a playlist from this article: https://example.com/best-albums-2024"
+- Read the page, extract: [{"artist": "...", "album": "...", "year": 2024}, ...]
 - create_playlist_from_items(name="Best Albums 2024", items=[...], description="From: https://...")
 - Response: "Created playlist with X tracks. Y are in your library, Z are marked as missing."
 

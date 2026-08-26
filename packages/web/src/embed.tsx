@@ -1,17 +1,25 @@
 import '@familiar/frontend/src/index.css';
-import { registerEngineFactory } from '@familiar/frontend/src/player/audio/createEngine';
-import { registerPlaybackInterceptor } from '@familiar/frontend/src/player/playbackInterceptor';
+import { registerEngineFactory } from '@familiar/frontend/src/audio/createEngine';
+import { registerPlaybackInterceptor } from '@familiar/frontend/src/audio/playbackInterceptor';
 import { postPlayIntent } from '@familiar/frontend/src/services/embedBridge';
+import { installNowPlayingSink } from '@familiar/frontend/src/services/nowPlayingSink';
 import { renderEmbed } from '@familiar/frontend/src/renderEmbed';
 import { NullAudioEngine } from './NullAudioEngine';
 
 /**
  * The embedded surface's entry point (ADR-0017 point 1).
  *
- * A second entry beside `main.tsx`, not a mode of it. The whole decision rests on this file being
- * the only thing that boots the embedded page: it registers an engine that cannot make sound, so a
+ * A second entry beside `main.tsx`, not a mode of it. The decision rests on this file being the
+ * only thing that boots the *Discover* surface: it registers an engine that cannot make sound, so a
  * play path the bridge fails to intercept is inert rather than a second `WebAudioEngine` competing
  * with the native player for the audio session.
+ *
+ * It used to say "the only thing that boots the embedded page", which stopped being true when
+ * `visualizer.tsx` arrived (ADR-0033). That surface makes the same guarantee the same way — a
+ * `NullAudioEngine`, so nothing can construct an `AudioContext` — but declares
+ * `visualizer: true`, because `isVisualizerAvailable()` reads the registration and a surface
+ * declaring `false` would draw album art forever. The guarantee lives in the omitted `getAnalyser`,
+ * not in the flag.
  *
  * Registering *nothing* was the obvious alternative and is rejected by ADR-0017 point 4:
  * `createEngine()` throws when no factory is registered, which would turn a missed play intent into
@@ -38,5 +46,8 @@ registerEngineFactory(() => new NullAudioEngine(), {
 registerPlaybackInterceptor(({ tracks, startingAt }) =>
     postPlayIntent({ trackIds: tracks.map((t) => t.id), startingAt })
 );
+
+// Before React renders, so a frame arriving during startup is not dropped (ADR-0090).
+installNowPlayingSink();
 
 renderEmbed();

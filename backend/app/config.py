@@ -45,8 +45,13 @@ class Settings(BaseSettings):
     # Analysis
     analysis_version: int = 1
 
+    # MCP (ADR-0043). Comma-separated hosts this server is reached by, e.g.
+    # "localhost:4400,myserver:4400". Set it and DNS-rebinding protection is enabled for /mcp;
+    # leave it empty and the protection is off, with a warning at startup. The SDK ships no default
+    # allowlist, so enabling it without naming your host rejects every request with a 421.
+    mcp_allowed_hosts: str = ""
+
     # API Keys (Phase 3+)
-    anthropic_api_key: str | None = None
     frontend_url: str | None = None  # Base URL for OAuth callbacks (e.g., http://myserver:4400)
     lastfm_api_key: str | None = None
     lastfm_api_secret: str | None = None
@@ -57,16 +62,6 @@ class Settings(BaseSettings):
     # devices use to fetch the audio stream. Needed when the browser reaches the app via a network
     # the device can't (e.g. Tailscale), since the frontend builds stream URLs from its own origin.
     device_stream_base_url: str | None = None
-
-    # LLM provider selection and OpenAI-compatible endpoint config.
-    # Set LLM_PROVIDER=openai to route chat + utility calls through an OpenAI-compatible server
-    # (e.g. Groq, Together, OpenRouter, LocalAI, vLLM, llama.cpp, LM Studio, Ollama /v1).
-    # OPENAI_BASE_URL is optional — leave unset for api.openai.com. Model names are required.
-    llm_provider: str | None = None
-    openai_api_key: str | None = None
-    openai_base_url: str | None = None
-    openai_chat_model: str | None = None
-    openai_utility_model: str | None = None
 
     # S3 Backup
     s3_backup_access_key_id: str | None = None
@@ -129,7 +124,13 @@ MELODIC_VERSION = 6
 #   v2: Added vinyl label overlay (arc text, initials)
 #   v3: Heavy blur for color-wash background, label after post-process, dark backdrop
 #   v4: Larger label radius for text padding, artist-only initials
-GENERATIVE_ART_VERSION = 4
+#   v5: Keyed by Album.id rather than the tag hash (ADR-0052). Nothing about the drawing
+#       changed — but the key *is* the random seed, so every generated cover comes out
+#       different, and the features are now aggregated across the whole album instead of
+#       only the tracks sharing one artist string. The bump exists so
+#       /artwork/regenerate-stale repaints them; it only touches files carrying a
+#       `.generated` marker, so real and hand-uploaded art is left alone.
+GENERATIVE_ART_VERSION = 5
 
 # Mood tags history:
 #   v1: CLAP-based mood/genre/instrumentation/energy tags

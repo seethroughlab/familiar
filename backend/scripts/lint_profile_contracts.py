@@ -39,6 +39,11 @@ ALLOWLISTED_MODULES = {
     "analysis",
     "ambient",
     "background",
+    # Still exempt after ADR-0086. Every video operation is keyed by a track, and a video
+    # belongs to the library rather than to a listener, so none of them is profile state.
+    # The one column that would change this is `track_videos.match_confirmed_by`, which
+    # ADR-0085 point 7's match-and-download action is the only plausible caller for — if
+    # that ships and writes it, this entry comes off.
     "videos",
     "updates",
     "s3_backup",
@@ -55,6 +60,15 @@ ALLOWLISTED_MODULES = {
 
 # Individual functions exempt in otherwise-profiled modules
 ALLOWLISTED_FUNCTIONS = {
+    # The server token (ADR-0045) is server configuration, not listener state — ADR-0029 point 2's
+    # category one. Requiring a profile here would be actively *weaker*: profile IDs are public
+    # (GET /api/v1/profiles lists them all, unauthenticated), so it would gate token rotation behind
+    # something anyone can read. These routes check the current token instead, which is the
+    # credential that actually means something. Listed per-function rather than as a module, because
+    # ADR-0045 point 2 sends ALLOWLISTED_MODULES to zero and a new module entry moves it the wrong
+    # way.
+    ("auth", "issue_token"),
+    ("auth", "revoke_token"),
     # Profile creation/registration can't require an existing profile
     ("profiles", "create_profile"),
     ("profiles", "register_profile"),

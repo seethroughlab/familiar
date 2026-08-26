@@ -1,0 +1,23 @@
+{
+  "name": "Reactive Terrain",
+  "id": "reactive-terrain",
+  "version": "1.0.0",
+  "type": "visualizer",
+  "description": "A wireframe landscape driven by the music, with a car on an endless road.",
+  "author": {
+    "name": "Familiar"
+  },
+  "main": "index.html",
+  "familiar": {
+    "apiVersion": 1
+  },
+  "icon": "Mountain",
+  "affinity": {
+    "tags": [
+      "ambient",
+      "dreamy",
+      "electronic"
+    ],
+    "ranges": []
+  }
+}

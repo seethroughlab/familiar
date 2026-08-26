@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, BackgroundTasks, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -24,6 +24,11 @@ from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
 from app.api.schemas.common import UTCDateTime
 from app.db.models import PlayEvent, ProfilePlayHistory, Track
+from app.services.scrobble_dispatch import (
+    remember_now_playing,
+    scrobble_if_earned,
+    send_now_playing,
+)
 from app.utils.time import to_naive_utc, utcnow
 
 logger = logging.getLogger(__name__)
@@ -181,6 +186,7 @@ async def record_play(
     track_id: UUID,
     db: DbSession,
     profile: RequiredProfile,
+    background_tasks: BackgroundTasks,
     request: PlayRecordRequest | None = None,
 ) -> PlayRecordResponse:
     """Record that a track was played.
@@ -248,6 +254,17 @@ async def record_play(
     await db.commit()
     await db.refresh(play_history)
 
+    # Scrobbling rides the listening event rather than being a client's job (ADR-0030). Queued
+    # rather than awaited: the play is already recorded, and Last.fm must never delay or fail it.
+    background_tasks.add_task(
+        scrobble_if_earned,
+        profile_id=profile.id,
+        track_id=track_id,
+        played_seconds=played_seconds,
+        track_duration=request.track_duration if request else None,
+        started_at=_resolve_started_at(request.started_at if request else None),
+    )
+
     return PlayRecordResponse(
         track_id=track_id,
         play_count=play_history.play_count,
@@ -302,17 +319,61 @@ async def record_skip(
     track_id: UUID,
     db: DbSession,
     profile: RequiredProfile,
+    background_tasks: BackgroundTasks,
     request: ListenEventRequest | None = None,
 ) -> ListenEventResponse:
-    """Record that playback of a track stopped before it was scrobbled.
+    """Record that playback of a track stopped before it ran out.
 
     ProfilePlayHistory is not modified — only completed plays count toward it.
 
     The outcome is derived rather than assumed: a track abandoned at 95%, or a short
     track played in full, is recorded as `completed`, and a failed load is recorded as
     `errored` so it never reaches the taste signal.
+
+    **A skip can still be a scrobble** (ADR-0030). Last.fm asks for half a track; Familiar's
+    `play_count` means the track reached its end. A track abandoned at 60% arrives here and nowhere
+    else, and Last.fm wants it — which is why scrobbling is decided from the event's own numbers
+    rather than from which endpoint it came through.
     """
-    return await _record_listen_event(db, profile.id, track_id, request)
+    response = await _record_listen_event(db, profile.id, track_id, request)
+    background_tasks.add_task(
+        scrobble_if_earned,
+        profile_id=profile.id,
+        track_id=track_id,
+        played_seconds=request.played_seconds if request else None,
+        track_duration=request.track_duration if request else None,
+        started_at=_resolve_started_at(request.started_at if request else None),
+    )
+    return response
+
+
+@router.post("/{track_id}/started", status_code=status.HTTP_204_NO_CONTENT)
+async def record_start(
+    track_id: UUID,
+    profile: RequiredProfile,
+    background_tasks: BackgroundTasks,
+) -> None:
+    """A track just started playing (ADR-0030 point 6).
+
+    The signal this server has never had. `/played` and `/skipped` both fire at the *end* of a
+    track, so nothing until now could tell it what a listener is hearing right now.
+
+    Deliberately generic rather than a Last.fm endpoint: "this track just started" is a fact about
+    listening, and the server is free to do more with it later — presence, listening-together, a
+    recently-started feed. It forwards to Last.fm as now-playing, and it is also what lets an MCP
+    host answer "what am I listening to?" — the "later" this docstring anticipated, costing the
+    clients nothing because they already send this.
+
+    Writes nothing. There is no database work here at all, which is why it takes no session: a
+    now-playing is a claim about the present that expires in minutes, and the durable record of this
+    track arrives later on `/played` or `/skipped`.
+
+    204 rather than a body: there is nothing a caller can do with the outcome, and a client must not
+    wait on it.
+    """
+    background_tasks.add_task(send_now_playing, profile_id=profile.id, track_id=track_id)
+    # Same reasoning as above — the caller must not wait, and this still writes nothing durable.
+    background_tasks.add_task(remember_now_playing, profile_id=profile.id, track_id=track_id)
 
 
 @router.post("/{track_id}/rejected", response_model=ListenEventResponse)

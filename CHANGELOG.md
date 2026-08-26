@@ -5,6 +5,86 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0-alpha1] - 2026-08-10
+
+First release of the 0.2 line, and the biggest change since the project started: **Familiar no
+longer calls a language model at all.** The built-in chat is gone from every surface, replaced by an
+MCP server that lets Claude Desktop, Claude Code or any other MCP host drive your library with its
+own model. The features that mattered most — "make me a playlist based on this album" — no longer go
+through a sentence at all; they are generated from the audio analysis directly.
+
+Also in this release: radio, offline ranking, a server-owned queue, event-sourced listening history,
+drop-in visualizers, listening sessions, and native macOS and iOS clients that have grown from
+listening surfaces into management ones.
+
+### Added
+
+- **MCP server — 36 tools** (`/mcp`) covering search, playlists, favourites, listening history and
+  radio. Point an MCP host at Familiar and it can browse your library, build playlists and control
+  playback. **The host brings the model; Familiar needs no API key for any of it.**
+- **Seeded playlist generation** — `POST /playlists/generate` builds a playlist from a structured
+  seed (a track, an album, an artist, a set of artists) using the library's own embeddings and
+  features. The "Make a playlist" menu items now call it directly. Playlists are scored as a *set*
+  rather than as a sequence of transitions, which is what makes them different from radio.
+- **Radio** — endless listening that learns from what you skip and finish, with ambient and radio
+  weighting profiles, taste weighting and negative terms. Suggestions arrive in play order, shuffle
+  included.
+- **Radio works offline** — precomputed ranking manifests mean a plane or a basement still gets
+  suggestions, without shipping the ranking engine to every client.
+- **Server-owned playback queue** — the queue lives on the server, so it survives a reload and can be
+  adopted by another device.
+- **Listening history is event-sourced** — every play, skip and completion is recorded with when it
+  happened, which is what feeds radio and scrobbling.
+- **Scrobbling moved to the server**, so it happens whether or not a browser tab is open.
+- **Listening sessions** — listen along with someone else, signalled through your own server rather
+  than a third party.
+- **Visualizers** — a full-screen visualizer page driven by live audio features, a documented
+  contract, and drop-in plugins loaded from a `Visualizers/` directory. Includes **Lyric Storm**,
+  which renders the words as a moving field.
+- **Weighted shuffle** — shuffle that favours what you actually listen to.
+- **Home** — a screen that starts music rather than making you go find some.
+- **Native Mac and iPhone apps** — smart playlists, pending review, proposed changes, mixtapes,
+  sortable track tables with a column chooser, a music map of 500 artists, embedded Discover, and a
+  Settings destination on the phone.
+- **Server token** — optional shared-secret auth for the API. **Off unless you configure one**;
+  media endpoints stay exempt so speakers and guests keep working.
+- **An always-on demo server**, and a website that leads with how to install.
+
+### Changed
+
+- **Chat is replaced by MCP.** The chat box, its history, the provider layer, the Anthropic and
+  OpenAI SDKs and the AI settings screen are all gone. Nothing in Familiar calls a model any more —
+  an MCP host brings its own, and its key is configured there rather than here.
+- **Playlists come from analysis, not from a sentence.** A button whose meaning was already
+  unambiguous no longer composes English to ask a model what it meant.
+- **Deployment targets** — macOS 14 and iOS 17, for table column customisation and navigation.
+- The default branch is now `main`.
+
+### Removed
+
+- **The Spotify favorites import**, which had been unreachable from the app: the modal existed but
+  nothing ever opened it. Spotify is still used for artist photos.
+- **Chat history** — from the API, from backup and export, and from browser storage. Old backups
+  containing it still restore; the field is ignored.
+
+### Fixed
+
+- **Streaming no longer holds a database connection** for the life of a download, which is what
+  turned 834 downloads into 83-byte error bodies.
+- **Offline caching covers the whole library**, not just the first page of it.
+- **Playback reports a play when the track is done with**, not at the halfway mark.
+- **The prefetcher no longer starves the track that is playing**, or evicts one an audio element is
+  still reading.
+- **Auto-download toggles do what they say** — they said "new tracks" and meant all of them.
+- **"New releases" no longer leads with release dates that cannot be true.**
+- **Network outputs no longer clip track tails** — crossfade is suppressed where the device owns the
+  transition.
+- **A missing API route returns 404**, rather than the single-page app answering 200 for anything.
+- **Embedded Discover** — its track lists render, its play button actually plays, and it no longer
+  offers a chat that is not there.
+- **The music map's scroll-to-zoom works**, and a small drag no longer eats click-to-focus.
+- **The scanner moves `updated_at`** when an upsert takes its conflict branch.
+
 ## [0.1.0-alpha9] - 2026-06-11
 
 Ninth alpha — **network audio outputs grow up**: the devices you cast to survive restarts, the volume slider controls them, and casting works out of the box on a LAN without manual config. Plus open PWAs now refresh themselves after a deploy.

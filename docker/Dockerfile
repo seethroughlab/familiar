@@ -26,11 +26,9 @@ COPY packages/web/package.json packages/web/
 RUN pnpm install --frozen-lockfile --filter @familiar/web...
 
 # Copy source and build.
-# VITE_SESSIONS_RELAY_URL is baked in at build time; defaults to the public
-# Fly.io relay. Override with --build-arg VITE_SESSIONS_RELAY_URL=... if you
-# self-host familiar-sessions.
-ARG VITE_SESSIONS_RELAY_URL=https://familiar-sessions.fly.dev
-ENV VITE_SESSIONS_RELAY_URL=${VITE_SESSIONS_RELAY_URL}
+# There is no sessions relay build argument. Listening sessions signal through the Familiar server
+# this image *is* (ADR-0036); a build argument that silently sent listeners' session codes, chat and
+# reactions to a third party was the thing that decision removed.
 COPY packages/frontend/ packages/frontend/
 COPY packages/web/ packages/web/
 RUN pnpm --filter @familiar/web run build
@@ -38,7 +36,11 @@ RUN pnpm --filter @familiar/web run build
 # =============================================================================
 # Stage 2: Python base with uv
 # =============================================================================
-FROM python:3.11-slim AS python-base
+# Pinned to the patch, and **must stay equal to `UV_PYTHON` in `.github/workflows/ci.yml`** — that
+# is what makes CI test the interpreter this image ships. `3.11-slim` floated, so the two could
+# drift a patch apart without either file changing; on 2026-08-22 a single patch release was enough
+# to flip two tests, so a floating tag is not close enough. Bump both together.
+FROM python:3.11.15-slim AS python-base
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv

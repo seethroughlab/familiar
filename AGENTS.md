@@ -22,20 +22,14 @@ packages/
 │       ├── player/        # Audio engine abstraction, playback hooks
 │       ├── services/      # offlineService, playlistCache, syncService, profileService
 │       └── db/            # IndexedDB/Dexie storage
-├── web/                   # Web entry point + Web Audio engine + PWA
-│   ├── src/
-│   │   ├── main.tsx       # Registers WebAudioEngine, sets up SW
-│   │   └── WebAudioEngine.ts
-│   ├── e2e/               # Playwright E2E tests
-│   └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
-└── ios/                   # Capacitor + native Swift + iOS deploy
+└── web/                   # Web entry point + Web Audio engine + PWA
     ├── src/
-    │   ├── main.tsx       # Registers CapacitorEngine
-    │   ├── CapacitorEngine.ts
-    │   └── plugins/familiarAudio.ts
-    ├── native/            # Xcode project + Swift code
-    ├── capacitor.config.ts
-    └── scripts/           # deploy-device.sh, release-testflight.sh
+    │   ├── main.tsx       # Registers WebAudioEngine, sets up SW
+    │   └── WebAudioEngine.ts
+    ├── e2e/               # Playwright E2E tests
+    └── vite.config.ts     # PWA plugin, dev proxy, manual chunks
+                           # The Apple clients live in the familiar-apple repo (ADR-0001);
+                           # packages/ios, the Capacitor app, was deleted 2026-08-11.
 backend/
 ├── app/
 │   ├── api/routes/        # FastAPI endpoints (~29 route files)
@@ -61,7 +55,6 @@ backend/
 | Audio engine abstraction | `packages/frontend/src/player/audio/types.ts`, `createEngine.ts` |
 | Audio playback | `packages/frontend/src/player/useAudioEngine.ts` |
 | Web Audio engine | `packages/web/src/WebAudioEngine.ts` |
-| iOS Audio engine | `packages/ios/src/CapacitorEngine.ts` |
 | Player state | `packages/frontend/src/stores/playerStore.ts` |
 | Download queue | `packages/frontend/src/stores/downloadStore.ts` |
 | Offline storage | `packages/frontend/src/services/offlineService.ts` |
@@ -80,14 +73,23 @@ The frontend uses a **registration pattern** for platform-specific code. The sha
 - **`createEngine.ts`** — `registerEngineFactory(fn)` sets the audio engine constructor
 - **`api/base.ts`** — `registerPreferencesProvider(p)` for Capacitor Preferences
 
-Each platform entry point (`packages/web/src/main.tsx`, `packages/ios/src/main.tsx`) registers its implementations before calling `renderApp()`.
+The web entry point (`packages/web/src/main.tsx`) registers its implementations before calling `renderApp()`. It is the only one left: the Capacitor app that was the other was retired with ADR-0001 point 6, and the registration pattern stays because `/embed` and `/visualizer` still use it.
 
 ## Common Tasks
 
 ### Add a new audio feature
-1. Add extraction logic to `analysis.py` in `extract_features()`
-2. No schema change needed (features stored as JSONB)
-3. Bump `ANALYSIS_VERSION` in `config.py` to re-analyze existing tracks
+1. Add extraction logic in `analysis.py` — `derive_features()` for librosa scalars (`extract_features()`
+   is a thin wrapper), or `services/track_analysis/analyzers.py` for the section analyzers, mapped
+   through `extract_feature_scalars()` in `track_analysis/pipeline.py`
+2. **Add a typed column** to `TrackAnalysis` in `backend/app/db/models/tracks.py`, list it in
+   `ANALYSIS_FEATURE_COLUMNS`, and write an Alembic migration. Features were promoted out of JSONB
+   into typed columns — a new feature that skips this is computed and then silently dropped
+3. Bump `FEATURES_VERSION` in `config.py` and add a line to the history comment beside it. There is
+   **no `ANALYSIS_VERSION`**; the constants are per phase, so bumping features leaves embeddings and
+   melodic data alone
+4. Re-analysis only happens during a **library sync** — nothing is scheduled. Budget for it: one
+   worker, a fresh interpreter per track, and an 8-hour cap on the features phase, so a large
+   library takes several consecutive syncs. See `VERSIONING.md`
 
 ### Add a new LLM tool
 1. Define tool schema in `MUSIC_TOOLS` list in `services/llm/tools.py`
@@ -215,10 +217,16 @@ cd packages/web && npx playwright test --ui           # Playwright UI mode
 
 ### iOS Development
 
+**Not in this repo.** The phone and Mac apps are built from `familiar-apple` (ADR-0001); the
+Capacitor app that used to live in `packages/ios` was deleted on 2026-08-11, once the native client
+had shipped a TestFlight build of its own.
+
 ```bash
-make deploy-device            # Build + install to connected iPhone (~2 min)
-make release-testflight       # Build + upload to TestFlight
+cd ../familiar-apple && ./scripts/release-testflight.sh   # archive, sign, upload
 ```
+
+Same App Store Connect record (`com.familiar.player`), so it replaces rather than migrates. `make
+release-testflight` and `make deploy-device` still exist here and print this, then exit non-zero.
 
 ## Code Conventions
 

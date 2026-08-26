@@ -42,7 +42,6 @@ def test_get_settings_default(
 
     # Secrets should be None initially
     assert data["lastfm_api_key"] is None
-    assert data["anthropic_api_key"] is None
 
     # Status fields
     assert data["lastfm_configured"] is False
@@ -56,15 +55,15 @@ def test_update_settings(
     response = client.put(
         "/api/v1/settings",
         json={
-            "anthropic_api_key": "sk-ant-test123456789",
+            "acoustid_api_key": "acoustid-test123456789",
         },
     )
     assert response.status_code == 200
     data = response.json()
 
     # Key should be masked in response
-    assert data["anthropic_api_key"].startswith("sk-a")
-    assert "•" in data["anthropic_api_key"]
+    assert data["acoustid_api_key"].startswith("acou")
+    assert "•" in data["acoustid_api_key"]
 
 
 def test_update_lastfm_credentials(
@@ -94,7 +93,7 @@ def test_settings_persist(
     # Update a setting
     client.put(
         "/api/v1/settings",
-        json={"anthropic_api_key": "sk-ant-persistent-key"},
+        json={"acoustid_api_key": "acoustid-persistent-key"},
     )
 
     # Clear the in-memory cache
@@ -106,8 +105,8 @@ def test_settings_persist(
     data = response.json()
 
     # Should still be there (masked)
-    assert data["anthropic_api_key"] is not None
-    assert data["anthropic_api_key"].startswith("sk-a")
+    assert data["acoustid_api_key"] is not None
+    assert data["acoustid_api_key"].startswith("acou")
 
 
 def test_clear_lastfm_settings(
@@ -144,7 +143,7 @@ def test_partial_update(
     client.put(
         "/api/v1/settings",
         json={
-            "anthropic_api_key": "sk-ant-key1",
+            "acoustid_api_key": "acoustid-key1",
             "community_cache_enabled": True,
         },
     )
@@ -159,62 +158,5 @@ def test_partial_update(
     response = client.get("/api/v1/settings")
     data = response.json()
 
-    assert data["anthropic_api_key"] is not None  # Still set
+    assert data["acoustid_api_key"] is not None  # Still set
     assert data["community_cache_enabled"] is False  # Updated
-
-
-def test_llm_provider_defaults_to_anthropic(
-    client: TestClient,
-    mock_settings_service: AppSettingsService,
-) -> None:
-    """When nothing is set, the settings response should report 'anthropic'."""
-    response = client.get("/api/v1/settings")
-    data = response.json()
-    assert data["llm_provider"] == "anthropic"
-    assert data["openai_configured"] is False
-    assert data["openai_api_key"] is None
-
-
-def test_llm_provider_round_trip(
-    client: TestClient,
-    mock_settings_service: AppSettingsService,
-) -> None:
-    """The openai_* fields should round-trip through PUT/GET (key masked)."""
-    response = client.put(
-        "/api/v1/settings",
-        json={
-            "llm_provider": "openai",
-            "openai_api_key": "sk-oa-test123456789",
-            "openai_base_url": "https://api.groq.com/openai/v1",
-            "openai_chat_model": "llama-3.3-70b-versatile",
-            "openai_utility_model": "llama-3.1-8b-instant",
-        },
-    )
-    assert response.status_code == 200
-    data = response.json()
-
-    assert data["llm_provider"] == "openai"
-    assert data["openai_base_url"] == "https://api.groq.com/openai/v1"
-    assert data["openai_chat_model"] == "llama-3.3-70b-versatile"
-    assert data["openai_utility_model"] == "llama-3.1-8b-instant"
-    # Key must be masked (matches anthropic_api_key convention)
-    assert data["openai_api_key"].startswith("sk-o")
-    assert "•" in data["openai_api_key"]
-    assert data["openai_configured"] is True
-
-
-def test_openai_configured_requires_model_names(
-    client: TestClient,
-    mock_settings_service: AppSettingsService,
-) -> None:
-    """base_url is optional, but model names must be set to count as configured."""
-    response = client.put(
-        "/api/v1/settings",
-        json={
-            "llm_provider": "openai",
-            "openai_api_key": "sk-oa-test",
-            # chat/utility models omitted
-        },
-    )
-    data = response.json()
-    assert data["openai_configured"] is False

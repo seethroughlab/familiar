@@ -5,9 +5,9 @@
  * contributions with full access to track metadata, audio analysis, and
  * real-time audio data.
  */
-import type { ComponentType } from 'react';
 import type { Track, TrackFeatures } from '../../types';
 import type { LyricLine } from '../../api';
+import type { VisualizerAffinity } from '../../services/visualizerPlugins';
 
 /**
  * Metadata about a visualizer for the picker UI.
@@ -21,6 +21,15 @@ export interface VisualizerMetadata {
   author?: string;
   /** Optional: preview image URL */
   previewUrl?: string;
+  /**
+   * What this visualizer suits, for auto-selection (ADR-0064).
+   *
+   * **The built-ins declare this too**, per point 4: a ranker holding five unlabelled candidates
+   * and one labelled plugin would hand the plugin every track, which is indistinguishable from
+   * favouritism. A plugin's block arrives on its *manifest* rather than here — the bundle registers
+   * its own metadata and knows nothing about its manifest — so the loader merges the two.
+   */
+  affinity?: VisualizerAffinity;
 }
 
 /**
@@ -101,39 +110,5 @@ export interface VisualizerPropsWithAudio extends VisualizerProps {
 /**
  * A registered visualizer with metadata and component.
  */
-export interface RegisteredVisualizer {
-  metadata: VisualizerMetadata;
-  component: ComponentType<VisualizerProps>;
-}
-
-/**
- * Visualizer registry - maps id to visualizer info.
- */
-export const visualizerRegistry: Map<string, RegisteredVisualizer> = new Map();
-
-/**
- * Register a visualizer in the registry.
- */
-export function registerVisualizer(
-  metadata: VisualizerMetadata,
-  component: ComponentType<VisualizerProps>
-): void {
-  visualizerRegistry.set(metadata.id, { metadata, component });
-}
-
-/**
- * Get all registered visualizers.
- */
-export function getVisualizers(): RegisteredVisualizer[] {
-  return Array.from(visualizerRegistry.values());
-}
-
-/**
- * Get a specific visualizer by ID.
- */
-export function getVisualizer(id: string): RegisteredVisualizer | undefined {
-  return visualizerRegistry.get(id);
-}
-
 // Re-export constants for backward compatibility
 export { DEFAULT_VISUALIZER_ID } from './constants';

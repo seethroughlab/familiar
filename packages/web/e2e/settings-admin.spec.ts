@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ensureProfile, navigateToTab } from './helpers';
+import { ensureProfile, navigateToDestination } from './helpers';
 
 test.describe('Settings', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,29 +7,35 @@ test.describe('Settings', () => {
     await ensureProfile(page);
   });
 
-  test('settings page loads', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
-
-    // Should see settings content
-    const settingsContent = page.locator('[data-testid="settings"], .settings, main');
-    await expect(settingsContent).toBeVisible({ timeout: 5000 });
+  test('a settings URL lands on the dashboard', async ({ page }) => {
+    // ADR-0080 deleted the destination — theme was the only control left on it, and the interface
+    // is one look now. An old bookmark hits the catch-all rather than an error, which is the whole
+    // point of the catch-all; asserting it here keeps that promise honest.
+    await page.goto('/settings');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByRole('heading', { name: 'Library', exact: true }).first())
+      .toBeVisible({ timeout: 10000 });
   });
 
-  test('API key status is visible in settings', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+  test('API key status is visible on the Server destination', async ({ page }) => {
+    // Keys are infrastructural (ADR-0057 point 2) and moved to Server with ADR-0058 point 2.
+    await navigateToDestination(page, 'Server');
 
     // Should see the API Keys section
     const apiKeysHeading = page.getByText('API Keys', { exact: true });
     await expect(apiKeysHeading).toBeVisible({ timeout: 5000 });
 
-    // Should show the active API key services
-    await expect(page.getByText('Claude API', { exact: true })).toBeVisible({ timeout: 5000 });
+    // Should show the active API key services. **No Claude or OpenAI row**: ADR-0048 removed them
+    // with the provider layer, and this assertion is what would catch one coming back — a key field
+    // for a model this server never calls is a promise it cannot keep.
+    await expect(page.getByText('Claude API', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('OpenAI-compatible', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Last.fm', { exact: true }).first()).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('AcoustID', { exact: true })).toBeVisible({ timeout: 5000 });
   });
 
-  test('community cache is visible in settings', async ({ page }) => {
-    await navigateToTab(page, 'Settings');
+  test('community cache is visible on the Tools destination', async ({ page }) => {
+    await navigateToDestination(page, 'Tools');
 
     // Should see the Community Cache section
     const cacheHeading = page.getByText('Community Cache', { exact: true });
@@ -39,48 +45,12 @@ test.describe('Settings', () => {
     await expect(page.getByText('Use community cache', { exact: true })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Contribute to cache', { exact: true })).toBeVisible({ timeout: 5000 });
   });
-
-  test('library grid/list view toggle', async ({ page }) => {
-    await navigateToTab(page, 'Library');
-
-    // Look for view toggle buttons
-    const gridBtn = page.locator('button[aria-label*="grid" i], [data-testid="grid-view"]');
-    const listBtn = page.locator('button[aria-label*="list" i], [data-testid="list-view"]');
-
-    if (await gridBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await gridBtn.click();
-    }
-
-    if (await listBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await listBtn.click();
-    }
-  });
 });
 
 test.describe('UI Elements', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await ensureProfile(page);
-  });
-
-  test('album artwork displays', async ({ page }) => {
-    await navigateToTab(page, 'Library');
-
-    const trackRow = page.locator('[data-testid="track-row"], .track-row, tr').first();
-    if (!(await trackRow.isVisible({ timeout: 5000 }).catch(() => false))) {
-      test.skip(true, 'No tracks in library');
-      return;
-    }
-
-    // Click to play a track
-    await trackRow.click();
-    await page.waitForFunction(() => !!document.querySelector('audio'), { timeout: 5000 }).catch(() => {});
-
-    // Look for album art in player bar or now playing
-    const albumArt = page.locator('[data-testid="album-art"], .album-art, img[alt*="album" i], img[alt*="cover" i]');
-    if (await albumArt.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await expect(albumArt).toBeVisible();
-    }
   });
 
   test('no console errors on page load', async ({ page }) => {
@@ -105,20 +75,22 @@ test.describe('UI Elements', () => {
     expect(criticalErrors.length).toBe(0);
   });
 
-  test('main sidebar navigation works', async ({ page }) => {
-    // Test sidebar navigation links are accessible
-    // Use Artists and Albums (Tracks view uses complex virtualizer that can be flaky in CI)
-    const sidebarLinks = ['Artists', 'Albums'] as const;
+  test('main navigation works', async ({ page }) => {
+    // The top bar lists destinations, not browsers (ADR-0058 point 2, ADR-0080 point 1). Of the
+    // browsers only
+    // Cleanup is still reachable — the track list left with the player (ADR-0057 point 5) — which
+    // the navigation helpers cover; what this asserts is that each destination is mounted and
+    // renders its own heading, the failure `navigationIntegrity.test.ts` guards statically.
+    const destinations = [
+      { link: 'Tools', heading: 'Tools' },
+      { link: 'Server', heading: 'Server' },
+      { link: 'Library', heading: 'Library' },
+    ] as const;
 
-    for (const linkText of sidebarLinks) {
-      const link = page.locator(`a:has-text("${linkText}")`).first();
-      await expect(link).toBeVisible({ timeout: 5000 });
-      await link.click();
-      await page.waitForLoadState('domcontentloaded');
+    for (const { link, heading } of destinations) {
+      await navigateToDestination(page, link);
+      await expect(page.getByRole('heading', { name: heading, exact: true }).first())
+        .toBeVisible({ timeout: 10000 });
     }
-
-    // Verify Settings button works
-    const settingsBtn = page.locator('button:has-text("Settings")').first();
-    await expect(settingsBtn).toBeVisible({ timeout: 5000 });
   });
 });

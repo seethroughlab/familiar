@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { createLogger } from './utils/logger';
@@ -9,27 +9,24 @@ const log = createLogger('App');
 
 import { ProfileSelector } from './components/Profiles';
 import { WorkerAlert } from './components/WorkerAlert';
-import { ServerSettings } from './components/Settings/ServerSettings';
-import { getApiOrigin } from './api/base';
 import { MobileAppRedirect } from './components/MobileAppRedirect';
-import { isIOS, isNativeApp, isPWA } from './utils/platform';
+import { isIOS } from './utils/platform';
 import { useUpdateNotification } from './hooks/useUpdateNotification';
 import { initializeProfile, type Profile } from './services/profileService';
 
 // Layout
 import { AppShell } from './components/AppShell';
 import { LibraryBrowser } from './components/Library/LibraryBrowser';
-import { HomeScreen } from './components/Home';
 
 // Lazy-loaded route components
-const ArtistDetail = lazy(() => import('./components/Library/ArtistDetail').then(m => ({ default: m.ArtistDetail })));
-const AlbumDetail = lazy(() => import('./components/Library/AlbumDetail').then(m => ({ default: m.AlbumDetail })));
-const PlaylistDetail = lazy(() => import('./components/Playlists/PlaylistDetail').then(m => ({ default: m.PlaylistDetail })));
-const EphemeralPlaylistDetail = lazy(() => import('./components/Playlists/EphemeralPlaylistDetail').then(m => ({ default: m.EphemeralPlaylistDetail })));
-const FavoritesDetail = lazy(() => import('./components/Playlists/FavoritesDetail').then(m => ({ default: m.FavoritesDetail })));
-const DownloadsDetail = lazy(() => import('./components/Playlists/DownloadsDetail').then(m => ({ default: m.DownloadsDetail })));
-const SmartPlaylistDetail = lazy(() => import('./components/SmartPlaylists/SmartPlaylistDetail').then(m => ({ default: m.SmartPlaylistDetail })));
-const MixTapesList = lazy(() => import('./components/MixTape').then(m => ({ default: m.MixTapesList })));
+const LibraryPage = lazy(() => import('./components/Admin/LibraryPage').then(m => ({ default: m.LibraryPage })));
+const ToolsPage = lazy(() => import('./components/Admin/ToolsPage').then(m => ({ default: m.ToolsPage })));
+const DuplicatesPage = lazy(() => import('./components/Admin/DuplicatesPage').then(m => ({ default: m.DuplicatesPage })));
+const OrganizePage = lazy(() => import('./components/Admin/OrganizePage').then(m => ({ default: m.OrganizePage })));
+const ArtworkPage = lazy(() => import('./components/Admin/ArtworkPage').then(m => ({ default: m.ArtworkPage })));
+const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => ({ default: m.ServerPage })));
+// The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
+// loads this page and nothing else, and everyone else never loads it at all.
 
 import { MixTapeProgressWatcher } from './components/MixTape';
 
@@ -54,88 +51,6 @@ const queryClient = new QueryClient({
  * Redirect legacy hash-based URLs to new path-based routes.
  * e.g. /?browser=track-list#library → /library/tracks
  */
-function LegacyRedirect() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const hash = window.location.hash.slice(1);
-    const params = new URLSearchParams(window.location.search);
-
-    // Only redirect if we have hash-based navigation
-    if (!hash && !params.has('browser') && !params.has('view') && !params.has('playlist') && !params.has('smartPlaylist') && !params.has('artistDetail') && !params.has('albumDetailArtist')) {
-      return;
-    }
-
-    let newPath = '/home'; // default
-
-    // Check for detail views first
-    const artistDetail = params.get('artistDetail');
-    if (artistDetail) {
-      newPath = `/library/artists/${encodeURIComponent(artistDetail)}`;
-      navigate(newPath, { replace: true });
-      return;
-    }
-
-    const albumDetailArtist = params.get('albumDetailArtist');
-    const albumDetailAlbum = params.get('albumDetailAlbum');
-    if (albumDetailArtist && albumDetailAlbum) {
-      newPath = `/library/albums/${encodeURIComponent(albumDetailArtist)}/${encodeURIComponent(albumDetailAlbum)}`;
-      navigate(newPath, { replace: true });
-      return;
-    }
-
-    // Check for playlist views
-    const view = params.get('view');
-    if (view === 'favorites') { navigate('/favorites', { replace: true }); return; }
-    if (view === 'downloads') { navigate('/downloads', { replace: true }); return; }
-
-    const playlistId = params.get('playlist');
-    if (playlistId) { navigate(`/playlists/${playlistId}`, { replace: true }); return; }
-
-    const smartPlaylistId = params.get('smartPlaylist');
-    if (smartPlaylistId) { navigate(`/smart-playlists/${smartPlaylistId}`, { replace: true }); return; }
-
-    // Browser mapping
-    const browserMap: Record<string, string> = {
-      'track-list': '/library/tracks',
-      'artist-list': '/library/artists',
-      'album-grid': '/library/albums',
-      'vibe-map': '/library/music-map',
-      'discover': '/library/discover',
-      'proposed-changes': '/library/proposed-changes',
-    };
-
-    const browser = params.get('browser');
-    if (browser && browserMap[browser]) {
-      newPath = browserMap[browser];
-    } else if (hash === 'settings') {
-      // Settings is now a modal, redirect to default
-      navigate('/home', { replace: true });
-      return;
-    } else if (hash === 'playlists') {
-      // Playlists are now in the sidebar
-      navigate('/home', { replace: true });
-      return;
-    } else if (hash === 'queue') {
-      navigate('/home', { replace: true });
-      return;
-    }
-
-    // Preserve filter params
-    const filterParams = new URLSearchParams();
-    for (const key of ['search', 'artist', 'album', 'genre', 'yearFrom', 'yearTo',
-      'energyMin', 'energyMax', 'valenceMin', 'valenceMax', 'downloadedOnly']) {
-      const val = params.get(key);
-      if (val) filterParams.set(key, val);
-    }
-
-    const filterString = filterParams.toString();
-    navigate(newPath + (filterString ? `?${filterString}` : ''), { replace: true });
-  }, [location, navigate]);
-
-  return null;
-}
 
 import { BROWSER_ROUTES } from './routes';
 
@@ -166,15 +81,13 @@ if (typeof window !== 'undefined') {
 }
 
 function App() {
+  // Send an iPhone visitor to the real listening client (ADR-0050): the phone's job is playing
+  // music, and this page administers a server. The `!isPWA()` term went with ADR-0059 — there is
+  // no installed copy to be already inside.
   const [showMobileRedirect] = useState(
-    () => isIOS() && !isNativeApp() && !isPWA() &&
-          !sessionStorage.getItem('familiar-continue-in-browser')
+    () => isIOS() && !sessionStorage.getItem('familiar-continue-in-browser')
   );
   const [mobileRedirectDismissed, setMobileRedirectDismissed] = useState(false);
-
-  const [serverConfigured, setServerConfigured] = useState(
-    () => !isNativeApp() || !!getApiOrigin()
-  );
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
@@ -206,23 +119,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!serverConfigured) return;
     checkProfile();
     const handleInvalidated = () => setProfile(null);
     window.addEventListener('profile-invalidated', handleInvalidated);
     return () => window.removeEventListener('profile-invalidated', handleInvalidated);
-  }, [checkProfile, serverConfigured]);
-
-  // "Change Server" in Settings dispatches this — drop back to the
-  // Connect-to-Server screen without needing to restart the app.
-  useEffect(() => {
-    const handleReset = () => {
-      setProfile(null);
-      setServerConfigured(false);
-    };
-    window.addEventListener('server-reset', handleReset);
-    return () => window.removeEventListener('server-reset', handleReset);
-  }, []);
+  }, [checkProfile]);
 
   useUpdateNotification();
 
@@ -237,21 +138,9 @@ function App() {
     );
   }
 
-  if (!serverConfigured) {
-    return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-6">
-          <div className="text-center space-y-2">
-            <h1 className="text-2xl font-bold text-white">Connect to Server</h1>
-            <p className="text-zinc-400 text-sm">
-              Enter the URL of your Familiar server to get started.
-            </p>
-          </div>
-          <ServerSettings onConnected={() => setServerConfigured(true)} />
-        </div>
-      </div>
-    );
-  }
+  // No Connect-to-Server screen. It only ever appeared when `isNativeApp()` was true, and that
+  // tested for `window.Capacitor` — an app deleted on 2026-08-11 (ADR-0001 point 6). The web app
+  // is same-origin, so there is no URL to ask for.
 
   if (checkingProfile) {
     return (
@@ -282,13 +171,40 @@ function App() {
       <WorkerAlert />
       <QueryClientProvider client={queryClient}>
         {/* Legacy URL redirect handler */}
-        <LegacyRedirect />
         {/* Watches in-flight mix tape renders and toasts on terminal state */}
         <MixTapeProgressWatcher />
         <Routes>
+
           {/* Main app routes inside AppShell */}
           <Route element={<AppShell />}>
-            <Route path="/home" element={<HomeScreen />} />
+
+            {/* The other two destinations. Library is the index route below. */}
+            <Route path="/tools" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ToolsPage />
+              </Suspense>
+            } />
+            {/* Phase 4. Both preview-only — the server exposes no apply route for either. */}
+            <Route path="/tools/duplicates" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <DuplicatesPage />
+              </Suspense>
+            } />
+            <Route path="/tools/artwork" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ArtworkPage />
+              </Suspense>
+            } />
+            <Route path="/tools/organize" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <OrganizePage />
+              </Suspense>
+            } />
+            <Route path="/server" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ServerPage />
+              </Suspense>
+            } />
             {/* Library browser views */}
             {BROWSER_ROUTES.map(({ path, browserId }) => (
               <Route
@@ -297,58 +213,20 @@ function App() {
                 element={<LibraryBrowser key={browserId} browserId={browserId} />}
               />
             ))}
-
-            {/* Drill-down detail views */}
-            <Route path="/library/artists/:name" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <ArtistDetail />
-              </Suspense>
-            } />
-            <Route path="/library/albums/:artist/:album" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <AlbumDetail />
-              </Suspense>
-            } />
-
             {/* Collections */}
-            <Route path="/favorites" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <FavoritesDetail />
-              </Suspense>
-            } />
-            <Route path="/downloads" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <DownloadsDetail />
-              </Suspense>
-            } />
-
-            {/* Playlists */}
-            <Route path="/playlists/:id" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <PlaylistDetail />
-              </Suspense>
-            } />
-            <Route path="/smart-playlists/:id" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <SmartPlaylistDetail />
-              </Suspense>
-            } />
-            <Route path="/ephemeral/:id" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <EphemeralPlaylistDetail />
-              </Suspense>
-            } />
-
             {/* Mix Tapes */}
-            <Route path="/mixtapes" element={
-              <Suspense fallback={<LazyLoadSpinner />}>
-                <MixTapesList />
-              </Suspense>
-            } />
 
             {/* Default redirect */}
-            <Route index element={<Navigate to="/home" replace />} />
-            <Route path="*" element={<Navigate to="/home" replace />} />
+            {/* ADR-0058 point 1: the administrator lands on the thing being administered, not on a
+                form. This was `Navigate to="/settings"`; there is no settings route at all now —
+                ADR-0080 deleted it once theme was the only control left on it. The catch-all below
+                sends an old bookmark here. */}
+            <Route index element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <LibraryPage />
+              </Suspense>
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </QueryClientProvider>

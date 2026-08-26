@@ -145,6 +145,7 @@ from app.api.routes.tracks.listing import router as listing_router  # noqa: E402
 from app.api.routes.tracks.metadata import router as metadata_router  # noqa: E402
 from app.api.routes.tracks.playback import router as playback_router  # noqa: E402
 from app.api.routes.tracks.streaming import router as streaming_router  # noqa: E402
+from app.api.routes.tracks.visualizers import router as visualizers_router  # noqa: E402
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 # Register list_tracks directly on the parent router so its path is ""
@@ -157,4 +158,5 @@ router.include_router(discovery_router)
 router.include_router(playback_router)
 router.include_router(metadata_router)
 router.include_router(identification_router)
+router.include_router(visualizers_router)
 

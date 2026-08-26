@@ -1,28 +1,28 @@
 # Bundle Metrics
 
-Generated: 2026-03-13T12:41:50.262Z
+Generated: 2026-08-08T23:22:15.521Z
 
 ## Summary
 
-- Entry: `assets/index-Dvy_qw_U.js` (454.87 kB gzip)
-- Largest Lazy: `assets/index-B_PCgeGB.js` (71.32 kB gzip)
-- Main CSS: `assets/index-9hqiJINH.css` (13.63 kB gzip)
+- Entry: `assets/index-D7LJTutN.js` (96.92 kB gzip)
+- Largest Lazy: `assets/PlaylistRow-kG_ggIRt.js` (28.34 kB gzip)
+- Main CSS: N/A
 
 ## Top JS Assets (gzip)
 
 | File | Raw (kB) | Gzip (kB) |
 |---|---:|---:|
-| assets/index-Dvy_qw_U.js | 1654.52 | 454.87 |
-| assets/index-B_PCgeGB.js | 217.83 | 71.32 |
-| assets/vendor-audio-CXPx7eTM.js | 92.74 | 31.17 |
-| assets/index-gmKv4Kgd.js | 136.89 | 27.99 |
-| assets/vendor-react-Bq1UMS2s.js | 39.9 | 14.21 |
-| assets/vendor-query-CcIar6DF.js | 43.77 | 13.37 |
-| assets/vendor-icons-DeeEANVr.js | 29.53 | 9.55 |
-| assets/index-Bm4932vQ.js | 21.55 | 7.16 |
-| assets/PlaylistDetail-Demhifen.js | 15.04 | 4.88 |
-| assets/ArtistDetail-DXgxmG5Y.js | 14.74 | 4.54 |
+| assets/vendor-three-D8DgyZ8I.js | 1040.27 | 290.59 |
+| assets/index-D7LJTutN.js | 378.52 | 96.92 |
+| assets/vendor-react-qEhzO5Dk.js | 224.91 | 71.72 |
+| assets/vendor-audio-alqlCz7y.js | 92.74 | 31.17 |
+| assets/PlaylistRow-kG_ggIRt.js | 97.28 | 28.34 |
+| assets/index-DaEA4nrL.js | 131.65 | 26.42 |
+| assets/uiStore-Cfjqt7mo.js | 43.07 | 17.03 |
+| assets/playerStore-CoIc_o-d.js | 41.87 | 13.13 |
+| assets/vendor-icons-Cj_N8uHg.js | 33.36 | 10.78 |
+| assets/vendor-query-D1pqjCy3.js | 35.6 | 10.46 |
 
 ## Budget Results
 
-- Warning: Entry gzip 454.87 kB exceeds target 300 kB
+- All budgets within target thresholds.

@@ -103,7 +103,14 @@ from inside a web view.
 
 5. **The bridge is one-way and narrow**: the page posts an intent — play these track ids, starting at
    this one — and the native side owns the queue, the playback and the reporting. The web view is
-   never told what is playing and never renders a transport. One player, one queue, one now-playing
+   never told what is playing and never renders a transport.
+
+   > **"Never told what is playing" is superseded** by
+   > [ADR-0033](ADR-0033-the-embed-bridge-gains-a-return-channel.md) for the visualizer and
+   > [ADR-0090](ADR-0090-discover-is-told-what-is-playing.md) for Discover. What survives is the
+   > ownership rule and "never renders a transport", which is the half that was load-bearing: the
+   > native side still owns the queue, the playback and the reporting, and page → app is still the
+   > two intents ADR-0020 point 2 caps. One player, one queue, one now-playing
    entry, exactly as with CarPlay.
 
 6. **The web view is given the server URL and profile explicitly** by the native app rather than

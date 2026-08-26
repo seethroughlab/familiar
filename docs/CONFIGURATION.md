@@ -32,18 +32,16 @@ API keys are configured via environment variables in your `.env` file (see below
 
 ## Getting API Keys
 
-### Anthropic (Claude AI)
+### Anthropic (Claude AI) — not needed
 
-The Anthropic API powers the AI chat feature, allowing you to ask questions about your music library and get intelligent recommendations.
+**Familiar no longer calls a language model itself** (ADR-0043, ADR-0048). The chat client is
+retired and playlists are generated from the library's own audio analysis, so **no API key is
+required** for any feature in the app. `ANTHROPIC_API_KEY`, `LLM_PROVIDER` and the `OPENAI_*`
+variables have been removed — setting them does nothing.
 
-1. Go to [console.anthropic.com](https://console.anthropic.com/)
-2. Sign up or log in to your account
-3. Navigate to **Settings** → **API Keys**
-4. Click **Create Key** and give it a name (e.g., "Familiar")
-5. Copy the key (starts with `sk-ant-...`)
-6. Add it to your `.env` file as `ANTHROPIC_API_KEY=sk-ant-...` and restart Docker
-
-**Pricing note:** Anthropic charges per token. Typical music library queries cost fractions of a cent. See [anthropic.com/pricing](https://www.anthropic.com/pricing) for current rates.
+An Anthropic key is still useful for one thing: pointing an MCP host — Claude Desktop, Claude Code —
+at Familiar's MCP server, where the *host* brings the model. **That key is configured in the host,
+not here**, and Familiar never sees it.
 
 ### Spotify
 

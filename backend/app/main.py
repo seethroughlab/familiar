@@ -36,7 +36,6 @@ from app.api.routes import (
     artwork,
     background,
     bandcamp,
-    chat,
     diagnostics,
     download,
     export_import,
@@ -50,16 +49,19 @@ from app.api.routes import (
     organizer,
     outputs,
     pending_review,
+    playback,
     playlists,
     profiles,
     proposed_changes,
     queue,
     s3_backup,
     smart_playlists,
-    spotify_import,
     tracks,
     updates,
     videos,
+)
+from app.api.routes import (
+    auth as auth_routes,
 )
 from app.api.routes import settings as settings_routes
 from app.api.schemas.common import error_responses
@@ -76,7 +78,7 @@ logger = get_logger(__name__)
 class RequestIDMiddleware:
     """Add unique request ID and request timing to each request."""
 
-    _SKIP_TIMING_PREFIXES = ("/health", "/assets/", "/icons/", "/sw.js", "/manifest.json", "/workbox-")
+    _SKIP_TIMING_PREFIXES = ("/health", "/assets/", "/icons/", "/sw.js")
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -295,7 +297,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await bg.startup()
     logger.info("Background task manager started")
 
-    yield
+    # The MCP session manager must be running or every /mcp request fails at *request* time with
+    # "Task group is not initialized", not at startup — so it looks like a runtime bug rather than
+    # missing wiring (ADR-0043 point 1).
+    async with _mcp_session_manager_running(app):
+        yield
 
     # Shutdown
     logger.info("Shutting down Familiar API")
@@ -330,6 +336,40 @@ app = FastAPI(
     lifespan=lifespan,
     generate_unique_id_function=custom_generate_unique_id,
 )
+
+# MCP (ADR-0043). Mounted here rather than beside the API routers because the SPA catch-all is
+# registered last and would swallow it — and asymmetrically: streamable HTTP uses POST for requests
+# and GET for the server-initiated stream, so a late mount leaves POST working while GET quietly
+# returns index.html. `mcp` is in NON_SPA_PREFIXES for the same reason.
+from app.mcp.server import MCPDispatch  # noqa: E402
+from app.mcp.server import build_asgi_app as _build_mcp_app  # noqa: E402
+
+_mcp_asgi_app = _build_mcp_app()
+app.add_middleware(MCPDispatch, mcp_app=_mcp_asgi_app)
+
+# Inbound authentication (ADR-0045 point 1).
+#
+# **The position in this file is the whole design.** `add_middleware` prepends, so the *last* one
+# added is the outermost. Adding this immediately after `MCPDispatch` and before `RequestIDMiddleware`
+# and CORS puts it:
+#   - *inside* CORS, so a preflight is answered with CORS headers rather than an opaque 401;
+#   - *inside* `RequestIDMiddleware`, so a refusal carries the `x-request-id` that correlates it;
+#   - *outside* `MCPDispatch`, which is the load-bearing one — `MCPDispatch` answers `/mcp` before
+#     the router is ever reached, so a router dependency would protect all 264 REST operations and
+#     leave the MCP endpoint, the one ADR-0043 exists to expose, as the only open door.
+#
+# It is inert until a token is configured; see `TokenAuthMiddleware`.
+from app.api.auth import TokenAuthMiddleware  # noqa: E402
+
+app.add_middleware(TokenAuthMiddleware)
+
+
+@asynccontextmanager
+async def _mcp_session_manager_running(_app: FastAPI) -> AsyncGenerator[None, None]:
+    """Run the MCP session manager for the lifetime of the app."""
+    async with _mcp_asgi_app.router.lifespan_context(_mcp_asgi_app):
+        yield
+
 
 # Rate limiting
 app.state.limiter = limiter
@@ -468,9 +508,9 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 DEFAULT_ERROR_RESPONSES = error_responses(400, 401, 404, 422, 500)
 
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(auth_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(tracks.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(library.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(chat.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(videos.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(lastfm.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(settings_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
@@ -491,8 +531,8 @@ app.include_router(s3_backup.router, prefix="/api/v1", responses=DEFAULT_ERROR_R
 app.include_router(analysis.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(download.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(updates.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(spotify_import.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(ambient.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+app.include_router(playback.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(external_albums.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(new_releases.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
@@ -502,13 +542,86 @@ app.include_router(pending_review.bulk_router, prefix="/api/v1", responses=DEFAU
 app.include_router(pending_review.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 
 
+def _openapi_with_global_security() -> dict[str, Any]:
+    """Publish the server token as a global security requirement (ADR-0045 point 2).
+
+    Point 2 says *"every operation carries a security requirement, and the allowlist goes to zero"*,
+    and cites 158 operations with none. That number is real — it is 160 today, having grown by two
+    since the ADR was written, which is the ADR's own argument about permanent allowlists making
+    itself. But the count conflates two axes that this codebase keeps separate:
+
+    - **Authentication** — does the caller hold the server token? That is not a property of an
+      individual operation here. `TokenAuthMiddleware` gates every `/api/` path and `/mcp` at once,
+      so the honest OpenAPI expression is a *global* `security` block, which the spec has never had
+      (`security` was absent entirely). One block covers all 264.
+    - **Profile scoping** — which profile may a request act as? That is per-operation, it is what
+      `lint_profile_contracts.py`'s 30-module allowlist tracks, and it is the genuinely large half
+      of point 2. It is untouched here and is a later phase.
+
+    Conflating them would let this look finished while the second half had not started, so the two
+    are separated deliberately rather than quietly.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    from fastapi.openapi.utils import get_openapi
+
+    from app.api.auth import TOKEN_HEADER
+
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    components = schema.setdefault("components", {})
+    schemes = components.setdefault("securitySchemes", {})
+    schemes["FamiliarToken"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": TOKEN_HEADER,
+        "description": (
+            "Server token (ADR-0045). Issue one at POST /api/v1/auth/token. When no token is "
+            "configured the server accepts unauthenticated requests, so generated clients must "
+            "treat this as optional-but-expected rather than required."
+        ),
+    }
+    # Applies to every operation, including the ones that declare `ProfileHeader`: the two are
+    # different questions, and an operation can require both.
+    schema["security"] = [{"FamiliarToken": []}]
+
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = _openapi_with_global_security  # type: ignore[method-assign]
+
+
 # Serve frontend static files in production
 # The static folder is created during Docker build
 STATIC_DIR = Path(__file__).parent.parent / "static"
 
 # Prefixes the single-page app must never swallow. A miss inside these belongs to the API, and the
 # answer to it is a 404 rather than an HTML document.
-NON_SPA_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "health")
+NON_SPA_PREFIXES = (
+    "api/",
+    "docs",
+    "redoc",
+    "openapi.json",
+    "health",
+    "mcp",
+    # An MCP host probes these before connecting, to find out whether the server has an
+    # authorisation server. **A 404 is the answer that means "no, connect anonymously."** Served by
+    # the SPA they returned `200 text/html`, which reads as "yes, here it is" — so Claude Desktop
+    # tried to register a client against an HTML page and reported *"Couldn't register with
+    # Familiar's sign-in service"*, which points at authentication rather than at this line.
+    ".well-known",
+    # An MCP host probes these before connecting, to find out whether the server has an
+    # authorisation server. **A 404 is the answer that means "no, connect anonymously."** Served by
+    # the SPA they returned `200 text/html`, which reads as "yes, here it is" — so Claude Desktop
+    # tried to register a client against an HTML page and reported *"Couldn't register with
+    # Familiar's sign-in service"*, which points at authentication rather than at this line.
+)
 
 
 async def serve_embed() -> FileResponse:
@@ -552,6 +665,11 @@ async def spa_fallback(full_path: str) -> FileResponse:
     """
     if full_path.startswith(NON_SPA_PREFIXES):
         raise NotFoundError("Not found")
+    # The served path, not the route template. `request_completed` logs `/{full_path:path}` for
+    # everything that lands here, which is useless precisely when it matters: an MCP host probing
+    # for an authorisation server gets `index.html` with a 200, reads it as "yes, here it is", and
+    # reports a sign-in failure that names nothing about routing.
+    logger.info("spa_fallback_served", extra={"path": full_path})
     return FileResponse(STATIC_DIR / "index.html")
 
 
@@ -560,22 +678,17 @@ if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
     app.mount("/icons", StaticFiles(directory=STATIC_DIR / "icons"), name="icons")
 
-    # Serve PWA files
-    @app.get("/manifest.json")
-    async def manifest() -> FileResponse:
-        return FileResponse(STATIC_DIR / "manifest.json")
 
+    # The PWA is retired (ADR-0059) — no manifest, no `registerSW.js`, no `workbox-*` chunks.
+    #
+    # `/sw.js` stays, and must. It now serves a tombstone worker whose whole job is to unregister
+    # the Workbox worker earlier versions installed. Letting this 404 would fall through to the SPA
+    # catch-all and answer with `index.html`, and a browser told its service worker is now an HTML
+    # document behaves less predictably than one handed a script that removes itself. See
+    # `packages/web/public/sw.js`.
     @app.get("/sw.js")
     async def service_worker() -> FileResponse:
         return FileResponse(STATIC_DIR / "sw.js", media_type="application/javascript")
-
-    @app.get("/registerSW.js")
-    async def register_sw() -> FileResponse:
-        return FileResponse(STATIC_DIR / "registerSW.js", media_type="application/javascript")
-
-    @app.get("/workbox-{path:path}")
-    async def workbox(path: str) -> FileResponse:
-        return FileResponse(STATIC_DIR / f"workbox-{path}", media_type="application/javascript")
 
     # Serve index.html for root
     @app.get("/")
@@ -583,8 +696,8 @@ if STATIC_DIR.exists():
         """Serve index.html for root path."""
         return FileResponse(STATIC_DIR / "index.html")
 
-    # Registered before the catch-all below, which would otherwise swallow it and hand the web view
-    # the full app.
+    # Registered before the catch-all below, which would otherwise swallow them and hand the web
+    # view the full app.
     app.get("/embed", response_model=None)(serve_embed)
 
     # SPA fallback - serve index.html for all non-API routes

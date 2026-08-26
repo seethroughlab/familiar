@@ -23,6 +23,10 @@ dependencies = [
     "pillow>=10.0.0",
     # HTTP client
     "httpx>=0.26.0",
+    # `mcp`'s own client stack, used directly by scripts/mcp_bridge.py. It arrives transitively
+    # with `mcp`, so this line changes nothing today — it declares a direct import rather than
+    # leaving the bridge to break on an `mcp` release that drops it.
+    "httpx2>=2.9.1",
     # Configuration
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -30,14 +34,11 @@ dependencies = [
     "greenlet>=3.0.0",
     # Rate limiting
     "slowapi>=0.1.9",
-    # Password hashing (for Subsonic API auth)
-    "bcrypt>=4.0.0",
+    # MCP server (ADR-0043) — Familiar's LLM surface
+    "mcp>=2.0.0",
     # Utilities
     "python-multipart>=0.0.6",
-    "anthropic>=0.75.0",
-    "openai>=1.40.0",
     "spotipy>=2.25.2",
-    "bandcamp-api>=0.2.3",
     "beautifulsoup4>=4.14.3",
     "rapidfuzz>=3.0.0",
     "pyacoustid>=1.3.0",

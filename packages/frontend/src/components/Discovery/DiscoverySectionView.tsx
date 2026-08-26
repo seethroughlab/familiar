@@ -1,5 +1,7 @@
 import { Disc, Disc3, User } from 'lucide-react';
 import type { DiscoverySection, DiscoveryItem } from './types';
+import { useSyncExternalStore } from 'react';
+import { getNowPlaying, subscribeToNowPlaying } from '../../services/nowPlayingSink';
 import { DiscoveryList } from './DiscoveryList';
 import { DiscoveryGrid } from './DiscoveryGrid';
 import { DiscoverTrackList } from './DiscoverTrackList';
@@ -38,6 +40,17 @@ export function DiscoverySectionView({
   gridColumns = 4,
   className = '',
 }: DiscoverySectionViewProps) {
+  /**
+   * What the native app is playing (ADR-0090).
+   *
+   * **Read here, one level above the three components that draw it**, because ADR-0083 point 1 puts
+   * playing state on their props: this is the parent that knows, and they stay prop-driven and
+   * testable without a channel. In the web app nothing ever calls the sink, so this is
+   * `{ null, false }` for the life of the page and no row is marked — correct rather than degraded,
+   * since that app has no player.
+   */
+  const nowPlaying = useSyncExternalStore(subscribeToNowPlaying, getNowPlaying);
+
   if (section.items.length === 0) {
     return null;
   }
@@ -65,6 +78,26 @@ export function DiscoverySectionView({
         <DiscoverTrackList
           items={section.rawTracks}
           sortPersistKey={`discover-${section.id}`}
+          currentTrackId={nowPlaying.trackId}
+          isPlaying={nowPlaying.playing}
+          /*
+           * **Play went nowhere without this.** `DiscoverTrackList` stopped reaching into
+           * `playerStore` under ADR-0083 and started taking a callback instead — but this parent
+           * was never updated to pass one, and `onPlayTracks?.()` swallowed every click. The two
+           * layouts either side of this branch were wired all along, so it failed only in the
+           * `tracklist` sections: "Unheard in Your Library" and "Deep Cuts".
+           *
+           * A track id is all the embedded surface can act on — it posts an intent for a queue of
+           * one (ADR-0016 point 4, ADR-0090 point 4), so the list is deliberately not forwarded.
+           */
+          onPlayTracks={
+            onItemPlay
+              ? (_tracks, startId) => {
+                  const item = section.items.find((i) => i.playbackContext?.trackId === startId);
+                  if (item) onItemPlay(item);
+                }
+              : undefined
+          }
         />
       ) : layout === 'grid' ? (
         <DiscoveryGrid
@@ -72,12 +105,16 @@ export function DiscoverySectionView({
           columns={gridColumns}
           onItemClick={onItemClick}
           onItemPlay={onItemPlay}
+          currentTrackId={nowPlaying.trackId}
+          isPlaying={nowPlaying.playing}
         />
       ) : (
         <DiscoveryList
           items={section.items}
           onItemClick={onItemClick}
           onItemPlay={onItemPlay}
+          currentTrackId={nowPlaying.trackId}
+          isPlaying={nowPlaying.playing}
         />
       )}
     </div>

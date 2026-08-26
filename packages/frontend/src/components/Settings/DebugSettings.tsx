@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bug, RefreshCw, Trash2, Download, AlertCircle } from 'lucide-react';
+import { Bug, RefreshCw, Trash2, AlertCircle } from 'lucide-react';
 import { getApiUrl } from '../../api/base';
 import { isMobile, isIOS } from '../../utils/platform';
 import {
@@ -8,16 +8,13 @@ import {
   areAudioEffectsAvailable,
   isVisualizerAvailable,
   getCurrentMode,
-} from '../../player/audio/engineInstance';
+} from '../../audio/engineInstance';
 import {
   getAudioAnalysisDiagnosticsSnapshot,
   isVisualizerDebugEnabled,
   setVisualizerDebugEnabled,
   type AudioAnalysisDiagnosticsSnapshot,
-} from '../../player/audio/analysisDiagnostics';
-import { usePlayerStore } from '../../stores/playerStore';
-import { useDownloadStore } from '../../stores/downloadStore';
-import * as offlineService from '../../services/offlineService';
+} from '../../audio/analysisDiagnostics';
 import { apiErrorTracker } from '../../utils/apiErrorTracker';
 import type { TrackedError } from '../../utils/apiErrorTracker';
 // Build timestamp injected by Vite at build time
@@ -74,15 +71,11 @@ if (typeof window !== 'undefined' && !(window as unknown as { __debugLogsSetup: 
 export function DebugSettings() {
   const [expanded, setExpanded] = useState(false);
   const [logs, setLogs] = useState<typeof logBuffer>([]);
-  const [offlineCount, setOfflineCount] = useState<number | null>(null);
   const [apiErrors, setApiErrors] = useState<TrackedError[]>([]);
   const [visualizerDebugEnabled, setVisualizerDebugEnabledState] = useState(isVisualizerDebugEnabled());
   const [visualizerDiagnostics, setVisualizerDiagnostics] = useState<AudioAnalysisDiagnosticsSnapshot>(
     getAudioAnalysisDiagnosticsSnapshot(),
   );
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const { jobs, activeJobId } = useDownloadStore();
 
   // Subscribe to API errors
   useEffect(() => {
@@ -95,23 +88,6 @@ export function DebugSettings() {
   }, []);
 
   // Refresh logs and offline count periodically when expanded
-  useEffect(() => {
-    if (!expanded) return;
-
-    const refreshData = async () => {
-      setLogs([...logBuffer]);
-      const ids = await offlineService.getOfflineTrackIds();
-      setOfflineCount(ids.length);
-      setVisualizerDiagnostics(getAudioAnalysisDiagnosticsSnapshot());
-    };
-
-    const interval = setInterval(refreshData, 500);
-
-    // Initial load
-    refreshData();
-
-    return () => clearInterval(interval);
-  }, [expanded]);
 
   const audioContext = getAudioContext();
   const analyser = getAudioAnalyser();
@@ -162,17 +138,17 @@ export function DebugSettings() {
   };
 
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-white rounded-lg p-4">
+    <div className="bg-zinc-800/50 rounded-lg p-4">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3"
       >
         <Bug className="w-5 h-5 text-orange-400" />
         <div className="flex-1 text-left">
-          <h4 className="font-medium text-white dark:text-white light:text-zinc-900">
+          <h4 className="font-medium text-white">
             Debug Info
           </h4>
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+          <p className="text-sm text-zinc-400">
             Build: {BUILD_TIME === 'dev' ? 'dev' : new Date(BUILD_TIME).toLocaleString()}
           </p>
         </div>
@@ -234,15 +210,12 @@ export function DebugSettings() {
                 {analyser ? 'exists' : 'null'}
               </div>
 
-              <div className="text-zinc-400">isPlaying:</div>
-              <div className={isPlaying ? 'text-green-400' : 'text-zinc-400'}>
-                {String(isPlaying)}
-              </div>
-
-              <div className="text-zinc-400">currentTrack:</div>
-              <div className="text-zinc-200 truncate">
-                {currentTrack ? currentTrack.title : 'none'}
-              </div>
+              {/*
+                `isPlaying` and `currentTrack` were reported here until ADR-0083. They described a
+                player the admin app has not had since ADR-0071 removed it, so both rows had been
+                showing `false` and `none` for every session — a diagnostic that could only ever
+                give one answer, on the screen people go to when something is wrong.
+              */}
             </div>
           </div>
 
@@ -338,58 +311,6 @@ export function DebugSettings() {
             )}
           </div>
           )}
-
-          {/* Download State */}
-          <div className="bg-zinc-900/50 rounded-lg p-3">
-            <h5 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              Download State
-            </h5>
-            <div className="grid grid-cols-2 gap-2 text-xs font-mono mb-3">
-              <div className="text-zinc-400">Offline tracks in DB:</div>
-              <div className="text-zinc-200">{offlineCount ?? 'loading...'}</div>
-
-              <div className="text-zinc-400">Active jobs:</div>
-              <div className="text-zinc-200">{jobs.size}</div>
-
-              <div className="text-zinc-400">Active job ID:</div>
-              <div className="text-zinc-200">{activeJobId || 'none'}</div>
-            </div>
-
-            {jobs.size > 0 && (
-              <div className="space-y-2">
-                {Array.from(jobs.values()).map((job) => (
-                  <div key={job.id} className="bg-zinc-800 rounded p-2 text-xs font-mono">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-zinc-300 font-medium truncate">{job.name}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-xs ${job.status === 'downloading' ? 'bg-blue-500/20 text-blue-400' :
-                        job.status === 'queued' ? 'bg-yellow-500/20 text-yellow-400' :
-                          job.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                            job.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                              'bg-zinc-500/20 text-zinc-400'
-                        }`}>
-                        {job.status}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1 text-zinc-400">
-                      <div>trackIds: {job.trackIds.length}</div>
-                      <div>completed: {job.completedIds.length}</div>
-                      <div>failed: {job.failedIds.length}</div>
-                      <div>progress: {job.currentProgress}%</div>
-                      <div className="col-span-2">currentTrack: {job.currentTrackId || 'none'}</div>
-                    </div>
-                    {job.error && (
-                      <div className="text-red-400 mt-1">{job.error}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {jobs.size === 0 && (
-              <div className="text-zinc-500 text-xs italic">No active download jobs</div>
-            )}
-          </div>
 
           {/* API Errors */}
           <div className="bg-zinc-900/50 rounded-lg p-3">
@@ -499,22 +420,6 @@ export function DebugSettings() {
                 className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs rounded"
               >
                 Log Test
-              </button>
-              <button
-                onClick={async () => {
-                  console.log('[Test] Checking IndexedDB...');
-                  try {
-                    const ids = await offlineService.getOfflineTrackIds();
-                    console.log('[Test] Offline track IDs:', ids.length, ids.slice(0, 5));
-                    const usage = await offlineService.getOfflineStorageUsage();
-                    console.log('[Test] Storage usage:', usage);
-                  } catch (e) {
-                    console.error('[Test] IndexedDB error:', e);
-                  }
-                }}
-                className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs rounded"
-              >
-                Check IndexedDB
               </button>
               <button
                 onClick={async () => {

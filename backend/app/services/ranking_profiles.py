@@ -116,9 +116,65 @@ RADIO = RankingProfile(
 )
 
 
+PLAYLIST = RankingProfile(
+    name="playlist",
+    # **A playlist is judged as a set, not as a sequence of transitions** (ADR-0048 point 4).
+    # `AMBIENT` and `RADIO` both answer "what should play *next*", and the ADR is explicit that
+    # reusing `RADIO` because it is nearby is how this ends up subtly wrong in a way nobody can
+    # name. Every difference below follows from that one distinction.
+    #
+    # `key` is **zero**, where radio keeps 0.10. Harmonic compatibility is a *mixing* concern: it
+    # matters when one track runs into the next without a gap. Nothing about a saved playlist plays
+    # that way — the listener may shuffle it, skip through it, or hear it a week later. Scoring
+    # tracks up for being in a compatible key with the seed would filter the library by something
+    # the listener will never perceive.
+    #
+    # `embedding` takes that weight and more, at 0.45. "A playlist based on this album" is a
+    # similarity question almost to the exclusion of everything else; the features exist to break
+    # ties among things that already sound alike.
+    #
+    # `energy` is 0.10 against ambient's much higher share, because ambient uses it to hold a
+    # requested intensity and this has no intensity to hold. The seven weights plus `taste_weight`
+    # are a convex combination summing to 1.0 — `_validate()` enforces it at import, and caught this
+    # profile at 1.05 on the first attempt.
+    weights={
+        "key": 0.0,
+        "energy": 0.10,
+        "embedding": 0.45,
+        "vocal": 0.0,
+        "brightness": 0.05,
+        "valence": 0.10,
+        "dr": 0.05,
+        # Not in WEIGHT_KEYS: taste is scored separately, see `taste_weight`.
+    },
+    # No intensity control on this surface — a button has no slider — so no overrides.
+    #
+    # **`bpm_penalty` is zero, and that is the clearest case of the point-4 trap.** Radio penalises
+    # a large tempo jump because an abrupt one is jarring *at the moment of transition*. A playlist
+    # spanning 70 and 140 BPM is not defective; a playlist that quietly excluded everything slow
+    # because the seed was fast would be.
+    #
+    # **`artist_cooldown_penalty` is zero because the constraint does this properly.**
+    # `_select_diverse_tracks`' `max_per_artist` is a hard cap on the finished set, which is what
+    # "don't give me eight tracks by one band" actually means. A soft per-candidate penalty
+    # approximates the same thing worse, and applying both would double-count.
+    quiet_energy_bonus=0.0,
+    minor_key_bonus=0.0,
+    # Taste weighs more than radio's 0.20. Radio is playing at you and should take risks; a playlist
+    # is something you asked for and will keep, so favouring what this listener actually plays is
+    # the right bias. Negative signal is carried over from radio unchanged — a skip means the same
+    # thing in both places.
+    taste_weight=0.25,
+    skip_penalty=0.08,
+    reject_penalty=0.25,
+    max_negative_penalty=0.40,
+)
+
+
 PROFILES: dict[str, RankingProfile] = {
     AMBIENT.name: AMBIENT,
     RADIO.name: RADIO,
+    PLAYLIST.name: PLAYLIST,
 }
 
 

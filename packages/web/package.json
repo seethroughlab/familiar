@@ -7,7 +7,6 @@
     "dev": "vite",
     "dev:remote": "VITE_API_TARGET=http://openmediavault:4400 vite",
     "build": "vite build",
-    "build:cap": "BUILD_TARGET=capacitor vite build",
     "check:bundle-budgets": "node ./scripts/check-bundle-budgets.mjs",
     "preview": "vite preview",
     "test:e2e": "playwright test",
@@ -18,7 +17,6 @@
     "@familiar/frontend": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-query": "^5.90.21",
-    "dexie": "^4.3.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -30,7 +28,6 @@
     "@types/node": "^24.10.1",
     "@vitejs/plugin-react": "^5.1.1",
     "typescript": "~5.9.3",
-    "vite": "^7.2.4",
-    "vite-plugin-pwa": "^1.2.0"
+    "vite": "^7.2.4"
   }
 }

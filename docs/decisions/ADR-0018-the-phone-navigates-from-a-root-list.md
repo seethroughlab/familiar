@@ -1,11 +1,20 @@
 # ADR-0018: The Phone Navigates From a Root List
 
-Status: accepted
+Status: accepted — points 1 and 5 superseded by
+[ADR-0042](ADR-0042-the-phone-gets-a-persistent-tab-bar.md)
 
 Date: 2026-08-02
 
 Extends [ADR-0012](ADR-0012-favorites-are-a-collection-not-a-library-section.md) and
 [ADR-0013](ADR-0013-the-mac-is-a-management-surface-too.md).
+
+**Partially superseded, and the split is worth reading before this one is cited.** ADR-0042 gives the
+phone a persistent tab bar, which replaces point 1's "rooted on a single list of destinations" and
+reverses point 5's acceptance of the extra tap — point 5 predicted that cost precisely and it turned
+out not to be worth paying. **Points 2, 3, 4, 6 and 7 stand unchanged**: the list itself survives
+intact as the More tab's content, with its grouping, its counts and its ADR-0012 point 1 collection
+group. Only where the list sits changes. Not marked `superseded by` outright for that reason — five
+of seven points are still in force, and a reader sent away from this file would lose them.
 
 Implementation:
 - Accepted 2026-08-02, shipped on `familiar-apple` `feat/phone-root-list` (#44) and confirmed on the

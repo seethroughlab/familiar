@@ -4,6 +4,10 @@ Re-exports all models and enums for backward compatibility.
 All existing imports like `from app.db.models import Track` continue to work.
 """
 
+from .albums import (
+    Album,
+    AlbumAlias,
+)
 from .artists import (
     Artist,
     ArtistAlias,
@@ -32,7 +36,6 @@ from .profiles import (
     ProfileFavorite,
     ProfilePlayHistory,
 )
-from .spotify import SpotifyImport
 from .tracks import ANALYSIS_FEATURE_COLUMNS, Track, TrackAnalysis, TrackVideo
 
 __all__ = [
@@ -45,6 +48,8 @@ __all__ = [
     "ChangeStatus",
     "TrackStatus",
     # Models
+    "Album",
+    "AlbumAlias",
     "Artist",
     "ArtistAlias",
     "ArtistCheckCache",
@@ -63,7 +68,6 @@ __all__ = [
     "ProfilePlayHistory",
     "ProposedChange",
     "SmartPlaylist",
-    "SpotifyImport",
     "Track",
     "TrackAnalysis",
     "TrackVideo",

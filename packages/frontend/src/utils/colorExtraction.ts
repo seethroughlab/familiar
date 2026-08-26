@@ -4,7 +4,6 @@
  * Extracts dominant colors from images using canvas sampling.
  */
 import { createLogger } from './logger';
-import { isNativeApp } from './platform';
 
 const log = createLogger('ColorExtraction');
 
@@ -18,14 +17,9 @@ async function loadImage(url: string): Promise<HTMLImageElement> {
   const img = new Image();
   img.crossOrigin = 'anonymous';
 
-  if (isNativeApp()) {
-    // eslint-disable-next-line no-restricted-globals -- CORS blob workaround for native iOS WKWebView
-    const res = await fetch(url);
-    const blob = await res.blob();
-    img.src = URL.createObjectURL(blob);
-  } else {
-    img.src = url;
-  }
+  // A blob workaround for the Capacitor WKWebView's CORS behaviour used to sit here. That app was
+  // deleted on 2026-08-11 (ADR-0001 point 6), and every remaining consumer is an ordinary browser.
+  img.src = url;
 
   return new Promise((resolve, reject) => {
     img.onload = () => resolve(img);

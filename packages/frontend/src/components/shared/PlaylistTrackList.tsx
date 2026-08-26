@@ -9,7 +9,6 @@
 import { useMemo, useCallback, useRef, useEffect, useLayoutEffect, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Music, X } from 'lucide-react';
-import { usePlayerStore } from '../../stores/playerStore';
 import { useColumnStore, getVisibleColumns } from '../../stores/columnStore';
 import { useLocalSort, useSortedTracks, buildGridColumns } from './PlaylistColumns';
 import { PlaylistColumnHeader } from './PlaylistColumnHeader';
@@ -18,11 +17,9 @@ import { useClientAlphabetBar } from './useClientAlphabetBar';
 import { AlphabetBar } from '../Library/AlphabetBar';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
 import { useTrackContextMenu } from '../../hooks/useTrackContextMenu';
-import { useOfflineStatus } from '../../hooks/useOfflineStatus';
-import { useOfflineTrackIds } from '../../hooks/useOfflineTrack';
 import { useScrollContainer } from '../../hooks/useScrollContainer';
 import { formatDuration } from '../../utils/format';
-import { FavoriteButton } from '../Library/browsers/trackList/FavoriteButton';
+import { FavoriteButton } from './FavoriteButton';
 import type { Track } from '../../types';
 import { resolveTrackRowIntent } from './trackRowInteraction';
 import { PlaylistRow, type TrackRowContext } from './PlaylistRow';
@@ -31,6 +28,19 @@ export type { TrackRowContext } from './PlaylistRow';
 export interface PlaylistTrackListProps<T> {
   /** The raw items to display (before sorting). */
   items: T[];
+  /**
+   * Which row to mark as current, and whether it is playing (ADR-0083 point 1).
+   *
+   * **Passed in rather than read from a store**, which is what this list used to do. It is rendered
+   * on `/embed`, where no player store is ever mounted — so the selectors returned nothing, no row
+   * ever highlighted, and the only lasting effect was to pin `playerStore` and the 1,016-line queue
+   * store behind it into a bundle that had no use for either.
+   *
+   * Both optional: a surface with no transport passes neither and no row is marked, which is
+   * correct rather than degraded.
+   */
+  currentTrackId?: string | null;
+  isPlaying?: boolean;
   /** Convert an item to a Track (for sorting, context menu, etc.). Return null for unsortable items. */
   getTrack: (item: T) => Track | null;
   /** Unique ID for each item (defaults to getTrack(item)?.id). */
@@ -109,21 +119,13 @@ export function PlaylistTrackList<T>({
   contextMenuOptions,
   sortPersistKey,
   defaultSortBy,
+  currentTrackId = null,
+  isPlaying = false,
 }: PlaylistTrackListProps<T>) {
-  const { isOffline } = useOfflineStatus();
-  const { offlineIds } = useOfflineTrackIds();
+  // Every item is visible. This used to hide anything not downloaded while offline; ADR-0071
+  // removed the download store, so there is no cached subset to filter to.
+  const visibleItems = items;
 
-  const visibleItems = useMemo(() => {
-    if (!isOffline) return items;
-    return items.filter((item) => {
-      const track = getTrack(item);
-      return !!track && offlineIds.has(track.id);
-    });
-  }, [isOffline, items, getTrack, offlineIds]);
-
-  // Player state
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
 
   // Scroll container for virtualization — prefer AppShell's shared scroll
   // container so the header above the track list scrolls away on mobile.
@@ -170,13 +172,13 @@ export function PlaylistTrackList<T>({
 
   // Auto-scroll to currently playing track
   useEffect(() => {
-    if (!currentTrack?.id) return;
+    if (!currentTrackId) return;
     const idx = sortedItems.findIndex((item) => {
       const track = getTrack(item);
-      return track?.id === currentTrack.id;
+      return track?.id === currentTrackId;
     });
     if (idx >= 0) virtualizer.scrollToIndex(idx, { align: 'center' });
-  }, [currentTrack?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentTrackId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Alphabet bar (client-side, no backend call needed)
   const scrollToIndex = useCallback((idx: number) => {
@@ -360,7 +362,7 @@ export function PlaylistTrackList<T>({
             const track = getTrack(item);
             const id = getItemId ? getItemId(item) : track?.id ?? '';
             const trackObj = track ?? { id, file_path: '', title: null, artist: null, album: null, album_artist: null, album_type: 'album' as const, track_number: null, disc_number: null, year: null, genre: null, duration_seconds: null, format: null, analysis_version: 0 };
-            const isCurrent = currentTrack?.id === (track?.id ?? id);
+            const isCurrent = currentTrackId !== null && currentTrackId === (track?.id ?? id);
             const selected = isSelected(id);
             const ctx = { item, track: trackObj, index: idx, isCurrentTrack: isCurrent, isPlaying, isSelected: selected } as TrackRowContext<T>;
             const extraRowClass = getRowClassName?.(ctx) ?? '';

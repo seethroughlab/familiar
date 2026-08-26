@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo } from 'react';
-import { usePlayerStore } from '../stores/playerStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useAppNavigation } from './useAppNavigation';
 import { useFavorites } from './useFavorites';
@@ -15,6 +14,15 @@ import type { Track } from '../types';
 interface UseTrackContextMenuOptions {
   /** Called to play the context menu track. Receives the track. */
   onPlay?: (track: Track) => void;
+  /**
+   * Queue mutation, supplied by a surface that owns a queue (ADR-0016 point 5).
+   *
+   * Both were `playerStore` selectors. On `/embed` that store is not mounted, so "Add to queue" and
+   * "Play next" wrote into a queue nothing played from — two menu items that did nothing, with no
+   * error. Absent means the items are not offered, which is the honest rendering.
+   */
+  addToQueue?: (track: Track) => void;
+  setQueue?: (tracks: Track[], startIndex: number) => void;
   /** Return true if the track is currently selected (for multi-select views). */
   isSelected?: (trackId: string) => boolean;
   /** Number of currently selected tracks (shows bulk actions when > 1). */
@@ -55,9 +63,13 @@ interface UseTrackContextMenuOptions {
 
 export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState>(initialContextMenuState);
-  const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const setQueue = usePlayerStore((s) => s.setQueue);
-  const { navigateToArtist, navigateToAlbumDetail } = useAppNavigation();
+  // `addToQueue` and `setQueue` came from `playerStore`. **The queue belongs to the native player**
+  // (ADR-0016 point 5), and this menu renders on `/embed`, where the store is not mounted — so both
+  // menu items wrote into a queue nothing plays from, and did nothing at all. Handed in by the
+  // surface that has a queue, or absent.
+  const addToQueue = options.addToQueue;
+  const setQueue = options.setQueue;
+  const { navigateToArtist, navigateToAlbum } = useAppNavigation();
   const { isFavorite, toggle: toggleFavorite } = useFavorites();
 
   const handleContextMenu = useCallback((track: Track, e: React.MouseEvent) => {
@@ -86,11 +98,11 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
     const effectiveSelectedCount = options.selectedCount ?? sel?.size;
 
     // Default bulk action callbacks (used when caller doesn't override)
-    const defaultPlaySelected = sel && options.resolveSelectedTracks && options.onClearSelection
+    const defaultPlaySelected = sel && options.resolveSelectedTracks && options.onClearSelection && setQueue
       ? () => {
           const tracks = options.resolveSelectedTracks!(sel);
           if (tracks.length > 0) {
-            setQueue(tracks, 0);
+            setQueue!(tracks, 0);
             options.onClearSelection!();
           }
         }
@@ -149,7 +161,9 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
           if (options.onQueue) {
             options.onQueue(track);
           } else {
-            addToQueue(track);
+            // Absent on a surface that owns no queue; the item simply does nothing rather than
+            // writing into a queue nothing plays from.
+            addToQueue?.(track);
           }
         }}
         onGoToArtist={() => {
@@ -167,7 +181,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
             const albumArtist = track.album_artist || track.artist;
             if (albumArtist && track.album) {
               options.beforeNavigate?.();
-              navigateToAlbumDetail(albumArtist, track.album);
+              navigateToAlbum(albumArtist, track.album);
             }
           }
         }}
@@ -181,11 +195,6 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
         }}
         onAddToPlaylist={() => {
           useUIStore.getState().openPlaylistPicker([track.id]);
-        }}
-        onMakePlaylist={() => {
-          const message = `Make me a playlist based on "${track.title || 'this track'}" by ${track.artist || 'Unknown Artist'}`;
-          options.beforeNavigate?.();
-          useUIStore.getState().triggerChat(message);
         }}
         onEditMetadata={() => {
           if (options.onEditMetadata) {
@@ -220,7 +229,7 @@ export function useTrackContextMenu(options: UseTrackContextMenuOptions = {}) {
     );
   }, [
     contextMenu, options, closeContextMenu, addToQueue, setQueue,
-    navigateToArtist, navigateToAlbumDetail, isFavorite, toggleFavorite,
+    navigateToArtist, navigateToAlbum, isFavorite, toggleFavorite,
   ]);
 
   return {

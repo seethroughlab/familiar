@@ -2,10 +2,10 @@
  * Contextual Mix Tape button for the playlist / smart-playlist detail views.
  *
  * State machine:
- *   - in-flight (pending / rendering)  → "Rendering Mix Tape…" with phase, disabled
- *   - ready                            → "Download Mix Tape"  (one-click download)
- *                                         + small "+" button to start a new render
- *   - failed or none                   → "Export Mix Tape" (opens the modal)
+ *   - in-flight (pending / rendering)  →"Rendering Mix Tape…" with phase, disabled
+ *   - ready                            →"Download Mix Tape"  (one-click download)
+ *                                         + small"+" button to start a new render
+ *   - failed or none                   →"Export Mix Tape" (opens the modal)
  *
  * The modal state is owned by the parent detail view (so right-click and
  * inline click both feed the same modal).
@@ -67,7 +67,7 @@ export function MixTapeButton({ source, trackCount, enforceMaxFifteen = false }:
     );
   }
 
-  // ── Ready: download primary, "+" secondary ─────────────────────────────────
+  // ── Ready: download primary,"+" secondary ─────────────────────────────────
   if (current && current.status === 'ready') {
     return (
       <>

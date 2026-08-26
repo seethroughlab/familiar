@@ -1,0 +1,52 @@
+name: Deploy site to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "screenshots/**"
+      - ".github/workflows/cloudflare-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # Named for where it deploys. It was `pages.yml` with a job called "Deploy Pages" while
+  # deploying to Cloudflare, which is how `site/README.md` came to describe GitHub Pages, a CNAME
+  # this repository does not contain, and DNS pointing at seethroughlab.github.io. ADR-0039 point 7
+  # fixed the README and left this, noting it was the only thing keeping the confusion alive.
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -R site/. _site/
+          cp -R screenshots _site/screenshots
+          # site/ is copied wholesale, so anything dropped in it ships. These are working
+          # files, not pages: the illustration prompts, the mark-extraction script, and the
+          # README describing the directory itself.
+          rm -rf _site/scripts _site/ILLUSTRATIONS.md _site/README.md
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          projectName: familiar-site
+          directory: _site
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

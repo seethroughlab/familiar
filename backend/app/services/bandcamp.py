@@ -1,10 +1,24 @@
-"""Bandcamp search service for finding albums to purchase."""
+"""Bandcamp search service for finding albums to purchase.
 
+**Search uses Bandcamp's own JSON endpoint, not the search page.** That page became a JavaScript
+shell: a request for `/search?q=ambient+drone` returns **HTTP 200 and about 3 KB containing no
+results at all**. The scraper that read it therefore matched nothing and returned an empty list —
+not once with an error, because a 200 with unfamiliar markup is not an exception. Both
+`search_bandcamp` and `recommend_bandcamp_purchases` had been answering "no results" for every
+query, indistinguishable from a genuinely empty search.
+
+`autocomplete_elastic` is what bandcamp.com's own front end calls. Album detail below still parses
+HTML, which still works — a release page is server-rendered where search no longer is.
+"""
+
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -24,7 +38,9 @@ class BandcampService:
     """Service for searching Bandcamp."""
 
     BASE_URL = "https://bandcamp.com"
-    SEARCH_URL = "https://bandcamp.com/search"
+    #: What bandcamp.com's own front end calls. The human-facing `/search` page renders its results
+    #: client-side and is not scrapable.
+    SEARCH_URL = "https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic"
 
     def __init__(self) -> None:
         self.client = httpx.AsyncClient(
@@ -50,91 +66,76 @@ class BandcampService:
         Returns:
             List of BandcampResult objects
         """
-        params = {
-            "q": query,
-            "item_type": item_type,
+        body = {
+            "search_text": query,
+            # The endpoint's `search_filter` uses the same letters this method already took.
+            "search_filter": item_type,
+            "full_page": False,
         }
 
         try:
-            response = await self.client.get(self.SEARCH_URL, params=params)
+            response = await self.client.post(self.SEARCH_URL, json=body)
             response.raise_for_status()
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            # Logged, not swallowed. Returning [] here is indistinguishable from "nothing matched",
+            # which is exactly how this integration stayed broken without anyone noticing.
+            logger.warning("Bandcamp search failed for %r: %r", query, exc)
             return []
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        results = []
+        try:
+            payload = response.json()
+        except ValueError:
+            logger.warning(
+                "Bandcamp search returned %d bytes that are not JSON — the endpoint has probably "
+                "changed. Query was %r.",
+                len(response.text),
+                query,
+            )
+            return []
 
-        # Find search result items
-        result_items = soup.select(".searchresult.data-search")
+        raw = (payload.get("auto") or {}).get("results") or []
+        results = [r for r in (self._parse_result(item) for item in raw[:limit]) if r]
 
-        for item in result_items[:limit]:
-            result = self._parse_result_item(item, item_type)
-            if result:
-                results.append(result)
-
+        if raw and not results:
+            # A response full of items that none of which parsed means the shape moved under us.
+            # Distinct from an empty search, and the caller must not see them as the same thing.
+            logger.warning(
+                "Bandcamp returned %d results for %r and none could be parsed — the response "
+                "shape has changed.",
+                len(raw),
+                query,
+            )
         return results
 
-    def _parse_result_item(self, item: Tag, item_type: str) -> BandcampResult | None:  # type: ignore[return]
-        """Parse a single search result item."""
+    def _parse_result(self, item: dict[str, Any]) -> "BandcampResult | None":
+        """Map one `autocomplete_elastic` result onto `BandcampResult`."""
         try:
-            # Get result type
-            result_class_raw: str | list[str] | None = item.get("class")
-            result_class: list[str] = [result_class_raw] if isinstance(result_class_raw, str) else list(result_class_raw or [])
-            if "album" in result_class:
-                rtype = "album"
-            elif "track" in result_class:
-                rtype = "track"
-            elif "band" in result_class:
-                rtype = "artist"
-            else:
-                rtype = "album"  # Default
-
-            # Get name
-            heading = item.select_one(".heading a")
-            name = heading.get_text(strip=True) if heading else None
-            url_attr = heading.get("href") if heading else None
-            url = str(url_attr) if url_attr else None
-
+            kind = {"a": "album", "t": "track", "b": "artist"}.get(str(item.get("type")), "album")
+            name = item.get("name")
+            # A band has no `item_url_path`; its page *is* the root.
+            url = item.get("item_url_path") or item.get("item_url_root")
             if not name or not url:
                 return None
 
-            # Get artist (for albums/tracks)
-            subhead = item.select_one(".subhead")
-            artist = None
-            if subhead:
-                artist_text = subhead.get_text(strip=True)
-                # Format is typically "by Artist Name"
-                if artist_text.startswith("by "):
-                    artist = artist_text[3:]
-                else:
-                    artist = artist_text
-
-            # Get image
-            art = item.select_one(".art img")
-            image_url_attr = art.get("src") if art else None
-            image_url = str(image_url_attr) if image_url_attr else None
-
-            # Get genre from tags
-            genre = None
-            tags = item.select(".tags .tag")
-            if tags:
-                genre = tags[0].get_text(strip=True)
-
-            # Get release date if available
-            release = item.select_one(".released")
-            release_date = release.get_text(strip=True).replace("released ", "") if release else None
-
+            tags = item.get("tag_names") or []
             return BandcampResult(
-                result_type=rtype,
-                name=name,
-                artist=artist,
-                album=None if rtype != "track" else None,  # For tracks, album is separate
-                url=url,
-                image_url=image_url,
-                genre=genre,
-                release_date=release_date,
+                result_type=kind,
+                # A band result names the band in `name` and has no `band_name`.
+                name=str(name),
+                artist=str(item["band_name"]) if item.get("band_name") else None,
+                album=str(item["album_name"]) if item.get("album_name") else None,
+                url=str(url),
+                image_url=str(item["img"]) if item.get("img") else None,
+                genre=(
+                    str(item.get("genre_name"))
+                    if item.get("genre_name")
+                    else (str(tags[0]) if tags else None)
+                ),
+                # Not carried by this endpoint. `get_album_details` has it for a specific release.
+                release_date=None,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - one malformed row must not lose the whole search
+            logger.warning("Could not parse a Bandcamp result: %r", item, exc_info=True)
             return None
 
     async def get_album_details(self, url: str) -> dict[str, Any] | None:  # type: ignore[return]

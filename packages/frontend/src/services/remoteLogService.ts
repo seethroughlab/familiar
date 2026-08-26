@@ -9,7 +9,7 @@
  * - Enabled by default; opt-out via localStorage.remoteLogging = 'false'
  * - Best-effort: all failures are silently swallowed
  */
-import { db, isIndexedDBAvailable, type RemoteLogEntry } from '../db';
+import type { RemoteLogEntry } from './remoteLogTypes';
 import { frontendLogsApi } from '../api';
 import { getSelectedProfileId } from './profileService';
 import { setLogSink } from '../utils/logger';
@@ -79,65 +79,30 @@ export function captureLog(level: string, namespace: string, args: unknown[]): v
 }
 
 /**
- * Flush in-memory buffer to IndexedDB.
- */
-async function flushToIDB(): Promise<void> {
-  if (buffer.length === 0) return;
-
-  const available = await isIndexedDBAvailable();
-  if (!available) {
-    buffer = [];
-    return;
-  }
-
-  const entries = buffer;
-  buffer = [];
-
-  try {
-    await db.remoteLogs.bulkAdd(entries);
-
-    // Prune if over local cap
-    const count = await db.remoteLogs.count();
-    if (count > LOCAL_CAP) {
-      const excess = count - LOCAL_CAP;
-      const oldest = await db.remoteLogs.orderBy('id').limit(excess).primaryKeys();
-      await db.remoteLogs.bulkDelete(oldest);
-    }
-  } catch {
-    // Best-effort: drop entries on failure
-  }
-}
-
-/**
- * Submit IDB entries to the backend and delete on success.
+ * Submit buffered entries to the backend.
+ *
+ * **No local database.** These used to be spooled into IndexedDB and drained from there, which
+ * made a log survive a page close. ADR-0071 removed that store, and the buffer flushes on a
+ * one-second timer and on `pagehide`, so what is lost is at most a second of diagnostics.
+ *
+ * Entries go back on the buffer if the request fails, so a transient outage does not lose them.
  */
 async function submitToBackend(): Promise<void> {
-  const available = await isIndexedDBAvailable();
-  if (!available) return;
+  if (buffer.length === 0) return;
 
-  let entries: RemoteLogEntry[];
-  try {
-    entries = await db.remoteLogs.orderBy('createdAt').limit(SUBMIT_BATCH).toArray();
-  } catch {
-    return;
-  }
-
-  if (entries.length === 0) return;
+  const entries = buffer.slice(0, SUBMIT_BATCH);
+  buffer = buffer.slice(entries.length);
 
   try {
-    const payload = entries.map((e) => ({
+    await frontendLogsApi.ingest(entries.map((e) => ({
       level: e.level,
       namespace: e.namespace,
       message: e.message,
       timestamp: e.createdAt.toISOString(),
       context: e.context,
-    }));
-
-    await frontendLogsApi.ingest(payload);
-    const ids = entries.map((e) => e.id!).filter(Boolean);
-    await db.remoteLogs.bulkDelete(ids);
+    })));
   } catch {
-    // Silent on failure -- best-effort
+    buffer = entries.concat(buffer).slice(-LOCAL_CAP);
   }
 }
 
@@ -145,34 +110,21 @@ async function submitToBackend(): Promise<void> {
  * Force an immediate flush + submit cycle. Used by the Settings UI.
  */
 export async function flushNow(): Promise<void> {
-  await flushToIDB();
   await submitToBackend();
 }
 
 /**
- * Get count of pending (unsent) log entries in IDB.
+ * Count of buffered entries not yet accepted by the backend.
  */
 export async function getPendingCount(): Promise<number> {
-  const available = await isIndexedDBAvailable();
-  if (!available) return 0;
-  try {
-    return await db.remoteLogs.count();
-  } catch {
-    return 0;
-  }
+  return buffer.length;
 }
 
 /**
- * Clear all local log entries from IDB.
+ * Drop everything buffered locally.
  */
 export async function clearLocalLogs(): Promise<void> {
-  const available = await isIndexedDBAvailable();
-  if (!available) return;
-  try {
-    await db.remoteLogs.clear();
-  } catch {
-    // Best-effort
-  }
+  buffer = [];
 }
 
 // Register as log sink so logger.ts doesn't need to import us (avoids circular dep)
@@ -191,7 +143,7 @@ export function initRemoteLogging(): () => void {
   getSelectedProfileId().then((id) => { cachedProfileId = id; }).catch(() => {});
 
   // Write buffer to IDB on a timer
-  writeTimer = setInterval(flushToIDB, WRITE_INTERVAL);
+  writeTimer = setInterval(submitToBackend, WRITE_INTERVAL);
 
   // Submit IDB entries to backend on a timer
   submitTimer = setInterval(submitToBackend, SUBMIT_INTERVAL);
@@ -199,14 +151,14 @@ export function initRemoteLogging(): () => void {
   // Flush on visibility change (catches iOS tab kills)
   const onVisibilityChange = () => {
     if (document.visibilityState === 'hidden') {
-      flushToIDB();
+      submitToBackend();
     }
   };
   document.addEventListener('visibilitychange', onVisibilityChange);
 
   // Flush + submit when coming back online
   const onOnline = () => {
-    flushToIDB().then(submitToBackend).catch(() => {});
+    submitToBackend().then(submitToBackend).catch(() => {});
   };
   window.addEventListener('online', onOnline);
 

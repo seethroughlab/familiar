@@ -1,4 +1,4 @@
-"""SyncMixin: Redis locks, run_sync, spotify_sync, maintenance."""
+"""SyncMixin: Redis locks, run_sync, maintenance."""
 
 from __future__ import annotations
 

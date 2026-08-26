@@ -12,7 +12,6 @@ export { DiscoveryGrid } from './DiscoveryGrid';
 export { DiscoverTrackList } from './DiscoverTrackList';
 
 // Curated prompts
-export { CuratedPrompts } from './CuratedPrompts';
 
 // Utility components
 export { DiscoveryLoading } from './DiscoveryLoading';
@@ -26,4 +25,3 @@ export { useArtistDiscovery } from './hooks/useArtistDiscovery';
 export { useTrackDiscovery } from './hooks/useTrackDiscovery';
 export { usePlaylistDiscovery } from './hooks/usePlaylistDiscovery';
 export { useLibraryDiscovery } from './hooks/useLibraryDiscovery';
-export { useSpotifyDiscovery } from './hooks/useSpotifyDiscovery';

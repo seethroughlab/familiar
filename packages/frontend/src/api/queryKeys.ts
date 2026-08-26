@@ -25,6 +25,15 @@ export const queryKeys = {
     detail: (trackId: string) => ['track-discover', trackId] as const,
   },
 
+  // ── Library ───────────────────────────────────────────────────────────
+  library: {
+    stats: () => ['library', 'stats'] as const,
+    playStats: (limit: number) => ['library', 'play-stats', limit] as const,
+    // Its own key, not part of `stats`: coverage stats one file per album (~4k on Jeff's library),
+    // and the dashboard should not pay for a filesystem sweep on every load.
+    artworkCoverage: () => ['library', 'artwork-coverage'] as const,
+  },
+
   // ── Albums ────────────────────────────────────────────────────────────
   albums: {
     all: ['library-albums'] as const,
@@ -97,9 +106,6 @@ export const queryKeys = {
   libraryDiscover: {
     all: ['library-discover'] as const,
   },
-  curatedPrompts: {
-    all: ['curated-prompts'] as const,
-  },
   newReleases: {
     all: ['new-releases'] as const,
     list: (params: { limit: number; offset: number; include_dismissed: boolean; include_owned: boolean }) =>
@@ -126,11 +132,6 @@ export const queryKeys = {
   },
   egoMap: {
     detail: (artist: string) => ['ego-map', artist] as const,
-  },
-
-  // ── Spotify ───────────────────────────────────────────────────────────
-  spotifyImport: {
-    all: ['spotify-import'] as const,
   },
 
   // ── Pending Review ──────────────────────────────────────────────────

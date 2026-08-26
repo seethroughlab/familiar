@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.api.deps import DbSession, RequiredProfile
-from app.api.exceptions import PlaylistNotFoundError, ValidationError
+from app.api.exceptions import PlaylistNotFoundError
 from app.api.routes._external_albums_schemas import (
     ExternalAlbumResponse,
     ExternalAlbumsResponse,
@@ -58,16 +58,19 @@ async def get_playlist_recommendations(
 ) -> RecommendationsResponse:
     """Get recommendations based on a playlist's content.
 
-    Only available for auto-generated (AI) playlists.
-    Uses Last.fm for similar artists/tracks, with Bandcamp as fallback.
+    Available for any playlist. Uses Last.fm for similar artists/tracks, with Bandcamp as fallback.
+
+    **This used to answer 400 unless the playlist was auto-generated**, on the assumption that a
+    generated playlist has richer semantics to seed from. It does not — recommendations come from the
+    tracks, and a hand-made playlist has tracks. The gate also contradicted the sibling endpoint
+    below, whose docstring had already noted it worked "for any playlist … unlike the sibling
+    ``/recommendations`` endpoint which is AI-only". Someone documented the inconsistency rather than
+    removing it; this removes it.
     """
     playlist = await db.get(Playlist, playlist_id)
 
     if not playlist or playlist.profile_id != profile.id:
         raise PlaylistNotFoundError()
-
-    if not playlist.is_auto_generated:
-        raise ValidationError("Recommendations only available for AI-generated playlists")
 
     service = RecommendationsService(db)
     try:

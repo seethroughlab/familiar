@@ -213,6 +213,34 @@ curl "http://localhost:4400/api/v1/tracks/{id}/artwork?size=thumb" -o cover.jpg
 
 Returns JPEG image with 1-year cache header.
 
+### Artwork Coverage
+
+```
+GET /artwork/coverage
+```
+
+How much of the library has real cover art (ADR-0058 phase 5).
+
+```json
+{
+  "total_albums": 3927,
+  "with_artwork": 3568,
+  "generated": 661,
+  "without_artwork": 359
+}
+```
+
+`total_albums` is counted the way `/library/albums` and `/library/stats` count, so all three agree.
+
+`generated` is a **subset of `with_artwork`**, not a fourth category: those albums have a thumbnail
+on disk, but it is a placeholder Familiar drew rather than a real cover. Real art is
+`with_artwork - generated`. Reporting them as covered would call a library with no real art at all
+fully covered.
+
+Artwork existence is a filesystem fact — no column records it — so this stats one thumbnail per
+album in a worker thread. Roughly 4k stat calls answer in under a second, but it is a separate
+endpoint from `/library/stats` so the dashboard does not sweep the disk on every load.
+
 ### Get Lyrics
 
 ```
@@ -374,13 +402,25 @@ curl "http://localhost:4400/api/v1/library/stats"
   "total_tracks": 1295,
   "total_albums": 156,
   "total_artists": 89,
-  "albums": 1100,
-  "compilations": 150,
-  "soundtracks": 45,
+  "albums": 1295,
+  "compilations": 0,
+  "soundtracks": 0,
   "analyzed_tracks": 1250,
-  "pending_analysis": 45
+  "pending_analysis": 45,
+  "pending_backfill": 0,
+  "pending_melodic": 0,
+  "pending_mood_tags": 0
 }
 ```
+
+The three totals count active tracks only, and agree with `/library/albums` and `/library/artists`
+— same grouping, same canonical tables. `tests/test_library_stats.py` asserts that agreement.
+
+**`albums`, `compilations` and `soundtracks` are deprecated and should not be displayed.** Nothing
+writes `Track.album_type`, so every row keeps the column default: `albums` always equals
+`total_tracks` and the other two are always `0`. This example previously showed `150` compilations
+and `45` soundtracks, which no instance has ever returned. They remain on the wire only because
+`library` is a generated tag (ADR-0007) and removing required fields breaks the Swift client.
 
 ### Start Library Sync
 

@@ -1,7 +1,6 @@
 import { memo, type ReactNode } from 'react';
 import { PlayIndicator } from '../common/PlayIndicator';
 import { getColumnDef } from '../Library/columnDefinitions';
-import { usePlayerStore } from '../../stores/playerStore';
 import type { Track } from '../../types';
 
 /** Context passed to render props for each track row. */
@@ -16,6 +15,8 @@ export interface TrackRowContext<T> {
 
 /** Props for the memoized row component. */
 export interface PlaylistRowProps {
+  /** Whether this row's audio is still loading. Optional — see the note in the body. */
+  isLoadingAudio?: boolean;
   id: string;
   virtualStart: number;
   virtualIndex: number;
@@ -74,7 +75,11 @@ export const PlaylistRow = memo(function PlaylistRow(props: PlaylistRowProps) {
     measureElement,
   } = props;
 
-  const isLoadingAudio = usePlayerStore((s) => s.isLoadingAudio);
+  // Was `usePlayerStore((s) => s.isLoadingAudio)`. This row renders on `/embed`, where no player
+  // store is mounted — so the pulse never fired there, and the only thing the selector achieved was
+  // to pin the whole player graph into a bundle that cannot play anything. A surface that knows
+  // about loading can pass it; none currently does.
+  const isLoadingAudio = props.isLoadingAudio ?? false;
   const loadingClass = isCurrentTrack && isLoadingAudio ? 'animate-pulse bg-green-500/5' : '';
   const selectedClass = isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : '';
   const currentClass = isCurrentTrack ? 'bg-zinc-800/30' : '';

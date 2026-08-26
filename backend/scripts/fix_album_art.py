@@ -43,7 +43,12 @@ async def fix_album_art(artist: str, album: str) -> None:
 
     from app.db.models import Track, TrackAnalysis, TrackStatus
     from app.db.session import async_session_maker
-    from app.services.artwork import ARTWORK_SIZES, compute_album_hash, get_artwork_path
+    from app.services.artwork import (
+        ARTWORK_SIZES,
+        album_key_for_track,
+        clear_generated_marker,
+        get_artwork_path,
+    )
     from app.services.tasks import run_track_enrichment
 
     print(f"Fixing album art for: {artist} - {album}")
@@ -91,12 +96,17 @@ async def fix_album_art(artist: str, album: str) -> None:
         print(f"Actual values: {actual_artist} - {actual_album}")
 
         # Step 2: Delete cached artwork
-        album_hash = compute_album_hash(actual_artist, actual_album)
-        print(f"\nAlbum hash: {album_hash}")
+        album_key = album_key_for_track(tracks[0])
+        print(f"\nAlbum key: {album_key}")
+
+        # The marker goes too. Deleting only the JPEGs left `.generated` behind, so the
+        # album still counted as generated art and `/artwork/regenerate` would refuse to
+        # replace whatever arrived next — a repair tool that quietly half-repaired.
+        clear_generated_marker(album_key)
 
         deleted_art = 0
         for size in ARTWORK_SIZES:
-            art_path = get_artwork_path(album_hash, size)
+            art_path = get_artwork_path(album_key, size)
             if art_path.exists():
                 art_path.unlink()
                 print(f"  Deleted: {art_path}")

@@ -188,7 +188,8 @@ Object.defineProperty(window, 'MediaMetadata', {
   writable: true,
 })
 
-// Mock indexedDB for Dexie tests
+// Mock indexedDB. Nothing in the app uses it since ADR-0071 removed the Dexie store; this
+// stays so a stray access in jsdom fails predictably rather than throwing on an undefined global.
 const indexedDBMock = {
   open: vi.fn(() => {
     const request = {

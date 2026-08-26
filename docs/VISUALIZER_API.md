@@ -1,575 +1,242 @@
 # Visualizer API
 
-Create custom audio visualizers for Familiar. Visualizers are React components that receive track metadata, audio features, real-time audio data, and timed lyrics.
+A visualizer is **a folder with an `index.html`**. Familiar loads it in its own sandboxed frame and
+posts it events. That is the whole contract.
 
-## Quick Start
+It lends you nothing — no React, no three.js, no globals. Whatever you build the document from is
+your business: a canvas, WebGL, shaders, p5, a `<video>`, or plain HTML.
 
-Create a new visualizer in `frontend/src/components/Visualizer/visualizers/`:
+> This replaces the previous contract, in which a visualizer was a React component registered onto
+> `window.Familiar` and evaluated inside the host page. See
+> [ADR-0087](decisions/ADR-0087-a-visualizer-is-a-document-not-a-component.md) for why it changed and
+> what it cost.
 
-```tsx
-import { Canvas, useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
-import { registerVisualizer, type VisualizerProps } from '../types';
-import { useAudioAnalyser, getAudioData } from '../hooks';
+## The smallest visualizer that works
 
-function Scene() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  useAudioAnalyser(true);
+```html
+<!doctype html>
+<meta charset="utf-8">
+<style>html,body{margin:0;height:100%;background:#000}canvas{display:block;width:100%;height:100%}</style>
+<canvas id="c"></canvas>
+<script>
+  const ctx = document.getElementById('c').getContext('2d');
+  let level = 0;
 
-  useFrame(() => {
-    const audioData = getAudioData();
-    if (meshRef.current && audioData) {
-      meshRef.current.scale.y = 1 + audioData.bass;
-    }
+  window.addEventListener('message', (event) => {
+    const message = event.data;
+    if (message?.type === 'familiar:audio') level = message.payload.bass;
   });
 
-  return (
-    <mesh ref={meshRef}>
-      <boxGeometry />
-      <meshBasicMaterial color="#a855f7" />
-    </mesh>
-  );
-}
+  (function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 10000, 10000);
+    ctx.fillStyle = '#0af';
+    ctx.fillRect(0, 0, 10000, level * 400);
+    requestAnimationFrame(draw);
+  })();
 
-export function MyVisualizer(props: VisualizerProps) {
-  return (
-    <Canvas camera={{ position: [0, 0, 5] }}>
-      <Scene />
-    </Canvas>
-  );
-}
-
-// Register the visualizer
-registerVisualizer(
-  {
-    id: 'my-visualizer',
-    name: 'My Visualizer',
-    description: 'A custom audio visualizer',
-    usesMetadata: false,
-  },
-  MyVisualizer
-);
+  // Last, once you are listening.
+  parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
+</script>
 ```
 
-Then import it in `frontend/src/components/Visualizer/visualizers/index.ts`:
+No build step, no dependencies, no imports. Drop that in a folder with a manifest and it is a
+visualizer.
 
-```tsx
-import './MyVisualizer';
+## The folder
+
+```
+my-visualizer/
+  familiar-plugin.json    required
+  index.html              required — the entry point
+  …anything else          your JS, CSS, models, shaders, images
 ```
 
-Your visualizer will appear in the visualizer picker.
-
----
-
-## VisualizerProps
-
-Props passed to every visualizer component.
-
-```typescript
-interface VisualizerProps {
-  // === Playback State ===
-  currentTime: number;    // Current playback position in seconds
-  duration: number;       // Track duration in seconds
-  isPlaying: boolean;     // Whether audio is currently playing
-
-  // === Track Metadata ===
-  track: Track | null;    // Full track object, null if nothing playing
-
-  // === Audio Analysis ===
-  features: TrackFeatures | null;  // BPM, key, energy, etc.
-
-  // === Media ===
-  artworkUrl: string | null;       // Album artwork URL
-  lyrics: LyricLine[] | null;      // Time-synced lyrics
+```json
+{
+  "name": "My Visualizer",
+  "id": "my-visualizer",
+  "version": "1.0.0",
+  "type": "visualizer",
+  "description": "One line, shown in the picker.",
+  "author": { "name": "You" },
+  "main": "index.html",
+  "familiar": { "apiVersion": 1 },
+  "icon": "Sparkles",
+  "affinity": { "tags": [], "ranges": [] }
 }
 ```
 
----
+`id` must be lowercase letters, digits and hyphens — it goes in a URL. `apiVersion` is the version of
+*this event contract*; a manifest declaring one the host does not implement is refused with a reason
+shown in the picker rather than loaded and left to fail.
 
-## Data Types
+## The events
 
-### Track
+Three come in. One goes out.
 
-```typescript
-interface Track {
-  id: string;
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  album_artist: string | null;
-  album_type: 'album' | 'compilation' | 'soundtrack';
-  track_number: number | null;
-  disc_number: number | null;
-  year: number | null;
-  genre: string | null;
-  duration_seconds: number | null;
-  format: string | null;           // mp3, flac, m4a, etc.
-  analysis_version: number;
-  features?: TrackFeatures;
-}
+### `familiar:ready` — you → Familiar
+
+Send it once, **after** you have attached your `message` listener. Familiar does not post anything
+until it arrives, so a visualizer that sends it too early misses the first track, and one that never
+sends it receives nothing at all.
+
+```js
+parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
 ```
 
-### TrackFeatures
+### `familiar:track` — the track changed
 
-Audio analysis data (available when track has been analyzed):
-
-```typescript
-interface TrackFeatures {
-  bpm: number | null;              // Tempo in beats per minute
-  key: string | null;              // Musical key (e.g., "Am", "C#")
-  energy: number | null;           // 0-1, calm to energetic
-  danceability: number | null;     // 0-1, suitability for dancing
-  valence: number | null;          // 0-1, sad to happy
-  acousticness: number | null;     // 0-1, acoustic vs electronic
-  instrumentalness: number | null; // 0-1, vocals vs instrumental
-  speechiness: number | null;      // 0-1, spoken word presence
-}
-```
-
-### LyricLine
-
-```typescript
-interface LyricLine {
-  time: number;   // Start time in seconds
-  text: string;   // Lyric text
-}
-```
-
----
-
-## Hooks
-
-Import from `../hooks`:
-
-```typescript
-import {
-  useAudioAnalyser,
-  getAudioData,
-  useArtworkPalette,
-  useBeatSync,
-  useLyricTiming,
-} from '../hooks';
-```
-
-### useAudioAnalyser
-
-Real-time audio frequency data from Web Audio API.
-
-```typescript
-const audioData = useAudioAnalyser(enabled: boolean = true);
-```
-
-**Returns:**
-
-```typescript
-interface AudioAnalysisData {
-  frequencyData: Uint8Array;    // Raw frequency bins (0-255 per bin)
-  timeDomainData: Uint8Array;   // Waveform data (centered at 128)
-  bass: number;                 // 0-1, low frequency intensity
-  mid: number;                  // 0-1, mid frequency intensity
-  treble: number;               // 0-1, high frequency intensity
-  averageFrequency: number;     // 0-255, overall intensity
-}
-```
-
-**Example:**
-
-```tsx
-function MyScene() {
-  const audioData = useAudioAnalyser(true);
-
-  // Use in render (triggers re-renders)
-  const scale = 1 + (audioData?.bass ?? 0);
-
-  return <mesh scale={scale}>...</mesh>;
-}
-```
-
-### getAudioData
-
-Synchronous access to audio data for use in Three.js `useFrame` (doesn't trigger re-renders).
-
-```typescript
-const audioData = getAudioData();
-```
-
-**Example:**
-
-```tsx
-function MyScene() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  useAudioAnalyser(true);  // Enable analysis
-
-  useFrame(() => {
-    const audioData = getAudioData();
-    if (meshRef.current && audioData) {
-      meshRef.current.scale.y = 1 + audioData.bass * 2;
-    }
-  });
-
-  return <mesh ref={meshRef}>...</mesh>;
-}
-```
-
-### useArtworkPalette
-
-Extract dominant colors from album artwork.
-
-```typescript
-const palette = useArtworkPalette(
-  artworkUrl: string | null,
-  numColors: number = 5
-): string[];
-```
-
-**Returns:** Array of hex color strings (e.g., `['#a855f7', '#06b6d4', ...]`)
-
-**Example:**
-
-```tsx
-function MyVisualizer({ artworkUrl }: VisualizerProps) {
-  const palette = useArtworkPalette(artworkUrl);
-
-  return (
-    <Canvas>
-      <mesh>
-        <meshBasicMaterial color={palette[0]} />
-      </mesh>
-    </Canvas>
-  );
-}
-```
-
-### useBeatSync
-
-Synchronize animations with detected BPM.
-
-```typescript
-const beatData = useBeatSync(
-  bpm: number | null | undefined,
-  currentTime: number
-): BeatSyncData;
-```
-
-**Returns:**
-
-```typescript
-interface BeatSyncData {
-  beat: number;         // Current beat number (0, 1, 2, ...)
-  beatProgress: number; // Progress through current beat (0-1)
-  onBeat: boolean;      // True when a new beat just started
-  bpm: number;          // Effective BPM (120 if not detected)
-  beatDuration: number; // Seconds per beat
-}
-```
-
-**Example:**
-
-```tsx
-function MyVisualizer({ features, currentTime }: VisualizerProps) {
-  const { beatProgress, onBeat, bpm } = useBeatSync(features?.bpm, currentTime);
-
-  // Pulse on each beat
-  const scale = onBeat ? 1.2 : 1 + beatProgress * 0.1;
-
-  // Smooth sine wave synced to beat
-  const pulse = Math.sin(beatProgress * Math.PI);
-
-  return <div style={{ transform: `scale(${scale})` }}>...</div>;
-}
-```
-
-### useLyricTiming
-
-Get current and upcoming lyric lines.
-
-```typescript
-const lyricData = useLyricTiming(
-  lyrics: LyricLine[] | null,
-  currentTime: number
-): LyricTimingData;
-```
-
-**Returns:**
-
-```typescript
-interface LyricTimingData {
-  currentLine: LyricLine | null;  // Current line being sung
-  currentIndex: number;           // Index in lyrics array
-  nextLine: LyricLine | null;     // Upcoming line
-  progress: number;               // 0-1 progress through current line
-  timeToNext: number;             // Seconds until next line
-  words: string[];                // Individual words from current line
-  hasLyrics: boolean;             // Whether lyrics are available
-}
-```
-
-**Example:**
-
-```tsx
-function LyricDisplay({ lyrics, currentTime }: VisualizerProps) {
-  const { currentLine, nextLine, progress, hasLyrics } = useLyricTiming(lyrics, currentTime);
-
-  if (!hasLyrics) {
-    return <div>No lyrics available</div>;
+```ts
+{
+  type: 'familiar:track',
+  apiVersion: 1,
+  payload: {
+    id: string | null,
+    title: string | null,
+    artist: string | null,
+    album: string | null,
+    artworkUrl: string | null,   // load it directly; it is a normal URL
+    duration: number,            // seconds
+    features: {                  // null when the track has not been analysed
+      bpm?: number, key?: string, energy?: number, valence?: number,
+      danceability?: number, acousticness?: number, /* … */
+    } | null,
+    lyrics: Array<{ text: string, startTime: number, endTime?: number }> | null,
   }
-
-  return (
-    <div>
-      <div style={{ opacity: 1 - progress * 0.5 }}>
-        {currentLine?.text}
-      </div>
-      <div style={{ opacity: progress * 0.5 }}>
-        {nextLine?.text}
-      </div>
-    </div>
-  );
 }
 ```
 
----
+### `familiar:state` — transport
 
-## Rendering Approaches
+```ts
+{ type: 'familiar:state', apiVersion: 1, payload: { isPlaying: boolean, currentTime: number } }
+```
 
-### Three.js (3D)
+`currentTime` is seconds, and it is the playhead you should sync to.
 
-Best for: particle systems, 3D shapes, shader effects, GPU-accelerated animations.
+### `familiar:audio` — an analysis frame
 
-```tsx
-import { Canvas, useFrame } from '@react-three/fiber';
-import { useAudioAnalyser, getAudioData } from '../hooks';
+Sent on the host's animation loop while something is playing.
 
-function Scene() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  useAudioAnalyser(true);
-
-  useFrame((_, delta) => {
-    const audioData = getAudioData();
-    if (meshRef.current && audioData) {
-      meshRef.current.rotation.y += delta * (1 + audioData.mid);
-      meshRef.current.scale.setScalar(1 + audioData.bass);
-    }
-  });
-
-  return (
-    <mesh ref={meshRef}>
-      <icosahedronGeometry args={[1, 2]} />
-      <meshStandardMaterial color="#a855f7" wireframe />
-    </mesh>
-  );
-}
-
-export function MyVisualizer(props: VisualizerProps) {
-  return (
-    <Canvas camera={{ position: [0, 0, 5] }}>
-      <ambientLight intensity={0.5} />
-      <Scene />
-    </Canvas>
-  );
+```ts
+{
+  type: 'familiar:audio',
+  apiVersion: 1,
+  payload: {
+    bass: number,             // 0..1
+    mid: number,              // 0..1
+    treble: number,           // 0..1
+    averageFrequency: number, // 0..255
+    frequencyData: number[],  // 0..255 per bin
+    beat: number,             // 0..1 — spikes on an onset, then decays
+    onset: boolean,           // true only on the frame a transient is detected
+  }
 }
 ```
 
-**See:** `CosmicOrb.tsx`, `FrequencyBars.tsx`, `AlbumKaleidoscope.tsx`, `LyricStorm.tsx`
+**`beat` and `onset` are what you want for anything rhythmic.** `bass` follows the low end
+continuously, which is not the same thing: a track with a sustained bass note holds `bass` high and
+produces no beats at all. `beat` is an envelope that spikes and falls, so it reads as pulse; `onset`
+is a single-frame flag, which is what you spawn a ripple or flip a tile on.
 
-### Canvas 2D
+These two were missing from the first version of this contract while the host computed them all
+along — so a visualizer keying off them rendered perfectly and never moved. If you are debugging a
+plugin that looks frozen, log the payload before assuming your own maths is wrong.
 
-Best for: custom drawing, text effects, pixel manipulation.
+**Already smoothed.** Frames reach the host from a native player at about 10 Hz — macOS clamps the
+audio tap — and the host reconstructs a 60 Hz signal before sending. You do not need to interpolate
+it again, and doing so will make you late.
 
-```tsx
-import { useRef, useEffect } from 'react';
-import { useAudioAnalyser } from '../hooks';
+## You are obliged to receive, never to implement
 
-export function MyVisualizer({ currentTime }: VisualizerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioData = useAudioAnalyser(true);
+A visualizer that ignores every event and draws a still image is a valid visualizer. There is no
+lifecycle to satisfy, nothing to return, and no function you must export. Listen for what you want
+and ignore the rest.
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas) return;
+## Three things that will bite you
 
-    ctx.fillStyle = '#0a0015';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+These are not style advice. Each one produced a visualizer that loaded and drew nothing, and each
+took real time to diagnose because the failure is invisible from outside the frame.
 
-    // Draw frequency bars
-    if (audioData?.frequencyData) {
-      const barWidth = canvas.width / 64;
-      for (let i = 0; i < 64; i++) {
-        const value = audioData.frequencyData[i] / 255;
-        const hue = (i / 64) * 60 + 260;
-        ctx.fillStyle = `hsl(${hue}, 80%, 50%)`;
-        ctx.fillRect(
-          i * barWidth,
-          canvas.height - value * canvas.height,
-          barWidth - 1,
-          value * canvas.height
-        );
-      }
-    }
-  }, [audioData]);
+### 1. Use a classic script, not a module
 
-  return <canvas ref={canvasRef} width={800} height={600} className="w-full h-full" />;
+```html
+<script src="./app.js"></script>          <!-- yes -->
+<script type="module" src="./app.js"></script>   <!-- no -->
+```
+
+Your document has an **opaque origin**, because it is sandboxed without `allow-same-origin`. Module
+scripts are always fetched with CORS, so the request arrives as `Origin: null` and is refused —
+including for a file sitting in your own folder. If you use a bundler, build to an IIFE.
+
+An *inline* `<script>` has no such problem, which is why the smallest example above works and a
+bundled one may not.
+
+### 2. Anything you `fetch` needs CORS headers
+
+Same cause, wider effect. `fetch`, `XMLHttpRequest`, and therefore any loader built on them —
+`GLTFLoader`, a shader fetched at runtime, a JSON config — are CORS-checked and will fail against a
+server that does not send `Access-Control-Allow-Origin`.
+
+Familiar's own loader sends it for files in your folder, so a model beside your `index.html` loads
+fine. A file from somewhere else depends on that host's headers.
+
+`<script src>`, `<img>`, `<link rel="stylesheet">` and `<video>` are **not** CORS-checked. If you can
+express a dependency as one of those, it will always work.
+
+### 3. Bundlers and `process.env.NODE_ENV`
+
+If you bundle a library that reads `process.env.NODE_ENV` — React does — a library-mode build will
+not define it, and your bundle throws `process is not defined` on its first line. In Vite:
+
+```ts
+define: { 'process.env.NODE_ENV': '"production"' }
+```
+
+## Affinity — what your visualizer suits
+
+Optional. Declares what a track should be like for the server to pick you when the listener has
+"Match to the Music" on ([ADR-0064](decisions/ADR-0064-visualizers-declare-affinity-and-the-server-ranks-them.md)).
+
+```json
+"affinity": {
+  "tags": ["danceable", "drums", "funk"],
+  "ranges": [{ "feature": "danceability", "minimum": 0.5 }]
 }
 ```
 
-**See:** `TypographyWave.tsx`
+Declaring nothing scores neutral, which is the honest answer for a visualizer that suits anything —
+not last place. A tag or feature the server does not recognise is ignored and reported in the picker
+rather than failing the manifest.
 
-### HTML/CSS
+## Installing
 
-Best for: text-heavy visualizers, simple animations, accessibility.
+Put the folder in Familiar's `Visualizers` directory — Settings has a button that reveals it — and
+reopen the visualizer. There is no install-from-URL
+([ADR-0034](decisions/ADR-0034-visualizers-are-drop-in-bundles.md) point 5).
 
-```tsx
-import { useAudioAnalyser, useLyricTiming } from '../hooks';
+A folder with no manifest is ignored silently, because that directory accumulates `.DS_Store` and
+half-unzipped archives. A folder *with* a manifest that cannot be used is reported in the picker,
+with the reason.
 
-export function MyVisualizer({ track, lyrics, currentTime }: VisualizerProps) {
-  const audioData = useAudioAnalyser(true);
-  const { currentLine } = useLyricTiming(lyrics, currentTime);
+## When it does not appear
 
-  const bass = audioData?.bass ?? 0;
-  const scale = 1 + bass * 0.1;
-  const glow = 10 + bass * 30;
+- **Not in the picker at all** — no `familiar-plugin.json`, or it is not valid JSON.
+- **Listed with a reason** — the manifest parsed but was refused; the reason says which part.
+- **Listed but blank** — the document loaded and drew nothing. Almost always one of the three traps
+  above. Open the folder's `index.html` directly in a browser: everything except the events works
+  there, and the console will show you the CORS or `process` error.
+- **Draws but never moves** — you are probably not sending `familiar:ready`, so no events follow.
 
-  return (
-    <div className="flex items-center justify-center h-full bg-[#0a0015]">
-      <h1
-        className="text-6xl font-bold text-purple-500"
-        style={{
-          transform: `scale(${scale})`,
-          textShadow: `0 0 ${glow}px #a855f7`,
-        }}
-      >
-        {currentLine?.text || track?.title || 'No Track'}
-      </h1>
-    </div>
-  );
-}
-```
+## What Familiar guarantees, and what it does not
 
-**See:** `LyricPulse.tsx`
+**Guaranteed:** your document is loaded from your folder, its files are served with CORS headers, and
+the four events keep the shapes above for as long as `apiVersion` is 1.
 
----
-
-## Post-Processing Effects
-
-Add bloom, vignette, and audio-reactive effects using the `AudioReactiveEffects` component:
-
-```tsx
-import { AudioReactiveEffects } from '../effects/AudioReactiveEffects';
-
-function MyScene() {
-  return (
-    <>
-      {/* Your scene content */}
-      <mesh>...</mesh>
-
-      {/* Add post-processing */}
-      <AudioReactiveEffects
-        enableBloom
-        enableVignette
-        bloomIntensity={1.5}
-        bloomThreshold={0.6}
-        vignetteIntensity={0.4}
-      />
-    </>
-  );
-}
-```
-
-**Props:**
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `enableBloom` | boolean | true | Enable bloom/glow effect |
-| `enableVignette` | boolean | true | Enable vignette darkening |
-| `bloomIntensity` | number | 1.0 | Bloom strength (audio-reactive) |
-| `bloomThreshold` | number | 0.85 | Brightness threshold for bloom |
-| `bloomRadius` | number | 0.5 | Bloom spread radius |
-| `vignetteIntensity` | number | 0.5 | Vignette darkness |
-
-Effects automatically react to bass and average frequency.
-
----
-
-## Registration
-
-Register your visualizer at the bottom of your file:
-
-```typescript
-import { registerVisualizer, type VisualizerProps } from '../types';
-
-registerVisualizer(
-  {
-    id: 'my-visualizer',           // Unique ID (kebab-case)
-    name: 'My Visualizer',         // Display name in picker
-    description: 'A cool effect',  // Short description
-    usesMetadata: true,            // true if using track/artwork/lyrics
-    author: 'Your Name',           // Optional: for community visualizers
-  },
-  MyVisualizer
-);
-```
-
----
-
-## Existing Visualizers
-
-| Visualizer | Description | Key Features |
-|------------|-------------|--------------|
-| `CosmicOrb` | Glowing orb with particle field | GPU particles, custom shaders, waveform ring |
-| `FrequencyBars` | Spectrum analyzer | 128 bars, gradient colors, reflective floor |
-| `AlbumKaleidoscope` | Kaleidoscope from artwork | Shader-based mirroring, twist effects, sparkles |
-| `ColorFlow` | Flowing color particles | Palette extraction, flow field, glowing rings |
-| `LyricStorm` | 3D floating lyrics | drei Text, depth sorting, current line highlight |
-| `LyricPulse` | Pulsing current lyric | BPM sync, glow effects, progress bar |
-| `TypographyWave` | Animated text waves | Canvas 2D, per-character animation |
-
----
-
-## Guidelines
-
-1. **Handle null props** - Track, features, artwork, and lyrics may be null
-2. **Clean up resources** - Return cleanup function from useEffect
-3. **Use getAudioData() in useFrame** - Avoids triggering React re-renders
-4. **Keep files small** - Target under 50KB per visualizer
-5. **No external APIs** - Use only provided data
-6. **Test with various tracks** - Different genres, with/without lyrics
-
----
-
-## Performance Tips
-
-1. **Use useMemo** for geometry and materials:
-   ```tsx
-   const geometry = useMemo(() => new THREE.BoxGeometry(1, 1, 1), []);
-   ```
-
-2. **Update uniforms, not geometry** in animations:
-   ```tsx
-   useFrame(() => {
-     materialRef.current.uniforms.uTime.value = clock.elapsedTime;
-   });
-   ```
-
-3. **Limit particle counts** based on device:
-   ```tsx
-   const particleCount = window.devicePixelRatio > 1 ? 5000 : 2000;
-   ```
-
-4. **Use getAudioData()** in useFrame to avoid re-renders
-
-5. **Respect reduced motion**:
-   ```tsx
-   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-   ```
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create your visualizer in `visualizers/community/`
-3. Copy `_template/ExampleVisualizer.tsx` as a starting point
-4. Test with various music (different genres, with/without lyrics)
-5. Submit a PR with a screenshot or GIF
-
-See the [template README](../frontend/src/components/Visualizer/visualizers/_template/README.md) for detailed instructions.
+**Not guaranteed:** anything about libraries. Familiar ships no THREE, no React, no drei for you to
+borrow, and there is no shared folder to load them from
+([ADR-0087](decisions/ADR-0087-a-visualizer-is-a-document-not-a-component.md) point 7). Bundle what
+you need. The visualizers Familiar ships do exactly that, and are worth reading as worked examples —
+`spectrum` is 106 lines of canvas with no build step at all; `beat-tiles` is a three.js scene that
+carries its own copy.

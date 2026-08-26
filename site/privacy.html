@@ -17,8 +17,8 @@
   </a>
   <div class="topnav-links">
     <a href="./#features">Features</a>
-    <a href="./#ask">Ask</a>
-    <a href="./#faq">FAQ</a>
+    <a href="./#features">Ask</a>
+    <a href="./faq.html">FAQ</a>
     <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
     <a href="./#install" class="topnav-install">Install</a>
   </div>
@@ -49,7 +49,7 @@
 <section>
   <h2>Data sent to third parties (only when you opt in)</h2>
   <ul>
-    <li><strong>Anthropic (Claude API)</strong> — when you use the AI chat feature, your prompt and conversation context are sent to Anthropic for processing. Subject to <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic's privacy policy</a>. Familiar does not retain these messages beyond what the backend you control stores.</li>
+    <li><strong>Your own AI assistant, if you connect one</strong> — Familiar holds no API key and calls no model. It exposes an MCP server, and an MCP host you run and configure — Claude Desktop, say — connects to it on your behalf. Anything you type goes from that host to whichever provider you have signed in to, on your account and under their privacy policy, not through Familiar. What crosses the connection from Familiar's side is the answers to the tool calls your host makes: search results, track and playlist metadata, playback state. Never audio.</li>
     <li><strong>Last.fm</strong> — if you connect a Last.fm account, Familiar scrobbles now-playing metadata (artist, title, duration) to <code>ws.audioscrobbler.com</code>.</li>
     <li><strong>LRCLIB</strong> — synced lyrics are fetched from <code>lrclib.net</code> by track title / artist / album / duration.</li>
     <li><strong>MusicBrainz and Cover Art Archive</strong> — used for metadata and artwork lookups; only the fields named are sent.</li>

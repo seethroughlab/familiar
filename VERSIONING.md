@@ -219,18 +219,39 @@ The version is exposed via:
 - Settings UI (bottom of System Status panel)
 - FastAPI OpenAPI docs
 
-## Analysis Version
+## Analysis Versions
 
-Separate from the app version, `ANALYSIS_VERSION` tracks the audio analysis pipeline:
+Separate from the app version, the analysis pipeline is versioned **per phase**. There is no single
+`ANALYSIS_VERSION` — it was split so that changing one phase does not re-run the others:
 
 ```python
 # backend/app/config.py
-ANALYSIS_VERSION = 3
+FEATURES_VERSION = 8    # librosa scalars, key, loudness, VAD
+EMBEDDING_VERSION = 6   # CLAP 512-dim embeddings
+MELODIC_VERSION = 6     # basic-pitch MIDI transcription
+GENERATIVE_ART_VERSION = 4
+MOOD_TAGS_VERSION = 1
 ```
 
-**When to bump:** When analysis output changes (new features extracted, algorithm changes).
+**Bump only the phase that changed.** Each constant has a history comment beside it in `config.py`
+recording what every prior version altered; add a line there when bumping.
 
-Bumping this version causes all tracks to be re-analyzed on next library scan.
+`Settings.analysis_version` also exists in `config.py` and is **dead** — nothing reads it. The
+backward-compatible `Track.analysis_version` property returns `analyses[0].features_version`.
+
+**What a bump actually does.** Nothing, on its own. Re-analysis is driven by
+`queue_tracks_for_features()` (`app/services/tasks/analysis_queue.py`), which selects tracks whose
+`features_version` is behind — and that only runs during a **library sync**. There is no scheduler
+for it.
+
+**Budget before bumping `FEATURES_VERSION`.** Analysis runs on a single worker
+(`max_analysis_workers = 1`) with `max_tasks_per_child=1`, so every track pays a fresh interpreter
+spawn, and the features phase aborts after 8 hours — a large library needs several consecutive syncs
+to finish. The pass also re-runs AcoustID fingerprinting and a MusicBrainz lookup rate-limited to
+1 req/s, so for a library in the tens of thousands the network I/O, not the DSP, tends to dominate.
+
+**A features bump does not recompute embeddings or melodic data** — those gate on their own
+constants, so they are skipped while `EMBEDDING_VERSION` and `MELODIC_VERSION` are unchanged.
 
 ## When to Release
 

@@ -28,25 +28,6 @@ export function isIOS(): boolean {
 }
 
 /**
- * Check if the app is running as a PWA (installed to home screen).
- */
-export function isPWA(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  // iOS PWA detection
-  if ('standalone' in navigator && (navigator as Navigator & { standalone: boolean }).standalone) {
-    return true;
-  }
-
-  // Android/Desktop PWA detection
-  if (window.matchMedia('(display-mode: standalone)').matches) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
  * Check if the app is running on mobile (iOS or Android).
  */
 export function isMobile(): boolean {
@@ -57,21 +38,11 @@ export function isMobile(): boolean {
 }
 
 /**
- * Check if the app is running as a Capacitor native app.
- */
-export function isNativeApp(): boolean {
-  if (typeof window === 'undefined') return false;
-
-  return !!(window as unknown as Record<string, unknown>).Capacitor &&
-    (window as unknown as { Capacitor: { isNativePlatform?: () => boolean } })
-      .Capacitor.isNativePlatform?.() === true;
-}
-
-/**
  * Check if background downloads are supported.
  * Returns true for desktop browsers, false for iOS.
  */
 export function supportsBackgroundDownloads(): boolean {
-  // iOS doesn't support background downloads in PWAs
+  // iOS Safari suspends a backgrounded tab's transfers. This was written about PWAs; it is just
+  // as true of a plain tab, which is all there is since ADR-0059.
   return !isIOS();
 }

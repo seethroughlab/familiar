@@ -3,15 +3,21 @@
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, RequiredProfile
 from app.api.exceptions import TrackNotFoundError
 from app.api.schemas.common import UTCDateTime
+from app.api.schemas.suggestions import (
+    SuggestedTrackResponse,
+    SuggestedTracksResponse,
+    SuggestionReasonResponse,
+)
 from app.api.schemas.tracks import TrackResponse
 from app.db.models import ProfileFavorite, ProfilePlayHistory, Track
+from app.services.collection_suggestions import SEED_SAMPLE_CAP, suggest_for_collection
 
 logger = logging.getLogger(__name__)
 
@@ -131,28 +137,101 @@ class AutoDownloadUpdate(BaseModel):
     enabled: bool
 
 
-@router.get("/auto-download", response_model=AutoDownloadResponse)
+@router.get("/auto-download", response_model=AutoDownloadResponse, deprecated=True)
 async def get_favorites_auto_download(
     db: DbSession,
     profile: RequiredProfile,
 ) -> AutoDownloadResponse:
-    """Get the auto-download setting for favorites."""
+    """Get the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).
+
+    The setting moved to the client. Whether to keep 1,700 tracks offline depends on the device's
+    disk, and one boolean per profile meant a phone and a desktop could not disagree. This was the
+    only listener preference the server held; after the move it holds none.
+
+    Still served, and still reads the stored value, because both clients call it exactly once per
+    profile to carry the old value across. Removing it would make that seed impossible and silently
+    turn the feature off for anyone who had it on. It can go once every client has seeded — and
+    note that `familiar-apple` commits `openapi.json` verbatim, so removal there means regenerating
+    the Swift client in the same change.
+    """
     enabled = (profile.settings or {}).get("favorites_auto_download", False)
     return AutoDownloadResponse(enabled=enabled)
 
 
-@router.put("/auto-download", response_model=AutoDownloadResponse)
+@router.put("/auto-download", response_model=AutoDownloadResponse, deprecated=True)
 async def set_favorites_auto_download(
     request: AutoDownloadUpdate,
     db: DbSession,
     profile: RequiredProfile,
 ) -> AutoDownloadResponse:
-    """Set the auto-download setting for favorites."""
+    """Set the auto-download setting for favorites. **Deprecated** (ADR-0029 point 4).
+
+    No shipping client writes here any more — the setting is device-local. Kept so an older build
+    that still writes is not met with a 404, and so the stored value stays a usable seed for a
+    device that has not been updated yet.
+    """
     settings = dict(profile.settings or {})
     settings["favorites_auto_download"] = request.enabled
     profile.settings = settings
     await db.commit()
     return AutoDownloadResponse(enabled=request.enabled)
+
+
+@router.get("/suggested-tracks", response_model=SuggestedTracksResponse)
+async def get_favorites_suggested_tracks(
+    db: DbSession,
+    profile: RequiredProfile,
+    limit: int = Query(10, ge=1, le=50),
+) -> SuggestedTracksResponse:
+    """Tracks from your library that fit your favorites and are not already among them.
+
+    Each carries the favourite that reached it, so the list explains itself rather than needing a
+    heading nobody can write truthfully (ADR-0093 point 7).
+
+    **Registered above `GET /{track_id}`, and it has to stay there.** FastAPI matches in registration
+    order, so behind the parameterised route this path is read as a track id and 422s on the UUID
+    parse — the same trap `routes/playlists/__init__.py` documents for `/generate`.
+    """
+    favorite_ids = list(
+        (
+            await db.execute(
+                select(ProfileFavorite.track_id)
+                .join(Track, ProfileFavorite.track_id == Track.id)
+                .where(ProfileFavorite.profile_id == profile.id)
+                .where(Track.active_filter())
+                .order_by(ProfileFavorite.favorited_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    suggestions = await suggest_for_collection(
+        db,
+        seed_track_ids=favorite_ids[:SEED_SAMPLE_CAP],
+        # Everything favourited, not the capped seed — ADR-0093 point 4. This is the difference
+        # between a panel that suggests new music and one that suggests what you already loved.
+        exclude_track_ids=set(favorite_ids),
+        profile_id=profile.id,
+        limit=limit,
+    )
+
+    return SuggestedTracksResponse(
+        suggestions=[
+            SuggestedTrackResponse(
+                track=TrackResponse.model_validate(s.track, from_attributes=True),
+                because_of=SuggestionReasonResponse(
+                    track_id=s.because_of.id,
+                    title=s.because_of.title,
+                    artist=s.because_of.artist,
+                ),
+                similarity=s.similarity,
+                votes=s.votes,
+            )
+            for s in suggestions
+        ],
+        seed_track_count=len(favorite_ids),
+    )
 
 
 @router.post("/{track_id}", status_code=status.HTTP_201_CREATED)

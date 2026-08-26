@@ -56,17 +56,36 @@ async function globalSetup() {
       attempts++;
     }
 
-    if (attempts >= maxAttempts) {
-      console.warn('⚠️ Sync timed out after 120 seconds');
-    }
+    const syncStillRunning = attempts >= maxAttempts;
 
-    // Verify tracks are available
+    // Verify tracks are available. **This is the setup's actual contract** — the tests need
+    // fixtures in the library, not a sync that has reached idle. An earlier version of this
+    // threw when the sync had not finished in time, which was too strict: the sync reliably
+    // takes longer than this in CI, so it turned an occasional confusing failure into a
+    // permanently red build. Slow is not the same as broken.
     const tracksResponse = await context.get('/api/v1/tracks?page_size=1');
     let trackCount = 0;
     if (tracksResponse.ok()) {
       const tracks = await tracksResponse.json();
       trackCount = tracks.total || 0;
       console.log(`📊 Library has ${trackCount} tracks available for testing`);
+    }
+
+    if (trackCount === 0) {
+      throw new Error(
+        `The library has no tracks after ${maxAttempts}s of syncing, so every test that needs ` +
+          `a fixture would fail for reasons pointing nowhere near this setup. Check ` +
+          `MUSIC_LIBRARY_PATH on the backend.`
+      );
+    }
+
+    if (syncStillRunning) {
+      // Tolerable, and no longer the trap it was: library-sync.spec.ts waits for the Sync
+      // button to be actionable and skips with a reason when a sync holds it disabled.
+      console.warn(
+        `⚠️ A library sync is still in flight after ${maxAttempts}s. Tests continue — the ` +
+          `fixtures are present — and library-sync.spec.ts will skip its trigger test.`
+      );
     }
 
     // Wait for analysis to complete (features + embeddings) if we have tracks

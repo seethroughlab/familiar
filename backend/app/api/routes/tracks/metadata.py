@@ -5,13 +5,14 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
 from app.api.exceptions import TrackNotFoundError
 from app.db.models import Track
+from app.services import metadata_overrides
 
 from . import TrackFeaturesResponse
 
@@ -53,6 +54,48 @@ class TrackMetadataUpdateRequest(BaseModel):
 
     # User overrides for analysis values (bpm, key, etc.)
     user_overrides: dict[str, Any] | None = None
+
+    @field_validator(
+        "title",
+        "artist",
+        "album",
+        "album_artist",
+        "genre",
+        "composer",
+        "conductor",
+        "lyricist",
+        "grouping",
+        "comment",
+        "sort_artist",
+        "sort_album",
+        "sort_title",
+        "lyrics",
+        mode="before",
+    )
+    @classmethod
+    def _blank_means_absent(cls, value: Any) -> Any:
+        """A blank string clears the tag rather than storing an empty one.
+
+        Two reasons, and the second is why this lives on the server.
+
+        An empty genre is not a genre. Stored as ``""`` it sorts and groups apart from every track
+        that simply has none, so "no genre" quietly becomes two different things depending on
+        whether somebody once typed in the box and changed their mind.
+
+        And it is the only way the Swift client can clear anything at all.
+        ``Components.Schemas.TrackMetadataUpdateRequest.genre`` is a plain ``String?`` with
+        synthesised ``Codable``, which omits a nil rather than writing ``null`` — so setting the
+        property to nil was indistinguishable from never touching it, and clearing a tag on the Mac
+        reported success and did nothing. The client now sends ``""`` and means it. See
+        ``MetadataClearingTests`` in familiar-apple, which asserts that encoding directly.
+
+        Numeric fields are deliberately not covered: ``year`` and the track and disc numbers are
+        ``int | None``, an empty string is not a number, and there is no blank to interpret.
+        """
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
 
 
 class TrackMetadataResponse(BaseModel):
@@ -217,6 +260,10 @@ async def update_track_metadata(
     for field, value in update_data.items():
         if hasattr(track, field):
             setattr(track, field, value)
+
+    # Remember that these were chosen rather than read off the file, so a rescan cannot undo them.
+    # Assigned rather than mutated in place: SQLAlchemy does not notice in-place changes to JSONB.
+    track.metadata_overrides = metadata_overrides.record(track.metadata_overrides, update_data)
 
     # Commit database changes
     await db.commit()

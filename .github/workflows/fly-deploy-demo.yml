@@ -2,15 +2,19 @@ name: Fly Deploy (demo)
 
 on:
   workflow_dispatch:
-  # Auto-deploy on push disabled while demo is offline.
-  # To re-enable: uncomment the `push:` block below.
-  # push:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - 'backend/**'
-  #     - 'deploy/fly/**'
-  #     - '.github/workflows/fly-deploy-demo.yml'
+  # **Restored** (ADR-0038 point 4). This was commented out "while demo is offline", and the comment
+  # then became the documentation: the demo drifted from `main` for months because bringing it up
+  # was a manual step somebody had to remember. A demo that disproves the submitted build is worse
+  # than no demo.
+  #
+  # Scoped, so a frontend-only or docs-only change does not redeploy a backend that has not moved.
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'deploy/fly/**'
+      - '.github/workflows/fly-deploy-demo.yml'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

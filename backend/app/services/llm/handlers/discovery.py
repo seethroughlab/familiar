@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
@@ -19,6 +20,138 @@ logger = logging.getLogger(__name__)
 
 class DiscoveryHandlersMixin:
     """Mixin providing discovery-related tool handlers."""
+
+    async def _get_recently_played(
+        self: "ToolExecutor",
+        limit: int = 20,
+        days: int | None = None,
+    ) -> dict[str, Any]:
+        """What the listener has actually been playing, newest first.
+
+        **Written against `PlayEvent` rather than reusing anything, because nothing existed.** No
+        endpoint, service or query in this codebase orders listening by time — `get_play_stats`
+        answers "most played", which `filter_tracks(sort_by="play_count")` already reaches. The gap
+        was recency.
+
+        `PlayEvent` is the right source: one row per play, and `ix_play_events_profile_started_at`
+        is exactly this query. `ProfilePlayHistory.last_played_at` holds a single timestamp per
+        track, so it would collapse a track played five times today into one line.
+        """
+        from app.db.models import PlayEvent
+        from app.utils.time import utcnow
+
+        if not self.profile_id:
+            return {"error": "No profile is bound to this session."}
+
+        query = (
+            select(PlayEvent, Track)
+            .join(Track, PlayEvent.track_id == Track.id)
+            .where(
+                PlayEvent.profile_id == self.profile_id,
+                # A file that failed to play is not listening, and treating it as taste would be
+                # actively wrong — the listener never heard it.
+                PlayEvent.outcome != "errored",
+            )
+            .order_by(PlayEvent.started_at.desc())
+            .limit(max(1, min(limit, 100)))
+        )
+        if days:
+            cutoff = utcnow() - timedelta(days=days)
+            query = query.where(PlayEvent.started_at >= cutoff)
+
+        rows = (await self.db.execute(query)).all()
+        plays = []
+        for event, track in rows:
+            entry = self._track_to_dict(track)
+            # `started_at` is naive UTC in the column. Marked explicitly, or the model has no way
+            # to know whether a bare timestamp is local or not.
+            entry["played_at"] = event.started_at.isoformat() + "Z"
+            entry["outcome"] = event.outcome
+            entry["completion_ratio"] = round(event.completion_ratio or 0.0, 2)
+            plays.append(entry)
+
+        return {
+            "plays": plays,
+            "count": len(plays),
+            "note": (
+                "Newest first. `outcome` is 'completed' or 'skipped' — a skip is a weaker signal "
+                "of taste than a completed play, and repeats of the same track appear separately."
+            ),
+        }
+
+    async def _get_radio_suggestions(
+        self: "ToolExecutor",
+        seed_track_id: str,
+        limit: int = 10,
+        profile: str = "radio",
+    ) -> dict[str, Any]:
+        """Familiar's own recommender, seeded from one track.
+
+        Distinct from `find_similar_tracks`, which is a bare cosine-distance neighbour search over
+        the audio embeddings. This runs the ranking engine: the same similarity, **plus** the
+        listener's taste and the negative signal of what they have skipped. It scores better, and
+        the two tools are kept apart in their descriptions so the model is not choosing between
+        them at random.
+
+        Cheaper than it looks — roughly four queries and a 150-row vector search over precomputed
+        embeddings, with no embedding inference and no model load.
+        """
+        from app.services.ambient import get_candidates
+        from app.services.ranking_profiles import get_profile
+
+        ids = self._safe_parse_uuids([seed_track_id])
+        if not ids:
+            return {"error": f"{seed_track_id!r} is not a valid track id."}
+
+        ranking = get_profile(profile if profile in ("radio", "ambient") else "radio")
+        candidates, pool_size, collapsed = await get_candidates(
+            self.db,
+            current_track_id=ids[0],
+            limit=max(1, min(limit, 20)),
+            profile=ranking,
+            profile_id=self.profile_id,
+        )
+        if not candidates:
+            return {
+                "suggestions": [],
+                "note": (
+                    "The recommender found nothing from that seed. Usually it has no audio "
+                    "embedding yet, so there is nothing to be similar to."
+                ),
+            }
+
+        by_id = {
+            t.id: t
+            for t in (
+                await self.db.execute(
+                    select(Track).where(Track.id.in_([c.descriptor.track_id for c in candidates]))
+                )
+            )
+            .scalars()
+            .all()
+        }
+        suggestions = []
+        for candidate in candidates:
+            track = by_id.get(candidate.descriptor.track_id)
+            if track is None:
+                continue
+            entry = self._track_to_dict(track)
+            entry["score"] = round(candidate.compatibility_score, 4)
+            suggestions.append(entry)
+
+        result: dict[str, Any] = {
+            "suggestions": suggestions,
+            "count": len(suggestions),
+            "pool_size": pool_size,
+        }
+        if collapsed:
+            # Said plainly: without an embedding the pool is drawn at random, so the ordering
+            # means nothing and presenting it as a recommendation would be a lie.
+            result["note"] = (
+                "The candidate pool collapsed — the seed has no embedding, so these are close to "
+                "random rather than similar."
+            )
+        return result
 
     async def _search_bandcamp(
         self: "ToolExecutor",
@@ -471,73 +604,6 @@ class DiscoveryHandlersMixin:
             "note": f"Found {len(recommended)} recommended artists, {len(unheard_tracks)} unheard tracks, and {len(deep_cuts)} deep cuts from your top artists."
             if recommended or unheard_tracks
             else "Not enough listening history for recommendations yet.",
-        }
-
-    async def _get_spotify_unmatched(
-        self: "ToolExecutor",
-        search: str | None = None,
-        artist: str | None = None,
-        limit: int = 50,
-    ) -> dict[str, Any]:
-        """Find Spotify tracks not matched to local library, with summary stats."""
-        from app.db.models import SpotifyImport
-        from app.services.spotify_import import SpotifyImportService
-
-        if not self.profile_id:
-            return {"error": "Profile required for Spotify lookup"}
-
-        try:
-            limit = max(1, min(200, int(limit)))
-        except (ValueError, TypeError):
-            limit = 50
-
-        # Get import
-        result = await self.db.execute(
-            select(SpotifyImport).where(SpotifyImport.profile_id == self.profile_id)
-        )
-        import_ = result.scalar_one_or_none()
-
-        if not import_:
-            return {"error": "No Spotify import found. Import your Spotify data first via Settings."}
-
-        # Get stats from summary
-        summary = import_.summary or {}
-        stats = {
-            "total_unique_tracks": summary.get("total_unique_tracks"),
-            "total_matched": summary.get("total_matched", 0),
-            "total_unmatched": summary.get("total_unmatched"),
-            "match_rate": summary.get("match_rate"),
-        }
-
-        # Get unmatched tracks
-        unique = SpotifyImportService._iter_unique_tracks(import_.favorites, import_.playlists)
-        match_results = import_.match_results or {}
-        unmatched = [v for k, v in unique.items() if k not in match_results]
-
-        # Apply filters
-        if search:
-            s = search.lower()
-            unmatched = [
-                t for t in unmatched
-                if s in t["artist"].lower() or s in t["track"].lower() or s in t["album"].lower()
-            ]
-        if artist:
-            a = artist.lower()
-            unmatched = [t for t in unmatched if a in t["artist"].lower()]
-
-        unmatched.sort(key=lambda t: (t["artist"].lower(), t["track"].lower()))
-        total_filtered = len(unmatched)
-        page = unmatched[:limit]
-
-        return {
-            "stats": stats,
-            "unmatched_tracks": [
-                {"artist": t["artist"], "track": t["track"], "album": t["album"]}
-                for t in page
-            ],
-            "total_unmatched_shown": len(page),
-            "total_unmatched_matching_filter": total_filtered,
-            "note": f"Showing {len(page)} of {total_filtered} unmatched Spotify tracks. Match rate: {stats.get('match_rate', 'unknown')}.",
         }
 
     async def _identify_track(

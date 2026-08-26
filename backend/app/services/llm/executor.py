@@ -39,12 +39,10 @@ class ToolExecutor(
         db: AsyncSession,
         profile_id: UUID | None = None,
         user_message: str = "",
-        visible_track_ids: list[str] | None = None,
     ) -> None:
         self.db = db
         self.profile_id = profile_id
         self.user_message = user_message
-        self.visible_track_ids = visible_track_ids or []
         self._queued_tracks: list[dict[str, Any]] = []
         self._clear_queue: bool = True  # Default to clearing queue for new requests
         self._playback_action: str | None = None
@@ -68,6 +66,7 @@ class ToolExecutor(
             "get_track_details": self._get_track_details,
             "search_bandcamp": self._search_bandcamp,
             "recommend_bandcamp_purchases": self._recommend_bandcamp_purchases,
+            "generate_playlist": self._generate_playlist,
             "select_diverse_tracks": self._select_diverse_tracks,
             # Metadata correction tools
             "lookup_correct_metadata": self._lookup_correct_metadata,
@@ -79,15 +78,18 @@ class ToolExecutor(
             "find_duplicate_artists": self._find_duplicate_artists,
             "merge_duplicate_artists": self._merge_duplicate_artists,
             # View context tools
-            "get_visible_tracks": self._get_visible_tracks,
             # Discovery tools
             "get_similar_artists_in_library": self._get_similar_artists_in_library,
             "get_new_releases": self._get_new_releases,
             "get_discovery_recommendations": self._get_discovery_recommendations,
-            "get_spotify_unmatched": self._get_spotify_unmatched,
             # Web page reading tools
-            "fetch_webpage": self._fetch_webpage,
             "create_playlist_from_items": self._create_playlist_from_items,
+            "list_playlists": self._list_playlists,
+            "get_playlist": self._get_playlist,
+            "add_tracks_to_playlist": self._add_tracks_to_playlist,
+            "set_favorite": self._set_favorite,
+            "get_recently_played": self._get_recently_played,
+            "get_radio_suggestions": self._get_radio_suggestions,
             # Track identification tools
             "identify_track": self._identify_track,
             # Analysis tools
@@ -100,7 +102,7 @@ class ToolExecutor(
 
         try:
             # Handle methods that take no args vs those that do
-            if tool_name in ("get_library_stats", "get_visible_tracks"):
+            if tool_name == "get_library_stats":
                 return await handler()  # type: ignore[operator]
             return await handler(**tool_input)  # type: ignore[operator]
         except Exception as e:

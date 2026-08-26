@@ -1,20 +1,45 @@
 import { useCallback } from 'react';
-import { usePlayerStore } from '../../stores/playerStore';
 import { PlaylistTrackList, type TrackRowContext } from '../shared/PlaylistTrackList';
 import { formatDuration } from '../../utils/format';
 import type { Track } from '../../types';
 import type { DiscoverTrack } from '../../api';
 
+/**
+ * Playing state arrives as props, and starting playback goes out through a callback (ADR-0083
+ * points 1 and 2).
+ *
+ * **This component reached into `playerStore` for all four**, which is why the visualizer and
+ * Discover both pinned a 1,016-line queue store, a persistence adapter and IndexedDB behind them —
+ * on a surface (`/embed`) where none of it is ever mounted. `setQueueByTrackId` there wrote a queue
+ * nothing played from.
+ *
+ * With the state passed in, *where it comes from* becomes the parent's business: the admin app has
+ * no player and passes nothing, while the embedded surface passes what the native app tells it.
+ * That is the seam ADR-0016 point 4 is really about — the page never decides what plays.
+ */
 interface Props {
   items: DiscoverTrack[];
   sortPersistKey: string;
+  /** The track the *native* player is on, when the parent knows. */
+  currentTrackId?: string | null;
+  isPlaying?: boolean;
+  /**
+   * Play this list, starting here. The parent decides what that means — an intent posted to the
+   * app, or nothing at all.
+   */
+  onPlayTracks?: (tracks: Track[], startId: string) => void;
+  /** Toggle the current track. Absent where there is no transport to toggle. */
+  onTogglePlay?: () => void;
 }
 
-export function DiscoverTrackList({ items, sortPersistKey }: Props) {
-  const setQueueByTrackId = usePlayerStore((s) => s.setQueueByTrackId);
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+export function DiscoverTrackList({
+  items,
+  sortPersistKey,
+  currentTrackId = null,
+  isPlaying = false,
+  onPlayTracks,
+  onTogglePlay,
+}: Props) {
 
   const getTrack = useCallback(
     (item: DiscoverTrack): Track => ({
@@ -44,14 +69,14 @@ export function DiscoverTrackList({ items, sortPersistKey }: Props) {
       if (!item) return;
 
       const track = getTrack(item);
-      if (currentTrack?.id === track.id) {
-        setIsPlaying(!isPlaying);
+      if (currentTrackId === track.id) {
+        onTogglePlay?.();
         return;
       }
 
-      setQueueByTrackId(list.map(getTrack), track.id);
+      onPlayTracks?.(list.map(getTrack), track.id);
     },
-    [items, getTrack, currentTrack?.id, isPlaying, setIsPlaying, setQueueByTrackId],
+    [items, getTrack, currentTrackId, onTogglePlay, onPlayTracks],
   );
 
   const getItemId = useCallback((item: DiscoverTrack) => item.id, []);
@@ -77,6 +102,8 @@ export function DiscoverTrackList({ items, sortPersistKey }: Props) {
   return (
     <PlaylistTrackList
       items={items}
+      currentTrackId={currentTrackId}
+      isPlaying={isPlaying}
       getTrack={getTrack}
       getItemId={getItemId}
       onPlay={handlePlay}

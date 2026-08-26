@@ -288,9 +288,76 @@ export interface LetterIndexResponse {
   total: number;
 }
 
+/** Duplicate groups from a whole-library scan. Preview only — the server has no apply route. */
+export interface DuplicateTrackInfo {
+  id: string;
+  title: string | null;
+  artist: string | null;
+  album: string | null;
+  file_path: string;
+  format: string | null;
+  quality: string;
+  format_tier: number;
+  metadata_completeness: number;
+  created_at: string;
+}
+
+export interface DuplicateGroup {
+  normalized_key: string;
+  keep: DuplicateTrackInfo;
+  remove: DuplicateTrackInfo[];
+}
+
+export interface DeduplicatePreview {
+  total_groups: number;
+  total_duplicates: number;
+  groups: DuplicateGroup[];
+}
+
+export interface ArtworkCoverage {
+  total_albums: number;
+  with_artwork: number;
+  generated: number;
+  without_artwork: number;
+}
+
 export const libraryApi = {
   getStats: async (): Promise<LibraryStats> => {
     const { data } = await api.get('/library/stats');
+    return data;
+  },
+
+  /**
+   * Ask the internet again for every album showing a placeholder.
+   *
+   * Explicit, never automatic: it queues hundreds of external lookups. The server applies the same
+   * 30-day rule the per-album path uses, so pressing this twice in a day does nothing the second
+   * time — the button cannot bypass the rate limit.
+   */
+  refetchGeneratedArtwork: async (): Promise<{
+    considered: number;
+    queued: number;
+    skipped_recent: number;
+  }> => {
+    const { data } = await api.post('/artwork/refetch-generated');
+    return data;
+  },
+
+  getArtworkCoverage: async (): Promise<ArtworkCoverage> => {
+    const { data } = await api.get('/artwork/coverage');
+    return data;
+  },
+
+  /**
+   * Find duplicate tracks. **A POST that scans the whole library**, so it is never called on
+   * page load — ADR-0058 phase 4 puts it behind an explicit button for that reason.
+   */
+  deduplicatePreview: async (params?: {
+    search?: string;
+    artist?: string;
+    album?: string;
+  }): Promise<DeduplicatePreview> => {
+    const { data } = await api.post('/library/deduplicate/preview', null, { params });
     return data;
   },
 
@@ -458,12 +525,6 @@ export const libraryApi = {
     return data;
   },
 
-  getCuratedPrompts: async (params?: {
-    refresh?: boolean;
-  }): Promise<CuratedPromptsResponse> => {
-    const { data } = await api.get('/library/discover/prompts', { params });
-    return data;
-  },
 
   getDiscover: async (params?: {
     recommendations_limit?: number;
@@ -477,16 +538,7 @@ export const libraryApi = {
 };
 
 // Curated Prompts types
-export interface CuratedPrompt {
-  prompt: string;
-  context: string;
-  icon: string | null;
-}
 
-export interface CuratedPromptsResponse {
-  prompts: CuratedPrompt[];
-  generated_at: string | null;
-}
 
 // Library Discover types
 export interface DiscoverTrack {

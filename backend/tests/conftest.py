@@ -32,6 +32,7 @@ from app.db.models import (
     SmartPlaylist,
     Track,
     TrackAnalysis,
+    TrackVideo,
 )
 from app.main import app
 
@@ -113,6 +114,8 @@ _CLEANUP_TABLES = [
     ArtistCheckCache,
     ExternalArtistImageCache,
     TrackAnalysis,
+    # FKs to Track with CASCADE, so it goes before Track like TrackAnalysis does.
+    TrackVideo,
     Track,
     ArtistAlias,
     Artist,

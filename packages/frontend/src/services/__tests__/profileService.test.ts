@@ -3,31 +3,10 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock db tables
-const mockDeviceProfileGet = vi.fn();
-const mockDeviceProfilePut = vi.fn();
-const mockDeviceProfileDelete = vi.fn();
-const mockCachedProfilesGet = vi.fn();
-const mockCachedProfilesPut = vi.fn();
-const mockCachedProfilesDelete = vi.fn();
-const mockCachedProfilesToArray = vi.fn();
+// The selected profile lives in localStorage now (ADR-0071 deleted the Dexie store), so these
+// tests drive the same key the service writes rather than a mocked database.
+const STORAGE_KEY = 'familiar:selected-profile';
 
-vi.mock('../../db', () => ({
-  db: {
-    deviceProfile: {
-      get: (...args: unknown[]) => mockDeviceProfileGet(...args),
-      put: (...args: unknown[]) => mockDeviceProfilePut(...args),
-      delete: (...args: unknown[]) => mockDeviceProfileDelete(...args),
-    },
-    cachedProfiles: {
-      get: (...args: unknown[]) => mockCachedProfilesGet(...args),
-      put: (...args: unknown[]) => mockCachedProfilesPut(...args),
-      delete: (...args: unknown[]) => mockCachedProfilesDelete(...args),
-      toArray: () => mockCachedProfilesToArray(),
-    },
-  },
-  isIndexedDBAvailable: vi.fn(() => Promise.resolve(true)),
-}));
 
 vi.mock('../../utils/logger', () => ({
   createLogger: () => ({
@@ -61,13 +40,7 @@ describe('profileService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
-    mockDeviceProfileGet.mockResolvedValue(undefined);
-    mockDeviceProfilePut.mockResolvedValue(undefined);
-    mockDeviceProfileDelete.mockResolvedValue(undefined);
-    mockCachedProfilesGet.mockResolvedValue(undefined);
-    mockCachedProfilesPut.mockResolvedValue(undefined);
-    mockCachedProfilesDelete.mockResolvedValue(undefined);
-    mockCachedProfilesToArray.mockResolvedValue([]);
+    localStorage.clear();
   });
 
   afterEach(() => {
@@ -85,120 +58,14 @@ describe('profileService', () => {
     has_lastfm: false,
   };
 
-  const sampleCachedProfile = {
-    id: 'profile-123',
-    name: 'Test User',
-    color: '#ff0000',
-    avatar_url: null,
-    has_lastfm: false,
-    cachedAt: new Date(),
-  };
 
-  describe('cacheProfile', () => {
-    it('should cache a profile in IndexedDB', async () => {
-      const { cacheProfile } = await getModule();
-      await cacheProfile(sampleProfile);
 
-      expect(mockCachedProfilesPut).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'profile-123',
-          name: 'Test User',
-          color: '#ff0000',
-          has_lastfm: false,
-          cachedAt: expect.any(Date),
-        })
-      );
-    });
 
-    it('should skip caching when IndexedDB is unavailable', async () => {
-      const dbModule = await import('../../db');
-      vi.mocked(dbModule.isIndexedDBAvailable).mockResolvedValueOnce(false);
 
-      const { cacheProfile } = await getModule();
-      await cacheProfile(sampleProfile);
-
-      expect(mockCachedProfilesPut).not.toHaveBeenCalled();
-    });
-
-    it('should silently handle db errors', async () => {
-      mockCachedProfilesPut.mockRejectedValueOnce(new Error('IDB error'));
-
-      const { cacheProfile } = await getModule();
-      await cacheProfile(sampleProfile);
-      // Should not throw
-    });
-  });
-
-  describe('getCachedProfile', () => {
-    it('should return cached profile by ID', async () => {
-      mockCachedProfilesGet.mockResolvedValueOnce(sampleCachedProfile);
-
-      const { getCachedProfile } = await getModule();
-      const result = await getCachedProfile('profile-123');
-
-      expect(result).toEqual(sampleCachedProfile);
-      expect(mockCachedProfilesGet).toHaveBeenCalledWith('profile-123');
-    });
-
-    it('should return undefined when not found', async () => {
-      mockCachedProfilesGet.mockResolvedValueOnce(undefined);
-
-      const { getCachedProfile } = await getModule();
-      const result = await getCachedProfile('nonexistent');
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should return undefined when IndexedDB is unavailable', async () => {
-      const dbModule = await import('../../db');
-      vi.mocked(dbModule.isIndexedDBAvailable).mockResolvedValueOnce(false);
-
-      const { getCachedProfile } = await getModule();
-      const result = await getCachedProfile('profile-123');
-
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe('getCachedProfiles', () => {
-    it('should return all cached profiles', async () => {
-      mockCachedProfilesToArray.mockResolvedValueOnce([sampleCachedProfile]);
-
-      const { getCachedProfiles } = await getModule();
-      const result = await getCachedProfiles();
-
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('profile-123');
-    });
-
-    it('should return empty array when IndexedDB is unavailable', async () => {
-      const dbModule = await import('../../db');
-      vi.mocked(dbModule.isIndexedDBAvailable).mockResolvedValueOnce(false);
-
-      const { getCachedProfiles } = await getModule();
-      const result = await getCachedProfiles();
-
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('clearCachedProfile', () => {
-    it('should delete cached profile by ID', async () => {
-      const { clearCachedProfile } = await getModule();
-      await clearCachedProfile('profile-123');
-
-      expect(mockCachedProfilesDelete).toHaveBeenCalledWith('profile-123');
-    });
-  });
 
   describe('getSelectedProfileId', () => {
     it('should return profile ID from IndexedDB', async () => {
-      mockDeviceProfileGet.mockResolvedValueOnce({
-        id: 'device-profile',
-        profileId: 'profile-123',
-        deviceId: '',
-        createdAt: new Date(),
-      });
+      localStorage.setItem(STORAGE_KEY, 'profile-123');
 
       const { getSelectedProfileId } = await getModule();
       const result = await getSelectedProfileId();
@@ -207,7 +74,6 @@ describe('profileService', () => {
     });
 
     it('should return null when no profile is selected', async () => {
-      mockDeviceProfileGet.mockResolvedValueOnce(undefined);
 
       const { getSelectedProfileId } = await getModule();
       const result = await getSelectedProfileId();
@@ -215,64 +81,21 @@ describe('profileService', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null when IndexedDB is unavailable', async () => {
-      const dbModule = await import('../../db');
-      vi.mocked(dbModule.isIndexedDBAvailable).mockResolvedValueOnce(false);
 
-      const { getSelectedProfileId } = await getModule();
-      const result = await getSelectedProfileId();
-
-      expect(result).toBeNull();
-    });
-
-    it('should cache the profile ID in memory after first read', async () => {
-      mockDeviceProfileGet.mockResolvedValueOnce({
-        id: 'device-profile',
-        profileId: 'profile-456',
-        deviceId: '',
-        createdAt: new Date(),
-      });
-
-      const { getSelectedProfileId } = await getModule();
-
-      const first = await getSelectedProfileId();
-      const second = await getSelectedProfileId();
-
-      expect(first).toBe('profile-456');
-      expect(second).toBe('profile-456');
-      // Should only read from db once (cached after first call)
-      expect(mockDeviceProfileGet).toHaveBeenCalledTimes(1);
-    });
   });
 
   describe('selectProfile', () => {
-    it('should persist profile selection to IndexedDB', async () => {
+    it('should persist the profile selection', async () => {
       const { selectProfile } = await getModule();
       await selectProfile('profile-789');
 
-      expect(mockDeviceProfilePut).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'device-profile',
-          profileId: 'profile-789',
-        })
-      );
+      expect(localStorage.getItem(STORAGE_KEY)).toBe('profile-789');
     });
 
-    it('should set memory cache even when IndexedDB is unavailable', async () => {
-      const dbModule = await import('../../db');
-      vi.mocked(dbModule.isIndexedDBAvailable).mockResolvedValueOnce(false);
-
-      const { selectProfile, getSelectedProfileId } = await getModule();
-      await selectProfile('profile-memory');
-
-      const result = await getSelectedProfileId();
-      expect(result).toBe('profile-memory');
-      expect(mockDeviceProfilePut).not.toHaveBeenCalled();
-    });
   });
 
   describe('clearSelectedProfile', () => {
-    it('should clear profile from IndexedDB and memory', async () => {
+    it('should clear the stored profile and the memory cache', async () => {
       const { selectProfile, clearSelectedProfile } = await getModule();
 
       await selectProfile('profile-123');
@@ -280,7 +103,7 @@ describe('profileService', () => {
 
       // Memory cache should be cleared
       // Need to check IDB is asked
-      expect(mockDeviceProfileDelete).toHaveBeenCalledWith('device-profile');
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
   });
 
@@ -297,25 +120,7 @@ describe('profileService', () => {
       expect(mockProfilesApi.list).toHaveBeenCalled();
     });
 
-    it('should cache fetched profiles', async () => {
-      mockProfilesApi.list.mockResolvedValueOnce([sampleProfile]);
 
-      const { listProfiles } = await getModule();
-      await listProfiles();
-
-      expect(mockCachedProfilesPut).toHaveBeenCalled();
-    });
-
-    it('should fall back to cache when offline with allowCache', async () => {
-      mockProfilesApi.list.mockRejectedValueOnce(new Error('Network error'));
-      mockCachedProfilesToArray.mockResolvedValueOnce([sampleCachedProfile]);
-
-      const { listProfiles } = await getModule();
-      const result = await listProfiles({ allowCache: true });
-
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('profile-123');
-    });
 
     it('should throw when offline without allowCache', async () => {
       mockProfilesApi.list.mockRejectedValueOnce(new Error('Network error'));
@@ -345,17 +150,16 @@ describe('profileService', () => {
   });
 
   describe('getProfile', () => {
-    it('should fetch profile by ID and cache it', async () => {
+    it('should fetch profile by ID', async () => {
       mockProfilesApi.get.mockResolvedValueOnce(sampleProfile);
 
       const { getProfile } = await getModule();
       const result = await getProfile('profile-123');
 
       expect(result?.name).toBe('Test User');
-      expect(mockCachedProfilesPut).toHaveBeenCalled();
     });
 
-    it('should return null and clear cache for 404', async () => {
+    it('should return null for a 404', async () => {
       const axiosError = new Error('Not Found');
       (axiosError as unknown as { response: { status: number } }).response = { status: 404 };
       mockProfilesApi.get.mockRejectedValueOnce(axiosError);
@@ -364,19 +168,8 @@ describe('profileService', () => {
       const result = await getProfile('deleted-profile');
 
       expect(result).toBeNull();
-      expect(mockCachedProfilesDelete).toHaveBeenCalledWith('deleted-profile');
     });
 
-    it('should fall back to cache on network error with allowCache', async () => {
-      mockProfilesApi.get.mockRejectedValueOnce(new Error('Network error'));
-      mockCachedProfilesGet.mockResolvedValueOnce(sampleCachedProfile);
-
-      const { getProfile } = await getModule();
-      const result = await getProfile('profile-123', { allowCache: true });
-
-      expect(result).not.toBeNull();
-      expect(result?.id).toBe('profile-123');
-    });
   });
 
   describe('deleteProfile', () => {
@@ -391,12 +184,7 @@ describe('profileService', () => {
 
     it('should clear selection if deleting the selected profile', async () => {
       // First set the selected profile
-      mockDeviceProfileGet.mockResolvedValue({
-        id: 'device-profile',
-        profileId: 'profile-123',
-        deviceId: '',
-        createdAt: new Date(),
-      });
+      localStorage.setItem(STORAGE_KEY, 'profile-123');
 
       mockProfilesApi.delete.mockResolvedValueOnce(undefined);
 
@@ -404,7 +192,7 @@ describe('profileService', () => {
       await selectProfile('profile-123');
       await deleteProfile('profile-123');
 
-      expect(mockDeviceProfileDelete).toHaveBeenCalledWith('device-profile');
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
   });
 
@@ -418,12 +206,7 @@ describe('profileService', () => {
     });
 
     it('should validate against server and return profile', async () => {
-      mockDeviceProfileGet.mockResolvedValueOnce({
-        id: 'device-profile',
-        profileId: 'profile-123',
-        deviceId: '',
-        createdAt: new Date(),
-      });
+      localStorage.setItem(STORAGE_KEY, 'profile-123');
 
       mockProfilesApi.get.mockResolvedValueOnce(sampleProfile);
 
@@ -434,12 +217,7 @@ describe('profileService', () => {
     });
 
     it('should clear selection if profile was deleted on server', async () => {
-      mockDeviceProfileGet.mockResolvedValueOnce({
-        id: 'device-profile',
-        profileId: 'profile-123',
-        deviceId: '',
-        createdAt: new Date(),
-      });
+      localStorage.setItem(STORAGE_KEY, 'profile-123');
 
       const axiosError = new Error('Not Found');
       (axiosError as unknown as { response: { status: number } }).response = { status: 404 };
@@ -449,7 +227,7 @@ describe('profileService', () => {
       const result = await validateSelectedProfile();
 
       expect(result).toBeNull();
-      expect(mockDeviceProfileDelete).toHaveBeenCalledWith('device-profile');
+      expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
     });
   });
 });

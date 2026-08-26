@@ -50,13 +50,28 @@ deploy-frontend:
 deploy-backend:
 	./scripts/deploy-dev.sh --backend-only
 
-# Build and upload iOS app to TestFlight
+# The phone app is built in the familiar-apple repo (ADR-0001). These two targets stay, and say so,
+# rather than being deleted: `make release-testflight` is muscle memory, and "No rule to make target"
+# would send you looking for what broke instead of telling you where the app went.
 release-testflight:
-	cd packages/ios && ./scripts/release-testflight.sh
+	@echo "The iOS app ships from the familiar-apple repo now — the Capacitor app is retired (ADR-0001)."
+	@echo ""
+	@echo "    cd ../familiar-apple && ./scripts/release-testflight.sh"
+	@echo ""
+	@echo "That script archives Familiar-iOS, signs it, and uploads to the same"
+	@echo "App Store Connect record (com.familiar.player). First build from it: 1.2 (14)."
+	@exit 1
 
-# Build and install iOS app directly to connected device
 deploy-device:
-	cd packages/ios && ./scripts/deploy-device.sh
+	@echo "The iOS app ships from the familiar-apple repo now — the Capacitor app is retired (ADR-0001)."
+	@echo ""
+	@echo "There is no deploy-device script there yet. Build and install with:"
+	@echo ""
+	@echo "    cd ../familiar-apple"
+	@echo "    xcodebuild -project Familiar.xcodeproj -scheme Familiar-iOS \\"
+	@echo "      -destination 'generic/platform=iOS' -skipPackagePluginValidation build"
+	@echo "    xcrun devicectl device install app --device <udid> <built .app>"
+	@exit 1
 
 # Run CLAP smoke test inside Docker (downloads ~1.5GB model on first run)
 smoke-test-docker:

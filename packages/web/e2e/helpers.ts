@@ -1,6 +1,33 @@
 import { Page } from '@playwright/test';
 
 /**
+ * The navigation labels that mean "the app has finished booting".
+ *
+ * These are the three destinations of ADR-0058 point 2, rendered as sidebar links on desktop and
+ * bottom-bar buttons on mobile. They used to be 'Tracks' / 'Artists', and when the sidebar stopped
+ * listing browsers **every spec in this directory failed at `ensureProfile`** — 44 tests each
+ * burning the full 30s probe timeout, which cancelled the job at its 30-minute limit before
+ * Playwright could print a single failure.
+ *
+ * So: if the navigation is restructured again, this constant is the thing to change, and it is one
+ * place rather than four copies of a `querySelectorAll` predicate.
+ */
+const READY_LABELS = ['Library', 'Tools', 'Server'];
+
+/**
+ * Runs **in the browser**, so it takes its labels as an argument and references nothing from this
+ * module's scope — `waitForFunction` serialises the body and would otherwise throw on the closure.
+ */
+const NAV_READY_IN_PAGE = (labels: string[]) => {
+  const matches = (el: Element) =>
+    labels.some((l) => el.textContent?.includes(l)) && (el as HTMLElement).offsetParent !== null;
+  return (
+    Array.from(document.querySelectorAll('a')).some(matches) ||
+    Array.from(document.querySelectorAll('nav button')).some(matches)
+  );
+};
+
+/**
  * Helper to create or select a profile before tests
  */
 export async function ensureProfile(page: Page, profileName = 'Test User') {
@@ -11,7 +38,7 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
   // (meaning we need to pick/create a profile) or the nav links are already visible
   // (meaning a profile is already selected). In CI, React hydration + API calls can
   // take 10-15s, so we use a generous timeout here instead of a short isVisible check.
-  const navOrProfile = await page.waitForFunction(() => {
+  const navOrProfile = await page.waitForFunction(({ labels, navReady }) => {
     // Check for profile selector heading
     const headings = document.querySelectorAll('h1, h2, h3');
     const hasProfileSelector = Array.from(headings).some(
@@ -19,20 +46,11 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
     );
     if (hasProfileSelector) return 'profile-selector';
 
-    // Check for visible nav links (app already loaded with profile)
-    const links = document.querySelectorAll('a');
-    const buttons = document.querySelectorAll('nav button');
-    const hasVisibleLink = Array.from(links).some(
-      el => (el.textContent?.includes('Tracks') || el.textContent?.includes('Artists'))
-        && el.offsetParent !== null
-    );
-    const hasVisibleButton = Array.from(buttons).some(
-      el => el.textContent?.includes('Tracks') && el.offsetParent !== null
-    );
-    if (hasVisibleLink || hasVisibleButton) return 'nav-ready';
+    // Check for visible nav (app already loaded with profile)
+    if (new Function(`return (${navReady})`)()(labels)) return 'nav-ready';
 
     return null;
-  }, undefined, { timeout: 30000 });
+  }, { labels: READY_LABELS, navReady: NAV_READY_IN_PAGE.toString() }, { timeout: 30000 });
 
   const state = await navOrProfile.jsonValue();
 
@@ -52,28 +70,101 @@ export async function ensureProfile(page: Page, profileName = 'Test User') {
       await page.getByRole('button', { name: 'Create' }).click();
     }
 
-    // Now wait for nav links after profile selection
-    await page.waitForFunction(() => {
-      const links = document.querySelectorAll('a');
-      const buttons = document.querySelectorAll('nav button');
-      const hasVisibleLink = Array.from(links).some(
-        el => (el.textContent?.includes('Tracks') || el.textContent?.includes('Artists'))
-          && el.offsetParent !== null
-      );
-      const hasVisibleButton = Array.from(buttons).some(
-        el => el.textContent?.includes('Tracks') && el.offsetParent !== null
-      );
-      return hasVisibleLink || hasVisibleButton;
-    }, undefined, { timeout: 15000 });
+    // Now wait for nav after profile selection
+    await page.waitForFunction(
+      ({ labels, navReady }) => new Function(`return (${navReady})`)()(labels),
+      { labels: READY_LABELS, navReady: NAV_READY_IN_PAGE.toString() },
+      { timeout: 15000 },
+    );
   }
   // If state === 'nav-ready', we're already good
 }
 
 /**
- * Navigate to a specific view by clicking its sidebar link.
- * Labels: 'Tracks', 'Artists', 'Albums', 'Mood Grid', 'Music Map', '3D Explorer', 'Discover', 'Changes'
+ * Where each view lives now that the sidebar lists destinations rather than browsers.
+ *
+ * Only `Cleanup` is still mounted. The rest were unmounted by ADR-0050 and ADR-0057 —
+ * `navigateToView(page, 'Artists')` and its siblings have been walking the fallback path for some
+ * time, which is why they are mapped to `null`: a spec asking for one should fail saying so,
+ * rather than clicking nothing and asserting against whatever page it happened to stay on.
+ */
+const VIEW_PATHS: Record<string, { destination: string; link: string } | null> = {
+  // ADR-0058 point 3 had moved the track list onto the Tools page while the player was still
+  // scheduled for deletion. It has now been deleted, and ADR-0057 point 5 took the "Track list"
+  // link with it — a capability and its affordances leave together. There is no tracks browser
+  // left to reach: `BROWSER_ROUTES` is down to `artist-cleanup` alone.
+  Tracks: null,
+  Cleanup: { destination: 'Library', link: 'Artist cleanup' },
+  Artists: null,
+  Albums: null,
+  'Mood Grid': null,
+  'Music Map': null,
+  '3D Explorer': null,
+  Discover: null,
+};
+
+/**
+ * Go to one of the three destinations (ADR-0058 point 2).
+ *
+ * Most of what used to be on the Settings page now lives on one of these: scan and analysis on
+ * Library, keys and profiles and diagnostics on Server, backup and community cache on Tools.
+ */
+export async function navigateToDestination(
+  page: Page,
+  destination: 'Library' | 'Tools' | 'Server',
+) {
+  await clickNav(page, destination);
+}
+
+/**
+ * Click a navigation link by its accessible name.
+ *
+ * There is one bar at every width now (ADR-0080 point 1), and it renders `<Link>`s, so the first
+ * branch is the one that fires. The `nav button` fallback is kept because it costs nothing and is
+ * what covered the deleted mobile bottom bar — if a future bar renders buttons, this still works.
+ */
+async function clickNav(page: Page, label: string) {
+  const link = page.getByRole('link', { name: label, exact: true }).first();
+  if (await link.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await link.click();
+    await page.waitForLoadState('domcontentloaded');
+    return;
+  }
+
+  const button = page.locator(`nav button:has-text("${label}")`).first();
+  if (await button.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await button.click();
+    await page.waitForLoadState('domcontentloaded');
+    return;
+  }
+
+  // Not exact-matched anywhere: fall back to a substring link, then let Playwright report it.
+  const loose = page.getByRole('link', { name: label }).first();
+  await loose.click({ timeout: 5000 });
+  await page.waitForLoadState('domcontentloaded');
+}
+
+/**
+ * Navigate to a specific view, **by clicking**, the way someone actually reaches it.
+ *
+ * Deliberately not `page.goto`: that is a full document load, and every spec here calls
+ * `ensureProfile` once in `beforeEach` and then expects the app to stay booted. Client-side
+ * routing keeps it that way; a reload re-runs the whole boot on every navigation.
  */
 export async function navigateToView(page: Page, label: string) {
+  if (label in VIEW_PATHS) {
+    const path = VIEW_PATHS[label];
+    if (path === null) {
+      throw new Error(
+        `navigateToView("${label}"): that view is not mounted in the web app (ADR-0050/0057). ` +
+          `Update the spec rather than the helper.`,
+      );
+    }
+    await clickNav(page, path.destination);
+    await clickNav(page, path.link);
+    return;
+  }
+
   // Desktop: sidebar link is visible
   const link = page.getByRole('link', { name: label, exact: true });
   if (await link.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -106,110 +197,29 @@ export async function navigateToView(page: Page, label: string) {
   await page.waitForLoadState('domcontentloaded');
 }
 
-/**
- * Open the chat panel via the player bar toggle button, then wait for the chat input.
- * Falls back to clicking the mobile "Chat" button if the desktop button isn't visible.
- */
-export async function openChatPanel(page: Page) {
-  const desktopButton = page.locator('button[aria-label="Open chat"]');
-  const mobileButton = page.locator('nav button:has-text("Chat")');
-
-  // Both toggles are absent until `/chat/status` says a provider is configured, and absent for
-  // good if it says otherwise. The 3s below is therefore waiting on a request, not on a render —
-  // and on a server with no provider this function correctly opens nothing.
-  if (await desktopButton.isVisible({ timeout: 3000 }).catch(() => false)) {
-    await desktopButton.click();
-  } else if (await mobileButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-    await mobileButton.click();
-  }
-
-  await page.locator('[aria-label="Chat message"]').first().waitFor({ timeout: 5000 });
-}
 
 /**
- * Navigate to a specific section in the sidebar-based UI
+ * Navigate to a specific section of the administration tool.
+ *
+ * `Queue` was removed from the union when the queue left with the player (ADR-0057 point 5), and
+ * **`Settings` is gone the same way**: ADR-0080 deleted the destination once the theme picker was
+ * the only control left on it, so a spec asking for it would navigate nowhere and then assert
+ * against whatever page it happened to be on. Removing it from the type makes that a compile error
+ * rather than a confident false pass — the same reason `Queue` went.
  */
-export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists' | 'Queue' | 'Settings') {
+export async function navigateToTab(page: Page, tabName: 'Library' | 'Playlists') {
   switch (tabName) {
     case 'Library': {
-      await navigateToView(page, 'Tracks');
-      break;
-    }
-    case 'Settings': {
-      // Open Settings modal via custom event (same mechanism used by the app internally)
-      // Direct button click is unreliable in CI due to player bar overlay
-      await page.evaluate(() => {
-        window.dispatchEvent(new Event('navigate-to-settings'));
-      });
-      // Wait for the lazy-loaded Settings modal to render
-      await page.waitForSelector('h2:has-text("Settings")', { timeout: 10000 });
+      // Was `navigateToView(page, 'Tracks')`, which reached the track list on the Tools page.
+      // Both are gone; Library is a destination in its own right and is where the app opens
+      // (ADR-0058 points 1 and 2).
+      await navigateToDestination(page, 'Library');
       break;
     }
     case 'Playlists':
-    case 'Queue':
-      // These are visible in the sidebar by default, no navigation needed
+      // Visible by default, no navigation needed
       break;
   }
-}
-
-/**
- * Get the audio element from the page
- */
-export async function getAudioElement(page: Page) {
-  return page.locator('audio').first();
-}
-
-/**
- * Check if audio is currently playing
- */
-export async function isAudioPlaying(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? !audio.paused : false;
-  });
-}
-
-/**
- * Get current audio time
- */
-export async function getAudioCurrentTime(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? audio.currentTime : 0;
-  });
-}
-
-/**
- * Get audio duration
- */
-export async function getAudioDuration(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? audio.duration : 0;
-  });
-}
-
-/**
- * Get audio volume
- */
-export async function getAudioVolume(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const audio = document.querySelector('audio');
-    return audio ? audio.volume : 0;
-  });
-}
-
-/**
- * Wait for audio to be ready
- */
-export async function waitForAudioReady(page: Page, timeout = 10000) {
-  await page.waitForFunction(
-    () => {
-      const audio = document.querySelector('audio');
-      return audio && audio.readyState >= 2; // HAVE_CURRENT_DATA
-    },
-    { timeout }
-  );
 }
 
 /**
@@ -304,72 +314,6 @@ export async function waitForAnalysisComplete(page: Page, timeout = 180000) {
 // ============================================================================
 
 /**
- * Get the state of all <audio> elements in the page
- */
-export async function getAllAudioStates(page: Page) {
-  return page.evaluate(() => {
-    const elements = Array.from(document.querySelectorAll('audio'));
-    return elements.map((el, i) => ({
-      index: i,
-      src: el.src,
-      paused: el.paused,
-      currentTime: el.currentTime,
-      duration: el.duration,
-      volume: el.volume,
-      readyState: el.readyState,
-    }));
-  });
-}
-
-/**
- * Check if at least one audio element is not paused
- */
-export async function isAnyAudioPlaying(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const elements = Array.from(document.querySelectorAll('audio'));
-    return elements.some(el => !el.paused);
-  });
-}
-
-/**
- * Seek the currently playing audio element to a specific time
- */
-export async function seekAudio(page: Page, time: number) {
-  await page.evaluate((t) => {
-    const elements = Array.from(document.querySelectorAll('audio'));
-    const playing = elements.find(el => !el.paused);
-    if (playing) {
-      playing.currentTime = t;
-    }
-  }, time);
-}
-
-/**
- * Wait for the displayed track title to change from the current one
- */
-export async function waitForTrackChange(page: Page, currentTitle: string, timeout = 15000) {
-  const startTime = Date.now();
-  while (Date.now() - startTime < timeout) {
-    const title = await page.evaluate(() => {
-      // Look for track title in the player bar or full player
-      const el = document.querySelector('[data-testid="track-title"]') ||
-                 document.querySelector('.track-title');
-      return el?.textContent || '';
-    });
-    if (title && title !== currentTitle) {
-      return title;
-    }
-    await page.waitForTimeout(100);
-  }
-  throw new Error(`Track title didn't change from "${currentTitle}" within ${timeout}ms`);
-}
-
-/**
- * Detect if there's a gap in audio playback (all elements paused)
- * during a given monitoring window.
- * Returns true if a gap was detected.
- */
-/**
  * Wait for visual content (images/canvas) to be ready for screenshots.
  */
 export async function waitForContentReady(page: Page, opts?: {
@@ -385,24 +329,4 @@ export async function waitForContentReady(page: Page, opts?: {
   if (opts?.canvas) {
     await page.waitForSelector('canvas', { timeout }).catch(() => {});
   }
-}
-
-export async function detectAudioGap(page: Page, durationMs: number): Promise<boolean> {
-  return page.evaluate(async (ms) => {
-    const pollInterval = 50;
-    const end = Date.now() + ms;
-    let gapDetected = false;
-
-    while (Date.now() < end) {
-      const elements = Array.from(document.querySelectorAll('audio'));
-      const anyPlaying = elements.some(el => !el.paused && el.currentTime > 0);
-      if (!anyPlaying && elements.length > 0) {
-        gapDetected = true;
-        break;
-      }
-      await new Promise(r => setTimeout(r, pollInterval));
-    }
-
-    return gapDetected;
-  }, durationMs);
 }
