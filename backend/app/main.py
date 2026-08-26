@@ -610,15 +610,6 @@ NON_SPA_PREFIXES = (
     "openapi.json",
     "health",
     "mcp",
-    # Visualizer documents (ADR-0087). Normally the `/visualizers` mount answers these and nothing
-    # here is reached — this is the backstop for the build that has no such folder, where the SPA
-    # would otherwise return `index.html` with **HTTP 200** for a plugin document. An iframe then
-    # loads the entire web app, never sends `familiar:ready`, and the failure looks like a broken
-    # handshake rather than a missing file. A missing visualizer should look missing.
-    #
-    # This is also the half of the fix a test can hold onto: the mount only exists when `static/`
-    # does, which is never the case under pytest, so `spa_fallback` is the only reachable seam.
-    "visualizers/",
     # An MCP host probes these before connecting, to find out whether the server has an
     # authorisation server. **A 404 is the answer that means "no, connect anonymously."** Served by
     # the SPA they returned `200 text/html`, which reads as "yes, here it is" — so Claude Desktop
@@ -655,23 +646,6 @@ async def serve_embed() -> FileResponse:
     return FileResponse(embed)
 
 
-async def serve_visualizer() -> FileResponse:
-    """Serve the embedded visualizer's own document (ADR-0033).
-
-    A sibling of :func:`serve_embed`, and separate for the same reason: the SPA fallback answers any
-    unknown path with ``index.html`` — HTTP 200, the whole web app, ``WebAudioEngine`` and all. A
-    native host loading that would get a second audio engine inside a web view inside an app that is
-    already playing, which is the one thing ADR-0016 point 4 exists to prevent.
-
-    404s rather than falling through when the build predates this surface, so the app can say the
-    server is too old instead of showing a visualizer that will never receive a frame.
-    """
-    visualizer = STATIC_DIR / "visualizer.html"
-    if not visualizer.exists():
-        raise NotFoundError("This server has no embedded visualizer build.")
-    return FileResponse(visualizer)
-
-
 async def spa_fallback(full_path: str) -> FileResponse:
     """Serve index.html for SPA routing (catches all non-API routes).
 
@@ -704,23 +678,6 @@ if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
     app.mount("/icons", StaticFiles(directory=STATIC_DIR / "icons"), name="icons")
 
-    # Every visualizer is a folder of files under here (ADR-0087), so this must be a mount and not a
-    # route: `index.html` sits beside a manifest and whatever assets the document brings with it.
-    #
-    # Unmounted, `/visualizers/spectrum/index.html` fell through to the SPA catch-all and came back
-    # as **`index.html` with HTTP 200** — the whole web app, in the iframe, in place of the plugin
-    # document. It never sends `familiar:ready`, so the handshake simply never happened and the
-    # contract spec timed out against a page that had loaded perfectly well. This is the failure
-    # `serve_visualizer` below already describes for `/visualizer`; the folders that ADR-0087 added
-    # needed the same protection and did not get it.
-    #
-    # `check_dir=False` so a server whose build predates these folders still answers **404** here
-    # rather than handing back the SPA. A missing visualizer should look missing.
-    app.mount(
-        "/visualizers",
-        StaticFiles(directory=STATIC_DIR / "visualizers", check_dir=False),
-        name="visualizers",
-    )
 
     # The PWA is retired (ADR-0059) — no manifest, no `registerSW.js`, no `workbox-*` chunks.
     #
@@ -742,7 +699,6 @@ if STATIC_DIR.exists():
     # Registered before the catch-all below, which would otherwise swallow them and hand the web
     # view the full app.
     app.get("/embed", response_model=None)(serve_embed)
-    app.get("/visualizer", response_model=None)(serve_visualizer)
 
     # SPA fallback - serve index.html for all non-API routes
     app.get("/{full_path:path}", response_model=None)(spa_fallback)
