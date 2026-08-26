@@ -8894,6 +8894,55 @@
         "title": "SmartPlaylistUpdate",
         "type": "object"
       },
+      "SuggestedTrackResponse": {
+        "description": "One addable track, and why it is being offered.",
+        "properties": {
+          "because_of": {
+            "$ref": "#/components/schemas/SuggestionReasonResponse"
+          },
+          "similarity": {
+            "title": "Similarity",
+            "type": "number"
+          },
+          "track": {
+            "$ref": "#/components/schemas/TrackResponse"
+          },
+          "votes": {
+            "title": "Votes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track",
+          "because_of",
+          "similarity",
+          "votes"
+        ],
+        "title": "SuggestedTrackResponse",
+        "type": "object"
+      },
+      "SuggestedTracksResponse": {
+        "description": "Suggestions for one collection, best first.",
+        "properties": {
+          "seed_track_count": {
+            "title": "Seed Track Count",
+            "type": "integer"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedTrackResponse"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions",
+          "seed_track_count"
+        ],
+        "title": "SuggestedTracksResponse",
+        "type": "object"
+      },
       "Suggestion": {
         "description": "One suggested track and how well it scored.",
         "properties": {
@@ -8910,6 +8959,35 @@
           "score"
         ],
         "title": "Suggestion",
+        "type": "object"
+      },
+      "SuggestionReasonResponse": {
+        "description": "The track of the listener's own that reached this suggestion.\n\nDeliberately not a full `TrackResponse`: this is a caption, and returning a whole track for every\nsuggestion would double the payload to say \"because you like X\".",
+        "properties": {
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_id": {
+            "format": "uuid",
+            "title": "Track Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "track_id"
+        ],
+        "title": "SuggestionReasonResponse",
         "type": "object"
       },
       "SuggestionsRequest": {
@@ -14818,6 +14896,97 @@
           }
         ],
         "summary": "Set Favorites Auto Download",
+        "tags": [
+          "favorites"
+        ]
+      }
+    },
+    "/api/v1/favorites/suggested-tracks": {
+      "get": {
+        "description": "Tracks from your library that fit your favorites and are not already among them.\n\nEach carries the favourite that reached it, so the list explains itself rather than needing a\nheading nobody can write truthfully (ADR-0093 point 7).\n\n**Registered above `GET /{track_id}`, and it has to stay there.** FastAPI matches in registration\norder, so behind the parameterised route this path is read as a track id and 422s on the UUID\nparse \u2014 the same trap `routes/playlists/__init__.py` documents for `/generate`.",
+        "operationId": "favorites_get_favorites_suggested_tracks",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedTracksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Favorites Suggested Tracks",
         "tags": [
           "favorites"
         ]
@@ -24750,6 +24919,107 @@
           }
         ],
         "summary": "Get Playlist External Albums",
+        "tags": [
+          "playlists"
+        ]
+      }
+    },
+    "/api/v1/playlists/{playlist_id}/suggested-tracks": {
+      "get": {
+        "description": "Tracks from your library that would fit this playlist and are not already in it.\n\nEach carries the playlist track that reached it, so the list explains itself.",
+        "operationId": "playlists_get_playlist_suggested_tracks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "playlist_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Playlist Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestedTracksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Playlist Suggested Tracks",
         "tags": [
           "playlists"
         ]
