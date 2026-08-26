@@ -168,7 +168,7 @@ Three traps the two ADRs name explicitly, all of which the compiler is silent ab
 **do not write a range parser** — `app/api/streaming.py`'s `stream_file` exists and its docstring
 records the incident the hand-rolled one caused; **do not add `videos` to the generator's `tags:`** —
 the filter keys are a union, so the tag re-admits the stream the ADR deliberately leaves hand-written
-(name the four JSON operations instead, per ADR-0031); and **`visualizerID` is stored as a bare
+(name the five JSON operations instead, per ADR-0031); and **`visualizerID` is stored as a bare
 `String`**, so deleting `VisualizerChoice.musicVideo` leaves profiles holding `"music-video"`
 selecting nothing unless they are reset.
 

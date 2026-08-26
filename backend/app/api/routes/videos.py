@@ -1,17 +1,20 @@
 """Video endpoints for music video search and download."""
 
 import logging
-from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
+from starlette.responses import FileResponse
 
 from app.api.deps import DbSession, release_connection
 from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
+from app.api.schemas.common import UTCDateTime
+from app.api.schemas.tracks import TrackResponse
+from app.api.streaming import stream_file
 from app.db.models import Track
+from app.db.models.tracks import TrackVideo
 from app.services.video import get_video_service
 
 logger = logging.getLogger(__name__)
@@ -47,6 +50,76 @@ class DownloadResponse(BaseModel):
     status: str
     message: str
     track_id: str
+
+
+class VideoListItem(TrackResponse):
+    """A track that has a video — the full track, plus which video and when it arrived.
+
+    Subclasses `TrackResponse` for the same reason `FavoriteTrackResponse` does: the client drawing
+    this list wants a track row, and reinventing a narrower one guarantees it diverges from every
+    other track row in the app.
+    """
+
+    source: str
+    source_id: str
+    source_url: str | None = None
+    file_size_bytes: int | None = None
+    downloaded_at: UTCDateTime | None = None
+
+
+class VideoListResponse(BaseModel):
+    """Paginated list of tracks that have a video."""
+
+    items: list[VideoListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+@router.get("", response_model=VideoListResponse)
+async def list_videos(
+    db: DbSession,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+) -> VideoListResponse:
+    """
+    List the tracks that have a downloaded video.
+
+    ADR-0086 point 3, and the one thing the rest of this surface cannot do: every other operation is
+    keyed by a track id you already have, so a destination that *lists* videos had nothing to call.
+    """
+    base = (
+        select(TrackVideo, Track)
+        .join(Track, TrackVideo.track_id == Track.id)
+        .where(Track.active_filter())
+    )
+
+    total = await db.scalar(
+        select(func.count()).select_from(base.subquery())
+    ) or 0
+
+    result = await db.execute(
+        # `TrackVideo.id` last so the total order is unique. Ordering by `downloaded_at` alone ties
+        # every row written in the same transaction, and OFFSET paging over a non-unique order may
+        # repeat or skip rows between pages — see the same note on `tracks/listing.py`.
+        base.order_by(TrackVideo.downloaded_at.desc().nullslast(), TrackVideo.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+
+    items = [
+        VideoListItem(
+            **TrackResponse.model_validate(track, from_attributes=True).model_dump(),
+            source=video.source,
+            source_id=video.source_id,
+            source_url=video.source_url,
+            file_size_bytes=video.file_size_bytes,
+            downloaded_at=video.downloaded_at,
+        )
+        for video, track in result.all()
+    ]
+
+    return VideoListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{track_id}/search")
@@ -111,7 +184,7 @@ async def get_video_status(
     track_id_str = str(track_id)
 
     has_video = video_service.has_video(track_id_str)
-    download_status = video_service.get_download_status(track_id_str)
+    download_status = await video_service.get_download_status(db, track_id_str)
 
     if download_status:
         return VideoStatusResponse(
@@ -147,7 +220,7 @@ async def download_video(
     track_id_str = str(track_id)
 
     # Check if already downloading
-    status = video_service.get_download_status(track_id_str)
+    status = await video_service.get_download_status(db, track_id_str)
     if status and status.status == 'downloading':
         return DownloadResponse(
             status="downloading",
@@ -180,13 +253,26 @@ async def download_video(
     )
 
 
-@router.get("/{track_id}/stream")
+@router.get(
+    "/{track_id}/stream",
+    # Declare the real media type, exactly as `/tracks/{id}/stream` does. Without this the schema
+    # claims `application/json` and a generated client would try to JSON-decode a video (ADR-0007).
+    # This endpoint is hand-written per platform — `AVPlayer` is the caller — so the schema only
+    # needs to describe it honestly (ADR-0086 point 5).
+    response_class=FileResponse,
+    responses={
+        200: {"content": {"video/*": {}}, "description": "Whole video file."},
+        206: {"content": {"video/*": {}}, "description": "Partial content for a Range request (seeking, buffering)."},
+        416: {"description": "Requested range is not satisfiable."},
+    },
+)
 async def stream_video(
     db: DbSession,
     track_id: UUID,
-) -> StreamingResponse:
+    request: Request,
+) -> FileResponse:
     """
-    Stream a downloaded video for a track.
+    Stream a downloaded video for a track, honouring `Range`.
     """
     # Verify track exists
     query = select(Track).where(Track.id == track_id)
@@ -202,27 +288,17 @@ async def stream_video(
     if not video_path:
         raise NotFoundError("No video available")
 
-    file_size = video_path.stat().st_size
-
     # Nothing below reads the database, so the connection goes back before the body is sent.
     # A `yield` dependency otherwise lives until the response *finishes*, which for a video is the
     # length of the video. See `release_connection`.
     await release_connection(db)
 
-    async def stream_video_file() -> AsyncIterator[bytes]:
-        with open(video_path, "rb") as f:
-            chunk_size = 64 * 1024  # 64KB chunks
-            while chunk := f.read(chunk_size):
-                yield chunk
-
-    return StreamingResponse(
-        stream_video_file(),  # type: ignore[no-untyped-call]
-        media_type="video/mp4",
-        headers={
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(file_size),
-        },
-    )
+    # ADR-0086 point 4: `stream_file` hands the file to Starlette's `FileResponse`, which reads the
+    # range off the ASGI scope and supplies 206, 416, suffix ranges, multipart, `ETag` and
+    # `Last-Modified`. The handler this replaced set `Accept-Ranges: bytes` and then served the whole
+    # file from byte 0 every time. **Do not reintroduce a hand-rolled parser here** — `stream_file`'s
+    # docstring records the five defects the audio one had, and the incident they caused.
+    return await stream_file(video_path, request, "video/mp4")
 
 
 class VideoDeleteResponse(BaseModel):
@@ -246,7 +322,7 @@ async def delete_video(
         raise TrackNotFoundError()
 
     video_service = get_video_service()
-    deleted = await video_service.delete_video(str(track_id))
+    deleted = await video_service.delete_video(db, str(track_id))
 
     if deleted:
         return VideoDeleteResponse(status="deleted", message="Video deleted successfully")

@@ -5,7 +5,7 @@ Status: accepted
 Date: 2026-08-18
 
 Extends [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md), whose generated surface this
-adds four operations to, and whose point 8 it applies to the one handler that stays outside.
+adds five operations to, and whose point 8 it applies to the one handler that stays outside.
 Prerequisite for
 [ADR-0085](ADR-0085-music-videos-are-a-mac-function-not-a-visualizer.md) — **this one executes
 first**, on the principle that server-side work every client inherits comes before client work.
@@ -103,18 +103,18 @@ There are **no functional tests for this feature** on either side. The only test
    is the fix for a defect that turned 834 downloads into 83-byte error bodies: a `yield` dependency
    otherwise holds a database connection for the length of the video.
 
-5. **The four JSON operations join `VENDORED_OPERATIONS`; the `videos` *tag* does not join
+5. **The five JSON operations join `VENDORED_OPERATIONS`; the `videos` *tag* does not join
    `VENDORED_TAGS`.** This is the ADR-0031 precedent, not a stylistic choice, and the reason is
    mechanical: the generator's filter keys are a **union**, so naming the tag would re-admit
-   `videos_stream_video` along with the rest. `search`, `status`, `download` and the new `list` are
-   ordinary JSON and are generated; the stream is written by hand, because `AVPlayer` is the caller
+   `videos_stream_video` along with the rest. `search`, `status`, `download`, `delete` and the
+   new `list` are ordinary JSON and are generated; the stream is written by hand, because `AVPlayer` is the caller
    and range requests are what ADR-0007 point 8 excludes.
 
    **Point 8 is doctrine with no enforcement, and this ADR should not pretend otherwise.**
    `/tracks/{id}/stream` is *not* filtered out by `scripts/lint_openapi.py` — it carries the `tracks`
    tag and is fully in scope, passing the lint only because point 4's `response_class` and explicit
    `responses` stop it advertising `application/json`. The only mechanism that expresses "generate
-   four of five" is the per-operation list. Adding it also obliges deleting the video stream's entry
+   five of six" is the per-operation list. Adding it also obliges deleting the video stream's entry
    in `ALLOWED_UNTYPED_OPERATIONS` (`scripts/lint_openapi.py:235`): point 4 makes the handler typed,
    and an allowlist entry for an in-scope operation is a contradiction the lint fails on by design.
 
@@ -175,6 +175,15 @@ question is asked.
 - **Positive** — the table stops being conditional on how a database was built. Point 1's migration
   is the first thing that guarantees `track_videos` exists on a database older than the model.
 - **Positive** — the first functional tests this feature has ever had.
+- **Tradeoff** — **point 5 cannot land on the backend alone.** `surface_disagreement()` compares
+  `VENDORED_OPERATIONS` against the Swift config for anyone with both repos checked out, so adding
+  the five operations here fails `make lint-contracts` until `familiar-apple`'s
+  `openapi-generator-config.yaml` names the same five. That is the mechanism working — it is what
+  makes ADR-0014 point 4's "updated in the same change" enforceable — but it means the `familiar-apple`
+  half is not optional follow-up. **And the config change cannot land there alone either**: the
+  generator throws on an operationId its vendored `openapi.json` does not contain, so the schema is
+  re-vendored in the same commit. ADR-0078 point 2 says that copy is made by a target rather than by
+  hand; no such target exists yet, which is worth knowing before reaching for `cp`.
 - **Tradeoff** — the generated Swift surface now has a second entry that is a *list of operations*
   rather than a tag, so the two mechanisms sit side by side and someone will eventually add `videos`
   to `tags:` for tidiness and silently re-admit the stream. The config file warns about this in
