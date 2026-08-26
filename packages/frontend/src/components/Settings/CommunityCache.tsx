@@ -20,19 +20,19 @@ export function CommunityCache() {
 
   if (isLoading) {
     return (
-      <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4">
+      <div className="bg-zinc-800/50 rounded-lg p-4">
         <div className="animate-pulse h-16 bg-zinc-700/50 rounded" />
       </div>
     );
   }
 
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-4">
+    <div className="bg-zinc-800/50 rounded-lg p-4 space-y-4">
       <div className="flex items-center gap-3">
         <Database className="w-5 h-5 text-cyan-400" />
         <div>
-          <h4 className="font-medium text-white dark:text-white light:text-zinc-900">Community Cache</h4>
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+          <h4 className="font-medium text-white">Community Cache</h4>
+          <p className="text-sm text-zinc-400">
             Share analysis data with other Familiar users
           </p>
         </div>
@@ -43,8 +43,8 @@ export function CommunityCache() {
         <div className="flex items-center gap-3">
           <Cloud className="w-5 h-5 text-blue-400" />
           <div>
-            <p className="text-sm text-white dark:text-white light:text-zinc-900">Use community cache</p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-500 light:text-zinc-500">
+            <p className="text-sm text-white">Use community cache</p>
+            <p className="text-xs text-zinc-500">
               Look up pre-computed features and embeddings
             </p>
           </div>
@@ -66,8 +66,8 @@ export function CommunityCache() {
         <div className="flex items-center gap-3">
           <Upload className="w-5 h-5 text-green-400" />
           <div>
-            <p className="text-sm text-white dark:text-white light:text-zinc-900">Contribute to cache</p>
-            <p className="text-xs text-zinc-500 dark:text-zinc-500 light:text-zinc-500">
+            <p className="text-sm text-white">Contribute to cache</p>
+            <p className="text-xs text-zinc-500">
               Share your computed features and embeddings (anonymous)
             </p>
           </div>

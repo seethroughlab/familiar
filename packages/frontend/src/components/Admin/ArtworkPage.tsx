@@ -4,7 +4,7 @@
  * **A placeholder is not artwork, and this page exists to say so out loud.** When Last.fm and
  * MusicBrainz both come back empty, Familiar draws a cover itself. That is a good fallback — a grid
  * of blank squares is worse — but it is indistinguishable from real art everywhere else in the app,
- * which is how 661 albums came to be permanently stuck on one: both queue routes reported "artwork
+ * which is how 661 albums came to be permanently stuck on one: both queue routes reported"artwork
  * exists" for a file Familiar had drawn, so the fetcher's own retry allowance was unreachable.
  *
  * The fix is in the server. This page is the bulk lever, because fixing the routes only makes
@@ -56,7 +56,7 @@ export function ArtworkPage() {
           <Figure label="No art at all" value={data?.without_artwork} loading={isLoading} tone="text-zinc-400" />
         </div>
         {data && data.total_albums > 0 && (
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+          <p className="text-sm text-zinc-400">
             {Math.round((real / data.total_albums) * 100)}% of {data.total_albums.toLocaleString()}{' '}
             albums have artwork fetched from Last.fm or MusicBrainz. The rest show a cover Familiar
             drew, or nothing.
@@ -65,8 +65,8 @@ export function ArtworkPage() {
       </AdminSection>
 
       <AdminSection title="Re-fetch">
-        <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 space-y-3">
-          <p className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+        <div className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
+          <p className="text-sm text-zinc-400">
             Asks Last.fm and MusicBrainz again for every album currently showing a placeholder. Art
             gets added to those services over time, and correcting an album's tags changes what
             Familiar asks for — so an album that had nothing last year may have a cover now.
@@ -98,7 +98,7 @@ export function ArtworkPage() {
           )}
 
           {result && !refetch.isPending && (
-            <p className="text-sm text-zinc-300 dark:text-zinc-300 light:text-zinc-700">
+            <p className="text-sm text-zinc-300">
               Queued {result.queued.toLocaleString()} album
               {result.queued === 1 ? '' : 's'}
               {result.skipped_recent > 0 &&
@@ -127,12 +127,12 @@ function Figure({
   tone: string;
 }) {
   return (
-    <div className="bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4">
+    <div className="bg-zinc-800/50 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-1">
         <Image className={`w-5 h-5 ${tone}`} />
-        <span className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">{label}</span>
+        <span className="text-sm text-zinc-400">{label}</span>
       </div>
-      <div className="text-2xl font-semibold tabular-nums text-white dark:text-white light:text-zinc-900">
+      <div className="text-2xl font-semibold tabular-nums text-white">
         {loading || value === undefined ? '—' : value.toLocaleString()}
       </div>
     </div>

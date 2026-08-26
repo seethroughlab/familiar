@@ -28,14 +28,14 @@ export function LibraryPage() {
         <Link
           to="/library/artist-cleanup"
           aria-label="Artist cleanup"
-          className="flex items-center gap-3 bg-zinc-800/50 dark:bg-zinc-800/50 light:bg-zinc-100 rounded-lg p-4 hover:bg-zinc-800 transition-colors"
+          className="flex items-center gap-3 bg-zinc-800/50 rounded-lg p-4 hover:bg-zinc-800 transition-colors"
         >
           <Combine className="w-5 h-5 text-cyan-400 flex-shrink-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-white dark:text-white light:text-zinc-900">
+            <div className="text-sm font-medium text-white">
               Artist cleanup
             </div>
-            <div className="text-sm text-zinc-400 dark:text-zinc-400 light:text-zinc-600">
+            <div className="text-sm text-zinc-400">
               Merge duplicate artists and fix name variants
             </div>
           </div>
