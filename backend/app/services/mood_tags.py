@@ -6,6 +6,7 @@ to find the best-matching descriptors.
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -93,6 +94,12 @@ def _get_descriptor_embeddings() -> np.ndarray | None:
     if _descriptor_embeddings is not None:
         return _descriptor_embeddings
 
+    # The committed file first, so analysis does not re-embed 48 fixed strings either. It is the
+    # same matrix; this path only remains for a library whose file is missing or has drifted.
+    committed = descriptor_embeddings_if_warm()
+    if committed is not None:
+        return committed
+
     if _descriptor_embeddings_failed:
         return None
 
@@ -151,10 +158,66 @@ def _get_descriptor_embeddings() -> np.ndarray | None:
         return None
 
 
+#: The 48 descriptor text embeddings, precomputed and committed (ADR-0093 point 7).
+#:
+#: These are a pure function of `DESCRIPTORS` and the CLAP text encoder, so computing them at
+#: runtime bought nothing and cost a great deal: `_get_descriptor_embeddings` loaded ~1.5 GB of
+#: model to embed 48 fixed strings, and cached the result in Redis under a **24 hour TTL written
+#: only while analysis runs**. Measured on the NAS 2026-08-25, with analysis complete and nothing
+#: pending, the key was simply absent — so the "warm cache" path this file was built around
+#: essentially never fired in a steady-state library, and every caller silently took its fallback.
+#:
+#: Regenerate with `scripts/build_mood_descriptors.py` if `DESCRIPTORS` or the CLAP model changes.
+_DESCRIPTOR_FILE = Path(__file__).parent / "data" / "mood_descriptors.npz"
+
+_committed_embeddings: np.ndarray | None = None
+_committed_failed = False
+
+
+def descriptor_embeddings_if_warm() -> np.ndarray | None:
+    """The descriptor embeddings, if they cost nothing to get (ADR-0093 point 7).
+
+    Now essentially always available, because they are read from a committed file rather than
+    recomputed. Still returns `None` rather than raising if the file is missing or has drifted out
+    of step with `DESCRIPTORS`, because the callers are captioning headings and every one of them
+    has something truthful to fall back to.
+    """
+    global _committed_embeddings, _committed_failed
+
+    if _committed_embeddings is not None:
+        return _committed_embeddings
+    if _committed_failed:
+        return _descriptor_embeddings  # whatever a runtime computation may have left behind
+
+    try:
+        with np.load(_DESCRIPTOR_FILE, allow_pickle=False) as data:
+            embeddings = np.asarray(data["embeddings"], dtype=np.float32)
+            tags = [str(t) for t in data["tags"]]
+    except Exception as e:  # noqa: BLE001 - a caption is never worth raising for
+        logger.warning(f"Committed mood descriptors unavailable ({e}); labels will fall back")
+        _committed_failed = True
+        return _descriptor_embeddings
+
+    # **Order is the contract**, not just length: `compute_mood_tags` indexes `DESCRIPTORS` by the
+    # row that won, so a file whose rows have drifted would confidently return the wrong words.
+    expected = [d["tag"] for d in DESCRIPTORS]
+    if tags != expected:
+        logger.warning(
+            "Committed mood descriptors do not match DESCRIPTORS "
+            f"({len(tags)} rows vs {len(expected)}); regenerate with scripts/build_mood_descriptors.py"
+        )
+        _committed_failed = True
+        return _descriptor_embeddings
+
+    _committed_embeddings = embeddings
+    return _committed_embeddings
+
+
 def compute_mood_tags(
     audio_embedding: list[float],
     top_k: int = 5,
     min_confidence: float = 0.15,
+    desc_embeddings: np.ndarray | None = None,
 ) -> list[dict[str, Any]]:
     """Compute mood/genre/instrumentation tags for a track.
 
@@ -162,11 +225,15 @@ def compute_mood_tags(
         audio_embedding: 512-dim CLAP audio embedding
         top_k: Maximum number of tags to return
         min_confidence: Minimum cosine similarity threshold
+        desc_embeddings: Descriptor matrix to score against, when the caller already holds one.
+            Supplied by `descriptor_embeddings_if_warm` callers so this cannot fall through to
+            `_get_descriptor_embeddings` and load CLAP on a request path (ADR-0093 point 7).
 
     Returns:
         List of {"tag", "category", "confidence"} dicts, sorted by confidence descending.
     """
-    desc_embeddings = _get_descriptor_embeddings()
+    if desc_embeddings is None:
+        desc_embeddings = _get_descriptor_embeddings()
     if desc_embeddings is None:
         return []
 

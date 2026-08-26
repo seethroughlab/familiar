@@ -17,6 +17,7 @@ from app.api.routes.playlists.crud import (
 )
 from app.api.routes.playlists.generate import router as generate_router
 from app.api.routes.playlists.recommendations import router as recommendations_router
+from app.api.routes.playlists.suggestions import router as suggestions_router
 from app.api.routes.playlists.tracks import router as tracks_router
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
@@ -33,3 +34,4 @@ router.include_router(generate_router)
 router.include_router(crud_router)
 router.include_router(tracks_router)
 router.include_router(recommendations_router)
+router.include_router(suggestions_router)

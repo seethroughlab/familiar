@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, literal, select
+from sqlalchemy import and_, func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Track, TrackAnalysis
@@ -39,6 +39,18 @@ POOL_SIZE = 400
 #: whatever it has — a "playlist based on Cocteau Twins" padded with death metal because there was
 #: nothing else left. Better to return a short playlist than a wrong one.
 MIN_SCORE = 0.35
+
+#: How many candidates the HNSW index is allowed to consider. **`POOL_SIZE` does not work without
+#: this**, and that is not obvious from either the query or the plan: pgvector's `hnsw.ef_search`
+#: defaults to 40 and caps the result set regardless of `LIMIT`, so `ORDER BY ... LIMIT 400` had
+#: been quietly returning 40 rows since ADR-0048 shipped. Measured on the 26k library, 2026-08-25:
+#: 40 rows without it, 400 with, and the query costs 12 ms either way.
+#:
+#: Must be >= POOL_SIZE or the cap simply moves here. Set with `SET LOCAL` so it lasts exactly one
+#: transaction and cannot leak onto a pooled connection; PostgreSQL accepts a dotted name as a
+#: placeholder even before pgvector's library is loaded, so this never raises on a database where
+#: the extension has not been touched yet.
+HNSW_EF_SEARCH = 500
 
 
 @dataclass(frozen=True)
@@ -125,9 +137,9 @@ async def resolve_seed(
     embeddings = [row[1].embedding for row in rows if row[1].embedding is not None]
     centroid: list[float] | None = None
     if embeddings:
-        # **The centroid, not a loop over seeds** (point 3). A mean of unit-ish CLAP vectors is the
-        # direction they have in common; pgvector's cosine distance ignores magnitude, so it does
-        # not need renormalising.
+        # **The centroid, not a loop over seeds** (ADR-0048 point 3). A mean of unit-ish CLAP
+        # vectors is the direction they have in common; pgvector's cosine distance ignores
+        # magnitude, so it does not need renormalising.
         width = len(embeddings[0])
         centroid = [sum(float(e[i]) for e in embeddings) / len(embeddings) for i in range(width)]
 
@@ -285,6 +297,7 @@ async def generate_seeded_playlist(
         conditions.append(Track.id.notin_(seed_ids))
 
     if seed.centroid is not None:
+        await db.execute(text(f"SET LOCAL hnsw.ef_search = {int(HNSW_EF_SEARCH)}"))
         cosine_dist = TrackAnalysis.embedding.cosine_distance(seed.centroid)
         query = (
             select(Track, TrackAnalysis, (1 - cosine_dist).label("similarity"))
