@@ -10428,6 +10428,211 @@
         "title": "VideoDeleteResponse",
         "type": "object"
       },
+      "VideoListItem": {
+        "description": "A track that has a video \u2014 the full track, plus which video and when it arrived.\n\nSubclasses `TrackResponse` for the same reason `FavoriteTrackResponse` does: the client drawing\nthis list wants a track row, and reinventing a narrower one guarantees it diverges from every\nother track row in the app.",
+        "properties": {
+          "album": {
+            "title": "Album",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "album_artist": {
+            "title": "Album Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "album_type": {
+            "title": "Album Type",
+            "type": "string"
+          },
+          "analysis_version": {
+            "title": "Analysis Version",
+            "type": "integer"
+          },
+          "artist": {
+            "title": "Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disc_number": {
+            "title": "Disc Number",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "downloaded_at": {
+            "format": "date-time",
+            "title": "Downloaded At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "features": {
+            "$ref": "#/components/schemas/TrackFeaturesResponse"
+          },
+          "file_path": {
+            "title": "File Path",
+            "type": "string"
+          },
+          "file_size_bytes": {
+            "title": "File Size Bytes",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "format": {
+            "title": "Format",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "genre": {
+            "title": "Genre",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_played_at": {
+            "format": "date-time",
+            "title": "Last Played At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "play_count": {
+            "title": "Play Count",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_url": {
+            "title": "Source Url",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "default": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_number": {
+            "title": "Track Number",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "year": {
+            "title": "Year",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "file_path",
+          "title",
+          "artist",
+          "album",
+          "album_artist",
+          "album_type",
+          "track_number",
+          "disc_number",
+          "year",
+          "genre",
+          "duration_seconds",
+          "format",
+          "analysis_version",
+          "source",
+          "source_id"
+        ],
+        "title": "VideoListItem",
+        "type": "object"
+      },
+      "VideoListResponse": {
+        "description": "Paginated list of tracks that have a video.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VideoListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "VideoListResponse",
+        "type": "object"
+      },
       "VideoSearchResultResponse": {
         "description": "Video search result response.",
         "properties": {
@@ -33597,6 +33802,103 @@
         ]
       }
     },
+    "/api/v1/videos": {
+      "get": {
+        "description": "List the tracks that have a downloaded video.\n\nADR-0086 point 3, and the one thing the rest of this surface cannot do: every other operation is\nkeyed by a track id you already have, so a destination that *lists* videos had nothing to call.",
+        "operationId": "videos_list_videos",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "List Videos",
+        "tags": [
+          "videos"
+        ]
+      }
+    },
     "/api/v1/videos/{track_id}": {
       "delete": {
         "description": "Delete a downloaded video for a track.",
@@ -33961,7 +34263,7 @@
     },
     "/api/v1/videos/{track_id}/stream": {
       "get": {
-        "description": "Stream a downloaded video for a track.",
+        "description": "Stream a downloaded video for a track, honouring `Range`.",
         "operationId": "videos_stream_video",
         "parameters": [
           {
@@ -33978,11 +34280,15 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
-              }
+              "video/*": {}
             },
-            "description": "Successful Response"
+            "description": "Whole video file."
+          },
+          "206": {
+            "content": {
+              "video/*": {}
+            },
+            "description": "Partial content for a Range request (seeking, buffering)."
           },
           "400": {
             "content": {
@@ -34013,6 +34319,9 @@
               }
             },
             "description": "Not Found"
+          },
+          "416": {
+            "description": "Requested range is not satisfiable."
           },
           "422": {
             "content": {

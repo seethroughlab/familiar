@@ -2,19 +2,11 @@
 export const DEFAULT_VISUALIZER_ID = 'reactive-terrain';
 
 /**
- * Well-known visualizer IDs to avoid magic strings.
+ * localStorage key for persisted visualizer preference.
  *
- * All five built-ins, and it must stay that way: a plugin claiming one of these ids is refused, so
- * a missing entry here is a reserved id nothing in this file records. `lyric-storm` was absent from
- * this list for as long as it has existed.
+ * `VISUALIZER_IDS` used to sit here, listing the built-in ids "so a plugin claiming one is refused".
+ * Nothing ever imported it, so nothing was ever refused by it — and by the time it was removed its
+ * docblock was false twice over: it named `music-video`, which ADR-0085 retired, and it did not name
+ * `spectrum`, which ships. A list with no caller cannot go stale loudly (ADR-0077).
  */
-export const VISUALIZER_IDS = {
-  REACTIVE_TERRAIN: 'reactive-terrain',
-  BEAT_TILES: 'beat-tiles',
-  LYRICS: 'lyrics',
-  MUSIC_VIDEO: 'music-video',
-  LYRIC_STORM: 'lyric-storm',
-} as const;
-
-/** localStorage key for persisted visualizer preference. */
 export const VISUALIZER_STORAGE_KEY = 'familiar-visualizer';

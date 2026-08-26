@@ -148,6 +148,30 @@ compatibility branch alive for one API. **Adopting `NavigationStack` is delibera
 — that is the payoff, recorded as a follow-up, and a navigation rewrite should not ride along with a
 deployment-target bump.
 
+**`ADR-0085`–`ADR-0086` make music videos a Mac function** (both accepted, proposed 2026-08-18).
+**Execution order is `0086` then `0085`** — server work every client inherits first. `0086` makes the
+existing feature a real resource: `track_videos` is read and written by nothing and, on any database
+stamped at baseline before the model landed, **does not exist**; the stream advertises
+`Accept-Ranges` and never honours a `Range`; and no generated client can reach the endpoints. `0085`
+then says what the PWA got wrong: **a music video is a way of playing a track, not a visualizer.**
+
+**Read both ADRs' own record of what drifted under them before working from their line numbers.**
+They were drafted while the web app still had a player. Since then `MusicVideo.tsx`,
+`packages/frontend/src/player/` and `FullPlayer.tsx` have all been deleted (#190, #192, #194), so the
+web visualizer went by collateral rather than by decision, `0085` point 9's "removes a `queueStore`
+pin" argument is vacuous, and its point 10's parity reasoning is moot because the player's removal
+countdown already emptied. What survives is sharper, not weaker: the feature is now reachable from
+**nothing**, while five endpoints and a yt-dlp service run in production with zero callers in either
+repo.
+
+Three traps the two ADRs name explicitly, all of which the compiler is silent about:
+**do not write a range parser** — `app/api/streaming.py`'s `stream_file` exists and its docstring
+records the incident the hand-rolled one caused; **do not add `videos` to the generator's `tags:`** —
+the filter keys are a union, so the tag re-admits the stream the ADR deliberately leaves hand-written
+(name the five JSON operations instead, per ADR-0031); and **`visualizerID` is stored as a bare
+`String`**, so deleting `VisualizerChoice.musicVideo` leaves profiles holding `"music-video"`
+selecting nothing unless they are reset.
+
 ## Key Directories
 
 ```

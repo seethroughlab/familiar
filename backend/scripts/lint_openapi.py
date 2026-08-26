@@ -77,6 +77,15 @@ VENDORED_TAGS = {
 # Casting (ADR-0031), by operation rather than by tag: nine of the twenty-four `outputs` operations
 # are zones — dead, unpersisted, and one of them unreachable — so the tag cannot be adopted whole.
 VENDORED_OPERATIONS = {
+    # Music videos (ADR-0086 point 5), by operation for the same reason casting is: the `videos`
+    # tag also covers `videos_stream_video`, which stays hand-written because `AVPlayer` is the
+    # caller and range requests are what ADR-0007 point 8 excludes. The generator's filter keys are
+    # a union, so naming the tag would re-admit it. **Do not add `videos` to VENDORED_TAGS.**
+    "videos_list_videos",
+    "videos_search_videos",
+    "videos_get_video_status",
+    "videos_download_video",
+    "videos_delete_video",
     "outputs_list_outputs",
     "outputs_discover_all_outputs",
     "outputs_get_output",
@@ -232,7 +241,6 @@ ALLOWED_UNTYPED_OPERATIONS = {
     ("GET", "/api/v1/tracks/{track_id}/analysis/midi"),
     ("GET", "/api/v1/tracks/{track_id}/analysis/report"),
     ("GET", "/api/v1/tracks/{track_id}/analysis/similarity.png"),
-    ("GET", "/api/v1/videos/{track_id}/stream"),
 }
 
 # In-scope model fields that are genuinely free-form, with the reason. These are

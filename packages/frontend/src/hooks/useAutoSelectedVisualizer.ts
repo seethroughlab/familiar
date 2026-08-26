@@ -32,9 +32,11 @@ export const SWITCH_MARGIN = 0.1;
  *
  * **One definition, because there is more than one consumer.** Auto-select introduces a second
  * possible answer to "which visualizer is on", and anything still reading `visualizerId` directly
- * gets the wrong one: `FullPlayer` gates its whole layout on whether Music Video is playing, and
- * would have laid album art over a video the moment auto-select chose it. Re-deriving this at each
- * call site is how those two answers come apart.
+ * gets the wrong one. The original example was `FullPlayer`, which gated its whole layout on
+ * whether Music Video was playing and would have laid album art over a video the moment auto-select
+ * chose it — both are gone now (ADR-0058 removed the player, ADR-0085 the visualizer), but the
+ * hazard is the rule rather than the example: re-deriving this at each call site is how two answers
+ * to one question come apart.
  *
  * Reads state only — it never triggers a ranking. `useAutoSelectedVisualizer` is what asks, and it
  * is called once, by `AudioVisualizer`.

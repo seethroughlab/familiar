@@ -39,6 +39,11 @@ ALLOWLISTED_MODULES = {
     "analysis",
     "ambient",
     "background",
+    # Still exempt after ADR-0086. Every video operation is keyed by a track, and a video
+    # belongs to the library rather than to a listener, so none of them is profile state.
+    # The one column that would change this is `track_videos.match_confirmed_by`, which
+    # ADR-0085 point 7's match-and-download action is the only plausible caller for — if
+    # that ships and writes it, this entry comes off.
     "videos",
     "updates",
     "s3_backup",

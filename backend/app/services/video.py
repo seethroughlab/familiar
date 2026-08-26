@@ -6,8 +6,15 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from uuid import UUID, uuid4
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.db.models.tracks import TrackVideo
+from app.db.session import async_session_maker
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -134,12 +141,112 @@ class VideoService:
         return None
 
     def has_video(self, track_id: str) -> bool:
-        """Check if a video exists for a track."""
+        """Check if a video exists for a track.
+
+        The file on disk is the authority for *existence*; the row is the authority for *identity*
+        (ADR-0086 point 2). Answering existence from disk keeps this synchronous and keeps a video
+        playable even if its row was lost, which matters because the file is what the stream serves.
+        """
         return self.get_video_path(track_id) is not None
 
-    def get_download_status(self, track_id: str) -> VideoDownloadStatus | None:
-        """Get the status of a video download."""
-        return self._downloads.get(track_id)
+    async def get_video_record(
+        self, session: AsyncSession, track_id: str
+    ) -> TrackVideo | None:
+        """The row for a track's video, or None.
+
+        Takes the caller's session rather than opening one. Every caller is a request handler that
+        already has `DbSession`, and a service that opens a second session against the same engine
+        binds its pool to whichever event loop touched it first — which is exactly the conflict
+        `conftest.async_db` exists to work around.
+
+        Reconciles the two sources ADR-0086 point 2 names: a row whose file is gone is deleted
+        rather than reported, so "which video is attached" can never outlive the thing it describes.
+        """
+        record = await session.scalar(
+            select(TrackVideo).where(TrackVideo.track_id == UUID(track_id))
+        )
+        if record is None:
+            return None
+        if self.get_video_path(track_id) is None:
+            await session.execute(delete(TrackVideo).where(TrackVideo.id == record.id))
+            await session.commit()
+            return None
+        return record
+
+    async def get_download_status(
+        self, session: AsyncSession, track_id: str
+    ) -> VideoDownloadStatus | None:
+        """The status of a video download.
+
+        The in-memory dict is the progress cache for a download running *in this process* — that is
+        the one thing it is good at, and it is the only place a percentage exists. It is consulted
+        first for exactly that reason. When it is empty, the table answers instead, so a restart no
+        longer erases the fact that a video exists.
+        """
+        live = self._downloads.get(track_id)
+        if live is not None:
+            return live
+
+        record = await self.get_video_record(session, track_id)
+        if record is None:
+            return None
+
+        return VideoDownloadStatus(
+            track_id=track_id,
+            video_id=record.source_id,
+            status='complete',
+            progress=100,
+            file_path=record.file_path,
+        )
+
+    async def _record_download(
+        self,
+        track_id: str,
+        video_id: str,
+        video_url: str,
+        output_path: Path,
+    ) -> None:
+        """Write the `track_videos` row for a completed download.
+
+        **The one place in this service that opens its own session**, and it has to: `download` is
+        invoked from `BackgroundTasks`, which runs after the request's session has been committed and
+        closed, so there is nothing to borrow. Every other DB method here takes the caller's session
+        instead.
+
+        Failures here are logged and swallowed on purpose. The file is already on disk and playable;
+        losing the row costs the *identity* of the video, not the video. Raising would leave the
+        caller's `except` marking a completed download as an error, which is the worse of the two.
+        """
+        try:
+            async with async_session_maker() as session:
+                existing = await session.scalar(
+                    select(TrackVideo).where(TrackVideo.track_id == UUID(track_id))
+                )
+                if existing is not None:
+                    await session.execute(
+                        delete(TrackVideo).where(TrackVideo.id == existing.id)
+                    )
+
+                session.add(
+                    TrackVideo(
+                        id=uuid4(),
+                        track_id=UUID(track_id),
+                        source='youtube',
+                        source_id=video_id,
+                        source_url=video_url,
+                        file_path=str(output_path),
+                        is_audio_only=False,
+                        file_size_bytes=output_path.stat().st_size,
+                        downloaded_at=utcnow(),
+                    )
+                )
+                await session.commit()
+        except Exception:
+            logger.exception(
+                "Downloaded video for track %s but could not record it; "
+                "the file is on disk and playable, its source is not known",
+                track_id,
+            )
 
     @staticmethod
     def _extract_video_id(video_url: str) -> str:
@@ -241,6 +348,11 @@ class VideoService:
                 status.status = 'complete'
                 status.progress = 100
                 status.file_path = str(output_path)
+                # ADR-0086 point 1. Deliberately inside the success branch and before the status is
+                # observable as complete, so "there is a file" and "we know what it is" become true
+                # together. `_record_download` swallows its own failures — see its docstring for why
+                # a lost row must not turn a finished download into an error.
+                await self._record_download(track_id, video_id, video_url, output_path)
             else:
                 status.status = 'error'
                 # Use the last (most specific) yt-dlp error, or generic fallback
@@ -257,15 +369,31 @@ class VideoService:
 
         return status
 
-    async def delete_video(self, track_id: str) -> bool:
-        """Delete a downloaded video."""
+    async def delete_video(self, session: AsyncSession, track_id: str) -> bool:
+        """Delete a downloaded video, and the row that says what it was.
+
+        The row goes whether or not the file was there: a `track_videos` row whose file is missing
+        describes nothing, and leaving one behind would make `get_video_record` reconcile it away
+        later anyway.
+        """
         video_path = self.get_video_path(track_id)
+        deleted = False
         if video_path:
             video_path.unlink()
-            if track_id in self._downloads:
-                del self._downloads[track_id]
-            return True
-        return False
+            deleted = True
+
+        if track_id in self._downloads:
+            del self._downloads[track_id]
+
+        result = await session.execute(
+            delete(TrackVideo).where(TrackVideo.track_id == UUID(track_id))
+        )
+        await session.commit()
+        # `session.execute` is typed `Result[Any]`; a DELETE really returns a `CursorResult`,
+        # which has `rowcount`. Same ignore the other eight call sites in this codebase use.
+        deleted = deleted or bool(result.rowcount)  # type: ignore[attr-defined]
+
+        return deleted
 
 
 # Singleton instance

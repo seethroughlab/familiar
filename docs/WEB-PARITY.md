@@ -46,6 +46,7 @@ which only holds if it is corrected when a row changes. Update it in the same ch
 | Offline downloads | ✅ | ✅ | ✅ | Independent implementations — Dexie vs background `URLSession` |
 | Network output (Sonos/UPnP/Chromecast) | ✅ | ✅ | ✅ | ADR-0056 brought casting to the phone. AirPlay stays the OS picker's job (ADR-0031 point 3), reachable from the same merged control |
 | CarPlay | — | — | ✅ | |
+| Music video | ❌ | ✅ | ❌ | **not a blocker:** the browser copy was *deleted*, not skipped — `MusicVideo.tsx` went in `c00d99f` when visualizers became documents (ADR-0087), so the ❌ here is a removal rather than something the browser cannot do. ADR-0085 rebuilt it on the Mac as a player mode with its own destination and a match-and-download row action; ADR-0013 point 2 keeps all of that off the phone, which loses a picker entry that had already stopped selecting anything |
 | Sleep timer, playback speed | ❌ | ❌ | ❌ | **not a blocker:** exists nowhere, including the web app, so it is not a reason to keep it (ADR-0060 point 1) |
 
 ## Playlist editing

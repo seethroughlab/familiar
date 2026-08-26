@@ -55,6 +55,9 @@ NAVIGATION_DESTINATIONS = [
     "smart_playlists",
     "music_map",
     "discover",
+    # ADR-0085 point 7. Mac-only, like "music_map" above it: the phone shares the enum but has
+    # no row that selects this root.
+    "videos",
     "pending_review",
     "proposed_changes",
     "mixtapes",

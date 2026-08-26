@@ -225,9 +225,11 @@ describe('what the picker is told', () => {
 });
 
 /**
- * The active id is what anything outside the visualizer itself must read. `FullPlayer` gates its
- * entire layout on whether Music Video is playing, and reading the *stored* id would lay album art
- * over a playing video the moment auto-select chose it.
+ * The active id is what anything outside the visualizer itself must read. The case that made this
+ * concrete was `FullPlayer` gating its layout on whether Music Video was playing, where reading the
+ * *stored* id laid album art over a playing video the moment auto-select chose it. Neither still
+ * exists — ADR-0058 removed the player, ADR-0085 retired the visualizer — but the invariant is what
+ * is being tested, not that example.
  */
 describe('useActiveVisualizerId', () => {
   beforeEach(() => {
