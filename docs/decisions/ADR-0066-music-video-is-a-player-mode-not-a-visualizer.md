@@ -1,6 +1,24 @@
 # ADR-0066: Music Video Is a Player Mode, Not a Visualizer
 
-Status: proposed
+Status: rejected — superseded before acceptance by
+[ADR-0085](ADR-0085-music-videos-are-a-mac-function-not-a-visualizer.md) and
+[ADR-0086](ADR-0086-music-videos-become-a-persisted-resource.md)
+
+**Rejected because the surface it decided about was deleted underneath it.** This ADR made music
+video a third *background of the web app's full player* and removed `music-video` from the visualizer
+registry. Both halves have since been overtaken. `FullPlayer.tsx` and the whole
+`packages/frontend/src/player/` tree were deleted by `ADR-0058`'s admin-tool direction and the work
+that followed it (#190, #192, #194), so point 1 has no player to give three backgrounds to; and
+`MusicVideo.tsx` went with them in `c00d99f`, so point 2 happened as collateral rather than as a
+decision. Point 5 is dead outright — `docs/VISUALIZER_API.md` was rewritten by `ADR-0087`/`ADR-0088`
+and has neither the "Existing Visualizers" table nor the reserved-id table it describes.
+
+Two things outlived it, and both are carried forward rather than lost. Its `## Context` is still the
+clearest statement of *why* the shape was wrong — one id special-cased in the surrounding interface,
+the only built-in registered `usesMetadata: false`, the only one that could declare no affinity, and
+the only one reaching outside the plugin API. And its point 4 — "it is a mode on every client, or it
+is browser-only and says so" — is the question `ADR-0085` and `ADR-0086` answer: a Mac function,
+built on a server resource, with a `docs/WEB-PARITY.md` row that says so.
 
 Date: 2026-08-18
 
