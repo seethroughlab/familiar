@@ -232,10 +232,9 @@ the shape of the work.**
   revisit. It needs a background refresh path and a policy for intent that changed while the device
   was away.
 - **Follow-up:** Offline favourites. The set is on the device but the list is not; whether it
-  becomes browsable without a server depends on ADR-0011, which is drafted but held on branch
-  `docs/adr-0010-0011-held` and so is deliberately not linked here — there is no file to link to
-  until it is proposed. If the library is cached whole, favourites become a filter over it rather
-  than a second cache.
+  becomes browsable without a server depends on
+  [ADR-0011](ADR-0011-the-library-is-cached-whole-and-refreshed-by-delta.md), proposed 2026-07-31.
+  If the library is cached whole, favourites become a filter over it rather than a second cache.
 - **Follow-up:** Whether a favourite should be a queue source — "play my favourites" — which is a
   ranking question closer to [ADR-0005](ADR-0005-one-ranking-engine-serves-ambient-and-radio.md)
   than to this one.
