@@ -425,9 +425,16 @@ class RecommendationsService:
         ``discovery_context='listening_profile_recommendation'`` and
         ``source_playlist_id IS NULL``. 24h TTL.
         """
-        if not refresh and not await self._needs_recompute(
-            LISTENING_PROFILE_CONTEXT, source_playlist_id=None
-        ):
+        if not refresh:
+            # **Never compute on the request path.** Recomputing means Last.fm plus MusicBrainz plus
+            # Cover Art Archive for every seed artist, measured at **71 seconds** against the real
+            # library on 2026-08-26 — so the first caller after the TTL expired paid for everyone,
+            # and no UI waits that long. "Albums you might want" therefore looked permanently
+            # broken while the endpoint was, strictly speaking, working.
+            #
+            # Stale is served in preference to slow, and an empty cache returns empty rather than
+            # blocking. `_daily_external_albums_refresh` keeps it warm; `refresh=true` still forces
+            # a synchronous recompute for anyone who asks for one deliberately.
             return await self._read_external_albums(
                 LISTENING_PROFILE_CONTEXT, source_playlist_id=None, limit=limit
             )

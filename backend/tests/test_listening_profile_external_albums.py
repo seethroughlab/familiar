@@ -1,5 +1,6 @@
 """Service-level tests for the listening-profile external-albums lane (#2 in Discover)."""
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -263,6 +264,64 @@ async def test_ttl_skips_recompute(async_db, monkeypatch):
     # Force refresh → re-hits
     await service.get_listening_profile_external_albums(profile.id, refresh=True)
     assert len(stub.calls) > len(initial_calls)
+
+
+@pytest.mark.asyncio
+async def test_an_expired_cache_still_does_not_compute_on_the_request(async_db, monkeypatch):
+    """A stale cache is served stale. The request path never recomputes.
+
+    `test_ttl_skips_recompute` above covers the *fresh* case. This is the expired one, which used
+    to fall through to a synchronous recompute — Last.fm plus MusicBrainz plus Cover Art Archive
+    for every seed artist, measured at **71 seconds** against the real library. Whichever request
+    first found the TTL expired paid for everyone, so "Albums you might want" read as permanently
+    broken while the endpoint was technically working.
+
+    `_daily_external_albums_refresh` keeps the cache warm now, and `refresh=true` is the only way
+    to ask for a synchronous recompute.
+    """
+    profile, _, _ = await _seed_top_played(async_db)
+
+    service = RecommendationsService(async_db)
+    stub = _StubLastfm(
+        configured=True,
+        similar={"Radiohead": [_lastfm_similar("Thom Yorke", 0.9)]},
+    )
+    service.lastfm = stub
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.search_artist",
+        lambda name: _mb_search("Thom Yorke", "mb-thom"),
+    )
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.get_artist_releases_recent",
+        lambda mb_id, days_back, release_types: [_mb_release("rg-anima", "ANIMA")],
+    )
+
+    await service.get_listening_profile_external_albums(profile.id, refresh=True)
+    await async_db.commit()
+    calls_after_seeding = list(stub.calls)
+
+    # Age every cached row well past the TTL.
+    rows = (
+        await async_db.execute(
+            select(ExternalAlbumCache).where(
+                ExternalAlbumCache.discovery_context == LISTENING_PROFILE_CONTEXT
+            )
+        )
+    ).scalars().all()
+    assert rows, "seeding should have written cache rows"
+    for row in rows:
+        row.discovered_at = datetime(2020, 1, 1, tzinfo=UTC)
+    await async_db.commit()
+
+    # Expired, so the old code would have recomputed here.
+    assert await service._needs_recompute(
+        LISTENING_PROFILE_CONTEXT, source_playlist_id=None
+    ), "the fixture should leave the cache expired, or this proves nothing"
+
+    result = await service.get_listening_profile_external_albums(profile.id)
+
+    assert stub.calls == calls_after_seeding, "the request path recomputed"
+    assert result, "stale rows should still be served rather than an empty list"
 
 
 @pytest.mark.asyncio
