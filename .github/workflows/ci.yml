@@ -577,7 +577,16 @@ jobs:
 
   frontend-lint:
     name: Frontend Lint
-    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and
+    # a bare label let them pile onto the one Mac — which is shared with `familiar-apple`'s CI and is
+    # the only runner that can take the macOS jobs. Four workers started there within two minutes on
+    # 2026-08-26, all unpacking the same action archives into the shared `_actions/` tree, and one
+    # hung in `tar -xzf` of `pnpm/action-setup` before a single step ran. GitHub killed it at twenty
+    # minutes and reported `cancelled`, which reads as a failure on the pull request.
+    #
+    # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
+    # for the two jobs that genuinely need it.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 10
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -611,7 +620,16 @@ jobs:
 
   frontend-test:
     name: Frontend Test
-    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and
+    # a bare label let them pile onto the one Mac — which is shared with `familiar-apple`'s CI and is
+    # the only runner that can take the macOS jobs. Four workers started there within two minutes on
+    # 2026-08-26, all unpacking the same action archives into the shared `_actions/` tree, and one
+    # hung in `tar -xzf` of `pnpm/action-setup` before a single step ran. GitHub killed it at twenty
+    # minutes and reported `cancelled`, which reads as a failure on the pull request.
+    #
+    # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
+    # for the two jobs that genuinely need it.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
@@ -639,7 +657,16 @@ jobs:
 
   frontend-build:
     name: Frontend Build
-    runs-on: ${{ vars.CI_RUNNER || 'self-hosted' }}
+    # **Linux, not bare `self-hosted`.** These three are Node jobs with no reason to want macOS, and
+    # a bare label let them pile onto the one Mac — which is shared with `familiar-apple`'s CI and is
+    # the only runner that can take the macOS jobs. Four workers started there within two minutes on
+    # 2026-08-26, all unpacking the same action archives into the shared `_actions/` tree, and one
+    # hung in `tar -xzf` of `pnpm/action-setup` before a single step ran. GitHub killed it at twenty
+    # minutes and reported `cancelled`, which reads as a failure on the pull request.
+    #
+    # That happened five times in a day, always to `Frontend Build`. Moving them here leaves the Mac
+    # for the two jobs that genuinely need it.
+    runs-on: ${{ fromJSON(vars.CI_LINUX_RUNNER || '["self-hosted","Linux"]') }}
     timeout-minutes: 15
     env:
       NPM_CONFIG_FETCH_RETRIES: '5'
