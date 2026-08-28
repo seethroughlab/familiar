@@ -700,6 +700,12 @@ class RecommendationsService:
             pg_insert(ExternalAlbumCache)
             .values(
                 release_id=release_id,
+                # **Stamped from the application clock, not `server_default=func.now()`.** In
+                # PostgreSQL `now()` is the *transaction* timestamp, so a row inserted here would
+                # carry the time the transaction opened — earlier than the `run_started_at` computed
+                # in Python afterwards. The prune then deleted the rows the same run had just
+                # written, and every recommendation vanished.
+                discovered_at=utcnow(),
                 discovery_context=discovery_context,
                 source_playlist_id=source_playlist_id,
                 artist_name=artist_name,
