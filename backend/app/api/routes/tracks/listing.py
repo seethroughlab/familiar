@@ -2,7 +2,7 @@
 
 import math
 import random
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -44,6 +44,7 @@ class TrackIndexResponse(BaseModel):
 
 # --- Weighted shuffle presets ---
 
+
 @router.get("/ids", response_model=TrackIdsResponse)
 async def list_track_ids(
     db: DbSession,
@@ -68,7 +69,7 @@ async def list_track_ids(
     fy_min: float | None = Query(None, ge=0, le=1),
     fy_max: float | None = Query(None, ge=0, le=1),
     sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query('asc', pattern='^(asc|desc)$', description="Sort direction"),
+    sort_order: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
 ) -> TrackIdsResponse:
     """Get all track IDs matching filters.
 
@@ -77,7 +78,9 @@ async def list_track_ids(
     Use start_with to ensure a specific track appears first (useful when shuffle=true).
     """
 
-    has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
+    has_feature_filter = any(
+        x is not None for x in [energy_min, energy_max, valence_min, valence_max]
+    )
     has_fx = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
     has_fy = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx or has_fy
@@ -135,8 +138,7 @@ async def list_track_ids(
     if preset and profile:
         # Fetch IDs with play history and favorite status
         weighted_query = (
-            query
-            .add_columns(
+            query.add_columns(
                 Track.artist,
                 Track.created_at,
                 ProfilePlayHistory.play_count,
@@ -145,13 +147,12 @@ async def list_track_ids(
             )
             .outerjoin(
                 ProfilePlayHistory,
-                (ProfilePlayHistory.track_id == Track.id) &
-                (ProfilePlayHistory.profile_id == profile.id),
+                (ProfilePlayHistory.track_id == Track.id)
+                & (ProfilePlayHistory.profile_id == profile.id),
             )
             .outerjoin(
                 ProfileFavorite,
-                (ProfileFavorite.track_id == Track.id) &
-                (ProfileFavorite.profile_id == profile.id),
+                (ProfileFavorite.track_id == Track.id) & (ProfileFavorite.profile_id == profile.id),
             )
         )
         result = await db.execute(weighted_query)
@@ -311,7 +312,7 @@ async def list_tracks(
         ),
     ),
     sort_by: str | None = Query(None, description="Column to sort by"),
-    sort_order: str = Query('asc', pattern='^(asc|desc)$', description="Sort direction"),
+    sort_order: str = Query("asc", pattern="^(asc|desc)$", description="Sort direction"),
 ) -> TrackListResponse:
     """List tracks with optional filtering and pagination.
 
@@ -332,14 +333,31 @@ async def list_tracks(
     ``GET /library/fingerprint`` is the backstop that catches that drift.
     """
 
-    has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
-    has_fx_list = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
-    has_fy_list = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
+    has_feature_filter = any(
+        x is not None for x in [energy_min, energy_max, valence_min, valence_max]
+    )
+    has_fx_list = bool(
+        fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
+    )
+    has_fy_list = bool(
+        fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    )
     has_feature_filter = has_feature_filter or has_fx_list or has_fy_list
 
     # A delta sees every status; a normal listing sees only active ones. See the docstring.
     if updated_since is not None:
-        query = select(Track).where(Track.updated_at >= updated_since)
+        # **Normalised to naive UTC before it reaches the driver.** `Track.updated_at` is
+        # `TIMESTAMP WITHOUT TIME ZONE`, and asyncpg refuses to compare that against an aware
+        # datetime — "can't subtract offset-naive and offset-aware datetimes", surfaced as a 500.
+        #
+        # Every real client hits this. The generated Swift client sends RFC 3339 with a `Z`, which
+        # FastAPI parses into an aware datetime; only a hand-written naive string gets through. It
+        # was found by a live slice test against the real server, having passed every fixture test
+        # and every curl by hand, because both supplied the naive form.
+        cursor = updated_since
+        if cursor.tzinfo is not None:
+            cursor = cursor.astimezone(UTC).replace(tzinfo=None)
+        query = select(Track).where(Track.updated_at >= cursor)
     else:
         query = select(Track).where(Track.status == TrackStatus.ACTIVE)
 
@@ -371,8 +389,7 @@ async def list_tracks(
     # Audio feature filters
     if has_feature_filter:
         query = query.join(
-            TrackAnalysis,
-            (Track.id == TrackAnalysis.track_id) & (TrackAnalysis.bpm.isnot(None))
+            TrackAnalysis, (Track.id == TrackAnalysis.track_id) & (TrackAnalysis.bpm.isnot(None))
         )
         if energy_min is not None:
             query = query.where(TrackAnalysis.energy >= energy_min)
@@ -494,7 +511,7 @@ async def get_track_index(
     fy_min: float | None = Query(None, ge=0, le=1),
     fy_max: float | None = Query(None, ge=0, le=1),
     sort_by: str | None = Query(None),
-    sort_order: str = Query('asc', pattern='^(asc|desc)$'),
+    sort_order: str = Query("asc", pattern="^(asc|desc)$"),
 ) -> TrackIndexResponse:
     """Get the 0-based index of a track in the sorted list.
 
@@ -507,8 +524,12 @@ async def get_track_index(
     has_feature_filter = any(
         x is not None for x in [energy_min, energy_max, valence_min, valence_max]
     )
-    has_fx_idx = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
-    has_fy_idx = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
+    has_fx_idx = bool(
+        fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max])
+    )
+    has_fy_idx = bool(
+        fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max])
+    )
     has_feature_filter = has_feature_filter or has_fx_idx or has_fy_idx
 
     base_query = select(Track.id).where(Track.status == TrackStatus.ACTIVE)
@@ -535,8 +556,7 @@ async def get_track_index(
 
     if has_feature_filter:
         base_query = base_query.join(
-            TrackAnalysis,
-            (Track.id == TrackAnalysis.track_id) & (TrackAnalysis.bpm.isnot(None))
+            TrackAnalysis, (Track.id == TrackAnalysis.track_id) & (TrackAnalysis.bpm.isnot(None))
         )
         if energy_min is not None:
             base_query = base_query.where(TrackAnalysis.energy >= energy_min)
@@ -564,24 +584,50 @@ async def get_track_index(
     if sort_by and (sort_by in SORT_FIELD_MAP or sort_by in SORT_FEATURE_FIELDS):
         if sort_by in SORT_FIELD_MAP:
             sort_col = SORT_FIELD_MAP[sort_by]
-            if sort_by == 'lastPlayed' and profile:
+            if sort_by == "lastPlayed" and profile:
                 base_query = base_query.outerjoin(
                     ProfilePlayHistory,
-                    (ProfilePlayHistory.track_id == Track.id) &
-                    (ProfilePlayHistory.profile_id == profile.id),
+                    (ProfilePlayHistory.track_id == Track.id)
+                    & (ProfilePlayHistory.profile_id == profile.id),
                 )
-            if sort_order == 'desc':
-                order_clauses = [nulls_last(sort_col.desc()), Track.artist, Track.album, Track.track_number, Track.id]
+            if sort_order == "desc":
+                order_clauses = [
+                    nulls_last(sort_col.desc()),
+                    Track.artist,
+                    Track.album,
+                    Track.track_number,
+                    Track.id,
+                ]
             else:
-                order_clauses = [nulls_last(sort_col.asc()), Track.artist, Track.album, Track.track_number, Track.id]
+                order_clauses = [
+                    nulls_last(sort_col.asc()),
+                    Track.artist,
+                    Track.album,
+                    Track.track_number,
+                    Track.id,
+                ]
         else:
             needs_analysis_join = not has_feature_filter
             sort_col_attr = getattr(TrackAnalysis, sort_by, None)
-            sort_expr = cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
-            if sort_order == 'desc':
-                order_clauses = [nulls_last(sort_expr.desc()), Track.artist, Track.album, Track.track_number, Track.id]
+            sort_expr = (
+                cast(sort_col_attr, Float) if sort_col_attr is not None else TrackAnalysis.bpm
+            )
+            if sort_order == "desc":
+                order_clauses = [
+                    nulls_last(sort_expr.desc()),
+                    Track.artist,
+                    Track.album,
+                    Track.track_number,
+                    Track.id,
+                ]
             else:
-                order_clauses = [nulls_last(sort_expr.asc()), Track.artist, Track.album, Track.track_number, Track.id]
+                order_clauses = [
+                    nulls_last(sort_expr.asc()),
+                    Track.artist,
+                    Track.album,
+                    Track.track_number,
+                    Track.id,
+                ]
     else:
         # Must match `list_tracks` exactly, `Track.id` tiebreaker included: this endpoint reports
         # a track's row number in that same ordering, so any divergence returns an index the
@@ -609,11 +655,7 @@ async def get_track_index(
 @router.get("/{track_id}", response_model=TrackResponse)
 async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
     """Get a single track with its latest analysis."""
-    query = (
-        select(Track)
-        .options(selectinload(Track.analyses))
-        .where(Track.id == track_id)
-    )
+    query = select(Track).options(selectinload(Track.analyses)).where(Track.id == track_id)
     result = await db.execute(query)
     track = result.scalar_one_or_none()
 

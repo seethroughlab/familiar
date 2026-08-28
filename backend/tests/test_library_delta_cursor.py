@@ -140,6 +140,51 @@ async def test_the_boundary_row_is_returned_again_not_skipped(
 
 
 @pytest.mark.asyncio
+async def test_the_cursor_accepts_an_aware_timestamp(async_db, client: TestClient, test_profile):
+    """The form every generated client actually sends.
+
+    `Track.updated_at` is TIMESTAMP WITHOUT TIME ZONE, and asyncpg refuses to compare that against
+    an aware datetime — it raises, and FastAPI turns it into a 500. The Swift client sends RFC 3339
+    with a `Z`, so this was broken for every real caller while passing all of the tests above and
+    every curl by hand, because those all send the naive form.
+
+    Found by a live slice test against the real server, which is the only thing that spoke the same
+    dialect as the app.
+    """
+    await _track_at(async_db, NEW, title="Edited")
+
+    resp = client.get(
+        "/api/v1/tracks",
+        params={"updated_since": "2024-06-01T12:00:00Z"},
+        headers=make_profile_headers(test_profile),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _titles(resp) == ["Edited"]
+
+
+@pytest.mark.asyncio
+async def test_an_offset_cursor_is_converted_rather_than_truncated(
+    async_db, client: TestClient, test_profile
+):
+    """An offset cursor names an instant, and the conversion has to preserve it.
+
+    14:00+02:00 is 12:00 UTC. Dropping the tzinfo instead of converting would read it as 14:00 and
+    silently skip two hours of changes — a delta that loses rows rather than failing.
+    """
+    await _track_at(async_db, datetime(2024, 6, 1, 13, 0, 0), title="After noon UTC")
+
+    resp = client.get(
+        "/api/v1/tracks",
+        params={"updated_since": "2024-06-01T14:00:00+02:00"},
+        headers=make_profile_headers(test_profile),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _titles(resp) == ["After noon UTC"], "the cursor is 12:00 UTC, not 14:00"
+
+
+@pytest.mark.asyncio
 async def test_the_fingerprint_measures_the_set_it_guards(async_db, client: TestClient):
     """Active rows only — the same set `/tracks` pages when no cursor is given."""
     await _track_at(async_db, OLD, title="One")
@@ -155,9 +200,7 @@ async def test_the_fingerprint_measures_the_set_it_guards(async_db, client: Test
 
 
 @pytest.mark.asyncio
-async def test_a_removal_moves_the_fingerprint_through_the_count(
-    async_db, client: TestClient
-):
+async def test_a_removal_moves_the_fingerprint_through_the_count(async_db, client: TestClient):
     """The count is the backstop, and this is the case that proves it is needed.
 
     A removed track's `updated_at` leaves the active set with it, so `max_updated_at` can sit

@@ -171,10 +171,28 @@ benefit for half the disk. Both clear the 15% bar under the hostile sensitivity 
 `PlayCacheStoreTests` asserting point 8's invariant directly. Recency is the file's modification
 date rather than an index, so the filesystem stays the single truth per ADR-0009 point 4.
 
-**Not yet built:** point 1's destination provider in `NativeAudioEngine`, the read path through
-`PlaybackSource.resolve`, and points 4, 5, 6 and 7's wiring. The store therefore has no caller yet —
-deliberately a phase boundary, not an oversight, but ADR-0077's rule applies if the next phase does
-not follow.
+**Phase 2 — the engine seam, the read path and promotion** (`familiar-apple` #139). Points 1, 3, 5,
+6 and 7 are built and the store has its callers.
+
+Three of the engine's five temp-file deletions had to learn about ownership. Two are pre-move clears
+and must stay unconditional, because `moveItem` fails onto an existing file; the other three fire on
+a **superseded** load and would otherwise destroy a legitimately cached file because that particular
+load lost a race.
+
+`PlayCacheStore.promote`, added in phase 1, was **removed in phase 2 rather than shipped uncalled**.
+Point 6's real seam is `DownloadStore.store(fileAt:)`, which also writes the index entry — a file
+moved without one is the filesystem/index disagreement ADR-0009 point 4 keeps reconciliation for.
+
+**Point 4 is vacuous today, and this is the honest statement of it.** The rule is that the offline
+manifest carries the pinned set only. Nothing posts a manifest: `/queue/offline-manifest` has no
+caller in either repository, which `ADR-0074` records independently while scoping the `queue` tag. So
+the rule is satisfied structurally — the cache is a separate directory and a separate type, with no
+path from it to the manifest — but nothing asserts it, because there is no caller to assert against.
+**Whoever builds the manifest owes point 4 its test at that moment**, and should not read this
+absence as the rule having been checked.
+
+**Not yet exercised against real playback.** The cache fills only when a track actually streams
+through `NativeAudioEngine`, which needs the app running rather than a test.
 
 ## Alternatives Considered
 
