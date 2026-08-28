@@ -12,7 +12,7 @@ from app.services.s3_backup import get_s3_backup_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/s3-backup", tags=["s3-backup"])
+router = APIRouter(prefix="/s3-backup", tags=["backup"])
 
 
 # ── Request/Response Models ──────────────────────────────────────────

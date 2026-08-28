@@ -379,17 +379,23 @@ OPENAPI_TAGS = [
     {"name": "organizer", "description":
         "File-organisation previews. Preview only: no route moves a file, so there is nothing to "
         "apply. Renamed from `Library Organization` by ADR-0072 point 3."},
-    {"name": "admin", "description":
-        "Artist-merge operations. The `admin` name is a misnomer under ADR-0058 — most of this API "
-        "is administration — and ADR-0076 point 5 is the proposal to rename it `artists`."},
+    {"name": "artists", "description":
+        "Artist-merge operations, named for what they act on. Was `admin`, a name promising a "
+        "namespace two-thirds of this API would qualify for and only these three used. The "
+        "`/admin/artists/` prefix has not moved with the tag — that needs ADR-0079's alias module, "
+        "which is accepted and unbuilt."},
 
     # Transfer and backup — getting data out, and back.
-    {"name": "export-import", "description":
-        "Moving a profile or a library between servers."},
-    {"name": "s3-backup", "description":
-        "Scheduled backup to S3-compatible storage, and restore from it."},
-    {"name": "download", "description":
-        "ZIP exports of playlists, track sets and analysis reports."},
+    {"name": "backup", "description":
+        "Durability — scheduled backup to S3-compatible storage, and restore from it. Paths stay "
+        "under `/s3-backup/`; the tag names the activity, not the storage backend (ADR-0076)."},
+    {"name": "transfer", "description":
+        "Portability — moving a profile or a library between servers. The line against `backup` is "
+        "durability versus portability, which is the line a user is already on when choosing a "
+        "screen."},
+    {"name": "exports", "description":
+        "ZIP exports of playlists, track sets and analysis reports. Was `download`, which named a "
+        "transport rather than what the operations produce."},
 
     # Server — operating the thing.
     {"name": "profiles", "description":
@@ -398,11 +404,11 @@ OPENAPI_TAGS = [
     {"name": "auth", "description": "Server-token administration (ADR-0045)."},
     {"name": "settings", "description":
         "Server configuration — library paths, API keys, provider choice."},
-    {"name": "health", "description":
-        "Liveness. `GET /api/v1/health` is a container probe, not a client-facing endpoint."},
-    {"name": "diagnostics", "description": "Logs and runtime introspection."},
-    {"name": "background", "description": "Background job state."},
-    {"name": "updates", "description": "Application update checks."},
+    {"name": "system", "description":
+        "The state of the running server: liveness, database and worker health, logs, metrics, "
+        "background jobs and update checks. Four tags merged here under ADR-0076 — the paths did "
+        "not move with them, because each already names its resource honestly (ADR-0072 point 4). "
+        "`GET /api/v1/health` in particular is a container probe and stays where it is forever."},
 ]
 
 # The seven areas, in render order. Point 5 says the areas are published rather than implied; this
@@ -416,10 +422,9 @@ OPENAPI_TAG_GROUPS = [
     {"name": "Discovery", "tags": ["discover", "lastfm", "new-releases", "external-albums"]},
     {"name": "Curation", "tags": [
         "ingest", "metadata", "identification", "duplicates",
-        "pending-review", "proposed-changes", "organizer", "admin"]},
-    {"name": "Transfer and backup", "tags": ["export-import", "s3-backup", "download"]},
-    {"name": "Server", "tags": [
-        "profiles", "auth", "settings", "health", "diagnostics", "background", "updates"]},
+        "pending-review", "proposed-changes", "organizer", "artists"]},
+    {"name": "Transfer and backup", "tags": ["backup", "transfer", "exports"]},
+    {"name": "Server", "tags": ["profiles", "auth", "settings", "system"]},
 ]
 
 

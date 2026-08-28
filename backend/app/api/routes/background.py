@@ -12,7 +12,7 @@ from app.services.tasks import get_sync_progress
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/background", tags=["background"])
+router = APIRouter(prefix="/background", tags=["system"])
 
 
 class JobProgress(BaseModel):

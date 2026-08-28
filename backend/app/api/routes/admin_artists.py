@@ -28,7 +28,7 @@ from app.services.artist_resolver import _canonicalize_for_match
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/artists", tags=["admin"])
+router = APIRouter(prefix="/admin/artists", tags=["artists"])
 
 MAX_MERGE_BATCH = 20
 
