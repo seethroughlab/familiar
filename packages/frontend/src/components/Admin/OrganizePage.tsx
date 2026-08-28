@@ -5,6 +5,8 @@
  * That is the fourth generated-and-uncalled capability this ADR has turned up: `libraryApi.getStats`,
  * `playTrackingApi.getStats`, `api/pendingTracks.ts` and this one. The pattern is consistent enough
  * to be worth stating — a wrapper written alongside an endpoint, and no screen ever built on it.
+ * ADR-0077 later made that pattern a rule and deleted the `pendingTracks` wrapper; this page is
+ * why `organizerApi` was not deleted with it — it has a screen, even if the server has no apply.
  *
  * **No apply button, and not out of caution.** `organizer.py` exposes `/templates`, `/preview` and
  * `/track/{id}/preview`. There is no route that moves a file, so there is nothing to call. The

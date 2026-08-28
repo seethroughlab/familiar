@@ -499,54 +499,6 @@ describe('artworkApi', () => {
   })
 })
 
-describe('exportImportApi', () => {
-  let exportImportApi: typeof import('..').exportImportApi
-
-  beforeEach(async () => {
-    vi.clearAllMocks()
-    vi.resetModules()
-    const module = await import('..')
-    exportImportApi = module.exportImportApi
-  })
-
-  describe('export', () => {
-    it('should export profile data', async () => {
-      mockApiInstance.post.mockResolvedValue({
-        data: { version: 1, profile: {}, play_history: [] },
-      })
-
-      const result = await exportImportApi.export({
-        include_play_history: true,
-        include_favorites: true,
-      })
-
-      expect(mockApiInstance.post).toHaveBeenCalledWith('/export-import/export', {
-        include_play_history: true,
-        include_favorites: true,
-      })
-      expect(result.version).toBe(1)
-    })
-  })
-
-  describe('previewImport', () => {
-    it('should preview import file', async () => {
-      mockApiInstance.post.mockResolvedValue({
-        data: { session_id: 'session-123', summary: {} },
-      })
-
-      const file = new File(['{}'], 'export.json', { type: 'application/json' })
-      const result = await exportImportApi.previewImport(file)
-
-      expect(mockApiInstance.post).toHaveBeenCalledWith(
-        '/export-import/import/preview',
-        expect.any(FormData),
-        { headers: { 'Content-Type': 'multipart/form-data' } }
-      )
-      expect(result.session_id).toBe('session-123')
-    })
-  })
-})
-
 describe('profilesApi', () => {
   let profilesApi: typeof import('..').profilesApi
 

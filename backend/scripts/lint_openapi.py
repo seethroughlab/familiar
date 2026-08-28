@@ -39,10 +39,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 #   was dead generated code rather than a defect — under ADR-0013 those 17 stop being dead, since
 #   the review surfaces need them.
 #
-#   `ambient` is absent: ADR-0001 point 5 puts ambient/generative mode out of v1.
+#   `ambient` is absent, and as of ADR-0077 so are its routes — the tag is gone from the schema
+#   entirely. ADR-0001 point 5 had put ambient/generative mode out of v1; ADR-0077 found the three
+#   routes had no client left at all, `app/services/ambient` staying put behind five importers.
 #
-#   `outputs` is present as nine *operations* rather than as a tag, because nine of its
-#   twenty-four are zones — dead, unpersisted, and one of them unreachable (ADR-0031 point 2).
+#   `outputs` is present as nine *operations* rather than as a tag. ADR-0077 deleted the nine zone
+#   operations that first forced that shape, but the shape survives them: of the fifteen that
+#   remain, six are still unwanted — registration and deletion, because discovery auto-registers
+#   what it finds, and the four per-protocol discover endpoints, because `discover_all` covers them
+#   (`discover/airplay` for ADR-0031 point 3's reason instead). The filter keys are a union, so
+#   naming the tag would re-admit all six.
 # The surface, vendored here — and cross-checked against the real config whenever it is reachable.
 #
 # The Swift client's `openapi-generator-config.yaml` is the source of truth, but it lives in the
@@ -74,8 +80,9 @@ VENDORED_TAGS = {
     "mixtapes",
 }
 
-# Casting (ADR-0031), by operation rather than by tag: nine of the twenty-four `outputs` operations
-# are zones — dead, unpersisted, and one of them unreachable — so the tag cannot be adopted whole.
+# Casting (ADR-0031), by operation rather than by tag. The nine zone operations that originally
+# forced this are gone (ADR-0077); the tag still cannot be adopted whole, because six of the
+# fifteen remaining `outputs` operations are deliberately ungenerated. See the note above.
 VENDORED_OPERATIONS = {
     # Music videos (ADR-0086 point 5), by operation for the same reason casting is: the `videos`
     # tag also covers `videos_stream_video`, which stays hand-written because `AVPlayer` is the
@@ -213,11 +220,6 @@ ALLOWED_UNTYPED_OPERATIONS = {
     ("POST", "/api/v1/new-releases/check/batch"),
     ("GET", "/api/v1/new-releases/status"),
     ("POST", "/api/v1/new-releases/{release_id}/dismiss"),
-    ("DELETE", "/api/v1/outputs/zones/{zone_id}/outputs/{output_id}"),
-    ("POST", "/api/v1/outputs/zones/{zone_id}/outputs/{output_id}"),
-    ("POST", "/api/v1/outputs/zones/{zone_id}/pause"),
-    ("POST", "/api/v1/outputs/zones/{zone_id}/play"),
-    ("POST", "/api/v1/outputs/zones/{zone_id}/stop"),
     ("POST", "/api/v1/pending-tracks/bulk/approve-all"),
     ("POST", "/api/v1/pending-tracks/bulk/skip-all"),
     ("POST", "/api/v1/pending-tracks/bulk/unskip-all"),
