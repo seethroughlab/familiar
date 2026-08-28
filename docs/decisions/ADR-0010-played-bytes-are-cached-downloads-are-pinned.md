@@ -1,6 +1,6 @@
 # ADR-0010: Played Bytes Are Cached, Downloads Are Pinned
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-31
 
@@ -133,6 +133,48 @@ them.
 8. **The invariant is a test, not a convention:** nothing in the pinned set is evictable, nothing in
    the cached set reaches the manifest or the downloads list. This is the boundary the web client got
    wrong once already.
+
+## Implementation
+
+**The measurement this ADR made itself conditional on has been run, and it passes.** The Consequences
+below said to supersede rather than implement if the hit-rate curve flattened below roughly 15%. It
+does not.
+
+Re-run on 2026-08-27 over `play_events`, which now covers **31 days** (2026-07-27 → 2026-08-27),
+2,285 plays across 1,494 distinct tracks — against the two-day window the ADR was drafted with:
+
+| budget | hit rate | GB saved |
+|---|---|---|
+| 2 GB | 12.5% | 5.6 |
+| 4 GB | 17.2% | 7.7 |
+| 8 GB | 23.6% | 10.0 |
+| **16 GB** | **33.3%** | 13.2 |
+| unbounded | 34.6% | 13.7 |
+
+The curve flattens at 16 GB, against a 34.6% ceiling — 16 → 32 GB adds 1.3 points. The two-day window
+had predicted a 13.3% ceiling, so a month of ordinary use more than doubled it, which is the payout
+`CLAUDE.md`'s ordering principle predicted when ADR-0004 was sequenced second.
+
+**The result does not rest on development traffic**, which was the ADR's stated worry about its own
+data. Excluding the 25 most-replayed tracks entirely — what bench testing looks like in this dataset
+— 16 GB still gives 28.8% and 8 GB gives 19.3%. Plays are also less concentrated than the argument
+for caching assumes: the top 10 tracks are 4.0% of plays, and 1,024 of 1,494 tracks were played
+exactly once.
+
+Re-sends were 38.4% of playback bytes in this window, against the 63% lifetime aggregate the Context
+cites. The lower figure is the more honest one for sizing, because it is ordered.
+
+**Budgets, from that curve:** 16 GB on macOS, 8 GB on iOS — the phone taking two thirds of the
+benefit for half the disk. Both clear the 15% bar under the hostile sensitivity check above.
+
+**Phase 1 — the store** (`familiar-apple`): `Sources/FamiliarKit/PlayCacheStore.swift`, with
+`PlayCacheStoreTests` asserting point 8's invariant directly. Recency is the file's modification
+date rather than an index, so the filesystem stays the single truth per ADR-0009 point 4.
+
+**Not yet built:** point 1's destination provider in `NativeAudioEngine`, the read path through
+`PlaybackSource.resolve`, and points 4, 5, 6 and 7's wiring. The store therefore has no caller yet —
+deliberately a phase boundary, not an oversight, but ADR-0077's rule applies if the next phase does
+not follow.
 
 ## Alternatives Considered
 
