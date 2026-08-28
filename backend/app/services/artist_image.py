@@ -727,6 +727,26 @@ async def _persist_results(
         logger.warning(f"Failed to flush artist images: {e}")
 
 
+async def read_cached_artist_images(
+    db: AsyncSession, names: list[str]
+) -> dict[str, str | None]:
+    """Images already known for ``names``, from the cache table alone.
+
+    **The cheap half of ``resolve_many_artist_images``, without the network half.** That function
+    reads this cache and then spends up to ``wikipedia_timeout`` seconds resolving whatever missed,
+    which is fine on a dashboard built once and wrong on a list endpoint paged through thousands of
+    artists — it made ``GET /library/artists`` take 4.1 seconds per page against 0.12 for albums.
+
+    Callers that want the misses filled should hand them to ``schedule_background_resolve``, which
+    runs the fuller Wikipedia → MusicBrainz → Wikidata chain off the request path and negative-caches
+    the results so the next load hits this function instead.
+    """
+    if not names:
+        return {}
+    cached_image, _, _ = await _read_cached(db, names)
+    return cached_image
+
+
 async def resolve_many_artist_images(
     db: AsyncSession,
     items: list[tuple[str, str | None]] | list[str],

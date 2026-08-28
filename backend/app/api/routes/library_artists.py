@@ -140,25 +140,36 @@ async def list_artists(
         for row in rows
     ]
 
-    # For artists whose ``Artist.image_url`` is NULL, run the resolver.
-    # ``resolve_many_artist_images`` writes through to ``Artist.image_url``
-    # itself when an alias for the resolved name exists (Pass 4), so we
-    # only need to mirror the result onto the in-memory ``items`` list.
+    # For artists whose ``Artist.image_url`` is NULL, fill in from the image cache — and **only**
+    # from the cache.
+    #
+    # This used to call ``resolve_many_artist_images``, which reads the same cache and then spends
+    # up to its four-second ``wikipedia_timeout`` resolving whatever missed. On a page of 100
+    # artists that is a Wikipedia round trip on the request path, and it measured at **4.1 seconds
+    # per page** against 0.12 for ``/library/albums`` doing the same shape of work. It is the same
+    # defect as the external-albums endpoint ADR-0090's work found at 71 seconds: expensive
+    # external calls where a listener is waiting.
+    #
+    # The misses go to ``schedule_background_resolve``, which was already being called three lines
+    # below for whatever the synchronous attempt failed to find. It runs the fuller Wikipedia → MB →
+    # Wikidata chain on its own session, persists, and negative-caches every input — its own
+    # docstring says "no time pressure ... off the request path". The synchronous call was doing a
+    # weaker version of that work while a request waited for it.
+    #
+    # The cost is that an artist whose image has never been resolved renders without one on first
+    # paint instead of after a four-second wait. Clients already handle a null ``image_url``
+    # (``ArtistInitials`` in the Apple client draws initials), and the next load has the image.
     unresolved_names = [a.name for a in items if a.image_url is None]
     if unresolved_names:
         from app.services.artist_image import (
-            resolve_many_artist_images,
+            read_cached_artist_images,
             schedule_background_resolve,
         )
 
-        names_with_hints: list[tuple[str, str | None]] = [
-            (n, None) for n in unresolved_names
-        ]
-        resolved = await resolve_many_artist_images(db, names_with_hints)
+        cached = await read_cached_artist_images(db, unresolved_names)
         for a in items:
             if a.image_url is None:
-                a.image_url = resolved.get(a.name)
-        await db.commit()
+                a.image_url = cached.get(a.name)
         still_missing: list[tuple[str, str | None]] = [
             (a.name, None) for a in items if a.image_url is None
         ]
