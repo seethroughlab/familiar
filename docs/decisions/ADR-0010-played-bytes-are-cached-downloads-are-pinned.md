@@ -191,8 +191,20 @@ path from it to the manifest — but nothing asserts it, because there is no cal
 **Whoever builds the manifest owes point 4 its test at that moment**, and should not read this
 absence as the rule having been checked.
 
-**Not yet exercised against real playback.** The cache fills only when a track actually streams
-through `NativeAudioEngine`, which needs the app running rather than a test.
+**Exercised against real playback** (`familiar-apple` #140). `PlayCacheEngineSliceTests` drives
+`NativeAudioEngine.load` against the live library and asserts the three things fixtures could not:
+a played track leaves real audio in the cache directory, **those bytes survive the following load**,
+and a repeat play resolves to `.local` with a file `AVAudioFile` will open. The second is the whole
+behaviour change — deleting the file exactly there is what the engine did before this ADR.
+
+It produces no audio. `load` downloads, opens an `AVAudioFile` and schedules on the player node, but
+nothing calls `playerNode.play()`. Skipped without `FAMILIAR_BASE_URL`, so CI does not depend on the
+NAS.
+
+**Every decision point is now either built and tested or recorded as vacuous.** The remaining
+follow-ups in the Consequences below — a fixed budget versus a fraction of free space, and
+least-recently-played versus least-recently-started once ADR-0004's events are recorded natively —
+are unchanged and still open.
 
 ## Alternatives Considered
 
