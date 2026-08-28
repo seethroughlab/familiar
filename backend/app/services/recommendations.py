@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, func, select, text
+from sqlalchemy import Float, delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import TextClause
@@ -569,6 +569,13 @@ class RecommendationsService:
             cand["mb_id"] = mb_id
 
         # Step 3: fetch releases per resolved artist and persist.
+        #
+        # Stamped before the first write so the prune below can tell this run's rows from the
+        # previous run's. Deliberately *not* used to clear the cache up front: the old set stays
+        # readable for the whole recompute, which is what lets the page keep showing something
+        # while this runs for a minute.
+        run_started_at = utcnow()
+
         for cand in candidates.values():
             mb_id = cand.get("mb_id")
             if not mb_id:
@@ -597,6 +604,26 @@ class RecommendationsService:
                     seed_artist=cand["seed_artist"],
                     release=release,
                 )
+
+        # **This run replaces the last one on the page.** Anything not rediscovered is dropped, so
+        # Discover shows the current recommendations rather than an accumulation — an album found a
+        # year ago could otherwise outrank today's, since the read orders by score first.
+        #
+        # Dismissed rows are kept. They are excluded from the read anyway, and keeping them is what
+        # stops a dismissed album reappearing at the next refresh: the row survives, so the upsert
+        # above conflicts with it and never re-adds it as undismissed.
+        scope = ExternalAlbumCache.source_playlist_id == source_playlist_id
+        if source_playlist_id is None:
+            scope = ExternalAlbumCache.source_playlist_id.is_(None)
+        await self.db.execute(
+            delete(ExternalAlbumCache).where(
+                ExternalAlbumCache.discovery_context == discovery_context,
+                scope,
+                ExternalAlbumCache.discovered_at < run_started_at,
+                ExternalAlbumCache.dismissed.is_(False),
+            )
+        )
+        await self.db.flush()
 
     async def _lookup_mb_id(self, artist_normalized: str) -> str | None:
         result = await self.db.execute(
@@ -689,9 +716,36 @@ class RecommendationsService:
                 },
                 local_album_match=local_match,
             )
-            .on_conflict_do_nothing(
+            .on_conflict_do_update(
                 index_elements=conflict_elements,
                 index_where=_INDEX_WHERE_BY_CONTEXT[discovery_context],
+                # **`do_nothing` here meant the TTL never advanced.** A release already in the cache
+                # was skipped entirely, so `discovered_at` kept its original date — and
+                # `_needs_recompute` reads `max(discovered_at)`. For a library whose recommendations
+                # are stable, every run rediscovered the same albums, nothing was written, the
+                # maximum never moved, and the 24h TTL was permanently expired. That is why this
+                # recomputed on *every* request rather than once a day.
+                #
+                # Touching the row also marks it as belonging to this run, which is what lets the
+                # prune below tell "still recommended" from "no longer recommended".
+                #
+                # **`dismissed` is deliberately absent from this set.** It is the listener's decision
+                # and a refresh must not undo it.
+                set_={
+                    "discovered_at": utcnow(),
+                    "artist_name": artist_name,
+                    "musicbrainz_artist_id": musicbrainz_artist_id,
+                    "release_name": release_name,
+                    "release_type": release.get("release_type"),
+                    "release_date": release_date,
+                    "artwork_url": release.get("artwork_url"),
+                    "track_count": release.get("track_count"),
+                    "extra_data": {
+                        "match_score": match_score,
+                        "seed_artist": seed_artist,
+                    },
+                    "local_album_match": local_match,
+                },
             )
         )
         await self.db.execute(stmt)
