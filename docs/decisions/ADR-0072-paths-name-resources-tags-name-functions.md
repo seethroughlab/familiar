@@ -8,6 +8,46 @@ Extends [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md), which made t
 and the tag the unit that defines the generated surface. This says what a tag and a path each mean,
 so that the contract can be reorganized without guessing.
 
+Implementation:
+
+- **Shipped 2026-08-28**, `familiar` on `adr-0072-paths-and-tags` and `familiar-apple` on the branch
+  of the same name, both stacked on `ADR-0077`'s. Counts at the time: **249 operations, 219 paths,
+  29 tags** — the ADR's 260/228/32 was measured before `ADR-0077` deleted fourteen operations and
+  the `bandcamp` and `ambient` tags.
+- **It cost nothing in the generated surface.** Only three operationIds moved, all `organizer`
+  (`library-organization_preview_organization` → `organizer_preview_organization`, and two more),
+  and `organizer` is not in `filter.tags` — so the Swift client came back **byte-identical** for the
+  second ADR running. Point 4 held exactly: **no path moved.**
+- Point 2 was applied as the ADR words it — the aggregator stops tagging, the leaf keeps it.
+  `library.router` now carries no tag and its two own operations tag themselves; the ten leaf
+  routers already tagged. That is what made `["library", "library"]` unrepresentable rather than
+  fixed.
+- **Point 2 needed a tie-break the Decision does not give**, for the schema's one two-tag
+  operation. `library_deduplicate_preview` resolved to `library`, not `deduplicate`, under point 7:
+  a one-operation tag usually means a path prefix was wanted, and `/library/deduplicate` is already
+  that prefix. It also keeps the operationId and keeps the operation inside the generated surface,
+  which `deduplicate` would have removed it from. **`ADR-0073` point 6 assumes this is still
+  unresolved and moves it to `duplicates`** — it should now read as `library` → `duplicates`, one
+  move inside its own six-way split rather than two.
+- **Point 5 was silently inert before it was written, which is worth knowing.** `get_openapi()`
+  does not read `openapi_tags` off the app; it must be passed `tags=` explicitly. `main.py` has a
+  custom `app.openapi` hook (for `ADR-0045`'s global security block) that did not, so setting
+  `openapi_tags` on the constructor produced **no `tags` array at all** and raised nothing. The same
+  shape of defect the ADR is about: a value set in one place and ignored in another.
+- `x-tagGroups` is a ReDoc extension with no `FastAPI(...)` argument, so it is set in that same
+  hook. The seven areas are Music, Collections, Playback, Discovery, Curation, Transfer and backup,
+  and Server. **`ADR-0073`, `ADR-0074` and `ADR-0076` all move tags between them**, so this list is
+  expected to be edited when they land.
+- The final follow-up is built: `scripts/lint_openapi.py` now asserts points 2, 3 and 5 — one
+  lowercase kebab-case tag per operation, every tag described, every tag in exactly one group, and
+  no stale index entry. Each of the eight checks was verified to fire against a deliberately broken
+  schema, not merely to pass against the real one.
+- Point 6's aggregation went in as `routes/__init__.py:api_router`, and `health` gained the shared
+  error responses as a result: four operations that documented only `200` now document the same
+  envelope as the other 245. **The `pending_review` registration order is load-bearing** and is
+  called out in that module — `group` → `bulk` → `router`, because the last owns
+  `/{pending_track_id}`. That is the defect `ADR-0077` deleted an endpoint over.
+
 ## Context
 
 The API is 260 operations across 228 paths and 32 tags. Six independent defects were found while
