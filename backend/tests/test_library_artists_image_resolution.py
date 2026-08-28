@@ -154,3 +154,26 @@ async def test_an_image_already_in_the_cache_is_still_served(
     assert response.status_code == 200, response.text
     served = {a["name"]: a["image_url"] for a in response.json()["items"]}
     assert served[name] == "https://example.com/cached.jpg"
+
+
+@pytest.mark.asyncio
+async def test_the_biography_is_plain_text_not_html(async_db, client, test_profile, monkeypatch):
+    """Last.fm biographies are HTML, and every client renders them as text.
+
+    The artist screen showed a literal `<a href="...">Read more on Last.fm</a>` at the end of the
+    summary. Stripped on read rather than at write time, so every row already stored is fixed
+    without a Last.fm re-fetch.
+    """
+    monkeypatch.setattr(artist_image, "schedule_background_resolve", lambda items: None)
+    artist = await _artist_with_a_track(async_db, "Has A Bio")
+    artist.bio_summary = 'A band. <a href="https://www.last.fm/music/x">Read more on Last.fm</a>'
+    await async_db.commit()
+
+    response = client.get(
+        "/api/v1/library/artists/Has A Bio", headers=make_profile_headers(test_profile)
+    )
+
+    assert response.status_code == 200, response.text
+    bio = response.json()["bio_summary"]
+    assert "<a href" not in bio
+    assert bio == "A band. Read more on Last.fm", "the words survive, the markup does not"

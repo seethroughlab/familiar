@@ -1,7 +1,9 @@
 """Artist browsing and detail endpoints."""
 
 import asyncio
+import html
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request
@@ -101,8 +103,7 @@ async def list_artists(
     if search:
         s = search.lower()
         base_query = base_query.where(
-            func.lower(Artist.name).contains(s)
-            | func.lower(Artist.sort_name).contains(s)
+            func.lower(Artist.name).contains(s) | func.lower(Artist.sort_name).contains(s)
         )
 
     # Total count.
@@ -111,13 +112,9 @@ async def list_artists(
 
     # Sorting — prefer ``Artist.sort_name`` so "The Beatles" sorts under B.
     if sort_by == "track_count":
-        base_query = base_query.order_by(
-            desc(literal_column("track_count")), Artist.sort_name
-        )
+        base_query = base_query.order_by(desc(literal_column("track_count")), Artist.sort_name)
     elif sort_by == "album_count":
-        base_query = base_query.order_by(
-            desc(literal_column("album_count")), Artist.sort_name
-        )
+        base_query = base_query.order_by(desc(literal_column("album_count")), Artist.sort_name)
     else:
         base_query = base_query.order_by(Artist.sort_name)
 
@@ -317,15 +314,17 @@ async def get_artist_new_releases(
         )
 
         for r in releases:
-            all_releases.append(NewRelease(
-                artist_name=row.artist_name,
-                title=r["title"],
-                release_type=r.get("release_type"),
-                release_date=r["release_date"],
-                artwork_url=r.get("artwork_url"),
-                musicbrainz_release_group_id=r.get("musicbrainz_release_group_id"),
-                in_library=False,  # updated below
-            ))
+            all_releases.append(
+                NewRelease(
+                    artist_name=row.artist_name,
+                    title=r["title"],
+                    release_type=r.get("release_type"),
+                    release_date=r["release_date"],
+                    artwork_url=r.get("artwork_url"),
+                    musicbrainz_release_group_id=r.get("musicbrainz_release_group_id"),
+                    in_library=False,  # updated below
+                )
+            )
 
     # Cross-reference with the library to mark releases the user already has.
     # Compare on (canonical artist name, lower album) — the canonical name
@@ -345,8 +344,7 @@ async def get_artist_new_releases(
         )
         album_result = await db.execute(album_pairs_query)
         library_albums = {
-            (row.artist_name.lower().strip(), row.album_lower)
-            for row in album_result.all()
+            (row.artist_name.lower().strip(), row.album_lower) for row in album_result.all()
         }
 
         for release in all_releases:
@@ -371,9 +369,7 @@ async def get_artist_new_releases(
 # ── Artist Detail ─────────────────────────────────────────────
 
 
-async def _resolve_artist_via_alias(
-    db: DbSession, artist_name: str
-) -> Artist | None:
+async def _resolve_artist_via_alias(db: DbSession, artist_name: str) -> Artist | None:
     """Resolve a URL artist name to a canonical ``Artist`` row.
 
     Tries the NFKD-stripped form first (the resolver's preferred key),
@@ -392,6 +388,23 @@ async def _resolve_artist_via_alias(
     if alias is None:
         return None
     return await db.get(Artist, alias.artist_id)
+
+
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _plain_text(value: str | None) -> str | None:
+    """Last.fm biography HTML, as text.
+
+    Only tags are removed. The trailing "Read more on Last.fm" anchor becomes its own text, which
+    reads as a sentence rather than as markup — and `lastfm_url` is returned alongside for a client
+    that wants a real link.
+    """
+    if not value:
+        return value
+    stripped = html.unescape(_TAG_RE.sub("", value))
+    # Collapse the whitespace the removed tags leave behind, without touching paragraph breaks.
+    return re.sub(r"[ \t]{2,}", " ", stripped).strip()
 
 
 @router.get("/artists/{artist_name}", response_model=ArtistDetailResponse)
@@ -434,20 +447,16 @@ async def get_artist_detail(
     # under both. The album_artist column is populated by Pass 3's
     # scanner dual-write + backfill, with the same diacritic-Python
     # pass-2 protection as canonical_artist_id.
-    canonical_match = (
-        (Track.canonical_artist_id == artist.id)
-        | (Track.canonical_album_artist_id == artist.id)
+    canonical_match = (Track.canonical_artist_id == artist.id) | (
+        Track.canonical_album_artist_id == artist.id
     )
 
-    stats_query = (
-        select(
-            func.count(Track.id).label("track_count"),
-            func.count(func.distinct(Track.album)).label("album_count"),
-            func.sum(Track.duration_seconds).label("total_duration"),
-            func.min(cast(Track.id, TEXT)).label("first_track_id"),
-        )
-        .where(canonical_match, Track.status == TrackStatus.ACTIVE)
-    )
+    stats_query = select(
+        func.count(Track.id).label("track_count"),
+        func.count(func.distinct(Track.album)).label("album_count"),
+        func.sum(Track.duration_seconds).label("total_duration"),
+        func.min(cast(Track.id, TEXT)).label("first_track_id"),
+    ).where(canonical_match, Track.status == TrackStatus.ACTIVE)
     stats = (await db.execute(stats_query)).one_or_none()
     if not stats or stats.track_count == 0:
         raise NotFoundError("Artist not found in library")
@@ -509,9 +518,7 @@ async def get_artist_detail(
         cache_age = utcnow() - artist.fetched_at
         needs_similar_refresh = not artist.fetch_error and (
             not artist.similar_artists
-            or "match" not in (
-                artist.similar_artists[0] if artist.similar_artists else {}
-            )
+            or "match" not in (artist.similar_artists[0] if artist.similar_artists else {})
         )
         if cache_age < cache_max_age and not needs_similar_refresh:
             lastfm_fetched = True
@@ -531,26 +538,17 @@ async def get_artist_detail(
                         img.get("size"): img.get("#text")
                         for img in images
                         if img.get("#text")
-                        and "2a96cbd8b46e442fc41c2b86b821562f"
-                        not in img.get("#text", "")
+                        and "2a96cbd8b46e442fc41c2b86b821562f" not in img.get("#text", "")
                     }
-                    similar = similar_from_api or info.get("similar", {}).get(
-                        "artist", []
-                    )
+                    similar = similar_from_api or info.get("similar", {}).get("artist", [])
                     tags = [
-                        t.get("name")
-                        for t in info.get("tags", {}).get("tag", [])
-                        if t.get("name")
+                        t.get("name") for t in info.get("tags", {}).get("tag", []) if t.get("name")
                     ]
                     artist.lastfm_url = info.get("url")
                     artist.bio_summary = info.get("bio", {}).get("summary")
                     artist.bio_content = info.get("bio", {}).get("content")
-                    artist.listeners = (
-                        int(info.get("stats", {}).get("listeners", 0)) or None
-                    )
-                    artist.playcount = (
-                        int(info.get("stats", {}).get("playcount", 0)) or None
-                    )
+                    artist.listeners = int(info.get("stats", {}).get("listeners", 0)) or None
+                    artist.playcount = int(info.get("stats", {}).get("playcount", 0)) or None
                     artist.similar_artists = similar
                     artist.tags = tags
                     artist.fetched_at = utcnow()
@@ -587,9 +585,7 @@ async def get_artist_detail(
         from app.services.search_links import generate_artist_search_url
 
         similar_names = [s.get("name", "") for s in raw_similar if s.get("name")]
-        similar_normalized = [
-            normalize_artist_name(n) for n in similar_names if n
-        ]
+        similar_normalized = [normalize_artist_name(n) for n in similar_names if n]
         library_map: dict[str, int] = {}
         if similar_normalized:
             similar_query = (
@@ -606,9 +602,7 @@ async def get_artist_detail(
                 .group_by(ArtistAlias.alias_normalized)
             )
             similar_result = await db.execute(similar_query)
-            library_map = {
-                row.alias_norm: row.track_count for row in similar_result.all()
-            }
+            library_map = {row.alias_norm: row.track_count for row in similar_result.all()}
 
         for similar in raw_similar:
             name = similar.get("name", "")
@@ -624,11 +618,7 @@ async def get_artist_detail(
             image_url_s: str | None = None
             for img in images:
                 url = img.get("#text", "")
-                if (
-                    img.get("size") == "large"
-                    and url
-                    and LASTFM_PLACEHOLDER not in url
-                ):
+                if img.get("size") == "large" and url and LASTFM_PLACEHOLDER not in url:
                     image_url_s = url
                     break
             if not image_url_s:
@@ -690,8 +680,16 @@ async def get_artist_detail(
         track_count=stats.track_count,
         album_count=stats.album_count,
         total_duration_seconds=stats.total_duration or 0,
-        bio_summary=artist.bio_summary,
-        bio_content=artist.bio_content,
+        # Last.fm's biographies are HTML, and every client renders them as plain text — so the
+        # artist screen showed a literal
+        # `<a href="https://www.last.fm/music/Interpol">Read more on Last.fm</a>` at the end of the
+        # summary. Stripped here rather than in each client, and rather than at write time, because
+        # doing it on read fixes every row already stored without a Last.fm re-fetch.
+        #
+        # The link is not lost: `lastfm_url` is returned separately, which is what a client should
+        # be building its own affordance from.
+        bio_summary=_plain_text(artist.bio_summary),
+        bio_content=_plain_text(artist.bio_content),
         image_url=image_url,
         lastfm_url=artist.lastfm_url,
         listeners=artist.listeners,
@@ -770,8 +768,7 @@ async def get_artist_image(
                 image_urls: dict[str, str] = {
                     img.get("size"): img.get("#text")
                     for img in images
-                    if img.get("#text")
-                    and LASTFM_PLACEHOLDER not in img.get("#text", "")
+                    if img.get("#text") and LASTFM_PLACEHOLDER not in img.get("#text", "")
                 }
                 image_url = (
                     image_urls.get(size)
@@ -789,9 +786,7 @@ async def get_artist_image(
                         headers={"Cache-Control": "public, max-age=86400"},
                     )
         except Exception as e:
-            logger.debug(
-                f"Last.fm artist image lookup failed for '{artist.name}': {e}"
-            )
+            logger.debug(f"Last.fm artist image lookup failed for '{artist.name}': {e}")
 
     # Step 3: Album-artwork fallback — first track for this canonical artist.
     track_query = (
@@ -811,6 +806,7 @@ async def get_artist_image(
         artwork_path = get_artwork_path(album_key, artwork_size)
 
         if artwork_path.exists():
+
             def stream_artwork():
                 with open(artwork_path, "rb") as f:
                     yield f.read()
@@ -823,10 +819,9 @@ async def get_artist_image(
 
         file_path = Path(track.file_path)
         if file_path.exists():
-            extract_and_save_artwork(
-                file_path, track.artist, track.album, album_key=album_key
-            )
+            extract_and_save_artwork(file_path, track.artist, track.album, album_key=album_key)
             if artwork_path.exists():
+
                 def stream_artwork():
                     with open(artwork_path, "rb") as f:
                         yield f.read()
