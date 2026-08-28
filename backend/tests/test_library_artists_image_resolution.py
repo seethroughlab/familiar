@@ -96,6 +96,33 @@ async def test_the_misses_are_handed_to_the_background_resolver(
 
 
 @pytest.mark.asyncio
+async def test_opening_an_artist_does_not_wait_on_wikipedia(
+    async_db, client, test_profile, monkeypatch
+):
+    """The detail screen, for the same reason as the list.
+
+    One artist rather than a hundred, but still a Wikipedia round trip on its own four-second
+    timeout between tapping an artist and seeing their albums — which is more noticeable on an
+    open than on a page, not less.
+    """
+    scheduled: list = []
+    monkeypatch.setattr(
+        artist_image, "schedule_background_resolve", lambda items: scheduled.append(items)
+    )
+    await _artist_with_a_track(async_db, "Opened Without A Photo")
+
+    response = client.get(
+        "/api/v1/library/artists/Opened Without A Photo",
+        headers=make_profile_headers(test_profile),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["image_url"] is None
+    handed_over = [name for batch in scheduled for name, _ in batch]
+    assert "Opened Without A Photo" in handed_over
+
+
+@pytest.mark.asyncio
 async def test_an_image_already_in_the_cache_is_still_served(
     async_db, client, test_profile, monkeypatch
 ):

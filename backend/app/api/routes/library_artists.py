@@ -656,19 +656,27 @@ async def get_artist_detail(
                 )
             )
 
-    # Resolve a real artist photo via the unified Wikipedia → MB → Spotify
-    # chain. Read ``Artist.image_url`` first (already populated for most by
-    # Pass 1's backfill); fall back to the resolver and write through.
+    # Read ``Artist.image_url`` first (populated for most by Pass 1's backfill), then the image
+    # cache, and hand a miss to the background chain.
+    #
+    # **Off the request path for the same reason as ``list_artists`` above**, and it is not a
+    # smaller problem here just because it is one artist rather than a hundred: this is a single
+    # Wikipedia round trip, on its own four-second timeout, between tapping an artist and seeing
+    # their albums. A screen that takes four seconds to open is more noticeable than a list that
+    # takes four seconds to page, not less.
+    #
+    # The write-through stays: promoting a cache hit onto ``Artist.image_url`` is one row, and it
+    # means the next listing reads it from the artist directly.
     image_url = artist.image_url
     if image_url is None:
         from app.services.artist_image import (
-            resolve_many_artist_images,
+            read_cached_artist_images,
             schedule_background_resolve,
         )
 
         detail_hints: list[tuple[str, str | None]] = [(artist.name, None)]
-        resolved = await resolve_many_artist_images(db, detail_hints)
-        image_url = resolved.get(artist.name)
+        cached = await read_cached_artist_images(db, [artist.name])
+        image_url = cached.get(artist.name)
         if image_url is not None:
             artist.image_url = image_url
             artist.image_checked_at = utcnow()
