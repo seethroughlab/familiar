@@ -401,6 +401,69 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.warning(f"Daily new releases check failed: {e}")
 
+    async def _daily_external_albums_refresh(self) -> None:
+        """APScheduler entry: recompute "Albums you might want" for every profile.
+
+        **This is the only thing that recomputes it now.** The endpoint reads the cache and never
+        computes, because computing means Last.fm plus MusicBrainz plus Cover Art Archive for every
+        seed artist — 71 seconds against the real library, paid by whichever request first found the
+        TTL expired. Moving it here trades freshness for a page that loads.
+
+        Every profile, not just the first: unlike new releases, these recommendations are seeded by
+        *that* profile's top-played artists, so doing one would leave the others permanently empty.
+        One profile's failure does not stop the rest.
+        """
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import (
+            AsyncSession,
+            async_sessionmaker,
+            create_async_engine,
+        )
+
+        from app.config import settings
+        from app.db.models import Profile
+        from app.services.recommendations import RecommendationsService
+
+        try:
+            engine = create_async_engine(settings.database_url)
+            async_session = async_sessionmaker(engine, class_=AsyncSession)
+            try:
+                async with async_session() as db:
+                    result = await db.execute(select(Profile.id))
+                    profile_ids = [row[0] for row in result.all()]
+
+                if not profile_ids:
+                    logger.info("Daily external albums refresh: no profiles, skipping")
+                    return
+
+                for profile_id in profile_ids:
+                    async with async_session() as db:
+                        service = RecommendationsService(db)
+                        try:
+                            rows = await service.get_listening_profile_external_albums(
+                                profile_id, refresh=True
+                            )
+                            await db.commit()
+                            logger.info(
+                                "Daily external albums refresh: profile %s -> %d album(s)",
+                                profile_id,
+                                len(rows),
+                            )
+                        except Exception as e:
+                            # One profile with no play history, or a rate-limited third party,
+                            # must not cost the others their refresh.
+                            logger.warning(
+                                "Daily external albums refresh failed for profile %s: %s",
+                                profile_id,
+                                e,
+                            )
+                        finally:
+                            await service.close()
+            finally:
+                await engine.dispose()
+        except Exception as e:
+            logger.warning(f"Daily external albums refresh failed: {e}")
+
     async def _cleanup_frontend_logs(self) -> None:
         """Delete frontend_logs older than 7 days."""
         from datetime import timedelta

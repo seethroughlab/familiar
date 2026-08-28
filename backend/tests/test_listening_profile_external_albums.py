@@ -1,5 +1,6 @@
 """Service-level tests for the listening-profile external-albums lane (#2 in Discover)."""
 
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -58,19 +59,11 @@ class _StubLastfm:
 async def _seed_top_played(async_db) -> tuple:
     profile = await insert_test_profile(async_db)
     # Two artists with different play counts
-    track_radio = await insert_test_track(
-        async_db, artist="Radiohead", album="OK Computer"
-    )
-    track_porti = await insert_test_track(
-        async_db, artist="Portishead", album="Dummy"
-    )
+    track_radio = await insert_test_track(async_db, artist="Radiohead", album="OK Computer")
+    track_porti = await insert_test_track(async_db, artist="Portishead", album="Dummy")
     # Radiohead is the top-played
-    await insert_test_play_history(
-        async_db, profile.id, track_radio.id, play_count=20
-    )
-    await insert_test_play_history(
-        async_db, profile.id, track_porti.id, play_count=5
-    )
+    await insert_test_play_history(async_db, profile.id, track_radio.id, play_count=20)
+    await insert_test_play_history(async_db, profile.id, track_porti.id, play_count=5)
     await async_db.commit()
     return profile, track_radio, track_porti
 
@@ -99,9 +92,7 @@ async def test_seeds_from_top_played_artists(async_db, monkeypatch):
         lambda mb_id, days_back, release_types: [_mb_release("rg-anima", "ANIMA")],
     )
 
-    rows = await service.get_listening_profile_external_albums(
-        profile.id, refresh=True
-    )
+    rows = await service.get_listening_profile_external_albums(profile.id, refresh=True)
     await async_db.commit()
 
     # Top-played artist (Radiohead) was seeded
@@ -131,9 +122,7 @@ async def test_persists_with_correct_context_and_null_playlist(async_db, monkeyp
     await service.get_listening_profile_external_albums(profile.id, refresh=True)
     await async_db.commit()
 
-    persisted = (
-        await async_db.execute(select(ExternalAlbumCache))
-    ).scalars().all()
+    persisted = (await async_db.execute(select(ExternalAlbumCache))).scalars().all()
     assert len(persisted) == 1
     assert persisted[0].discovery_context == LISTENING_PROFILE_CONTEXT
     assert persisted[0].source_playlist_id is None
@@ -206,12 +195,14 @@ async def test_does_not_collide_with_artist_new_release_row(async_db, monkeypatc
     await async_db.commit()
 
     rows = (
-        await async_db.execute(
-            select(ExternalAlbumCache).where(
-                ExternalAlbumCache.release_id == "rg-anima"
+        (
+            await async_db.execute(
+                select(ExternalAlbumCache).where(ExternalAlbumCache.release_id == "rg-anima")
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     contexts = {r.discovery_context for r in rows}
     assert contexts == {ARTIST_NEW_RELEASE, LISTENING_PROFILE_CONTEXT}
 
@@ -223,13 +214,9 @@ async def test_lastfm_not_configured_returns_empty(async_db, monkeypatch):
     service = RecommendationsService(async_db)
     service.lastfm = _StubLastfm(configured=False)
 
-    rows = await service.get_listening_profile_external_albums(
-        profile.id, refresh=True
-    )
+    rows = await service.get_listening_profile_external_albums(profile.id, refresh=True)
     assert rows == []
-    persisted = (
-        await async_db.execute(select(ExternalAlbumCache))
-    ).scalars().all()
+    persisted = (await async_db.execute(select(ExternalAlbumCache))).scalars().all()
     assert persisted == []
 
 
@@ -266,6 +253,145 @@ async def test_ttl_skips_recompute(async_db, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_an_expired_cache_still_does_not_compute_on_the_request(async_db, monkeypatch):
+    """A stale cache is served stale. The request path never recomputes.
+
+    `test_ttl_skips_recompute` above covers the *fresh* case. This is the expired one, which used
+    to fall through to a synchronous recompute — Last.fm plus MusicBrainz plus Cover Art Archive
+    for every seed artist, measured at **71 seconds** against the real library. Whichever request
+    first found the TTL expired paid for everyone, so "Albums you might want" read as permanently
+    broken while the endpoint was technically working.
+
+    `_daily_external_albums_refresh` keeps the cache warm now, and `refresh=true` is the only way
+    to ask for a synchronous recompute.
+    """
+    profile, _, _ = await _seed_top_played(async_db)
+
+    service = RecommendationsService(async_db)
+    stub = _StubLastfm(
+        configured=True,
+        similar={"Radiohead": [_lastfm_similar("Thom Yorke", 0.9)]},
+    )
+    service.lastfm = stub
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.search_artist",
+        lambda name: _mb_search("Thom Yorke", "mb-thom"),
+    )
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.get_artist_releases_recent",
+        lambda mb_id, days_back, release_types: [_mb_release("rg-anima", "ANIMA")],
+    )
+
+    await service.get_listening_profile_external_albums(profile.id, refresh=True)
+    await async_db.commit()
+    calls_after_seeding = list(stub.calls)
+
+    # Age every cached row well past the TTL.
+    rows = (
+        (
+            await async_db.execute(
+                select(ExternalAlbumCache).where(
+                    ExternalAlbumCache.discovery_context == LISTENING_PROFILE_CONTEXT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert rows, "seeding should have written cache rows"
+    for row in rows:
+        # Naive, because the column is TIMESTAMP WITHOUT TIME ZONE — which is exactly why
+        # `utcnow()` strips tzinfo. An aware value here fails the flush with
+        # "can't subtract offset-naive and offset-aware datetimes".
+        row.discovered_at = datetime(2020, 1, 1)
+    await async_db.commit()
+
+    # Expired, so the old code would have recomputed here.
+    assert await service._needs_recompute(LISTENING_PROFILE_CONTEXT, source_playlist_id=None), (
+        "the fixture should leave the cache expired, or this proves nothing"
+    )
+
+    result = await service.get_listening_profile_external_albums(profile.id)
+
+    assert stub.calls == calls_after_seeding, "the request path recomputed"
+    assert result, "stale rows should still be served rather than an empty list"
+
+
+@pytest.mark.asyncio
+async def test_a_refresh_replaces_the_previous_set_but_keeps_dismissals(async_db, monkeypatch):
+    """What Discover shows is this run's recommendations, not an accumulation.
+
+    The read orders by score before recency, so an album found a year ago could outrank today's.
+    Rows not rediscovered are pruned; dismissed rows are kept, both because the listener said so and
+    because keeping the row is what stops the upsert re-adding it as undismissed.
+    """
+    profile, _, _ = await _seed_top_played(async_db)
+
+    service = RecommendationsService(async_db)
+    stub = _StubLastfm(
+        configured=True,
+        similar={"Radiohead": [_lastfm_similar("Thom Yorke", 0.9)]},
+    )
+    service.lastfm = stub
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.search_artist",
+        lambda name: _mb_search("Thom Yorke", "mb-thom"),
+    )
+
+    # First run finds two albums.
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.get_artist_releases_recent",
+        lambda mb_id, days_back, release_types: [
+            _mb_release("rg-anima", "ANIMA"),
+            _mb_release("rg-tomorrow", "Tomorrow's Modern Boxes"),
+        ],
+    )
+    await service.get_listening_profile_external_albums(profile.id, refresh=True)
+    await async_db.commit()
+
+    # The listener dismisses one of them.
+    row = (
+        await async_db.execute(
+            select(ExternalAlbumCache).where(ExternalAlbumCache.release_id == "rg-tomorrow")
+        )
+    ).scalar_one()
+    row.dismissed = True
+    await async_db.commit()
+
+    # Second run finds a different album, and no longer suggests ANIMA.
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.get_artist_releases_recent",
+        lambda mb_id, days_back, release_types: [_mb_release("rg-suspiria", "Suspiria")],
+    )
+    await service.get_listening_profile_external_albums(profile.id, refresh=True)
+    await async_db.commit()
+
+    # Keyed on release_name: the reader projects a display shape and does not carry release_id.
+    surfaced = {
+        r["release_name"]
+        for r in await service._read_external_albums(
+            LISTENING_PROFILE_CONTEXT, source_playlist_id=None, limit=50
+        )
+    }
+    assert surfaced == {"Suspiria"}, "the page should show this run's set only"
+
+    remaining = {
+        r.release_id: r.dismissed
+        for r in (
+            await async_db.execute(
+                select(ExternalAlbumCache).where(
+                    ExternalAlbumCache.discovery_context == LISTENING_PROFILE_CONTEXT
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    assert remaining.get("rg-anima") is None, "a dropped recommendation should be pruned"
+    assert remaining.get("rg-tomorrow") is True, "a dismissal must survive a refresh"
+
+
+@pytest.mark.asyncio
 async def test_no_play_history_returns_empty(async_db, monkeypatch):
     """Fresh profile with no listening history → no seeds → empty result."""
     profile = await insert_test_profile(async_db)
@@ -275,9 +401,7 @@ async def test_no_play_history_returns_empty(async_db, monkeypatch):
     stub = _StubLastfm(configured=True)
     service.lastfm = stub
 
-    rows = await service.get_listening_profile_external_albums(
-        profile.id, refresh=True
-    )
+    rows = await service.get_listening_profile_external_albums(profile.id, refresh=True)
     assert rows == []
     # Last.fm shouldn't have been called either (no seeds to query)
     assert stub.calls == []

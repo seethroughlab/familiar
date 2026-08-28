@@ -112,6 +112,16 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
+            # Keeps "Albums you might want" warm. 03:15 sits between the new-releases check at
+            # 03:00 and the S3 backup at 03:30, so the three daily jobs do not overlap on a box
+            # that is also serving music.
+            self._scheduler.add_job(
+                self._daily_external_albums_refresh,
+                CronTrigger(hour=3, minute=15),
+                id="daily_external_albums",
+                replace_existing=True,
+            )
+
             # Periodic metrics summary every 5 minutes
             self._scheduler.add_job(
                 self._log_metrics_summary,
