@@ -11,7 +11,7 @@ from app.services.tasks import get_sync_progress
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["library"])
+router = APIRouter(tags=["ingest"])
 
 
 class SyncProgress(BaseModel):

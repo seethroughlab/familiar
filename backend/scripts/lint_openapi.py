@@ -65,6 +65,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 VENDORED_TAGS = {
     "tracks",
     "library",
+    # ADR-0073 split `library` and `tracks` along function. Six of the eight new tags join the
+    # generated surface here; `analysis`, `duplicates` and `identification` deliberately do not,
+    # because nothing in Swift has ever called them — which is what made the split free.
+    #
+    # The tag list grows while the *operation* count falls. Compare the count, not the list.
+    "map",
+    "ingest",
+    "discover",
+    "plays",
+    "metadata",
+    "visualizers",
     "playlists",
     "smart-playlists",
     "profiles",

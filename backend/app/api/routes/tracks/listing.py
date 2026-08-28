@@ -33,7 +33,7 @@ from . import (
     apply_track_sort,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["tracks"])
 
 
 class TrackIndexResponse(BaseModel):

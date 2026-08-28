@@ -12,7 +12,7 @@ from app.api.exceptions import FamiliarError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["identification"])
 
 
 class IdentifyCandidateResponse(BaseModel):

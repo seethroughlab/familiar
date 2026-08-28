@@ -63,7 +63,7 @@ class LyricsResponse(BaseModel):
 
 
 @router.get(
-    "/{track_id}/stream",
+    "/{track_id}/stream", tags=["tracks"],
     # Declare the real media type. Without this the schema claims application/json and a
     # generated client would try to JSON-decode audio (ADR-0007). This endpoint is
     # hand-written per platform; the schema only needs to describe it honestly.
@@ -189,7 +189,7 @@ class PlaybackErrorResponse(BaseModel):
     reason: Literal["cache_cleared", "no_cache"]
 
 
-@router.post("/{track_id}/report-playback-error", response_model=PlaybackErrorResponse)
+@router.post("/{track_id}/report-playback-error", tags=["plays"], response_model=PlaybackErrorResponse)
 async def report_playback_error(
     db: DbSession,
     track_id: UUID,
@@ -228,7 +228,7 @@ async def report_playback_error(
 
 
 @router.get(
-    "/{track_id}/artwork",
+    "/{track_id}/artwork", tags=["tracks"],
     response_class=StreamingResponse,
     responses={200: {"content": {"image/*": {}}, "description": "Album artwork image."}},
 )
@@ -288,7 +288,7 @@ async def get_track_artwork(
     )
 
 
-@router.post("/{track_id}/artwork", response_model=ArtworkUploadResponse)
+@router.post("/{track_id}/artwork", tags=["tracks"], response_model=ArtworkUploadResponse)
 async def upload_track_artwork(
     db: DbSession,
     track_id: UUID,
@@ -342,7 +342,7 @@ async def upload_track_artwork(
     )
 
 
-@router.delete("/{track_id}/artwork", response_model=ArtworkUploadResponse)
+@router.delete("/{track_id}/artwork", tags=["tracks"], response_model=ArtworkUploadResponse)
 async def delete_track_artwork(
     db: DbSession,
     track_id: UUID,
@@ -396,7 +396,7 @@ def _empty_lyrics() -> LyricsResponse:
     return LyricsResponse(synced=False, lines=[], plain_text="", source="none")
 
 
-@router.get("/{track_id}/lyrics", response_model=LyricsResponse)
+@router.get("/{track_id}/lyrics", tags=["tracks"], response_model=LyricsResponse)
 async def get_track_lyrics(
     db: DbSession,
     track_id: UUID,

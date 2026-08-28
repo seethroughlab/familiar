@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # rather than `deduplicate` is ADR-0072 point 7: a tag with one operation usually means a path
 # prefix was wanted, and `/library/deduplicate` is already that prefix. It also keeps the
 # operationId at `library_deduplicate_preview`, unchanged.
-router = APIRouter(prefix="/deduplicate", tags=["library"])
+router = APIRouter(prefix="/deduplicate", tags=["duplicates"])
 
 
 # ── Response models ────────────────────────────────────────────

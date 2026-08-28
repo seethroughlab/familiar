@@ -27,7 +27,7 @@ from app.services.visualizer_affinity import (
     rank_candidates,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["visualizers"])
 
 
 class VisualizerFeatureRange(BaseModel):

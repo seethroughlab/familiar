@@ -18,7 +18,7 @@ from . import TrackFeaturesResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["metadata"])
 
 
 class TrackMetadataUpdateRequest(BaseModel):
