@@ -20,7 +20,13 @@ from uuid import uuid4
 
 import pytest
 
-from app.db.models import Artist, ExternalArtistImageCache, Track, TrackStatus
+from app.db.models import (
+    Artist,
+    ArtistAlias,
+    ExternalArtistImageCache,
+    Track,
+    TrackStatus,
+)
 from app.services import artist_image
 from app.services.artist_resolver import normalize_artist_name
 from app.utils.time import utcnow
@@ -30,6 +36,19 @@ from tests.conftest import make_profile_headers
 async def _artist_with_a_track(db, name: str, *, image_url: str | None = None) -> Artist:
     artist = Artist(id=uuid4(), name=name, sort_name=name, image_url=image_url)
     db.add(artist)
+    await db.flush()
+    # **The alias is not optional.** `/library/artists/{name}` resolves through `ArtistAlias`
+    # (`db.get(ArtistAlias, normalize_artist_name(name))`), not through `Artist.name` — so an artist
+    # created without one is listed correctly and 404s when opened. The list tests passed while both
+    # detail tests failed, which is exactly what that difference looks like.
+    db.add(
+        ArtistAlias(
+            alias_normalized=normalize_artist_name(name),
+            alias=name,
+            artist_id=artist.id,
+            source="tag",
+        )
+    )
     await db.flush()
     db.add(
         Track(
