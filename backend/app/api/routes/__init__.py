@@ -22,7 +22,6 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     admin_artists,
-    auth as auth_routes,
     analysis,
     artwork,
     background,
@@ -45,11 +44,16 @@ from app.api.routes import (
     proposed_changes,
     queue,
     s3_backup,
-    settings as settings_routes,
     smart_playlists,
     tracks,
     updates,
     videos,
+)
+from app.api.routes import (
+    auth as auth_routes,
+)
+from app.api.routes import (
+    settings as settings_routes,
 )
 from app.api.schemas.common import error_responses
 
