@@ -183,7 +183,41 @@ The client caches the library whole, refreshes it by delta, and never derives wh
   comes back. It also pins the case that justifies the count: a removal can leave `max_updated_at`
   perfectly still, so only the count notices.
 
-Point 4's storage decision and points 1, 2, 3, 8 and 9 are the Swift half and are not yet built.
+**Verified against the live library on 2026-08-27**, after deploying to the NAS — the two claims the
+design rests on, checked with real data rather than fixtures:
+
+| | |
+|---|---|
+| `/library/fingerprint` `track_count` | 26,422, in 160 ms |
+| `GET /tracks` total (active only) | 26,422 — the fingerprint measures the set it guards |
+| `GET /tracks?updated_since=2020-01-01` total | **26,488** |
+
+The 66-row difference is exactly the inactive tracks, so a delta carries removals as rows (point 7).
+A two-day delta is 500 rows against 26,422, which matches the churn the Context measured.
+
+**Phase 2 — the cache core** (`familiar-apple` #136). `Sources/FamiliarKit/LibraryCache.swift` holds
+the merge, the search predicate, the fingerprint comparison and the atomic `Codable` file;
+`App/Shared/LibraryCacheCoordinator.swift` drives them and conforms the generated `TrackResponse`.
+
+**Everything in the Kit is generic over the element**, which is what lets point 2 hold: `FamiliarKit`
+deliberately does not depend on `FamiliarAPI`, so a `CachedTrack` struct there would have been
+exactly the hand-picked projection point 2 rejects. A protocol keeps the generated struct as the
+cached type.
+
+**Phase 3 — the offline read path** (`familiar-apple` #137). `LibraryStore` falls back to the cache,
+and `CachedCopyBanner` carries point 9 on both platforms.
+
+Two ordering rules came out of building it, neither of which this ADR decided:
+
+- **The merge does not re-sort.** Reproducing `ORDER BY artist, album, track_number, id` on the
+  device means reproducing PostgreSQL's collation, which is the drift ADR-0006 exists to prevent. A
+  delta therefore appends, and the cached order is the server's only until one does.
+- **A list served from the cache stays served from it**, even if the network returns mid-scroll —
+  otherwise page 1 from disk and page 2 from the server offset into two different orderings and
+  silently repeat or skip rows.
+
+**Not yet built:** point 3 (albums, artists and playlists), and point 8's backend twin — the test
+running the same inputs against both search implementations exists only on the Swift side.
 
 ## Alternatives Considered
 
