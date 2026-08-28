@@ -1,6 +1,6 @@
 """Service-level tests for the listening-profile external-albums lane (#2 in Discover)."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -310,7 +310,10 @@ async def test_an_expired_cache_still_does_not_compute_on_the_request(async_db, 
     ).scalars().all()
     assert rows, "seeding should have written cache rows"
     for row in rows:
-        row.discovered_at = datetime(2020, 1, 1, tzinfo=UTC)
+        # Naive, because the column is TIMESTAMP WITHOUT TIME ZONE — which is exactly why
+        # `utcnow()` strips tzinfo. An aware value here fails the flush with
+        # "can't subtract offset-naive and offset-aware datetimes".
+        row.discovered_at = datetime(2020, 1, 1)
     await async_db.commit()
 
     # Expired, so the old code would have recomputed here.
