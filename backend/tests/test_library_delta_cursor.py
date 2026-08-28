@@ -200,6 +200,34 @@ async def test_the_fingerprint_measures_the_set_it_guards(async_db, client: Test
 
 
 @pytest.mark.asyncio
+async def test_renaming_an_album_moves_the_library_fingerprint(async_db, client: TestClient):
+    """ADR-0011 point 3's open follow-up, asserted rather than assumed.
+
+    The Apple client caches albums and artists and lets their staleness *ride* the track
+    fingerprint, on the grounds that both are groupings of track tags. The ADR flagged the risk:
+    "an album renamed with no track edit would slip through".
+
+    There is no such operation — an album is renamed *by* editing its tracks' tags, which is an
+    ORM update, so `onupdate` moves `updated_at` and the fingerprint with it. This is the test that
+    makes that a fact rather than an argument. If a future endpoint ever renames an album without
+    touching its tracks, this fails and the client needs its own signal for albums.
+    """
+    track = await _track_at(async_db, OLD, title="Song")
+
+    before = client.get("/api/v1/library/fingerprint").json()
+
+    # No explicit updated_at: the point is that the column moves by itself.
+    track.album = "Renamed After The Fact"
+    await async_db.commit()
+
+    after = client.get("/api/v1/library/fingerprint").json()
+
+    assert after["max_updated_at"] != before["max_updated_at"], (
+        "a tag edit must be visible to the fingerprint that guards the album cache"
+    )
+
+
+@pytest.mark.asyncio
 async def test_a_removal_moves_the_fingerprint_through_the_count(async_db, client: TestClient):
     """The count is the backstop, and this is the case that proves it is needed.
 
