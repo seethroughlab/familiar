@@ -17,6 +17,7 @@ from app.api.routes.library_import import router as import_router
 from app.api.routes.library_maps import router as maps_router
 from app.api.routes.library_missing import router as missing_router
 from app.api.routes.library_sync import router as sync_router
+from app.api.schemas.common import UTCDateTime
 from app.db.models import Track, TrackAnalysis
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,45 @@ class LibraryStats(BaseModel):
     pending_backfill: int = 0
     pending_melodic: int = 0
     pending_mood_tags: int = 0
+
+
+class LibraryFingerprint(BaseModel):
+    """Whether a cached copy of the library is stale, in one request (ADR-0011 point 5)."""
+
+    track_count: int
+    max_updated_at: UTCDateTime | None = None
+
+
+@router.get("/fingerprint", response_model=LibraryFingerprint)
+async def get_library_fingerprint(db: DbSession) -> LibraryFingerprint:
+    """Cheap staleness check for an offline library cache.
+
+    A client compares both fields against what it holds and refreshes if either moved. The two
+    together are what make the check complete, and each covers a case the other misses:
+
+    - ``max_updated_at`` moves when any active track changes, which is the ordinary case.
+    - ``track_count`` moves when a track leaves the library. Familiar does not delete tracks, it
+      sets ``status`` away from active — so the row disappears from this set without the maximum
+      necessarily changing, and the count is the only thing that notices. This is
+      ADR-0011 point 7's backstop, and it is also what catches a delta that silently missed rows
+      to the cursor race described on ``list_tracks``.
+
+    **Deliberately not ``/library/stats``.** ADR-0011 rejected that endpoint on a mismatch — it
+    counted every row while ``/tracks`` counted active ones — and that specific defect was fixed
+    on 2026-08-16, so the counts now agree. Two reasons survive the fix and are why this endpoint
+    exists anyway: stats carries no ``max(updated_at)``, so it cannot be a cursor at all; and it
+    runs eight aggregates including analysis backlogs, where a check made on every launch should
+    be two.
+
+    Both values are over the active set — the same set ``list_tracks`` pages when no
+    ``updated_since`` is given — so the fingerprint measures exactly the data it guards.
+    """
+    from app.db.models import TrackStatus
+
+    active = Track.status == TrackStatus.ACTIVE
+    track_count = await db.scalar(select(func.count(Track.id)).where(active)) or 0
+    max_updated_at = await db.scalar(select(func.max(Track.updated_at)).where(active))
+    return LibraryFingerprint(track_count=track_count, max_updated_at=max_updated_at)
 
 
 @router.get("/stats", response_model=LibraryStats)

@@ -1,6 +1,6 @@
 # ADR-0011: The Library Is Cached Whole, and Refreshed by Delta
 
-Status: proposed
+Status: accepted
 
 Date: 2026-07-31
 
@@ -83,7 +83,14 @@ delta would rest on and none of which existed: a retag moves `updated_at`, an un
 leaves two backend prerequisites below rather than three.
 
 **`/library/stats` cannot serve as the staleness fingerprint**, which is the obvious thing to reach
-for and the reason to look closely. It counts every `Track` row (`library.py:50-59`) while `/tracks`
+for and the reason to look closely. **The specific defect below was fixed on 2026-08-16, after this
+ADR was drafted — read the numbers as history.** `total_tracks` now filters to active, `total_albums`
+groups by `(album_artist, album)` case-insensitively, and `total_artists` reads the canonical `Artist`
+table, so all three agree with the endpoints they mirror and `tests/test_library_stats.py` asserts
+that agreement. Decision point 5 survives the fix on two narrower grounds: stats carries no
+`max(updated_at)`, so it cannot be a cursor at any accuracy; and it runs eight aggregate queries
+including analysis backlogs, where a check made on every launch should be two. What follows is why it
+was rejected at drafting time. It counts every `Track` row (`library.py:50-59`) while `/tracks`
 applies `Track.active_filter()` — 26,462 against 26,396, which is the 66 inactive rows exactly. Its
 `total_albums` is `COUNT(DISTINCT Track.album)` at 3,871 while `/library/albums` groups and reports
 3,925; its `total_artists` is `COUNT(DISTINCT Track.artist)` at 3,662 while `/library/artists` reads
@@ -158,6 +165,25 @@ The client caches the library whole, refreshes it by delta, and never derives wh
    was last refreshed and that it is browsing a cached copy. ADR-0009 point 4 made the filesystem the
    truth for downloads; the equivalent here is that a cache which cannot be verified against the
    server says so.
+
+## Implementation
+
+**Phase 1 — the backend prerequisites (decision points 5, 6, 7)** on
+`feat/adr-0011-library-cache-prereqs`:
+
+- `TrackResponse.updated_at` exposed (`api/schemas/tracks.py`), without which `updated_since` would
+  be a parameter no client could supply a value for.
+- `updated_since` on `list_tracks` (`api/routes/tracks/listing.py`). It selects **every status**, so
+  a removal arrives as a row; the comparison is `>=`, so the boundary row is re-sent rather than
+  skipped; and a delta pages in `(updated_at, id)` order rather than by artist.
+- `GET /library/fingerprint` (`api/routes/library.py`) returning `track_count` and `max_updated_at`
+  over the active set.
+- `tests/test_library_delta_cursor.py` pins the three behaviours a client cannot check for itself:
+  removals travel through the cursor, an ordinary listing still hides them, and the boundary row
+  comes back. It also pins the case that justifies the count: a removal can leave `max_updated_at`
+  perfectly still, so only the count notices.
+
+Point 4's storage decision and points 1, 2, 3, 8 and 9 are the Swift half and are not yet built.
 
 ## Alternatives Considered
 

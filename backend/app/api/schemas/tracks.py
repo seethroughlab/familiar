@@ -49,6 +49,11 @@ class TrackResponse(BaseModel):
     # `Track.created_at`, which is what ADR-0021's `dateAdded` column sorts by — the sort
     # shipped without the field, so the column was built, seen blank on every row, and removed.
     created_at: UTCDateTime | None = None
+    # The delta cursor for the offline library cache (ADR-0011 point 6). `Track.updated_at` carries
+    # `onupdate=func.now()`, and an ordinary rescan goes through `_update_track` — plain ORM
+    # attribute assignment — so the timestamp moves when a track's tags change. A client keeps the
+    # highest value it has seen and passes it back as `updated_since`.
+    updated_at: UTCDateTime | None = None
     features: TrackFeaturesResponse | None = None
     # Play history (profile-specific, populated when profile header is present)
     last_played_at: UTCDateTime | None = None

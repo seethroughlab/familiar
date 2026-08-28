@@ -3657,6 +3657,14 @@
               "null"
             ]
           },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "year": {
             "title": "Year",
             "type": [
@@ -4639,6 +4647,28 @@
           }
         },
         "title": "LibraryFilters",
+        "type": "object"
+      },
+      "LibraryFingerprint": {
+        "description": "Whether a cached copy of the library is stale, in one request (ADR-0011 point 5).",
+        "properties": {
+          "max_updated_at": {
+            "format": "date-time",
+            "title": "Max Updated At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "track_count": {
+            "title": "Track Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track_count"
+        ],
+        "title": "LibraryFingerprint",
         "type": "object"
       },
       "LibraryImportExecuteRequest": {
@@ -10344,6 +10374,14 @@
               "null"
             ]
           },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "year": {
             "title": "Year",
             "type": [
@@ -10647,6 +10685,14 @@
             "title": "Track Number",
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -17514,6 +17560,78 @@
         "summary": "Get Listening Profile External Albums",
         "tags": [
           "library",
+          "library"
+        ]
+      }
+    },
+    "/api/v1/library/fingerprint": {
+      "get": {
+        "description": "Cheap staleness check for an offline library cache.\n\nA client compares both fields against what it holds and refreshes if either moved. The two\ntogether are what make the check complete, and each covers a case the other misses:\n\n- ``max_updated_at`` moves when any active track changes, which is the ordinary case.\n- ``track_count`` moves when a track leaves the library. Familiar does not delete tracks, it\n  sets ``status`` away from active \u2014 so the row disappears from this set without the maximum\n  necessarily changing, and the count is the only thing that notices. This is\n  ADR-0011 point 7's backstop, and it is also what catches a delta that silently missed rows\n  to the cursor race described on ``list_tracks``.\n\n**Deliberately not ``/library/stats``.** ADR-0011 rejected that endpoint on a mismatch \u2014 it\ncounted every row while ``/tracks`` counted active ones \u2014 and that specific defect was fixed\non 2026-08-16, so the counts now agree. Two reasons survive the fix and are why this endpoint\nexists anyway: stats carries no ``max(updated_at)``, so it cannot be a cursor at all; and it\nruns eight aggregates including analysis backlogs, where a check made on every launch should\nbe two.\n\nBoth values are over the active set \u2014 the same set ``list_tracks`` pages when no\n``updated_since`` is given \u2014 so the fingerprint measures exactly the data it guards.",
+        "operationId": "library_get_library_fingerprint",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryFingerprint"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Get Library Fingerprint",
+        "tags": [
           "library"
         ]
       }
@@ -29954,7 +30072,7 @@
     },
     "/api/v1/tracks": {
       "get": {
-        "description": "List tracks with optional filtering and pagination.",
+        "description": "List tracks with optional filtering and pagination.\n\n``updated_since`` is the delta cursor for the offline library cache (ADR-0011 points 6 and 7).\nTwo things about it are deliberate and load-bearing:\n\n**It returns rows in every status, not just active.** A cursor query cannot see a deleted row,\nbut Familiar does not delete tracks \u2014 it sets ``status`` away from active, which is an ORM\nupdate, so ``updated_at`` moves. Returning those rows is what lets a client drop them from its\ncache. Filtering to active here would make removals invisible, and a cache would drift in the\none direction nobody notices.\n\n**The comparison is ``>=``, so the boundary row comes back again.** A client passing back the\n``max(updated_at)`` it last saw re-receives the rows carrying exactly that timestamp, which is\nan idempotent re-write on its side. ``>`` would silently skip any row sharing the boundary\ninstant. This does not close the general cursor race \u2014 a row committed during a refresh with a\ntimestamp below the cursor is missed by either comparison \u2014 and the active count from\n``GET /library/fingerprint`` is the backstop that catches that drift.",
         "operationId": "tracks_list_tracks",
         "parameters": [
           {
@@ -30214,6 +30332,21 @@
               "description": "Include audio analysis features",
               "title": "Include Features",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Return only tracks changed at or after this time, in any status. The delta cursor for an offline library cache.",
+            "in": "query",
+            "name": "updated_since",
+            "required": false,
+            "schema": {
+              "description": "Return only tracks changed at or after this time, in any status. The delta cursor for an offline library cache.",
+              "format": "date-time",
+              "title": "Updated Since",
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {

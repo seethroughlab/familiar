@@ -2,6 +2,7 @@
 
 import math
 import random
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -302,17 +303,45 @@ async def list_tracks(
     fy_min: float | None = Query(None, ge=0, le=1),
     fy_max: float | None = Query(None, ge=0, le=1),
     include_features: bool = Query(False, description="Include audio analysis features"),
+    updated_since: datetime | None = Query(
+        None,
+        description=(
+            "Return only tracks changed at or after this time, in any status. "
+            "The delta cursor for an offline library cache."
+        ),
+    ),
     sort_by: str | None = Query(None, description="Column to sort by"),
     sort_order: str = Query('asc', pattern='^(asc|desc)$', description="Sort direction"),
 ) -> TrackListResponse:
-    """List tracks with optional filtering and pagination."""
+    """List tracks with optional filtering and pagination.
+
+    ``updated_since`` is the delta cursor for the offline library cache (ADR-0011 points 6 and 7).
+    Two things about it are deliberate and load-bearing:
+
+    **It returns rows in every status, not just active.** A cursor query cannot see a deleted row,
+    but Familiar does not delete tracks — it sets ``status`` away from active, which is an ORM
+    update, so ``updated_at`` moves. Returning those rows is what lets a client drop them from its
+    cache. Filtering to active here would make removals invisible, and a cache would drift in the
+    one direction nobody notices.
+
+    **The comparison is ``>=``, so the boundary row comes back again.** A client passing back the
+    ``max(updated_at)`` it last saw re-receives the rows carrying exactly that timestamp, which is
+    an idempotent re-write on its side. ``>`` would silently skip any row sharing the boundary
+    instant. This does not close the general cursor race — a row committed during a refresh with a
+    timestamp below the cursor is missed by either comparison — and the active count from
+    ``GET /library/fingerprint`` is the backstop that catches that drift.
+    """
 
     has_feature_filter = any(x is not None for x in [energy_min, energy_max, valence_min, valence_max])
     has_fx_list = bool(fx and fx in FEATURE_FILTER_AXES and any(x is not None for x in [fx_min, fx_max]))
     has_fy_list = bool(fy and fy in FEATURE_FILTER_AXES and any(x is not None for x in [fy_min, fy_max]))
     has_feature_filter = has_feature_filter or has_fx_list or has_fy_list
 
-    query = select(Track).where(Track.status == TrackStatus.ACTIVE)
+    # A delta sees every status; a normal listing sees only active ones. See the docstring.
+    if updated_since is not None:
+        query = select(Track).where(Track.updated_at >= updated_since)
+    else:
+        query = select(Track).where(Track.status == TrackStatus.ACTIVE)
 
     # Include analysis features if requested
     if include_features:
@@ -386,7 +415,13 @@ async def list_tracks(
         # 2,846 rows share an ordering key, and OFFSET paging over a non-unique order may
         # repeat or skip rows between pages — silently omitting tracks from anything that
         # pages the whole library.
-        query = query.order_by(Track.artist, Track.album, Track.track_number, Track.id)
+        if updated_since is not None:
+            # A delta pages in cursor order, for the same uniqueness reason: the client is
+            # walking a changed set, and ordering it by artist would interleave rows whose
+            # position moves as the set changes underneath the paging.
+            query = query.order_by(Track.updated_at, Track.id)
+        else:
+            query = query.order_by(Track.artist, Track.album, Track.track_number, Track.id)
 
     query = query.offset((page - 1) * page_size).limit(page_size)
 
