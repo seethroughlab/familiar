@@ -320,6 +320,66 @@ def lint_openapi(schema: dict[str, Any]) -> list[str]:
         errors.append(disagreement)
     components = schema.get("components", {}).get("schemas", {})
 
+    # ── ADR-0072: paths name resources, tags name functions ───────────────────────────────────
+    #
+    # Points 2, 3 and 5 are the machine-checkable half of that ADR (points 1 and 4 are judgement,
+    # and a reviewer applies them). Each of these three had already been violated once before it
+    # was a rule — 32 operations tagged `["library", "library"]`, one tag with a space and
+    # capitals that a prior audit missed, and an index nothing set — so they are asserted rather
+    # than trusted.
+    schema_tags: set[str] = set()
+    for path, methods in schema.get("paths", {}).items():
+        for method, operation in methods.items():
+            if not isinstance(operation, dict):
+                continue
+            tags = operation.get("tags") or []
+            # `GET /` is the app root, registered outside `api_router` and outside `/api/v1`. It
+            # has never carried a tag and is not part of any functional area.
+            if path == "/":
+                continue
+            if len(tags) != 1:
+                errors.append(
+                    f"{method.upper()} {path} has {len(tags)} tags ({tags!r}) — ADR-0072 point 2 "
+                    f"requires exactly one. Tag the leaf router that owns the operation, and make "
+                    f"sure no aggregator above it also tags: FastAPI concatenates rather than "
+                    f"deduplicating."
+                )
+            for tag in tags:
+                schema_tags.add(tag)
+                if tag != tag.lower() or " " in tag:
+                    errors.append(
+                        f"tag {tag!r} on {method.upper()} {path} is not lowercase kebab-case — "
+                        f"ADR-0072 point 3. The tag is half of the generated operationId, so this "
+                        f"reaches the Swift method name."
+                    )
+
+    # Point 5: every tag is described, and sits in exactly one group. An undescribed tag renders in
+    # /redoc as a bare heading, which is precisely the illegibility the point exists to remove.
+    described = {t["name"]: t.get("description") for t in schema.get("tags", [])}
+    if not described:
+        errors.append(
+            "schema has no top-level `tags` array — ADR-0072 point 5. Note that `get_openapi()` "
+            "ignores the app's `openapi_tags` unless it is passed `tags=` explicitly, so a custom "
+            "`app.openapi` hook drops the index silently."
+        )
+    grouped: list[str] = [t for g in schema.get("x-tagGroups", []) for t in g.get("tags", [])]
+    if not grouped:
+        errors.append("schema has no `x-tagGroups` — ADR-0072 point 5.")
+    for tag in sorted(schema_tags):
+        if tag not in described:
+            errors.append(f"tag {tag!r} is used but has no description — ADR-0072 point 5.")
+        elif not described[tag]:
+            errors.append(f"tag {tag!r} has an empty description — ADR-0072 point 5.")
+        if grouped.count(tag) != 1:
+            errors.append(
+                f"tag {tag!r} appears in {grouped.count(tag)} x-tagGroups entries — ADR-0072 "
+                f"point 5 requires exactly one."
+            )
+    for tag in sorted(set(described) - schema_tags):
+        errors.append(
+            f"tag {tag!r} is described but no operation carries it — a stale index entry."
+        )
+
     # The profile header must reach the schema. It is the only authentication there is, and it is
     # supplied by a dependency rather than a route signature — so deleting `Depends(profile_header)`
     # in deps.py would silently strip every security requirement and leave a generated client with

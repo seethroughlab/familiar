@@ -16,7 +16,13 @@ from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/deduplicate", tags=["deduplicate"])
+# `library`, not `deduplicate`. This was the schema's only two-tag operation — the parent
+# aggregator's `library` plus this router's own — and therefore the only one whose generated name
+# depended on which tag happened to come first (ADR-0072 point 2). Resolving it toward `library`
+# rather than `deduplicate` is ADR-0072 point 7: a tag with one operation usually means a path
+# prefix was wanted, and `/library/deduplicate` is already that prefix. It also keeps the
+# operationId at `library_deduplicate_preview`, unchanged.
+router = APIRouter(prefix="/deduplicate", tags=["library"])
 
 
 # ── Response models ────────────────────────────────────────────

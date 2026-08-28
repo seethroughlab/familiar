@@ -22,7 +22,12 @@ from app.db.models import Track, TrackAnalysis
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/library", tags=["library"])
+# No tag here. This router is an aggregator for the ten `library_*` leaf routers below, and
+# ADR-0072 point 2 puts the tag on the leaf that owns the operation: FastAPI *concatenates*
+# router tags rather than deduplicating them, so an aggregator that also tagged would give every
+# nested operation `["library", "library"]` — which is exactly what it used to do, for 32 of them.
+# The two operations declared directly on this router carry the tag on their own decorators.
+router = APIRouter(prefix="/library")
 
 
 class LibraryStats(BaseModel):
@@ -57,7 +62,7 @@ class LibraryFingerprint(BaseModel):
     max_updated_at: UTCDateTime | None = None
 
 
-@router.get("/fingerprint", response_model=LibraryFingerprint)
+@router.get("/fingerprint", response_model=LibraryFingerprint, tags=["library"])
 async def get_library_fingerprint(db: DbSession) -> LibraryFingerprint:
     """Cheap staleness check for an offline library cache.
 
@@ -89,7 +94,7 @@ async def get_library_fingerprint(db: DbSession) -> LibraryFingerprint:
     return LibraryFingerprint(track_count=track_count, max_updated_at=max_updated_at)
 
 
-@router.get("/stats", response_model=LibraryStats)
+@router.get("/stats", response_model=LibraryStats, tags=["library"])
 async def get_library_stats(db: DbSession) -> LibraryStats:
     """Get library statistics.
 
