@@ -43,6 +43,10 @@ MOVED = [
         "/api/v1/playback/artifacts/00000000-0000-0000-0000-000000000000",
         "/api/v1/commands/artifacts/00000000-0000-0000-0000-000000000000",
     ),
+    # ADR-0076 point 5's deferred move.
+    ("POST", "/api/v1/admin/artists/merge", "/api/v1/artists/merge"),
+    ("GET", "/api/v1/admin/artists/merge-suggestions", "/api/v1/artists/merge-suggestions"),
+    ("GET", "/api/v1/admin/artists/search", "/api/v1/artists/search"),
 ]
 
 
@@ -110,7 +114,9 @@ def test_the_aliases_are_absent_from_the_schema(client: TestClient) -> None:
     leaked = [
         path
         for path in schema["paths"]
-        if path.startswith("/api/v1/queue/") or path.startswith("/api/v1/playback/")
+        if path.startswith("/api/v1/queue/")
+        or path.startswith("/api/v1/playback/")
+        or path.startswith("/api/v1/admin/")
     ]
     assert leaked == [], f"alias paths leaked into the published schema: {leaked}"
 

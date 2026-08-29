@@ -28,7 +28,11 @@ from app.services.artist_resolver import _canonicalize_for_match
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/artists", tags=["artists"])
+# `/artists`, not `/admin/artists` (ADR-0076 point 5, deferred there and taken here). The `/admin/`
+# prefix promised a namespace two-thirds of this API would qualify for and only these three used —
+# under ADR-0058 most of Familiar's API *is* administration, so a prefix claiming the word is worse
+# than no prefix. Distinct from `/library/artists`, which browses; this merges.
+router = APIRouter(prefix="/artists", tags=["artists"])
 
 MAX_MERGE_BATCH = 20
 
