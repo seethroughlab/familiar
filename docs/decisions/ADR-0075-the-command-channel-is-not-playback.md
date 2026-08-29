@@ -1,11 +1,37 @@
 # ADR-0075: The Command Channel Is Not Playback
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
 Extends [ADR-0072](ADR-0072-paths-name-resources-tags-name-functions.md). Moves paths under
 [ADR-0079](ADR-0079-a-moved-path-keeps-an-invisible-alias.md).
+
+Implementation:
+
+- **Shipped 2026-08-28**, both repositories on `adr-0075-command-channel`, stacked on `ADR-0074`'s.
+  This closes the API cluster: `0077` → `0072` → `0073`/`0074`/`0076` → `0075`.
+- Point 1 was free exactly as predicted: `playback` is not in `filter.tags`, and the generated Swift
+  client came back **byte-identical**. Point 3's two paths moved with aliases, which exist because
+  `ADR-0074` built `ADR-0079`'s module.
+- **Point 2 was implemented as `tracks/plays.py`, not `listening/plays.py`.** The ADR's goal is to
+  stop `routes/playback.py` shadowing `routes/tracks/playback.py`, and renaming the inner module
+  achieves it. Moving it to `listening/` would have put routes whose paths are `/tracks/{id}/played`
+  — which `ADR-0073` point 3 deliberately does not move — into a package aggregated under a
+  different prefix, forcing `tracks/__init__.py` to import its own routes back out of `listening/`.
+  The collision is resolved; the file simply sits where its paths do.
+- `routes/playback.py` became `routes/commands.py` and `tests/test_playback_commands.py` became
+  `tests/test_command_channel.py`, so the word stops appearing where the ADR says it misleads.
+- **The Tradeoff is worse than the ADR states, and this is the thing to carry forward.** It says a
+  generated client would fail to compile while this one fails at runtime. True — but there is also
+  **no test anywhere in `familiar-apple` that asserts either path**. `PlaybackCommandClient` builds
+  them with `appendingPathComponent` and nothing checks the result, so the only things standing
+  between a typo and a silently dead command channel are a grep and the server-side alias.
+- **That gap is not closed here, and the reason is structural.** `PlaybackCommandClient` lives in
+  `App/Shared`, which is outside the Swift package and therefore unreachable from `swift test` — the
+  same seam `ADR-0073` hit from the other direction. Testing the URL construction means moving the
+  client into `FamiliarKit`, which is a larger change than this ADR's scope and is recorded as a
+  follow-up rather than smuggled in.
 
 ## Context
 
@@ -93,6 +119,9 @@ not have to be renamed again when there is a second.
   used by an agent rather than watched by a person.
 - **Tradeoff** — point 4's removal check is a grep of another repository's shipped source, which is
   weaker than every other trigger in this set.
+- **Follow-up** — `PlaybackCommandClient` should move into `FamiliarKit` so the paths it builds can
+  be asserted by a test. It is in `App/Shared` today, which `swift test` cannot see, so the two
+  string literals this ADR changed are verified by nothing on the client side.
 - **Follow-up** — the hand-written `PlaybackCommandClient` is the reason this is risky. Whether the
   command channel should be in the generated surface at all is a real question and not this ADR's:
   `ADR-0007` point 8 deliberately excludes SSE endpoints, so the answer today is no, and the artifact

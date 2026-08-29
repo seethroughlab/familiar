@@ -34,6 +34,15 @@ MOVED = [
     ),
     ("POST", "/api/v1/queue/suggestions", "/api/v1/radio/suggestions"),
     ("POST", "/api/v1/queue/offline-manifest", "/api/v1/offline/manifest"),
+    # ADR-0075. These two matter more than the four above: their caller is hand-written Swift
+    # (`PlaybackCommandClient`), which builds the path as a string, so nothing would fail to
+    # compile if the alias broke — it would fail in the field, on a channel an agent drives.
+    ("GET", "/api/v1/playback/commands", "/api/v1/commands/stream"),
+    (
+        "POST",
+        "/api/v1/playback/artifacts/00000000-0000-0000-0000-000000000000",
+        "/api/v1/commands/artifacts/00000000-0000-0000-0000-000000000000",
+    ),
 ]
 
 
@@ -98,7 +107,11 @@ def test_the_aliases_are_absent_from_the_schema(client: TestClient) -> None:
     `include_in_schema=False` fails here too.
     """
     schema = client.get("/openapi.json").json()
-    leaked = [path for path in schema["paths"] if path.startswith("/api/v1/queue")]
+    leaked = [
+        path
+        for path in schema["paths"]
+        if path.startswith("/api/v1/queue/") or path.startswith("/api/v1/playback/")
+    ]
     assert leaked == [], f"alias paths leaked into the published schema: {leaked}"
 
 
@@ -111,12 +124,14 @@ def test_every_registered_alias_is_covered_by_this_file() -> None:
     registered = {(tuple(methods)[0], path) for path, methods, _ in _ALIASES}
     covered = {(method, old.replace("/api/v1", "")) for method, old, _ in MOVED}
     # The restore alias carries a path parameter; compare its template rather than the filled id.
-    covered = {
-        (m, "/queue/session/archive/{archive_id}/restore")
-        if "/restore" in p
-        else (m, p)
-        for m, p in covered
-    }
+    def _template(method: str, path: str) -> tuple[str, str]:
+        if "/restore" in path:
+            return (method, "/queue/session/archive/{archive_id}/restore")
+        if "/playback/artifacts/" in path:
+            return (method, "/playback/artifacts/{request_id}")
+        return (method, path)
+
+    covered = {_template(m, p) for m, p in covered}
     assert registered == covered, (
         f"compat.py and this test disagree.\n"
         f"  registered but untested: {sorted(registered - covered)}\n"

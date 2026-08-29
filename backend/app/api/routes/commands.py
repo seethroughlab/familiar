@@ -1,4 +1,4 @@
-"""The playback command channel's HTTP surface (ADR-0044, ADR-0053).
+"""The command channel's HTTP surface (ADR-0044, ADR-0053).
 
 Two endpoints now. A client subscribes and receives imperatives until it goes away; and, since
 ADR-0053, it uploads anything a command asked it to produce. There is still no *send* endpoint —
@@ -35,7 +35,11 @@ logger = logging.getLogger(__name__)
 # A window capture at Retina scale is a few hundred KB; this is a bound, not a target.
 _MAX_ARTIFACT_BYTES = 25 * 1024 * 1024
 
-router = APIRouter(prefix="/playback", tags=["playback"])
+# `commands`, not `playback` (ADR-0075). Nothing here plays anything: the server neither decodes
+# audio nor holds a transport, and the thing on the receiving end is the Apple client. The old name
+# also collided with `routes/tracks/plays.py` — a command bus and a listening ledger, two modules
+# called playback, and the tag belonged to the one that is neither.
+router = APIRouter(prefix="/commands", tags=["commands"])
 
 #: Long enough not to be chatter, short enough that a proxy idle timeout is not reached first.
 _HEARTBEAT_SECONDS = 20.0
@@ -65,7 +69,7 @@ async def _events(request: Request, player: AttachedPlayer) -> AsyncIterator[str
 
 
 @router.get(
-    "/commands",
+    "/stream",
     response_class=StreamingResponse,
     responses={
         200: {

@@ -25,6 +25,7 @@ from app.api.routes import (
     analysis,
     artwork,
     background,
+    commands,
     compat,
     diagnostics,
     download,
@@ -40,7 +41,6 @@ from app.api.routes import (
     organizer,
     outputs,
     pending_review,
-    playback,
     playlists,
     profiles,
     proposed_changes,
@@ -87,7 +87,7 @@ api_router.include_router(s3_backup.router)
 api_router.include_router(analysis.router)
 api_router.include_router(download.router)
 api_router.include_router(updates.router)
-api_router.include_router(playback.router)
+api_router.include_router(commands.router)
 api_router.include_router(listening.router)
 api_router.include_router(external_albums.router)
 api_router.include_router(new_releases.router)

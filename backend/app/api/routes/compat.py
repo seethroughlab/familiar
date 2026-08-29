@@ -37,6 +37,7 @@ from fastapi import APIRouter
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.api.routes import commands
 from app.api.routes.listening import offline, session
 from app.api.routes.listening import radio as radio_routes
 
@@ -62,6 +63,14 @@ _ALIASES: list[tuple[str, list[str], Callable[..., Any]]] = [
     ("/queue/session/archive/{archive_id}/restore", ["POST"], session.restore_archived_session),
     ("/queue/suggestions", ["POST"], radio_routes.suggestions),
     ("/queue/offline-manifest", ["POST"], offline.offline_manifest),
+    # ADR-0075 moved the command channel off `/playback/`. **This pair is the riskiest in the file**
+    # and outlives the rest. Every other alias here backs a *generated* client, so its removal can be
+    # checked by regenerating and seeing what fails to compile. This one backs hand-written Swift —
+    # `App/Shared/PlaybackCommandClient.swift`, which builds these paths as strings — so a premature
+    # removal fails at runtime, in the field, on a channel an agent uses rather than a person
+    # watches. Removing it means grepping that file in the oldest offered build (ADR-0075 point 4).
+    ("/playback/commands", ["GET"], commands.playback_commands),
+    ("/playback/artifacts/{request_id}", ["POST"], commands.upload_artifact),
 ]
 
 for _path, _methods, _endpoint in _ALIASES:

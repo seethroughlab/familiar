@@ -194,7 +194,7 @@ class TestEndpoint:
         """
         from types import SimpleNamespace
 
-        from app.api.routes.playback import playback_commands
+        from app.api.routes.commands import playback_commands
         from app.services.playback_commands import get_channel
 
         closed: list[bool] = []
@@ -233,7 +233,7 @@ class TestEndpoint:
         """Leaving is the only departure signal, so the generator's cleanup has to be reliable."""
         from types import SimpleNamespace
 
-        from app.api.routes.playback import _events
+        from app.api.routes.commands import _events
         from app.services.playback_commands import get_channel
 
         profile_id = uuid4()
