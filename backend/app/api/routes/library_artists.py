@@ -5,11 +5,13 @@ import html
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.sql import ColumnElement
 
 from app.api.deps import CurrentProfile, DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError
@@ -64,6 +66,7 @@ async def list_artists(
     profile: CurrentProfile = None,
     search: str | None = None,
     sort_by: str = "name",
+    sort_order: str | None = None,
     page: int = 1,
     page_size: int = 100,
     has_embeddings: bool = False,
@@ -84,6 +87,10 @@ async def list_artists(
     ``sort_by`` accepts ``name``, ``track_count``, ``album_count``, ``duration``, ``date_added``,
     ``year``, ``play_count`` and ``last_played`` — the last two only with a profile, falling back
     to name without one rather than erroring.
+
+    ``sort_order`` is ``asc``/``desc``, and defaults to whichever way the column is usually read:
+    A-first for a name, biggest-first for a count or a date. A client that offers a direction
+    control must send one, or the arrow it draws will disagree with the rows it gets.
 
     Args:
         has_embeddings: If True, only include artists that have at least one
@@ -182,11 +189,17 @@ async def list_artists(
         descending["last_played"] = "last_played_at"
 
     if column := descending.get(sort_by):
+        # Natural direction unless the caller says otherwise.
+        ascending = sort_order == "asc"
+        ordering: ColumnElement[Any] = literal_column(column)
         base_query = base_query.order_by(
-            desc(literal_column(column)).nullslast(), Artist.sort_name
+            ordering.asc().nullslast() if ascending else desc(ordering).nullslast(),
+            Artist.sort_name,
         )
     else:
-        base_query = base_query.order_by(Artist.sort_name)
+        base_query = base_query.order_by(
+            Artist.sort_name.desc() if sort_order == "desc" else Artist.sort_name
+        )
 
     offset = (page - 1) * page_size
     base_query = base_query.offset(offset).limit(page_size)
