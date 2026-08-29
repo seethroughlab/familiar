@@ -26,6 +26,17 @@ Implementation:
 - Verified: markup balanced (no unclosed tags, no stray closers); the four `data-panel` values match
   the four panel ids exactly; every internal anchor resolves; `site/scripts/check-claims.py` passes
   all four groups, including the six new external links.
+- **`site/e2e/toggle.spec.ts` covers the no-JavaScript case**, which nothing else can: the page looks
+  right in a browser precisely because the script ran. It has its own
+  `site/playwright.config.ts` because `packages/web`'s has a `globalSetup` that POSTs
+  `/api/v1/library/sync` — a static document should not need a database to be tested — and it
+  resolves the `file://` base in the config, since `import.meta.url` in the spec makes Playwright
+  treat it as ESM and fail against this repository's CommonJS default.
+- **Each assertion was checked by breaking the thing it guards**, and one of them was worthless
+  until that was done. The nav-overlap test originally asserted that the *pills* clear the sticky
+  nav — and it passed with `scroll-padding-top` set to `0`, because the pills sit far enough down
+  the section to clear it anyway. The heading is what gets buried. Re-pointed at `#install h2`, it
+  now fails at 27.8px against a nav ending at 55.8px. A test that cannot fail is a comment.
 - The new section uses `constellation.webp`, one of the nine marks `ADR-0054`'s Implementation block
   recorded as unreferenced when it was ratified the same day. **Eight now**, and the reserve is
   doing what that note predicted it was for.
