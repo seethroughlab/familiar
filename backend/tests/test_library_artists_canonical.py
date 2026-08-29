@@ -201,3 +201,46 @@ async def test_resolve_artist_via_alias_diacritic_fallback(async_db):
     found2 = await _resolve_artist_via_alias(async_db, "Bjork")
     assert found2 is not None
     assert found2.id == canonical.id
+
+
+@pytest.mark.asyncio
+async def test_min_track_count_hides_the_long_tail(async_db):
+    """`min_track_count` removes artists sorting cannot (ADR-0094 point 5).
+
+    An artist with one track is usually a compilation straggler. Sorting ascending puts those
+    first and descending buries them; neither takes them out of the list, which is why this is the
+    one filter the browse surface has.
+    """
+    prolific = await ar.resolve_canonical_artist(async_db, "Prolific", do_mb_lookup=False)
+    straggler = await ar.resolve_canonical_artist(async_db, "Straggler", do_mb_lookup=False)
+    for i in range(3):
+        async_db.add(_new_track(file=f"p{i}", artist_id=prolific.id, artist_str="Prolific"))
+    async_db.add(_new_track(file="s0", artist_id=straggler.id, artist_str="Straggler"))
+    await async_db.commit()
+
+    unfiltered = await list_artists(async_db)
+    assert {a.name for a in unfiltered.items} >= {"Prolific", "Straggler"}
+
+    filtered = await list_artists(async_db, min_track_count=2)
+    names = {a.name for a in filtered.items}
+    assert "Prolific" in names
+    assert "Straggler" not in names
+
+
+@pytest.mark.asyncio
+async def test_min_track_count_is_counted_before_the_total(async_db):
+    """`total` must describe the filtered set, not the whole one.
+
+    The filter is a `HAVING` on the same grouped query the count runs over. Count first and the
+    client is told there are more artists than it can ever page to — a last page that is short
+    for no visible reason, which is the kind of paging defect nothing surfaces as an error.
+    """
+    keep = await ar.resolve_canonical_artist(async_db, "Keep", do_mb_lookup=False)
+    drop = await ar.resolve_canonical_artist(async_db, "Drop", do_mb_lookup=False)
+    for i in range(2):
+        async_db.add(_new_track(file=f"k{i}", artist_id=keep.id, artist_str="Keep"))
+    async_db.add(_new_track(file="d0", artist_id=drop.id, artist_str="Drop"))
+    await async_db.commit()
+
+    filtered = await list_artists(async_db, min_track_count=2)
+    assert filtered.total == len(filtered.items)

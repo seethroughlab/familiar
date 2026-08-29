@@ -52,11 +52,18 @@ async def list_artists(
     page: int = 1,
     page_size: int = 100,
     has_embeddings: bool = False,
+    min_track_count: int = 1,
 ) -> ArtistListResponse:
     """Get distinct artists with aggregated stats.
 
     Returns artists sorted by name (default), track count, or album count.
     Includes first_track_id for artwork lookup.
+
+    ``min_track_count`` hides the long tail — an artist with one track is usually a compilation
+    straggler rather than someone in the library (ADR-0094 point 5). It is the one filter here,
+    and it earns that because **sorting cannot express it**: ascending order shows those artists
+    first and descending merely buries them, and neither removes them. Everything else the browse
+    surface needs is a sort, which ``sort_by`` already answers.
 
     Args:
         has_embeddings: If True, only include artists that have at least one
@@ -105,6 +112,13 @@ async def list_artists(
         base_query = base_query.where(
             func.lower(Artist.name).contains(s) | func.lower(Artist.sort_name).contains(s)
         )
+
+    # The long-tail filter, applied *before* the count (ADR-0094 point 5). `HAVING` rather than
+    # `WHERE` because it tests the aggregate this query groups by. Counting after filtering is
+    # what keeps `total` agreeing with the rows — count it first and the last page is short of
+    # what the client was told to expect.
+    if min_track_count > 1:
+        base_query = base_query.having(func.count(Track.id) >= min_track_count)
 
     # Total count.
     count_query = select(func.count()).select_from(base_query.subquery())

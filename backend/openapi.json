@@ -16253,7 +16253,7 @@
     },
     "/api/v1/library/artists": {
       "get": {
-        "description": "Get distinct artists with aggregated stats.\n\nReturns artists sorted by name (default), track count, or album count.\nIncludes first_track_id for artwork lookup.\n\nArgs:\n    has_embeddings: If True, only include artists that have at least one\n        track with an embedding (for use in similarity-based features).",
+        "description": "Get distinct artists with aggregated stats.\n\nReturns artists sorted by name (default), track count, or album count.\nIncludes first_track_id for artwork lookup.\n\n``min_track_count`` hides the long tail \u2014 an artist with one track is usually a compilation\nstraggler rather than someone in the library (ADR-0094 point 5). It is the one filter here,\nand it earns that because **sorting cannot express it**: ascending order shows those artists\nfirst and descending merely buries them, and neither removes them. Everything else the browse\nsurface needs is a sort, which ``sort_by`` already answers.\n\nArgs:\n    has_embeddings: If True, only include artists that have at least one\n        track with an embedding (for use in similarity-based features).",
         "operationId": "library_list_artists",
         "parameters": [
           {
@@ -16306,6 +16306,16 @@
               "default": false,
               "title": "Has Embeddings",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_track_count",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Min Track Count",
+              "type": "integer"
             }
           }
         ],
