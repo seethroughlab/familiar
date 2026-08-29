@@ -24,7 +24,7 @@ REQUIRED_PROFILE_ENDPOINTS = [
     # Radio suggestions weigh this profile's taste and skip history, so they cannot
     # run profile-less (ADR-0005). The `ambient` routes used to be the contrast here;
     # ADR-0077 deleted them, the service they wrapped staying put.
-    ("POST", "/api/v1/queue/suggestions"),
+    ("POST", "/api/v1/radio/suggestions"),
 ]
 
 

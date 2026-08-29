@@ -1,11 +1,44 @@
 # ADR-0074: The Queue Tag Names Three Different Things
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
 Extends [ADR-0072](ADR-0072-paths-name-resources-tags-name-functions.md). Moves paths under
 [ADR-0079](ADR-0079-a-moved-path-keeps-an-invisible-alias.md).
+
+Implementation:
+
+- **Shipped 2026-08-28**, both repositories on `adr-0074-queue-split`, stacked on `ADR-0076`'s.
+  Six operations retagged and moved, `queue.py` split three ways, six Swift call sites and five web
+  call sites updated, and **`ADR-0079` built** — see below.
+- **This ADR could not be implemented as written, because `ADR-0079` was accepted and unbuilt.**
+  Points 3 and 4 assume a compatibility mechanism that did not exist: no module, and
+  `include_in_schema=False` occurring once in the whole codebase on an unrelated route. So
+  `app/api/routes/compat.py` is `ADR-0079`'s deliverable, landing here because this is the first
+  path move that needed it.
+- **`ADR-0079` point 3 does not work as a route dependency, and the failure is silent.** A
+  dependency taking `Response` sets headers on the object the *success* path returns; when a handler
+  raises — a 401 from `RequiredProfile`, a 503 from a disabled flag — the exception handler builds a
+  fresh response and the headers are dropped. Since every unauthenticated call to these paths 401s,
+  the first implementation announced nothing on exactly the requests most worth logging. It is ASGI
+  middleware instead, which attaches the headers to whatever response is actually sent.
+- **"Five aliases" is five paths and six routes.** `/queue/session` answers GET and PUT.
+- The split is clean: no session helper is used by radio or offline, so
+  `listening/{session,radio,offline}.py` share nothing but imports. **`queue.py`'s module docstring
+  described only radio** — a file named for a queue, documented as a recommender, holding session
+  persistence. That was the conflation in one artifact.
+- **All three new tags stay in the generated surface**, which preserves the six generated operations
+  exactly. `offline` is generated despite having no Swift caller, because `ADR-0077` point 4 kept it
+  on the grounds that `ADR-0006` says its consumer is coming; dropping it from `filter.tags` here
+  would have quietly reversed that.
+- `ADR-0073`'s trap recurred and was handled: the generated `Operations` enum member types rename in
+  PascalCase alongside the camelCase methods, and `swift build` does not compile `App/Shared`.
+  Verified with `xcodebuild` for both `Familiar-macOS` and `Familiar-iOS`.
+- **The existing tests were moved to the new paths on purpose.** Left alone they would have passed
+  through the aliases, and the suite would have been testing compatibility while appearing to test
+  the contract. `tests/test_compat_aliases.py` covers the aliases deliberately — 20 tests, including
+  one asserting that the table in the test and the table in `compat.py` cannot drift.
 
 ## Context
 

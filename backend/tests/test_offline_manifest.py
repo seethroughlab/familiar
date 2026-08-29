@@ -215,14 +215,14 @@ class TestSeeds:
 
 class TestEndpoint:
     async def test_requires_a_profile(self, client):
-        r = client.post("/api/v1/queue/offline-manifest", json={"track_ids": []})
+        r = client.post("/api/v1/offline/manifest", json={"track_ids": []})
         assert r.status_code == 401
 
     async def test_returns_a_variant_per_profile_and_preset(self, client, test_profile):
         from tests.conftest import make_profile_headers
 
         r = client.post(
-            "/api/v1/queue/offline-manifest",
+            "/api/v1/offline/manifest",
             json={"track_ids": []},
             headers=make_profile_headers(test_profile),
         )
@@ -236,7 +236,7 @@ class TestEndpoint:
         from tests.conftest import make_profile_headers
 
         r = client.post(
-            "/api/v1/queue/offline-manifest",
+            "/api/v1/offline/manifest",
             json={"track_ids": [str(uuid4()) for _ in range(10_001)]},
             headers=make_profile_headers(test_profile),
         )

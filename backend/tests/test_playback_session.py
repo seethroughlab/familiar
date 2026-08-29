@@ -22,12 +22,12 @@ from uuid import uuid4
 
 import pytest
 
-from app.api.routes.queue import ARCHIVE_LIMIT, reservoir_digest
+from app.api.routes.listening.session import ARCHIVE_LIMIT, reservoir_digest
 from tests.conftest import make_profile_headers
 
 pytestmark = pytest.mark.asyncio
 
-SESSION_URL = "/api/v1/queue/session"
+SESSION_URL = "/api/v1/listening/session"
 
 
 @pytest.fixture(autouse=True)
@@ -290,7 +290,7 @@ class TestConflicts:
     async def test_a_wildly_future_clock_cannot_keep_winning(self, client, test_profile):
         from datetime import datetime, timedelta
 
-        from app.api.routes.queue import MAX_CLOCK_SKEW
+        from app.api.routes.listening.session import MAX_CLOCK_SKEW
         from app.utils.time import to_naive_utc, utcnow
 
         _put(client, test_profile, track_ids=[str(uuid4())])
