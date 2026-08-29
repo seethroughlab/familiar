@@ -1,8 +1,37 @@
 # ADR-0095: The Install Section Is Platform-First
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-29
+
+Implementation:
+- Accepted and built the same day, on `adr-0095-0096-install-and-remote-access`. Four panels —
+  macOS, Windows, Synology, Linux & NAS — in `site/index.html`, styled in `site/assets/site.css`,
+  switched by `site/assets/install.js`, the site's first script.
+- **The macOS panel does not use the site's old command, because `start.sh` is better for this
+  reader.** It requires a `.env`, expands `~` itself (Compose does not), warns when the music path
+  does not exist, detects `Darwin` and adds the logging override, and warns about CLAP on an 8 GB
+  machine. That is four failure modes handled before the reader meets them, and it is what
+  `MACOS_BEGINNER.md` already documents — so the panel and the guide agree by construction rather
+  than by maintenance.
+- **A false claim was found on the page and corrected.** The "Build from source" block said
+  `./start.sh` "builds the image locally". It does not: `start.sh:84` runs
+  `docker compose -f docker-compose.prod.yml`, which pulls `ghcr.io/seethroughlab/familiar:latest`,
+  and the script contains no `--build` at all. Exactly the shape `ADR-0055` point 2 exists for, and
+  found by reading the script to write a different panel.
+- **Windows needs `docker-compose.macos.yml`.** The file only swaps `journald` for `json-file`, and
+  Docker Desktop runs a Linux VM on both platforms, so the override applies to Windows too despite
+  the name. The panel says this in one sentence, which is the honest fix and not a good one — see
+  the follow-up.
+- Verified: markup balanced (no unclosed tags, no stray closers); the four `data-panel` values match
+  the four panel ids exactly; every internal anchor resolves; `site/scripts/check-claims.py` passes
+  all four groups, including the six new external links.
+- The new section uses `constellation.webp`, one of the nine marks `ADR-0054`'s Implementation block
+  recorded as unreferenced when it was ratified the same day. **Eight now**, and the reserve is
+  doing what that note predicted it was for.
+- **Rendered length is ~1,158 words against 1,778 before, and `0055` point 4's budget is 700.**
+  Hiding three panels accounts for ~338 of the reduction. Point 9 stands: the budget wins, and
+  closing the rest of that gap is `0055`'s restructure, not this ADR's.
 
 Supersedes point 1 of [ADR-0055](ADR-0055-the-site-is-restructured-around-five-things.md), and
 rebuilds the "how to get it" half of its point 3. Reverses the hero clause of
@@ -161,6 +190,13 @@ here is the site's first JavaScript, and it has to work without a generator.
   beyond GitHub issues.
 - **Follow-up** — Windows is `unverifiable` until someone installs it. Worth doing before the panel
   claims more than it does.
+- **Follow-up** — `docker-compose.macos.yml` is misnamed. Its content is "this host is not Linux",
+  which covers Docker Desktop on Windows equally, and the Windows panel now has to explain why it is
+  telling a Windows user to fetch a file called `macos`. That is the single most confusing sentence
+  in the new section, and it is confusing because of a filename. Renaming it to
+  `docker-compose.desktop.yml`, with the old name kept as a copy so existing instructions keep
+  working, would remove the explanation entirely. Not done here because it touches `docker/` and
+  `start.sh`, which this ADR has no business changing.
 - **Follow-up** — remote access is the second half of "make it simple" and is deliberately not here.
   Today it is step 4 of the install, one command and a link, which explains *how* and never *why*.
   See ADR-0096.

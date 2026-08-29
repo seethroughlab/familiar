@@ -59,6 +59,29 @@ construction); the topic was matched rather than the assertion; and nothing was 
 | Community cache | true | `routes/settings.py:59`; UI `components/Settings/CommunityCache.tsx` |
 | Web app for setup | true | ADR-0050 point 3 |
 
+## Install and remote access — `index.html`
+
+Added 2026-08-29 with ADR-0095 and ADR-0096. ADR-0095 point 8 draws the line these rows sit on:
+**the platform support table is a claim; the instructions are not.** A procedure is checked by
+running it, which this ledger does not model — what it carries is the assertion that Familiar
+installs on a given platform.
+
+| Claim | Verdict | Evidence |
+|---|---|---|
+| Installs on macOS | true | `docker/start.sh:86` detects `Darwin` and adds `docker-compose.macos.yml`; `docs/MACOS_BEGINNER.md` is a 299-line walkthrough of exactly the steps the panel gives |
+| Installs on Linux, and on OpenMediaVault | true | `docker-compose.prod.yml` needs only `./init-pgvector.sql` locally, and every other variable has a default — `MUSIC_LIBRARY_PATH` falls back to `/data/music`. OMV walkthrough at `INSTALLATION.md:72` |
+| Installs on Synology via Container Manager | true | `INSTALLATION.md:241`, DSM 7.2+, with the compose file to paste and a supported-model list. **Not run by anyone here**; the claim rests on the guide, which is specific enough to be checkable |
+| Installs on Windows | **unverifiable** | `docs/WINDOWS.md` is a compatibility *audit*, not a guide: 21 issues, four critical, **all of them about running the backend natively**. Under Docker the container is Linux and the host "only needs Docker installed" (`WINDOWS.md:15`). So this should work and **nobody has run it**. The panel says so on the page — this is the verdict the site itself displays |
+| `./start.sh` builds the image locally | **false — corrected on the page** | It does not build. `start.sh:84` runs `docker compose -f docker-compose.prod.yml`, which pulls `ghcr.io/seethroughlab/familiar:latest`, and there is no `--build` anywhere in the script. The "Build from source" block now shows an explicit `compose build` and says what `start.sh` actually does |
+| Windows needs `docker-compose.macos.yml` | true | That file only swaps `journald` for `json-file`, and journald is Linux-only. Docker Desktop runs a Linux VM on both platforms, so the override applies to both despite the name. See the follow-up below |
+| Familiar has no login | true | ADR-0045 is **accepted and unimplemented**: no token in `backend/app/api/deps.py`, `app/config.py` or `app/main.py`, and no auth middleware. Its own Implementation block explains why — point 2, closing the 158 allowlisted operations, is the real project |
+| A reverse proxy without authentication does not protect it | true | Follows from the row above: there is nothing behind the proxy to authenticate against |
+| Tailscale gives a private network, HTTPS and no router configuration | **unverifiable** | Tailscale's own documented behaviour, not checkable here. ADR-0096 point 5 is why the page says nothing about their pricing, plans or limits — `ADR-0055` point 2 was burned once already by claims about somebody else's product |
+
+**Expiry (ADR-0096 point 6).** The last three rows depend on Familiar having no authentication. When
+ADR-0045 ships, the "Listening away from home" section and these rows are revisited — a scheduled
+edit, not a later discovery.
+
 ## Removed, with the reason
 
 Kept so nothing is quietly restored later.

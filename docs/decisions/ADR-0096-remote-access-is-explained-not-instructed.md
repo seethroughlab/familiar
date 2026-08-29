@@ -1,8 +1,25 @@
 # ADR-0096: Remote Access Is Explained, Not Instructed
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-29
+
+Implementation:
+- Accepted and built the same day, alongside `ADR-0095`, on
+  `adr-0095-0096-install-and-remote-access`. "Listening away from home" is now its own section after
+  Install, with a nav entry, and step 4 of the install is gone.
+- The no-login paragraph was re-verified rather than taken from the ADR draft: no token in
+  `backend/app/api/deps.py`, `app/config.py` or `app/main.py`, and no auth middleware anywhere.
+- **The wording avoids the word "insecure" and every synonym.** Point 7's register, and it is also
+  more accurate: a server on your own network with no login is a reasonable design, and the sentence
+  the page needed was about *where* it is reachable from, not about quality. What it says is that
+  anything able to reach it can play the music and browse the folders — a fact, from which the
+  recommendation follows without adjectives.
+- The reverse-proxy warning (point 4) is stated as the thing a careful person gets wrong, because
+  that is who it is for: someone incautious will not put nginx in front of anything.
+- The page links `ADR-0045` directly, so a reader who wants to know when this changes can watch the
+  decision rather than the marketing.
+- `site/scripts/check-claims.py` passes, including the new `tailscale.com` and `ADR-0045` links.
 
 Extends [ADR-0095](ADR-0095-the-install-section-is-platform-first.md). Reads alongside
 [ADR-0045](ADR-0045-familiar-authenticates-inbound-requests.md), whose Decision is accepted and
