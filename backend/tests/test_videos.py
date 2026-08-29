@@ -247,3 +247,70 @@ class TestDelete:
         assert not (settings.videos_path / f"{track_id}.mp4").exists()
         listed = client.get("/api/v1/videos").json()["items"]
         assert all(i["id"] != track_id for i in listed)
+
+
+class TestSearchFailureIsNotAnEmptyResult:
+    """A broken search must not look like a search that found nothing.
+
+    This is the defect ADR-0077 records for `search_bandcamp` — it "answered 'no results' for every
+    query, for however long it had been" — and video search had it too: every `yt-dlp` failure was
+    caught and returned as `[]`. It was found the same way, by asking for a video that certainly
+    exists and being told there were none.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_failed_search_raises_rather_than_returning_empty(self, monkeypatch):
+        from app.services.video import VideoSearchUnavailable, VideoService
+
+        async def fake_exec(*args, **kwargs):
+            class Proc:
+                returncode = 1
+
+                async def communicate(self):
+                    return b"", b"ERROR: Requested format is not available"
+
+                def kill(self):
+                    pass
+
+                async def wait(self):
+                    pass
+
+            return Proc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        with pytest.raises(VideoSearchUnavailable):
+            await VideoService().search("anything")
+
+    @pytest.mark.asyncio
+    async def test_a_genuinely_empty_search_still_returns_empty(self, monkeypatch):
+        """The other half: success with no matches is an empty list, not an error."""
+        from app.services.video import VideoService
+
+        async def fake_exec(*args, **kwargs):
+            class Proc:
+                returncode = 0
+
+                async def communicate(self):
+                    return b"", b""
+
+                def kill(self):
+                    pass
+
+                async def wait(self):
+                    pass
+
+            return Proc()
+
+        monkeypatch.setattr("asyncio.create_subprocess_exec", fake_exec)
+        assert await VideoService().search("nothing matches this") == []
+
+    def test_no_player_client_is_pinned(self):
+        """yt-dlp chooses its own client.
+
+        Pinning `player_client=web` is what broke every search: YouTube answered it with
+        storyboard images only. `docker/entrypoint.sh` updates yt-dlp on every boot precisely so
+        it can track these changes — a pin here makes that update useless.
+        """
+        from app.services.video import VideoService
+
+        assert VideoService._base_ytdlp_args() == []

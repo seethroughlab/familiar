@@ -9,13 +9,18 @@ from sqlalchemy import func, select
 from starlette.responses import FileResponse
 
 from app.api.deps import DbSession, release_connection
-from app.api.exceptions import NotFoundError, TrackNotFoundError, ValidationError
-from app.api.schemas.common import UTCDateTime
+from app.api.exceptions import (
+    NotFoundError,
+    ServiceUnavailableError,
+    TrackNotFoundError,
+    ValidationError,
+)
+from app.api.schemas.common import UTCDateTime, error_responses
 from app.api.schemas.tracks import TrackResponse
 from app.api.streaming import stream_file
 from app.db.models import Track
 from app.db.models.tracks import TrackVideo
-from app.services.video import get_video_service
+from app.services.video import VideoSearchUnavailable, get_video_service
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +127,14 @@ async def list_videos(
     return VideoListResponse(items=items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/{track_id}/search")
+@router.get(
+    "/{track_id}/search",
+    # 503 is control flow, not a server fault: YouTube being unreachable is an ordinary answer a
+    # client must expect, and `videos_search_videos` is in the generated surface. Undeclared, a
+    # generated client has no case to branch on and reports an unexpected response — the reasoning
+    # `listening/session.py` records for its own 503.
+    responses=error_responses(503),
+)
 async def search_videos(
     db: DbSession,
     track_id: UUID,
@@ -148,7 +160,13 @@ async def search_videos(
     logger.info("Video search for track %s: '%s'", track_id, search_query)
 
     video_service = get_video_service()
-    results = await video_service.search(search_query, limit=limit)
+    try:
+        results = await video_service.search(search_query, limit=limit)
+    except VideoSearchUnavailable as exc:
+        # 503, not an empty list. "YouTube could not be asked" and "YouTube has nothing" are
+        # different answers, and only one of them is the listener's problem to shrug at. This is
+        # the distinction ADR-0077 records `search_bandcamp` losing for months.
+        raise ServiceUnavailableError(f"Could not search for videos: {exc}") from exc
 
     return [
         VideoSearchResultResponse(
