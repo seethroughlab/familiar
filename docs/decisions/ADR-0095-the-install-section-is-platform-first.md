@@ -26,6 +26,11 @@ Implementation:
   Seventeen references updated across `start.sh`, `stop.sh`, `MACOS.md`, `INSTALLATION.md`, CI and
   the page. **No copy left at the old name** — every consumer is in this repository, and anyone who
   already downloaded the file has their own copy, so a duplicate would only drift.
+- **The deploy would have published the test suite, and its own comment said so.**
+  `.github/workflows/cloudflare-pages.yml` copies `site/` wholesale and then deletes the working
+  files by name — "anything dropped in it ships". Adding `site/e2e/` and `site/playwright.config.ts`
+  put two more things in that directory, so both were headed for the public site until the removal
+  list was extended. Found by assembling `_site/` locally rather than by reading the workflow.
 - Verified: markup balanced (no unclosed tags, no stray closers); the four `data-panel` values match
   the four panel ids exactly; every internal anchor resolves; `site/scripts/check-claims.py` passes
   all four groups, including the six new external links.
