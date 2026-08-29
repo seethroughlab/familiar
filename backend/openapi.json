@@ -755,6 +755,14 @@
             "title": "Album Count",
             "type": "integer"
           },
+          "date_added": {
+            "format": "date-time",
+            "title": "Date Added",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "first_album": {
             "title": "First Album",
             "type": [
@@ -780,13 +788,49 @@
               "null"
             ]
           },
+          "last_played_at": {
+            "format": "date-time",
+            "title": "Last Played At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
           },
+          "play_count": {
+            "title": "Play Count",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "total_duration_seconds": {
+            "title": "Total Duration Seconds",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "track_count": {
             "title": "Track Count",
             "type": "integer"
+          },
+          "year_max": {
+            "title": "Year Max",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "year_min": {
+            "title": "Year Min",
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -16253,7 +16297,7 @@
     },
     "/api/v1/library/artists": {
       "get": {
-        "description": "Get distinct artists with aggregated stats.\n\nReturns artists sorted by name (default), track count, or album count.\nIncludes first_track_id for artwork lookup.\n\n``min_track_count`` hides the long tail \u2014 an artist with one track is usually a compilation\nstraggler rather than someone in the library (ADR-0094 point 5). It is the one filter here,\nand it earns that because **sorting cannot express it**: ascending order shows those artists\nfirst and descending merely buries them, and neither removes them. Everything else the browse\nsurface needs is a sort, which ``sort_by`` already answers.\n\nArgs:\n    has_embeddings: If True, only include artists that have at least one\n        track with an embedding (for use in similarity-based features).",
+        "description": "Get distinct artists with aggregated stats.\n\nIncludes first_track_id for artwork lookup.\n\n**The aggregates are all over the one grouped query**, so the extra columns the Mac's table\nshows (ADR-0094) cost no second round trip: duration, year range and date-added come from the\n`Track` join that already computes the counts.\n\n``play_count`` and ``last_played_at`` are **per profile** and null without one, via an outer\njoin to ``ProfilePlayHistory``. That mirrors ``PROFILE_SORT_FIELDS`` on the tracks list: \"how\noften have you played this\" has no answer when there is no you, and ordering by it anyway\nwould leave the database to invent a cross join.\n\n``sort_by`` accepts ``name``, ``track_count``, ``album_count``, ``duration``, ``date_added``,\n``year``, ``play_count`` and ``last_played`` \u2014 the last two only with a profile, falling back\nto name without one rather than erroring.\n\nArgs:\n    has_embeddings: If True, only include artists that have at least one\n        track with an embedding (for use in similarity-based features).",
         "operationId": "library_list_artists",
         "parameters": [
           {
@@ -16306,16 +16350,6 @@
               "default": false,
               "title": "Has Embeddings",
               "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "min_track_count",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "title": "Min Track Count",
-              "type": "integer"
             }
           }
         ],
@@ -16381,6 +16415,11 @@
             "description": "Internal Server Error"
           }
         },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
         "summary": "List Artists",
         "tags": [
           "library"

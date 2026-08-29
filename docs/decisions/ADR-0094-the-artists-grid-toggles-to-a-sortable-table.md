@@ -33,8 +33,28 @@ Implementation:
 - One wrinkle the schema forced: `ArtistSummary.id` is `String?` and so cannot satisfy
   `Identifiable`, which `Table` requires. A small `ArtistRow` wrapper keys on `name` — the same key
   the grid's `ForEach` already used, so both views agree what one row is.
-- Sorting is a toolbar picker, not column headers. A header that reordered the loaded page would
-  order the accident of what has been scrolled to, which is what point 2 forbids.
+- **Points 3, 4 and 5 were revised after first use, and the ADR is wrong about all three.** Built
+  as written, the toolbar carried a view toggle, a sort picker and a minimum-tracks stepper; three
+  controls for one list read as clutter, and the answer was not the one this ADR reasoned its way
+  to:
+  - **Sorting moved to the column headers** — point 2's mechanism, not its placement, was the part
+    that mattered. `ArtistSortComparator.compare` returns `.orderedSame` always, so `Table` never
+    reorders the loaded page; the binding is a signal and the store refetches. The ADR argued
+    headers would be misleading; they are only misleading if they sort *locally*.
+  - **Point 5's `min_track_count` was removed entirely**, UI and server parameter both. It is a
+    good filter and nobody wanted it in the toolbar, and an unhooked parameter is exactly the
+    surface-with-no-caller `ADR-0077` deletes.
+  - **Point 3 held for about a day.** Five columns were added — duration, year range, date added,
+    play count, last played — which point 3 anticipated as "a separate change with its own cost".
+    The cost was smaller than expected: all five are aggregates over the join `list_artists`
+    already had, and only the two per-profile ones needed anything new.
+- The per-profile join is scoped in the **ON clause**, not `WHERE`. In `WHERE` it silently becomes
+  an inner join and drops every artist the listener has never played — the set "last played" is
+  most useful for finding.
+- **A latent bug surfaced in the store**, unrelated to this ADR but found by it:
+  `isServingCachedCopy` was set on a fallback to the offline cache and never cleared, so one
+  transient failure pinned the store to disk for the session and every later sort silently
+  re-served the cached order.
 
 ## Context
 
