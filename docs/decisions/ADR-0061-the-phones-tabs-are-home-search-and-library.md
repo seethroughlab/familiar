@@ -1,8 +1,31 @@
 # ADR-0061: The Phone's Tabs Are Home, Search and Library
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-17
+
+Implementation:
+- **Nothing was built for this ADR, and that is the point.** Accepted 2026-08-29 after verifying all
+  five decisions against the app as it stands, on `adr-0061-ratify-phone-tabs`. The arrangement had
+  already shipped in `familiar-apple` `6ca7e44`; this ratifies it.
+- Verified: `LibraryView.swift:837` is a three-tab `TabView` tagged `.home`, `.search`, `.library`
+  (points 1, 2). The Library tab roots on `LibraryRootList` (`LibraryView.swift:958`), whose
+  `Section("Library")` and `Section("Collection")` and per-row `detail:` counts are intact —
+  Favorites carries `favoritesDetail`, Tracks a count from its store (point 3). Each tab owns a
+  `NavigationStack` and `phoneMiniPlayerInset` sits outside every one of them (point 4, and ADR-0042
+  points 5 and 6).
+- **The `codex/home-screen-changes` worktree is already gone** — no worktree, no local branch, no
+  remote branch. That follow-up is discharged, not outstanding.
+- **A fourth drift was found while checking, of exactly the shape point 5 is about.**
+  `LibraryRouting.swift`'s `case settings` justifies its own existence with *"a gear in the toolbar
+  would be a second way of getting somewhere"* — and the phone now has that gear:
+  `phoneIdentityToolbar` presents `PhoneSettingsView()` as a sheet, while `LibraryView.swift:626`
+  still renders the same view as a root nothing selects. Two ways to the same screen, one of them
+  unreachable, and the comment arguing against the arrangement that shipped.
+
+  **Deliberately not fixed here.** Removing either half is a navigation change, and point 5's whole
+  claim is that those need an ADR. Fixing it in the ADR that says so would be the same mistake with
+  better intentions. It belongs to a follow-up below.
 
 Supersedes [ADR-0042](ADR-0042-the-phone-gets-a-persistent-tab-bar.md) point 2. The rest of that ADR
 stands: the tab bar itself, per-tab stacks, the transport above it, and the partial supersession of
@@ -101,9 +124,16 @@ it was considered and rejected rather than forgotten.
 - **Positive:** ADR-0042's good parts are preserved explicitly rather than by silence.
 - **Tradeoff:** Tracks and Favorites stay one tap down. That is the cost ADR-0018 point 5 admitted
   and ADR-0042 point 2 tried to buy back; it is now paid deliberately, to spend the slot on Search.
-- **Follow-up:** the uncommitted `codex/home-screen-changes` worktree should be discarded — it is a
-  superseded design and its distinctive ideas are rejected above.
-- **Follow-up:** nothing checks that an accepted ADR's decisions still describe the app. Three have
-  now drifted — this, `WEB-PARITY.md`, and ADR-0058 point 4 — each found by accident. Worth
-  considering whether the Apple clients need the equivalent of `WEB-PARITY.md`: a file that is
-  wrong in an obvious way when the app moves.
+- **Follow-up (discharged):** the uncommitted `codex/home-screen-changes` worktree should be
+  discarded — it is a superseded design and its distinctive ideas are rejected above. Confirmed gone
+  at acceptance; the reasoning above is now the only record that it existed, which is why it was
+  written down.
+- **Follow-up:** nothing checks that an accepted ADR's decisions still describe the app. **Four**
+  have now drifted — this, `WEB-PARITY.md`, ADR-0058 point 4, and the `SidebarItem.settings`
+  duplicate found while ratifying this one — each found by accident, and the fourth found only
+  because someone was checking a record against the app on purpose for once. Worth considering
+  whether the Apple clients need the equivalent of `WEB-PARITY.md`: a file that is wrong in an
+  obvious way when the app moves.
+- **Follow-up:** decide whether the phone reaches Settings through the toolbar sheet or through
+  `SidebarItem.settings`, and delete the other. Both exist; only the sheet is reachable. Needs its
+  own ADR by point 5.
