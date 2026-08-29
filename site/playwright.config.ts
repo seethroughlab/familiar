@@ -17,6 +17,9 @@ import { join } from 'node:path';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Kept beside the config rather than defaulting to the repository root, where a run from
+  // packages/web dropped a `test-results/` directory that was committed by accident once.
+  outputDir: './e2e/.results',
   fullyParallel: true,
   reporter: 'line',
   use: {
