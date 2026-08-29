@@ -230,14 +230,14 @@ open -e .env</code></pre>
           <li>Open PowerShell and download three small files:
 <pre><code>mkdir familiar; cd familiar
 curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.prod.yml
-curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.macos.yml
+curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.desktop.yml
 curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql</code></pre>
             <p><code>curl.exe</code> with the extension, because PowerShell uses plain <code>curl</code> for something else.</p>
           </li>
           <li>Start it, with your own music folder in place of the one below:
 <pre><code>$env:MUSIC_LIBRARY_PATH="C:\Users\you\Music"
-docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d</code></pre>
-            <p>The second file is named for the Mac and is needed here too: it turns off a logging setting that only exists on Linux hosts. The first run downloads about 4&nbsp;GB.</p>
+docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</code></pre>
+            <p>The first run downloads about 4&nbsp;GB.</p>
           </li>
         </ol>
         <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation guide</a> — settings, upgrading and troubleshooting.</p>

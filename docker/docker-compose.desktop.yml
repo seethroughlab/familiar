@@ -1,0 +1,20 @@
+# Docker Desktop override: replace journald logging (Linux-only) with the default json-file driver.
+#
+# Needed on **macOS and Windows alike**. Docker Desktop runs a Linux VM on both, and that VM has no
+# systemd-journald, so the production file's logging driver fails there. Nothing about this is
+# Mac-specific — it was called `docker-compose.macos.yml` until 2026-08-29, which meant the install
+# instructions had to tell Windows users to fetch a file named for the Mac and then explain why
+# (ADR-0095). The name was the whole of the confusion.
+#
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d
+
+services:
+  postgres:
+    logging:
+      driver: json-file
+  redis:
+    logging:
+      driver: json-file
+  api:
+    logging:
+      driver: json-file

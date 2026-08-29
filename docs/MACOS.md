@@ -71,10 +71,10 @@ The default 64GB disk image is sufficient for most users. If you have a very lar
    <summary>Manual alternative (if you prefer not to use the script)</summary>
 
    ```bash
-   docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d
+   docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d
    ```
 
-   The `-f docker-compose.macos.yml` override is required on macOS because the production compose file uses the `journald` logging driver (Linux-only). The override switches to Docker's default `json-file` driver.
+   The `-f docker-compose.desktop.yml` override is required on macOS because the production compose file uses the `journald` logging driver (Linux-only). The override switches to Docker's default `json-file` driver.
    </details>
 
 4. **Wait for the startup check to complete.** The script will show progress dots and then print a success message with the URL when ready (~30-60 seconds on first run).
@@ -89,7 +89,7 @@ Once `start.sh` reports success:
 
 **If nothing loads:** Check that Docker Desktop is still running and the containers are healthy:
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml ps
+docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml ps
 ```
 
 **If the page loads but scanning finds no music:** Double-check the `MUSIC_LIBRARY_PATH` in your `.env` file. The path must point to a folder containing audio files (MP3, M4A, FLAC, etc.), not the Apple Music app itself.
@@ -136,7 +136,7 @@ Database migrations run automatically on startup.
 **"journald logging driver not found":**
 You ran the production compose file without the macOS override. Use `./start.sh` which applies it automatically, or manually run:
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d
 ```
 
 **Container killed / out of memory:**

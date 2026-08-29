@@ -19,10 +19,13 @@ Implementation:
   `docker compose -f docker-compose.prod.yml`, which pulls `ghcr.io/seethroughlab/familiar:latest`,
   and the script contains no `--build` at all. Exactly the shape `ADR-0055` point 2 exists for, and
   found by reading the script to write a different panel.
-- **Windows needs `docker-compose.macos.yml`.** The file only swaps `journald` for `json-file`, and
-  Docker Desktop runs a Linux VM on both platforms, so the override applies to Windows too despite
-  the name. The panel says this in one sentence, which is the honest fix and not a good one — see
-  the follow-up.
+- **Windows needs the Docker Desktop override, and the file has been renamed to say so.** It only
+  swaps `journald` for `json-file`, and Docker Desktop runs a Linux VM on macOS and Windows alike.
+  The panel first carried a sentence explaining why a Windows user was fetching a file called
+  `macos`; `docker-compose.macos.yml` is now `docker-compose.desktop.yml` and the sentence is gone.
+  Seventeen references updated across `start.sh`, `stop.sh`, `MACOS.md`, `INSTALLATION.md`, CI and
+  the page. **No copy left at the old name** — every consumer is in this repository, and anyone who
+  already downloaded the file has their own copy, so a duplicate would only drift.
 - Verified: markup balanced (no unclosed tags, no stray closers); the four `data-panel` values match
   the four panel ids exactly; every internal anchor resolves; `site/scripts/check-claims.py` passes
   all four groups, including the six new external links.
@@ -201,13 +204,11 @@ here is the site's first JavaScript, and it has to work without a generator.
   beyond GitHub issues.
 - **Follow-up** — Windows is `unverifiable` until someone installs it. Worth doing before the panel
   claims more than it does.
-- **Follow-up** — `docker-compose.macos.yml` is misnamed. Its content is "this host is not Linux",
-  which covers Docker Desktop on Windows equally, and the Windows panel now has to explain why it is
-  telling a Windows user to fetch a file called `macos`. That is the single most confusing sentence
-  in the new section, and it is confusing because of a filename. Renaming it to
-  `docker-compose.desktop.yml`, with the old name kept as a copy so existing instructions keep
-  working, would remove the explanation entirely. Not done here because it touches `docker/` and
-  `start.sh`, which this ADR has no business changing.
+- **Follow-up (discharged same day)** — `docker-compose.macos.yml` was misnamed: its content is
+  "this host is not Linux", which covers Docker Desktop on Windows equally, and the Windows panel
+  had to spend a sentence explaining the filename. Renamed to `docker-compose.desktop.yml` and the
+  sentence deleted. The follow-up proposed keeping the old name as a copy; that was dropped on the
+  grounds above — a duplicate with no consumer is a thing to keep in step, not a courtesy.
 - **Follow-up** — remote access is the second half of "make it simple" and is deliberately not here.
   Today it is step 4 of the install, one command and a link, which explains *how* and never *why*.
   See ADR-0096.
