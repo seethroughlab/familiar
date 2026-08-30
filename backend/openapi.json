@@ -680,6 +680,18 @@
             "title": "Artists Skipped",
             "type": "integer"
           },
+          "note": {
+            "title": "Note",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "partial": {
+            "default": false,
+            "title": "Partial",
+            "type": "boolean"
+          },
           "releases": {
             "items": {
               "$ref": "#/components/schemas/NewRelease"
