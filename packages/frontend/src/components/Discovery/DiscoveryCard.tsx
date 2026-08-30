@@ -187,7 +187,7 @@ export function DiscoveryCard({
         <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
           <div className="flex items-end justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <div className={`font-medium text-sm truncate ${isPlaying ? 'text-green-500' : ''}`}>
+              <div className={`font-medium text-sm truncate ${isPlaying ? 'text-success' : ''}`}>
                 {item.name}
               </div>
               {item.subtitle && (
@@ -227,7 +227,7 @@ export function DiscoveryCard({
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className={`font-medium text-sm truncate ${isPlaying ? 'text-green-500' : ''}`}>
+        <div className={`font-medium text-sm truncate ${isPlaying ? 'text-success' : ''}`}>
           {item.name}
         </div>
         {item.subtitle && (

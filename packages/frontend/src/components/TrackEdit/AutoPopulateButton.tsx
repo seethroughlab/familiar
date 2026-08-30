@@ -22,9 +22,9 @@ function ConfidenceBadge({ score }: { score: number }) {
   const percent = Math.round(score * 100);
   const colorClass =
     score >= 0.8
-      ? 'bg-green-500/20 text-green-400'
+      ? 'bg-green-500/20 text-success'
       : score >= 0.5
-      ? 'bg-amber-500/20 text-amber-400'
+      ? 'bg-amber-500/20 text-warning'
       : 'bg-zinc-700 text-zinc-400';
 
   return (
@@ -209,11 +209,11 @@ export function AutoPopulateButton({ trackId, onApply }: Props) {
 
         {/* Error state */}
         {identifyMutation.isError && (
-          <div className="flex items-start gap-3 py-4 text-red-400">
+          <div className="flex items-start gap-3 py-4 text-danger">
             <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium">Identification failed</p>
-              <p className="text-sm text-red-400/80 mt-1">
+              <p className="text-sm text-danger/80 mt-1">
                 {identifyMutation.error instanceof Error
                   ? identifyMutation.error.message
                   : 'An error occurred'}
@@ -227,10 +227,10 @@ export function AutoPopulateButton({ trackId, onApply }: Props) {
           <div className="space-y-3">
             {/* Error from API response */}
             {identifyMutation.data.error && (
-              <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-danger/20 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-red-400">
+                  <p className="text-sm font-medium text-danger">
                     {identifyMutation.data.error_type === 'not_configured'
                       ? 'AcoustID not configured'
                       : identifyMutation.data.error_type === 'chromaprint_missing'
@@ -239,7 +239,7 @@ export function AutoPopulateButton({ trackId, onApply }: Props) {
                       ? 'Audio file not found'
                       : 'Identification error'}
                   </p>
-                  <p className="text-sm text-red-400/80 mt-1">
+                  <p className="text-sm text-danger/80 mt-1">
                     {identifyMutation.data.error}
                   </p>
                 </div>

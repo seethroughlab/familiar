@@ -52,7 +52,7 @@ export function ArtworkPage() {
       <AdminSection title="Coverage">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Figure label="Real art" value={real} loading={isLoading} tone="text-emerald-400" />
-          <Figure label="Placeholder" value={data?.generated} loading={isLoading} tone="text-amber-400" />
+          <Figure label="Placeholder" value={data?.generated} loading={isLoading} tone="text-warning" />
           <Figure label="No art at all" value={data?.without_artwork} loading={isLoading} tone="text-zinc-400" />
         </div>
         {data && data.total_albums > 0 && (
@@ -74,7 +74,7 @@ export function ArtworkPage() {
           <button
             onClick={() => refetch.mutate()}
             disabled={refetch.isPending || !data?.generated}
-            className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm font-medium flex items-center gap-2"
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-white text-sm font-medium flex items-center gap-2"
           >
             {refetch.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -91,7 +91,7 @@ export function ArtworkPage() {
           </p>
 
           {refetch.isError && (
-            <p className="text-sm text-red-400">
+            <p className="text-sm text-danger">
               Could not queue:{' '}
               {refetch.error instanceof Error ? refetch.error.message : 'unknown error'}
             </p>

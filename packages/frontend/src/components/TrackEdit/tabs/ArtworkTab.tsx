@@ -169,19 +169,19 @@ export function ArtworkTab({ trackId, artist, album }: Props) {
 
       {/* Status messages */}
       {uploadMutation.isSuccess && (
-        <div className="flex items-center justify-center gap-2 text-green-400 text-sm">
+        <div className="flex items-center justify-center gap-2 text-success text-sm">
           <CheckCircle className="w-4 h-4" />
           Artwork uploaded successfully
         </div>
       )}
       {uploadMutation.isError && (
-        <div className="flex items-center justify-center gap-2 text-red-400 text-sm">
+        <div className="flex items-center justify-center gap-2 text-danger text-sm">
           <AlertCircle className="w-4 h-4" />
           {uploadMutation.error?.message || 'Upload failed'}
         </div>
       )}
       {deleteMutation.isSuccess && (
-        <div className="flex items-center justify-center gap-2 text-green-400 text-sm">
+        <div className="flex items-center justify-center gap-2 text-success text-sm">
           <CheckCircle className="w-4 h-4" />
           Artwork removed
         </div>

@@ -66,7 +66,7 @@ export function LibrarySync() {
     const isPast = phaseIndex < currentIndex || currentPhase === 'complete';
 
     const iconClass = `w-4 h-4 ${
-      isActive ? 'text-blue-400' : isPast ? 'text-green-400' : 'text-zinc-600'
+      isActive ? 'text-blue-400' : isPast ? 'text-success' : 'text-zinc-600'
     }`;
 
     if (isPast) {
@@ -104,10 +104,10 @@ export function LibrarySync() {
       return <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />;
     }
     if (status === 'error') {
-      return <AlertCircle className="w-5 h-5 text-red-400" />;
+      return <AlertCircle className="w-5 h-5 text-danger" />;
     }
     if (status === 'completed' || phase === 'complete') {
-      return <CheckCircle className="w-5 h-5 text-green-400" />;
+      return <CheckCircle className="w-5 h-5 text-success" />;
     }
 
     return <Music className="w-5 h-5 text-zinc-400" />;
@@ -221,7 +221,7 @@ export function LibrarySync() {
                 {getPhaseIcon('discovering', progress.phase)}
                 <span className={`text-xs ${
                   progress.phase === 'discovering' ? 'text-blue-400' :
-                  ['reading', 'features', 'embeddings', 'melodic', 'complete'].includes(progress.phase) ? 'text-green-400' : 'text-zinc-600'
+                  ['reading', 'features', 'embeddings', 'melodic', 'complete'].includes(progress.phase) ? 'text-success' : 'text-zinc-600'
                 }`}>
                   Discover
                 </span>
@@ -235,7 +235,7 @@ export function LibrarySync() {
                 {getPhaseIcon('reading', progress.phase)}
                 <span className={`text-xs ${
                   progress.phase === 'reading' ? 'text-blue-400' :
-                  ['features', 'embeddings', 'melodic', 'complete'].includes(progress.phase) ? 'text-green-400' : 'text-zinc-600'
+                  ['features', 'embeddings', 'melodic', 'complete'].includes(progress.phase) ? 'text-success' : 'text-zinc-600'
                 }`}>
                   Read
                 </span>
@@ -249,13 +249,13 @@ export function LibrarySync() {
                 {progress.phase === 'features' ? (
                   <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
                 ) : ['embeddings', 'melodic', 'complete'].includes(progress.phase) ? (
-                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <CheckCircle className="w-4 h-4 text-success" />
                 ) : (
                   <Cpu className="w-4 h-4 text-zinc-600" />
                 )}
                 <span className={`text-xs ${
                   progress.phase === 'features' ? 'text-blue-400' :
-                  ['embeddings', 'melodic', 'complete'].includes(progress.phase) ? 'text-green-400' : 'text-zinc-600'
+                  ['embeddings', 'melodic', 'complete'].includes(progress.phase) ? 'text-success' : 'text-zinc-600'
                 }`}>
                   Features
                 </span>
@@ -269,13 +269,13 @@ export function LibrarySync() {
                 {progress.phase === 'embeddings' ? (
                   <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
                 ) : ['melodic', 'complete'].includes(progress.phase) ? (
-                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <CheckCircle className="w-4 h-4 text-success" />
                 ) : (
                   <Sparkles className="w-4 h-4 text-zinc-600" />
                 )}
                 <span className={`text-xs ${
                   progress.phase === 'embeddings' ? 'text-blue-400' :
-                  ['melodic', 'complete'].includes(progress.phase) ? 'text-green-400' : 'text-zinc-600'
+                  ['melodic', 'complete'].includes(progress.phase) ? 'text-success' : 'text-zinc-600'
                 }`}>
                   Embeddings
                 </span>
@@ -289,13 +289,13 @@ export function LibrarySync() {
                 {progress.phase === 'melodic' ? (
                   <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
                 ) : progress.phase === 'complete' ? (
-                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <CheckCircle className="w-4 h-4 text-success" />
                 ) : (
                   <Music2 className="w-4 h-4 text-zinc-600" />
                 )}
                 <span className={`text-xs ${
                   progress.phase === 'melodic' ? 'text-blue-400' :
-                  progress.phase === 'complete' ? 'text-green-400' : 'text-zinc-600'
+                  progress.phase === 'complete' ? 'text-success' : 'text-zinc-600'
                 }`}>
                   Melodic
                 </span>
@@ -321,7 +321,7 @@ export function LibrarySync() {
           {/* Stats grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
             <div className="bg-zinc-700/50 rounded p-2">
-              <div className="text-green-400 font-medium">{progress.new_tracks}</div>
+              <div className="text-success font-medium">{progress.new_tracks}</div>
               <div className="text-zinc-500">New</div>
             </div>
             <div className="bg-zinc-700/50 rounded p-2">
@@ -340,7 +340,7 @@ export function LibrarySync() {
 
           {/* Errors */}
           {Array.isArray(progress.errors) && progress.errors.length > 0 && (
-            <div className="mt-2 p-2 bg-red-900/20 border border-red-800 rounded text-xs text-red-300">
+            <div className="mt-2 p-2 bg-red-900/20 border border-red-800 rounded text-xs text-danger">
               <p className="font-medium mb-1">Errors ({progress.errors.length}):</p>
               <ul className="list-disc list-inside">
                 {progress.errors.slice(0, 3).map((err, i) => (
@@ -359,7 +359,7 @@ export function LibrarySync() {
       {syncStatus?.status === 'completed' && progress && (
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
           <div className="bg-zinc-700/50 rounded p-2">
-            <div className="text-green-400 font-medium">{progress.new_tracks}</div>
+            <div className="text-success font-medium">{progress.new_tracks}</div>
             <div className="text-zinc-500">New</div>
           </div>
           <div className="bg-zinc-700/50 rounded p-2">
@@ -381,9 +381,9 @@ export function LibrarySync() {
       {syncStatus?.status === 'error' && (
         <div className="mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg">
           <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
+            <AlertCircle className="w-5 h-5 text-danger mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-red-400">Sync failed</p>
+              <p className="font-medium text-danger">Sync failed</p>
               <p className="text-sm text-zinc-400 mt-1">
                 {syncStatus.message || 'An unknown error occurred'}
               </p>

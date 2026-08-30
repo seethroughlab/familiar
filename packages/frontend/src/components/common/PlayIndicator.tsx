@@ -24,7 +24,7 @@ export function PlayIndicator({ isCurrent, isPlaying, index , isLoadingAudio}: P
       {/* Default state (no hover) */}
       <span className="group-hover:hidden text-zinc-400">
         {isLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin text-green-500 mx-auto" />
+          <Loader2 className="w-4 h-4 animate-spin text-success mx-auto" />
         ) : isCurrent && isPlaying ? (
           <div className="flex justify-center gap-0.5">
             <div className="w-0.5 h-3 bg-green-500 animate-pulse" />
@@ -32,7 +32,7 @@ export function PlayIndicator({ isCurrent, isPlaying, index , isLoadingAudio}: P
             <div className="w-0.5 h-3 bg-green-500 animate-pulse [animation-delay:0.4s]" />
           </div>
         ) : isCurrent ? (
-          <span className="text-sm text-green-500">{index}</span>
+          <span className="text-sm text-success">{index}</span>
         ) : (
           <span className="text-sm">{index}</span>
         )}
@@ -76,7 +76,7 @@ export function MobilePlayIndicator({ isCurrent, isPlaying, isSelected, index, i
   if (isLoading) {
     return (
       <>
-        <Loader2 className="w-4 h-4 animate-spin text-green-500 md:group-hover:hidden" />
+        <Loader2 className="w-4 h-4 animate-spin text-success md:group-hover:hidden" />
         <Pause className="hidden md:group-hover:block w-4 h-4" fill="currentColor" />
       </>
     );

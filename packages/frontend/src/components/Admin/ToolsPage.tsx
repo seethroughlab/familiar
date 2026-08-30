@@ -20,19 +20,19 @@ export function ToolsPage() {
       <AdminSection title="Inspect">
         <ToolLink
           to="/tools/duplicates"
-          icon={<Copy className="w-5 h-5 text-cyan-400 flex-shrink-0" />}
+          icon={<Copy className="w-5 h-5 text-accent flex-shrink-0" />}
           label="Duplicates"
           description="Find tracks that appear more than once, and which copy is better"
         />
         <ToolLink
           to="/tools/artwork"
-          icon={<Image className="w-5 h-5 text-cyan-400 flex-shrink-0" />}
+          icon={<Image className="w-5 h-5 text-accent flex-shrink-0" />}
           label="Cover art"
           description="See what has real artwork, and re-fetch placeholders"
         />
         <ToolLink
           to="/tools/organize"
-          icon={<FolderTree className="w-5 h-5 text-cyan-400 flex-shrink-0" />}
+          icon={<FolderTree className="w-5 h-5 text-accent flex-shrink-0" />}
           label="Organiser"
           description="See where files would move under a naming template"
         />

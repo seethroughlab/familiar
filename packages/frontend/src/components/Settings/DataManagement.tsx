@@ -365,14 +365,14 @@ export function DataManagement() {
             </button>
 
             {backupState === 'success' && (
-              <span className="flex items-center gap-1 text-sm text-green-400">
+              <span className="flex items-center gap-1 text-sm text-success">
                 <CheckCircle className="w-4 h-4" />
                 Download started
               </span>
             )}
 
             {backupState === 'error' && (
-              <span className="flex items-center gap-1 text-sm text-red-400">
+              <span className="flex items-center gap-1 text-sm text-danger">
                 <AlertCircle className="w-4 h-4" />
                 {backupError}
               </span>
@@ -423,12 +423,12 @@ export function DataManagement() {
           {/* Error Message */}
           {restoreState === 'error' && restoreError && (
             <div className="mt-3 p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="text-sm text-red-300">{restoreError}</p>
+                <p className="text-sm text-danger">{restoreError}</p>
                 <button
                   onClick={resetRestore}
-                  className="mt-2 text-xs text-red-400 hover:text-red-300"
+                  className="mt-2 text-xs text-danger hover:text-danger"
                 >
                   Try again
                 </button>
@@ -481,7 +481,7 @@ export function DataManagement() {
               {restorePreview.warnings.length > 0 && (
                 <div className="p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                    <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-medium text-yellow-300">Warnings</p>
                       <ul className="mt-1 text-xs text-yellow-200/80 space-y-1">
@@ -705,7 +705,7 @@ export function DataManagement() {
           {/* Restoring State */}
           {restoreState === 'restoring' && (
             <div className="flex items-center justify-center py-6">
-              <Loader2 className="w-6 h-6 text-green-400 animate-spin" />
+              <Loader2 className="w-6 h-6 text-success animate-spin" />
               <span className="ml-2 text-zinc-400">Restoring data...</span>
             </div>
           )}
@@ -715,8 +715,8 @@ export function DataManagement() {
             <div className="space-y-4">
               <div className="p-4 bg-green-900/20 border border-green-800 rounded-lg">
                 <div className="flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-400" />
-                  <p className="text-sm font-medium text-green-300">Restore completed</p>
+                  <CheckCircle className="w-5 h-5 text-success" />
+                  <p className="text-sm font-medium text-success">Restore completed</p>
                 </div>
               </div>
 
@@ -736,7 +736,7 @@ export function DataManagement() {
                       if (typeof result === 'object' && result !== null && 'imported' in result) {
                         return (
                           <div key={key} className="bg-zinc-700/50 rounded p-2">
-                            <div className="text-green-400 font-medium">{result.imported}</div>
+                            <div className="text-success font-medium">{result.imported}</div>
                             <div className="text-zinc-500">{label}</div>
                             {result.skipped > 0 && (
                               <div className="text-xs text-zinc-600">({result.skipped} skipped)</div>
@@ -756,19 +756,19 @@ export function DataManagement() {
                   <p className="text-xs text-zinc-400 uppercase tracking-wide mb-2">Library Analysis</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                     <div className="bg-zinc-700/50 rounded p-2">
-                      <div className="text-green-400 font-medium">
+                      <div className="text-success font-medium">
                         {restoreResult.results.library.analysis_imported}
                       </div>
                       <div className="text-zinc-500">Analysis</div>
                     </div>
                     <div className="bg-zinc-700/50 rounded p-2">
-                      <div className="text-green-400 font-medium">
+                      <div className="text-success font-medium">
                         {restoreResult.results.library.embeddings_imported}
                       </div>
                       <div className="text-zinc-500">Embeddings</div>
                     </div>
                     <div className="bg-zinc-700/50 rounded p-2">
-                      <div className="text-green-400 font-medium">
+                      <div className="text-success font-medium">
                         {restoreResult.results.library.user_overrides_imported}
                       </div>
                       <div className="text-zinc-500">Overrides</div>

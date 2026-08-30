@@ -50,9 +50,9 @@ function ConfidenceBadge({ score }: { score: number }) {
   const percent = Math.round(score * 100);
   const colorClass =
     score >= 0.8
-      ? 'bg-green-500/20 text-green-400'
+      ? 'bg-green-500/20 text-success'
       : score >= 0.5
-      ? 'bg-amber-500/20 text-amber-400'
+      ? 'bg-amber-500/20 text-warning'
       : 'bg-zinc-700 text-zinc-400';
 
   return (
@@ -80,9 +80,9 @@ function TrackResultCard({
 
   const statusIcon = {
     pending: <Loader2 className="w-4 h-4 animate-spin text-zinc-500" />,
-    matched: <Check className="w-4 h-4 text-green-400" />,
+    matched: <Check className="w-4 h-4 text-success" />,
     no_match: <X className="w-4 h-4 text-zinc-500" />,
-    error: <AlertCircle className="w-4 h-4 text-red-400" />,
+    error: <AlertCircle className="w-4 h-4 text-danger" />,
     applied: <CheckCircle className="w-4 h-4 text-purple-400" />,
   };
 
@@ -212,7 +212,7 @@ function TrackResultCard({
       {/* Error message */}
       {result.status === 'error' && identifyResult?.error && (
         <div className="border-t border-zinc-700 px-3 py-2 bg-red-500/10">
-          <p className="text-xs text-red-400">{identifyResult.error}</p>
+          <p className="text-xs text-danger">{identifyResult.error}</p>
         </div>
       )}
     </div>
@@ -412,7 +412,7 @@ export function BulkAutoPopulatePanel({ trackIds, onApplyToTrack }: Props) {
             </span>
           )}
           {isComplete && (
-            <span className="text-xs text-green-400">
+            <span className="text-xs text-success">
               {stats.matched} matched
             </span>
           )}
@@ -479,11 +479,11 @@ export function BulkAutoPopulatePanel({ trackIds, onApplyToTrack }: Props) {
 
           {/* Errors */}
           {progress?.errors && progress.errors.length > 0 && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-sm font-medium text-red-400 mb-2">
+            <div className="mt-4 p-3 bg-red-500/10 border border-danger/20 rounded-lg">
+              <p className="text-sm font-medium text-danger mb-2">
                 {progress.errors.length} error{progress.errors.length !== 1 ? 's' : ''}
               </p>
-              <ul className="text-xs text-red-400/80 space-y-1">
+              <ul className="text-xs text-danger/80 space-y-1">
                 {progress.errors.slice(0, 5).map((error, i) => (
                   <li key={i}>{error}</li>
                 ))}

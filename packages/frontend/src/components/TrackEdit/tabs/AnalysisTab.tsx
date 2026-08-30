@@ -86,7 +86,7 @@ export function AnalysisTab({ formData, metadata, onChange }: Props) {
           {detectedBpm && (
             <span className="text-sm text-zinc-500">
               Detected: {detectedBpm.toFixed(1)} BPM
-              {hasOverride('bpm') && <span className="text-yellow-500 ml-2">(overridden)</span>}
+              {hasOverride('bpm') && <span className="text-warning ml-2">(overridden)</span>}
             </span>
           )}
           {!detectedBpm && (
@@ -123,7 +123,7 @@ export function AnalysisTab({ formData, metadata, onChange }: Props) {
           {detectedKey && (
             <span className="text-sm text-zinc-500">
               Detected: {detectedKey}
-              {hasOverride('key') && <span className="text-yellow-500 ml-2">(overridden)</span>}
+              {hasOverride('key') && <span className="text-warning ml-2">(overridden)</span>}
             </span>
           )}
           {!detectedKey && (

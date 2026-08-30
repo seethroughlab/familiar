@@ -78,7 +78,7 @@ export function Dashboard() {
     // same tiles can sit under a heading it does not own.
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <Stat icon={<Music className="w-5 h-5 text-cyan-400" />} label="Tracks"
+        <Stat icon={<Music className="w-5 h-5 text-accent" />} label="Tracks"
               value={library?.total_tracks} loading={libraryLoading} />
         {/*
           * No albums/compilations/soundtracks breakdown, though `/library/stats` returns one.
@@ -86,15 +86,15 @@ export function Dashboard() {
           * breakdown reads"26,488 albums · 0 compilations" on a library ADR-0052 found 297
           * compilations in. Point 6 forbids exactly this — a figure that looks like data.
           */}
-        <Stat icon={<Disc3 className="w-5 h-5 text-cyan-400" />} label="Albums"
+        <Stat icon={<Disc3 className="w-5 h-5 text-accent" />} label="Albums"
               value={library?.total_albums} loading={libraryLoading} />
-        <Stat icon={<Users className="w-5 h-5 text-cyan-400" />} label="Artists"
+        <Stat icon={<Users className="w-5 h-5 text-accent" />} label="Artists"
               value={library?.total_artists} loading={libraryLoading} />
       </div>
 
       <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
         <div className="flex items-center gap-3">
-          <Activity className="w-5 h-5 text-cyan-400" />
+          <Activity className="w-5 h-5 text-accent" />
           <h3 className="font-medium text-white">Analysis</h3>
           <span className="ml-auto text-sm text-zinc-400 tabular-nums">
             {libraryLoading ? '—' : `${analysed.toLocaleString()} of ${total.toLocaleString()}`}
@@ -102,7 +102,7 @@ export function Dashboard() {
         </div>
 
         <div className="h-2 rounded bg-zinc-700/50 overflow-hidden">
-          <div className="h-full bg-cyan-500 transition-[width] duration-500"
+          <div className="h-full bg-accent transition-[width] duration-500"
                style={{ width: `${coverage}%` }} />
         </div>
         <p className="text-sm text-zinc-400">
@@ -112,7 +112,7 @@ export function Dashboard() {
         {queues.length > 0 && (
           <div className="pt-1 space-y-1">
             <div className="flex items-center gap-2 text-sm text-zinc-300">
-              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <AlertTriangle className="w-4 h-4 text-warning" />
               <span>Waiting</span>
             </div>
 
@@ -131,7 +131,7 @@ export function Dashboard() {
       {artwork && artwork.total_albums > 0 && (
         <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <Image className="w-5 h-5 text-cyan-400" />
+            <Image className="w-5 h-5 text-accent" />
             <h3 className="font-medium text-white">Cover art</h3>
             <span className="ml-auto text-sm text-zinc-400 tabular-nums">
               {artwork.with_artwork.toLocaleString()} of {artwork.total_albums.toLocaleString()}
@@ -140,7 +140,7 @@ export function Dashboard() {
 
           <div className="h-2 rounded bg-zinc-700/50 overflow-hidden">
             <div
-              className="h-full bg-cyan-500 transition-[width] duration-500"
+              className="h-full bg-accent transition-[width] duration-500"
               style={{ width: `${Math.round((artwork.with_artwork / artwork.total_albums) * 100)}%` }}
             />
           </div>
@@ -162,7 +162,7 @@ export function Dashboard() {
       {plays && plays.total_plays > 0 && (
         <section className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
           <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-cyan-400" />
+            <Clock className="w-5 h-5 text-accent" />
             <h3 className="font-medium text-white">Listening</h3>
           </div>
           <p className="text-sm text-zinc-400">

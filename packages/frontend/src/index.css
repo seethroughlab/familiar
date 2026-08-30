@@ -21,6 +21,27 @@
   --border-color: #3f3f46;
 }
 
+/* Colour comes from tokens, and status colours say what they mean (ADR-0082 points 1, 5, 6).
+   
+   `@theme` is Tailwind v4's token mechanism: each entry here generates real utilities, so
+   `--color-danger` gives `text-danger`, `bg-danger`, `border-danger` and their opacity variants.
+   That is why these are tokens rather than the `--bg-*` variables above — those are plain custom
+   properties, referenced five times in this file and nowhere in a component.
+
+   **One accent** (point 5). The admin interface had two: `cyan-400` and `green-500`, used
+   interchangeably for primary actions. Green also meant "success" in status rows, so the same hue
+   carried two meanings and neither was reliable.
+
+   **Status colours are semantic** (point 6). `text-red-400` says how it looks; `text-danger` says
+   what it is. The pairs this replaces were mostly ternaries — `cond ? 'text-green-400' :
+   'text-red-400'` — which is a status indicator written as a colour. */
+@theme {
+  --color-accent: var(--color-cyan-400);
+  --color-danger: var(--color-red-400);
+  --color-warning: var(--color-amber-400);
+  --color-success: var(--color-green-400);
+}
+
 /* Scrollbar styling */
 * {
   scrollbar-width: thin;
