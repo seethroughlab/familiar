@@ -59,7 +59,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className={containerClass}>
-          <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
+          <AlertTriangle className="w-12 h-12 text-warning-strong mb-4" />
           <h2 className="text-lg font-semibold text-zinc-200 mb-2">
             Something went wrong
           </h2>

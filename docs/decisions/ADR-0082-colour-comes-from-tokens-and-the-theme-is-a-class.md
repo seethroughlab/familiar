@@ -1,6 +1,38 @@
 # ADR-0082: Colour Comes from Tokens and the Theme Is a Class
 
-Status: proposed
+Status: accepted
+
+Implementation:
+- Built 2026-08-30 on `adr-0082-tokens`. **270 raw status hues became semantic tokens**; zero remain
+  in components.
+- **Points 2 and 4 were already done by `ADR-0080`** — zero `light:` classes, zero
+  `prefers-color-scheme`. Point 4 says 102 `light:` classes and `index.css` said 78. Neither number
+  is checkable now and both are zero, so the discrepancy is recorded rather than resolved.
+- **The tokens are Tailwind v4 `@theme` entries, not plain custom properties**, and that is what
+  makes point 1 work. `@theme` generates real utilities — `--color-danger` gives `text-danger`,
+  `bg-danger`, `border-danger` and their opacity variants. The existing `--bg-*` and `--text-*`
+  variables are ordinary properties, referenced five times in `index.css` and by **no component**,
+  so "the existing variables are extended" could not be taken literally.
+- **Point 6 needed four shades per status, not one, and this was found by trying one first.** A
+  single token per meaning could not express what is on the page: a tinted panel is
+  `bg-*-900/20` behind `border-*-800` behind `text-*-200`, and collapsing those onto one hue
+  flattens the panel into a wash. The set is now base / `-strong` / `-muted` / `-surface` /
+  `-subtle`, each mapped to the exact Tailwind shade it replaces. Jeff chose this over accepting the
+  visual change.
+- **The migration is pixel-identical with one deliberate exception.** The interface used both
+  `yellow-*` and `amber-*` for warnings; both now resolve to amber, moving **34 usages** by one hue
+  step. Two colours meaning "warning" is the ambiguity point 6 exists to remove, so this is the
+  point rather than a cost. An earlier draft of the code comment claimed the migration changed no
+  pixels at all — false as written, and corrected.
+- **Point 5's one accent is cyan-400**, and a solid green fill is treated as the accent it was
+  rather than as a success signal. Green previously served as both a primary-action colour and a
+  status colour, so the same hue carried two meanings and neither was reliable.
+- **Point 3**: `embed.html` and `visualizer.html` declare `color-scheme: dark`. They render inside a
+  `WKWebView` whose host has its own appearance, and a form control or scrollbar drawn in the system
+  light palette on a dark surface is the give-away that it is a web view.
+- Verified: 372 tests pass, the build is clean, all 16 tokens appear in the shipped CSS, and each
+  spot-checked token resolves to the shade it replaced — `--color-danger-surface` to `red-900`,
+  `--color-danger-subtle` to `red-200`, `--color-warning-strong` to `amber-500`.
 
 Date: 2026-08-18
 

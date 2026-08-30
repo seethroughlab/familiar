@@ -80,8 +80,8 @@ export const PlaylistRow = memo(function PlaylistRow(props: PlaylistRowProps) {
   // to pin the whole player graph into a bundle that cannot play anything. A surface that knows
   // about loading can pass it; none currently does.
   const isLoadingAudio = props.isLoadingAudio ?? false;
-  const loadingClass = isCurrentTrack && isLoadingAudio ? 'animate-pulse bg-green-500/5' : '';
-  const selectedClass = isSelected ? 'bg-green-900/30 ring-1 ring-green-500/50' : '';
+  const loadingClass = isCurrentTrack && isLoadingAudio ? 'animate-pulse bg-success-strong/5' : '';
+  const selectedClass = isSelected ? 'bg-success-surface/30 ring-1 ring-success-strong/50' : '';
   const currentClass = isCurrentTrack ? 'bg-zinc-800/30' : '';
   const dragClass = `${isDragged ? 'opacity-50' : ''} ${isDropTarget ? 'border-t-2 border-success' : ''}`;
 

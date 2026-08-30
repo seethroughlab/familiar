@@ -40,7 +40,7 @@ export function ExternalLinkPills({ links, className = '' }: ExternalLinkPillsPr
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleClick}
-          className="px-2 py-1 text-xs bg-red-600/20 text-danger hover:bg-red-600/40 rounded transition-colors flex items-center gap-1"
+          className="px-2 py-1 text-xs bg-danger-strong/20 text-danger hover:bg-danger-strong/40 rounded transition-colors flex items-center gap-1"
         >
           Last.fm
         </a>

@@ -127,7 +127,7 @@ function ResultRow({ result }: { result: OrganizeResult }) {
     result.status === 'moved'
       ? 'bg-cyan-900/60 text-cyan-300'
       : result.status === 'error'
-        ? 'bg-red-900/60 text-danger'
+        ? 'bg-danger-surface/60 text-danger'
         : 'bg-zinc-700 text-zinc-400';
 
   return (

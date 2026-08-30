@@ -81,12 +81,12 @@ export function ServerTokenSettings() {
           placeholder="Paste the token from your server's admin page"
           autoComplete="off"
           spellCheck={false}
-          className="flex-1 px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="flex-1 px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-warning-strong"
         />
         <button
           onClick={saveAndVerify}
           disabled={status === 'testing'}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+          className="px-4 py-2 bg-warning-strong hover:bg-warning-strong disabled:bg-zinc-700 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
         >
           {status === 'testing' ? (
             <Loader2 className="w-4 h-4 animate-spin" />

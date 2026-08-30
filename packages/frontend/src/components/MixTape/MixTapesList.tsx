@@ -16,8 +16,8 @@ function StatusBadge({ status }: { status: MixTape['status'] }) {
   const styles: Record<MixTape['status'], string> = {
     pending: 'bg-zinc-700 text-zinc-300',
     rendering: 'bg-blue-700/50 text-blue-200',
-    ready: 'bg-green-700/50 text-green-200',
-    failed: 'bg-red-700/50 text-red-200',
+    ready: 'bg-success-strong/50 text-success-subtle',
+    failed: 'bg-danger-strong/50 text-danger-subtle',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${styles[status]}`}>

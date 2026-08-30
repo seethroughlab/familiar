@@ -340,7 +340,7 @@ export function LibrarySync() {
 
           {/* Errors */}
           {Array.isArray(progress.errors) && progress.errors.length > 0 && (
-            <div className="mt-2 p-2 bg-red-900/20 border border-red-800 rounded text-xs text-danger">
+            <div className="mt-2 p-2 bg-danger-surface/20 border border-danger-muted rounded text-xs text-danger">
               <p className="font-medium mb-1">Errors ({progress.errors.length}):</p>
               <ul className="list-disc list-inside">
                 {progress.errors.slice(0, 3).map((err, i) => (
@@ -379,7 +379,7 @@ export function LibrarySync() {
 
       {/* Error state */}
       {syncStatus?.status === 'error' && (
-        <div className="mt-4 p-4 bg-red-900/20 border border-red-800 rounded-lg">
+        <div className="mt-4 p-4 bg-danger-surface/20 border border-danger-muted rounded-lg">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-danger mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
@@ -389,7 +389,7 @@ export function LibrarySync() {
               </p>
               <button
                 onClick={() => startSync(false)}
-                className="mt-3 px-3 py-1.5 bg-red-600 hover:bg-red-500 rounded text-sm"
+                className="mt-3 px-3 py-1.5 bg-danger-strong hover:bg-danger-strong rounded text-sm"
               >
                 Retry
               </button>

@@ -22,9 +22,9 @@ function ConfidenceBadge({ score }: { score: number }) {
   const percent = Math.round(score * 100);
   const colorClass =
     score >= 0.8
-      ? 'bg-green-500/20 text-success'
+      ? 'bg-success-strong/20 text-success'
       : score >= 0.5
-      ? 'bg-amber-500/20 text-warning'
+      ? 'bg-warning-strong/20 text-warning'
       : 'bg-zinc-700 text-zinc-400';
 
   return (
@@ -227,7 +227,7 @@ export function AutoPopulateButton({ trackId, onApply }: Props) {
           <div className="space-y-3">
             {/* Error from API response */}
             {identifyMutation.data.error && (
-              <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-danger/20 rounded-lg">
+              <div className="flex items-start gap-3 p-3 bg-danger-strong/10 border border-danger/20 rounded-lg">
                 <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-danger">

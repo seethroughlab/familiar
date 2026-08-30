@@ -149,7 +149,7 @@ export function AlphabetBar({
             top: bubblePosition.y - 24,
           }}
         >
-          <div className="bg-green-600 text-white text-3xl font-bold rounded-lg px-4 py-2 shadow-lg">
+          <div className="bg-accent text-white text-3xl font-bold rounded-lg px-4 py-2 shadow-lg">
             {dragLetter}
           </div>
         </div>
