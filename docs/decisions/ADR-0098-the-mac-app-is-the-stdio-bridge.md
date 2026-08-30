@@ -1,6 +1,39 @@
 # ADR-0098: The Mac App Is the stdio Bridge
 
-Status: proposed
+Status: accepted
+
+Implementation:
+- Built 2026-08-30 in `familiar-apple` on `adr-0098-mcp-helper`: four Swift files under
+  `App/MCPHelper/` and a Run Script phase that compiles them into
+  `Familiar.app/Contents/MacOS/familiar-mcp`. Verified against the live server — 39 tools,
+  `get_library_stats` returning 26,434 tracks, and `launch_familiar` opening the app.
+- **Point 4 is proven, not argued.** The test run opened the *Debug build the helper was inside*
+  rather than `/Applications`. That is exactly the bug `FAMILIAR_APP_PATH` exists to work around in
+  the Python bridge, and it cannot occur here because the helper resolves its own bundle from
+  `argv[0]`.
+- **Point 2's reasoning about `UserDefaults` was backwards, and the code now does the opposite of
+  what this ADR describes.** The Context says macOS keys defaults by bundle identifier, so a
+  separate executable must name the app's suite explicitly. That is true *outside* the bundle.
+  Shipped *inside* it, the helper inherits `com.familiar.player`, so `UserDefaults.standard` already
+  is the app's domain — and asking for your own identifier as a suite is refused by AppKit with
+  *"does not make sense and will not work"*. The first bundled build reported "no server configured"
+  on a machine where Familiar is configured and running. `AppConfiguration.appDefaults` now matches
+  on the identifier and picks; both paths carry the reason.
+- **A Swift-specific bug worth recording.** The MCP streamable-HTTP frames are CRLF-delimited, and
+  in Swift `"\r\n"` is a **single grapheme cluster** — so `split(separator: "\n")` does not match
+  it. The entire body came back as one line, nothing began with `data:`, the parse produced nothing,
+  `send` returned `nil`, and the helper answered nothing at all while logging that it had connected.
+  `split(whereSeparator: \.isNewline)` is correct. Cost an hour, and the compiler is silent about
+  it.
+- **A Run Script phase rather than a second Xcode target**, which point 1 did not specify. The
+  helper is four files with no dependencies beyond Foundation and AppKit; a native target would add
+  build configurations, a scheme and a dependency edge to say the same thing. It runs before code
+  signing, so the binary is signed as part of the bundle. **A first-class target is the follow-up if
+  the helper ever needs its own signing identity or entitlements** — recorded rather than left
+  implicit.
+- Point 5 is unchanged and still holds: `backend/scripts/mcp_bridge.py` stays for Linux and Windows.
+  The Python bridge was also used, unchanged, to unblock the listener the same day while this was
+  being written.
 
 Date: 2026-08-30
 
