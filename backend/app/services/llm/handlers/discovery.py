@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -212,7 +213,10 @@ class DiscoveryHandlersMixin:
         artists = [row[0] for row in result.all() if row[0]]
 
         if not artists:
-            return {"recommendations": [], "message": "No artists in library to base recommendations on"}
+            return {
+                "recommendations": [],
+                "message": "No artists in library to base recommendations on",
+            }
 
         bc = BandcampService()
         recommendations = []
@@ -226,13 +230,15 @@ class DiscoveryHandlersMixin:
                 results = await bc.search(artist, item_type="a", limit=2)
 
                 for r in results:
-                    recommendations.append({
-                        "type": r.result_type,
-                        "name": r.name,
-                        "artist": r.artist,
-                        "url": r.url,
-                        "genre": r.genre,
-                    })
+                    recommendations.append(
+                        {
+                            "type": r.result_type,
+                            "name": r.name,
+                            "artist": r.artist,
+                            "url": r.url,
+                            "genre": r.genre,
+                        }
+                    )
 
                 if len(recommendations) >= limit:
                     break
@@ -265,9 +271,8 @@ class DiscoveryHandlersMixin:
         lastfm = get_lastfm_service()
 
         # Check if the requested artist is in the library
-        artist_in_library_stmt = (
-            select(func.count(Track.id))
-            .where(Track.active_filter(), Track.artist.ilike(f"%{artist}%"))
+        artist_in_library_stmt = select(func.count(Track.id)).where(
+            Track.active_filter(), Track.artist.ilike(f"%{artist}%")
         )
         artist_count = await self.db.scalar(artist_in_library_stmt) or 0
         requested_artist_in_library = artist_count > 0
@@ -281,7 +286,9 @@ class DiscoveryHandlersMixin:
                 "requested_artist_in_library": requested_artist_in_library,
                 "similar_artists_in_library": [],
                 "count": 0,
-                "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}" if not requested_artist_in_library else None,
+                "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}"
+                if not requested_artist_in_library
+                else None,
                 "note": "Could not find similar artists via Last.fm. Try semantic_search instead.",
             }
 
@@ -301,15 +308,20 @@ class DiscoveryHandlersMixin:
             if row:
                 # Find the match score from Last.fm data
                 match_score = next(
-                    (float(a.get("match", 0)) for a in similar_artists
-                     if a.get("name", "").lower() == similar_name.lower()),
-                    0.0
+                    (
+                        float(a.get("match", 0))
+                        for a in similar_artists
+                        if a.get("name", "").lower() == similar_name.lower()
+                    ),
+                    0.0,
                 )
-                artists_in_library.append({
-                    "name": row.artist,
-                    "track_count": row.track_count,
-                    "similarity": round(match_score, 2),
-                })
+                artists_in_library.append(
+                    {
+                        "name": row.artist,
+                        "track_count": row.track_count,
+                        "similarity": round(match_score, 2),
+                    }
+                )
 
         # Sort by similarity score
         artists_in_library.sort(key=lambda x: x["similarity"], reverse=True)
@@ -320,8 +332,12 @@ class DiscoveryHandlersMixin:
             "requested_artist_in_library": requested_artist_in_library,
             "similar_artists_in_library": artists_in_library,
             "count": len(artists_in_library),
-            "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}" if not requested_artist_in_library else None,
-            "note": f"Found {len(artists_in_library)} similar artists in your library. Search for their tracks to build a playlist." if artists_in_library else "No similar artists found in library.",
+            "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}"
+            if not requested_artist_in_library
+            else None,
+            "note": f"Found {len(artists_in_library)} similar artists in your library. Search for their tracks to build a playlist."
+            if artists_in_library
+            else "No similar artists found in library.",
         }
 
     async def _get_new_releases(
@@ -368,26 +384,58 @@ class DiscoveryHandlersMixin:
         artists_checked = 0
         artists_skipped = 0
 
+        # **Bounded, because MusicBrainz stalls and `musicbrainzngs` hides it.**
+        #
+        # A 503 is answered by retrying with backoff, logged at INFO, and the caller is told
+        # nothing. MusicBrainz rate-limits to one request a second per client, so when this runs
+        # alongside the background artist resolver it gets 503s — and fifteen artists, each retried,
+        # turns a scan that should take fifteen seconds into one that never returns. Observed on
+        # 2026-08-30 at 240 seconds with no response, which an MCP host reports as a bare
+        # "Tool execution failed" pointing at the app rather than at the upstream.
+        #
+        # The budgets live in `library_artists` so the tool and the HTTP endpoint cannot drift into
+        # disagreeing about how long a person will wait.
+        from app.api.routes.library_artists import (
+            NEW_RELEASE_PER_ARTIST_TIMEOUT_SECONDS,
+            NEW_RELEASE_SCAN_BUDGET_SECONDS,
+        )
+
+        deadline = time.monotonic() + NEW_RELEASE_SCAN_BUDGET_SECONDS
+        partial = False
+        stalled = False
+
         for row in top_artists:
             if not row.musicbrainz_id:
                 artists_skipped += 1
                 continue
 
+            if time.monotonic() > deadline:
+                partial = True
+                break
+
             artists_checked += 1
-            releases = await asyncio.to_thread(
-                get_artist_releases_recent,
-                row.musicbrainz_id,
-                days_back,
-            )
+            try:
+                releases = await asyncio.wait_for(
+                    asyncio.to_thread(get_artist_releases_recent, row.musicbrainz_id, days_back),
+                    timeout=NEW_RELEASE_PER_ARTIST_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                # `wait_for` cannot cancel the thread; it finishes in the background. Acceptable —
+                # it is one bounded HTTP call, and the alternative is holding the tool open for it.
+                partial = True
+                stalled = True
+                continue
 
             for r in releases:
-                all_releases.append({
-                    "artist": row.artist_name,
-                    "title": r["title"],
-                    "type": r.get("release_type"),
-                    "date": r["release_date"],
-                    "in_library": False,
-                })
+                all_releases.append(
+                    {
+                        "artist": row.artist_name,
+                        "title": r["title"],
+                        "type": r.get("release_type"),
+                        "date": r["release_date"],
+                        "in_library": False,
+                    }
+                )
 
         # Cross-reference with the library by canonical artist + album.
         if all_releases:
@@ -405,8 +453,7 @@ class DiscoveryHandlersMixin:
             )
             album_result = await self.db.execute(album_pairs_query)
             library_albums = {
-                (row.artist_name.lower().strip(), row.album_lower)
-                for row in album_result.all()
+                (row.artist_name.lower().strip(), row.album_lower) for row in album_result.all()
             }
 
             for release in all_releases:
@@ -424,9 +471,18 @@ class DiscoveryHandlersMixin:
             "artists_skipped": artists_skipped,
             "count": len(all_releases),
             "new_releases_not_in_library": new_count,
-            "note": f"Found {len(all_releases)} recent releases ({new_count} not in library) from {artists_checked} artists (last {days_back} days)."
-            if all_releases
-            else f"No recent releases found in the last {days_back} days.",
+            "partial": partial,
+            # The note is what the host reads aloud, so it has to distinguish "nothing new" from
+            # "we ran out of time" — an empty list looks identical either way and leads to
+            # opposite conclusions.
+            "note": _new_release_note(
+                found=len(all_releases),
+                new_count=new_count,
+                artists_checked=artists_checked,
+                days_back=days_back,
+                partial=partial,
+                stalled=stalled,
+            ),
         }
 
     async def _get_discovery_recommendations(
@@ -469,7 +525,12 @@ class DiscoveryHandlersMixin:
         top_artist_ids = [row.artist_id for row in top_artists]
 
         if not top_artists:
-            return {"recommended_artists": [], "unheard_tracks": [], "deep_cuts": [], "note": "No play history found."}
+            return {
+                "recommended_artists": [],
+                "unheard_tracks": [],
+                "deep_cuts": [],
+                "note": "No play history found.",
+            }
 
         # Similar-artist candidates from the canonical artists' cached data.
         seen: set[str] = set()
@@ -533,14 +594,16 @@ class DiscoveryHandlersMixin:
             except (ValueError, TypeError):
                 match_score = 0.0
 
-            recommended.append({
-                "name": similar.get("name", ""),
-                "match_score": round(match_score, 2),
-                "in_library": in_library,
-                "track_count": tc if in_library else None,
-                "bandcamp_url": generate_artist_search_url("bandcamp", similar.get("name", "")),
-                "based_on": based_on,
-            })
+            recommended.append(
+                {
+                    "name": similar.get("name", ""),
+                    "match_score": round(match_score, 2),
+                    "in_library": in_library,
+                    "track_count": tc if in_library else None,
+                    "bandcamp_url": generate_artist_search_url("bandcamp", similar.get("name", "")),
+                    "based_on": based_on,
+                }
+            )
 
         recommended.sort(key=lambda a: a["match_score"], reverse=True)
         recommended = recommended[:limit]
@@ -550,9 +613,8 @@ class DiscoveryHandlersMixin:
         deep_cuts: list[dict[str, Any]] = []
 
         if top_artist_ids:
-            played_ids = (
-                select(ProfilePlayHistory.track_id)
-                .where(ProfilePlayHistory.profile_id == self.profile_id)
+            played_ids = select(ProfilePlayHistory.track_id).where(
+                ProfilePlayHistory.profile_id == self.profile_id
             )
 
             unheard_result = await self.db.execute(
@@ -568,15 +630,19 @@ class DiscoveryHandlersMixin:
             unheard_ids = set()
             for row in unheard_result.fetchall():
                 unheard_ids.add(row.id)
-                unheard_tracks.append({
-                    "id": str(row.id),
-                    "title": row.title,
-                    "artist": row.artist,
-                    "album": row.album,
-                })
+                unheard_tracks.append(
+                    {
+                        "id": str(row.id),
+                        "title": row.title,
+                        "artist": row.artist,
+                        "album": row.album,
+                    }
+                )
 
             deep_result = await self.db.execute(
-                select(Track.id, Track.title, Track.artist, Track.album, ProfilePlayHistory.play_count)
+                select(
+                    Track.id, Track.title, Track.artist, Track.album, ProfilePlayHistory.play_count
+                )
                 .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
                 .where(
                     Track.canonical_artist_id.in_(top_artist_ids),
@@ -589,13 +655,15 @@ class DiscoveryHandlersMixin:
             )
             for row in deep_result.fetchall():
                 if row.id not in unheard_ids:
-                    deep_cuts.append({
-                        "id": str(row.id),
-                        "title": row.title,
-                        "artist": row.artist,
-                        "album": row.album,
-                        "play_count": row.play_count,
-                    })
+                    deep_cuts.append(
+                        {
+                            "id": str(row.id),
+                            "title": row.title,
+                            "artist": row.artist,
+                            "album": row.album,
+                            "play_count": row.play_count,
+                        }
+                    )
 
         return {
             "recommended_artists": recommended,
@@ -626,11 +694,15 @@ class DiscoveryHandlersMixin:
             return {"error": "Both title and artist are required"}
 
         # Search local library for exact match first
-        stmt = select(Track).where(
-            Track.active_filter(),
-            func.lower(Track.title) == title.lower(),
-            func.lower(Track.artist) == artist.lower(),
-        ).limit(1)
+        stmt = (
+            select(Track)
+            .where(
+                Track.active_filter(),
+                func.lower(Track.title) == title.lower(),
+                func.lower(Track.artist) == artist.lower(),
+            )
+            .limit(1)
+        )
         result = await self.db.execute(stmt)
         track = result.scalar_one_or_none()
 
@@ -645,10 +717,14 @@ class DiscoveryHandlersMixin:
             }
 
         # Try fuzzy match on local library
-        stmt = select(Track).where(
-            Track.active_filter(),
-            func.lower(Track.artist).contains(artist.lower()),
-        ).limit(200)
+        stmt = (
+            select(Track)
+            .where(
+                Track.active_filter(),
+                func.lower(Track.artist).contains(artist.lower()),
+            )
+            .limit(200)
+        )
         result = await self.db.execute(stmt)
         candidates = list(result.scalars().all())
 
@@ -726,17 +802,25 @@ class DiscoveryHandlersMixin:
         for similar in similar_tracks[:limit]:
             similar_name = similar.get("name", "")
             similar_artist_data = similar.get("artist", {})
-            similar_artist = similar_artist_data.get("name", "") if isinstance(similar_artist_data, dict) else str(similar_artist_data)
+            similar_artist = (
+                similar_artist_data.get("name", "")
+                if isinstance(similar_artist_data, dict)
+                else str(similar_artist_data)
+            )
 
             if not similar_name or not similar_artist:
                 continue
 
             # Check if in local library
-            stmt = select(Track).where(
-                Track.active_filter(),
-                func.lower(Track.title) == similar_name.lower(),
-                func.lower(Track.artist) == similar_artist.lower(),
-            ).limit(1)
+            stmt = (
+                select(Track)
+                .where(
+                    Track.active_filter(),
+                    func.lower(Track.title) == similar_name.lower(),
+                    func.lower(Track.artist) == similar_artist.lower(),
+                )
+                .limit(1)
+            )
             result = await self.db.execute(stmt)
             local_track = result.scalar_one_or_none()
 
@@ -766,3 +850,38 @@ class DiscoveryHandlersMixin:
             "missing": len(tracks_with_status) - in_library_count,
             "note": f"Found {len(tracks_with_status)} similar tracks ({in_library_count} in library, {len(tracks_with_status) - in_library_count} not in library).",
         }
+
+
+def _new_release_note(
+    *,
+    found: int,
+    new_count: int,
+    artists_checked: int,
+    days_back: int,
+    partial: bool,
+    stalled: bool,
+) -> str:
+    """What to tell a person about a scan that may not have finished.
+
+    Separated from the handler because the interesting case is the unhappy one, and it was
+    previously unrepresentable: the old note could only say "found N" or "found none", so a scan cut
+    short by a rate-limited upstream reported "No recent releases found" — a confident wrong answer.
+    """
+    if stalled:
+        return (
+            f"MusicBrainz did not answer in time for some artists, so this is partial: "
+            f"{found} release(s) from {artists_checked} artist(s). It rate-limits to one request a "
+            "second and returns 503 when that is exceeded, which is usually temporary — try again "
+            "in a minute."
+        )
+    if partial:
+        return (
+            f"Stopped early to stay responsive: {found} release(s) from the first "
+            f"{artists_checked} artist(s). Ask again to continue where MusicBrainz left off."
+        )
+    if found:
+        return (
+            f"Found {found} recent releases ({new_count} not in library) from {artists_checked} "
+            f"artists (last {days_back} days)."
+        )
+    return f"No recent releases found in the last {days_back} days."
