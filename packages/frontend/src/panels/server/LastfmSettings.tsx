@@ -37,13 +37,13 @@ export function LastfmSettings() {
     return (
       <div className="bg-zinc-800 rounded-lg p-4">
         <div className="flex items-center gap-3 mb-3">
-          <Radio className="w-6 h-6 text-red-500" />
+          <Radio className="w-6 h-6 text-danger" />
           <h3 className="font-medium">Last.fm</h3>
         </div>
-        <div className="flex items-start gap-2 p-3 bg-amber-900/20 border border-amber-800 rounded-lg">
-          <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="flex items-start gap-2 p-3 bg-warning-surface/20 border border-warning-muted rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm text-amber-400">Last.fm API not configured</p>
+            <p className="text-sm text-warning">Last.fm API not configured</p>
             <p className="text-xs text-zinc-500 mt-1">
               Set LASTFM_API_KEY and LASTFM_API_SECRET in docker/.env to enable scrobbling.
             </p>
@@ -56,13 +56,13 @@ export function LastfmSettings() {
   return (
     <div className="bg-zinc-800 rounded-lg p-4">
       <div className="flex items-center gap-3 mb-3">
-        <Radio className="w-6 h-6 text-red-500" />
+        <Radio className="w-6 h-6 text-danger" />
         <h3 className="font-medium">Last.fm Scrobbling</h3>
       </div>
 
       {status.connected ? (
         <div className="space-y-4">
-          <div className="flex items-center gap-2 text-green-400">
+          <div className="flex items-center gap-2 text-success">
             <CheckCircle className="w-5 h-5" />
             <span>Connected as {status.username}</span>
           </div>
@@ -84,7 +84,7 @@ export function LastfmSettings() {
             <button
               onClick={() => disconnectMutation.mutate()}
               disabled={disconnectMutation.isPending}
-              className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors"
+              className="px-3 py-2 bg-danger-strong/20 hover:bg-danger-strong/30 text-danger rounded-lg text-sm transition-colors"
             >
               {disconnectMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -108,7 +108,7 @@ export function LastfmSettings() {
           <button
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-danger-strong hover:bg-danger-strong rounded-lg text-sm font-medium transition-colors"
           >
             {connectMutation.isPending ? (
               <>

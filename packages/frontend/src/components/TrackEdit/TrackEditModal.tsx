@@ -272,7 +272,7 @@ export function TrackEditModal() {
               <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center py-12 text-red-400">
+            <div className="flex flex-col items-center justify-center py-12 text-danger">
               <AlertCircle className="w-8 h-8 mb-2" />
               <p>Failed to load track metadata</p>
             </div>
@@ -337,13 +337,13 @@ export function TrackEditModal() {
         <div className="flex items-center justify-end px-4 py-3 sm:px-6 sm:py-4 border-t border-zinc-700">
           <div className="flex items-center gap-3">
             {activeMutation.isSuccess && (
-              <span className="flex items-center gap-1 text-sm text-green-400">
+              <span className="flex items-center gap-1 text-sm text-success">
                 <CheckCircle className="w-4 h-4" />
                 Saved
               </span>
             )}
             {activeMutation.isError && (
-              <span className="flex items-center gap-1 text-sm text-red-400">
+              <span className="flex items-center gap-1 text-sm text-danger">
                 <AlertCircle className="w-4 h-4" />
                 Error saving
               </span>

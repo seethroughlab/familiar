@@ -59,7 +59,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <div className={containerClass}>
-          <AlertTriangle className="w-12 h-12 text-amber-500 mb-4" />
+          <AlertTriangle className="w-12 h-12 text-warning-strong mb-4" />
           <h2 className="text-lg font-semibold text-zinc-200 mb-2">
             Something went wrong
           </h2>
@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Try Again
           </button>
           {import.meta.env.DEV && this.state.error && (
-            <pre className="mt-4 p-4 bg-zinc-950 rounded-lg text-left text-xs text-red-400
+            <pre className="mt-4 p-4 bg-zinc-950 rounded-lg text-left text-xs text-danger
                             max-w-full overflow-auto max-h-40">
               {this.state.error.message}
               {'\n\n'}

@@ -30,7 +30,7 @@ function ProblemRow({ title, detail }: { title: string; detail: string }) {
   return (
     <div className="flex items-start gap-3 p-3 text-left">
       <div className="p-2 rounded-lg bg-zinc-800">
-        <AlertTriangle className="w-4 h-4 text-amber-500" />
+        <AlertTriangle className="w-4 h-4 text-warning-strong" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="font-medium text-zinc-400">{title}</div>

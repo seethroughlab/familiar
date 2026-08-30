@@ -137,7 +137,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
 
       {/* Offline indicator */}
       {isOffline && usingCache && (
-        <div className="mb-8 px-4 py-2 bg-amber-500/20 border border-amber-500/50 rounded-lg text-amber-400 flex items-center gap-2">
+        <div className="mb-8 px-4 py-2 bg-warning-strong/20 border border-warning-strong/50 rounded-lg text-warning flex items-center gap-2">
           <svg
             className="w-5 h-5"
             fill="none"
@@ -156,7 +156,7 @@ export function ProfileSelector({ onProfileSelected }: ProfileSelectorProps) {
       )}
 
       {error && (
-        <div className="mb-8 px-4 py-2 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
+        <div className="mb-8 px-4 py-2 bg-danger-strong/20 border border-danger/50 rounded-lg text-danger">
           {error}
         </div>
       )}

@@ -61,7 +61,7 @@ export function ServerTokenSettings() {
   return (
     <div className="bg-zinc-800/50 rounded-lg p-4">
       <div className="flex items-center gap-3 mb-4">
-        <KeyRound className="w-5 h-5 text-amber-400" />
+        <KeyRound className="w-5 h-5 text-warning" />
         <div>
           <h4 className="font-medium text-white">Server Token</h4>
           <p className="text-sm text-zinc-400">
@@ -81,31 +81,31 @@ export function ServerTokenSettings() {
           placeholder="Paste the token from your server's admin page"
           autoComplete="off"
           spellCheck={false}
-          className="flex-1 px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          className="flex-1 px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white placeholder-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-warning-strong"
         />
         <button
           onClick={saveAndVerify}
           disabled={status === 'testing'}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-zinc-700 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
+          className="px-4 py-2 bg-warning-strong hover:bg-warning-strong disabled:bg-zinc-700 text-white text-sm rounded-lg transition-colors flex items-center gap-2"
         >
           {status === 'testing' ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : status === 'success' ? (
-            <CheckCircle className="w-4 h-4 text-green-400" />
+            <CheckCircle className="w-4 h-4 text-success" />
           ) : status === 'error' ? (
-            <XCircle className="w-4 h-4 text-red-400" />
+            <XCircle className="w-4 h-4 text-danger" />
           ) : null}
           Save
         </button>
       </div>
 
       {status === 'success' && (
-        <p className="mt-2 text-sm text-green-400">
+        <p className="mt-2 text-sm text-success">
           {token.trim() ? 'Token accepted and saved.' : 'Saved. This server needs no token.'}
         </p>
       )}
       {status === 'error' && errorMsg && (
-        <p className="mt-2 text-sm text-red-400">{errorMsg}</p>
+        <p className="mt-2 text-sm text-danger">{errorMsg}</p>
       )}
     </div>
   );

@@ -250,11 +250,11 @@ export function SystemStatus() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy':
-        return <CheckCircle className="w-4 h-4 text-green-400" />;
+        return <CheckCircle className="w-4 h-4 text-success" />;
       case 'degraded':
-        return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
+        return <AlertTriangle className="w-4 h-4 text-warning" />;
       case 'unhealthy':
-        return <AlertCircle className="w-4 h-4 text-red-400" />;
+        return <AlertCircle className="w-4 h-4 text-danger" />;
       default:
         return <Activity className="w-4 h-4 text-zinc-400" />;
     }
@@ -293,11 +293,11 @@ export function SystemStatus() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'healthy':
-        return 'text-green-400';
+        return 'text-success';
       case 'degraded':
-        return 'text-yellow-400';
+        return 'text-warning';
       case 'unhealthy':
-        return 'text-red-400';
+        return 'text-danger';
       default:
         return 'text-zinc-400';
     }
@@ -306,11 +306,11 @@ export function SystemStatus() {
   const getStatusBgColor = (status: string) => {
     switch (status) {
       case 'healthy':
-        return 'bg-green-900/20 border-green-800';
+        return 'bg-success-surface/20 border-success-muted';
       case 'degraded':
-        return 'bg-yellow-900/20 border-yellow-800';
+        return 'bg-warning-surface/20 border-warning-muted';
       case 'unhealthy':
-        return 'bg-red-900/20 border-red-800';
+        return 'bg-danger-surface/20 border-danger-muted';
       default:
         return 'bg-zinc-800/50 border-zinc-700';
     }
@@ -359,13 +359,13 @@ export function SystemStatus() {
 
   if (error) {
     return (
-      <div className="bg-red-900/20 border border-red-800 rounded-lg p-4">
+      <div className="bg-danger-surface/20 border border-danger-muted rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400" />
+            <AlertCircle className="w-5 h-5 text-danger" />
             <div>
               <h4 className="font-medium text-white">System Status Unavailable</h4>
-              <p className="text-sm text-red-300">{error}</p>
+              <p className="text-sm text-danger">{error}</p>
             </div>
           </div>
           <button
@@ -435,10 +435,10 @@ export function SystemStatus() {
               key={service.name}
               className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs ${
                 service.status === 'healthy'
-                  ? 'bg-green-900/30 text-green-300'
+                  ? 'bg-success-surface/30 text-success'
                   : service.status === 'degraded'
-                  ? 'bg-yellow-900/30 text-yellow-300'
-                  : 'bg-red-900/30 text-red-300'
+                  ? 'bg-warning-surface/30 text-warning-subtle'
+                  : 'bg-danger-surface/30 text-danger'
               }`}
             >
               {getServiceIcon(service.name)}
@@ -476,7 +476,7 @@ export function SystemStatus() {
           {health.warnings.map((warning, i) => (
             <div
               key={i}
-              className="flex items-start gap-2 p-2 bg-yellow-900/20 border border-yellow-800/50 rounded text-sm text-yellow-200"
+              className="flex items-start gap-2 p-2 bg-warning-surface/20 border border-warning-muted/50 rounded text-sm text-warning-subtle"
             >
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <span>{warning}</span>
@@ -510,7 +510,7 @@ export function SystemStatus() {
                 <div key={worker.name} className="p-3 bg-zinc-800/50 rounded-lg">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Cpu className="w-4 h-4 text-green-400" />
+                      <Cpu className="w-4 h-4 text-success" />
                       <span className="text-sm font-medium text-white">
                         {worker.name}
                       </span>
@@ -549,12 +549,12 @@ export function SystemStatus() {
               {workerStatus.recent_failures.slice(0, 5).map((failure, i) => (
                 <div
                   key={i}
-                  className="p-3 bg-red-900/20 border border-red-800/50 rounded-lg"
+                  className="p-3 bg-danger-surface/20 border border-danger-muted/50 rounded-lg"
                 >
                   <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                    <AlertCircle className="w-4 h-4 text-danger mt-0.5 flex-shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-sm text-red-200 break-words">{failure.error}</p>
+                      <p className="text-sm text-danger-subtle break-words">{failure.error}</p>
                       {failure.track && (
                         <p className="text-xs text-zinc-400 mt-1 truncate">
                           {failure.track}
@@ -621,7 +621,7 @@ export function SystemStatus() {
             <div className="p-3 bg-zinc-800/50 rounded-lg space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-zinc-400">remote_command_enablement_mismatch</span>
-                <span className={`font-mono ${connectivityCounters.remote_command_enablement_mismatch === 0 ? 'text-green-400' : 'text-yellow-300'}`}>
+                <span className={`font-mono ${connectivityCounters.remote_command_enablement_mismatch === 0 ? 'text-success' : 'text-warning-subtle'}`}>
                   {connectivityCounters.remote_command_enablement_mismatch}
                 </span>
               </div>
@@ -743,11 +743,11 @@ function ServiceStatusRow({ service }: { service: ServiceStatus }) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy':
-        return <CheckCircle className="w-4 h-4 text-green-400" />;
+        return <CheckCircle className="w-4 h-4 text-success" />;
       case 'degraded':
-        return <AlertTriangle className="w-4 h-4 text-yellow-400" />;
+        return <AlertTriangle className="w-4 h-4 text-warning" />;
       case 'unhealthy':
-        return <AlertCircle className="w-4 h-4 text-red-400" />;
+        return <AlertCircle className="w-4 h-4 text-danger" />;
       default:
         return <Activity className="w-4 h-4 text-zinc-400" />;
     }

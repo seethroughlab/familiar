@@ -16,8 +16,8 @@ function StatusBadge({ status }: { status: MixTape['status'] }) {
   const styles: Record<MixTape['status'], string> = {
     pending: 'bg-zinc-700 text-zinc-300',
     rendering: 'bg-blue-700/50 text-blue-200',
-    ready: 'bg-green-700/50 text-green-200',
-    failed: 'bg-red-700/50 text-red-200',
+    ready: 'bg-success-strong/50 text-success-subtle',
+    failed: 'bg-danger-strong/50 text-danger-subtle',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${styles[status]}`}>
@@ -73,7 +73,7 @@ export function MixTapesList() {
   }
 
   if (error) {
-    return <div className="p-8 text-red-400">Failed to load mix tapes.</div>;
+    return <div className="p-8 text-danger">Failed to load mix tapes.</div>;
   }
 
   const items = data ?? [];
@@ -118,7 +118,7 @@ export function MixTapesList() {
                 {mt.crossfade_seconds && <span>{mt.crossfade_seconds}s crossfade</span>}
               </div>
               {mt.status === 'failed' && mt.error_message && (
-                <p className="text-xs text-red-400 mt-1">{mt.error_message}</p>
+                <p className="text-xs text-danger mt-1">{mt.error_message}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -138,7 +138,7 @@ export function MixTapesList() {
               {mt.status !== 'pending' && mt.status !== 'rendering' && (
                 <button
                   onClick={() => handleDelete(mt)}
-                  className="p-1.5 text-zinc-400 hover:text-red-400 rounded transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-danger rounded transition-colors"
                   title="Delete mix tape"
                 >
                   <Trash2 className="w-4 h-4" />

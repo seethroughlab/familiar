@@ -75,16 +75,16 @@ export function AnalysisSettings() {
       {/* Status indicator */}
       <div className={`flex items-start gap-2 p-3 rounded ${
         isEnabled
-          ? 'bg-green-900/20 border border-green-800/50'
+          ? 'bg-success-surface/20 border border-success-muted/50'
           : 'bg-zinc-700/30 '
       }`}>
         {isEnabled ? (
-          <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+          <CheckCircle className="w-4 h-4 text-success mt-0.5 flex-shrink-0" />
         ) : (
           <Info className="w-4 h-4 text-zinc-400 mt-0.5 flex-shrink-0" />
         )}
         <div className="text-sm">
-          <p className={isEnabled ? 'text-green-300' : 'text-zinc-400 '}>
+          <p className={isEnabled ? 'text-success' : 'text-zinc-400 '}>
             {clapStatus?.reason || 'Status unknown'}
           </p>
           {ramGb !== null && ramGb !== undefined && (
@@ -97,11 +97,11 @@ export function AnalysisSettings() {
 
       {/* RAM warning */}
       {!ramSufficient && ramGb !== null && ramGb !== undefined && (
-        <div className="flex items-start gap-2 p-3 bg-yellow-900/20 border border-yellow-800/50 rounded">
-          <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-          <div className="text-sm text-yellow-200">
+        <div className="flex items-start gap-2 p-3 bg-warning-surface/20 border border-warning-muted/50 rounded">
+          <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
+          <div className="text-sm text-warning-subtle">
             <p>Insufficient RAM for CLAP embeddings</p>
-            <p className="text-xs text-yellow-300/70 mt-1">
+            <p className="text-xs text-warning-subtle/70 mt-1">
               Your system has {ramGb.toFixed(1)}GB RAM. CLAP requires at least 6GB.
               Enabling may cause performance issues or crashes.
             </p>

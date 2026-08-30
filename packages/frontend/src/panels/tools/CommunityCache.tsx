@@ -29,7 +29,7 @@ export function CommunityCache() {
   return (
     <div className="bg-zinc-800/50 rounded-lg p-4 space-y-4">
       <div className="flex items-center gap-3">
-        <Database className="w-5 h-5 text-cyan-400" />
+        <Database className="w-5 h-5 text-accent" />
         <div>
           <h4 className="font-medium text-white">Community Cache</h4>
           <p className="text-sm text-zinc-400">
@@ -64,7 +64,7 @@ export function CommunityCache() {
       {/* Contribute toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Upload className="w-5 h-5 text-green-400" />
+          <Upload className="w-5 h-5 text-success" />
           <div>
             <p className="text-sm text-white">Contribute to cache</p>
             <p className="text-xs text-zinc-500">
@@ -80,7 +80,7 @@ export function CommunityCache() {
             disabled={updateMutation.isPending}
             className="sr-only peer"
           />
-          <div className="w-11 h-6 bg-zinc-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500 peer-disabled:opacity-50" />
+          <div className="w-11 h-6 bg-zinc-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-success-strong rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent peer-disabled:opacity-50" />
         </label>
       </div>
 

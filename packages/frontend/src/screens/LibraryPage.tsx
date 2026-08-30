@@ -30,7 +30,7 @@ export function LibraryPage() {
           aria-label="Artist cleanup"
           className="flex items-center gap-3 bg-zinc-800/50 rounded-lg p-4 hover:bg-zinc-800 transition-colors"
         >
-          <Combine className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+          <Combine className="w-5 h-5 text-accent flex-shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-white">
               Artist cleanup

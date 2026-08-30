@@ -149,7 +149,7 @@ export function AlphabetBar({
             top: bubblePosition.y - 24,
           }}
         >
-          <div className="bg-green-600 text-white text-3xl font-bold rounded-lg px-4 py-2 shadow-lg">
+          <div className="bg-accent text-white text-3xl font-bold rounded-lg px-4 py-2 shadow-lg">
             {dragLetter}
           </div>
         </div>
@@ -201,7 +201,7 @@ export function AlphabetBar({
                   leading-tight transition-colors
                   ${isMobile ? 'text-[10px] py-0 px-1' : 'text-xs py-0.5 px-1.5'}
                   ${isActive
-                    ? `text-green-500 font-bold scale-110${isJumping ? ' animate-pulse' : ''}`
+                    ? `text-success font-bold scale-110${isJumping ? ' animate-pulse' : ''}`
                     : hasItems
                       ? 'text-zinc-300 hover:text-white'
                       : 'text-zinc-600 cursor-default'

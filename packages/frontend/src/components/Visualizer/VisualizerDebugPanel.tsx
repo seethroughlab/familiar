@@ -15,16 +15,16 @@ import { getMetrics, subscribeToMetrics } from './visualizerMetrics';
 /** What each row means when it goes wrong, so the panel diagnoses rather than just reports. */
 function verdict(m: ReturnType<typeof getMetrics>): { text: string; tone: string } {
   if (m.analysisAgeMs > 2000) {
-    return { text: 'no analysis from the player — nothing is driving the scene', tone: 'text-red-400' };
+    return { text: 'no analysis from the player — nothing is driving the scene', tone: 'text-danger' };
   }
   if (m.analysisFps > 0 && m.analysisFps < 6) {
-    return { text: 'analysis arriving slowly; motion will look stepped', tone: 'text-amber-400' };
+    return { text: 'analysis arriving slowly; motion will look stepped', tone: 'text-warning' };
   }
   if (m.pluginFps !== null && m.pluginFps < 30) {
-    return { text: 'the plugin itself is slow — its scene, not the pipeline', tone: 'text-amber-400' };
+    return { text: 'the plugin itself is slow — its scene, not the pipeline', tone: 'text-warning' };
   }
   if (m.hostFps > 0 && m.hostFps < 45) {
-    return { text: 'the host loop is slow; a debug build does this', tone: 'text-amber-400' };
+    return { text: 'the host loop is slow; a debug build does this', tone: 'text-warning' };
   }
   return { text: 'healthy', tone: 'text-emerald-400' };
 }

@@ -127,9 +127,9 @@ export function DebugSettings() {
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'error':
-        return 'text-red-400';
+        return 'text-danger';
       case 'warn':
-        return 'text-yellow-400';
+        return 'text-warning';
       case 'debug':
         return 'text-zinc-500';
       default:
@@ -165,17 +165,17 @@ export function DebugSettings() {
               <div className="text-zinc-200 break-all">{navigator.userAgent.slice(0, 50)}...</div>
 
               <div className="text-zinc-400">isMobilePlatform:</div>
-              <div className={isMobilePlatform ? 'text-green-400' : 'text-red-400'}>
+              <div className={isMobilePlatform ? 'text-success' : 'text-danger'}>
                 {String(isMobilePlatform)}
               </div>
 
               <div className="text-zinc-400">isIOS:</div>
-              <div className={isIOSDevice ? 'text-green-400' : 'text-red-400'}>
+              <div className={isIOSDevice ? 'text-success' : 'text-danger'}>
                 {String(isIOSDevice)}
               </div>
 
               <div className="text-zinc-400">useHybridMode:</div>
-              <div className={useHybridMode ? 'text-green-400' : 'text-red-400'}>
+              <div className={useHybridMode ? 'text-success' : 'text-danger'}>
                 {String(useHybridMode)}
               </div>
 
@@ -185,12 +185,12 @@ export function DebugSettings() {
               </div>
 
               <div className="text-zinc-400">effectsAvailable:</div>
-              <div className={effectsAvailable ? 'text-green-400' : 'text-red-400'}>
+              <div className={effectsAvailable ? 'text-success' : 'text-danger'}>
                 {String(effectsAvailable)}
               </div>
 
               <div className="text-zinc-400">visualizerAvailable:</div>
-              <div className={visualizerAvailable ? 'text-green-400' : 'text-red-400'}>
+              <div className={visualizerAvailable ? 'text-success' : 'text-danger'}>
                 {String(visualizerAvailable)}
               </div>
             </div>
@@ -201,12 +201,12 @@ export function DebugSettings() {
             <h5 className="text-sm font-medium text-zinc-300 mb-2">Audio State</h5>
             <div className="grid grid-cols-2 gap-2 text-xs font-mono">
               <div className="text-zinc-400">AudioContext:</div>
-              <div className={audioContext ? 'text-green-400' : 'text-yellow-400'}>
+              <div className={audioContext ? 'text-success' : 'text-warning'}>
                 {audioContext ? `exists (${audioContext.state})` : 'null'}
               </div>
 
               <div className="text-zinc-400">Analyser:</div>
-              <div className={analyser ? 'text-green-400' : 'text-yellow-400'}>
+              <div className={analyser ? 'text-success' : 'text-warning'}>
                 {analyser ? 'exists' : 'null'}
               </div>
 
@@ -233,7 +233,7 @@ export function DebugSettings() {
                 onClick={toggleVisualizerDebug}
                 className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                   visualizerDebugEnabled
-                    ? 'bg-green-500/20 text-green-300'
+                    ? 'bg-success-strong/20 text-success'
                     : 'bg-zinc-700 text-zinc-300'
                 }`}
               >
@@ -316,12 +316,12 @@ export function DebugSettings() {
           <div className="bg-zinc-900/50 rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
               <h5 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400" />
+                <AlertCircle className="w-4 h-4 text-danger" />
                 API Errors ({apiErrors.length})
               </h5>
               <button
                 onClick={() => apiErrorTracker.clear()}
-                className="p-1 text-zinc-400 hover:text-red-400"
+                className="p-1 text-zinc-400 hover:text-danger"
                 title="Clear errors"
               >
                 <Trash2 className="w-4 h-4" />
@@ -335,9 +335,9 @@ export function DebugSettings() {
                   <div
                     key={err.id}
                     className={`p-2 rounded ${err.severity === 'error'
-                      ? 'bg-red-900/30 border border-red-800/50'
+                      ? 'bg-danger-surface/30 border border-danger-muted/50'
                       : err.severity === 'warning'
-                        ? 'bg-yellow-900/30 border border-yellow-800/50'
+                        ? 'bg-warning-surface/30 border border-warning-muted/50'
                         : 'bg-zinc-800/50 border border-zinc-700/50'
                       }`}
                   >
@@ -346,11 +346,11 @@ export function DebugSettings() {
                         className={`px-1.5 py-0.5 rounded text-[10px] ${err.category === 'network'
                           ? 'bg-orange-500/20 text-orange-400'
                           : err.category === 'auth'
-                            ? 'bg-red-500/20 text-red-400'
+                            ? 'bg-danger-strong/20 text-danger'
                             : err.category === 'server'
-                              ? 'bg-red-500/20 text-red-400'
+                              ? 'bg-danger-strong/20 text-danger'
                               : err.category === 'external'
-                                ? 'bg-yellow-500/20 text-yellow-400'
+                                ? 'bg-warning-strong/20 text-warning'
                                 : 'bg-zinc-500/20 text-zinc-400'
                           }`}
                       >
@@ -389,7 +389,7 @@ export function DebugSettings() {
                 </button>
                 <button
                   onClick={clearLogs}
-                  className="p-1 text-zinc-400 hover:text-red-400"
+                  className="p-1 text-zinc-400 hover:text-danger"
                   title="Clear"
                 >
                   <Trash2 className="w-4 h-4" />
