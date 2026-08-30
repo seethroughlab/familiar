@@ -4,6 +4,7 @@ import asyncio
 import html
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -142,9 +143,7 @@ async def list_artists(
     else:
         # No profile: keep the columns in the row shape, always null, so the response schema does
         # not change between requests.
-        base_query = base_query.outerjoin(
-            ProfilePlayHistory, literal_column("false")
-        )
+        base_query = base_query.outerjoin(ProfilePlayHistory, literal_column("false"))
 
     # Filter to only artists with embeddings if requested.
     if has_embeddings:
@@ -341,12 +340,30 @@ class NewRelease(BaseModel):
     in_library: bool
 
 
+#: How long the whole new-release scan may take before it returns what it has.
+#:
+#: Twenty seconds because an MCP host is a person waiting: the tool's own docstring promised
+#: "10-15 seconds", and this leaves headroom without turning a stalled upstream into a hung request.
+NEW_RELEASE_SCAN_BUDGET_SECONDS = 20.0
+
+#: How long any one artist may take. Stops a single stalled lookup from eating the whole budget and
+#: starving the artists behind it, which is what the retry backoff did.
+NEW_RELEASE_PER_ARTIST_TIMEOUT_SECONDS = 6.0
+
+
 class ArtistNewReleasesResponse(BaseModel):
     """New releases from artists in the user's library."""
 
     releases: list[NewRelease]
     artists_checked: int
     artists_skipped: int
+    #: True when the deadline stopped the scan early, so `releases` is partial.
+    #:
+    #: The caller has to be able to tell "nothing new" from "we ran out of time", because they look
+    #: identical in an empty list and lead to opposite conclusions.
+    partial: bool = False
+    #: Set when the scan stopped for a reason worth repeating to a person.
+    note: str | None = None
 
 
 @router.get("/artists/new-releases", tags=["discover"], response_model=ArtistNewReleasesResponse)
@@ -387,20 +404,56 @@ async def get_artist_new_releases(
     all_releases: list[NewRelease] = []
     artists_checked = 0
     artists_skipped = 0
+    partial = False
+    note: str | None = None
+
+    # **A deadline, because the upstream can stall indefinitely and used to.**
+    #
+    # `musicbrainzngs` answers a 503 by retrying with backoff, logging it at INFO and telling the
+    # caller nothing. MusicBrainz rate-limits at 1 req/sec per client, and when this endpoint runs
+    # alongside the background artist resolver it gets 503s — so fifteen artists, each retried a few
+    # times, turns a docstring promising "10-15 seconds" into a request that never returns. Observed
+    # 2026-08-30: 240 seconds with no response and no error, which an MCP host reports as a bare
+    # "Tool execution failed".
+    #
+    # Partial results beat a hang. The caller is told which it got.
+    deadline = time.monotonic() + NEW_RELEASE_SCAN_BUDGET_SECONDS
 
     for row in top_artists:
         if not row.musicbrainz_id:
             artists_skipped += 1
             continue
 
+        if time.monotonic() > deadline:
+            partial = True
+            note = (
+                f"Stopped after {artists_checked} of {len(top_artists)} artists — MusicBrainz was "
+                "too slow to finish. It rate-limits to one request a second and answers 503 when "
+                "that is exceeded. Results below are what arrived in time; try again shortly."
+            )
+            break
+
         artists_checked += 1
 
-        # MusicBrainz call (synchronous, rate-limited at 1 req/sec).
-        releases = await asyncio.to_thread(
-            get_artist_releases_recent,
-            row.musicbrainz_id,
-            days_back,
-        )
+        # MusicBrainz call (synchronous, rate-limited at 1 req/sec), bounded so one artist cannot
+        # consume the whole budget on retries.
+        try:
+            releases = await asyncio.wait_for(
+                asyncio.to_thread(get_artist_releases_recent, row.musicbrainz_id, days_back),
+                timeout=NEW_RELEASE_PER_ARTIST_TIMEOUT_SECONDS,
+            )
+        except TimeoutError:
+            # `asyncio.wait_for` cannot cancel a thread, so the worker keeps running to completion
+            # in the background. That is acceptable: it is one bounded HTTP call, and the
+            # alternative is holding the request open for it.
+            partial = True
+            note = (
+                "MusicBrainz did not answer in time for at least one artist. It rate-limits to one "
+                "request a second and answers 503 when that is exceeded, so this is usually "
+                "temporary."
+            )
+            logger.warning("new_releases_artist_timeout", extra={"artist": row.artist_name})
+            continue
 
         for r in releases:
             all_releases.append(
@@ -452,6 +505,8 @@ async def get_artist_new_releases(
         releases=all_releases,
         artists_checked=artists_checked,
         artists_skipped=artists_skipped,
+        partial=partial,
+        note=note,
     )
 
 
