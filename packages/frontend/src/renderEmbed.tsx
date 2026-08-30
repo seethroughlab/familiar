@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Toaster } from 'sonner';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { initApiOrigin, initServerToken, registerProfileProvider } from './api/base';
@@ -54,6 +55,11 @@ export function renderEmbed(options?: { onReady?: () => void }): void {
         <QueryClientProvider client={queryClient}>
           <BrowserRouter>
             <EmbedDiscover />
+            {/* Discover's sections report mutation failures through `toastStore`, and this page
+                mounted nothing to render them — so "Failed to start check" was invisible inside the
+                native app. Found when ADR-0081 moved those sections under `components/Embed/` and
+                the dependency-boundary rule finally saw them. */}
+            <Toaster theme="dark" position="bottom-center" richColors />
           </BrowserRouter>
         </QueryClientProvider>
       </StrictMode>,
