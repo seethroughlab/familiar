@@ -29,7 +29,7 @@ export function CommunityCache() {
   return (
     <div className="bg-zinc-800/50 rounded-lg p-4 space-y-4">
       <div className="flex items-center gap-3">
-        <Database className="w-5 h-5 text-cyan-400" />
+        <Database className="w-5 h-5 text-accent" />
         <div>
           <h4 className="font-medium text-white">Community Cache</h4>
           <p className="text-sm text-zinc-400">
@@ -64,7 +64,7 @@ export function CommunityCache() {
       {/* Contribute toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Upload className="w-5 h-5 text-green-400" />
+          <Upload className="w-5 h-5 text-success" />
           <div>
             <p className="text-sm text-white">Contribute to cache</p>
             <p className="text-xs text-zinc-500">

@@ -85,7 +85,7 @@ export function ArtistsPage() {
   if (isError) {
     return (
       <div className="bg-zinc-800/50 rounded-lg p-4">
-        <div className="flex items-center gap-3 text-red-400">
+        <div className="flex items-center gap-3 text-danger">
           <AlertTriangle className="w-5 h-5" />
           <span>Failed to load merge suggestions.</span>
           <button
@@ -222,7 +222,7 @@ function MergeSuggestionRow({
         ))}
       </div>
       {mbidConflict && (
-        <div className="flex items-center gap-2 text-xs text-amber-400">
+        <div className="flex items-center gap-2 text-xs text-warning">
           <AlertTriangle className="w-3.5 h-3.5" />
           Selected candidates have different MusicBrainz ids — likely
           different artists. Adjust the selection or merge fewer rows.
@@ -443,7 +443,7 @@ function ManualMergeSearch({ onMerge, isPending }: ManualMergeSearchProps) {
             })}
           </div>
           {mbidConflict && (
-            <div className="flex items-center gap-2 text-xs text-amber-400">
+            <div className="flex items-center gap-2 text-xs text-warning">
               <AlertTriangle className="w-3.5 h-3.5" />
               Selected candidates have different MusicBrainz ids — likely
               different artists. Adjust the selection or merge fewer rows.

@@ -81,7 +81,7 @@ export function OrganizePage() {
               <button
                 onClick={runPreview}
                 disabled={isFetching || !selected}
-                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-sm font-medium flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-accent hover:bg-accent disabled:opacity-50 text-white text-sm font-medium flex items-center gap-2"
               >
                 {isFetching ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -100,7 +100,7 @@ export function OrganizePage() {
       </AdminSection>
 
       {error && (
-        <p className="text-sm text-red-400">
+        <p className="text-sm text-danger">
           The preview failed: {error instanceof Error ? error.message : 'unknown error'}
         </p>
       )}
@@ -127,7 +127,7 @@ function ResultRow({ result }: { result: OrganizeResult }) {
     result.status === 'moved'
       ? 'bg-cyan-900/60 text-cyan-300'
       : result.status === 'error'
-        ? 'bg-red-900/60 text-red-300'
+        ? 'bg-red-900/60 text-danger'
         : 'bg-zinc-700 text-zinc-400';
 
   return (

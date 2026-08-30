@@ -18,7 +18,7 @@ export function ApiKeyStatus() {
   }
 
   const services = [
-    { name: 'Last.fm', desc: 'Scrobbling', configured: settings?.lastfm_configured, icon: Radio, color: 'text-red-400' },
+    { name: 'Last.fm', desc: 'Scrobbling', configured: settings?.lastfm_configured, icon: Radio, color: 'text-danger' },
     { name: 'AcoustID', desc: 'Fingerprinting', configured: settings?.acoustid_configured, icon: Fingerprint, color: 'text-blue-400' },
   ];
 
@@ -43,7 +43,7 @@ export function ApiKeyStatus() {
               <p className="text-xs text-zinc-500">{svc.desc}</p>
             </div>
             {svc.configured ? (
-              <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
+              <CheckCircle className="w-5 h-5 text-success flex-shrink-0" />
             ) : (
               <XCircle className="w-5 h-5 text-zinc-500 flex-shrink-0" />
             )}

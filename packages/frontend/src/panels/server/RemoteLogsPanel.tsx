@@ -88,8 +88,8 @@ export function RemoteLogsPanel() {
 
   const getLevelColor = (level: string) => {
     switch (level) {
-      case 'error': return 'text-red-400';
-      case 'warn': return 'text-yellow-400';
+      case 'error': return 'text-danger';
+      case 'warn': return 'text-warning';
       case 'info': return 'text-blue-400';
       case 'debug': return 'text-zinc-500';
       default: return 'text-zinc-300';
@@ -130,7 +130,7 @@ export function RemoteLogsPanel() {
               onClick={toggleEnabled}
               className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-xs rounded"
             >
-              {enabled ? <ToggleRight className="w-4 h-4 text-green-400" /> : <ToggleLeft className="w-4 h-4 text-zinc-500" />}
+              {enabled ? <ToggleRight className="w-4 h-4 text-success" /> : <ToggleLeft className="w-4 h-4 text-zinc-500" />}
               {enabled ? 'Enabled' : 'Disabled'}
             </button>
             <button

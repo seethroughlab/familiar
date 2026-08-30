@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#18181b" />
+    <!-- The theme is declared, not inherited (ADR-0082 point 3). This document is rendered
+         inside a WKWebView whose host has its own appearance, and a form control or a
+         scrollbar drawn in the system light palette on this dark surface is the give-away
+         that it is a web view. `color-scheme` tells the engine which set to use. -->
+    <meta name="color-scheme" content="dark" />
     <meta name="description" content="Familiar — embedded discovery surface" />
 
     <!-- How the native host proves it got *this* document and not the app.

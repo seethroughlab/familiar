@@ -73,7 +73,7 @@ export function MixTapesList() {
   }
 
   if (error) {
-    return <div className="p-8 text-red-400">Failed to load mix tapes.</div>;
+    return <div className="p-8 text-danger">Failed to load mix tapes.</div>;
   }
 
   const items = data ?? [];
@@ -118,7 +118,7 @@ export function MixTapesList() {
                 {mt.crossfade_seconds && <span>{mt.crossfade_seconds}s crossfade</span>}
               </div>
               {mt.status === 'failed' && mt.error_message && (
-                <p className="text-xs text-red-400 mt-1">{mt.error_message}</p>
+                <p className="text-xs text-danger mt-1">{mt.error_message}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -138,7 +138,7 @@ export function MixTapesList() {
               {mt.status !== 'pending' && mt.status !== 'rendering' && (
                 <button
                   onClick={() => handleDelete(mt)}
-                  className="p-1.5 text-zinc-400 hover:text-red-400 rounded transition-colors"
+                  className="p-1.5 text-zinc-400 hover:text-danger rounded transition-colors"
                   title="Delete mix tape"
                 >
                   <Trash2 className="w-4 h-4" />
