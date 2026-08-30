@@ -115,8 +115,10 @@ would qualify for and only this one uses.
    prefix misnames its resource is arguable in a way `/admin/` is not, and an arguable case does not
    clear `ADR-0072` point 4's bar.
 
-5. **`admin` becomes `artists`.** Three artist-merge operations named for what they act on. **The
-   `/admin/` prefix stays for now, and this is the one deferral that is a genuine loss**: unlike the
+5. **`admin` becomes `artists`, and so does the path.** Three artist-merge operations named for what
+   they act on. The tag moved with this ADR; **the `/admin/` prefix followed once `ADR-0079`'s alias
+   module existed** — see the Implementation note. It was the one deferral here that was a genuine
+   loss: unlike the
    others, `/admin/` really does misname its resource — under `ADR-0058` most of this API is
    administration, so a prefix claiming the word is worse than no prefix. It clears point 4's bar and
    is deferred only because `ADR-0079`'s mechanism is unbuilt and nine web-app call sites depend on
@@ -168,9 +170,10 @@ is displayed on the same screen as the worker status.
 - **Tradeoff** — merging four tags into `system` means a reader who knew where `/background/jobs` was
   has to look somewhere new. That is the point, but it is still a cost paid by the people most
   familiar with the codebase.
-- **Follow-up** — `/admin/artists/*` should still become `/artists/*`; point 5 explains why it is the
-  one path here that genuinely misnames its resource. It needs `ADR-0079`'s alias module built first,
-  and it moves nine web-app call sites.
+- **Follow-up, now done (2026-08-28)** — `/admin/artists/*` became `/artists/*` once `ADR-0074` built
+  `ADR-0079`'s alias module. Three operations, three web-app call sites — not the nine this bullet
+  estimated, which counted grep lines rather than distinct calls. `/artists` does not collide with
+  `/library/artists`: that one browses, this one merges.
 - **Follow-up** — **`ADR-0079` is accepted and unbuilt**, which this ADR discovered by depending on
   it. Every remaining path move in the restructure is blocked behind that module existing.
 - **Follow-up** — after this lands, `docs/REST-API.md` describes an API that no longer exists in any

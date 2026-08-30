@@ -37,7 +37,7 @@ from fastapi import APIRouter
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.api.routes import commands
+from app.api.routes import admin_artists, commands
 from app.api.routes.listening import offline, session
 from app.api.routes.listening import radio as radio_routes
 
@@ -71,6 +71,12 @@ _ALIASES: list[tuple[str, list[str], Callable[..., Any]]] = [
     # watches. Removing it means grepping that file in the oldest offered build (ADR-0075 point 4).
     ("/playback/commands", ["GET"], commands.playback_commands),
     ("/playback/artifacts/{request_id}", ["POST"], commands.upload_artifact),
+    # ADR-0076 point 5's deferred move, taken once this module existed. Unlike the `/queue/*` pair
+    # above, no shipped app calls these — the admin app is served by the same deploy — but a
+    # self-hoster may well have scripted them, which is the risk ADR-0077's Tradeoff names.
+    ("/admin/artists/merge", ["POST"], admin_artists.merge_artists),
+    ("/admin/artists/merge-suggestions", ["GET"], admin_artists.get_merge_suggestions),
+    ("/admin/artists/search", ["GET"], admin_artists.search_artists),
 ]
 
 for _path, _methods, _endpoint in _ALIASES:

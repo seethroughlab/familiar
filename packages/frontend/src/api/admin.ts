@@ -184,19 +184,19 @@ export interface ArtistSearchResponse {
 
 export const adminArtistsApi = {
   getMergeSuggestions: async (limit = 100): Promise<MergeSuggestionsResponse> => {
-    const { data } = await api.get('/admin/artists/merge-suggestions', {
+    const { data } = await api.get('/artists/merge-suggestions', {
       params: { limit },
     });
     return data;
   },
 
   mergeArtists: async (request: MergeArtistsRequest): Promise<MergeArtistsResponse> => {
-    const { data } = await api.post('/admin/artists/merge', request);
+    const { data } = await api.post('/artists/merge', request);
     return data;
   },
 
   searchArtists: async (q: string, limit = 20): Promise<ArtistSearchResponse> => {
-    const { data } = await api.get('/admin/artists/search', { params: { q, limit } });
+    const { data } = await api.get('/artists/search', { params: { q, limit } });
     return data;
   },
 };

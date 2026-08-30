@@ -119,9 +119,11 @@ not have to be renamed again when there is a second.
   used by an agent rather than watched by a person.
 - **Tradeoff** — point 4's removal check is a grep of another repository's shipped source, which is
   weaker than every other trigger in this set.
-- **Follow-up** — `PlaybackCommandClient` should move into `FamiliarKit` so the paths it builds can
-  be asserted by a test. It is in `App/Shared` today, which `swift test` cannot see, so the two
-  string literals this ADR changed are verified by nothing on the client side.
+- **Follow-up, now done (2026-08-28)** — the paths are asserted. Rather than move the whole
+  `ObservableObject` — it depends on `ServerConfiguration`, `FamiliarPlayer` and UIKit, all app-target
+  things — only the URL construction moved, to `FamiliarKit.PlaybackCommandEndpoints`, which is the
+  seam `PlaybackCommandClient`'s docstring already described. Five tests cover it, and they were
+  checked to *fail* on a reverted path rather than merely to pass.
 - **Follow-up** — the hand-written `PlaybackCommandClient` is the reason this is risky. Whether the
   command channel should be in the generated surface at all is a real question and not this ADR's:
   `ADR-0007` point 8 deliberately excludes SSE endpoints, so the answer today is no, and the artifact

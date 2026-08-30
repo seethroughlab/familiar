@@ -10735,7 +10735,7 @@
         "summary": "Root"
       }
     },
-    "/api/v1/admin/artists/merge": {
+    "/api/v1/artists/merge": {
       "post": {
         "description": "Merge several ``Artist`` rows into one canonical row.\n\nAtomic. Locks the source rows so the scanner's resolver can't\ninsert a new alias pointing at any merge_id mid-merge. Aliases\nthat would collide with one already on the keep artist are\ndropped (keep-side wins). ``tracks.canonical_artist_id`` is\nrepointed BEFORE the artist DELETE \u2014 the FK is ON DELETE SET\nNULL, which would silently null tracks if the order were\nreversed.\n\nIdempotency: re-running with the same payload finds the\nmerge_ids gone and returns 404 \u2014 honest signal, not 200.",
         "operationId": "artists_merge_artists",
@@ -10822,7 +10822,7 @@
         ]
       }
     },
-    "/api/v1/admin/artists/merge-suggestions": {
+    "/api/v1/artists/merge-suggestions": {
       "get": {
         "description": "Return groups of artists whose canonicalized names collide.\n\nThe obvious \"Beatles\" + \"The Beatles\" + \"Beatles, The\" cluster.\nPure-Python pass over a fetched-once list \u2014 ~3.5k artists fits in\n<5MB Python overhead, sub-50ms group. Each suggestion ranks\nMBID-bearing candidates first (likely canonical winner); UI\nguards against merging two non-matching MBIDs.\n\nLong-tail rename cases (\"Antony\" \u2192 \"ANOHNI\", \"Ceephax\" \u2192 \"Ceephax\nAcid Crew\") aren't surfaced here \u2014 different canonical forms. The\nuser picks those manually via the merge UI's search panel.",
         "operationId": "artists_get_merge_suggestions",
@@ -10911,7 +10911,7 @@
         ]
       }
     },
-    "/api/v1/admin/artists/search": {
+    "/api/v1/artists/search": {
       "get": {
         "description": "Substring search across canonical artist names + sort_names.\n\nPowers the merge UI's manual-search panel \u2014 finds long-tail rename\nor abbreviation cases that the canonical-form-collision suggestions\ncan't see (e.g. \"Various\" vs \"Various Artists\", \"Se\u00f1or Coconut\"\nvs \"Se\u00f1or Coconut and His Orchestra\"). Trim/lower the query, ILIKE\nagainst name + sort_name, order by track count desc.",
         "operationId": "artists_search_artists",
