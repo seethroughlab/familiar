@@ -69,7 +69,7 @@
          requirements beside the download button. -->
     <div class="hero-install">
       <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed</p>
-      <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <span class="hero-cta-note">macOS, Windows, Synology or Linux — about ten minutes</span></p>
+      <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <span class="hero-cta-note">macOS, Windows, Synology, OpenMediaVault or Linux — about ten minutes</span></p>
       <!-- The demo link was here under ADR-0039 point 8 and is deliberately gone. ADR-0038 built
            that instance because "Apple App Store review requires a working backend server with test
            data" — it is a compliance fixture, and pointing a visitor at it implied you could try
@@ -172,7 +172,7 @@
   </div>
 
   <div class="requirements">
-    <strong>What you need.</strong> A computer or NAS that can stay on, with Docker 24+ — 2&nbsp;GB RAM minimum, 4&nbsp;GB recommended, x86_64 or ARM64. Familiar runs in one place; your phone and Mac connect to it. Tested on macOS, Linux, OpenMediaVault and Synology.
+    <strong>What you need.</strong> A computer or NAS that can stay on, running Docker 24+, x86_64 or ARM64. Familiar runs in one place; your phone and Mac connect to it. Tested on macOS, Linux, OpenMediaVault and Synology; Windows should work and has not been tested.<br><br><strong>Memory is the thing to check.</strong> Familiar runs happily in 2–4&nbsp;GB, but the model that listens to your music peaks at about 4&nbsp;GB on its own, so a machine with 8&nbsp;GB or less — most NAS boxes, and a Raspberry Pi — needs <code>DISABLE_CLAP_EMBEDDINGS=true</code>. You keep the whole library, the tags, BPM, key, energy and mood, and smart playlists; you lose the features that compare how tracks <em>sound</em>, which includes Find Similar and suggested tracks. It can be turned on later if you move Familiar to a bigger machine.
   </div>
 
   <!-- ADR-0095 points 2 and 4. The reader picks the machine the *server* runs on. Deliberately not
@@ -194,6 +194,7 @@
         <button type="button" role="tab" data-panel="p-macos" aria-controls="p-macos">macOS</button>
         <button type="button" role="tab" data-panel="p-windows" aria-controls="p-windows">Windows</button>
         <button type="button" role="tab" data-panel="p-synology" aria-controls="p-synology">Synology</button>
+        <button type="button" role="tab" data-panel="p-omv" aria-controls="p-omv">OpenMediaVault</button>
         <button type="button" role="tab" data-panel="p-linux" aria-controls="p-linux">Linux &amp; NAS</button>
       </div>
 
@@ -254,9 +255,22 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
         <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md#synology-nas" target="_blank" rel="noopener">Synology guide</a> — the compose file to paste, and the list of models this runs on.</p>
       </div>
 
+      <div class="platform-panel" id="p-omv" role="tabpanel" aria-labelledby="tab-p-omv">
+        <h4 class="platform-heading">OpenMediaVault</h4>
+        <p class="platform-lead">No terminal. OMV has a Compose page, and Familiar is one file pasted into it.</p>
+        <ol class="platform-steps">
+          <li>In <strong>omv-extras</strong>, install the <strong>openmediavault-compose</strong> plugin, then go to <strong>Services → Compose → Settings</strong> and enable it. OMV 6 or 7.</li>
+          <li>Make a shared folder called <code>familiar</code> on your data disk, for the database and settings. Your music stays where it already is.</li>
+          <li>Go to <strong>Services → Compose → Files → Add</strong>, name it <code>familiar</code>, and paste the file from the guide below — replacing the <code>/path/to</code> placeholders with your own folders.</li>
+          <li>Press <strong>Up</strong>. The first run downloads about 4&nbsp;GB.</li>
+        </ol>
+        <p class="platform-caveat"><strong>If Familiar finds no music</strong>, it is almost always the shared folder's permissions rather than the path: the container has to be able to read it. The guide below shows the one command that tells you which.</p>
+        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md#openmediavault" target="_blank" rel="noopener">OpenMediaVault guide</a> — the compose file to paste, the HTTPS proxy, and the permissions check.</p>
+      </div>
+
       <div class="platform-panel" id="p-linux" role="tabpanel" aria-labelledby="tab-p-linux">
         <h4 class="platform-heading">Linux &amp; NAS</h4>
-        <p class="platform-lead">Two files and one command. Also the path for OpenMediaVault, Unraid and QNAP.</p>
+        <p class="platform-lead">Two files and one command. Also the path for Unraid, QNAP and anything else with a shell.</p>
         <ol class="platform-steps">
           <li>Download the two files Docker needs:
 <pre><code>mkdir familiar &amp;&amp; cd familiar
@@ -268,7 +282,7 @@ curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/in
             <p>Pulls the multi-arch image from <code>ghcr.io/seethroughlab/familiar:latest</code>. Nothing is built locally.</p>
           </li>
         </ol>
-        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation guide</a> — includes a step-by-step OpenMediaVault walkthrough and its permissions gotcha.</p>
+        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation guide</a> — settings, upgrading and troubleshooting.</p>
       </div>
     </div>
   </div>

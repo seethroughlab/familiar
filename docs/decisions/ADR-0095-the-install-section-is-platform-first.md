@@ -31,6 +31,20 @@ Implementation:
   files by name — "anything dropped in it ships". Adding `site/e2e/` and `site/playwright.config.ts`
   put two more things in that directory, so both were headed for the public site until the removal
   list was extended. Found by assembling `_site/` locally rather than by reading the workflow.
+- **A fifth panel, OpenMediaVault, was added on 2026-08-30.** Point 2 enumerates four choices;
+  this grows the list without reversing the decision, and is recorded here rather than edited into
+  the Decision (rule 6). Its justification is point 4's, not point 2's: OMV installs through
+  **Services → Compose** with no terminal at all, which is the same reason Synology is not folded
+  into "Linux & NAS". `INSTALLATION.md:72` already had the walkthrough, including the permissions
+  failure that is the usual reason a fresh OMV install finds no music.
+- **Restoring the low-RAM advice exposed a claim the page had been getting wrong.** The original
+  requirements line said "2 GB RAM minimum, 4 GB recommended" and, separately, "on 8 GB Macs set
+  `DISABLE_CLAP_EMBEDDINGS=true`". Both are misleading: `docs/MACOS.md:17` records that the
+  embedding model **peaks at about 4 GB on its own**, so the stated 4 GB "recommended" cannot run
+  the analysis the site sells. Worse, `MACOS.md` says disabling it means "only semantic search
+  embeddings are skipped" — but `TrackAnalysis.embedding` is read by eighteen modules, including
+  `collection_suggestions.py` (suggested tracks) and `search.py:64` (Find Similar). The requirements
+  line now leads with memory and says what turning it off actually costs.
 - Verified: markup balanced (no unclosed tags, no stray closers); the four `data-panel` values match
   the four panel ids exactly; every internal anchor resolves; `site/scripts/check-claims.py` passes
   all four groups, including the six new external links.
