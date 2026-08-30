@@ -25,6 +25,7 @@ from app.api.routes import (
     analysis,
     artwork,
     background,
+    compat,
     diagnostics,
     download,
     export_import,
@@ -33,6 +34,7 @@ from app.api.routes import (
     health,
     lastfm,
     library,
+    listening,
     mixtapes,
     new_releases,
     organizer,
@@ -42,7 +44,6 @@ from app.api.routes import (
     playlists,
     profiles,
     proposed_changes,
-    queue,
     s3_backup,
     smart_playlists,
     tracks,
@@ -87,7 +88,7 @@ api_router.include_router(analysis.router)
 api_router.include_router(download.router)
 api_router.include_router(updates.router)
 api_router.include_router(playback.router)
-api_router.include_router(queue.router)
+api_router.include_router(listening.router)
 api_router.include_router(external_albums.router)
 api_router.include_router(new_releases.router)
 api_router.include_router(admin_artists.router)
@@ -95,5 +96,9 @@ api_router.include_router(admin_artists.router)
 api_router.include_router(pending_review.group_router)
 api_router.include_router(pending_review.bulk_router)
 api_router.include_router(pending_review.router)
+
+# Moved paths, registered last and invisible to the schema (ADR-0079). Last because these are
+# compatibility spellings: a real route should always win a match against an alias.
+api_router.include_router(compat.router)
 
 __all__ = ["DEFAULT_ERROR_RESPONSES", "api_router"]

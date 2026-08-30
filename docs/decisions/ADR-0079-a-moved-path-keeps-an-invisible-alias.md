@@ -8,6 +8,27 @@ Extends [ADR-0072](ADR-0072-paths-name-resources-tags-name-functions.md), which 
 axes and establishes that a path is runtime coupling. This says what to do on the rare occasion one
 has to move anyway.
 
+Implementation:
+
+- **Built 2026-08-28** on `adr-0074-queue-split`, as `backend/app/api/routes/compat.py`. This ADR was
+  accepted on 2026-08-18 and sat unbuilt until `ADR-0074` became the first change that actually
+  needed to move a path — which is also how the gap was noticed: `ADR-0076` had been drafted
+  assuming aliases were available.
+- **Point 3 does not work as a route dependency**, and this is the finding worth carrying. Setting
+  `Deprecation`/`Sunset` on an injected `Response` only reaches the success path; a raising handler
+  gets a fresh response from the exception handler and the headers are silently dropped. Every
+  unauthenticated call to a moved path is a 401, so the first implementation announced nothing on
+  the requests most worth finding in logs. It is now ASGI middleware, which attaches the headers to
+  whatever response is sent, by any route or handler.
+- Point 2's "delegation, never a copy" is literal: `add_api_route` is given the **same function
+  object** the new path registers, so FastAPI resolves identical dependencies, validation and
+  response models. There is no wrapper to drift.
+- Point 5 holds — one module, and `tests/test_compat_aliases.py` asserts that the module's alias
+  table and the test's cannot diverge, since an untested alias is invisible to every other check.
+- The `Sunset` date is **indicative, not the trigger**. Point 4's trigger is a condition someone
+  checks; RFC 8594 needs a date for `Deprecation` to be machine-actionable. If the date passes and
+  the build still ships, move the date.
+
 ## Context
 
 `ADR-0072` point 4 keeps path changes rare, and most of the restructure lands in tags. A few paths

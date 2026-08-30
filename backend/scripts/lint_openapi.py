@@ -82,7 +82,13 @@ VENDORED_TAGS = {
     "favorites",
     # Radio and offline ranking (ADR-0005, ADR-0006). Native clients consume these directly — the
     # whole point of ADR-0006 is that they carry no ranking code.
-    "queue",
+    #
+    # Three tags since ADR-0074 split `queue`, which named a session, a recommender and a manifest
+    # at once. All three stay generated: Swift calls the session and radio today, and ADR-0077
+    # point 4 kept the offline manifest precisely because ADR-0006 says its client is coming.
+    "playback-session",
+    "radio",
+    "offline",
     # Management surfaces the Mac app gained (ADR-0013, generated per ADR-0014). Not on iOS, which
     # ADR-0013 point 2 keeps on the listening path — but the generated client is shared by both
     # targets, so iOS compiles these and never calls them.

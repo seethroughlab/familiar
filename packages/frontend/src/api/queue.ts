@@ -95,17 +95,17 @@ export const queueApi = {
   getOfflineManifest: async (
     request: OfflineManifestRequest
   ): Promise<OfflineManifestResponse> => {
-    const { data } = await api.post('/queue/offline-manifest', request);
+    const { data } = await api.post('/offline/manifest', request);
     return data;
   },
 
   getSuggestions: async (request: QueueSuggestionsRequest): Promise<QueueSuggestionsResponse> => {
-    const { data } = await api.post('/queue/suggestions', request);
+    const { data } = await api.post('/radio/suggestions', request);
     return data;
   },
 
   getSession: async (): Promise<PlaybackSessionResponse> => {
-    const { data } = await api.get('/queue/session');
+    const { data } = await api.get('/listening/session');
     return data;
   },
 
@@ -119,12 +119,12 @@ export const queueApi = {
     session: PlaybackSessionWrite,
     options?: RequestOptions,
   ): Promise<PlaybackSessionResponse> => {
-    const { data } = await api.put('/queue/session', session, options);
+    const { data } = await api.put('/listening/session', session, options);
     return data;
   },
 
   listArchivedSessions: async (): Promise<{ sessions: ArchivedSession[] }> => {
-    const { data } = await api.get('/queue/session/archive');
+    const { data } = await api.get('/listening/session/archive');
     return data;
   },
 

@@ -243,7 +243,7 @@ class TestRetrieval:
 
 class TestEndpoint:
     async def test_requires_a_profile(self, client):
-        r = client.post("/api/v1/queue/suggestions", json={"current_track_id": str(uuid4())})
+        r = client.post("/api/v1/radio/suggestions", json={"current_track_id": str(uuid4())})
         assert r.status_code == 401
 
     async def test_unknown_profile_name_is_a_validation_error_not_a_500(
@@ -253,7 +253,7 @@ class TestEndpoint:
         from tests.conftest import make_profile_headers
 
         r = client.post(
-            "/api/v1/queue/suggestions",
+            "/api/v1/radio/suggestions",
             json={"current_track_id": str(uuid4()), "profile": "jazz-o-matic"},
             headers=make_profile_headers(test_profile),
         )
@@ -266,7 +266,7 @@ class TestEndpoint:
         from tests.conftest import make_profile_headers
 
         r = client.post(
-            "/api/v1/queue/suggestions",
+            "/api/v1/radio/suggestions",
             json={"current_track_id": "not-a-uuid"},
             headers=make_profile_headers(test_profile),
         )
@@ -276,7 +276,7 @@ class TestEndpoint:
         from tests.conftest import make_profile_headers
 
         r = client.post(
-            "/api/v1/queue/suggestions",
+            "/api/v1/radio/suggestions",
             json={"current_track_id": str(uuid4())},
             headers=make_profile_headers(test_profile),
         )

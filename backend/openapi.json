@@ -18879,6 +18879,384 @@
         ]
       }
     },
+    "/api/v1/listening/session": {
+      "get": {
+        "description": "Return this profile's durable queue.\n\nAn empty session rather than a 404 when there is none: \"no queue yet\" is the ordinary\nstarting state, not an error, and a client adopting it should not have to special-case\na status code.",
+        "operationId": "playback-session_get_playback_session",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Get Playback Session",
+        "tags": [
+          "playback-session"
+        ]
+      },
+      "put": {
+        "description": "Upsert this profile's durable queue.\n\nOrdinary case: the client's `version` matches what is stored, so this is the next step\nin one device's own history and simply overwrites.\n\nConflict case: the client wrote from a stale version, meaning two devices diverged \u2014\ntypically because one was offline. The later `updated_at` wins and the loser is\narchived, never dropped (ADR-0003 point 6). A losing write still gets the winning\nsession back, so the client adopts rather than retries.",
+        "operationId": "playback-session_put_playback_session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaybackSessionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Put Playback Session",
+        "tags": [
+          "playback-session"
+        ]
+      }
+    },
+    "/api/v1/listening/session/archive": {
+      "get": {
+        "description": "List queues that lost a conflict and can still be restored.",
+        "operationId": "playback-session_list_archived_sessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivedSessionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "List Archived Sessions",
+        "tags": [
+          "playback-session"
+        ]
+      }
+    },
+    "/api/v1/listening/session/archive/{archive_id}/restore": {
+      "post": {
+        "description": "Make an archived queue current again.\n\nSymmetrical with the conflict rule: whatever is live now is archived in its place, so\nrestoring cannot itself destroy a queue.",
+        "operationId": "playback-session_restore_archived_session",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "archive_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Archive Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybackSessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Restore Archived Session",
+        "tags": [
+          "playback-session"
+        ]
+      }
+    },
     "/api/v1/mixtapes": {
       "get": {
         "description": "List the current profile's mixtapes, newest first.\n\nFor rows that are still pending/rendering, merges live phase + progress\nfrom Redis so the header indicator can render phase labels without\npolling each id individually.",
@@ -19793,6 +20171,93 @@
         "summary": "Dismiss Release",
         "tags": [
           "new-releases"
+        ]
+      }
+    },
+    "/api/v1/offline/manifest": {
+      "post": {
+        "description": "Precompute offline rankings for a device's downloaded tracks.\n\nRanks the supplied set against itself with the same `score_candidate()` the online\npath uses, so offline and online rankings are identical by construction rather than\nby two implementations intending to agree (ADR-0006).",
+        "operationId": "offline_offline_manifest",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfflineManifestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineManifestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Offline Manifest",
+        "tags": [
+          "offline"
         ]
       }
     },
@@ -25880,475 +26345,10 @@
         ]
       }
     },
-    "/api/v1/queue/offline-manifest": {
-      "post": {
-        "description": "Precompute offline rankings for a device's downloaded tracks.\n\nRanks the supplied set against itself with the same `score_candidate()` the online\npath uses, so offline and online rankings are identical by construction rather than\nby two implementations intending to agree (ADR-0006).",
-        "operationId": "queue_offline_manifest",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/OfflineManifestRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OfflineManifestResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Offline Manifest",
-        "tags": [
-          "queue"
-        ]
-      }
-    },
-    "/api/v1/queue/session": {
-      "get": {
-        "description": "Return this profile's durable queue.\n\nAn empty session rather than a 404 when there is none: \"no queue yet\" is the ordinary\nstarting state, not an error, and a client adopting it should not have to special-case\na status code.",
-        "operationId": "queue_get_playback_session",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlaybackSessionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Get Playback Session",
-        "tags": [
-          "queue"
-        ]
-      },
-      "put": {
-        "description": "Upsert this profile's durable queue.\n\nOrdinary case: the client's `version` matches what is stored, so this is the next step\nin one device's own history and simply overwrites.\n\nConflict case: the client wrote from a stale version, meaning two devices diverged \u2014\ntypically because one was offline. The later `updated_at` wins and the loser is\narchived, never dropped (ADR-0003 point 6). A losing write still gets the winning\nsession back, so the client adopts rather than retries.",
-        "operationId": "queue_put_playback_session",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PlaybackSessionWrite"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlaybackSessionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Conflict"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Put Playback Session",
-        "tags": [
-          "queue"
-        ]
-      }
-    },
-    "/api/v1/queue/session/archive": {
-      "get": {
-        "description": "List queues that lost a conflict and can still be restored.",
-        "operationId": "queue_list_archived_sessions",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ArchivedSessionsResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "List Archived Sessions",
-        "tags": [
-          "queue"
-        ]
-      }
-    },
-    "/api/v1/queue/session/archive/{archive_id}/restore": {
-      "post": {
-        "description": "Make an archived queue current again.\n\nSymmetrical with the conflict rule: whatever is live now is archived in its place, so\nrestoring cannot itself destroy a queue.",
-        "operationId": "queue_restore_archived_session",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "archive_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Archive Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlaybackSessionResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Restore Archived Session",
-        "tags": [
-          "queue"
-        ]
-      }
-    },
-    "/api/v1/queue/suggestions": {
+    "/api/v1/radio/suggestions": {
       "post": {
         "description": "Rank tracks to insert into the queue, weighted by this profile's taste.",
-        "operationId": "queue_suggestions",
+        "operationId": "radio_suggestions",
         "requestBody": {
           "content": {
             "application/json": {
@@ -26428,7 +26428,7 @@
         ],
         "summary": "Suggestions",
         "tags": [
-          "queue"
+          "radio"
         ]
       }
     },
@@ -33274,8 +33274,16 @@
       "name": "favorites"
     },
     {
-      "description": "The server-owned playback queue and its radio suggestions (ADR-0003, ADR-0005). ADR-0074 is the proposal that this tag names three different things.",
-      "name": "queue"
+      "description": "The durable playback session \u2014 the queue a listener left behind, so another device can pick it up (ADR-0003, ADR-0028). The queue itself is a client concept; what the server keeps is the session, which is why neither this tag nor its path says \"queue\".",
+      "name": "playback-session"
+    },
+    {
+      "description": "What to play next: tracks ranked for this profile's taste and skip history, to slip into a queue already playing (ADR-0005).",
+      "name": "radio"
+    },
+    {
+      "description": "The precomputed offline ranking manifest (ADR-0006), so a client can rank without carrying a scorer.",
+      "name": "offline"
     },
     {
       "description": "Transport state reported by a client, so other surfaces can show what is playing.",
@@ -33369,7 +33377,9 @@
     {
       "name": "Playback",
       "tags": [
-        "queue",
+        "playback-session",
+        "radio",
+        "offline",
         "playback",
         "plays",
         "outputs",

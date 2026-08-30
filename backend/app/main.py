@@ -30,6 +30,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.api.exceptions import FamiliarError, NotFoundError
 from app.api.ratelimit import limiter
 from app.api.routes import api_router
+from app.api.routes.compat import DeprecatedPathHeaders
 from app.config import AUDIO_EXTENSIONS, MUSIC_LIBRARY_PATH, get_app_version
 from app.config import settings as app_config
 from app.logging_config import get_logger, setup_logging
@@ -354,9 +355,16 @@ OPENAPI_TAGS = [
     {"name": "favorites", "description": "Per-profile favourites."},
 
     # Playback — what is playing, and where.
-    {"name": "queue", "description":
-        "The server-owned playback queue and its radio suggestions (ADR-0003, ADR-0005). "
-        "ADR-0074 is the proposal that this tag names three different things."},
+    {"name": "playback-session", "description":
+        "The durable playback session — the queue a listener left behind, so another device can "
+        "pick it up (ADR-0003, ADR-0028). The queue itself is a client concept; what the server "
+        "keeps is the session, which is why neither this tag nor its path says \"queue\"."},
+    {"name": "radio", "description":
+        "What to play next: tracks ranked for this profile's taste and skip history, to slip into "
+        "a queue already playing (ADR-0005)."},
+    {"name": "offline", "description":
+        "The precomputed offline ranking manifest (ADR-0006), so a client can rank without "
+        "carrying a scorer."},
     {"name": "playback", "description":
         "Transport state reported by a client, so other surfaces can show what is playing."},
     {"name": "outputs", "description":
@@ -418,7 +426,8 @@ OPENAPI_TAG_GROUPS = [
     {"name": "Music", "tags": ["library", "tracks", "map", "analysis", "artwork"]},
     {"name": "Collections", "tags": ["playlists", "smart-playlists", "mixtapes", "favorites"]},
     {"name": "Playback", "tags": [
-        "queue", "playback", "plays", "outputs", "videos", "visualizers"]},
+        "playback-session", "radio", "offline", "playback", "plays", "outputs", "videos",
+        "visualizers"]},
     {"name": "Discovery", "tags": ["discover", "lastfm", "new-releases", "external-albums"]},
     {"name": "Curation", "tags": [
         "ingest", "metadata", "identification", "duplicates",
@@ -609,6 +618,10 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 # shape the server actually sends. Routes add their own statuses on top where one is real control
 # flow.
 app.include_router(api_router, prefix="/api/v1")
+
+# Moved paths announce themselves (ADR-0079 point 3). Registered as middleware rather than as a
+# route dependency because the headers must survive an error response — see the class docstring.
+app.add_middleware(DeprecatedPathHeaders)
 
 
 def _openapi_with_global_security() -> dict[str, Any]:
