@@ -1,8 +1,34 @@
 # ADR-0065: The App Seeds the Drop-In Folder With Worked Examples
 
-Status: proposed
+Status: superseded by [ADR-0089](ADR-0089-the-app-bundle-seeds-the-folder-and-is-not-a-source.md)
 
 Date: 2026-08-18
+
+Superseded 2026-08-29. **The idea shipped; this ADR's version of it did not, and should not.**
+
+`ADR-0089` decided the same thing in a stronger form two days after this was written, and points 1
+through 4 of it are built: `App/Shared/Visualizers.bundle/` ships **five** visualizers as real
+folders — `beat-tiles`, `lyric-storm`, `lyrics`, `reactive-terrain`, `spectrum` — and
+`VisualizerPlugins.seed(marker:)` copies them into the drop-in folder once, with `restore` beside
+it. This ADR is not discarded so much as absorbed: `VisualizerPlugins.swift:167` cites **"`ADR-0065`
+point 2's reasoning, inherited"** for seeding once, ever. That point was right and is why the code
+reads the way it does.
+
+What did not survive is the *shape*, and it could not have. `ADR-0087` had already redefined a
+visualizer as **a folder with an `index.html`**, sandboxed at an opaque origin and driven by
+`postMessage`. Both examples here are the form that replaced: `"main": "dist/index.js"`, built from
+JSX, requiring the host to supply `React` and a `jsx`/`jsxs` shim. **There is no host-provided React
+in a document.** So point 6's vendoring of `non-places`, point 4's choice of which two examples, and
+point 5's `affinity` corrections are all answers to a question `0087` stopped asking.
+
+The implementation branch `adr/ship-example-visualizers` (`familiar-apple`, PR #129, closed
+2026-08-25) is two commits of dead code carrying `ExampleVisualizer-non-places.js`/`.json` as flat
+pairs reconstructed at runtime, plus a second "Restore" button duplicating `0089`'s. **It should be
+deleted along with its worktree at `/Users/jeff/Developer/familiar-apple-examples`.**
+
+The lesson worth keeping: this sat `proposed` for eleven days while the ground moved under it twice
+(`0087`, then `0088`/`0089`). A proposal that is not executed promptly is not held in amber — and
+nothing flagged the conflict. The PR review caught it, which is late but not too late.
 
 Extends [ADR-0034](ADR-0034-visualizers-are-drop-in-bundles.md) and supersedes the last sentence of
 its point 4 — "There is no third source in this ADR." There still is not: what follows is not a new

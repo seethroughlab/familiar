@@ -824,3 +824,132 @@ footer a { color: var(--text-secondary); }
 @media (forced-colors: active) {
   .mark { color: CanvasText; }
 }
+
+/* ── Platform chooser (ADR-0095) ───────────────────────────────────────────────
+   The reader picks the machine the *server* runs on. Panels are visible by
+   default and `install.js` hides all but one — point 6, so a script that never
+   loads leaves the page as it would have been, rather than empty. */
+
+.platforms { margin-top: 1rem; }
+
+.platform-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+/* Only meaningful once the script has made them do something. Hidden until then
+   so nobody clicks a pill that cannot switch anything. */
+.platform-tabs { display: none; }
+.js-platforms .platform-tabs { display: flex; }
+
+.platform-tabs button {
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.42rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.platform-tabs button:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.platform-tabs button[aria-selected="true"] {
+  color: var(--bg-primary);
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+  font-weight: 600;
+}
+
+.platform-tabs button:focus-visible {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 2px;
+}
+
+.platform-panel + .platform-panel { margin-top: 2rem; }
+.js-platforms .platform-panel + .platform-panel { margin-top: 0; }
+
+/* With the script running the pill names the panel, so its heading is redundant.
+   Without it, the heading is the only thing telling four stacked panels apart. */
+.js-platforms .platform-heading { display: none; }
+
+.platform-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+}
+
+.platform-lead {
+  margin: 0 0 1rem;
+  color: var(--text-secondary);
+}
+
+.platform-caveat {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent-purple);
+  border-radius: 0 4px 4px 0;
+}
+.platform-caveat strong { color: var(--text-primary); }
+
+.platform-steps {
+  margin: 0;
+  padding-left: 1.3rem;
+  color: var(--text-secondary);
+}
+.platform-steps > li { margin-bottom: 1.1rem; }
+.platform-steps > li:last-child { margin-bottom: 0; }
+.platform-steps p { margin: 0.55rem 0 0; font-size: 0.93rem; }
+.platform-steps pre { margin: 0.6rem 0 0; }
+
+.platform-doc {
+  margin: 1.25rem 0 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+/* ── Remote access (ADR-0096) ────────────────────────────────────────────────── */
+
+/* No `max-width` here on purpose: the note and the paragraphs below run the full column, and a
+   narrower lede beside them reads as a mistake rather than as emphasis. */
+#remote .lede {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+}
+
+#remote h3 {
+  margin: 2rem 0 0.6rem;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+#remote .footnote {
+  margin-top: 1.5rem;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+/* ── Hero call to action (ADR-0095 point 7) ──────────────────────────────────── */
+
+.hero-cta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.9rem 0 0;
+}
+
+.hero-cta-note {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}

@@ -38,9 +38,11 @@ jobs:
           cp -R site/. _site/
           cp -R screenshots _site/screenshots
           # site/ is copied wholesale, so anything dropped in it ships. These are working
-          # files, not pages: the illustration prompts, the mark-extraction script, and the
-          # README describing the directory itself.
-          rm -rf _site/scripts _site/ILLUSTRATIONS.md _site/README.md
+          # files, not pages: the illustration prompts, the mark-extraction script, the
+          # README describing the directory itself, and the Playwright suite that tests the
+          # install toggle (ADR-0095) along with its config and run artefacts.
+          rm -rf _site/scripts _site/ILLUSTRATIONS.md _site/README.md \
+                 _site/e2e _site/playwright.config.ts
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1

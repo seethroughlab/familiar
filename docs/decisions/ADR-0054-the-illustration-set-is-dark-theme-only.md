@@ -1,8 +1,31 @@
 # ADR-0054: The Illustration Set Is Dark-Theme Only
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-13
+
+Implementation:
+- **Already built when ratified**, 2026-08-29, on `adr-0054-ratify-illustrations`. Fourteen marks
+  live in `site/assets/marks/` as `.webp`, and `site/ILLUSTRATIONS.md` holds the prompts.
+- Point 1 holds: the marks are full-colour raster on the site's single dark palette, with no
+  `currentColor` and no light variants. Point 3's transparency was checked in the files themselves
+  rather than assumed — every one is RGBA with a fully transparent corner and `alpha-min = 0`.
+  Sizes are 2×-scale (479×689, 1024×510), and SVG is still what `icon.svg` and the App Store badge
+  use.
+- **Point 3 is honoured by a route the ADR did not anticipate, and `ILLUSTRATIONS.md` reads like it
+  contradicts it.** That file says in bold: *"Ask for a pure black background, and never for a
+  transparent one."* The reason is in `site/scripts/extract-marks.py` — **Gemini returns JPEG, which
+  has no alpha channel**, so asked for transparency it *draws* the grey checkerboard, because that
+  is the visual signifier it has seen. Those squares are real pixels and no prompt removes them. The
+  prompt therefore asks for a ground the script can key, and the script produces the transparency
+  the decision requires. The instruction that looks like a contradiction is what makes the point
+  achievable.
+- **Nine of the fourteen marks are unreferenced.** In use: `cat-and-crow` (hero), `crow-record`,
+  `lantern`, `cat-curled`, `cat-sitting`. Unused: `cat-stretching`, `cat-walking`, `cauldron`,
+  `constellation`, `crow-calling`, `crow-flight`, `crow-hopping`, `moon-phases`, `tuning-fork`.
+  Recorded so nobody prunes them as dead assets — ADR-0055 point 5 turns features into five or six
+  illustrated sections, and this is the reserve that pays for it. If `0055` is withdrawn, they
+  become genuinely unused and the question is worth reopening.
 
 Supersedes the theme-awareness clause of
 [ADR-0039](ADR-0039-the-website-is-rebuilt-in-place.md) point 4. The rest of that point — one set,
