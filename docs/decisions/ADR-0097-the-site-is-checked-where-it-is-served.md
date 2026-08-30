@@ -134,7 +134,14 @@ copy. `check-claims.py` is a good tool. It audits a directory.
 - **Tradeoff** — the check is only as good as the version chip being maintained. If a release ships
   without the chip moving, this compares two equal wrong values. `check_version` already has that
   property against the working tree.
-- **Follow-up** — the Cloudflare `production_branch` is `master` and should be `main`. Until it is,
-  the GitHub Action will keep producing previews, and this new check will keep failing — correctly,
-  and usefully, because it is the only thing that says so.
+- **Follow-up (discharged 2026-08-29)** — the Cloudflare `production_branch` was `master` and is now
+  `main`, set through the API. Proven rather than assumed: re-running the deploy workflow on the same
+  commit produced deployment `1cb0e48e` filed as **`Environment: Production, Branch: main`**, the
+  project's `canonical_deployment` moved to it, and the domain serves it. The previous run of the
+  identical workflow, before the change, was filed as a preview — so the pipeline, not just the
+  setting, is what was tested.
+
+  Point 6 said this ADR does not attempt to fix the deploy, and that stands: the fix is one field in
+  somebody's account and could be undone tomorrow by a project being recreated. The check is what
+  makes that visible.
 - **Follow-up** — the scheduled version of this, once there is somewhere for a failure to be seen.
