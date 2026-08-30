@@ -5,6 +5,63 @@ All notable changes to Familiar will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0-alpha2] - 2026-08-30
+
+Three weeks on from the 0.2 line's first release. That one's headline — Familiar no longer calls a
+language model at all — is unchanged. What has landed since is the surfaces that make the analysis
+usable, a large amount of deleting, and one feature that had shipped without ever working.
+
+### Music videos, which had never worked
+
+They were merged in August and were inert. Search returned nothing on every query, because the
+video service pinned a yt-dlp player client that YouTube answers with storyboard images only, and
+three separate code paths turned that failure into an empty list — so a broken search looked
+exactly like a library with no matches. "Match Music Video…" appeared in one of seven track menus,
+while the player's disabled Watch button told you to use the menu. All of it is fixed: a video now
+plays behind the track it belongs to on the Mac, and a failed search says so instead of returning
+nothing.
+
+### Added
+
+- **Offline library browsing** on the Mac and iPhone — albums, artists and playlists are cached, so
+  browsing works with the server unreachable.
+- **Suggested tracks** for Favourites and any playlist: music you already own that fits, each row
+  explaining itself with a real pair — "Because you like Fiona Apple — Criminal" — rather than a
+  generated label.
+- **The artists list toggles between the circle grid and a sortable table**, with track and album
+  counts, total time, play count, last played, date added and year range. Sorting is server-side,
+  so it sorts the whole library rather than the page you happen to be looking at.
+- **Windows is a supported platform**, installed and verified end to end for the first time.
+- **Playlists have their own Mac sidebar section**, each one listed, with create, rename and delete
+  — none of which the app could do before.
+- An MCP host can **navigate the interface and photograph it**, so an assistant can check its own
+  work.
+
+### Changed
+
+- **The API has been reorganised.** Tags mean one thing, paths follow function rather than history,
+  and endpoints nothing called were deleted. Existing clients keep working: the five `/queue/*`
+  paths that moved are aliased, every alias lives in one module (`app/api/routes/compat.py`), none
+  of them appears in `openapi.json`, and each answers with `Deprecation: true` and a `Sunset` date
+  so anything still calling an old path shows up in logs.
+- **The web app is an administration tool.** Three destinations — library, tools, server — with
+  listening done in the Mac and iPhone apps.
+- Albums are a first-class entity, and **edits you make in Familiar survive the file changing**.
+- The phone's tabs are Home, Search and Library.
+
+### Removed
+
+The Capacitor app, the PWA, the web player with its offline stack and listening sessions, and the
+server's visualizer hosting — visualizers are now documents in a folder you drop them into.
+
+### Fixed
+
+- The artist endpoints resolved artwork on the request path, costing about four seconds a page.
+  That work moved to the background path that already existed.
+- Discover's track lists could not start playback at all.
+- `updated_since` rejected the timestamp format real clients send.
+- "Albums you might want" is precomputed rather than recomputed on every request.
+
 ## [0.2.0-alpha1] - 2026-08-10
 
 First release of the 0.2 line, and the biggest change since the project started: **Familiar no
