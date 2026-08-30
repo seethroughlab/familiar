@@ -7,10 +7,9 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, delete, func, select, text
+from sqlalchemy import Float, delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.elements import TextClause
 
 from app.db.models import (
     ArtistCheckCache,
@@ -22,6 +21,9 @@ from app.db.models import (
 )
 from app.services.bandcamp import BandcampService
 from app.services.external_albums_helpers import (
+    _INDEX_WHERE_BY_CONTEXT,
+    LISTENING_PROFILE_CONTEXT,
+    PLAYLIST_REC_CONTEXT,
     check_user_has_release,
     normalize_artist_name,
 )
@@ -31,20 +33,8 @@ from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-PLAYLIST_REC_CONTEXT = "playlist_recommendation"
-LISTENING_PROFILE_CONTEXT = "listening_profile_recommendation"
-
-# Literal predicates that exactly mirror the partial-unique-index `postgresql_where`
-# clauses on ExternalAlbumCache (see `app/db/models/artists.py`). PostgreSQL needs
-# the ON CONFLICT inference predicate to imply the partial index predicate at plan
-# time; a parameterized comparison (`discovery_context = $param`) breaks inference,
-# so each context maps to a fixed text clause that matches the index definition.
-_INDEX_WHERE_BY_CONTEXT: dict[str, TextClause] = {
-    PLAYLIST_REC_CONTEXT: text("discovery_context = 'playlist_recommendation'"),
-    LISTENING_PROFILE_CONTEXT: text(
-        "discovery_context = 'listening_profile_recommendation'"
-    ),
-}
+# Re-exported from `external_albums_helpers`, which owns the discovery contexts and
+# the index predicates keyed on them, so the three writers cannot disagree.
 
 PLAYLIST_REC_TTL_HOURS = 24
 PLAYLIST_REC_MB_RELEASE_TYPES = ["album", "ep"]

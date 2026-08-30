@@ -397,3 +397,154 @@ async def test_get_check_status_aggregates(async_db):
     assert status["new_releases_available"] == 1
     assert status["last_check_at"] is not None
     assert isinstance(datetime.fromisoformat(status["last_check_at"]), datetime)
+
+
+# ---------------------------------------------------------------------------
+# ADR-0099: the dedup must be scoped to its own discovery context
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_save_discovered_release_is_scoped_to_its_own_discovery_context(async_db):
+    """A release already cached under a *different* context must not block this one.
+
+    This is the nineteen-night outage, in one test. ``external_album_cache`` does not
+    enforce uniqueness on ``release_id`` globally — it carries three *partial* unique
+    indexes, one per ``discovery_context`` — so the same release legitimately exists
+    once per context. ``save_discovered_release`` deduped on ``release_id`` alone and
+    called ``scalar_one_or_none()``, which raises ``MultipleResultsFound`` the moment
+    two rows come back.
+
+    In production exactly one release did this: ``b9df3445-4699-4221-9994-734c1c912468``
+    ("Reality Awaits"), present as both ``artist_new_release`` and
+    ``listening_profile_recommendation``. That single row crashed the nightly discovery
+    job every night from 2026-08-11 to 2026-08-30.
+
+    Against the old code this test raises rather than fails.
+    """
+    shared_release_id = "b9df3445-4699-4221-9994-734c1c912468"
+
+    async_db.add(
+        ExternalAlbumCache(
+            release_id=shared_release_id,
+            discovery_context="listening_profile_recommendation",
+            artist_name="Bruised Sky",
+            artist_name_normalized=normalize_artist_name("Bruised Sky"),
+            release_name="Reality Awaits",
+        )
+    )
+    await async_db.flush()
+
+    service = NewReleasesService(async_db)
+    saved = await service.save_discovered_release(
+        artist_name="Bruised Sky",
+        release_id=shared_release_id,
+        release_name="Reality Awaits",
+    )
+
+    assert saved is not None, "a new context is a new row, not a duplicate"
+
+    result = await async_db.execute(
+        select(ExternalAlbumCache).where(
+            ExternalAlbumCache.release_id == shared_release_id
+        )
+    )
+    contexts = sorted(row.discovery_context for row in result.scalars().all())
+    assert contexts == ["artist_new_release", "listening_profile_recommendation"]
+
+
+@pytest.mark.asyncio
+async def test_save_discovered_release_second_call_is_a_no_op_not_an_error(async_db):
+    """Re-saving within the same context returns None and does not raise.
+
+    The upsert replaced a check-then-write, so this pins the contract that the
+    conflict path is silent: ``None`` means "already had it", which is what the
+    ``releases_new`` counter is built on.
+    """
+    service = NewReleasesService(async_db)
+
+    first = await service.save_discovered_release(
+        artist_name="Boards of Canada",
+        release_id="rg-same-context",
+        release_name="Tomorrow's Harvest",
+    )
+    second = await service.save_discovered_release(
+        artist_name="Boards of Canada",
+        release_id="rg-same-context",
+        release_name="Tomorrow's Harvest",
+    )
+
+    assert first is not None
+    assert second is None
+
+    result = await async_db.execute(
+        select(ExternalAlbumCache).where(
+            ExternalAlbumCache.release_id == "rg-same-context"
+        )
+    )
+    assert len(result.scalars().all()) == 1
+
+
+def test_index_predicates_match_the_model():
+    """The literal ON CONFLICT predicates must equal the model's index predicates.
+
+    ``_INDEX_WHERE_BY_CONTEXT`` restates each partial index's ``postgresql_where`` as a
+    literal, because PostgreSQL cannot infer a partial index from a parameterised
+    predicate. That makes it a second source of truth, and this asserts the two agree —
+    the first copy of this knowledge is what drifted.
+    """
+    from app.db.models import ExternalAlbumCache as EAC
+    from app.services.external_albums_helpers import _INDEX_WHERE_BY_CONTEXT
+
+    model_predicates = {
+        str(idx.dialect_options["postgresql"]["where"])
+        for idx in EAC.__table__.indexes
+        if idx.unique and idx.dialect_options["postgresql"].get("where") is not None
+    }
+    mapped_predicates = {str(clause) for clause in _INDEX_WHERE_BY_CONTEXT.values()}
+
+    assert mapped_predicates == model_predicates, (
+        "every partial unique index needs an entry, and every entry an index — "
+        "artist_new_release was missing from the map, which is ADR-0099"
+    )
+
+
+@pytest.mark.asyncio
+async def test_save_does_not_raise_when_a_release_already_exists_in_two_contexts(
+    async_db,
+):
+    """The crash itself: two pre-existing rows for one release_id.
+
+    This is the state production reached and the one that actually took the job
+    down. The recommendations writer upserts scoped to its own context, so it will
+    happily add a ``listening_profile_recommendation`` row for a release that
+    already has an ``artist_new_release`` row. Once both exist, the next discovery
+    run selected on ``release_id`` alone, got two rows back, and
+    ``scalar_one_or_none()`` raised ``MultipleResultsFound`` — aborting the batch.
+
+    Nineteen consecutive nights, from one release.
+    """
+    release_id = "b9df3445-4699-4221-9994-734c1c912468"
+
+    for context in ("artist_new_release", "listening_profile_recommendation"):
+        async_db.add(
+            ExternalAlbumCache(
+                release_id=release_id,
+                discovery_context=context,
+                artist_name="Bruised Sky",
+                artist_name_normalized=normalize_artist_name("Bruised Sky"),
+                release_name="Reality Awaits",
+            )
+        )
+    await async_db.flush()
+
+    service = NewReleasesService(async_db)
+
+    # Must not raise. The release is already cached in this context, so this is a
+    # no-op — but a no-op, not an exception that ends the run.
+    result = await service.save_discovered_release(
+        artist_name="Bruised Sky",
+        release_id=release_id,
+        release_name="Reality Awaits",
+    )
+    assert result is None

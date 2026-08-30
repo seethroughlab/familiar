@@ -32,6 +32,56 @@ def _artist_names_match(searched: str, found: str) -> bool:
 NEW_RELEASES_PROGRESS_KEY = "familiar:new_releases:progress"
 
 
+async def _check_one_artist_isolated(
+    db: Any,
+    service: Any,
+    artist_name: str,
+    normalized: str,
+    mb_artist_id: str | None,
+    days_back: int,
+    stats: dict[str, Any],
+) -> bool:
+    """Check one artist, containing any failure to that artist. Returns success.
+
+    **One artist's failure must cost one artist.** Before this existed, the only
+    ``try`` in the path was inside ``_check_artist_against_musicbrainz``, around the
+    MusicBrainz call and nothing else — so a database error raised while saving a
+    release escaped to the caller's outer handler and ended the whole run. That is
+    how a single duplicated release row stopped nineteen consecutive nights of
+    discovery (ADR-0099).
+
+    The ``rollback()`` is the part that actually does the work. Catching without it
+    leaves the ``AsyncSession`` in a failed transaction, so every subsequent artist
+    raises ``PendingRollbackError`` and the batch is just as dead — a fix that looks
+    right and changes nothing.
+    """
+    from app.services.tasks.common import _record_task_failure
+
+    try:
+        await _check_artist_against_musicbrainz(
+            service=service,
+            artist_name=artist_name,
+            normalized=normalized,
+            mb_artist_id=mb_artist_id,
+            days_back=days_back,
+            stats=stats,
+        )
+        # Commit per artist rather than every 25: a rollback must not discard up to
+        # twenty-four artists' worth of successful work alongside the one that failed.
+        await db.commit()
+        return True
+    except Exception as e:
+        await db.rollback()
+        stats["artists_failed"] = stats.get("artists_failed", 0) + 1
+        _record_task_failure("new_releases", str(e), track_info=artist_name)
+        logger.warning(
+            "discovery_artist_failed",
+            extra={"artist": artist_name, "error": str(e)},
+            exc_info=True,
+        )
+        return False
+
+
 class NewReleasesProgressReporter:
     """Reports new releases check progress to Redis for API consumption."""
 
@@ -251,6 +301,7 @@ async def run_new_releases_check(
         "releases_found": 0,
         "releases_new": 0,
         "musicbrainz_queries": 0,
+        "artists_failed": 0,
     }
 
     local_engine, local_session_maker = create_task_engine_session()
@@ -286,7 +337,8 @@ async def run_new_releases_check(
 
                 stats["artists_checked"] += 1
 
-                await _check_artist_against_musicbrainz(
+                await _check_one_artist_isolated(
+                    db=db,
                     service=service,
                     artist_name=artist_name,
                     normalized=normalized,
@@ -294,11 +346,6 @@ async def run_new_releases_check(
                     days_back=days_back,
                     stats=stats,
                 )
-
-                if (i + 1) % 25 == 0:
-                    await db.commit()
-
-            await db.commit()
 
         progress.complete(
             checked=stats["artists_checked"],
@@ -334,6 +381,7 @@ async def run_prioritized_new_releases_check(
         "releases_found": 0,
         "releases_new": 0,
         "musicbrainz_queries": 0,
+        "artists_failed": 0,
     }
 
     local_engine, local_session_maker = create_task_engine_session()
@@ -375,7 +423,8 @@ async def run_prioritized_new_releases_check(
 
                 stats["artists_checked"] += 1
 
-                await _check_artist_against_musicbrainz(
+                await _check_one_artist_isolated(
+                    db=db,
                     service=service,
                     artist_name=artist_name,
                     normalized=normalized,
@@ -383,11 +432,6 @@ async def run_prioritized_new_releases_check(
                     days_back=days_back,
                     stats=stats,
                 )
-
-                if (i + 1) % 25 == 0:
-                    await db.commit()
-
-            await db.commit()
 
         progress.complete(
             checked=stats["artists_checked"],
@@ -397,7 +441,8 @@ async def run_prioritized_new_releases_check(
 
         logger.info(
             f"Priority-based new releases check complete: "
-            f"{stats['artists_checked']} artists, {stats['releases_new']} new releases"
+            f"{stats['artists_checked']} artists, {stats['releases_new']} new releases, "
+            f"{stats.get('artists_failed', 0)} failed"
         )
         return {"status": "success", **stats}
 

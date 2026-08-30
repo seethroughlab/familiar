@@ -30,8 +30,8 @@ Measured on the production database:
 | | |
 |---|---|
 | `external_album_cache`, `discovery_context = 'artist_new_release'` | **600 rows** |
-| `artist_check_cache` | **520 rows** |
-| a daily job at 03:00 (`daily_new_releases` in `background/manager.py:109`) | **runs** — eight log entries in 24 h |
+| `artist_check_cache` | **520 rows**, **0 checked in the last 24 h**, `check_priority` **0.0 on all of them** |
+| a daily job at 03:00 (`daily_new_releases` in `background/manager.py:109`) | **runs and crashes** — every night since 2026-08-11 |
 
 `backend/app/services/new_releases.py` is 446 lines whose docstring says it "reads/writes the shared
 `external_album_cache` table filtered to `discovery_context='artist_new_release'`".
@@ -44,11 +44,46 @@ them. This is the third capability-with-no-caller found in this codebase this we
 ### The freshness nobody could see
 
 The newest `artist_new_release` row is dated **2026-08-25** — five days old — while
-`listening_profile_recommendation`, written by the neighbouring job, is from today. So the daily
-new-release job is running and *not writing*, almost certainly hitting the same 503 wall the request
-path hit.
+`listening_profile_recommendation`, written by the neighbouring job, is from today.
 
-Nothing surfaced that. `panels/server/ApiKeyStatus.tsx` is 55 lines and reports whether an API *key*
+#### The premise that was wrong: it is not the rate limit, it is us
+
+This ADR was first drafted saying the daily job was "almost certainly hitting the same 503 wall the
+request path hit". **That is false, and checking it before implementing is what found the real
+defect.**
+
+The job has not been throttled. It has *crashed*, every night since at least 2026-08-11 — nineteen
+consecutive nights — with `sqlalchemy.exc.MultipleResultsFound`, raised at
+`services/new_releases.py:196` inside `save_discovered_release` and reached from
+`tasks/new_releases.py:216`.
+
+`save_discovered_release` deduped on `release_id` alone. `external_album_cache` does not enforce
+uniqueness that way: it carries **three partial unique indexes**, one per `discovery_context`
+(`ix_eac_artist_new_release_unique`, `ix_eac_listening_profile_unique`, `ix_eac_playlist_rec_unique`),
+so the same release legitimately exists once per context. Production held exactly **one** such
+release — `b9df3445-4699-4221-9994-734c1c912468`, "Reality Awaits", in both `artist_new_release` and
+`listening_profile_recommendation` — and `scalar_one_or_none()` raises on two rows.
+
+**One row stopped nineteen nights of discovery**, because the exception escaped the only `try` in the
+path — `_check_artist_against_musicbrainz` guarded the MusicBrainz call and nothing else — into a
+batch loop with no per-artist guard.
+
+Two consequences for what this ADR decides. First, **source health as originally argued would not
+have caught this**: the failure was ours, not an upstream's, and MusicBrainz answered fine throughout
+— which is why point 10 below now exists. Second, point 8's "runs, fails, and looks like a component
+that ran and found nothing" stops being a hypothesis; it is a literal description of nineteen logged
+crashes nobody read. Points 1–8 otherwise stand.
+
+Two further corrections to this ADR's own framing, found the same way. **`GET
+/library/artists/new-releases` has no callers in either repository** — the Discover page the Mac and
+iPhone display is the embedded web surface, whose `NewReleasesSection.tsx` calls the *cached*
+`GET /new-releases`. So the user-facing read path already satisfies point 1 and has all along; it was
+serving a cache the crash had frozen. The 240-second hang came through the MCP tool
+`get_new_releases`, which carries its own copy of the live-scan logic. And **`get_check_status`
+derives `last_check_at` from `max(ArtistCheckCache.last_checked_at)`**, which read 2026-08-28 while
+every run since 08-11 crashed — a freshness signal computed from a side effect of partial work.
+
+Nothing surfaced any of it. `panels/server/ApiKeyStatus.tsx` is 55 lines and reports whether an API *key*
 is configured, which is not the same question as whether a source is *working*. A source can have a
 valid key, be scheduled, run daily, fail every time, and look identical to a healthy one.
 
@@ -106,6 +141,18 @@ stopped everything at once. Last.fm and Bandcamp are integrated and barely used 
    failure mode this ADR exists to prevent is a component that runs, fails, and looks like a
    component that ran and found nothing.
 
+9. **One artist's failure costs one artist.** A discovery batch is fault-isolated per item: an
+   exception on one artist is recorded, the transaction rolled back to the last commit, and the batch
+   continues. The nineteen-night outage was one bad row taking a whole run with it, and no amount of
+   source health would have prevented that — only the isolation would. The rollback is the
+   load-bearing half: catching without it leaves the session in a failed transaction, so every later
+   artist fails too and the fix changes nothing.
+
+10. **Health covers the job's own outcome, not only its upstreams'.** Did the batch run, did it
+    finish, did it write. A source that answered perfectly while our own writer crashed must not read
+    as healthy — which is exactly the state that held for nineteen nights, and which points 6 and 8
+    as originally written would have rendered green.
+
 ## Alternatives Considered
 
 - **Keep the request path as it is and rely on the timeouts already added.** Cheapest, and it fixes
@@ -146,8 +193,9 @@ stopped everything at once. Last.fm and Bandcamp are integrated and barely used 
   prioritised batch has to stay small enough to be a good citizen. `musicbrainzngs`'s 1 req/sec
   limiter is per-process, so this needs care if the work is ever parallelised.
 - **Follow-up** — the endpoint and `_get_new_releases` duplicate each other's logic. Both were
-  bounded separately on 2026-08-30 because fixing one fixed nothing the user hit. Moving the read to
-  the cache is the moment to make one call the other.
+  bounded separately on 2026-08-30 because fixing one fixed nothing the user hit. Since the endpoint
+  turned out to have no callers, the resolution is to **delete it** (ADR-0077's precedent) and have
+  the MCP tool read the cache through `NewReleasesService`, rather than to make one call the other.
 - **Follow-up** — `musicbrainzngs` retries 503s internally and reports nothing to its caller. Point 6
   needs a real signal, which probably means wrapping the client rather than reading its logs.
 - **Follow-up** — nothing here decides how a *user* triggers a refresh when they know something is
