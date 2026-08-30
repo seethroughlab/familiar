@@ -365,8 +365,11 @@ OPENAPI_TAGS = [
     {"name": "offline", "description":
         "The precomputed offline ranking manifest (ADR-0006), so a client can rank without "
         "carrying a scorer."},
-    {"name": "playback", "description":
-        "Transport state reported by a client, so other surfaces can show what is playing."},
+    {"name": "commands", "description":
+        "The command channel an MCP client uses to actuate a native player (ADR-0044), and the "
+        "artifacts a command asks it to produce (ADR-0053). **Nothing here plays anything** — the "
+        "server holds no transport. It was called `playback`, which named this and the listening "
+        "ledger at once, and described neither (ADR-0075)."},
     {"name": "outputs", "description":
         "Network audio devices — Sonos, UPnP/DLNA, AirPlay, Chromecast — and casting to them "
         "(ADR-0031). Zone grouping was removed by ADR-0077."},
@@ -426,7 +429,7 @@ OPENAPI_TAG_GROUPS = [
     {"name": "Music", "tags": ["library", "tracks", "map", "analysis", "artwork"]},
     {"name": "Collections", "tags": ["playlists", "smart-playlists", "mixtapes", "favorites"]},
     {"name": "Playback", "tags": [
-        "playback-session", "radio", "offline", "playback", "plays", "outputs", "videos",
+        "playback-session", "radio", "offline", "commands", "plays", "outputs", "videos",
         "visualizers"]},
     {"name": "Discovery", "tags": ["discover", "lastfm", "new-releases", "external-albums"]},
     {"name": "Curation", "tags": [

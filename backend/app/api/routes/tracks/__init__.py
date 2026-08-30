@@ -143,7 +143,7 @@ from app.api.routes.tracks.identification import router as identification_router
 from app.api.routes.tracks.listing import list_tracks  # noqa: E402
 from app.api.routes.tracks.listing import router as listing_router  # noqa: E402
 from app.api.routes.tracks.metadata import router as metadata_router  # noqa: E402
-from app.api.routes.tracks.playback import router as playback_router  # noqa: E402
+from app.api.routes.tracks.plays import router as plays_router  # noqa: E402
 from app.api.routes.tracks.streaming import router as streaming_router  # noqa: E402
 from app.api.routes.tracks.visualizers import router as visualizers_router  # noqa: E402
 
@@ -158,7 +158,7 @@ router.get("", response_model=TrackListResponse, tags=["tracks"])(list_tracks)
 router.include_router(listing_router)
 router.include_router(streaming_router)
 router.include_router(discovery_router)
-router.include_router(playback_router)
+router.include_router(plays_router)
 router.include_router(metadata_router)
 router.include_router(identification_router)
 router.include_router(visualizers_router)

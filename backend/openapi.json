@@ -1498,6 +1498,20 @@
         "title": "BatchTracksRequest",
         "type": "object"
       },
+      "Body_commands_upload_artifact": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_commands_upload_artifact",
+        "type": "object"
+      },
       "Body_ingest_import_preview": {
         "properties": {
           "file": {
@@ -1510,20 +1524,6 @@
           "file"
         ],
         "title": "Body_ingest_import_preview",
-        "type": "object"
-      },
-      "Body_playback_upload_artifact": {
-        "properties": {
-          "file": {
-            "format": "binary",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_playback_upload_artifact",
         "type": "object"
       },
       "Body_profiles_upload_avatar": {
@@ -12107,6 +12107,208 @@
         "summary": "Get Background Jobs",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/api/v1/commands/artifacts/{request_id}": {
+      "post": {
+        "description": "Hand back something a command asked this client to produce (ADR-0053 point 3).\n\nThe return half of the channel, and deliberately not on the channel: the SSE stream stays\none-way, and this is a request the client makes when it has something to send. That keeps\nADR-0044 point 2's reasoning intact rather than reversing it.\n\n`request_id` names one outstanding question. It is minted by the server when it issues the\ncommand, it is not a device identity, and it dies when the question is answered or times out \u2014\nwhich is why this does not reopen ADR-0029 point 5.\n\n**Profile-scoped, and checked rather than merely required.** The store remembers which profile\nasked, so holding *a* profile is not enough to answer somebody else's question. Caught by\n`lint_profile_contracts.py`, which is the rule this route was quietly outside.\n\nA late or unknown upload is **discarded, not stored** (point 8). The question it answers has\nalready been answered with a timeout, and keeping the image would mean keeping it forever.\n204 either way: the client cannot do anything useful with the difference, and telling it its\nscreenshot was too slow would only invite a retry nothing is waiting for.",
+        "operationId": "commands_upload_artifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_commands_upload_artifact"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Upload Artifact",
+        "tags": [
+          "commands"
+        ]
+      }
+    },
+    "/api/v1/commands/stream": {
+      "get": {
+        "description": "Subscribe to this profile's playback commands.\n\nSubscribe while you can act and disconnect when you cannot: the subscription is the claim to\nbe a player, and the most recently attached client is the default target.\n\nCapabilities are declared here rather than assumed (point 12). The clients genuinely differ \u2014\nthe Apple clients have no theme, visualizer, normalization or shuffle-weight storage where the\nweb app has all four \u2014 so without a declaration a perfectly well-formed command reaches a\nclient that silently cannot obey it.",
+        "operationId": "commands_playback_commands",
+        "parameters": [
+          {
+            "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
+            "in": "query",
+            "name": "client",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
+              "title": "Client",
+              "type": "string"
+            }
+          },
+          {
+            "description": "e.g. macos, ios, web.",
+            "in": "query",
+            "name": "platform",
+            "required": false,
+            "schema": {
+              "default": "unknown",
+              "description": "e.g. macos, ios, web.",
+              "title": "Platform",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
+            "in": "query",
+            "name": "capabilities",
+            "required": false,
+            "schema": {
+              "default": "",
+              "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
+              "title": "Capabilities",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Playback commands for this profile, until the client disconnects."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "ProfileHeader": []
+          }
+        ],
+        "summary": "Playback Commands",
+        "tags": [
+          "commands"
         ]
       }
     },
@@ -23021,208 +23223,6 @@
         ]
       }
     },
-    "/api/v1/playback/artifacts/{request_id}": {
-      "post": {
-        "description": "Hand back something a command asked this client to produce (ADR-0053 point 3).\n\nThe return half of the channel, and deliberately not on the channel: the SSE stream stays\none-way, and this is a request the client makes when it has something to send. That keeps\nADR-0044 point 2's reasoning intact rather than reversing it.\n\n`request_id` names one outstanding question. It is minted by the server when it issues the\ncommand, it is not a device identity, and it dies when the question is answered or times out \u2014\nwhich is why this does not reopen ADR-0029 point 5.\n\n**Profile-scoped, and checked rather than merely required.** The store remembers which profile\nasked, so holding *a* profile is not enough to answer somebody else's question. Caught by\n`lint_profile_contracts.py`, which is the rule this route was quietly outside.\n\nA late or unknown upload is **discarded, not stored** (point 8). The question it answers has\nalready been answered with a timeout, and keeping the image would mean keeping it forever.\n204 either way: the client cannot do anything useful with the difference, and telling it its\nscreenshot was too slow would only invite a retry nothing is waiting for.",
-        "operationId": "playback_upload_artifact",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "request_id",
-            "required": true,
-            "schema": {
-              "title": "Request Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_playback_upload_artifact"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Upload Artifact",
-        "tags": [
-          "playback"
-        ]
-      }
-    },
-    "/api/v1/playback/commands": {
-      "get": {
-        "description": "Subscribe to this profile's playback commands.\n\nSubscribe while you can act and disconnect when you cannot: the subscription is the claim to\nbe a player, and the most recently attached client is the default target.\n\nCapabilities are declared here rather than assumed (point 12). The clients genuinely differ \u2014\nthe Apple clients have no theme, visualizer, normalization or shuffle-weight storage where the\nweb app has all four \u2014 so without a declaration a perfectly well-formed command reaches a\nclient that silently cannot obey it.",
-        "operationId": "playback_playback_commands",
-        "parameters": [
-          {
-            "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
-            "in": "query",
-            "name": "client",
-            "required": false,
-            "schema": {
-              "default": "unknown",
-              "description": "Human-readable client name, e.g. 'Jeff's Mac'.",
-              "title": "Client",
-              "type": "string"
-            }
-          },
-          {
-            "description": "e.g. macos, ios, web.",
-            "in": "query",
-            "name": "platform",
-            "required": false,
-            "schema": {
-              "default": "unknown",
-              "description": "e.g. macos, ios, web.",
-              "title": "Platform",
-              "type": "string"
-            }
-          },
-          {
-            "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
-            "in": "query",
-            "name": "capabilities",
-            "required": false,
-            "schema": {
-              "default": "",
-              "description": "Comma-separated list of what this client can actually do \u2014 e.g. 'play,queue,crossfade'. A command needing a capability this client did not declare goes to a client that did, or is answered as unavailable.",
-              "title": "Capabilities",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "text/event-stream": {}
-            },
-            "description": "Playback commands for this profile, until the client disconnects."
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Playback Commands",
-        "tags": [
-          "playback"
-        ]
-      }
-    },
     "/api/v1/playlists": {
       "get": {
         "description": "List all playlists for the current profile.",
@@ -33286,8 +33286,8 @@
       "name": "offline"
     },
     {
-      "description": "Transport state reported by a client, so other surfaces can show what is playing.",
-      "name": "playback"
+      "description": "The command channel an MCP client uses to actuate a native player (ADR-0044), and the artifacts a command asks it to produce (ADR-0053). **Nothing here plays anything** \u2014 the server holds no transport. It was called `playback`, which named this and the listening ledger at once, and described neither (ADR-0075).",
+      "name": "commands"
     },
     {
       "description": "Network audio devices \u2014 Sonos, UPnP/DLNA, AirPlay, Chromecast \u2014 and casting to them (ADR-0031). Zone grouping was removed by ADR-0077.",
@@ -33380,7 +33380,7 @@
         "playback-session",
         "radio",
         "offline",
-        "playback",
+        "commands",
         "plays",
         "outputs",
         "videos",
