@@ -110,3 +110,7 @@ art-sources/
 # Local preview only: the deploy copies screenshots/ into _site itself (cloudflare-pages.yml),
 # so this symlink exists to make `python3 -m http.server` in site/ resolve them and must not ship.
 site/screenshots
+
+# Playwright run artefacts
+test-results/
+site/e2e/.results/

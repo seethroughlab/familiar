@@ -14,7 +14,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-> **Note:** The production compose file uses the `journald` logging driver (Linux-only). On macOS, use the [macOS guide](MACOS.md) or add the override: `docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d`
+> **Note:** The production compose file uses the `journald` logging driver (Linux-only). On macOS, use the [macOS guide](MACOS.md) or add the override: `docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d`
 
 Access at http://localhost:4400. API keys are configured in your `.env` file — open **Settings** (gear icon) to manage your library and start a scan.
 

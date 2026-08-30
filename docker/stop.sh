@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 COMPOSE_CMD="docker compose -f docker-compose.prod.yml"
 
 if [ "$(uname)" = "Darwin" ]; then
-    COMPOSE_CMD="$COMPOSE_CMD -f docker-compose.macos.yml"
+    COMPOSE_CMD="$COMPOSE_CMD -f docker-compose.desktop.yml"
 fi
 
 echo "Stopping Familiar..."

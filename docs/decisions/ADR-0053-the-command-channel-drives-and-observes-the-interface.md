@@ -1,6 +1,34 @@
 # ADR-0053: The Command Channel Drives and Observes the Interface
 
-Status: proposed
+Status: accepted
+
+Implementation:
+- **Already built on both sides when ratified**, 2026-08-29, on `adr-0053-ratify-command-channel`.
+  Verified point by point rather than assumed.
+- Server: `navigate_app` and `capture_screenshot` are declared and dispatched in
+  `backend/app/mcp/playback.py` (`:105`, `:133`, `:223`, `:244`), the upload lands at
+  `POST /playback/artifacts/{request_id}` (`backend/app/api/routes/playback.py:138`), and
+  `ArtifactStore` in `services/playback_commands.py:254` holds captures in memory with `wait`
+  removing the entry once read — no table, no directory (points 1, 3, 8).
+- The request id is `uuid4().hex`, minted at issue (`mcp/playback.py:245`), and the tool waits
+  `_CAPTURE_TIMEOUT_SECONDS = 15.0` before answering with an error plus a note distinguishing "the
+  client is attached and declared the capability" from "unavailable" (`:261-272`). Nothing spins
+  (points 4, 5).
+- **Point 2's closed vocabulary was checked by comparing the two lists, not by reading either.**
+  `NAVIGATION_DESTINATIONS` and `SidebarItem`'s wire values are **15 entries that agree exactly** —
+  no server-only destination, no Swift-only one. That is the property the point is actually claiming.
+- Point 7 holds in all three directions: `_REQUIRES` gates both commands, `PlaybackCommand.supported`
+  omits `.screenshot` on iOS, and the web app declares no capabilities at all.
+- **Point 6's correction is in the code and absent from the comments around it.**
+  `WindowCapture.swift:80` renders through `layer.render(in:)` with `cacheDisplay` kept only as the
+  fallback at `:83` — the ADR's corrected form. But `WindowCapture.swift:13` still opens by
+  describing `cacheDisplay(in:to:)` as what the file does, and `PlaybackCommand.swift:92` explains
+  the iOS gate by saying "the capture is `cacheDisplay` over an `NSWindow`'s content view". Both
+  describe the mechanism this ADR *rejected*, and the second gives a correct conclusion a wrong
+  reason. Left as a follow-up rather than fixed in a docs-only change.
+- **One stale type name:** `mcp/playback.py:46` says the list "Mirrors `LibraryRoute` in
+  FamiliarKit". There is no `LibraryRoute`; it is `SidebarItem`, which is what point 2 says. Also a
+  follow-up.
 
 Date: 2026-08-12
 
@@ -128,6 +156,15 @@ render *its own* windows with no permission at all, and that is the only thing t
   or anything overlapping it — the title-bar strip comes back empty. For screenshots of the
   interface that is arguably better; for reproducing a visual bug involving a system control it is
   worse.
+- **Follow-up:** three comments describe the mechanism this ADR rejected. `WindowCapture.swift:13`
+  and `PlaybackCommand.swift:92` both call the capture `cacheDisplay` when it is
+  `CALayer.render(in:)`, and `mcp/playback.py:46` names a type, `LibraryRoute`, that does not exist.
+  Point 6 was corrected by running it; the prose around the correction was not. Cheap to fix and
+  worth doing, because the next person to touch the capture path will read the comment before the
+  code.
+- **Follow-up:** the ADR-0039 screenshot errand this unblocks has still not been run — the native
+  clients can now be photographed and have not been. That is the whole reason the capability was
+  built, and `docs/SITE-CLAIMS.md` will need the results before ADR-0055 can close.
 - **Tradeoff:** rendering a layer tree is not the same as what the compositor puts on screen.
   Anything the window server draws on top — a sheet from another process, a tooltip, the
   title bar — is absent by construction, and a capture is therefore evidence about the app's own

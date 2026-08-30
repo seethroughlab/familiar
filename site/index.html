@@ -7,6 +7,9 @@
   <meta name="description" content="Host your own music streaming service for the library you already own. Every track is analysed so you can find music by how it sounds — and point your own AI assistant at the library over MCP.">
   <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
   <link rel="stylesheet" href="./assets/site.css">
+  <!-- The site's first script (ADR-0095). Deferred, and it only hides panels: with it missing the
+       install section shows all four platforms, which is the page this would otherwise have been. -->
+  <script src="./assets/install.js" defer></script>
 
   <meta property="og:type" content="website">
   <meta property="og:title" content="Familiar — self-hosted streaming for your own music library">
@@ -31,6 +34,7 @@
   <div class="topnav-links">
     <a href="#features">Features</a>
     <a href="#comparison">Compare</a>
+    <a href="#remote">Remote</a>
     <a href="./faq.html">FAQ</a>
     <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
     <a href="#install" class="topnav-install">Install</a>
@@ -53,14 +57,20 @@
     <a class="version-chip" href="https://github.com/seethroughlab/familiar/blob/main/CHANGELOG.md" target="_blank" rel="noopener">
       <span class="version-dot"></span> v0.2.0-alpha1 · 2026-08-10
     </a>
-    <!-- ADR-0039 point 3: the hero sells a five-minute install of MIT-licensed software, where
-         Fork's sells a purchase. So the command is here rather than seven sections down, and the
-         requirements sit with it the way Fork puts its OS requirements beside its download button. -->
+    <!-- ADR-0039 point 3 put three shell commands here, to sell "a five-minute install of
+         MIT-licensed software" where Fork's hero sells a purchase. ADR-0095 point 7 takes them out:
+         that was right for ADR-0055's reader, who was defined as someone comfortable running
+         `docker compose up`, and wrong for this one, who owns a lot of music and has never opened a
+         terminal. A wall of curl in the first screenful is a competence test.
+
+         The commands were also not true here. They pull `docker-compose.prod.yml`, which logs to
+         journald — Linux-only — so the headline command failed on the most likely reader's Mac, and
+         the fix sat in a <details> further down the page, after it. They now live in the Linux
+         panel, which is where they work. The requirements line stays, the way Fork keeps its OS
+         requirements beside the download button. -->
     <div class="hero-install">
-<pre><code>curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.prod.yml
-curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql
-MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code></pre>
-      <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed · <a href="#install">full instructions</a></p>
+      <p class="hero-requirements">Docker&nbsp;24+ · 2&nbsp;GB RAM · x86_64 or ARM64 · MIT licensed</p>
+      <p class="hero-cta"><a href="#install" class="primary">Install Familiar</a> <span class="hero-cta-note">macOS, Windows, Synology or Linux — about ten minutes</span></p>
       <!-- The demo link was here under ADR-0039 point 8 and is deliberately gone. ADR-0038 built
            that instance because "Apple App Store review requires a working backend server with test
            data" — it is a compliance fixture, and pointing a visitor at it implied you could try
@@ -70,7 +80,9 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
       <a href="https://apps.apple.com/us/app/familiar-player/id6759879772" target="_blank" rel="noopener" class="app-store-link" aria-label="Download Familiar on the App Store">
         <img src="./assets/app-store-badge.svg" alt="Download on the App Store">
       </a>
-      <a href="#features" class="primary">See what it does</a>
+      <!-- Secondary now that Install is the hero's own call to action. ADR-0055 point 11: one call
+           to action, repeated, and it is Install. -->
+      <a href="#features">See what it does</a>
       </div>
     </div>
   </div>
@@ -161,52 +173,128 @@ MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code
   </div>
 
   <div class="requirements">
-    <strong>Requirements.</strong> Docker 24+, 2&nbsp;GB RAM minimum (4&nbsp;GB recommended), x86_64 or ARM64. Tested on macOS, Linux, OpenMediaVault, and Synology NAS. On 8&nbsp;GB Macs, set <code>DISABLE_CLAP_EMBEDDINGS=true</code>.
+    <strong>What you need.</strong> A computer or NAS that can stay on, with Docker 24+ — 2&nbsp;GB RAM minimum, 4&nbsp;GB recommended, x86_64 or ARM64. Familiar runs in one place; your phone and Mac connect to it. Tested on macOS, Linux, OpenMediaVault and Synology.
   </div>
 
+  <!-- ADR-0095 points 2 and 4. The reader picks the machine the *server* runs on. Deliberately not
+       detected from the user agent: the user agent describes the machine reading the page, and the
+       likely reader is on a phone planning to install on a NAS in a cupboard.
+
+       Point 3: each panel is the shortest true path plus one link to the canonical document in the
+       repository. The site does not fork the instructions — four copies of an install procedure is
+       four things to keep true, and ADR-0055 point 2 exists because that does not happen.
+
+       Point 6: with no JavaScript every panel is shown, headings and all. `install.js` only hides.
+       A tab strip is an affordance, and this project's recurring defect is an affordance whose
+       destination is not mounted. -->
   <div class="step" data-step="1">
-    <h3>Pull the prebuilt image and start the stack</h3>
+    <h3>Start Familiar on your server</h3>
+
+    <div class="platforms" id="platforms">
+      <div class="platform-tabs" role="tablist" aria-label="Choose your server's operating system">
+        <button type="button" role="tab" data-panel="p-macos" aria-controls="p-macos">macOS</button>
+        <button type="button" role="tab" data-panel="p-windows" aria-controls="p-windows">Windows</button>
+        <button type="button" role="tab" data-panel="p-synology" aria-controls="p-synology">Synology</button>
+        <button type="button" role="tab" data-panel="p-linux" aria-controls="p-linux">Linux &amp; NAS</button>
+      </div>
+
+      <div class="platform-panel" id="p-macos" role="tabpanel" aria-labelledby="tab-p-macos">
+        <h4 class="platform-heading">macOS</h4>
+        <p class="platform-lead">You will use Terminal for two commands. Everything else is Finder and a browser.</p>
+        <ol class="platform-steps">
+          <li>Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a> and open it once, so it is running.</li>
+          <li>Download <a href="https://github.com/seethroughlab/familiar/archive/refs/heads/main.zip">the Familiar folder</a>, unzip it, rename it to <code>familiar</code> and drag it into your home folder.</li>
+          <li>Open Terminal and set up your settings file:
+<pre><code>cd ~/familiar/docker
+cp .env.example .env
+open -e .env</code></pre>
+            <p>In the file that opens, put your music folder after <code>MUSIC_LIBRARY_PATH=</code>. To get the path, drag the folder from Finder into the Terminal window and copy what appears. If your Mac has 8&nbsp;GB of memory, add <code>DISABLE_CLAP_EMBEDDINGS=true</code> on its own line.</p>
+          </li>
+          <li>Start it:
+<pre><code>./start.sh</code></pre>
+            <p>The first run downloads about 4&nbsp;GB and only happens once. The script checks your settings and handles the Mac-specific logging setting for you.</p>
+          </li>
+        </ol>
+        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS_BEGINNER.md" target="_blank" rel="noopener">Installing Familiar on your Mac</a> — the same steps at length, with every menu named.</p>
+      </div>
+
+      <div class="platform-panel" id="p-windows" role="tabpanel" aria-labelledby="tab-p-windows">
+        <h4 class="platform-heading">Windows</h4>
+        <!-- ADR-0095 point 5. Docker on Windows runs the same Linux container, so this should work;
+             nobody here has run it. Omitting the platform is worse than a caveat, and claiming it
+             works is worse than both — ADR-0055 point 2. -->
+        <p class="platform-caveat"><strong>Untested.</strong> Familiar runs inside Linux containers, which Docker provides identically on Windows, so this should work — but nobody has run it on Windows yet. If you try it, <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">tell us how it went</a>.</p>
+        <p class="platform-lead">You will use PowerShell for two commands.</p>
+        <ol class="platform-steps">
+          <li>Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a>, keeping the WSL&nbsp;2 option it offers, and open it once.</li>
+          <li>Open PowerShell and download three small files:
+<pre><code>mkdir familiar; cd familiar
+curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.prod.yml
+curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.desktop.yml
+curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql</code></pre>
+            <p><code>curl.exe</code> with the extension, because PowerShell uses plain <code>curl</code> for something else.</p>
+          </li>
+          <li>Start it, with your own music folder in place of the one below:
+<pre><code>$env:MUSIC_LIBRARY_PATH="C:\Users\you\Music"
+docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</code></pre>
+            <p>The first run downloads about 4&nbsp;GB.</p>
+          </li>
+        </ol>
+        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation guide</a> — settings, upgrading and troubleshooting.</p>
+      </div>
+
+      <div class="platform-panel" id="p-synology" role="tabpanel" aria-labelledby="tab-p-synology">
+        <h4 class="platform-heading">Synology</h4>
+        <p class="platform-lead">No terminal at all. Everything happens in DSM, in Container Manager.</p>
+        <ol class="platform-steps">
+          <li>Open <strong>Package Center</strong> and install <strong>Container Manager</strong> (DSM 7.2 or newer; on older DSM it is called <strong>Docker</strong>).</li>
+          <li>In <strong>File Station</strong>, make a folder for Familiar's data: <code>/volume1/docker/familiar</code>. Your music can stay wherever it already lives, for example <code>/volume1/music</code>.</li>
+          <li>In Container Manager, go to <strong>Project → Create</strong>. Name it <code>familiar</code>, set the path to <code>/volume1/docker/familiar</code>, and choose <strong>Create docker-compose.yml</strong>. Paste the file from the guide below, changing <code>/volume1/music</code> to your own music folder.</li>
+          <li>Click <strong>Build</strong> and wait until every container shows <strong>Running</strong>.</li>
+        </ol>
+        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md#synology-nas" target="_blank" rel="noopener">Synology guide</a> — the compose file to paste, and the list of models this runs on.</p>
+      </div>
+
+      <div class="platform-panel" id="p-linux" role="tabpanel" aria-labelledby="tab-p-linux">
+        <h4 class="platform-heading">Linux &amp; NAS</h4>
+        <p class="platform-lead">Two files and one command. Also the path for OpenMediaVault, Unraid and QNAP.</p>
+        <ol class="platform-steps">
+          <li>Download the two files Docker needs:
 <pre><code>mkdir familiar &amp;&amp; cd familiar
 curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/docker-compose.prod.yml
-curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql
-MUSIC_LIBRARY_PATH=~/Music docker compose -f docker-compose.prod.yml up -d</code></pre>
-    <p>Two files, one <code>compose up</code>. Uses the multi-arch image at <code>ghcr.io/seethroughlab/familiar:latest</code>.</p>
+curl -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docker/init-pgvector.sql</code></pre>
+          </li>
+          <li>Start it, pointing <code>MUSIC_LIBRARY_PATH</code> at your music:
+<pre><code>MUSIC_LIBRARY_PATH=/srv/music docker compose -f docker-compose.prod.yml up -d</code></pre>
+            <p>Pulls the multi-arch image from <code>ghcr.io/seethroughlab/familiar:latest</code>. Nothing is built locally.</p>
+          </li>
+        </ol>
+        <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation guide</a> — includes a step-by-step OpenMediaVault walkthrough and its permissions gotcha.</p>
+      </div>
+    </div>
   </div>
 
   <div class="step" data-step="2">
-    <h3>Open the UI</h3>
-    <p>Visit <code>http://localhost:4400</code>. The admin page walks you through the optional API keys — Last.fm and AcoustID, for enrichment. Neither is required, and Familiar needs no model key at all.</p>
+    <h3>Open it in a browser</h3>
+    <p>Visit <code>http://localhost:4400</code> — or <code>http://your-nas-address:4400</code> if Familiar is on another machine. Familiar needs no account, and no AI key of any kind. Last.fm and AcoustID are optional, and only fetch extra information about your music.</p>
   </div>
 
   <div class="step" data-step="3">
-    <h3>Scan your library</h3>
-    <p>Point Familiar at a music folder in <strong>Settings → Library Management</strong>. It'll scan, fingerprint, and start extracting audio features in the background.</p>
+    <h3>Point it at your music</h3>
+    <p>Go to <strong>Settings → Library Management</strong> and choose your music folder. Familiar reads your files where they are — it never moves, renames or rewrites them.</p>
   </div>
 
   <div class="note">
-    <strong>Analysis takes time.</strong> Expect roughly 1 second per track on modern hardware. A 20,000-track library is ~6 hours. The community cache short-circuits most of this for music that's already been analyzed elsewhere.
-  </div>
-
-  <div class="step" data-step="4">
-    <h3>Reach it from anywhere</h3>
-    <p>Install <a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a> on the server and on each device, turn on HTTPS certificates, and run one command:</p>
-<pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
-    <p>Your apps can then reach <code>https://&lt;server&gt;.&lt;tailnet&gt;.ts.net</code> on cellular, with a certificate that renews itself. Cloudflare Tunnel, WireGuard or any reverse proxy work too — see <a href="./faq.html">the FAQ</a>. Don't port-forward <code>4400</code> to the open internet.</p>
+    <strong>Analysis takes time.</strong> Expect roughly 1 second per track on modern hardware. A 20,000-track library is ~6 hours. The community cache short-circuits most of this for music that's already been analyzed elsewhere. You can listen while it works.
   </div>
 
   <details class="install-alt">
-    <summary>macOS? (journald swap + 8 GB RAM note)</summary>
-    <p>The production compose uses <code>journald</code> logging (Linux-only). On macOS, add the override:</p>
-<pre><code>docker compose -f docker-compose.prod.yml -f docker-compose.macos.yml up -d</code></pre>
-    <p>See the <a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS.md" target="_blank" rel="noopener">macOS guide</a> for Apple Silicon notes and the <code>./start.sh</code> helper script.</p>
-  </details>
-
-  <details class="install-alt">
-    <summary>Build from source</summary>
+    <summary>Build from source instead</summary>
 <pre><code>git clone https://github.com/seethroughlab/familiar.git
 cd familiar/docker
-./start.sh</code></pre>
-    <p>Builds the image locally with platform detection and a health check. Useful when you're developing against the backend.</p>
+cp .env.example .env
+docker compose -f docker-compose.prod.yml build</code></pre>
+    <p>Useful when you're developing against the backend. Note that <code>./start.sh</code> does <em>not</em> build — it pulls the published image, detects macOS and adds the logging override, then health-checks the stack.</p>
   </details>
 
   <h3>Detailed guides</h3>
@@ -217,6 +305,44 @@ cd familiar/docker
     <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/LIBRARY_BROWSERS.md" target="_blank" rel="noopener">Library Browsers</a><span class="desc">Build custom 2D/3D visualizations</span></li>
     <li><a href="https://github.com/seethroughlab/familiar/blob/main/docs/REST-API.md" target="_blank" rel="noopener">REST API</a><span class="desc">Backend API reference</span></li>
   </ul>
+</section>
+
+<!-- ADR-0096. Its own section, after Install rather than step 4 of it (point 1): this is a decision
+     made once with a consequence, and someone who only listens at home should be able to finish the
+     install and stop.
+
+     Point 2 — the reason leads, and is stated once. Familiar has no login: ADR-0045 is accepted and
+     unimplemented, with no token in deps.py, config.py or main.py. So "don't port-forward 4400" is
+     not hardening advice, it is the difference between a private server and a public one. The page
+     gave that instruction and never said why, and an unexplained instruction is one people route
+     around.
+
+     Point 7 — no shields, no "hackers", no CVE language. The reader is being told how a thing works
+     so they can make one decision.
+
+     Point 6 — this wording expires. Its row in docs/SITE-CLAIMS.md records that it depends on
+     Familiar having no authentication, so shipping ADR-0045 is a scheduled edit here. -->
+<section id="remote">
+  <div class="section-head">
+    <div><h2>Listening away from home</h2></div>
+    <img class="section-art" src="./assets/marks/constellation.webp" alt="" aria-hidden="true"
+         loading="lazy" width="1024" height="559">
+  </div>
+
+  <p class="lede">On your own network, Familiar just works — open the app and it finds your server. Getting to it from a train is a different question, and worth understanding before you do it.</p>
+
+  <div class="note">
+    <strong>Familiar has no login.</strong> There are no accounts and no password, because it was built to sit on your own network where everything that can reach it is already yours. That is a fine trade at home and a bad one on the open internet: anything that can reach your server can play your music and look through your folders. So the answer is not to publish it and add a lock — it is to keep it private and let your own devices in.
+  </div>
+
+  <h3>Use Tailscale</h3>
+  <p><a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a> puts your server and your phone on a small private network of your own. Nothing is exposed to the internet, there is no router setting to change, and it works on cellular. Install it on the server and on each device you listen with, turn on HTTPS certificates in the admin console, then run one command on the server:</p>
+<pre><code>tailscale serve --bg https / http://localhost:4400</code></pre>
+  <p>Your apps then use <code>https://&lt;server&gt;.&lt;tailnet&gt;.ts.net</code>, with a certificate that renews itself. This is the setup Familiar is developed against.</p>
+
+  <h3>If you would rather not</h3>
+  <p>Cloudflare Tunnel and WireGuard both work, and are covered in <a href="./faq.html">the FAQ</a>. One warning worth reading twice: <strong>a reverse proxy is only a boundary if it asks for a password.</strong> Putting nginx or Caddy in front of Familiar without authentication does not protect it — it publishes it, through nginx. Given there is no login behind the proxy, that is the whole of the security.</p>
+  <p class="footnote">Adding real authentication to Familiar is <a href="https://github.com/seethroughlab/familiar/blob/main/docs/decisions/ADR-0045-familiar-authenticates-inbound-requests.md" target="_blank" rel="noopener">a decision already taken</a> and not yet built. When it ships, this page changes.</p>
 </section>
 
 <section id="get-started" class="closing-cta">
