@@ -16,7 +16,6 @@ import { initializeProfile, type Profile } from './services/profileService';
 
 // Layout
 import { AppShell } from './components/AppShell';
-import { LibraryBrowser } from './components/Library/LibraryBrowser';
 
 // Lazy-loaded route components
 const LibraryPage = lazy(() => import('./components/Admin/LibraryPage').then(m => ({ default: m.LibraryPage })));
@@ -24,6 +23,7 @@ const ToolsPage = lazy(() => import('./components/Admin/ToolsPage').then(m => ({
 const DuplicatesPage = lazy(() => import('./components/Admin/DuplicatesPage').then(m => ({ default: m.DuplicatesPage })));
 const OrganizePage = lazy(() => import('./components/Admin/OrganizePage').then(m => ({ default: m.OrganizePage })));
 const ArtworkPage = lazy(() => import('./components/Admin/ArtworkPage').then(m => ({ default: m.ArtworkPage })));
+const ArtistsPage = lazy(() => import('./components/Admin/ArtistsPage').then(m => ({ default: m.ArtistsPage })));
 const ServerPage = lazy(() => import('./components/Admin/ServerPage').then(m => ({ default: m.ServerPage })));
 // The guest listener (ADR-0036). Lazy like every other route component, and worth it here: a guest
 // loads this page and nothing else, and everyone else never loads it at all.
@@ -52,7 +52,6 @@ const queryClient = new QueryClient({
  * e.g. /?browser=track-list#library → /library/tracks
  */
 
-import { BROWSER_ROUTES } from './routes';
 
 // PWA Reset utility
 function resetPWAState() {
@@ -200,22 +199,18 @@ function App() {
                 <OrganizePage />
               </Suspense>
             } />
+            {/* ADR-0081 point 4: was `/library/artist-cleanup`, routed through the browser
+                registry. It is a job you run against the library, so it sits with the other jobs. */}
+            <Route path="/tools/artists" element={
+              <Suspense fallback={<LazyLoadSpinner />}>
+                <ArtistsPage />
+              </Suspense>
+            } />
             <Route path="/server" element={
               <Suspense fallback={<LazyLoadSpinner />}>
                 <ServerPage />
               </Suspense>
             } />
-            {/* Library browser views */}
-            {BROWSER_ROUTES.map(({ path, browserId }) => (
-              <Route
-                key={path}
-                path={`/library/${path}`}
-                element={<LibraryBrowser key={browserId} browserId={browserId} />}
-              />
-            ))}
-            {/* Collections */}
-            {/* Mix Tapes */}
-
             {/* Default redirect */}
             {/* ADR-0058 point 1: the administrator lands on the thing being administered, not on a
                 form. This was `Navigate to="/settings"`; there is no settings route at all now —

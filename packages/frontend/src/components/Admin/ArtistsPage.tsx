@@ -1,4 +1,13 @@
 /**
+ * Artist cleanup — merging artists the scanner split, at `/tools/artists`.
+ *
+ * **Was a "browser" at `/library/artist-cleanup` until ADR-0081 point 4.** It is a job you run
+ * against the library, which is what Tools means under ADR-0058 point 2, so it belongs beside
+ * Duplicates, Artwork and Organiser rather than in a registry of things to browse. Moving it here
+ * is what leaves the browser registry with a single member its only consumer bypasses — see
+ * point 3.
+ */
+/**
  * Admin tool: merge canonical artist rows.
  *
  * Two paths:
@@ -26,14 +35,14 @@ import {
   TagIcon,
   Search,
 } from 'lucide-react';
-import { adminArtistsApi } from '../../../../api/admin';
+import { adminArtistsApi } from '../../api/admin';
 import type {
   MergeSuggestion,
   MergeCandidate,
   ArtistSearchResult,
-} from '../../../../api/admin';
+} from '../../api/admin';
 
-export function ArtistMergePanel() {
+export function ArtistsPage() {
   const queryClient = useQueryClient();
   const [recentlyMerged, setRecentlyMerged] = useState<{
     kept: string;

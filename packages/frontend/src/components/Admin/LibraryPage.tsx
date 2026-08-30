@@ -26,7 +26,7 @@ export function LibraryPage() {
 
       <AdminSection title="Maintenance">
         <Link
-          to="/library/artist-cleanup"
+          to="/tools/artists"
           aria-label="Artist cleanup"
           className="flex items-center gap-3 bg-zinc-800/50 rounded-lg p-4 hover:bg-zinc-800 transition-colors"
         >

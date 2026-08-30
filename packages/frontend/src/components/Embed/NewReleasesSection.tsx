@@ -10,11 +10,11 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Disc3, Loader2, RefreshCw } from 'lucide-react';
-import { newReleasesApi, externalAlbumsApi } from '../../../../api/discovery';
-import { queryKeys } from '../../../../api/queryKeys';
-import { STALE_TIME } from '../../../../api/queryDefaults';
-import { showError, showSuccess } from '../../../../stores/toastStore';
-import { ExternalAlbumCard } from '../../../Discovery/ExternalAlbumCard';
+import { newReleasesApi, externalAlbumsApi } from '../../api/discovery';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME } from '../../api/queryDefaults';
+import { showError, showSuccess } from '../../stores/toastStore';
+import { ExternalAlbumCard } from '../Discovery/ExternalAlbumCard';
 
 const SECTION_LIMIT = 12;
 

@@ -92,7 +92,8 @@ const VIEW_PATHS: Record<string, { destination: string; link: string } | null> =
   // ADR-0058 point 3 had moved the track list onto the Tools page while the player was still
   // scheduled for deletion. It has now been deleted, and ADR-0057 point 5 took the "Track list"
   // link with it — a capability and its affordances leave together. There is no tracks browser
-  // left to reach: `BROWSER_ROUTES` is down to `artist-cleanup` alone.
+  // left to reach: the browser registry is gone (ADR-0081 point 3) and artist cleanup is an
+  // ordinary screen at `/tools/artists`.
   Tracks: null,
   Cleanup: { destination: 'Library', link: 'Artist cleanup' },
   Artists: null,

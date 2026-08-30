@@ -1,21 +1,21 @@
 import { lazy, Suspense, useCallback, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ScrollContainerContext } from '../../hooks/useScrollContainer';
-import type { BrowserProps, LibraryFilters } from '../Library/types';
 import { postNavigateIntent, postPlayIntent } from '../../services/embedBridge';
 
-// Imported directly rather than through `browsers/index.ts`, which registers all nine and would pull
-// the track list, the album grid and the Music Map into a bundle that shows none of them.
-const DiscoverBrowser = lazy(() => import('../Library/browsers/DiscoverBrowser/DiscoverBrowser'));
+const DiscoverSurface = lazy(() => import('./DiscoverSurface'));
 
 /**
  * Discover, alone, for the embedded surface (ADR-0016 point 2, ADR-0017).
  *
- * `DiscoverBrowser` takes the full `BrowserProps` because every library browser does, and reads two
- * of its twenty-two fields. The rest are supplied empty here rather than cast away, so that a field
- * it starts reading later is a type error at this seam instead of `undefined` at runtime — this file
- * is the boundary between a 2,943-line surface and a native app, and ADR-0016 names that seam as the
- * main risk of embedding at all.
+ * This file is the boundary between a large web surface and a native app, and ADR-0016 names that
+ * seam as the main risk of embedding at all. It used to guard the seam by supplying all
+ * twenty-four `BrowserProps` fields — most of them empty — so a field `DiscoverBrowser` started
+ * reading was a type error here rather than `undefined` inside a web view.
+ *
+ * ADR-0081 point 5 replaced that with the two fields the surface actually reads. The guard survives
+ * and moves: reading a third is now a compile error in `DiscoverSurface` itself. What is gone is
+ * twenty-two empty values standing in for a registry that no longer exists.
  */
 export function EmbedDiscover() {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -34,45 +34,18 @@ export function EmbedDiscover() {
     postNavigateIntent({ to: 'artist', artist: artistName });
   }, []);
 
-  const handleGoToAlbum = useCallback((artistName: string, albumName: string) => {
-    postNavigateIntent({ to: 'album', artist: artistName, album: albumName });
-  }, []);
 
-  const props: BrowserProps = {
-    tracks: [],
-    artists: [],
-    albums: [],
-    isLoading: false,
-
-    // Selection exists to build playlists out of a track list. There is no track list here.
-    selectedTrackIds: new Set<string>(),
-    onSelectTrack: noop,
-    onSelectAll: noop,
-    onClearSelection: noop,
-
-    // Handed to the *app*, not followed in the page (ADR-0020). The native artist and album screens
-    // already exist and are better than a web equivalent inside a web view; these links were the
-    // only route into them that did nothing.
+  /**
+   * Two fields, both handed to the *app* rather than followed in the page (ADR-0020).
+   *
+   * `onGoToAlbum`, and the year/genre/mood navigations, used to be supplied here as well — the
+   * album one live, the rest inert because the native app has no screen for a year, a genre or a
+   * mood region, and a message leading nowhere would be worse than a link that does nothing.
+   * `DiscoverSurface` reads neither, so they are gone rather than passed and ignored.
+   */
+  const props = {
     onGoToArtist: handleGoToArtist,
-    onGoToAlbum: handleGoToAlbum,
-    // Still inert, and named as such by ADR-0020 point 4: these open *lists* — a year, a genre, a
-    // mood region — and the native app has no screen for any of them. A message that leads nowhere
-    // on the other side would be worse than a link that does nothing.
-    onGoToYear: noop,
-    onGoToYearRange: noop,
-    onGoToGenre: noop,
-    onGoToMood: noop,
-
     onPlayTrack: handlePlayTrack,
-    // Discover has no index to play at, and queueing is a native-side concept here — the bridge is
-    // one message wide (ADR-0016 point 5) and "play" is that message.
-    onPlayTrackAt: (trackId: string) => handlePlayTrack(trackId),
-    onQueueTrack: noop,
-
-    onEditTrack: noop,
-
-    filters: EMPTY_FILTERS,
-    onFilterChange: noop,
   };
 
   return (
@@ -93,7 +66,7 @@ export function EmbedDiscover() {
       <ScrollContainerContext.Provider value={scrollRef}>
         <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
           <Suspense fallback={<EmbedLoading />}>
-            <DiscoverBrowser {...props} />
+            <DiscoverSurface {...props} />
           </Suspense>
         </div>
       </ScrollContainerContext.Provider>
@@ -109,8 +82,4 @@ function EmbedLoading() {
   );
 }
 
-function noop() {}
 
-// Every field on `LibraryFilters` is optional, so this needs no cast — which is the point of
-// building the props out rather than asserting them.
-const EMPTY_FILTERS: LibraryFilters = {};

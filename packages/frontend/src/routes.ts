@@ -4,40 +4,20 @@
  * Extracted to a dependency-free module so they can be imported in tests
  * without pulling in the React component tree.
  *
- * ## The web app is being reduced to management (see `docs/WEB-PARITY.md`)
+ * ## The web app is an administration tool (ADR-0058, `docs/WEB-PARITY.md`)
  *
- * The Mac and iPhone now cover the listening path, so the browser keeps only what it is uniquely
- * good for. The retired browsers are **unmounted, not deleted** — their components and registrations
- * stay, so this is one commit to revert if something turns out to be missed. `PARKED_BROWSERS` below
- * is what keeps that honest rather than silent.
+ * The Mac and iPhone cover the listening path, so the browser keeps only what it is uniquely good
+ * for: three destinations, and the jobs you run against a library.
+ *
+ * **The browser registry is gone** (ADR-0081 point 3). `BROWSER_ROUTES`, `PARKED_BROWSERS` and
+ * `LIBRARY_ITEMS` lived here while the retired browsers were unmounted-but-not-deleted, so the
+ * reduction stayed one commit from being reverted. That period is over: artist cleanup became an
+ * ordinary screen at `/tools/artists`, which left a registry of one whose only consumer imported it
+ * directly. The survivor is `components/Embed/DiscoverSurface.tsx`, rendered by the embedded page
+ * the Apple clients load — reached by a plain import, which is all it ever needed.
  */
 
-/** Maps URL path segments to browser registry IDs. */
-export const BROWSER_ROUTES = [
-  // No native equivalent, and its API tag (`Library Organization`) is not in the generated Swift
-  // client — so this is genuinely browser-only work, not a duplicate of something on the Mac.
-  { path: 'artist-cleanup', browserId: 'artist-cleanup' },
-] as const;
 
-/**
- * Registered browsers deliberately left without a route.
- *
- * `navigationIntegrity.test.ts` asserts every registered browser is reachable — the guard against a
- * component nobody can get to. Unmounting these breaks that guard on purpose, so they are named here
- * instead: the test allows exactly this set and nothing else, which means an *accidentally*
- * unreachable browser still fails the suite.
- *
- * Each entry says where the capability went. When one of these is deleted for good, delete its line.
- */
-export const PARKED_BROWSERS: Record<string, string> = {
-  // **Parked but NOT deletable.** `EmbedDiscover` lazy-imports `DiscoverBrowser`, so this component
-  // is what both Apple clients render inside their WKWebView. Unmounted from this app's routes;
-  // still very much alive. See ADR-0050 point 4 — parked and deletable are not the same thing, and
-  // this is the entry that proves it.
-  discover: 'Mac and iPhone embed this same code via /embed (ADR-0016/0017/0019) — do not delete',
-};
-
-/** Where the app opens. Settings, because that is what the browser is for now. */
 /// Where the app opens. The library, since ADR-0058 point 1 — it was `/settings`, which opened an
 /// administration tool on a form rather than on the thing being administered.
 export const HOME_ROUTE = {
@@ -80,8 +60,3 @@ export const UNBUILT_DESTINATION_ITEMS: Record<string, string> = {
   // their lines are deleted rather than marked done, so this stays a list of what is missing.
 };
 
-/** Sidebar library navigation items. */
-export const LIBRARY_ITEMS = [
-  // Kept as the "simple player": a browser can still find a track and play it, which is what a guest
-  { path: '/library/artist-cleanup', label: 'Cleanup' },
-] as const;
