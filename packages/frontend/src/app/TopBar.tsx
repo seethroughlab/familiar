@@ -49,10 +49,18 @@ export function TopBar() {
 
   return (
     <header className="shrink-0 border-b border-zinc-800 bg-zinc-950">
-      <div className="flex items-center gap-3 px-3 sm:px-4 py-1.5">
-        <span className="hidden sm:block text-sm font-semibold text-white pr-1">Familiar</span>
+      {/* Three columns so the destinations sit in the centre of the window, the way a Mac
+          settings pane arranges its panes — not packed against the left edge after the wordmark.
+          The empty third column is what does it: `1fr` on both sides means the middle is centred
+          on the *window*, not on the space left over after the brand. Dropping it and using
+          `justify-between` would centre the nav between the brand and the right edge, which drifts
+          as the wordmark shows and hides at the `sm` breakpoint. */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 sm:px-4 py-1.5">
+        <span className="hidden sm:block text-sm font-semibold text-white justify-self-start">Familiar</span>
+        {/* Holds the first column open on small screens, where the wordmark is hidden. */}
+        <span className="sm:hidden" aria-hidden="true" />
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center justify-center gap-1">
           {DESTINATION_ITEMS.map((item) => (
             <Link
               key={item.path}
@@ -71,6 +79,10 @@ export function TopBar() {
             </Link>
           ))}
         </nav>
+
+        {/* Balances the brand column. Empty on purpose: the centring is the point, and anything
+            put here has to be weighed against pushing the destinations off-centre. */}
+        <span aria-hidden="true" />
       </div>
     </header>
   );
