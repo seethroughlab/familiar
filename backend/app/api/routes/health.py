@@ -14,7 +14,7 @@ from app.db.models import Track, TrackAnalysis
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["health"])
+router = APIRouter(tags=["system"])
 
 
 class ServiceStatus(BaseModel):

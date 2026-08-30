@@ -15,7 +15,7 @@ from app.api.deps import CurrentProfile, DbSession
 from app.config import FEATURES_VERSION, get_app_version
 from app.utils.time import to_rfc3339, utcnow
 
-router = APIRouter(tags=["diagnostics"])
+router = APIRouter(tags=["system"])
 
 
 def get_system_info() -> dict[str, Any]:

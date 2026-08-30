@@ -28,7 +28,7 @@ from app.services.smart_playlists import SmartPlaylistService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/download", tags=["download"])
+router = APIRouter(prefix="/download", tags=["exports"])
 
 MAX_TRACKS = 500
 MAX_SIZE_BYTES = 2 * 1024 * 1024 * 1024  # 2GB

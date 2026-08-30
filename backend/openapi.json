@@ -1498,48 +1498,6 @@
         "title": "BatchTracksRequest",
         "type": "object"
       },
-      "Body_export-import_preview_import": {
-        "properties": {
-          "file": {
-            "format": "binary",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_export-import_preview_import",
-        "type": "object"
-      },
-      "Body_export-import_preview_library_import": {
-        "properties": {
-          "file": {
-            "format": "binary",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_export-import_preview_library_import",
-        "type": "object"
-      },
-      "Body_export-import_preview_restore": {
-        "properties": {
-          "file": {
-            "format": "binary",
-            "title": "File",
-            "type": "string"
-          }
-        },
-        "required": [
-          "file"
-        ],
-        "title": "Body_export-import_preview_restore",
-        "type": "object"
-      },
       "Body_ingest_import_preview": {
         "properties": {
           "file": {
@@ -1608,6 +1566,48 @@
           "file"
         ],
         "title": "Body_tracks_upload_track_artwork",
+        "type": "object"
+      },
+      "Body_transfer_preview_import": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_transfer_preview_import",
+        "type": "object"
+      },
+      "Body_transfer_preview_library_import": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_transfer_preview_library_import",
+        "type": "object"
+      },
+      "Body_transfer_preview_restore": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_transfer_preview_restore",
         "type": "object"
       },
       "BulkAnalysisRequest": {
@@ -10738,7 +10738,7 @@
     "/api/v1/admin/artists/merge": {
       "post": {
         "description": "Merge several ``Artist`` rows into one canonical row.\n\nAtomic. Locks the source rows so the scanner's resolver can't\ninsert a new alias pointing at any merge_id mid-merge. Aliases\nthat would collide with one already on the keep artist are\ndropped (keep-side wins). ``tracks.canonical_artist_id`` is\nrepointed BEFORE the artist DELETE \u2014 the FK is ON DELETE SET\nNULL, which would silently null tracks if the order were\nreversed.\n\nIdempotency: re-running with the same payload finds the\nmerge_ids gone and returns 404 \u2014 honest signal, not 200.",
-        "operationId": "admin_merge_artists",
+        "operationId": "artists_merge_artists",
         "requestBody": {
           "content": {
             "application/json": {
@@ -10818,14 +10818,14 @@
         ],
         "summary": "Merge Artists",
         "tags": [
-          "admin"
+          "artists"
         ]
       }
     },
     "/api/v1/admin/artists/merge-suggestions": {
       "get": {
         "description": "Return groups of artists whose canonicalized names collide.\n\nThe obvious \"Beatles\" + \"The Beatles\" + \"Beatles, The\" cluster.\nPure-Python pass over a fetched-once list \u2014 ~3.5k artists fits in\n<5MB Python overhead, sub-50ms group. Each suggestion ranks\nMBID-bearing candidates first (likely canonical winner); UI\nguards against merging two non-matching MBIDs.\n\nLong-tail rename cases (\"Antony\" \u2192 \"ANOHNI\", \"Ceephax\" \u2192 \"Ceephax\nAcid Crew\") aren't surfaced here \u2014 different canonical forms. The\nuser picks those manually via the merge UI's search panel.",
-        "operationId": "admin_get_merge_suggestions",
+        "operationId": "artists_get_merge_suggestions",
         "parameters": [
           {
             "in": "query",
@@ -10907,14 +10907,14 @@
         ],
         "summary": "Get Merge Suggestions",
         "tags": [
-          "admin"
+          "artists"
         ]
       }
     },
     "/api/v1/admin/artists/search": {
       "get": {
         "description": "Substring search across canonical artist names + sort_names.\n\nPowers the merge UI's manual-search panel \u2014 finds long-tail rename\nor abbreviation cases that the canonical-form-collision suggestions\ncan't see (e.g. \"Various\" vs \"Various Artists\", \"Se\u00f1or Coconut\"\nvs \"Se\u00f1or Coconut and His Orchestra\"). Trim/lower the query, ILIKE\nagainst name + sort_name, order by track count desc.",
-        "operationId": "admin_search_artists",
+        "operationId": "artists_search_artists",
         "parameters": [
           {
             "in": "query",
@@ -11005,7 +11005,7 @@
         ],
         "summary": "Search Artists",
         "tags": [
-          "admin"
+          "artists"
         ]
       }
     },
@@ -12041,7 +12041,7 @@
     "/api/v1/background/jobs": {
       "get": {
         "description": "Get status of all background jobs.\n\nReturns all jobs that are currently running or have recently completed.\nOnly includes jobs with active progress tracking.",
-        "operationId": "background_get_background_jobs",
+        "operationId": "system_get_background_jobs",
         "responses": {
           "200": {
             "content": {
@@ -12106,14 +12106,14 @@
         },
         "summary": "Get Background Jobs",
         "tags": [
-          "background"
+          "system"
         ]
       }
     },
     "/api/v1/diagnostics/export": {
       "get": {
         "description": "Export comprehensive diagnostics for issue reporting.\n\nThis endpoint gathers system health, recent logs, and configuration\ninformation to help diagnose issues. Sensitive data (API keys, paths)\nis excluded or redacted.",
-        "operationId": "diagnostics_export_diagnostics",
+        "operationId": "system_export_diagnostics",
         "responses": {
           "200": {
             "content": {
@@ -12178,14 +12178,14 @@
         },
         "summary": "Export Diagnostics",
         "tags": [
-          "diagnostics"
+          "system"
         ]
       }
     },
     "/api/v1/diagnostics/frontend-logs": {
       "delete": {
         "description": "Delete all frontend log entries.",
-        "operationId": "diagnostics_clear_frontend_logs",
+        "operationId": "system_clear_frontend_logs",
         "responses": {
           "200": {
             "content": {
@@ -12250,12 +12250,12 @@
         },
         "summary": "Clear Frontend Logs",
         "tags": [
-          "diagnostics"
+          "system"
         ]
       },
       "get": {
         "description": "Query frontend logs with optional filters.\n\nSet format=text for plain-text output suitable for curl | grep.",
-        "operationId": "diagnostics_query_frontend_logs",
+        "operationId": "system_query_frontend_logs",
         "parameters": [
           {
             "in": "query",
@@ -12356,7 +12356,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Diagnostics Query Frontend Logs"
+                  "title": "Response System Query Frontend Logs"
                 }
               }
             },
@@ -12415,12 +12415,12 @@
         },
         "summary": "Query Frontend Logs",
         "tags": [
-          "diagnostics"
+          "system"
         ]
       },
       "post": {
         "description": "Ingest a batch of frontend log entries.",
-        "operationId": "diagnostics_ingest_frontend_logs",
+        "operationId": "system_ingest_frontend_logs",
         "requestBody": {
           "content": {
             "application/json": {
@@ -12500,14 +12500,14 @@
         ],
         "summary": "Ingest Frontend Logs",
         "tags": [
-          "diagnostics"
+          "system"
         ]
       }
     },
     "/api/v1/diagnostics/metrics": {
       "get": {
         "description": "Get application metrics snapshot (request timing + background gauges).",
-        "operationId": "diagnostics_get_metrics",
+        "operationId": "system_get_metrics",
         "responses": {
           "200": {
             "content": {
@@ -12572,14 +12572,14 @@
         },
         "summary": "Get Metrics",
         "tags": [
-          "diagnostics"
+          "system"
         ]
       }
     },
     "/api/v1/download/analyses": {
       "post": {
         "description": "Download track analyses as a ZIP of markdown reports.\n\nFast path: all tracks already analyzed -> returns ZIP immediately (200).\nSlow path: some need analysis -> kicks off background task -> returns 202 with task_id.",
-        "operationId": "download_download_analyses_zip",
+        "operationId": "exports_download_analyses_zip",
         "requestBody": {
           "content": {
             "application/json": {
@@ -12657,14 +12657,14 @@
         ],
         "summary": "Download Analyses Zip",
         "tags": [
-          "download"
+          "exports"
         ]
       }
     },
     "/api/v1/download/analyses/{task_id}/download": {
       "get": {
         "description": "Download the analysis ZIP once background processing is ready.",
-        "operationId": "download_download_analysis_zip_result",
+        "operationId": "exports_download_analysis_zip_result",
         "parameters": [
           {
             "in": "path",
@@ -12743,14 +12743,14 @@
         ],
         "summary": "Download Analysis Zip Result",
         "tags": [
-          "download"
+          "exports"
         ]
       }
     },
     "/api/v1/download/analyses/{task_id}/status": {
       "get": {
         "description": "Poll progress of analysis-for-download task.",
-        "operationId": "download_get_analysis_download_status",
+        "operationId": "exports_get_analysis_download_status",
         "parameters": [
           {
             "in": "path",
@@ -12768,7 +12768,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Download Get Analysis Download Status",
+                  "title": "Response Exports Get Analysis Download Status",
                   "type": "object"
                 }
               }
@@ -12828,14 +12828,14 @@
         },
         "summary": "Get Analysis Download Status",
         "tags": [
-          "download"
+          "exports"
         ]
       }
     },
     "/api/v1/download/playlist/{playlist_id}": {
       "get": {
         "description": "Download all tracks in a playlist as a ZIP file.",
-        "operationId": "download_download_playlist_zip",
+        "operationId": "exports_download_playlist_zip",
         "parameters": [
           {
             "in": "path",
@@ -12915,14 +12915,14 @@
         ],
         "summary": "Download Playlist Zip",
         "tags": [
-          "download"
+          "exports"
         ]
       }
     },
     "/api/v1/download/smart-playlist/{playlist_id}": {
       "get": {
         "description": "Download all tracks matching a smart playlist as a ZIP file.",
-        "operationId": "download_download_smart_playlist_zip",
+        "operationId": "exports_download_smart_playlist_zip",
         "parameters": [
           {
             "in": "path",
@@ -13002,14 +13002,14 @@
         ],
         "summary": "Download Smart Playlist Zip",
         "tags": [
-          "download"
+          "exports"
         ]
       }
     },
     "/api/v1/download/tracks": {
       "post": {
         "description": "Download a set of tracks as a ZIP file.",
-        "operationId": "download_download_tracks_zip",
+        "operationId": "exports_download_tracks_zip",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13087,14 +13087,14 @@
         ],
         "summary": "Download Tracks Zip",
         "tags": [
-          "download"
+          "exports"
         ]
       }
     },
     "/api/v1/export-import/backup": {
       "post": {
         "description": "Create a backup of profile and/or library data.\n\nReturns a streaming download of JSON (optionally gzipped).\nIncludes what was selected: profile data (playlists, favorites, play history)\nand/or library analysis data (features, embeddings, fingerprints).",
-        "operationId": "export-import_create_backup",
+        "operationId": "transfer_create_backup",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13172,14 +13172,14 @@
         ],
         "summary": "Create Backup",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/export": {
       "post": {
         "description": "Export profile data as JSON.\n\nReturns a JSON file containing all selected data categories.\nTrack references use ISRC, MusicBrainz ID, and metadata for matching.",
-        "operationId": "export-import_export_profile_data",
+        "operationId": "transfer_export_profile_data",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13257,14 +13257,14 @@
         ],
         "summary": "Export Profile Data",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/import/execute": {
       "post": {
         "description": "Execute an import from a previewed session.\n\nRequires a valid session_id from /import/preview.\n\nModes:\n- merge: Add new data, combine play counts, skip existing playlists\n- overwrite: Replace all data in selected categories",
-        "operationId": "export-import_execute_import",
+        "operationId": "transfer_execute_import",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13344,19 +13344,19 @@
         ],
         "summary": "Execute Import",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/import/preview": {
       "post": {
         "description": "Preview an import file and get matching statistics.\n\nUpload a Familiar export JSON file to see:\n- Summary of data categories\n- Track matching results (how many tracks can be matched to your library)\n- Warnings about potential issues\n\nReturns a session_id to use with /import/execute.",
-        "operationId": "export-import_preview_import",
+        "operationId": "transfer_preview_import",
         "requestBody": {
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_export-import_preview_import"
+                "$ref": "#/components/schemas/Body_transfer_preview_import"
               }
             }
           },
@@ -13431,14 +13431,14 @@
         ],
         "summary": "Preview Import",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/library/export": {
       "post": {
         "description": "Export full library data for migration to another machine.\n\nIncludes:\n- Track metadata\n- Analysis features\n- Audio embeddings (optional)\n- User overrides\n\nReturns a streaming download of JSON (optionally gzipped).",
-        "operationId": "export-import_export_library",
+        "operationId": "transfer_export_library",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13511,14 +13511,14 @@
         },
         "summary": "Export Library",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/library/import/execute": {
       "post": {
         "description": "Execute a library import from a previewed session.\n\nRequires a valid session_id from /library/import/preview.\n\nModes:\n- match_only: Only apply data to tracks found in library\n- merge: Fill gaps in existing data\n- replace: Overwrite existing data",
-        "operationId": "export-import_execute_library_import",
+        "operationId": "transfer_execute_library_import",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13593,19 +13593,19 @@
         },
         "summary": "Execute Library Import",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/library/import/preview": {
       "post": {
         "description": "Preview a library import file and get matching statistics.\n\nUpload a Familiar library export file to see:\n- How many tracks can be matched by file_hash, acoustid, ISRC, etc.\n- Warnings about potential issues\n- Summary of importable data\n\nReturns a session_id to use with /library/import/execute.\nSupports both .json and .json.gz files.",
-        "operationId": "export-import_preview_library_import",
+        "operationId": "transfer_preview_library_import",
         "requestBody": {
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_export-import_preview_library_import"
+                "$ref": "#/components/schemas/Body_transfer_preview_library_import"
               }
             }
           },
@@ -13675,14 +13675,14 @@
         },
         "summary": "Preview Library Import",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/restore/execute": {
       "post": {
         "description": "Execute a restore from a previewed session.\n\nRequires a valid session_id from /restore/preview.\n\nProfile modes:\n- merge: Add new data, combine play counts, skip existing playlists\n- overwrite: Replace all data in selected categories\n\nLibrary modes:\n- match_only: Only apply to matched tracks\n- merge: Fill gaps in existing data\n- replace: Overwrite existing data",
-        "operationId": "export-import_execute_restore",
+        "operationId": "transfer_execute_restore",
         "requestBody": {
           "content": {
             "application/json": {
@@ -13762,19 +13762,19 @@
         ],
         "summary": "Execute Restore",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
     "/api/v1/export-import/restore/preview": {
       "post": {
         "description": "Preview a backup file and get matching statistics.\n\nAccepts backup files (.json or .json.gz).\nReturns a session_id to use with /restore/execute.",
-        "operationId": "export-import_preview_restore",
+        "operationId": "transfer_preview_restore",
         "requestBody": {
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_export-import_preview_restore"
+                "$ref": "#/components/schemas/Body_transfer_preview_restore"
               }
             }
           },
@@ -13849,7 +13849,7 @@
         ],
         "summary": "Preview Restore",
         "tags": [
-          "export-import"
+          "transfer"
         ]
       }
     },
@@ -14653,7 +14653,7 @@
     "/api/v1/health": {
       "get": {
         "description": "Basic liveness check.",
-        "operationId": "health_health_check",
+        "operationId": "system_health_check",
         "responses": {
           "200": {
             "content": {
@@ -14718,14 +14718,14 @@
         },
         "summary": "Health Check",
         "tags": [
-          "health"
+          "system"
         ]
       }
     },
     "/api/v1/health/db": {
       "get": {
         "description": "Database connectivity check.",
-        "operationId": "health_db_health_check",
+        "operationId": "system_db_health_check",
         "responses": {
           "200": {
             "content": {
@@ -14790,14 +14790,14 @@
         },
         "summary": "Db Health Check",
         "tags": [
-          "health"
+          "system"
         ]
       }
     },
     "/api/v1/health/system": {
       "get": {
         "description": "Comprehensive system health check.\n\nChecks all required services:\n- Database (PostgreSQL)\n- Redis\n- Background task status\n- Analysis backlog status\n- Library paths accessibility",
-        "operationId": "health_system_health_check",
+        "operationId": "system_system_health_check",
         "responses": {
           "200": {
             "content": {
@@ -14862,14 +14862,14 @@
         },
         "summary": "System Health Check",
         "tags": [
-          "health"
+          "system"
         ]
       }
     },
     "/api/v1/health/workers": {
       "get": {
         "description": "Get detailed status of background processing and task queues.",
-        "operationId": "health_get_worker_status",
+        "operationId": "system_get_worker_status",
         "responses": {
           "200": {
             "content": {
@@ -14934,7 +14934,7 @@
         },
         "summary": "Get Worker Status",
         "tags": [
-          "health"
+          "system"
         ]
       }
     },
@@ -26435,7 +26435,7 @@
     "/api/v1/s3-backup/cancel": {
       "post": {
         "description": "Cancel a running backup.",
-        "operationId": "s3-backup_cancel_backup",
+        "operationId": "backup_cancel_backup",
         "responses": {
           "200": {
             "content": {
@@ -26444,7 +26444,7 @@
                   "additionalProperties": {
                     "type": "string"
                   },
-                  "title": "Response S3-Backup Cancel Backup",
+                  "title": "Response Backup Cancel Backup",
                   "type": "object"
                 }
               }
@@ -26504,14 +26504,14 @@
         },
         "summary": "Cancel Backup",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/estimate": {
       "get": {
         "description": "Estimate S3 backup costs based on actual library data sizes.",
-        "operationId": "s3-backup_get_cost_estimate",
+        "operationId": "backup_get_cost_estimate",
         "responses": {
           "200": {
             "content": {
@@ -26576,14 +26576,14 @@
         },
         "summary": "Get Cost Estimate",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/history": {
       "get": {
         "description": "Get backup history (last 10 runs).",
-        "operationId": "s3-backup_get_backup_history",
+        "operationId": "backup_get_backup_history",
         "responses": {
           "200": {
             "content": {
@@ -26593,7 +26593,7 @@
                     "additionalProperties": true,
                     "type": "object"
                   },
-                  "title": "Response S3-Backup Get Backup History",
+                  "title": "Response Backup Get Backup History",
                   "type": "array"
                 }
               }
@@ -26653,14 +26653,14 @@
         },
         "summary": "Get Backup History",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/manifest": {
       "get": {
         "description": "Get backup contents from manifest (instant, stored in S3 Standard).",
-        "operationId": "s3-backup_get_manifest",
+        "operationId": "backup_get_manifest",
         "responses": {
           "200": {
             "content": {
@@ -26725,14 +26725,14 @@
         },
         "summary": "Get Manifest",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/progress": {
       "get": {
         "description": "Poll backup progress.",
-        "operationId": "s3-backup_get_progress",
+        "operationId": "backup_get_progress",
         "responses": {
           "200": {
             "content": {
@@ -26797,14 +26797,14 @@
         },
         "summary": "Get Progress",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/restore": {
       "post": {
         "description": "Initiate Glacier retrieval for backed-up files.\n\nThis sends RestoreObject requests to start the 12-48 hour retrieval process.",
-        "operationId": "s3-backup_initiate_restore",
+        "operationId": "backup_initiate_restore",
         "requestBody": {
           "content": {
             "application/json": {
@@ -26821,7 +26821,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response S3-Backup Initiate Restore",
+                  "title": "Response Backup Initiate Restore",
                   "type": "object"
                 }
               }
@@ -26881,21 +26881,21 @@
         },
         "summary": "Initiate Restore",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/restore/check": {
       "post": {
         "description": "Check if Glacier retrieval is complete (HEAD requests on sample).",
-        "operationId": "s3-backup_check_restore_availability",
+        "operationId": "backup_check_restore_availability",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response S3-Backup Check Restore Availability",
+                  "title": "Response Backup Check Restore Availability",
                   "type": "object"
                 }
               }
@@ -26955,14 +26955,14 @@
         },
         "summary": "Check Restore Availability",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/restore/download": {
       "post": {
         "description": "Download restored files from S3 and apply.\n\nRequires confirm=true. Creates a local safety backup first.",
-        "operationId": "s3-backup_download_and_restore",
+        "operationId": "backup_download_and_restore",
         "requestBody": {
           "content": {
             "application/json": {
@@ -26979,7 +26979,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response S3-Backup Download And Restore",
+                  "title": "Response Backup Download And Restore",
                   "type": "object"
                 }
               }
@@ -27039,14 +27039,14 @@
         },
         "summary": "Download And Restore",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/restore/progress": {
       "get": {
         "description": "Get restore download progress (reuses backup progress key).",
-        "operationId": "s3-backup_get_restore_download_progress",
+        "operationId": "backup_get_restore_download_progress",
         "responses": {
           "200": {
             "content": {
@@ -27111,21 +27111,21 @@
         },
         "summary": "Get Restore Download Progress",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/restore/status": {
       "get": {
         "description": "Get Glacier retrieval progress.",
-        "operationId": "s3-backup_get_restore_status",
+        "operationId": "backup_get_restore_status",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response S3-Backup Get Restore Status",
+                  "title": "Response Backup Get Restore Status",
                   "type": "object"
                 }
               }
@@ -27185,21 +27185,21 @@
         },
         "summary": "Get Restore Status",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/run": {
       "post": {
         "description": "Trigger a manual backup. Runs in background thread.",
-        "operationId": "s3-backup_trigger_backup",
+        "operationId": "backup_trigger_backup",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response S3-Backup Trigger Backup",
+                  "title": "Response Backup Trigger Backup",
                   "type": "object"
                 }
               }
@@ -27259,14 +27259,14 @@
         },
         "summary": "Trigger Backup",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/status": {
       "get": {
         "description": "Get backup status: enabled, last backup, next scheduled.",
-        "operationId": "s3-backup_get_backup_status",
+        "operationId": "backup_get_backup_status",
         "responses": {
           "200": {
             "content": {
@@ -27331,14 +27331,14 @@
         },
         "summary": "Get Backup Status",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
     "/api/v1/s3-backup/validate": {
       "post": {
         "description": "Validate AWS credentials and required S3 permissions.\n\nCredentials are read from environment variables (S3_BACKUP_ACCESS_KEY_ID,\nS3_BACKUP_SECRET_ACCESS_KEY) or settings.json via get_effective().",
-        "operationId": "s3-backup_validate_credentials",
+        "operationId": "backup_validate_credentials",
         "requestBody": {
           "content": {
             "application/json": {
@@ -27413,7 +27413,7 @@
         },
         "summary": "Validate Credentials",
         "tags": [
-          "s3-backup"
+          "backup"
         ]
       }
     },
@@ -32513,7 +32513,7 @@
     "/api/v1/updates": {
       "get": {
         "description": "Get cached update check result (no GitHub hit).",
-        "operationId": "updates_get_update_status",
+        "operationId": "system_get_update_status",
         "responses": {
           "200": {
             "content": {
@@ -32578,14 +32578,14 @@
         },
         "summary": "Get Update Status",
         "tags": [
-          "updates"
+          "system"
         ]
       }
     },
     "/api/v1/updates/check": {
       "post": {
         "description": "Trigger a fresh update check against GitHub.",
-        "operationId": "updates_trigger_update_check",
+        "operationId": "system_trigger_update_check",
         "responses": {
           "200": {
             "content": {
@@ -32650,7 +32650,7 @@
         },
         "summary": "Trigger Update Check",
         "tags": [
-          "updates"
+          "system"
         ]
       }
     },
@@ -33314,20 +33314,20 @@
       "name": "organizer"
     },
     {
-      "description": "Artist-merge operations. The `admin` name is a misnomer under ADR-0058 \u2014 most of this API is administration \u2014 and ADR-0076 point 5 is the proposal to rename it `artists`.",
-      "name": "admin"
+      "description": "Artist-merge operations, named for what they act on. Was `admin`, a name promising a namespace two-thirds of this API would qualify for and only these three used. The `/admin/artists/` prefix has not moved with the tag \u2014 that needs ADR-0079's alias module, which is accepted and unbuilt.",
+      "name": "artists"
     },
     {
-      "description": "Moving a profile or a library between servers.",
-      "name": "export-import"
+      "description": "Durability \u2014 scheduled backup to S3-compatible storage, and restore from it. Paths stay under `/s3-backup/`; the tag names the activity, not the storage backend (ADR-0076).",
+      "name": "backup"
     },
     {
-      "description": "Scheduled backup to S3-compatible storage, and restore from it.",
-      "name": "s3-backup"
+      "description": "Portability \u2014 moving a profile or a library between servers. The line against `backup` is durability versus portability, which is the line a user is already on when choosing a screen.",
+      "name": "transfer"
     },
     {
-      "description": "ZIP exports of playlists, track sets and analysis reports.",
-      "name": "download"
+      "description": "ZIP exports of playlists, track sets and analysis reports. Was `download`, which named a transport rather than what the operations produce.",
+      "name": "exports"
     },
     {
       "description": "Listener profiles. Familiar has no traditional auth; the profile id in the request header is what scopes taste, history and favourites.",
@@ -33342,20 +33342,8 @@
       "name": "settings"
     },
     {
-      "description": "Liveness. `GET /api/v1/health` is a container probe, not a client-facing endpoint.",
-      "name": "health"
-    },
-    {
-      "description": "Logs and runtime introspection.",
-      "name": "diagnostics"
-    },
-    {
-      "description": "Background job state.",
-      "name": "background"
-    },
-    {
-      "description": "Application update checks.",
-      "name": "updates"
+      "description": "The state of the running server: liveness, database and worker health, logs, metrics, background jobs and update checks. Four tags merged here under ADR-0076 \u2014 the paths did not move with them, because each already names its resource honestly (ADR-0072 point 4). `GET /api/v1/health` in particular is a container probe and stays where it is forever.",
+      "name": "system"
     }
   ],
   "x-tagGroups": [
@@ -33408,15 +33396,15 @@
         "pending-review",
         "proposed-changes",
         "organizer",
-        "admin"
+        "artists"
       ]
     },
     {
       "name": "Transfer and backup",
       "tags": [
-        "export-import",
-        "s3-backup",
-        "download"
+        "backup",
+        "transfer",
+        "exports"
       ]
     },
     {
@@ -33425,10 +33413,7 @@
         "profiles",
         "auth",
         "settings",
-        "health",
-        "diagnostics",
-        "background",
-        "updates"
+        "system"
       ]
     }
   ]

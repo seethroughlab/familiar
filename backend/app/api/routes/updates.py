@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/updates", tags=["updates"])
+router = APIRouter(prefix="/updates", tags=["system"])
 
 
 class UpdateStatus(BaseModel):
