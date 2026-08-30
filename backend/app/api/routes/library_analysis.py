@@ -14,7 +14,7 @@ from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["library"])
+router = APIRouter(tags=["analysis"])
 
 
 class AnalysisStatus(BaseModel):

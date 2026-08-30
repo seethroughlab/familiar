@@ -20,7 +20,7 @@ from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["library"])
+router = APIRouter()
 
 
 class ArtistSummary(BaseModel):
@@ -44,7 +44,7 @@ class ArtistListResponse(BaseModel):
     page_size: int
 
 
-@router.get("/artists", response_model=ArtistListResponse)
+@router.get("/artists", tags=["library"], response_model=ArtistListResponse)
 async def list_artists(
     db: DbSession,
     search: str | None = None,
@@ -260,7 +260,7 @@ class ArtistNewReleasesResponse(BaseModel):
     artists_skipped: int
 
 
-@router.get("/artists/new-releases", response_model=ArtistNewReleasesResponse)
+@router.get("/artists/new-releases", tags=["discover"], response_model=ArtistNewReleasesResponse)
 async def get_artist_new_releases(
     db: DbSession,
     profile: RequiredProfile,
@@ -407,7 +407,7 @@ def _plain_text(value: str | None) -> str | None:
     return re.sub(r"[ \t]{2,}", " ", stripped).strip()
 
 
-@router.get("/artists/{artist_name}", response_model=ArtistDetailResponse)
+@router.get("/artists/{artist_name}", tags=["library"], response_model=ArtistDetailResponse)
 async def get_artist_detail(
     db: DbSession,
     artist_name: str,
@@ -709,7 +709,7 @@ async def get_artist_detail(
 # ============================================================================
 
 
-@router.get("/artists/{artist_name}/image", response_class=StreamingResponse)
+@router.get("/artists/{artist_name}/image", tags=["library"], response_class=StreamingResponse)
 async def get_artist_image(
     db: DbSession,
     request: Request,

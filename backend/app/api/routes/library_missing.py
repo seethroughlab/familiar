@@ -14,7 +14,7 @@ from app.utils.time import to_rfc3339
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["library"])
+router = APIRouter(tags=["ingest"])
 
 
 class MissingTrack(BaseModel):

@@ -47,7 +47,7 @@ class TrackDiscoverResponse(BaseModel):
     bandcamp_track_url: str | None = None
 
 
-@router.get("/{track_id}/album-gain", response_model=AlbumGainResponse)
+@router.get("/{track_id}/album-gain", tags=["tracks"], response_model=AlbumGainResponse)
 async def get_album_gain(
     db: DbSession,
     track_id: UUID,
@@ -112,7 +112,7 @@ async def get_album_gain(
     )
 
 
-@router.get("/{track_id}/similar")
+@router.get("/{track_id}/similar", tags=["discover"])
 async def get_similar_tracks(
     db: DbSession,
     track_id: UUID,
@@ -147,7 +147,7 @@ async def get_similar_tracks(
     return [TrackResponse.model_validate(t) for t in tracks]
 
 
-@router.get("/{track_id}/discover", response_model=TrackDiscoverResponse)
+@router.get("/{track_id}/discover", tags=["discover"], response_model=TrackDiscoverResponse)
 async def get_track_discover(
     db: DbSession,
     track_id: UUID,

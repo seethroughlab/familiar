@@ -1,12 +1,43 @@
 # ADR-0073: The Library and Tracks Tags Split Along Function
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
 Extends [ADR-0072](ADR-0072-paths-name-resources-tags-name-functions.md) by applying its rule to the
 two tags that most need it. Resolves the split
 [ADR-0007](ADR-0007-clients-are-generated-from-openapi.md) point 2 deferred.
+
+Implementation:
+
+- **Shipped 2026-08-28**, both repositories on `adr-0073-split-library-tracks`, stacked on
+  `ADR-0072`'s. Every bucket above landed at its stated size.
+- **The central tradeoff is confirmed by measurement, not argument.** `filter.tags` grew from 10
+  entries to 16 while the generated operation count **fell from 157 to 148** — exactly the 5
+  `library/analysis`, 1 `duplicates` and 3 `identification` operations that left. The Consequences
+  section says to compare the count rather than the list; that is now a measured fact.
+- **Three files hold operations from two buckets each**, which the tables above do not show and
+  which file-level tagging cannot express: `tracks/discovery.py` (album-gain is `tracks`, similar
+  and discover are `discover`), `tracks/streaming.py` (report-playback-error is `plays`, the rest
+  `tracks`), and `library_artists.py` (new-releases is `discover`). Those three routers carry **no**
+  tag and tag each route instead — because FastAPI concatenates router and route tags, so doing
+  both would reintroduce exactly the two-tag defect `ADR-0072` point 2 forbids.
+- The `tracks` aggregator stopped tagging, the same change `ADR-0072` made to `library`.
+- **`swift build` passing means nothing here, and nearly hid the whole migration.** Fifteen of the
+  sixteen renamed call sites are in `App/Shared`, which is **not** part of the Swift package — only
+  `Sources/` is. `swift build` and `swift test` both went green against a client whose methods had
+  all been renamed. `xcodebuild` against `Familiar-macOS` is what actually compiles those files, and
+  it found the real errors.
+- **The generated `Operations` enum member types are renamed too**, in PascalCase:
+  `Operations.TracksRecordPlay` → `Operations.PlaysRecordPlay`. A rename pass over the camelCase
+  method names alone leaves these behind, and they are the only errors `xcodebuild` reported after
+  the first pass.
+- Two `xcodebuild` failures that are **not** the code: the plugin-trust prompt needs
+  `-skipPackagePluginValidation` in non-interactive use, and `Familiar-iOS` needs signing disabled
+  (`CODE_SIGNING_ALLOWED=NO`). Both read as build failures and neither is one.
+- The generator config's header said **"Eleven tags" while the list held ten** — `chat` left under
+  `ADR-0048` and `sessions` under `ADR-0070`, and neither deletion updated the tally. Rewritten to
+  describe the shape rather than carry a hand-maintained count directly above the list it counts.
 
 ## Context
 
@@ -25,11 +56,14 @@ those seventeen ever do resist typing."* They have not resisted typing; what has
 listening/management line is now the line the whole product is organised on, so the tag that
 straddles it is the one obstructing the map.
 
-The estimate was almost exact. The real split is **17 and 17**:
+The estimate was almost exact. The real split is **17 and 17** — **18 and 17 as built**, because
+`GET /library/fingerprint` was added for `ADR-0011`'s offline cache after this ADR was drafted and
+appears in none of the six buckets below. It is a staleness check a listening client calls on every
+launch, so it joins `library`:
 
 | → | ops | |
 |---|---|---|
-| `library` | 9 | albums, albums/{artist}/{album}, artists, artists/{name}, artists/{name}/image, letter-index, mood-distribution, stats, years |
+| `library` | 10 | albums, albums/{artist}/{album}, artists, artists/{name}, artists/{name}/image, fingerprint, letter-index, mood-distribution, stats, years |
 | `map` | 5 | map, map/3d, map/3d/stream, map/ego, map/stream |
 | `discover` | 3 | discover, discover/external-albums, artists/new-releases |
 | `ingest` | 11 | sync ×3, import ×3, missing ×5 |
@@ -49,12 +83,22 @@ activities against one resource:
 | `visualizers` | 1 | visualizer-ranking |
 
 **The cost is compile-time only, and smaller than it looks.** Under `ADR-0072` this is a tag change,
-so operation ids change and Swift method names with them, but **no path moves**. The generated client
-calls exactly nine `library*` methods — `libraryListArtists`, `libraryGetArtistDetail`,
-`libraryListAlbums`, `libraryGetAlbumDetail`, `libraryGetMusicMap`, `libraryGetDiscoverDashboard`,
-`libraryStartSync`, `libraryCancelSync`, `libraryGetSyncStatusEndpoint` — and every one lands in
-`library`, `map`, `discover` or `ingest`, all of which stay in the generated surface. **Nothing in
-Swift calls the analysis or deduplicate operations.**
+so operation ids change and Swift method names with them, but **no path moves**.
+
+The generated client calls **eleven** `library*` methods, not the nine this ADR first counted:
+`libraryListArtists`, `libraryGetArtistDetail`, `libraryListAlbums`, `libraryGetAlbumDetail`,
+`libraryGetMusicMap`, `libraryGetDiscoverDashboard`, `libraryStartSync`, `libraryCancelSync`,
+`libraryGetSyncStatusEndpoint`, and — added since — `libraryGetLibraryStats` and
+`libraryGetLibraryFingerprint`. **The conclusion is unchanged**: every one lands in `library`, `map`,
+`discover` or `ingest`, all of which stay in the generated surface, and the two new ones land in
+`library` itself, so they are not even renamed. It also calls twelve `tracks*` methods.
+
+`LibraryCache.libraryScoped` and `FavoritesAutoDownload.tracksToQueue` match the same name pattern
+and are **local helpers, not generated methods** — a grep for the call sites finds them, and a
+migration that renames them breaks the build for no reason.
+
+**Nothing in Swift calls the analysis, deduplicate or identification operations**, which is what
+makes point 4's removals free. Verified rather than assumed.
 
 ## Decision
 
@@ -77,8 +121,12 @@ Swift calls the analysis or deduplicate operations.**
    a new one. They are the same activity as the eight already tagged `analysis`, run over the library
    rather than one track, and two tags for one activity is what this ADR exists to stop.
 
-6. **`deduplicate` stops being a second tag on a `library` operation.** It becomes `duplicates`,
-   singular and sole, under `ADR-0072` point 2.
+6. **`library` becomes `duplicates` on the one deduplicate operation.** This point was written
+   expecting to find `["library", "deduplicate"]` and to resolve it. `ADR-0072` got there first:
+   point 2 forbade the second tag and point 7 settled it toward `library`, because a one-operation
+   tag usually means the path prefix — `/library/deduplicate` — was what was wanted. So the move
+   here is `library` → `duplicates`, one rename inside this ADR's own six-way split, rather than
+   the two-step it would have been.
 
 ## Alternatives Considered
 

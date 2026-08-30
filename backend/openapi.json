@@ -1540,7 +1540,7 @@
         "title": "Body_export-import_preview_restore",
         "type": "object"
       },
-      "Body_library_import_preview": {
+      "Body_ingest_import_preview": {
         "properties": {
           "file": {
             "format": "binary",
@@ -1551,7 +1551,7 @@
         "required": [
           "file"
         ],
-        "title": "Body_library_import_preview",
+        "title": "Body_ingest_import_preview",
         "type": "object"
       },
       "Body_playback_upload_artifact": {
@@ -15680,7 +15680,7 @@
     "/api/v1/library/analysis/cancel": {
       "post": {
         "description": "Cancel running analysis tasks.\n\nClears analysis task tracking. Note that in-progress subprocess tasks\nmay continue to completion, but no new tasks will be started.",
-        "operationId": "library_cancel_analysis",
+        "operationId": "analysis_cancel_analysis",
         "responses": {
           "200": {
             "content": {
@@ -15745,14 +15745,14 @@
         },
         "summary": "Cancel Analysis",
         "tags": [
-          "library"
+          "analysis"
         ]
       }
     },
     "/api/v1/library/analysis/executor": {
       "get": {
         "description": "Get process pool executor status.\n\nReturns whether the executor is disabled (circuit breaker tripped),\nthe number of consecutive failures, and which tracks caused crashes.",
-        "operationId": "library_get_executor_status",
+        "operationId": "analysis_get_executor_status",
         "responses": {
           "200": {
             "content": {
@@ -15817,14 +15817,14 @@
         },
         "summary": "Get Executor Status",
         "tags": [
-          "library"
+          "analysis"
         ]
       }
     },
     "/api/v1/library/analysis/executor/reset": {
       "post": {
         "description": "Reset the process pool executor circuit breaker.\n\nUse this to recover from a disabled executor without restarting the container.\nThe circuit breaker trips after 5 consecutive worker crashes.\n\nReturns info about what was reset, including which tracks caused crashes.",
-        "operationId": "library_reset_executor",
+        "operationId": "analysis_reset_executor",
         "responses": {
           "200": {
             "content": {
@@ -15889,14 +15889,14 @@
         },
         "summary": "Reset Executor",
         "tags": [
-          "library"
+          "analysis"
         ]
       }
     },
     "/api/v1/library/analysis/start": {
       "post": {
         "description": "Manually trigger analysis for unanalyzed tracks.\n\nThis queues tracks for analysis in the background. Use GET /analysis/status\nto monitor progress.\n\nScans and analysis cannot run simultaneously - they share resources.",
-        "operationId": "library_start_analysis",
+        "operationId": "analysis_start_analysis",
         "parameters": [
           {
             "in": "query",
@@ -15973,14 +15973,14 @@
         },
         "summary": "Start Analysis",
         "tags": [
-          "library"
+          "analysis"
         ]
       }
     },
     "/api/v1/library/analysis/status": {
       "get": {
         "description": "Get current audio analysis status with stuck detection.\n\nReturns analysis progress and detects if the worker has stalled.\nAlso reports embedding coverage to help detect silent failures.",
-        "operationId": "library_get_analysis_status",
+        "operationId": "analysis_get_analysis_status",
         "responses": {
           "200": {
             "content": {
@@ -16045,7 +16045,7 @@
         },
         "summary": "Get Analysis Status",
         "tags": [
-          "library"
+          "analysis"
         ]
       }
     },
@@ -16178,7 +16178,7 @@
     "/api/v1/library/artists/new-releases": {
       "get": {
         "description": "Find recent releases by your most-played artists via MusicBrainz.\n\nOn-demand lookup \u2014 may take 10-15 seconds depending on how many\nartists have MusicBrainz IDs cached.",
-        "operationId": "library_get_artist_new_releases",
+        "operationId": "discover_get_artist_new_releases",
         "parameters": [
           {
             "in": "query",
@@ -16274,7 +16274,7 @@
         ],
         "summary": "Get Artist New Releases",
         "tags": [
-          "library"
+          "discover"
         ]
       }
     },
@@ -16460,7 +16460,7 @@
     "/api/v1/library/deduplicate/preview": {
       "post": {
         "description": "Find duplicate tracks and show what would be kept/removed.",
-        "operationId": "library_deduplicate_preview",
+        "operationId": "duplicates_deduplicate_preview",
         "parameters": [
           {
             "in": "query",
@@ -16563,14 +16563,14 @@
         },
         "summary": "Deduplicate Preview",
         "tags": [
-          "library"
+          "duplicates"
         ]
       }
     },
     "/api/v1/library/discover": {
       "get": {
         "description": "Get aggregated discovery data for the dashboard.\n\nCombines:\n- New releases from library artists\n- Recommended artists based on most-played\n- Recently added track count",
-        "operationId": "library_get_discover_dashboard",
+        "operationId": "discover_get_discover_dashboard",
         "parameters": [
           {
             "in": "query",
@@ -16700,14 +16700,14 @@
         ],
         "summary": "Get Discover Dashboard",
         "tags": [
-          "library"
+          "discover"
         ]
       }
     },
     "/api/v1/library/discover/external-albums": {
       "get": {
         "description": "External album recommendations seeded by the user's top-played artists.\n\nProfile-wide (no specific playlist). Persists rows with\n``discovery_context='listening_profile_recommendation'``. 24h TTL \u2014\npass ``refresh=true`` to force a recompute.",
-        "operationId": "library_get_listening_profile_external_albums",
+        "operationId": "discover_get_listening_profile_external_albums",
         "parameters": [
           {
             "in": "query",
@@ -16801,7 +16801,7 @@
         ],
         "summary": "Get Listening Profile External Albums",
         "tags": [
-          "library"
+          "discover"
         ]
       }
     },
@@ -16880,12 +16880,12 @@
     "/api/v1/library/import/preview": {
       "post": {
         "description": "Preview an import - extract and scan files without importing.\n\nUploads file to temp location, extracts if zip, scans metadata,\nand returns preview with session_id for later execution.\n\nSession expires after 24 hours if not executed.",
-        "operationId": "library_import_preview",
+        "operationId": "ingest_import_preview",
         "requestBody": {
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_library_import_preview"
+                "$ref": "#/components/schemas/Body_ingest_import_preview"
               }
             }
           },
@@ -16955,14 +16955,14 @@
         },
         "summary": "Import Preview",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/import/preview-from-path": {
       "post": {
         "description": "Preview an import from a local filesystem path.\n\nScans audio files at the given path, extracts metadata, detects\nduplicates and compares quality \u2014 without copying anything yet.\nReturns a session_id for later execution via POST /import/execute.",
-        "operationId": "library_import_preview_from_path",
+        "operationId": "ingest_import_preview_from_path",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17037,14 +17037,14 @@
         },
         "summary": "Import Preview From Path",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/import/scan-path": {
       "get": {
         "description": "List subdirectories at a local path with audio file counts.\n\nUseful for discovering what's available for import at a given path\n(e.g. a mounted volume of downloaded music).\n\nArgs:\n    path: Absolute path inside the container to scan.",
-        "operationId": "library_scan_path",
+        "operationId": "ingest_scan_path",
         "parameters": [
           {
             "in": "query",
@@ -17064,7 +17064,7 @@
                   "items": {
                     "$ref": "#/components/schemas/ScanPathEntry"
                   },
-                  "title": "Response Library Scan Path",
+                  "title": "Response Ingest Scan Path",
                   "type": "array"
                 }
               }
@@ -17124,7 +17124,7 @@
         },
         "summary": "Scan Path",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
@@ -17266,7 +17266,7 @@
     "/api/v1/library/map": {
       "get": {
         "description": "Get 2D positions for artists/albums based on audio similarity.\n\nUses UMAP dimensionality reduction on CLAP embeddings to position\nentities so that similar-sounding music appears close together.\n\nThis is computationally expensive - results should be cached on the frontend.\n\nArgs:\n    entity_type: \"artists\" or \"albums\"\n    limit: Maximum entities to include (default 200, max 500)",
-        "operationId": "library_get_music_map",
+        "operationId": "map_get_music_map",
         "parameters": [
           {
             "in": "query",
@@ -17357,14 +17357,14 @@
         },
         "summary": "Get Music Map",
         "tags": [
-          "library"
+          "map"
         ]
       }
     },
     "/api/v1/library/map/3d": {
       "get": {
         "description": "Get 3D positions for all artists/albums based on audio similarity.\n\nUses UMAP dimensionality reduction on CLAP embeddings to position\nentities in 3D space so that similar-sounding music appears close together.\n\nUnlike the 2D map, this includes ALL entities in your library for full\nexploration. Results are cached for 1 hour due to expensive computation.\n\nArgs:\n    entity_type: \"artists\" (default) or \"albums\"",
-        "operationId": "library_get_3d_music_map",
+        "operationId": "map_get_3d_music_map",
         "parameters": [
           {
             "in": "query",
@@ -17445,14 +17445,14 @@
         },
         "summary": "Get 3D Music Map",
         "tags": [
-          "library"
+          "map"
         ]
       }
     },
     "/api/v1/library/map/3d/stream": {
       "get": {
         "description": "Stream 3D music map computation progress via Server-Sent Events.\n\nSends progress events during computation, then the complete map data.\nUse this for better UX during the initial (slow) UMAP computation.\n\nEvent types:\n- progress: {\"phase\": \"...\", \"progress\": 0.5, \"message\": \"...\"}\n- complete: Full MusicMap3DResponse JSON\n- error: {\"error\": \"...\"}",
-        "operationId": "library_get_3d_music_map_stream",
+        "operationId": "map_get_3d_music_map_stream",
         "parameters": [
           {
             "in": "query",
@@ -17529,14 +17529,14 @@
         },
         "summary": "Get 3D Music Map Stream",
         "tags": [
-          "library"
+          "map"
         ]
       }
     },
     "/api/v1/library/map/ego": {
       "get": {
         "description": "Get ego-centric map centered on an artist.\n\nReturns the center artist and surrounding artists positioned radially\nbased on audio similarity. Distance from center indicates dissimilarity.\n\nThe angle of each artist is stable (based on name hash), so when you\nrecenter on a different artist, positions smoothly transition rather\nthan completely reshuffling.",
-        "operationId": "library_get_ego_centric_map",
+        "operationId": "map_get_ego_centric_map",
         "parameters": [
           {
             "description": "Artist name to center on",
@@ -17641,14 +17641,14 @@
         },
         "summary": "Get Ego Centric Map",
         "tags": [
-          "library"
+          "map"
         ]
       }
     },
     "/api/v1/library/map/stream": {
       "get": {
         "description": "Stream music map computation progress via Server-Sent Events.\n\nSends progress events during computation, then the complete map data.\n\nEvent types:\n- progress: {\"phase\": \"...\", \"progress\": 0.5, \"message\": \"...\"}\n- complete: Full MusicMapResponse JSON\n- error: {\"error\": \"...\"}",
-        "operationId": "library_get_music_map_stream",
+        "operationId": "map_get_music_map_stream",
         "parameters": [
           {
             "in": "query",
@@ -17735,14 +17735,14 @@
         },
         "summary": "Get Music Map Stream",
         "tags": [
-          "library"
+          "map"
         ]
       }
     },
     "/api/v1/library/missing": {
       "get": {
         "description": "Get all tracks with MISSING or PENDING_DELETION status.",
-        "operationId": "library_get_missing_tracks",
+        "operationId": "ingest_get_missing_tracks",
         "responses": {
           "200": {
             "content": {
@@ -17807,14 +17807,14 @@
         },
         "summary": "Get Missing Tracks",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/missing/batch": {
       "delete": {
         "description": "Permanently delete multiple missing tracks from the database.\n\nThis is irreversible - the tracks and all their analysis data will be removed.\nOnly tracks with MISSING or PENDING_DELETION status can be deleted.",
-        "operationId": "library_delete_missing_tracks_batch",
+        "operationId": "ingest_delete_missing_tracks_batch",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17889,14 +17889,14 @@
         },
         "summary": "Delete Missing Tracks Batch",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/missing/relocate": {
       "post": {
         "description": "Search a folder for missing files and relocate them.\n\nScans the provided path for audio files and matches them against\nmissing tracks by filename. Successfully matched tracks are updated\nwith the new path and marked as ACTIVE.",
-        "operationId": "library_relocate_missing_tracks",
+        "operationId": "ingest_relocate_missing_tracks",
         "requestBody": {
           "content": {
             "application/json": {
@@ -17971,14 +17971,14 @@
         },
         "summary": "Relocate Missing Tracks",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/missing/{track_id}": {
       "delete": {
         "description": "Permanently delete a missing track from the database.\n\nThis is irreversible - the track and all its analysis data will be removed.",
-        "operationId": "library_delete_missing_track",
+        "operationId": "ingest_delete_missing_track",
         "parameters": [
           {
             "in": "path",
@@ -18054,14 +18054,14 @@
         },
         "summary": "Delete Missing Track",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/missing/{track_id}/locate": {
       "post": {
         "description": "Manually set a new path for a missing track.\n\nUse this when you know exactly where the file has moved to.",
-        "operationId": "library_locate_single_track",
+        "operationId": "ingest_locate_single_track",
         "parameters": [
           {
             "in": "path",
@@ -18147,7 +18147,7 @@
         },
         "summary": "Locate Single Track",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
@@ -18582,7 +18582,7 @@
     "/api/v1/library/sync": {
       "post": {
         "description": "Start a unified library sync (scan + analysis).\n\nThis is the recommended way to sync your library. It:\n1. Discovers audio files in your library paths\n2. Reads metadata from new/changed files\n3. Analyzes audio features for new tracks\n\nThe sync runs in the background, so this returns immediately.\nProgress is stored in Redis and can be retrieved via GET /sync/status.\n\nArgs:\n    reread_unchanged: Re-read metadata for files even if unchanged. Default False.",
-        "operationId": "library_start_sync",
+        "operationId": "ingest_start_sync",
         "parameters": [
           {
             "in": "query",
@@ -18659,14 +18659,14 @@
         },
         "summary": "Start Sync",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/sync/cancel": {
       "post": {
         "description": "Cancel a running library sync.\n\nClears the sync progress from Redis and releases the lock.",
-        "operationId": "library_cancel_sync",
+        "operationId": "ingest_cancel_sync",
         "responses": {
           "200": {
             "content": {
@@ -18731,14 +18731,14 @@
         },
         "summary": "Cancel Sync",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
     "/api/v1/library/sync/status": {
       "get": {
         "description": "Get current sync status with unified progress.\n\nReturns progress through all phases:\n- discovering: Finding audio files\n- reading: Reading metadata from files\n- analyzing: Extracting audio features\n- complete: Sync finished",
-        "operationId": "library_get_sync_status_endpoint",
+        "operationId": "ingest_get_sync_status_endpoint",
         "responses": {
           "200": {
             "content": {
@@ -18803,7 +18803,7 @@
         },
         "summary": "Get Sync Status Endpoint",
         "tags": [
-          "library"
+          "ingest"
         ]
       }
     },
@@ -29235,7 +29235,7 @@
     "/api/v1/tracks/bulk/common-values": {
       "post": {
         "description": "Get common field values across multiple tracks.\n\nUsed to pre-fill the bulk edit form. Fields with different values\nacross the selected tracks are returned as None (indicating \"mixed\").",
-        "operationId": "tracks_get_common_values",
+        "operationId": "metadata_get_common_values",
         "requestBody": {
           "content": {
             "application/json": {
@@ -29310,14 +29310,14 @@
         },
         "summary": "Get Common Values",
         "tags": [
-          "tracks"
+          "metadata"
         ]
       }
     },
     "/api/v1/tracks/bulk/identify": {
       "post": {
         "description": "Start bulk audio fingerprint identification for multiple tracks.\n\nReturns a task_id immediately. Poll GET /tracks/bulk/identify/{task_id}\nfor progress and results.\n\nRate limited to respect AcoustID (3/sec) and MusicBrainz (1/sec) limits.",
-        "operationId": "tracks_start_bulk_identify",
+        "operationId": "identification_start_bulk_identify",
         "requestBody": {
           "content": {
             "application/json": {
@@ -29392,14 +29392,14 @@
         },
         "summary": "Start Bulk Identify",
         "tags": [
-          "tracks"
+          "identification"
         ]
       }
     },
     "/api/v1/tracks/bulk/identify/{task_id}": {
       "get": {
         "description": "Get progress and results of a bulk identification task.",
-        "operationId": "tracks_get_bulk_identify_progress",
+        "operationId": "identification_get_bulk_identify_progress",
         "parameters": [
           {
             "in": "path",
@@ -29475,14 +29475,14 @@
         },
         "summary": "Get Bulk Identify Progress",
         "tags": [
-          "tracks"
+          "identification"
         ]
       }
     },
     "/api/v1/tracks/bulk/metadata": {
       "post": {
         "description": "Update metadata for multiple tracks at once.\n\nOnly provided (non-None) fields in metadata are applied to all tracks.\n\nReturns summary with success/failure counts and any errors.",
-        "operationId": "tracks_bulk_update_metadata",
+        "operationId": "metadata_bulk_update_metadata",
         "requestBody": {
           "content": {
             "application/json": {
@@ -29557,7 +29557,7 @@
         },
         "summary": "Bulk Update Metadata",
         "tags": [
-          "tracks"
+          "metadata"
         ]
       }
     },
@@ -29934,7 +29934,7 @@
     "/api/v1/tracks/lookup/metadata": {
       "post": {
         "description": "Look up track metadata from MusicBrainz.\n\nReturns a list of candidate matches sorted by confidence.\nUse this to find correct metadata for tracks with incomplete or wrong info.",
-        "operationId": "tracks_lookup_metadata",
+        "operationId": "metadata_lookup_metadata",
         "requestBody": {
           "content": {
             "application/json": {
@@ -29953,7 +29953,7 @@
                   "items": {
                     "$ref": "#/components/schemas/MetadataCandidateResponse"
                   },
-                  "title": "Response Tracks Lookup Metadata",
+                  "title": "Response Metadata Lookup Metadata",
                   "type": "array"
                 }
               }
@@ -30013,14 +30013,14 @@
         },
         "summary": "Lookup Metadata",
         "tags": [
-          "tracks"
+          "metadata"
         ]
       }
     },
     "/api/v1/tracks/stats/plays": {
       "get": {
         "description": "Get play statistics for the current profile.",
-        "operationId": "tracks_get_play_stats",
+        "operationId": "plays_get_play_stats",
         "parameters": [
           {
             "in": "query",
@@ -30104,7 +30104,7 @@
         ],
         "summary": "Get Play Stats",
         "tags": [
-          "tracks"
+          "plays"
         ]
       }
     },
@@ -30962,7 +30962,7 @@
     "/api/v1/tracks/{track_id}/discover": {
       "get": {
         "description": "Get discovery recommendations for a track.\n\nCombines:\n- Similar tracks from your library (embedding-based)\n- Similar artists (Last.fm, with library status)\n- External purchase/discovery links",
-        "operationId": "tracks_get_track_discover",
+        "operationId": "discover_get_track_discover",
         "parameters": [
           {
             "in": "path",
@@ -31063,14 +31063,14 @@
         },
         "summary": "Get Track Discover",
         "tags": [
-          "tracks"
+          "discover"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/identify": {
       "post": {
         "description": "Identify a track using audio fingerprinting (AcoustID).\n\nGenerates an audio fingerprint and looks up matching recordings in the\nAcoustID/MusicBrainz database. Returns candidate matches with full metadata\nincluding title, artist, album, year, genre, artwork URL, etc.\n\nUse this for the \"Auto-populate\" feature to fill in track metadata based\non the audio content rather than text matching.\n\nRequires:\n- chromaprint/fpcalc installed on the system\n- AcoustID API key configured in Settings > API Keys",
-        "operationId": "tracks_identify_track",
+        "operationId": "identification_identify_track",
         "parameters": [
           {
             "in": "path",
@@ -31175,7 +31175,7 @@
         },
         "summary": "Identify Track",
         "tags": [
-          "tracks"
+          "identification"
         ]
       }
     },
@@ -31586,7 +31586,7 @@
     "/api/v1/tracks/{track_id}/metadata": {
       "get": {
         "description": "Get full track metadata including extended fields.\n\nReturns all metadata fields including composer, conductor, lyrics, etc.\nUser overrides are merged with analysis features.",
-        "operationId": "tracks_get_track_metadata",
+        "operationId": "metadata_get_track_metadata",
         "parameters": [
           {
             "in": "path",
@@ -31663,12 +31663,12 @@
         },
         "summary": "Get Track Metadata",
         "tags": [
-          "tracks"
+          "metadata"
         ]
       },
       "patch": {
         "description": "Update track metadata in the database.\n\nOnly provided fields are updated.\n\nReturns the updated track with all metadata fields.",
-        "operationId": "tracks_update_track_metadata",
+        "operationId": "metadata_update_track_metadata",
         "parameters": [
           {
             "in": "path",
@@ -31755,14 +31755,14 @@
         },
         "summary": "Update Track Metadata",
         "tags": [
-          "tracks"
+          "metadata"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/played": {
       "post": {
         "description": "Record that a track was played.\n\nIncrements play count and updates last_played_at for the profile.\nOptionally records how long the track was played.\n\nAlso writes a `completed` PlayEvent. Reaching this endpoint *is* the definition of a\nplay \u2014 the client only calls it once scrobble thresholds are met \u2014 so the outcome is\nnot derived from completion_ratio here. Derivation belongs on /skipped.",
-        "operationId": "tracks_record_play",
+        "operationId": "plays_record_play",
         "parameters": [
           {
             "in": "path",
@@ -31854,14 +31854,14 @@
         ],
         "summary": "Record Play",
         "tags": [
-          "tracks"
+          "plays"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/rejected": {
       "post": {
         "description": "Record an explicit thumbs-down on a track, typically a radio insertion.\n\nA deliberate rejection is a stronger signal than a skip and is stored distinctly.\nProfilePlayHistory is not modified.",
-        "operationId": "tracks_record_rejection",
+        "operationId": "plays_record_rejection",
         "parameters": [
           {
             "in": "path",
@@ -31953,14 +31953,14 @@
         ],
         "summary": "Record Rejection",
         "tags": [
-          "tracks"
+          "plays"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/report-playback-error": {
       "post": {
         "description": "Report a client-side playback/decode error for a track.\n\nAuto-repair has been removed. Returns a skip status.",
-        "operationId": "tracks_report_playback_error",
+        "operationId": "plays_report_playback_error",
         "parameters": [
           {
             "in": "path",
@@ -32037,14 +32037,14 @@
         },
         "summary": "Report Playback Error",
         "tags": [
-          "tracks"
+          "plays"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/similar": {
       "get": {
         "description": "Find similar tracks using embedding similarity (pgvector).",
-        "operationId": "tracks_get_similar_tracks",
+        "operationId": "discover_get_similar_tracks",
         "parameters": [
           {
             "in": "path",
@@ -32077,7 +32077,7 @@
                   "items": {
                     "$ref": "#/components/schemas/TrackResponse"
                   },
-                  "title": "Response Tracks Get Similar Tracks",
+                  "title": "Response Discover Get Similar Tracks",
                   "type": "array"
                 }
               }
@@ -32137,14 +32137,14 @@
         },
         "summary": "Get Similar Tracks",
         "tags": [
-          "tracks"
+          "discover"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/skipped": {
       "post": {
         "description": "Record that playback of a track stopped before it ran out.\n\nProfilePlayHistory is not modified \u2014 only completed plays count toward it.\n\nThe outcome is derived rather than assumed: a track abandoned at 95%, or a short\ntrack played in full, is recorded as `completed`, and a failed load is recorded as\n`errored` so it never reaches the taste signal.\n\n**A skip can still be a scrobble** (ADR-0030). Last.fm asks for half a track; Familiar's\n`play_count` means the track reached its end. A track abandoned at 60% arrives here and nowhere\nelse, and Last.fm wants it \u2014 which is why scrobbling is decided from the event's own numbers\nrather than from which endpoint it came through.",
-        "operationId": "tracks_record_skip",
+        "operationId": "plays_record_skip",
         "parameters": [
           {
             "in": "path",
@@ -32236,14 +32236,14 @@
         ],
         "summary": "Record Skip",
         "tags": [
-          "tracks"
+          "plays"
         ]
       }
     },
     "/api/v1/tracks/{track_id}/started": {
       "post": {
         "description": "A track just started playing (ADR-0030 point 6).\n\nThe signal this server has never had. `/played` and `/skipped` both fire at the *end* of a\ntrack, so nothing until now could tell it what a listener is hearing right now.\n\nDeliberately generic rather than a Last.fm endpoint: \"this track just started\" is a fact about\nlistening, and the server is free to do more with it later \u2014 presence, listening-together, a\nrecently-started feed. It forwards to Last.fm as now-playing, and it is also what lets an MCP\nhost answer \"what am I listening to?\" \u2014 the \"later\" this docstring anticipated, costing the\nclients nothing because they already send this.\n\nWrites nothing. There is no database work here at all, which is why it takes no session: a\nnow-playing is a claim about the present that expires in minutes, and the durable record of this\ntrack arrives later on `/played` or `/skipped`.\n\n204 rather than a body: there is nothing a caller can do with the outcome, and a client must not\nwait on it.",
-        "operationId": "tracks_record_start",
+        "operationId": "plays_record_start",
         "parameters": [
           {
             "in": "path",
@@ -32318,7 +32318,7 @@
         ],
         "summary": "Record Start",
         "tags": [
-          "tracks"
+          "plays"
         ]
       }
     },
@@ -32414,7 +32414,7 @@
     "/api/v1/tracks/{track_id}/visualizer-ranking": {
       "post": {
         "description": "Rank the client's visualizers by how well each suits this track.\n\nA track that does not exist is a 404. A track that exists but has never been analysed is **not**\n\u2014 it returns the candidates in the order they were submitted with `ranked: false`, because\n\"nothing to rank against\" is an ordinary state on a library that is still being analysed, and\nan error would push the client into treating it as a failure.",
-        "operationId": "tracks_rank_visualizers",
+        "operationId": "visualizers_rank_visualizers",
         "parameters": [
           {
             "in": "path",
@@ -32506,7 +32506,7 @@
         ],
         "summary": "Rank Visualizers",
         "tags": [
-          "tracks"
+          "visualizers"
         ]
       }
     },
@@ -33214,8 +33214,40 @@
       "name": "library"
     },
     {
-      "description": "Individual tracks: listing, detail, streaming, metadata and play/skip reporting. `/tracks/{id}/played` belongs to the track, not to a reporting area (ADR-0072 point 4).",
+      "description": "The music map \u2014 2D, 3D, ego-centric, and the SSE streams that report build progress. A view of the library rather than a way to change it.",
+      "name": "map"
+    },
+    {
+      "description": "Getting music into the library and keeping it there: sync, import, and the missing-file reconciliation that follows when something moves on disk.",
+      "name": "ingest"
+    },
+    {
+      "description": "Duplicate detection. Preview only \u2014 no route merges or deletes anything.",
+      "name": "duplicates"
+    },
+    {
+      "description": "Individual tracks as things to play: listing, detail, streaming, artwork and lyrics. What a track *is*; what happens to it is `plays`, `metadata` or `discover`.",
       "name": "tracks"
+    },
+    {
+      "description": "Listening events \u2014 started, played, skipped, rejected, playback errors \u2014 and the aggregate they feed. ADR-0004's event stream; the paths stay on the track, because the event genuinely belongs to it (ADR-0072 point 4).",
+      "name": "plays"
+    },
+    {
+      "description": "Reading and editing track tags, one at a time or in bulk, plus external lookup.",
+      "name": "metadata"
+    },
+    {
+      "description": "Acoustic fingerprinting to work out what an unidentified file actually is.",
+      "name": "identification"
+    },
+    {
+      "description": "Finding music to play from what is already here: the discover dashboard, similar tracks, per-track discovery, and new releases by artists in the library.",
+      "name": "discover"
+    },
+    {
+      "description": "Per-track visualizer ranking (ADR-0064). One operation, and it earns its own tag: it is the only thing the embedded visualizer surface calls on its own behalf.",
+      "name": "visualizers"
     },
     {
       "description": "Audio analysis \u2014 features, embeddings and melodic data \u2014 over one track or the whole library. Re-analysis happens only during a library sync; nothing is scheduled.",
@@ -33332,6 +33364,7 @@
       "tags": [
         "library",
         "tracks",
+        "map",
         "analysis",
         "artwork"
       ]
@@ -33350,13 +33383,16 @@
       "tags": [
         "queue",
         "playback",
+        "plays",
         "outputs",
-        "videos"
+        "videos",
+        "visualizers"
       ]
     },
     {
       "name": "Discovery",
       "tags": [
+        "discover",
         "lastfm",
         "new-releases",
         "external-albums"
@@ -33365,6 +33401,10 @@
     {
       "name": "Curation",
       "tags": [
+        "ingest",
+        "metadata",
+        "identification",
+        "duplicates",
         "pending-review",
         "proposed-changes",
         "organizer",

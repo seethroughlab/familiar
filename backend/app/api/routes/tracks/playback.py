@@ -33,7 +33,7 @@ from app.utils.time import to_naive_utc, utcnow
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(tags=["plays"])
 
 # PlayEvent.outcome values
 OUTCOME_COMPLETED = "completed"

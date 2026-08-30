@@ -18,7 +18,7 @@ from app.api.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["library"])
+router = APIRouter(tags=["map"])
 
 
 class MapNode(BaseModel):

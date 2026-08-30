@@ -313,9 +313,31 @@ OPENAPI_TAGS = [
         "The collection as a whole: artists, albums, aggregations, sync, import, duplicates and "
         "the map. The largest tag in the API, and deliberately whole — ADR-0007 point 2 accepted "
         "dead generated code rather than split it, and ADR-0073 is the proposal that revisits."},
+    {"name": "map", "description":
+        "The music map — 2D, 3D, ego-centric, and the SSE streams that report build progress. "
+        "A view of the library rather than a way to change it."},
+    {"name": "ingest", "description":
+        "Getting music into the library and keeping it there: sync, import, and the missing-file "
+        "reconciliation that follows when something moves on disk."},
+    {"name": "duplicates", "description":
+        "Duplicate detection. Preview only — no route merges or deletes anything."},
     {"name": "tracks", "description":
-        "Individual tracks: listing, detail, streaming, metadata and play/skip reporting. "
-        "`/tracks/{id}/played` belongs to the track, not to a reporting area (ADR-0072 point 4)."},
+        "Individual tracks as things to play: listing, detail, streaming, artwork and lyrics. "
+        "What a track *is*; what happens to it is `plays`, `metadata` or `discover`."},
+    {"name": "plays", "description":
+        "Listening events — started, played, skipped, rejected, playback errors — and the "
+        "aggregate they feed. ADR-0004's event stream; the paths stay on the track, because the "
+        "event genuinely belongs to it (ADR-0072 point 4)."},
+    {"name": "metadata", "description":
+        "Reading and editing track tags, one at a time or in bulk, plus external lookup."},
+    {"name": "identification", "description":
+        "Acoustic fingerprinting to work out what an unidentified file actually is."},
+    {"name": "discover", "description":
+        "Finding music to play from what is already here: the discover dashboard, similar tracks, "
+        "per-track discovery, and new releases by artists in the library."},
+    {"name": "visualizers", "description":
+        "Per-track visualizer ranking (ADR-0064). One operation, and it earns its own tag: it is "
+        "the only thing the embedded visualizer surface calls on its own behalf."},
     {"name": "analysis", "description":
         "Audio analysis — features, embeddings and melodic data — over one track or the whole "
         "library. Re-analysis happens only during a library sync; nothing is scheduled."},
@@ -387,11 +409,14 @@ OPENAPI_TAGS = [
 # is where they are stated. ADR-0073, ADR-0074 and ADR-0076 all move tags between these, so expect
 # to edit this list when they land — that is the intended cost, and it is cheap.
 OPENAPI_TAG_GROUPS = [
-    {"name": "Music", "tags": ["library", "tracks", "analysis", "artwork"]},
+    {"name": "Music", "tags": ["library", "tracks", "map", "analysis", "artwork"]},
     {"name": "Collections", "tags": ["playlists", "smart-playlists", "mixtapes", "favorites"]},
-    {"name": "Playback", "tags": ["queue", "playback", "outputs", "videos"]},
-    {"name": "Discovery", "tags": ["lastfm", "new-releases", "external-albums"]},
-    {"name": "Curation", "tags": ["pending-review", "proposed-changes", "organizer", "admin"]},
+    {"name": "Playback", "tags": [
+        "queue", "playback", "plays", "outputs", "videos", "visualizers"]},
+    {"name": "Discovery", "tags": ["discover", "lastfm", "new-releases", "external-albums"]},
+    {"name": "Curation", "tags": [
+        "ingest", "metadata", "identification", "duplicates",
+        "pending-review", "proposed-changes", "organizer", "admin"]},
     {"name": "Transfer and backup", "tags": ["export-import", "s3-backup", "download"]},
     {"name": "Server", "tags": [
         "profiles", "auth", "settings", "health", "diagnostics", "background", "updates"]},

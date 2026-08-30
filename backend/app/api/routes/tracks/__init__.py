@@ -147,11 +147,14 @@ from app.api.routes.tracks.playback import router as playback_router  # noqa: E4
 from app.api.routes.tracks.streaming import router as streaming_router  # noqa: E402
 from app.api.routes.tracks.visualizers import router as visualizers_router  # noqa: E402
 
-router = APIRouter(prefix="/tracks", tags=["tracks"])
+# No tag on the aggregator (ADR-0072 point 2): the seven sub-routers below own their own, and
+# ADR-0073 splits them across six — `tracks`, `plays`, `metadata`, `identification`, `discover`
+# and `visualizers`. A tag here would concatenate onto every one of them.
+router = APIRouter(prefix="/tracks")
 # Register list_tracks directly on the parent router so its path is ""
 # (matches /tracks without trailing slash). Using "/" on a sub-router
 # only matches /tracks/ and the SPA catch-all intercepts the redirect.
-router.get("", response_model=TrackListResponse)(list_tracks)
+router.get("", response_model=TrackListResponse, tags=["tracks"])(list_tracks)
 router.include_router(listing_router)
 router.include_router(streaming_router)
 router.include_router(discovery_router)
