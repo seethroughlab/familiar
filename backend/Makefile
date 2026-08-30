@@ -54,6 +54,11 @@ format:
 	uv run ruff format .
 	uv run ruff check --fix .
 
+# One-shot backfill: give already-downloaded video files a `track_videos` row.
+# ADR-0086 says the file on disk wins for existence; this is the half it did not build.
+adopt-videos:
+	uv run python -m app.cli.adopt_orphan_videos $(ARGS)
+
 # One-shot backfill: populate canonical artists/aliases from existing tracks.
 # Pass ARGS="--dry-run" or ARGS="--no-mb --limit 50" for variants.
 backfill-artists:

@@ -1,5 +1,6 @@
 """Music video service using yt-dlp for YouTube video download."""
 
+
 import asyncio
 import json
 import logging
@@ -17,6 +18,13 @@ from app.db.session import async_session_maker
 from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
+class VideoSearchUnavailable(Exception):
+    """YouTube could not be searched — as distinct from having nothing to return.
+
+    The two must not look alike to a caller. An empty list means "no videos match"; this means
+    "the question could not be asked", and only one of them is worth telling somebody about.
+    """
+
 
 
 @dataclass
@@ -51,10 +59,23 @@ class VideoService:
 
     @staticmethod
     def _base_ytdlp_args() -> list[str]:
-        """Common yt-dlp args for YouTube compatibility."""
-        return [
-            "--extractor-args", "youtube:player_client=web",
-        ]
+        """Common yt-dlp args.
+
+        **Deliberately empty, and that is the fix.** This used to pin
+        `--extractor-args youtube:player_client=web`. YouTube now answers that client with
+        storyboard images only, so every search failed with *"Only images are available for
+        download"* → *"Requested format is not available"* — measured on 2026-08-29 against
+        yt-dlp 2026.08.19, where `web` and `web_safari` both failed and no argument at all
+        returned 32 playable formats up to 1080p.
+
+        Pinning a client is a standing bet that YouTube will not change, against a project whose
+        entire job is tracking those changes — `docker/entrypoint.sh` already updates yt-dlp on
+        every boot for exactly that reason. Letting it choose is what makes that update useful.
+
+        Kept as a method rather than inlined so a future argument has an obvious home and this
+        note stays attached to the decision not to have one.
+        """
+        return []
 
     async def search(
         self,
@@ -91,16 +112,20 @@ class VideoService:
                 logger.error("Video search timed out after 30s for query: %r", query)
                 process.kill()
                 await process.wait()
-                return []
+                raise VideoSearchUnavailable("search timed out after 30s") from None
 
             stderr_text = stderr.decode().strip() if stderr else ""
 
             if process.returncode != 0:
+                # Raised, not swallowed. Returning `[]` here made a broken search look exactly
+                # like an empty one — the defect ADR-0077 records for `search_bandcamp`, which
+                # "answered 'no results' for every query, for however long it had been". A
+                # listener seeing "no videos found" has no reason to report anything.
                 logger.error(
                     "yt-dlp search failed (rc=%d) for query %r: %s",
                     process.returncode, query, stderr_text[:500]
                 )
-                return []
+                raise VideoSearchUnavailable(stderr_text[:300] or "yt-dlp failed")
 
             if stderr_text:
                 logger.debug("yt-dlp search warnings for %r: %s", query, stderr_text[:500])
@@ -129,9 +154,13 @@ class VideoService:
 
             logger.info("Video search returned %d results for query: %r", len(results), query)
             return results
-        except Exception:
+        except VideoSearchUnavailable:
+            # Already the honest answer — do not let the catch-all below turn it back into "no
+            # results", which is what this handler did to every failure before.
+            raise
+        except Exception as exc:
             logger.exception("Video search failed for query: %r", query)
-            return []
+            raise VideoSearchUnavailable(str(exc)) from exc
 
     def get_video_path(self, track_id: str) -> Path | None:
         """Get the path to a downloaded video for a track."""
