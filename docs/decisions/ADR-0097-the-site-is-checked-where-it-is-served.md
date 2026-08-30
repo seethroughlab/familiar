@@ -2,6 +2,8 @@
 
 Status: accepted
 
+Date: 2026-08-29
+
 Implementation:
 - Accepted and built the same day, on `adr-0097-check-the-deployed-site`. `check_deployed` in
   `site/scripts/check-claims.py`, run after the four local checks and before the link check, and
@@ -25,8 +27,6 @@ Implementation:
   fallback for any unmatched path, so the check saw the correct page and passed. The 404 branch was
   re-tested against `raw.githubusercontent.com`. Worth knowing generally: **a 200 from
   `familiar-site.pages.dev` does not mean the path exists.**
-
-Date: 2026-08-29
 
 Extends [ADR-0055](ADR-0055-the-site-is-restructured-around-five-things.md), whose point 2 requires
 every claim on the site to be checkable and checked. This ADR says *which* site.
