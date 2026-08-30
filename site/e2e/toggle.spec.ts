@@ -63,10 +63,20 @@ test.describe('install platform chooser', () => {
     }
   });
 
-  test('the Windows caveat and the no-login paragraph are on the page', async ({ page }) => {
+  test('the Windows panel names the override an install actually needs', async ({ page }) => {
+    // This asserted an "Untested" caveat until 2026-08-30, when the install was run end to end on
+    // Windows 11 and the caveat was earned out. What replaced it is the load-bearing claim:
+    // `docker-compose.desktop.yml` is not optional there. `journald` is Linux-only and Docker
+    // Desktop's VM rejects it — measured at exit 125 — so a panel that stops mentioning the
+    // override ships a Windows install that fails.
     await page.goto('index.html');
     await page.getByRole('tab', { name: 'Windows' }).click();
-    await expect(page.locator('#p-windows .platform-caveat')).toContainText('Untested');
+    await expect(page.locator('#p-windows')).toContainText('docker-compose.desktop.yml');
+    await expect(page.locator('#p-windows .platform-caveat')).toHaveCount(0);
+  });
+
+  test('the no-login paragraph is on the page', async ({ page }) => {
+    await page.goto('index.html');
     await expect(page.locator('#remote .note')).toContainText('Familiar has no login');
   });
 

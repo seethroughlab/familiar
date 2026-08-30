@@ -221,8 +221,30 @@ here is the site's first JavaScript, and it has to work without a generator.
   shortest path plus a link, but it is more surface than one path.
 - **Tradeoff** — a beginner audience will produce support questions this project has no channel for
   beyond GitHub issues.
-- **Follow-up** — Windows is `unverifiable` until someone installs it. Worth doing before the panel
-  claims more than it does.
+- **Follow-up (discharged 2026-08-30)** — Windows was `unverifiable`. It has now been installed end
+  to end on a Windows 11 Pro machine: the panel's three commands verbatim, `compose-exit=0`, all
+  three containers healthy, health and UI both HTTP 200, and the container listing the real contents
+  of `C:\Users\jeff\Music`. The caveat has been removed from the panel and the ledger row is
+  `true`.
+
+  **Point 5's inference turned out to be right, and is now measured.** The panel shipped
+  `docker-compose.desktop.yml` to Windows on the reasoning that Docker Desktop's Linux VM lacks
+  `journald` there because it does on macOS. Directly tested:
+  `docker run --rm --log-driver=journald hello-world` fails with *"failed to initialize logging
+  driver: journald"*, exit **125**, while `--log-driver=json-file` succeeds. Without the override a
+  Windows install fails — so the rename from `docker-compose.macos.yml` was load-bearing, not
+  cosmetic.
+- **Follow-up** — `docs/WINDOWS.md` should be retired or rewritten. It is the reason this panel
+  carried a caveat, and it is wrong twice over: its four "Critical" issues concern *native* Windows
+  runs rather than Docker, and two of them audit code that no longer exists — `BLOCKED_PATHS` is
+  absent from `backend/` entirely and there is no filesystem-browse endpoint. Dated 2026-01-14 and
+  marked "Documented for future implementation", it now describes a codebase that has moved. Nothing
+  on the site links it, so this is a tidy-up rather than a correction.
+- **Follow-up (discharged 2026-08-30)** — the download size was wrong everywhere it appeared. Three
+  panels said "about 4 GB", taken from `MACOS_BEGINNER.md` rather than from a pull. Measured during
+  the Windows install: **6.09 GB** for the app image plus 621 MB and 58 MB for Postgres and Redis.
+  All three now say about 7 GB. Worth noting that this figure had been repeated for months without
+  anyone pulling the image to check.
 - **Follow-up (discharged same day)** — `docker-compose.macos.yml` was misnamed: its content is
   "this host is not Linux", which covers Docker Desktop on Windows equally, and the Windows panel
   had to spend a sentence explaining the filename. Renamed to `docker-compose.desktop.yml` and the

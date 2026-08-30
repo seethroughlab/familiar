@@ -172,7 +172,7 @@
   </div>
 
   <div class="requirements">
-    <strong>What you need.</strong> A computer or NAS that can stay on, running Docker 24+, x86_64 or ARM64. Familiar runs in one place; your phone and Mac connect to it. Tested on macOS, Linux, OpenMediaVault and Synology; Windows should work and has not been tested.<br><br><strong>Memory is the thing to check.</strong> Familiar runs happily in 2–4&nbsp;GB, but the model that listens to your music peaks at about 4&nbsp;GB on its own, so a machine with 8&nbsp;GB or less — most NAS boxes, and a Raspberry Pi — needs <code>DISABLE_CLAP_EMBEDDINGS=true</code>. You keep the whole library, the tags, BPM, key, energy and mood, and smart playlists; you lose the features that compare how tracks <em>sound</em>, which includes Find Similar and suggested tracks. It can be turned on later if you move Familiar to a bigger machine.
+    <strong>What you need.</strong> A computer or NAS that can stay on, running Docker 24+, x86_64 or ARM64. Familiar runs in one place; your phone and Mac connect to it. Tested on macOS, Windows, Linux, OpenMediaVault and Synology.<br><br><strong>Memory is the thing to check.</strong> Familiar runs happily in 2–4&nbsp;GB, but the model that listens to your music peaks at about 4&nbsp;GB on its own, so a machine with 8&nbsp;GB or less — most NAS boxes, and a Raspberry Pi — needs <code>DISABLE_CLAP_EMBEDDINGS=true</code>. You keep the whole library, the tags, BPM, key, energy and mood, and smart playlists; you lose the features that compare how tracks <em>sound</em>, which includes Find Similar and suggested tracks. It can be turned on later if you move Familiar to a bigger machine.
   </div>
 
   <!-- ADR-0095 points 2 and 4. The reader picks the machine the *server* runs on. Deliberately not
@@ -212,7 +212,7 @@ open -e .env</code></pre>
           </li>
           <li>Start it:
 <pre><code>./start.sh</code></pre>
-            <p>The first run downloads about 4&nbsp;GB and only happens once. The script checks your settings and handles the Mac-specific logging setting for you.</p>
+            <p>The first run downloads about 7&nbsp;GB and only happens once. The script checks your settings and handles the Mac-specific logging setting for you.</p>
           </li>
         </ol>
         <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/MACOS_BEGINNER.md" target="_blank" rel="noopener">Installing Familiar on your Mac</a> — the same steps at length, with every menu named.</p>
@@ -220,10 +220,10 @@ open -e .env</code></pre>
 
       <div class="platform-panel" id="p-windows" role="tabpanel" aria-labelledby="tab-p-windows">
         <h4 class="platform-heading">Windows</h4>
-        <!-- ADR-0095 point 5. Docker on Windows runs the same Linux container, so this should work;
-             nobody here has run it. Omitting the platform is worse than a caveat, and claiming it
-             works is worse than both — ADR-0055 point 2. -->
-        <p class="platform-caveat"><strong>Untested.</strong> Familiar runs inside Linux containers, which Docker provides identically on Windows, so this should work — but nobody has run it on Windows yet. If you try it, <a href="https://github.com/seethroughlab/familiar/issues" target="_blank" rel="noopener">tell us how it went</a>.</p>
+        <!-- Was labelled "Untested" under ADR-0095 point 5, which allowed the platform in with a
+             caveat rather than omitting it or claiming it worked. Run end to end on Windows 11 Pro
+             on 2026-08-30: these exact commands, then the UI and the music folder. The caveat has
+             been earned out and removed. -->
         <p class="platform-lead">You will use PowerShell for two commands.</p>
         <ol class="platform-steps">
           <li>Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noopener">Docker Desktop</a>, keeping the WSL&nbsp;2 option it offers, and open it once.</li>
@@ -237,7 +237,7 @@ curl.exe -LO https://raw.githubusercontent.com/seethroughlab/familiar/main/docke
           <li>Start it, with your own music folder in place of the one below:
 <pre><code>$env:MUSIC_LIBRARY_PATH="C:\Users\you\Music"
 docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</code></pre>
-            <p>The first run downloads about 4&nbsp;GB.</p>
+            <p>The first run downloads about 7&nbsp;GB.</p>
           </li>
         </ol>
         <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md" target="_blank" rel="noopener">Installation guide</a> — settings, upgrading and troubleshooting.</p>
@@ -262,7 +262,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.desktop.yml up -d</c
           <li>In <strong>omv-extras</strong>, install the <strong>openmediavault-compose</strong> plugin, then go to <strong>Services → Compose → Settings</strong> and enable it. OMV 6 or 7.</li>
           <li>Make a shared folder called <code>familiar</code> on your data disk, for the database and settings. Your music stays where it already is.</li>
           <li>Go to <strong>Services → Compose → Files → Add</strong>, name it <code>familiar</code>, and paste the file from the guide below — replacing the <code>/path/to</code> placeholders with your own folders.</li>
-          <li>Press <strong>Up</strong>. The first run downloads about 4&nbsp;GB.</li>
+          <li>Press <strong>Up</strong>. The first run downloads about 7&nbsp;GB.</li>
         </ol>
         <p class="platform-caveat"><strong>If Familiar finds no music</strong>, it is almost always the shared folder's permissions rather than the path: the container has to be able to read it. The guide below shows the one command that tells you which.</p>
         <p class="platform-doc"><a href="https://github.com/seethroughlab/familiar/blob/main/docs/INSTALLATION.md#openmediavault" target="_blank" rel="noopener">OpenMediaVault guide</a> — the compose file to paste, the HTTPS proxy, and the permissions check.</p>
