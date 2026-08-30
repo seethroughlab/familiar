@@ -47,6 +47,11 @@ RETIRED = {
 # grid was showing pictures four months older than the surfaces they claimed to show.
 SCREENSHOT_MAX_AGE_DAYS = 60
 
+# Where the site actually is (ADR-0097 point 4). A constant, not an argument: a configurable
+# target could be pointed at a preview URL, which is precisely the failure this check exists to
+# catch, only parameterised.
+LIVE_URL = "https://familiar.seethroughlab.com/"
+
 
 def fail(msg: str) -> str:
     return f"  FAIL  {msg}"
@@ -123,6 +128,66 @@ def check_screenshots(problems: list[str]) -> list[str]:
     return out
 
 
+def check_deployed(problems: list[str]) -> list[str]:
+    """What the live site is serving, not what the working tree says (ADR-0097).
+
+    This exists because every other check in this file reads `site/` from disk, and on
+    2026-08-29 the deployed site was found to be four months stale — still describing the iOS
+    app as a "native Capacitor wrapper" eighteen days after `packages/ios` was deleted. That is
+    the exact string `RETIRED` below already knows about, with the reason attached. The check
+    passed throughout, because the word was not in the working tree.
+
+    The deploy had been green all along: the workflow succeeded, the action reported success,
+    and the printed deployment URL served the right content. The Pages project's
+    `production_branch` was `master` while this repository's branch is `main`, so Cloudflare
+    filed every deployment as a preview and the production alias never moved. Nothing in CI can
+    see that. Fetching the address a visitor types is the only check that can.
+    """
+    # The User-Agent is not optional: Cloudflare answers python-urllib's default with **403**,
+    # so without it this check skips forever and reports that as fine — which is the silent pass
+    # it was written to abolish. `check_links` already sets the same header, for the same reason.
+    req = urllib.request.Request(LIVE_URL, headers={"User-Agent": "familiar-site-check"})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            html = r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        # Reachable and answering wrongly. Point 3's exemption is for a host being *down*; a site
+        # serving 403 or 404 to a visitor is a worse problem than a stale one, not a lesser one.
+        problems.append(fail(f"{LIVE_URL} — HTTP {exc.code}"))
+        return []
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        # Point 3: one host being unreachable is not a false claim. Skip, loudly, without failing.
+        return [ok(f"skipped — {LIVE_URL} unreachable ({type(exc).__name__})")]
+
+    out = []
+
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    m = re.search(r"^## \[([^\]]+)\] - (\S+)", changelog, re.M)
+    if not m:
+        problems.append(fail("CHANGELOG.md has no parseable release heading"))
+    else:
+        want = f"v{m.group(1)} · {m.group(2)}"
+        chip = re.search(r"<span class=\"version-dot\"></span>\s*([^<]+)", html)
+        got = chip.group(1).strip() if chip else "(no chip)"
+        if got != want:
+            problems.append(fail(
+                f"{LIVE_URL} is serving {got!r}, CHANGELOG says {want!r} — "
+                f"the deploy is not reaching production. Check the Pages project's "
+                f"production_branch against this repository's branch."))
+        else:
+            out.append(ok(f"live site is serving {want}"))
+
+    # Point 2: the same retired terms, against the copy that is actually published.
+    lowered = html.lower()
+    for term, reason in sorted(RETIRED.items()):
+        if term in lowered:
+            problems.append(fail(f"{LIVE_URL} still says {term!r} — {reason}"))
+    if not any(t in lowered for t in RETIRED):
+        out.append(ok(f"no retired features named on the live site"))
+
+    return out
+
+
 def check_links(problems: list[str]) -> list[str]:
     out = set()
     for name in PAGES:
@@ -170,6 +235,7 @@ def main() -> int:
         ("screenshots", check_screenshots),
     ]
     if not args.offline:
+        sections.append(("deployed site", check_deployed))
         sections.append(("external links", check_links))
 
     for title, fn in sections:
