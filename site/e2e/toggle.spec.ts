@@ -16,13 +16,13 @@ import { test, expect } from '@playwright/test';
  * panels and then fails to render one is exactly that defect with a new face. Nothing else checks
  * it: the page looks correct in a browser precisely because the script *did* run.
  */
-const PLATFORMS = ['macOS', 'Windows', 'Synology', 'Linux & NAS'];
+const PLATFORMS = ['macOS', 'Windows', 'Synology', 'OpenMediaVault', 'Linux & NAS'];
 
 test.describe('install platform chooser', () => {
   test('shows one platform at a time, and the pills switch it', async ({ page }) => {
     await page.goto('index.html');
 
-    await expect(page.locator('.platform-panel')).toHaveCount(4);
+    await expect(page.locator('.platform-panel')).toHaveCount(PLATFORMS.length);
     await expect(page.locator('.platform-panel:visible')).toHaveCount(1);
     await expect(page.locator('#p-macos')).toBeVisible();
 
@@ -31,9 +31,11 @@ test.describe('install platform chooser', () => {
     await expect(page.locator('#p-macos')).toBeHidden();
     await expect(page.locator('.platform-panel:visible')).toHaveCount(1);
 
-    // Arrow keys move within the strip, which is what `role="tablist"` promises.
+    // Arrow keys move within the strip, which is what `role="tablist"` promises. Asserting the
+    // *neighbour* rather than a fixed panel: this caught the OpenMediaVault pill being inserted
+    // between Synology and Linux, which is the test working, so it stays order-sensitive.
     await page.getByRole('tab', { name: 'Synology' }).press('ArrowRight');
-    await expect(page.locator('#p-linux')).toBeVisible();
+    await expect(page.locator('#p-omv')).toBeVisible();
   });
 
   test('without JavaScript, every panel is visible under its own heading', async ({ browser }) => {
@@ -41,7 +43,7 @@ test.describe('install platform chooser', () => {
     const page = await context.newPage();
     await page.goto('index.html');
 
-    await expect(page.locator('.platform-panel:visible')).toHaveCount(4);
+    await expect(page.locator('.platform-panel:visible')).toHaveCount(PLATFORMS.length);
     for (const name of PLATFORMS) {
       await expect(page.locator('.platform-heading', { hasText: name })).toBeVisible();
     }
@@ -51,16 +53,30 @@ test.describe('install platform chooser', () => {
     await context.close();
   });
 
-  test('Synology needs no terminal, which is why it is its own panel', async ({ page }) => {
+  test('the GUI panels show no commands, which is why they are their own panels', async ({ page }) => {
+    // Synology and OpenMediaVault both install through a web interface. If a command appears in
+    // either, the reason for splitting them out of "Linux & NAS" has gone.
     await page.goto('index.html');
-    await page.getByRole('tab', { name: 'Synology' }).click();
-    await expect(page.locator('#p-synology pre')).toHaveCount(0);
+    for (const [tab, panel] of [['Synology', '#p-synology'], ['OpenMediaVault', '#p-omv']] as const) {
+      await page.getByRole('tab', { name: tab }).click();
+      await expect(page.locator(`${panel} pre`)).toHaveCount(0);
+    }
   });
 
-  test('the Windows caveat and the no-login paragraph are on the page', async ({ page }) => {
+  test('the Windows panel names the override an install actually needs', async ({ page }) => {
+    // This asserted an "Untested" caveat until 2026-08-30, when the install was run end to end on
+    // Windows 11 and the caveat was earned out. What replaced it is the load-bearing claim:
+    // `docker-compose.desktop.yml` is not optional there. `journald` is Linux-only and Docker
+    // Desktop's VM rejects it — measured at exit 125 — so a panel that stops mentioning the
+    // override ships a Windows install that fails.
     await page.goto('index.html');
     await page.getByRole('tab', { name: 'Windows' }).click();
-    await expect(page.locator('#p-windows .platform-caveat')).toContainText('Untested');
+    await expect(page.locator('#p-windows')).toContainText('docker-compose.desktop.yml');
+    await expect(page.locator('#p-windows .platform-caveat')).toHaveCount(0);
+  });
+
+  test('the no-login paragraph is on the page', async ({ page }) => {
+    await page.goto('index.html');
     await expect(page.locator('#remote .note')).toContainText('Familiar has no login');
   });
 
