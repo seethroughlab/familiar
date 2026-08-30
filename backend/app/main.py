@@ -29,40 +29,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.exceptions import FamiliarError, NotFoundError
 from app.api.ratelimit import limiter
-from app.api.routes import (
-    admin_artists,
-    analysis,
-    artwork,
-    background,
-    diagnostics,
-    download,
-    export_import,
-    external_albums,
-    favorites,
-    health,
-    lastfm,
-    library,
-    mixtapes,
-    new_releases,
-    organizer,
-    outputs,
-    pending_review,
-    playback,
-    playlists,
-    profiles,
-    proposed_changes,
-    queue,
-    s3_backup,
-    smart_playlists,
-    tracks,
-    updates,
-    videos,
-)
-from app.api.routes import (
-    auth as auth_routes,
-)
-from app.api.routes import settings as settings_routes
-from app.api.schemas.common import error_responses
+from app.api.routes import api_router
 from app.config import AUDIO_EXTENSIONS, MUSIC_LIBRARY_PATH, get_app_version
 from app.config import settings as app_config
 from app.logging_config import get_logger, setup_logging
@@ -327,12 +294,117 @@ def custom_generate_unique_id(route: APIRoute) -> str:
     return f"{tag}_{route.name}"
 
 
+# ── The published index (ADR-0072 point 5) ────────────────────────────────────────────────────
+#
+# A newcomer's first read of this API should be the list of functional areas, not 249 operations
+# in alphabetical order. `openapi_tags` gives every tag an ordered position and a description;
+# `x-tagGroups` (added in `_openapi_with_global_security` below) gathers them into the seven areas
+# the product actually has. `/redoc` renders both and always could — `main.py` simply set neither.
+#
+# The order here is the order they render in. It runs from what a listener touches to what an
+# operator touches, which is also roughly most-used to least.
+#
+# **Every tag appears exactly once, and in exactly one group.** `scripts/lint_openapi.py` asserts
+# it, because a tag added without a description silently renders as a bare heading, which is the
+# failure this whole point exists to prevent.
+OPENAPI_TAGS = [
+    # Music — the collection itself.
+    {"name": "library", "description":
+        "The collection as a whole: artists, albums, aggregations, sync, import, duplicates and "
+        "the map. The largest tag in the API, and deliberately whole — ADR-0007 point 2 accepted "
+        "dead generated code rather than split it, and ADR-0073 is the proposal that revisits."},
+    {"name": "tracks", "description":
+        "Individual tracks: listing, detail, streaming, metadata and play/skip reporting. "
+        "`/tracks/{id}/played` belongs to the track, not to a reporting area (ADR-0072 point 4)."},
+    {"name": "analysis", "description":
+        "Audio analysis — features, embeddings and melodic data — over one track or the whole "
+        "library. Re-analysis happens only during a library sync; nothing is scheduled."},
+    {"name": "artwork", "description":
+        "Album and artist images: lookup, caching, regeneration and coverage reporting."},
+
+    # Collections — the ways a listener groups music.
+    {"name": "playlists", "description": "Hand-made playlists and their tracks."},
+    {"name": "smart-playlists", "description":
+        "Rule-driven playlists, evaluated server-side so every client sees the same result."},
+    {"name": "mixtapes", "description":
+        "Generated sequences with a stated shape, kept distinct from playlists because they are "
+        "authored by the server rather than by hand."},
+    {"name": "favorites", "description": "Per-profile favourites."},
+
+    # Playback — what is playing, and where.
+    {"name": "queue", "description":
+        "The server-owned playback queue and its radio suggestions (ADR-0003, ADR-0005). "
+        "ADR-0074 is the proposal that this tag names three different things."},
+    {"name": "playback", "description":
+        "Transport state reported by a client, so other surfaces can show what is playing."},
+    {"name": "outputs", "description":
+        "Network audio devices — Sonos, UPnP/DLNA, AirPlay, Chromecast — and casting to them "
+        "(ADR-0031). Zone grouping was removed by ADR-0077."},
+    {"name": "videos", "description":
+        "Music videos as a way of playing a track, not as a visualizer (ADR-0085, ADR-0086)."},
+
+    # Discovery — finding something that is not already in the collection.
+    {"name": "lastfm", "description": "Last.fm scrobbling and the metadata it supplies."},
+    {"name": "new-releases", "description": "New releases by artists in the library."},
+    {"name": "external-albums", "description":
+        "Albums found outside the library, offered as things to acquire."},
+
+    # Curation — deciding what the collection should become.
+    {"name": "pending-review", "description":
+        "Tracks awaiting a decision before they enter the library, in groups and in bulk."},
+    {"name": "proposed-changes", "description":
+        "Metadata changes proposed by analysis or by the LLM tools, awaiting approval."},
+    {"name": "organizer", "description":
+        "File-organisation previews. Preview only: no route moves a file, so there is nothing to "
+        "apply. Renamed from `Library Organization` by ADR-0072 point 3."},
+    {"name": "admin", "description":
+        "Artist-merge operations. The `admin` name is a misnomer under ADR-0058 — most of this API "
+        "is administration — and ADR-0076 point 5 is the proposal to rename it `artists`."},
+
+    # Transfer and backup — getting data out, and back.
+    {"name": "export-import", "description":
+        "Moving a profile or a library between servers."},
+    {"name": "s3-backup", "description":
+        "Scheduled backup to S3-compatible storage, and restore from it."},
+    {"name": "download", "description":
+        "ZIP exports of playlists, track sets and analysis reports."},
+
+    # Server — operating the thing.
+    {"name": "profiles", "description":
+        "Listener profiles. Familiar has no traditional auth; the profile id in the request header "
+        "is what scopes taste, history and favourites."},
+    {"name": "auth", "description": "Server-token administration (ADR-0045)."},
+    {"name": "settings", "description":
+        "Server configuration — library paths, API keys, provider choice."},
+    {"name": "health", "description":
+        "Liveness. `GET /api/v1/health` is a container probe, not a client-facing endpoint."},
+    {"name": "diagnostics", "description": "Logs and runtime introspection."},
+    {"name": "background", "description": "Background job state."},
+    {"name": "updates", "description": "Application update checks."},
+]
+
+# The seven areas, in render order. Point 5 says the areas are published rather than implied; this
+# is where they are stated. ADR-0073, ADR-0074 and ADR-0076 all move tags between these, so expect
+# to edit this list when they land — that is the intended cost, and it is cheap.
+OPENAPI_TAG_GROUPS = [
+    {"name": "Music", "tags": ["library", "tracks", "analysis", "artwork"]},
+    {"name": "Collections", "tags": ["playlists", "smart-playlists", "mixtapes", "favorites"]},
+    {"name": "Playback", "tags": ["queue", "playback", "outputs", "videos"]},
+    {"name": "Discovery", "tags": ["lastfm", "new-releases", "external-albums"]},
+    {"name": "Curation", "tags": ["pending-review", "proposed-changes", "organizer", "admin"]},
+    {"name": "Transfer and backup", "tags": ["export-import", "s3-backup", "download"]},
+    {"name": "Server", "tags": [
+        "profiles", "auth", "settings", "health", "diagnostics", "background", "updates"]},
+]
+
+
 app = FastAPI(
     title="Familiar",
     description="LLM-powered local music player API",
     version=get_app_version(),
     lifespan=lifespan,
     generate_unique_id_function=custom_generate_unique_id,
+    openapi_tags=OPENAPI_TAGS,
 )
 
 # MCP (ADR-0043). Mounted here rather than beside the API routers because the SPA catch-all is
@@ -496,46 +568,17 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         request_id=request_id,
     )
 
-# Include routers.
+# Include routers — every one of them, in a single call (ADR-0072 point 6). The list lives in
+# `app/api/routes/__init__.py`; see that module for why it is there and which part of its order is
+# load-bearing.
 #
-# `DEFAULT_ERROR_RESPONSES` is attached to every router rather than to 260 individual routes
-# (ADR-0007). Without it the schema documents only 200 and FastAPI's automatic 422 — and that 422
-# is the wrong shape, since `validation_exception_handler` below emits the Familiar envelope
-# instead. Declaring 422 explicitly replaces FastAPI's `HTTPValidationError` with the shape the
-# server actually sends. Routes add their own statuses on top where one is real control flow.
-DEFAULT_ERROR_RESPONSES = error_responses(400, 401, 404, 422, 500)
-
-app.include_router(health.router, prefix="/api/v1")
-app.include_router(auth_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(tracks.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(library.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(videos.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(lastfm.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(settings_routes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(smart_playlists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(playlists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(mixtapes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(profiles.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(favorites.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(organizer.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(proposed_changes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(outputs.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(artwork.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(background.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(diagnostics.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(export_import.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(s3_backup.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(analysis.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(download.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(updates.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(playback.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(external_albums.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(new_releases.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(admin_artists.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(pending_review.group_router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(pending_review.bulk_router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(pending_review.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
+# `DEFAULT_ERROR_RESPONSES` is attached to the aggregate router rather than to 249 individual
+# routes (ADR-0007). Without it the schema documents only 200 and FastAPI's automatic 422 — and
+# that 422 is the wrong shape, since `validation_exception_handler` below emits the Familiar
+# envelope instead. Declaring 422 explicitly replaces FastAPI's `HTTPValidationError` with the
+# shape the server actually sends. Routes add their own statuses on top where one is real control
+# flow.
+app.include_router(api_router, prefix="/api/v1")
 
 
 def _openapi_with_global_security() -> dict[str, Any]:
@@ -564,11 +607,15 @@ def _openapi_with_global_security() -> dict[str, Any]:
 
     from app.api.auth import TOKEN_HEADER
 
+    # `tags=` must be passed explicitly. `get_openapi` does not read it off the app, so the
+    # `openapi_tags` given to `FastAPI(...)` is silently dropped by any custom `openapi` hook that
+    # forgets it — the descriptions render as nothing and no error is raised anywhere.
     schema = get_openapi(
         title=app.title,
         version=app.version,
         description=app.description,
         routes=app.routes,
+        tags=app.openapi_tags,
     )
     components = schema.setdefault("components", {})
     schemes = components.setdefault("securitySchemes", {})
@@ -585,6 +632,12 @@ def _openapi_with_global_security() -> dict[str, Any]:
     # Applies to every operation, including the ones that declare `ProfileHeader`: the two are
     # different questions, and an operation can require both.
     schema["security"] = [{"FamiliarToken": []}]
+
+    # The functional areas, grouped (ADR-0072 point 5). `x-tagGroups` is a ReDoc extension rather
+    # than core OpenAPI, which is why it is set here instead of on the `FastAPI(...)` call — there
+    # is no constructor argument for it. `/redoc` renders it as the left-hand navigation; a
+    # generator that does not understand the key ignores it, which is the intended failure mode.
+    schema["x-tagGroups"] = OPENAPI_TAG_GROUPS
 
     app.openapi_schema = schema
     return schema

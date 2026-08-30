@@ -14664,6 +14664,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Health Check",
@@ -14686,6 +14736,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Db Health Check",
@@ -14708,6 +14808,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "System Health Check",
@@ -14730,6 +14880,56 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
           }
         },
         "summary": "Get Worker Status",
@@ -15355,7 +15555,6 @@
         },
         "summary": "List Albums",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15474,7 +15673,6 @@
         },
         "summary": "Get Album Detail",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15547,7 +15745,6 @@
         },
         "summary": "Cancel Analysis",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15620,7 +15817,6 @@
         },
         "summary": "Get Executor Status",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15693,7 +15889,6 @@
         },
         "summary": "Reset Executor",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15778,7 +15973,6 @@
         },
         "summary": "Start Analysis",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15851,7 +16045,6 @@
         },
         "summary": "Get Analysis Status",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -15978,7 +16171,6 @@
         },
         "summary": "List Artists",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16082,7 +16274,6 @@
         ],
         "summary": "Get Artist New Releases",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16176,7 +16367,6 @@
         },
         "summary": "Get Artist Detail",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16263,7 +16453,6 @@
         },
         "summary": "Get Artist Image",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16374,8 +16563,7 @@
         },
         "summary": "Deduplicate Preview",
         "tags": [
-          "library",
-          "deduplicate"
+          "library"
         ]
       }
     },
@@ -16512,7 +16700,6 @@
         ],
         "summary": "Get Discover Dashboard",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16614,7 +16801,6 @@
         ],
         "summary": "Get Listening Profile External Albums",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16769,7 +16955,6 @@
         },
         "summary": "Import Preview",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16852,7 +17037,6 @@
         },
         "summary": "Import Preview From Path",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -16940,7 +17124,6 @@
         },
         "summary": "Scan Path",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17076,7 +17259,6 @@
         },
         "summary": "Get Letter Index",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17175,7 +17357,6 @@
         },
         "summary": "Get Music Map",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17264,7 +17445,6 @@
         },
         "summary": "Get 3D Music Map",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17349,7 +17529,6 @@
         },
         "summary": "Get 3D Music Map Stream",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17462,7 +17641,6 @@
         },
         "summary": "Get Ego Centric Map",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17557,7 +17735,6 @@
         },
         "summary": "Get Music Map Stream",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17630,7 +17807,6 @@
         },
         "summary": "Get Missing Tracks",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17713,7 +17889,6 @@
         },
         "summary": "Delete Missing Tracks Batch",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17796,7 +17971,6 @@
         },
         "summary": "Relocate Missing Tracks",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17880,7 +18054,6 @@
         },
         "summary": "Delete Missing Track",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -17974,7 +18147,6 @@
         },
         "summary": "Locate Single Track",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -18083,7 +18255,6 @@
         },
         "summary": "Get Mood Distribution",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -18091,7 +18262,7 @@
     "/api/v1/library/organize/preview": {
       "post": {
         "description": "Preview what organization would do without moving files.\n\nReturns a list of tracks and their proposed new paths.\nLimited to first N tracks for performance.",
-        "operationId": "library-organization_preview_organization",
+        "operationId": "organizer_preview_organization",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18166,14 +18337,14 @@
         },
         "summary": "Preview Organization",
         "tags": [
-          "Library Organization"
+          "organizer"
         ]
       }
     },
     "/api/v1/library/organize/templates": {
       "get": {
         "description": "List available organization templates.",
-        "operationId": "library-organization_list_templates",
+        "operationId": "organizer_list_templates",
         "responses": {
           "200": {
             "content": {
@@ -18238,14 +18409,14 @@
         },
         "summary": "List Templates",
         "tags": [
-          "Library Organization"
+          "organizer"
         ]
       }
     },
     "/api/v1/library/organize/track/{track_id}/preview": {
       "get": {
         "description": "Preview organization for a single track.",
-        "operationId": "library-organization_preview_track",
+        "operationId": "organizer_preview_track",
         "parameters": [
           {
             "in": "path",
@@ -18332,7 +18503,7 @@
         },
         "summary": "Preview Track",
         "tags": [
-          "Library Organization"
+          "organizer"
         ]
       }
     },
@@ -18488,7 +18659,6 @@
         },
         "summary": "Start Sync",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -18561,7 +18731,6 @@
         },
         "summary": "Cancel Sync",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -18634,7 +18803,6 @@
         },
         "summary": "Get Sync Status Endpoint",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -18707,7 +18875,6 @@
         },
         "summary": "Get Year Distribution",
         "tags": [
-          "library",
           "library"
         ]
       }
@@ -33039,6 +33206,190 @@
   "security": [
     {
       "FamiliarToken": []
+    }
+  ],
+  "tags": [
+    {
+      "description": "The collection as a whole: artists, albums, aggregations, sync, import, duplicates and the map. The largest tag in the API, and deliberately whole \u2014 ADR-0007 point 2 accepted dead generated code rather than split it, and ADR-0073 is the proposal that revisits.",
+      "name": "library"
+    },
+    {
+      "description": "Individual tracks: listing, detail, streaming, metadata and play/skip reporting. `/tracks/{id}/played` belongs to the track, not to a reporting area (ADR-0072 point 4).",
+      "name": "tracks"
+    },
+    {
+      "description": "Audio analysis \u2014 features, embeddings and melodic data \u2014 over one track or the whole library. Re-analysis happens only during a library sync; nothing is scheduled.",
+      "name": "analysis"
+    },
+    {
+      "description": "Album and artist images: lookup, caching, regeneration and coverage reporting.",
+      "name": "artwork"
+    },
+    {
+      "description": "Hand-made playlists and their tracks.",
+      "name": "playlists"
+    },
+    {
+      "description": "Rule-driven playlists, evaluated server-side so every client sees the same result.",
+      "name": "smart-playlists"
+    },
+    {
+      "description": "Generated sequences with a stated shape, kept distinct from playlists because they are authored by the server rather than by hand.",
+      "name": "mixtapes"
+    },
+    {
+      "description": "Per-profile favourites.",
+      "name": "favorites"
+    },
+    {
+      "description": "The server-owned playback queue and its radio suggestions (ADR-0003, ADR-0005). ADR-0074 is the proposal that this tag names three different things.",
+      "name": "queue"
+    },
+    {
+      "description": "Transport state reported by a client, so other surfaces can show what is playing.",
+      "name": "playback"
+    },
+    {
+      "description": "Network audio devices \u2014 Sonos, UPnP/DLNA, AirPlay, Chromecast \u2014 and casting to them (ADR-0031). Zone grouping was removed by ADR-0077.",
+      "name": "outputs"
+    },
+    {
+      "description": "Music videos as a way of playing a track, not as a visualizer (ADR-0085, ADR-0086).",
+      "name": "videos"
+    },
+    {
+      "description": "Last.fm scrobbling and the metadata it supplies.",
+      "name": "lastfm"
+    },
+    {
+      "description": "New releases by artists in the library.",
+      "name": "new-releases"
+    },
+    {
+      "description": "Albums found outside the library, offered as things to acquire.",
+      "name": "external-albums"
+    },
+    {
+      "description": "Tracks awaiting a decision before they enter the library, in groups and in bulk.",
+      "name": "pending-review"
+    },
+    {
+      "description": "Metadata changes proposed by analysis or by the LLM tools, awaiting approval.",
+      "name": "proposed-changes"
+    },
+    {
+      "description": "File-organisation previews. Preview only: no route moves a file, so there is nothing to apply. Renamed from `Library Organization` by ADR-0072 point 3.",
+      "name": "organizer"
+    },
+    {
+      "description": "Artist-merge operations. The `admin` name is a misnomer under ADR-0058 \u2014 most of this API is administration \u2014 and ADR-0076 point 5 is the proposal to rename it `artists`.",
+      "name": "admin"
+    },
+    {
+      "description": "Moving a profile or a library between servers.",
+      "name": "export-import"
+    },
+    {
+      "description": "Scheduled backup to S3-compatible storage, and restore from it.",
+      "name": "s3-backup"
+    },
+    {
+      "description": "ZIP exports of playlists, track sets and analysis reports.",
+      "name": "download"
+    },
+    {
+      "description": "Listener profiles. Familiar has no traditional auth; the profile id in the request header is what scopes taste, history and favourites.",
+      "name": "profiles"
+    },
+    {
+      "description": "Server-token administration (ADR-0045).",
+      "name": "auth"
+    },
+    {
+      "description": "Server configuration \u2014 library paths, API keys, provider choice.",
+      "name": "settings"
+    },
+    {
+      "description": "Liveness. `GET /api/v1/health` is a container probe, not a client-facing endpoint.",
+      "name": "health"
+    },
+    {
+      "description": "Logs and runtime introspection.",
+      "name": "diagnostics"
+    },
+    {
+      "description": "Background job state.",
+      "name": "background"
+    },
+    {
+      "description": "Application update checks.",
+      "name": "updates"
+    }
+  ],
+  "x-tagGroups": [
+    {
+      "name": "Music",
+      "tags": [
+        "library",
+        "tracks",
+        "analysis",
+        "artwork"
+      ]
+    },
+    {
+      "name": "Collections",
+      "tags": [
+        "playlists",
+        "smart-playlists",
+        "mixtapes",
+        "favorites"
+      ]
+    },
+    {
+      "name": "Playback",
+      "tags": [
+        "queue",
+        "playback",
+        "outputs",
+        "videos"
+      ]
+    },
+    {
+      "name": "Discovery",
+      "tags": [
+        "lastfm",
+        "new-releases",
+        "external-albums"
+      ]
+    },
+    {
+      "name": "Curation",
+      "tags": [
+        "pending-review",
+        "proposed-changes",
+        "organizer",
+        "admin"
+      ]
+    },
+    {
+      "name": "Transfer and backup",
+      "tags": [
+        "export-import",
+        "s3-backup",
+        "download"
+      ]
+    },
+    {
+      "name": "Server",
+      "tags": [
+        "profiles",
+        "auth",
+        "settings",
+        "health",
+        "diagnostics",
+        "background",
+        "updates"
+      ]
     }
   ]
 }

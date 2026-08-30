@@ -17,7 +17,12 @@ from app.services.organizer import (
     get_available_templates,
 )
 
-router = APIRouter(prefix="/library/organize", tags=["Library Organization"])
+# `organizer`, lowercase kebab-case like every other tag (ADR-0072 point 3). It was
+# `Library Organization` — the schema's only tag with a space and capitals, which
+# `custom_generate_unique_id` then lowercased and hyphenated into
+# `library-organization_preview_organization`: 41 characters with "organization" in it twice.
+# ADR-0014 point 2 had asserted that class was empty; this tag had already been here seven months.
+router = APIRouter(prefix="/library/organize", tags=["organizer"])
 
 
 class TemplateInfo(BaseModel):
