@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Float, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -23,6 +24,8 @@ from app.db.models import (
     TrackStatus,
 )
 from app.services.external_albums_helpers import (
+    _INDEX_WHERE_BY_CONTEXT,
+    ARTIST_NEW_RELEASE_CONTEXT,
     check_user_has_release,
     normalize_artist_name,
 )
@@ -34,7 +37,7 @@ __all__ = ["DISCOVERY_CONTEXT", "NewReleasesService", "normalize_artist_name"]
 
 logger = logging.getLogger(__name__)
 
-DISCOVERY_CONTEXT = "artist_new_release"
+DISCOVERY_CONTEXT = ARTIST_NEW_RELEASE_CONTEXT
 
 
 
@@ -187,35 +190,56 @@ class NewReleasesService:
         extra_data: dict[str, Any] | None = None,
         musicbrainz_artist_id: str | None = None,
     ) -> ExternalAlbumCache | None:
-        """Save a discovered release if not already cached. Returns the row or None."""
-        existing = await self.db.execute(
-            select(ExternalAlbumCache).where(
-                ExternalAlbumCache.release_id == release_id,
-            )
-        )
-        if existing.scalar_one_or_none():
-            return None
+        """Save a discovered release if not already cached. Returns the row or None.
 
+        **The existence check is scoped to this discovery context, and that scoping is
+        load-bearing.** ``external_album_cache`` does not enforce uniqueness on
+        ``release_id`` globally — it carries three *partial* unique indexes, one per
+        ``discovery_context``, so the same release legitimately exists once per context.
+        This method used to select on ``release_id`` alone and call
+        ``scalar_one_or_none()``, which raises ``MultipleResultsFound`` the moment any
+        release appears in two contexts. Exactly one did, and it killed the nightly
+        discovery job every night for nineteen nights. See ADR-0099.
+
+        The insert is an upsert rather than check-then-write for a second reason: the
+        scheduled job and ``POST /new-releases/check/batch`` both start runs with no
+        lock between them, so two runs could pass the check and the loser would raise
+        ``IntegrityError`` — poisoning the session the same way.
+        """
         local_match = await self.check_if_user_has_release(artist_name, release_name)
 
-        release = ExternalAlbumCache(
-            discovery_context=DISCOVERY_CONTEXT,
-            artist_name=artist_name,
-            artist_name_normalized=normalize_artist_name(artist_name),
-            musicbrainz_artist_id=musicbrainz_artist_id,
-            release_id=release_id,
-            release_name=release_name,
-            release_type=release_type,
-            release_date=release_date,
-            artwork_url=artwork_url,
-            external_url=external_url,
-            track_count=track_count,
-            extra_data=extra_data or {},
-            local_album_match=local_match,
+        result = await self.db.execute(
+            pg_insert(ExternalAlbumCache)
+            .values(
+                discovery_context=DISCOVERY_CONTEXT,
+                # Stamped from the application clock, not `server_default=func.now()`:
+                # in PostgreSQL `now()` is the *transaction* timestamp. The neighbouring
+                # writer in `recommendations.py` records what that cost when it was got
+                # wrong.
+                discovered_at=utcnow(),
+                artist_name=artist_name,
+                artist_name_normalized=normalize_artist_name(artist_name),
+                musicbrainz_artist_id=musicbrainz_artist_id,
+                release_id=release_id,
+                release_name=release_name,
+                release_type=release_type,
+                release_date=release_date,
+                artwork_url=artwork_url,
+                external_url=external_url,
+                track_count=track_count,
+                extra_data=extra_data or {},
+                local_album_match=local_match,
+            )
+            .on_conflict_do_nothing(
+                index_elements=["release_id"],
+                index_where=_INDEX_WHERE_BY_CONTEXT[DISCOVERY_CONTEXT],
+            )
+            .returning(ExternalAlbumCache)
         )
-        self.db.add(release)
-        await self.db.flush()
-        return release
+        # `RETURNING` yields no row when the conflict clause suppressed the insert, so
+        # `None` still means "already had this one" and callers counting new releases
+        # keep counting the same thing.
+        return result.scalar_one_or_none()
 
     async def get_cached_releases(
         self,
