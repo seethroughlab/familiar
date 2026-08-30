@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Copy, Search, Loader2 } from 'lucide-react';
 
-import { libraryApi, type DuplicateGroup, type DuplicateTrackInfo } from '../../api/library';
+import { libraryApi, type DuplicateGroup, type DuplicateTrackInfo } from '../api/library';
 import { AdminPage, AdminSection } from './AdminPage';
 
 export function DuplicatesPage() {

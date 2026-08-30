@@ -81,25 +81,4 @@ export const initialContextMenuState: ContextMenuState = {
   position: { x: 0, y: 0 },
 };
 
-/**
- * State for album context menu management.
- */
-export interface AlbumContextMenuState {
-  isOpen: boolean;
-  album: {
-    name: string;
-    artist: string;
-    year: number | null;
-    first_track_id: string;
-  } | null;
-  position: { x: number; y: number };
-}
 
-/**
- * Initial album context menu state.
- */
-export const initialAlbumContextMenuState: AlbumContextMenuState = {
-  isOpen: false,
-  album: null,
-  position: { x: 0, y: 0 },
-};

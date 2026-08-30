@@ -11,8 +11,8 @@ import { Combine, ChevronRight } from 'lucide-react';
 
 import { AdminPage, AdminSection } from './AdminPage';
 import { Dashboard } from './Dashboard';
-import { LibrarySync } from '../Settings/LibrarySync';
-import { AnalysisSettings } from '../Settings/AnalysisSettings';
+import { LibrarySync } from '../panels/library/LibrarySync';
+import { AnalysisSettings } from '../panels/library/AnalysisSettings';
 
 export function LibraryPage() {
   return (

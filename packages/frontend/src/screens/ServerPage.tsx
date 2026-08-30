@@ -11,14 +11,14 @@
  * an empty section.
  */
 import { AdminPage, AdminSection } from './AdminPage';
-import { SystemStatus } from '../Settings/SystemStatus';
-import { ApiKeyStatus } from '../Settings/ApiKeyStatus';
-import { ServerTokenSettings } from '../Settings/ServerTokenSettings';
-import { ProfileSettings } from '../Settings/ProfileSettings';
-import { LastfmSettings } from '../Settings/LastfmSettings';
-import { DebugSettings } from '../Settings/DebugSettings';
-import { RemoteLogsPanel } from '../Settings/RemoteLogsPanel';
-import { BackgroundJobs } from '../Settings/BackgroundJobs';
+import { SystemStatus } from '../panels/server/SystemStatus';
+import { ApiKeyStatus } from '../panels/server/ApiKeyStatus';
+import { ServerTokenSettings } from '../panels/server/ServerTokenSettings';
+import { ProfileSettings } from '../panels/server/ProfileSettings';
+import { LastfmSettings } from '../panels/server/LastfmSettings';
+import { DebugSettings } from '../panels/server/DebugSettings';
+import { RemoteLogsPanel } from '../panels/server/RemoteLogsPanel';
+import { BackgroundJobs } from '../panels/server/BackgroundJobs';
 
 export function ServerPage() {
   // Developer tools are hidden by default. Shown in dev builds, or on any build by setting

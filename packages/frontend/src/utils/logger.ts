@@ -2,7 +2,7 @@
  * Namespaced logger utility.
  *
  * Usage:
- *   import { createLogger } from '../utils/logger';
+ *   import { createLogger } from './logger';
  *   const log = createLogger('MyModule');
  *   log.debug('loaded');   // [MyModule] loaded  (dev only)
  *   log.error('fail', e);  // [MyModule] fail Error...  (always)

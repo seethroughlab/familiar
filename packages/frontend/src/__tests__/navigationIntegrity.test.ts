@@ -19,7 +19,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, it, expect } from 'vitest';
-import { DESTINATIONS } from '../routes';
+import { DESTINATIONS } from '../app/routes';
 
 /**
  * Links are checked against the routes that actually exist in `App.tsx`.
@@ -38,7 +38,7 @@ describe('navigation links resolve to mounted routes', () => {
   const readSource = (relative: string) =>
     readFileSync(resolve(process.cwd(), 'src', relative), 'utf-8');
 
-  const appSource = readSource('App.tsx');
+  const appSource = readSource('app/App.tsx');
 
   /** Absolute paths `App.tsx` mounts, plus the `/library/:path` routes it maps from the registry. */
   const mountedPaths = new Set<string>([
@@ -73,17 +73,33 @@ describe('navigation links resolve to mounted routes', () => {
    * it is checking for, so there is no list any more.
    */
   const componentFiles = (): string[] => {
-    const dir = resolve(process.cwd(), 'src', 'components');
+    // **All of `src/`, not `src/components/`.** ADR-0081 split the tree into `app/`, `screens/` and
+    // `panels/`, and a scan rooted at `components/` would have quietly stopped covering two of the
+    // three — the same shape of mistake as the bug this checks for, arriving by directory rather
+    // than by list.
+    const dir = resolve(process.cwd(), 'src');
     return readdirSync(dir, { recursive: true, encoding: 'utf-8' })
-      .filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'))
-      .map((f) => `components/${f}`);
+      .filter((f) => (f.endsWith('.tsx') || f.endsWith('.ts')) && !f.includes('__tests__'));
   };
 
-  /** Every internal navigation target in a file: `<Link to="/…">` and `navigate('/…')`. */
-  const linkTargets = (source: string): string[] => [
-    ...Array.from(source.matchAll(/\bto="(\/[^"]*)"/g), (m) => m[1]),
-    ...Array.from(source.matchAll(/\bnavigate\(\s*['"](\/[^'"]*)['"]/g), (m) => m[1]),
-  ];
+  /**
+   * Every internal navigation target in a file: `<Link to="/…">` and `navigate('/…')`.
+   *
+   * **Comments are stripped first.** `App.tsx` explains the catch-all with the sentence "this was
+   * `Navigate to="/settings"`" — a description of what the code used to be — and scanning the raw
+   * source reported it as a dead link. A check that cannot tell a thing from an account of the
+   * thing is the same defect it exists to catch.
+   */
+  const stripComments = (source: string): string =>
+    source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  const linkTargets = (source: string): string[] => {
+    const code = stripComments(source);
+    return [
+      ...Array.from(code.matchAll(/\bto="(\/[^"]*)"/g), (m) => m[1]),
+      ...Array.from(code.matchAll(/\bnavigate\(\s*['"](\/[^'"]*)['"]/g), (m) => m[1]),
+    ];
+  };
 
   it('every internal link in every component is mounted', () => {
     const dead: string[] = [];
@@ -106,6 +122,6 @@ describe('navigation links resolve to mounted routes', () => {
     // The destinations are `<Link to={item.path}>` — dynamic, so the test above cannot see them and
     // the destinations test does that job. This asserts the bar is still where the scan looks, so a
     // rename cannot quietly drop the shell's navigation out of coverage.
-    expect(componentFiles()).toContain('components/TopBar.tsx');
+    expect(componentFiles()).toContain('app/TopBar.tsx');
   });
 });

@@ -20,8 +20,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FolderTree, Loader2, ArrowRight } from 'lucide-react';
 
-import { organizerApi, type OrganizeResult } from '../../api/metadata';
-import { queryKeys } from '../../api/queryKeys';
+import { organizerApi, type OrganizeResult } from '../api/metadata';
+import { queryKeys } from '../api/queryKeys';
 import { AdminPage, AdminSection } from './AdminPage';
 
 const PREVIEW_LIMIT = 100;

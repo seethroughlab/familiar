@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Disc3, Users, Music, Activity, Clock, AlertTriangle, Image } from 'lucide-react';
 
-import { libraryApi } from '../../api/library';
-import { playTrackingApi, type PlayStatsResponse } from '../../api/profiles';
-import { queryKeys } from '../../api/queryKeys';
-import { offlineAwareRetry } from '../../api/queryDefaults';
-import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { libraryApi } from '../api/library';
+import { playTrackingApi, type PlayStatsResponse } from '../api/profiles';
+import { queryKeys } from '../api/queryKeys';
+import { offlineAwareRetry } from '../api/queryDefaults';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
 
 /**
  * What the administrator is administering (ADR-0058 point 1).
