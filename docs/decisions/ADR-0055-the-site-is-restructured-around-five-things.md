@@ -1,6 +1,34 @@
 # ADR-0055: The Site Is Restructured Around Five Things
 
-Status: proposed
+Status: accepted
+
+Implementation:
+- **Accepted 2026-08-30, after checking every point against the page rather than against memory.**
+  Most of it had shipped incrementally across `0054`, `0058`, `0080`, `0095` and `0096` without this
+  ADR ever being flipped — which is the drift this project keeps finding, here in its own records.
+- Verified: the claims ledger exists (`docs/SITE-CLAIMS.md`, 156 lines) and its mechanical half runs
+  in `site/scripts/check-claims.py` (point 2); four illustrated feature blocks with the fourteen-item
+  list collapsed into one "Also included" group (point 5); no screenshot grid (point 6); the FAQ is
+  `site/faq.html`, linked from nav and footer (point 7); screenshots are age-checked in CI and fail
+  the run past 60 days (point 8); the version chip links `CHANGELOG.md` (point 9); no `familiar-demo`
+  reference anywhere on the page (point 10); and Install is the only call to action, appearing twice
+  (point 11).
+- **Points 3 and 4 were corrected before acceptance, both because later ADRs overtook them.** Point
+  3's five sections are six, because `0096` deliberately gave remote access its own — reversing this
+  ADR's own Follow-up, with better reasons. Point 4's budget said "in `<main>`" and now says what it
+  always meant.
+- **The 700-word budget is met, and looked violated until it was measured properly.** `<main>` is
+  1,676 words, which reads as more than double the cap. Split by section: hero 57, features 272,
+  comparison 116, closing 17 — **the argument is 462**. Install is 906 and remote access 301, both
+  reference, and 573 of Install's words sit in collapsed platform panels that no single reader sees.
+  A first pass at this concluded the ADR should be rewritten or withdrawn on the strength of the
+  1,676 figure alone.
+- **The 420px overflow Follow-up is fixed.** Tested at acceptance: `scrollWidth` 420 against
+  `innerWidth` 420 — no overflow. The test first came back red for an unrelated reason (Playwright's
+  browser binary was missing after an update), which would have confirmed a bug that no longer
+  exists; chasing the failure to its cause is what prevented that.
+- `0069` point 6 required this ADR to land or be withdrawn before the static-site migration. It has
+  landed, so that gate is open.
 
 Date: 2026-08-13
 
@@ -102,14 +130,34 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
    does, how to get it, and how to get it again. Everything currently on the page either belongs to
    one of those or leaves.
 
+   **It ended up as six, and the sixth was added deliberately.** "Listening away from home" is its
+   own section under [ADR-0096](ADR-0096-remote-access-is-explained-not-instructed.md) point 1, not
+   a step of Install — which is the opposite of what this ADR's own Follow-up below proposed. `0096`
+   won the argument on grounds this ADR had not considered: remote access is a decision made once,
+   with a consequence, and someone who only ever listens at home should be able to finish the
+   install and stop. Burying it in a numbered sequence means the reader who stops at "it works on my
+   laptop" never sees it, and that is precisely the reader who later types their public IP into a
+   router. Corrected here rather than left as a contradiction between two accepted ADRs.
+
 4. **Fewer claims, and a budget rather than a judgement.** The page makes **at most six claims**,
-   in **under 700 words** in `<main>`, against fourteen features and 1,778 words today. A budget is
-   the decision because "simplify" is not one — every individual sentence on the page is defensible,
-   which is exactly how it got to eleven sections, and without a number the next addition is always
+   in **under 700 words**, against fourteen features and 1,778 words today. A budget is the decision
+   because "simplify" is not one — every individual sentence on the page is defensible, which is
+   exactly how it got to eleven sections, and without a number the next addition is always
    justifiable too. When a seventh claim is worth making, one of the six has to lose its place.
 
    Density is the specific problem, not length. A reader who cannot tell which two or three things
    matter has been handed the work of editing, and most will decline it.
+
+   **The budget governs the argument, not the instructions**, and this originally said "in `<main>`"
+   without noticing the difference. The argument is the hero, the features, the comparison table and
+   the closing call to action — the part a reader weighs while deciding. Install and remote access
+   are *reference*: read after deciding, by someone who has already been persuaded, and one platform
+   at a time. Measured at acceptance: **the argument is 462 words**, inside the budget. All of
+   `<main>` is 1,676, of which 906 is Install — and 573 of that sits in collapsed panels no single
+   reader sees.
+
+   Left as a number rather than relaxed. A budget that expands to fit whatever was written is the
+   judgement this point exists to refuse; scoping it correctly is not the same as raising it.
 
 5. **Features become illustrated sections, not a list.** Five or six, each a heading, one paragraph,
    and one screenshot of that feature — Fork's actual pattern and the part `0039` skipped. The
@@ -184,9 +232,12 @@ support had been removed, which was wrong — it is `backend/app/api/routes/vide
   people. Accepted because the reader who wants it is the reader who will follow a link.
 - **Tradeoff:** regenerating screenshots needs a running backend and frontend, so this is not a
   documentation-only change and cannot be done from a plane.
-- **Follow-up:** the page overflows horizontally at 420px — the nav's Install button and the body
-  copy are both cut off. Found while screenshotting the illustration work, unrelated to it, and
-  independent of this restructure.
-- **Follow-up:** `#use-case`, `#remote-access` and `#feedback` are not obviously one of the five
-  things. Remote access in particular is install documentation that grew into a section, and it
-  should probably become a step of Install rather than survive as a peer.
+- **Follow-up (discharged):** the page overflowed horizontally at 420px — the nav's Install button
+  and the body copy both cut off. Fixed somewhere in the intervening work; measured at acceptance as
+  `scrollWidth` 420 against `innerWidth` 420.
+- **Follow-up (overtaken):** `#use-case`, `#remote-access` and `#feedback` were not obviously one of
+  the five things. `#use-case` and `#feedback` are gone. Remote access was to "become a step of
+  Install rather than survive as a peer" — and `ADR-0096` point 1 decided the opposite, deliberately
+  and with better reasons, which point 3 above now records. **This is the one place this ADR was
+  wrong rather than merely overtaken**: it read a section that explains a risk as documentation that
+  had outgrown its step.
