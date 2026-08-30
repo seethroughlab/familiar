@@ -1,6 +1,6 @@
 # ADR-0093: Collections Suggest Tracks From the Library
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-25
 
@@ -259,9 +259,26 @@ negative half of the signal is kept, because a track skipped repeatedly is evide
 - **Follow-up.** "You play these but have not favourited them" — 247 tracks at 2+ plays, 39 at 5+.
   Nothing today answers it: `library_discover`'s `deep_cuts` is *least*-played, `unheard_tracks`
   ignores favourites, and `smart_playlists` has no favourite field at all.
-- **Follow-up.** The Apple client surface — toolbar item, sheet, and the add action wiring into the
-  existing `playlistsAddTracksToPlaylist` — is a separate plan in `familiar-apple`, after the
-  endpoints are proven against the real library.
+- **Follow-up, now done (2026-08-29).** The Apple client shipped: `SuggestedTracksSheet`, opened
+  from a toolbar item on Favorites and on any playlist, adding through `FavoritesStore.toggle` and
+  the existing `playlistsAddTracksToPlaylist`.
+
+  The endpoints were re-proven against the real library first, as this bullet required: **1.3 s
+  warm** at limits 8 and 25 over 1,732 favourites, votes running 8→4 so `MIN_VOTES` is genuinely
+  binding, and `because_of` populated on every row. The 3.9 s first call is a cold cache, not the
+  steady state.
+
+  Three things the client work turned up, none of them in the ADR:
+
+  - **Smart playlists deliberately get no button.** Their contents are a rule's output, so an
+    "add this" action there would be overwritten by the next evaluation. Point 8 says "a playlist",
+    and this is where that stops being the same thing.
+  - **The sheet injects its environment objects explicitly.** A sheet presents in its own hierarchy
+    and does not reliably inherit them on macOS — `MatchVideoSheet` crashed on exactly this earlier
+    the same day, in `EnvironmentObject.error()`.
+  - **`suggestedTracks` had to sit outside `RowActions`' `#if os(macOS)` block.** It was first added
+    beside `searchVideos`, which is Mac-only because music video is; point 8 says both platforms,
+    and iOS failed to compile rather than silently losing the feature — the good failure.
 - **Follow-up.** `PlaylistSeed` in `FamiliarKit` deliberately omits `track_ids` "because no native
   surface can produce one". A suggestions sheet offering "make a playlist from these" would be the
   first native surface that could. That is a decision to record, not to slide in.
