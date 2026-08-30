@@ -5,16 +5,19 @@ import html
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.sql import ColumnElement
 
-from app.api.deps import DbSession, RequiredProfile
+from app.api.deps import CurrentProfile, DbSession, RequiredProfile
 from app.api.exceptions import NotFoundError
 from app.api.schemas.artists import SimilarArtistInfo
-from app.db.models import Artist, ArtistAlias, Track, TrackAnalysis, TrackStatus
+from app.api.schemas.common import UTCDateTime
+from app.db.models import Artist, ArtistAlias, ProfilePlayHistory, Track, TrackAnalysis, TrackStatus
 from app.services.external_albums_helpers import normalize_artist_name
 from app.utils.time import utcnow
 
@@ -34,6 +37,19 @@ class ArtistSummary(BaseModel):
     first_album: str | None = None
     image_url: str | None = None  # Resolved Wikipedia/Wikidata/Spotify thumbnail
 
+    # Columns for the Mac's artists table (ADR-0094). All are aggregates over the same grouped
+    # query the counts already use, so they cost no extra round trip.
+    total_duration_seconds: float | None = None
+    year_min: int | None = None
+    year_max: int | None = None
+    #: When this artist first appeared in the library — `min(Track.created_at)`.
+    date_added: UTCDateTime | None = None
+    #: Per-profile, and null when the request carries no profile. "How often have you played this"
+    #: has no answer when there is no you — the same reasoning `PROFILE_SORT_FIELDS` uses on the
+    #: tracks list.
+    play_count: int | None = None
+    last_played_at: UTCDateTime | None = None
+
 
 class ArtistListResponse(BaseModel):
     """Paginated list of artists."""
@@ -47,16 +63,34 @@ class ArtistListResponse(BaseModel):
 @router.get("/artists", tags=["library"], response_model=ArtistListResponse)
 async def list_artists(
     db: DbSession,
+    profile: CurrentProfile = None,
     search: str | None = None,
-    sort_by: str = "name",  # name, track_count, album_count
+    sort_by: str = "name",
+    sort_order: str | None = None,
     page: int = 1,
     page_size: int = 100,
     has_embeddings: bool = False,
 ) -> ArtistListResponse:
     """Get distinct artists with aggregated stats.
 
-    Returns artists sorted by name (default), track count, or album count.
     Includes first_track_id for artwork lookup.
+
+    **The aggregates are all over the one grouped query**, so the extra columns the Mac's table
+    shows (ADR-0094) cost no second round trip: duration, year range and date-added come from the
+    `Track` join that already computes the counts.
+
+    ``play_count`` and ``last_played_at`` are **per profile** and null without one, via an outer
+    join to ``ProfilePlayHistory``. That mirrors ``PROFILE_SORT_FIELDS`` on the tracks list: "how
+    often have you played this" has no answer when there is no you, and ordering by it anyway
+    would leave the database to invent a cross join.
+
+    ``sort_by`` accepts ``name``, ``track_count``, ``album_count``, ``duration``, ``date_added``,
+    ``year``, ``play_count`` and ``last_played`` — the last two only with a profile, falling back
+    to name without one rather than erroring.
+
+    ``sort_order`` is ``asc``/``desc``, and defaults to whichever way the column is usually read:
+    A-first for a name, biggest-first for a count or a date. A client that offers a direction
+    control must send one, or the arrow it draws will disagree with the rows it gets.
 
     Args:
         has_embeddings: If True, only include artists that have at least one
@@ -82,11 +116,35 @@ async def list_artists(
             func.count(func.distinct(Track.album)).label("album_count"),
             func.min(cast(Track.id, TEXT)).label("first_track_id"),
             func.min(Track.album).label("first_album"),
+            # ADR-0094's columns, aggregated over the join that is already here.
+            func.sum(Track.duration_seconds).label("total_duration_seconds"),
+            func.min(Track.year).label("year_min"),
+            func.max(Track.year).label("year_max"),
+            func.min(Track.created_at).label("date_added"),
+            # Per profile, and null without one — see the docstring.
+            func.sum(ProfilePlayHistory.play_count).label("play_count"),
+            func.max(ProfilePlayHistory.last_played_at).label("last_played_at"),
         )
         .join(Track, Track.canonical_artist_id == Artist.id)
         .where(Track.status == TrackStatus.ACTIVE)
         .group_by(Artist.id, Artist.name, Artist.sort_name, Artist.image_url)
     )
+
+    # **Outer** join, and scoped to this profile in the ON clause rather than in `WHERE`. In
+    # `WHERE` it would become an inner join and silently drop every artist the listener has never
+    # played — which is exactly the set "last played" is most useful for finding.
+    if profile is not None:
+        base_query = base_query.outerjoin(
+            ProfilePlayHistory,
+            (ProfilePlayHistory.track_id == Track.id)
+            & (ProfilePlayHistory.profile_id == profile.id),
+        )
+    else:
+        # No profile: keep the columns in the row shape, always null, so the response schema does
+        # not change between requests.
+        base_query = base_query.outerjoin(
+            ProfilePlayHistory, literal_column("false")
+        )
 
     # Filter to only artists with embeddings if requested.
     if has_embeddings:
@@ -111,12 +169,37 @@ async def list_artists(
     total = await db.scalar(count_query) or 0
 
     # Sorting — prefer ``Artist.sort_name`` so "The Beatles" sorts under B.
-    if sort_by == "track_count":
-        base_query = base_query.order_by(desc(literal_column("track_count")), Artist.sort_name)
-    elif sort_by == "album_count":
-        base_query = base_query.order_by(desc(literal_column("album_count")), Artist.sort_name)
+    # Counts and dates descend; the name ascends. "Sort by tracks" means the biggest first, and
+    # "sort by name" means A first — one direction for both would make one of them useless.
+    #
+    # `Artist.sort_name` is the tiebreaker on every branch so the order is total: without it, rows
+    # tied on an aggregate have no defined order and OFFSET paging may repeat or skip them between
+    # pages, which is the defect `apply_track_sort` records on the tracks list.
+    descending = {
+        "track_count": "track_count",
+        "album_count": "album_count",
+        "duration": "total_duration_seconds",
+        "date_added": "date_added",
+        "year": "year_max",
+    }
+    # Per-profile sorts need a profile, for the reason `PROFILE_SORT_FIELDS` gives: ordering by a
+    # column from a table that was never joined is a wrong answer served slowly. Fall back to name.
+    if profile is not None:
+        descending["play_count"] = "play_count"
+        descending["last_played"] = "last_played_at"
+
+    if column := descending.get(sort_by):
+        # Natural direction unless the caller says otherwise.
+        ascending = sort_order == "asc"
+        ordering: ColumnElement[Any] = literal_column(column)
+        base_query = base_query.order_by(
+            ordering.asc().nullslast() if ascending else desc(ordering).nullslast(),
+            Artist.sort_name,
+        )
     else:
-        base_query = base_query.order_by(Artist.sort_name)
+        base_query = base_query.order_by(
+            Artist.sort_name.desc() if sort_order == "desc" else Artist.sort_name
+        )
 
     offset = (page - 1) * page_size
     base_query = base_query.offset(offset).limit(page_size)
@@ -132,6 +215,12 @@ async def list_artists(
             album_count=row.album_count,
             first_track_id=str(row.first_track_id),
             first_album=row.first_album,
+            total_duration_seconds=row.total_duration_seconds,
+            year_min=row.year_min,
+            year_max=row.year_max,
+            date_added=row.date_added,
+            play_count=row.play_count,
+            last_played_at=row.last_played_at,
             image_url=row.image_url,
         )
         for row in rows

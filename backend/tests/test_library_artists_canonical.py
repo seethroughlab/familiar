@@ -201,3 +201,81 @@ async def test_resolve_artist_via_alias_diacritic_fallback(async_db):
     found2 = await _resolve_artist_via_alias(async_db, "Bjork")
     assert found2 is not None
     assert found2.id == canonical.id
+
+
+@pytest.mark.asyncio
+async def test_summary_carries_the_table_columns(async_db):
+    """Duration, year range and date-added come back on the list (ADR-0094).
+
+    All three are aggregates over the join that already computes the counts, so the point of this
+    test is that they are actually selected and mapped — a column that is computed and dropped on
+    the floor is the defect ADR-0094 was written about in the first place.
+    """
+    artist = await ar.resolve_canonical_artist(async_db, "Aggregates", do_mb_lookup=False)
+    early = _new_track(file="a0", artist_id=artist.id, artist_str="Aggregates")
+    early.duration_seconds = 100.0
+    early.year = 1994
+    late = _new_track(file="a1", artist_id=artist.id, artist_str="Aggregates", album="Later")
+    late.duration_seconds = 50.0
+    late.year = 2003
+    async_db.add_all([early, late])
+    await async_db.commit()
+
+    listed = await list_artists(async_db)
+    row = next(a for a in listed.items if a.name == "Aggregates")
+    assert row.total_duration_seconds == 150.0
+    assert row.year_min == 1994
+    assert row.year_max == 2003
+    assert row.date_added is not None
+
+
+@pytest.mark.asyncio
+async def test_play_columns_are_null_without_a_profile(async_db):
+    """Per-profile columns have no answer when there is no profile.
+
+    Null rather than 0: "never played" and "no listener to ask about" are different, and reporting
+    0 for the second would make an unplayed artist and an unknown one indistinguishable in a column
+    people will sort by.
+    """
+    artist = await ar.resolve_canonical_artist(async_db, "Unknown Listener", do_mb_lookup=False)
+    async_db.add(_new_track(file="u0", artist_id=artist.id, artist_str="Unknown Listener"))
+    await async_db.commit()
+
+    listed = await list_artists(async_db)
+    row = next(a for a in listed.items if a.name == "Unknown Listener")
+    assert row.play_count is None
+    assert row.last_played_at is None
+
+
+@pytest.mark.asyncio
+async def test_sorting_by_duration_puts_the_longest_first(async_db):
+    """`sort_by=duration` orders by total listening time, biggest first."""
+    short = await ar.resolve_canonical_artist(async_db, "Short", do_mb_lookup=False)
+    long = await ar.resolve_canonical_artist(async_db, "Long", do_mb_lookup=False)
+    s0 = _new_track(file="s0", artist_id=short.id, artist_str="Short")
+    s0.duration_seconds = 10.0
+    l0 = _new_track(file="l0", artist_id=long.id, artist_str="Long")
+    l0.duration_seconds = 900.0
+    async_db.add_all([s0, l0])
+    await async_db.commit()
+
+    listed = await list_artists(async_db, sort_by="duration")
+    names = [a.name for a in listed.items]
+    assert names.index("Long") < names.index("Short")
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_sort_falls_back_to_name_rather_than_erroring(async_db):
+    """A sort the server does not know orders by name instead of failing.
+
+    This is what makes a client typo survivable — and also why `ArtistSort.wireValue` is asserted
+    on the Swift side: the fallback means a wrong value is silently ignored rather than reported.
+    """
+    for who in ("Zed", "Alpha"):
+        a = await ar.resolve_canonical_artist(async_db, who, do_mb_lookup=False)
+        async_db.add(_new_track(file=f"{who}0", artist_id=a.id, artist_str=who))
+    await async_db.commit()
+
+    listed = await list_artists(async_db, sort_by="not_a_column")
+    names = [a.name for a in listed.items if a.name in {"Zed", "Alpha"}]
+    assert names == ["Alpha", "Zed"]
