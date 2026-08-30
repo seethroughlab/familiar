@@ -124,7 +124,7 @@ test.describe('Admin surfaces', () => {
   test('06 - Artist cleanup screenshot', async ({ page }) => {
     // The one library browser the web app still mounts, and the reason it stayed: no native
     // equivalent, and its API tag is not in the generated Swift client.
-    await page.goto('/library/artist-cleanup');
+    await page.goto('/tools/artists');
     await page.waitForLoadState('domcontentloaded');
     await takeScreenshot(page, '06-artist-cleanup.png');
   });

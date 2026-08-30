@@ -25,7 +25,12 @@ module.exports = {
         // embedded page makes and owns. What must never come back is player state — a queue, a
         // transport, a now-playing track — because the native app owns those (ADR-0016 point 5),
         // so a store read for them here is inert by construction.
-        pathNot: '^src/stores/(columnStore|visualizerStore|visualizerPluginStore|selectionStore)',
+        // `toastStore` joined this list on 2026-08-30, deliberately. It is not player state — it
+        // is how a surface tells the person in front of it that something failed, which is the
+        // embedded page's own business. It was allowed because the alternative was worse: the
+        // Discover sections had been calling `showError` with no `<Toaster />` mounted, so
+        // "Failed to start check" went nowhere. `renderEmbed` now mounts one.
+        pathNot: '^src/stores/(columnStore|visualizerStore|visualizerPluginStore|selectionStore|toastStore)',
       },
     },
     {

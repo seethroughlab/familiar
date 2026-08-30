@@ -6,11 +6,11 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sparkles, Loader2 } from 'lucide-react';
-import { externalAlbumsApi } from '../../../../api/discovery';
-import { queryKeys } from '../../../../api/queryKeys';
-import { STALE_TIME } from '../../../../api/queryDefaults';
-import { showError } from '../../../../stores/toastStore';
-import { ExternalAlbumCard } from '../../../Discovery/ExternalAlbumCard';
+import { externalAlbumsApi } from '../../api/discovery';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME } from '../../api/queryDefaults';
+import { showError } from '../../stores/toastStore';
+import { ExternalAlbumCard } from '../Discovery/ExternalAlbumCard';
 
 const SECTION_LIMIT = 12;
 

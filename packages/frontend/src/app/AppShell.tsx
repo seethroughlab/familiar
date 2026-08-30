@@ -23,10 +23,10 @@ import { useLastfmCallback } from '../hooks/useLastfmCallback';
 import { useUIStore } from '../stores/uiStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { TopBar } from './TopBar';
-import { ErrorBoundary } from './ErrorBoundary';
-import { OfflineIndicator } from './PWA/OfflineIndicator';
-import { TrackEditModal } from './TrackEdit';
-import { PlaylistPickerModal } from './Playlists/PlaylistPickerModal';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import { OfflineIndicator } from '../components/PWA/OfflineIndicator';
+import { TrackEditModal } from '../components/TrackEdit';
+import { PlaylistPickerModal } from '../components/Playlists/PlaylistPickerModal';
 
 export function AppShell() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);

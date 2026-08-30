@@ -14,10 +14,10 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Image, RefreshCw, Loader2 } from 'lucide-react';
 
-import { libraryApi } from '../../api/library';
-import { queryKeys } from '../../api/queryKeys';
-import { offlineAwareRetry } from '../../api/queryDefaults';
-import { useOfflineStatus } from '../../hooks/useOfflineStatus';
+import { libraryApi } from '../api/library';
+import { queryKeys } from '../api/queryKeys';
+import { offlineAwareRetry } from '../api/queryDefaults';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { AdminPage, AdminSection } from './AdminPage';
 
 export function ArtworkPage() {

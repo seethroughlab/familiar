@@ -1,6 +1,41 @@
 # ADR-0081: The Admin App Has One Component Tree
 
-Status: proposed
+Status: accepted
+
+Implementation:
+- Built 2026-08-30 on `adr-0081-one-tree`, in two commits: the registry deletion (points 3–5) and
+  the tree move (points 1, 2, 6). Net **−596 lines** then **−132**.
+- **Point 4 had to come first.** Artist cleanup was the registry's only routed member, so moving it
+  to `/tools/artists` is what reduced the registry to the state point 3 describes. The ADR presents
+  them in the other order; the dependency runs the other way.
+- **Point 3's premise was two members, not one.** `browsers/index.ts` registered `ArtistCleanupBrowser`
+  *and* `DiscoverBrowser`. "One member that its only consumer bypasses" describes the state after
+  point 4, which is worth saying because the point reads as a description of the state before it.
+- **Point 5 measured: `DiscoverBrowser` read 2 of 24 fields.** It is now
+  `components/Embed/DiscoverSurface.tsx`, beside its only renderer, with a two-field interface. The
+  seam `EmbedDiscover` was protecting survives and improves — reading a third field is a compile
+  error at the definition rather than depending on the caller having pre-supplied it.
+- **`components/Library/` is not deleted, and I deleted it once by mistake.** Point 3 names symbols;
+  the directory also holds `columnDefinitions`, `AlphabetBar`, `TrackContextMenu`,
+  `SelectionIndicator` and the shared filter and context-menu types, which `components/shared/` and
+  `hooks/` import — and point 6 keeps `shared/` precisely because the embed path runs through it.
+- **Point 2's `panels/settings/` has no members**, and there is no `screens/SettingsScreen.tsx`. The
+  point expected theme to survive as the one genuine setting; `ADR-0080` deleted the settings route
+  entirely once theme was all that remained on it.
+- **Point 6's orphan list had aged.** `SmartPlaylists/` and `Home/` were already gone. Of the rest,
+  `TrackContextMenu` has two real consumers and `PlaylistPickerModal` is rendered by `AppShell`.
+  Only `AlbumContextMenu.tsx` was genuinely dead — no importer anywhere, its only textual matches a
+  same-named state interface, which went with it.
+- **The navigation test is the load-bearing change.** It scanned `src/components/`, so splitting the
+  tree would have silently dropped `app/`, `screens/` and `panels/` from its coverage — **84 files
+  before, 196 after**. Its docstring warns that a list of files to check is the same shape of
+  mistake as the bug it checks for; a directory root is the same trap wearing different clothes.
+  Broadening it immediately produced a false positive: `App.tsx` explains its catch-all with the
+  words *"this was `Navigate to=\"/settings\"`"*, and the scanner read that prose as a dead link. It
+  now strips comments first.
+- Verified at each stage: `tsc` reports the same **6 pre-existing errors** as `origin/main` and no
+  new ones, **364 unit tests** pass, the web build succeeds, and `DiscoverSurface`'s chunk hash is
+  unchanged — the embedded page both Apple clients load is byte-identical.
 
 Date: 2026-08-18
 

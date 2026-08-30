@@ -11,8 +11,8 @@ import { Link } from 'react-router-dom';
 import { Copy, FolderTree, Image, ChevronRight } from 'lucide-react';
 
 import { AdminPage, AdminSection } from './AdminPage';
-import { DataManagement } from '../Settings/DataManagement';
-import { CommunityCache } from '../Settings/CommunityCache';
+import { DataManagement } from '../panels/tools/DataManagement';
+import { CommunityCache } from '../panels/tools/CommunityCache';
 
 export function ToolsPage() {
   return (

@@ -15,21 +15,40 @@ import {
   Music,
   Loader2,
 } from 'lucide-react';
-import { libraryApi } from '../../../../api';
-import { queryKeys } from '../../../../api/queryKeys';
-import { STALE_TIME } from '../../../../api/queryDefaults';
-import type { BrowserProps } from '../../types';
-import { useOfflineStatus } from '../../../../hooks/useOfflineStatus';
+import { libraryApi } from '../../api';
+import { queryKeys } from '../../api/queryKeys';
+import { STALE_TIME } from '../../api/queryDefaults';
+import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import {
   useLibraryDiscovery,
   DiscoverySectionView,
   type DiscoveryItem,
-} from '../../../Discovery';
+} from '../Discovery';
 import { NewReleasesSection } from './NewReleasesSection';
 import { ListeningProfileSection } from './ListeningProfileSection';
 
 
-export default function DiscoverBrowser({ onGoToArtist, onPlayTrack }: BrowserProps) {
+/**
+ * Discover, as the Apple clients embed it (ADR-0016 point 2, ADR-0017).
+ *
+ * **Was `DiscoverBrowser`, registered in a browser registry ADR-0081 point 3 deleted.** The registry
+ * ended with one member whose only consumer imported it directly, which is indirection with nothing
+ * on the other end. The file now lives beside `EmbedDiscover`, the only thing that renders it.
+ *
+ * **Its props are the two fields it reads, not the twenty-four a "browser" used to take** (point 5).
+ * `EmbedDiscover` previously supplied every field, most of them empty, so that a field this
+ * component started reading would be a type error at the seam rather than `undefined` inside a web
+ * view. That protection is kept and improves: reading a third field is now a compile error *here*,
+ * at the definition, instead of depending on the caller having pre-supplied it.
+ */
+export interface DiscoverSurfaceProps {
+  /** Open an artist. In the embed this posts a navigate intent to the native app. */
+  onGoToArtist: (artistName: string) => void;
+  /** Play one track. In the embed this posts a play intent; it never starts an audio engine. */
+  onPlayTrack: (trackId: string) => void;
+}
+
+export default function DiscoverSurface({ onGoToArtist, onPlayTrack }: DiscoverSurfaceProps) {
   const discoverNavigate = useNavigate();
   const { isOffline } = useOfflineStatus();
 

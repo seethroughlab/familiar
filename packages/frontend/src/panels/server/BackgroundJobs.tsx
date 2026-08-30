@@ -17,7 +17,7 @@
 import { useEffect } from 'react';
 import { Image, Music, CloudUpload } from 'lucide-react';
 
-import { AdminSection } from '../Admin/AdminPage';
+import { AdminSection } from '../../screens/AdminPage';
 import { useBackgroundJobsStore } from '../../stores/backgroundJobsStore';
 import type { BackgroundJob } from '../../api';
 

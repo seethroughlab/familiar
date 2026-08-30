@@ -17,7 +17,7 @@
 import { useLocation, Link } from 'react-router-dom';
 import { House, Wrench, Server } from 'lucide-react';
 
-import { DESTINATIONS } from '../routes';
+import { DESTINATIONS } from './routes';
 
 const DESTINATION_ICONS: Record<string, typeof House> = {
   '/': House,
