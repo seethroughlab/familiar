@@ -16,14 +16,14 @@ REQUIRED_PROFILE_ENDPOINTS = [
     ("GET", "/api/v1/smart-playlists"),
     ("GET", "/api/v1/favorites"),
     ("GET", "/api/v1/profiles/me"),
-    ("GET", "/api/v1/bandcamp/search?q=test"),
     ("POST", "/api/v1/export-import/export"),
     ("GET", f"/api/v1/download/playlist/{ZERO_UUID}"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/played"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/skipped"),
     ("POST", f"/api/v1/tracks/{ZERO_UUID}/rejected"),
-    # Radio suggestions weigh this profile's taste and skip history, so unlike the
-    # ambient routes they cannot run profile-less (ADR-0005).
+    # Radio suggestions weigh this profile's taste and skip history, so they cannot
+    # run profile-less (ADR-0005). The `ambient` routes used to be the contrast here;
+    # ADR-0077 deleted them, the service they wrapped staying put.
     ("POST", "/api/v1/queue/suggestions"),
 ]
 

@@ -1,12 +1,38 @@
 # ADR-0077: A Surface With No Caller Is Deleted, Not Documented
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-18
 
 Extends [ADR-0057](ADR-0057-the-web-app-keeps-only-what-has-no-native-answer.md), whose point 5 says
 a capability and its affordances leave together. This says the same about an endpoint and its
 clients, in the other direction.
+
+Implementation:
+
+- **Shipped 2026-08-28**, `familiar` on `adr-0077-delete-uncalled-surfaces` and `familiar-apple` on
+  `adr-0077-drop-uncalled-surfaces`. **Fourteen operations left the schema, and no operation was
+  added** — verified by diffing `backend/openapi.json` against its previous revision, not by
+  counting the intended deletions.
+- Points 2 and 3 took `routes/bandcamp.py`, `routes/ambient.py` and the nine zone endpoints.
+  `services/bandcamp.py` and `services/ambient.py` were left untouched, as point 2 requires — their
+  MCP and recommendation importers are what point 6 records as where the capability went.
+- **Point 2's "judged separately" was applied to zones and came out the other way.** `Zone`, the
+  manager's six zone methods and the `zones` dict were deleted from `services/outputs.py` too:
+  unlike bandcamp and ambient, nothing reached them but the routes, so leaving the service would
+  have left precisely the dead code point 1 objects to.
+- The generated Swift client came back **byte-identical** ("File Client.swift already up to date"),
+  which is the sharpest confirmation that all fourteen were outside the generated surface.
+- Point 5's wrappers went with one correction the compiler caught: `ImportResultCategory` was
+  declared beside the deleted export/import wrappers but used by the *kept* restore types, so it
+  moved rather than went. `api/backup.ts` fell from 612 lines to 190, keeping only `backupApi`.
+- Point 5 named `routes.ts:76` as a comment describing dead code. That comment, and two more in
+  `Admin/LibraryPage.tsx` and `Admin/OrganizePage.tsx`, now record the deletion instead — the
+  `pending-review` gap they document is still real, only the wrapper is gone.
+- **Follow-on this surfaced, not acted on:** deleting `s3BackupApi` and `libraryExportApi` leaves
+  `/s3-backup/*` and `/export-import/library/*` with no caller in either repository, and there is
+  no S3 backup UI anywhere. By point 1 they are now deletion candidates in their own right. They
+  are out of this ADR's scope, which named exactly what goes.
 
 ## Context
 
@@ -28,20 +54,31 @@ alive and reached a different way. `backend/tests/test_bandcamp.py` tests the se
 docstring records a real defect it caught: `search_bandcamp` *"answered 'no results' for every query,
 for however long it had been"*. **The routes go; the service stays.**
 
-**`ambient` — three routes whose only caller is being deleted.** `api/ambient.ts` is imported solely
-by `packages/frontend/src/player/ambient/AmbientCoordinator.ts`, and `player/ambient/` is in the
-unreachable set `docs/REMOVING-THE-WEB-PLAYER.md` measured — nothing in `/embed` or `/visualizer`
-reaches it. No Swift caller; the tag is excluded from the generated surface. Again the service is
-not the route: `app/services/ambient.get_candidates` is imported by `routes/queue.py:36`,
-`services/offline_manifest.py`, `services/playlist_generation.py` and the MCP discovery handler.
+**`ambient` — three routes whose only caller has since been deleted.** This was written while
+`api/ambient.ts` still existed, imported solely by
+`packages/frontend/src/player/ambient/AmbientCoordinator.ts` and in the unreachable set
+`docs/REMOVING-THE-WEB-PLAYER.md` measured. The player's removal took both, so **the three routes now
+have no client anywhere in either repository** — no Swift caller either, the tag being outside the
+generated surface. Again the service is not the route: `app/services/ambient` is imported by
+`routes/queue.py:36`, `services/offline_manifest.py`, `services/playlist_generation.py`,
+`services/collection_suggestions.py` and the MCP discovery handler, and by six test modules.
 **The routes go; the service stays.**
 
 **`outputs` zones — nine operations, one of them unreachable by construction.**
-`routes/outputs.py:212` declares `GET /{output_id}` and `routes/outputs.py:304` declares
-`GET /zones`; FastAPI matches in declaration order, so `/outputs/zones` is parsed as an output id and
-returns 422. The generator config already documents the nine as dead and unpersisted, and names them
-operation-by-operation in `filter.operations` to keep them out of Swift — a twenty-line block that
-exists solely to exclude them.
+`routes/outputs.py:212` declares `GET /{output_id}` with `output_id: UUID` and
+`routes/outputs.py:304` declares `GET /zones`; FastAPI matches in declaration order, so
+`/outputs/zones` is parsed as an output id and returns 422. The generator config already documents
+the nine as dead and unpersisted.
+
+**A first draft of this ADR got the generator config backwards, and the correction changes what
+point 3 can promise.** That draft said `filter.operations` *names the nine zone operations to keep
+them out of Swift*. It does the opposite: the block names the nine `outputs` operations that are
+**wanted**, and the zones are excluded by omission. The consequence is that deleting the zones does
+not free `outputs` to become an ordinary `filter.tags` entry. Six of the remaining fifteen are
+ungenerated for reasons of their own — `outputs_create_output` and `outputs_delete_output`, because
+discovery auto-registers what it finds; `outputs_discover_sonos`, `_upnp` and `_chromecast`, because
+`discover_all` covers them; and `outputs_discover_airplay`, because `ADR-0031` point 3 leaves AirPlay
+to the OS route picker. The filter keys are a union, so naming the tag re-admits all six.
 
 **Four `queue` operations with no caller.** `queue_put_playback_session`,
 `queue_list_archived_sessions`, `queue_restore_archived_session` and `queue_offline_manifest` are
@@ -59,9 +96,11 @@ are treated differently below.
    path. Only `routes/bandcamp.py` (2 operations) and `routes/ambient.py` (3) are removed.
 
 3. **The nine `outputs` zone operations are deleted**, including the one that has never been
-   reachable. `outputs` then becomes an ordinary `filter.tags` entry and the twenty-line
-   `filter.operations` block collapses to a single line — the largest single legibility gain in the
-   generator config.
+   reachable. **`outputs` does not thereby become a `filter.tags` entry**, for the reason recorded
+   in `## Context`, and `filter.operations` keeps naming operations — it must, both for the six
+   remaining `outputs` exclusions and for `ADR-0086`'s five `videos` operations. What the deletion
+   buys is smaller and still worth having: the config stops having to explain nine operations that
+   exist only to be excluded, and `GET /outputs/zones` stops being advertised.
 
 4. **The four uncalled `queue` operations are kept, and the reason is recorded.** They are the server
    half of `ADR-0003`'s server-owned queue and `ADR-0006`'s precomputed offline ranking, both of which
@@ -107,8 +146,9 @@ built for operations about to be removed.
 
 - **Positive** — fourteen operations leave the schema (2 bandcamp, 3 ambient, 9 outputs zones), and
   with `ADR-0070`'s two, sixteen.
-- **Positive** — the generator config's hardest-to-read section disappears, and `outputs` joins the
-  ordinary mechanism.
+- **Positive** — the generator config's longest comment shrinks to the six exclusions that remain
+  real. It does not disappear, and `outputs` does not join the ordinary mechanism; anyone reading
+  this expecting that should read point 3.
 - **Positive** — an endpoint that has never worked, `GET /outputs/zones`, stops being listed as
   though it does.
 - **Tradeoff** — a self-hoster who scripted `/bandcamp/search` or `/ambient/seed` loses it with no

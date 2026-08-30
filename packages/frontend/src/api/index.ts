@@ -11,13 +11,9 @@ export * from './metadata';
 export * from './backup';
 export * from './download';
 export * from './analysis';
-export * from './missingTracks';
 export * from './mixtapes';
-export * from './importSession';
 export * from './diagnosticsLogs';
-export * from './mapStream';
 export * from './outputs';
-export * from './pendingTracks';
 export * from './discovery';
 // Default export: shared axios instance (for MusicBrainzLookup)
 export { default } from './base';

@@ -71,7 +71,9 @@ export const DESTINATIONS = [
  * the gap between the ADR and the app is a record instead of a discrepancy someone rediscovers.
  */
 export const UNBUILT_DESTINATION_ITEMS: Record<string, string> = {
-  'pending-review': 'no web component — `api/pendingTracks.ts` is a wrapper nothing calls',
+  'pending-review':
+    'no web component — the `api/pendingTracks.ts` wrapper was deleted under ADR-0077, which had ' +
+    'named this very line as a comment describing dead code instead of removing it',
   'update-channel':
     'never existed — the Server slot held `InstallStatus` (PWA install state), retired by ADR-0059',
   // Duplicates, the organiser and artwork coverage were here. All three shipped in phases 4 and 5;

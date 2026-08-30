@@ -2,9 +2,9 @@
  * The Library destination (ADR-0058 point 2) — where the app opens.
  *
  * Dashboard, scan and sync, analysis, artist cleanup. Point 2 also names **pending review**, which
- * is not here: `api/pendingTracks.ts` is a client wrapper with no component behind it, so a row for
- * it would be an affordance whose destination is not mounted. Recorded in
- * `UNBUILT_DESTINATION_ITEMS` rather than linked and left to fail silently.
+ * is not here: there was a client wrapper with no component behind it, so a row for it would be an
+ * affordance whose destination is not mounted. ADR-0077 deleted the wrapper; the gap is still
+ * recorded in `UNBUILT_DESTINATION_ITEMS` rather than linked and left to fail silently.
  */
 import { Link } from 'react-router-dom';
 import { Combine, ChevronRight } from 'lucide-react';

@@ -31,11 +31,9 @@ from app.api.exceptions import FamiliarError, NotFoundError
 from app.api.ratelimit import limiter
 from app.api.routes import (
     admin_artists,
-    ambient,
     analysis,
     artwork,
     background,
-    bandcamp,
     diagnostics,
     download,
     export_import,
@@ -521,7 +519,6 @@ app.include_router(profiles.router, prefix="/api/v1", responses=DEFAULT_ERROR_RE
 app.include_router(favorites.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(organizer.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(proposed_changes.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(bandcamp.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(outputs.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(artwork.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(background.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
@@ -531,7 +528,6 @@ app.include_router(s3_backup.router, prefix="/api/v1", responses=DEFAULT_ERROR_R
 app.include_router(analysis.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(download.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(updates.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
-app.include_router(ambient.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(playback.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(queue.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)
 app.include_router(external_albums.router, prefix="/api/v1", responses=DEFAULT_ERROR_RESPONSES)

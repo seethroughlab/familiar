@@ -7,8 +7,10 @@ Provides a unified interface for different audio outputs:
 - ChromeCast (via pychromecast)
 - UPnP/DLNA/OpenHome (via async-upnp-client, covers WiiM and generic devices)
 
-The output manager allows playing to multiple zones simultaneously,
-with each zone potentially using a different output type.
+The output manager holds one output per device and plays to them individually.
+It used to group them into zones and fan a stream out to a group; ADR-0077 removed
+that, because the nine zone endpoints had no client, lost their state on every
+restart, and one of them — `GET /outputs/zones` — could never be reached at all.
 """
 
 import asyncio
@@ -932,62 +934,6 @@ class ChromecastOutput(AudioOutput):
         return self.to_dict()
 
 
-@dataclass
-class Zone:
-    """A playback zone that can contain multiple outputs."""
-
-    id: UUID = field(default_factory=uuid4)
-    name: str = ""
-    outputs: dict[UUID, AudioOutput] = field(default_factory=dict)
-    is_active: bool = False
-    current_track_id: UUID | None = None
-
-    def add_output(self, output: AudioOutput) -> None:
-        self.outputs[output.id] = output
-
-    def remove_output(self, output_id: UUID) -> bool:
-        if output_id in self.outputs:
-            del self.outputs[output_id]
-            return True
-        return False
-
-    async def play(
-        self,
-        stream_url: str,
-        track_id: UUID | None = None,
-        metadata: TrackMetadata | None = None,
-    ) -> dict[UUID, bool]:
-        results = {}
-        for output_id, output in self.outputs.items():
-            results[output_id] = await output.play(stream_url, track_id, metadata)
-        self.is_active = True
-        self.current_track_id = track_id
-        return results
-
-    async def pause(self) -> dict[UUID, bool]:
-        results = {}
-        for output_id, output in self.outputs.items():
-            results[output_id] = await output.pause()
-        return results
-
-    async def stop(self) -> dict[UUID, bool]:
-        results = {}
-        for output_id, output in self.outputs.items():
-            results[output_id] = await output.stop()
-        self.is_active = False
-        self.current_track_id = None
-        return results
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": str(self.id),
-            "name": self.name,
-            "outputs": [o.to_dict() for o in self.outputs.values()],
-            "is_active": self.is_active,
-            "current_track_id": str(self.current_track_id) if self.current_track_id else None,
-        }
-
-
 def _serialize_persisted(output: AudioOutput) -> dict[str, Any] | None:
     """Serialize an output to its reconstruction fields, or None if it should
     not be persisted (browser outputs are ephemeral and re-created on boot)."""
@@ -1027,11 +973,10 @@ def _deserialize_persisted(item: dict[str, Any]) -> AudioOutput | None:
 
 
 class OutputManager:
-    """Manages all audio outputs and zones."""
+    """Manages all audio outputs."""
 
     def __init__(self) -> None:
         self.outputs: dict[UUID, AudioOutput] = {}
-        self.zones: dict[UUID, Zone] = {}
         self._default_output_id: UUID | None = None
 
     def register_output(self, output: AudioOutput) -> UUID:
@@ -1083,27 +1028,8 @@ class OutputManager:
             except Exception as e:
                 logger.error(f"Failed to reload persisted output {item!r}: {e}")
 
-    def create_zone(self, name: str, output_ids: list[UUID] | None = None) -> Zone:
-        zone = Zone(name=name)
-        if output_ids:
-            for output_id in output_ids:
-                if output_id in self.outputs:
-                    zone.add_output(self.outputs[output_id])
-        self.zones[zone.id] = zone
-        logger.info(f"Created zone: {name}")
-        return zone
-
-    def delete_zone(self, zone_id: UUID) -> bool:
-        if zone_id in self.zones:
-            del self.zones[zone_id]
-            return True
-        return False
-
     def get_output(self, output_id: UUID) -> AudioOutput | None:
         return self.outputs.get(output_id)
-
-    def get_zone(self, zone_id: UUID) -> Zone | None:
-        return self.zones.get(zone_id)
 
     def get_default_output(self) -> AudioOutput | None:
         if self._default_output_id:
@@ -1127,18 +1053,6 @@ class OutputManager:
         if output:
             return await output.play(stream_url, track_id, metadata)
         return False
-
-    async def play_to_zone(
-        self,
-        zone_id: UUID,
-        stream_url: str,
-        track_id: UUID | None = None,
-        metadata: TrackMetadata | None = None,
-    ) -> dict[UUID, bool]:
-        zone = self.zones.get(zone_id)
-        if zone:
-            return await zone.play(stream_url, track_id, metadata)
-        return {}
 
     # -------------------------------------------------------------------------
     # Discovery
@@ -1352,9 +1266,6 @@ class OutputManager:
 
     def list_outputs(self) -> list[dict[str, Any]]:
         return [o.to_dict() for o in self.outputs.values()]
-
-    def list_zones(self) -> list[dict[str, Any]]:
-        return [z.to_dict() for z in self.zones.values()]
 
 
 # Singleton instance
