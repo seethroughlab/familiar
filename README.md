@@ -143,6 +143,8 @@ Three destinations — the library, the tools you run against it, and the server
 
 ## Quick Start
 
+On Linux:
+
 ```bash
 git clone https://github.com/seethroughlab/familiar.git
 cd familiar/docker
@@ -151,18 +153,39 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Access at http://localhost:4400. API keys are configured in your `.env` file — open **Library** in the top bar to manage your library and start a scan.
+**On macOS or Windows, add `-f docker-compose.desktop.yml`.** The production compose file logs to
+`journald`, which is Linux-only, and Docker Desktop's Linux VM does not have it — the run fails with
+*"failed to initialize logging driver: journald"*. On macOS `./start.sh` detects this and adds the
+override for you.
 
-**Running on macOS?** See the **[macOS Installation Guide](docs/MACOS.md)** — covers Docker Desktop setup, Apple Silicon, and music library paths.
+Access at http://localhost:4400. API keys are configured in your `.env` file — open **Library** in the top bar to manage your library and start a scan. The first run downloads about 7 GB.
 
-See the **[Installation Guide](docs/INSTALLATION.md)** for other platforms (OpenMediaVault, Synology NAS, development setup).
+Step-by-step guides, no prior Docker experience assumed:
+
+| | |
+|---|---|
+| **macOS** | [Installing Familiar on your Mac](docs/MACOS_BEGINNER.md) · [reference guide](docs/MACOS.md) |
+| **Synology** | [Container Manager, DSM 7.2+](docs/INSTALLATION.md#synology-nas) |
+| **OpenMediaVault** | [Services → Compose](docs/INSTALLATION.md#openmediavault) |
+| **Windows, Linux, other NAS** | [Installation Guide](docs/INSTALLATION.md) |
+
+Or use [the install page](https://familiar.seethroughlab.com/#install), which asks which machine you are installing on and shows only that path.
 
 ## Requirements
 
 - Docker Engine 24.0+ / Docker Compose v2
-- 2 GB RAM minimum (4 GB recommended for large libraries)
-- x86_64 or ARM64 (ARM64: CLAP embeddings can be disabled if needed)
+- x86_64 or ARM64
 - Music library accessible via filesystem mount
+- Tested on macOS, Windows, Linux, OpenMediaVault and Synology
+
+**Memory is the thing to check.** Familiar itself runs in 2–4 GB, but the CLAP model that listens to
+your music peaks at about 4 GB while analysing, so a machine with 8 GB or less — most NAS boxes, and
+a Raspberry Pi — wants `DISABLE_CLAP_EMBEDDINGS=true`. You keep the library, the tags, BPM, key,
+energy and mood, and smart playlists; you lose the features that compare how tracks *sound*, which
+includes Find Similar and suggested tracks. It can be enabled later on a bigger machine.
+
+This used to be documented as an ARM64 caveat and as "4 GB recommended". Both were wrong: the
+constraint is memory rather than architecture, and 4 GB is what the model alone needs.
 
 ## Keyboard Shortcuts
 
