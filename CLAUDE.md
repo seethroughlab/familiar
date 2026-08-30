@@ -172,6 +172,50 @@ the filter keys are a union, so the tag re-admits the stream the ADR deliberatel
 `String`**, so deleting `VisualizerChoice.musicVideo` leaves profiles holding `"music-video"`
 selecting nothing unless they are reset.
 
+**`ADR-0087`–`ADR-0089` make a visualizer a document, and the app bundle seed it.** A visualizer is
+now a folder with an `index.html`, sandboxed at an opaque origin and driven by `postMessage` — not a
+component the host supplies React to. `App/Shared/Visualizers.bundle/` ships five of them and
+`VisualizerPlugins.seed` copies them into the drop-in folder once. `ADR-0091`/`0092` moved the
+visualizers and plugin folders out of this repo entirely; the server no longer serves them.
+`ADR-0065`, which proposed seeding two examples the old way, is **superseded by `0089`** — its point
+2's "once, ever" reasoning survives and is cited in `VisualizerPlugins.swift`, but its examples were
+the `"main": "dist/index.js"` shape `0087` replaced.
+
+**`ADR-0072`–`ADR-0077` and `ADR-0079` restructure the API** (all accepted, merged 2026-08-30 as a
+nine-PR stack). Tags mean one thing, paths follow function rather than history, and endpoints
+nothing called were deleted. **Existing clients keep working**: the five `/queue/*` paths that moved
+are aliased, and `ADR-0079` point 5 requires that *every* alias in the API live in one module —
+`backend/app/api/routes/compat.py`. They are `include_in_schema=False`, delegate to the same function
+object rather than a copy, and answer with `Deprecation: true` and a `Sunset` date. The removal
+trigger is written down in that file: when no App Store build calling `/queue/*` is still offered.
+
+**`ADR-0093`–`ADR-0094` are shipped.** `0093` suggests tracks you already own for Favourites and any
+playlist, each explaining itself with a real pair of tracks rather than a generated label — three
+attempts at naming a cluster failed first. `0094` toggles the artists grid to a sortable table;
+**sorting is server-side**, because paging at 50 and sorting the loaded page repeats the
+library-shuffle defect on a surface where a wrong order looks like an order.
+
+**`ADR-0095`–`ADR-0097` are about the website, and two of them exist because the record was wrong.**
+`0095` makes the install section platform-first — five panels, one per machine you might install on —
+and supersedes `ADR-0055` point 1's reader, who was defined as "comfortable enough to run `docker
+compose up`". `0096` gives remote access its own section leading with the reason: **Familiar has no
+login**, because `ADR-0045` is accepted and unimplemented, so "don't port-forward 4400" is the
+difference between a private server and a public one.
+
+`0097` exists because **the live site served an April build for four months**. Cloudflare's
+`production_branch` was `master` against a repository on `main`, so every green deploy landed as a
+preview and the production alias never moved — while `check-claims.py` passed, because it audits the
+working tree. It now fetches the deployed site as well. **Both are fixed**, and the shape is the one
+this project keeps finding: a check whose subject is not the thing anyone uses.
+
+Three things established by running them rather than reading them, all of which had been asserted
+wrongly for months: **Docker Desktop on Windows genuinely rejects the `journald` driver** (exit 125),
+so `docker-compose.desktop.yml` — renamed from `.macos.yml`, since the content is "this host is not
+Linux" — is required there; **the first pull is ~7 GB**, not the 4 GB three docs claimed; and
+**disabling CLAP costs far more than "semantic search"**, since `TrackAnalysis.embedding` is read by
+eighteen modules including Find Similar and suggested tracks.
+
+
 ## Key Directories
 
 ```
