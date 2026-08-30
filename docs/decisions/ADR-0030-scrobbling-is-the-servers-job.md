@@ -1,6 +1,7 @@
 # ADR-0030: Scrobbling Is the Server's Job
 
-Status: accepted
+Status: accepted — point 1's "no client learns that Last.fm exists" superseded by
+[ADR-0100](ADR-0100-connecting-an-account-happens-in-the-listeners-app.md)
 Date: 2026-08-05
 
 Extends [ADR-0004](ADR-0004-listening-feedback-is-event-sourced.md)
