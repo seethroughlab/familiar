@@ -28,7 +28,7 @@ export function OfflineIndicator() {
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 pt-safe flex items-center justify-between text-sm bg-amber-600 text-white">
+    <div className="fixed top-0 left-0 right-0 z-50 px-4 py-2 pt-safe flex items-center justify-between text-sm bg-warning-strong text-white">
       <div className="flex items-center gap-2">
         <WifiOff className="w-4 h-4" />
         <span>Can't reach the server.</span>

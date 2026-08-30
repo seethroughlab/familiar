@@ -422,7 +422,7 @@ export function DataManagement() {
 
           {/* Error Message */}
           {restoreState === 'error' && restoreError && (
-            <div className="mt-3 p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2">
+            <div className="mt-3 p-3 bg-danger-surface/20 border border-danger-muted rounded-lg flex items-start gap-2">
               <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm text-danger">{restoreError}</p>
@@ -479,12 +479,12 @@ export function DataManagement() {
 
               {/* Warnings */}
               {restorePreview.warnings.length > 0 && (
-                <div className="p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+                <div className="p-3 bg-warning-surface/20 border border-warning-muted rounded-lg">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-sm font-medium text-yellow-300">Warnings</p>
-                      <ul className="mt-1 text-xs text-yellow-200/80 space-y-1">
+                      <p className="text-sm font-medium text-warning-subtle">Warnings</p>
+                      <ul className="mt-1 text-xs text-warning-subtle/80 space-y-1">
                         {restorePreview.warnings.map((warning, i) => (
                           <li key={i}>{warning}</li>
                         ))}
@@ -687,7 +687,7 @@ export function DataManagement() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={executeRestore}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-md flex items-center gap-2 text-sm font-medium"
+                  className="px-4 py-2 bg-accent hover:bg-accent rounded-md flex items-center gap-2 text-sm font-medium"
                 >
                   <Upload className="w-4 h-4" />
                   Restore Backup
@@ -713,7 +713,7 @@ export function DataManagement() {
           {/* Restore Success */}
           {restoreState === 'success' && restoreResult && (
             <div className="space-y-4">
-              <div className="p-4 bg-green-900/20 border border-green-800 rounded-lg">
+              <div className="p-4 bg-success-surface/20 border border-success-muted rounded-lg">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-success" />
                   <p className="text-sm font-medium text-success">Restore completed</p>
@@ -783,9 +783,9 @@ export function DataManagement() {
 
                   {/* Library Errors */}
                   {restoreResult.results.library.errors.length > 0 && (
-                    <div className="mt-3 p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
-                      <p className="text-sm font-medium text-yellow-300 mb-2">Some items had errors:</p>
-                      <ul className="text-xs text-yellow-200/80 space-y-1">
+                    <div className="mt-3 p-3 bg-warning-surface/20 border border-warning-muted rounded-lg">
+                      <p className="text-sm font-medium text-warning-subtle mb-2">Some items had errors:</p>
+                      <ul className="text-xs text-warning-subtle/80 space-y-1">
                         {restoreResult.results.library.errors.slice(0, 10).map((err, i) => (
                           <li key={i}>{err}</li>
                         ))}

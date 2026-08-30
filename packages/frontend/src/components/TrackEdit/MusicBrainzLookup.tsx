@@ -165,9 +165,9 @@ export function MusicBrainzLookup({ title, artist, album, onApply }: Props) {
                       <span
                         className={`text-xs px-2 py-0.5 rounded ${
                           candidate.confidence >= 0.8
-                            ? 'bg-green-500/20 text-success'
+                            ? 'bg-success-strong/20 text-success'
                             : candidate.confidence >= 0.5
-                            ? 'bg-amber-500/20 text-warning'
+                            ? 'bg-warning-strong/20 text-warning'
                             : 'bg-zinc-700 text-zinc-400'
                         }`}
                       >

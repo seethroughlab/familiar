@@ -98,8 +98,8 @@ export function RemoteLogsPanel() {
 
   const getLevelBg = (level: string) => {
     switch (level) {
-      case 'error': return 'bg-red-500/10';
-      case 'warn': return 'bg-yellow-500/10';
+      case 'error': return 'bg-danger-strong/10';
+      case 'warn': return 'bg-warning-strong/10';
       default: return '';
     }
   };
@@ -151,7 +151,7 @@ export function RemoteLogsPanel() {
             </button>
             <button
               onClick={handleClear}
-              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700 hover:bg-red-700 text-zinc-200 text-xs rounded"
+              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700 hover:bg-danger-strong text-zinc-200 text-xs rounded"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Clear All

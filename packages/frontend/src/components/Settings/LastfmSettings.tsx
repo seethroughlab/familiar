@@ -40,7 +40,7 @@ export function LastfmSettings() {
           <Radio className="w-6 h-6 text-danger" />
           <h3 className="font-medium">Last.fm</h3>
         </div>
-        <div className="flex items-start gap-2 p-3 bg-amber-900/20 border border-amber-800 rounded-lg">
+        <div className="flex items-start gap-2 p-3 bg-warning-surface/20 border border-warning-muted rounded-lg">
           <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
           <div>
             <p className="text-sm text-warning">Last.fm API not configured</p>
@@ -84,7 +84,7 @@ export function LastfmSettings() {
             <button
               onClick={() => disconnectMutation.mutate()}
               disabled={disconnectMutation.isPending}
-              className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-danger rounded-lg text-sm transition-colors"
+              className="px-3 py-2 bg-danger-strong/20 hover:bg-danger-strong/30 text-danger rounded-lg text-sm transition-colors"
             >
               {disconnectMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -108,7 +108,7 @@ export function LastfmSettings() {
           <button
             onClick={() => connectMutation.mutate()}
             disabled={connectMutation.isPending}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 rounded-lg text-sm font-medium transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-danger-strong hover:bg-danger-strong rounded-lg text-sm font-medium transition-colors"
           >
             {connectMutation.isPending ? (
               <>

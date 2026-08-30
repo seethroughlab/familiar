@@ -80,7 +80,7 @@ export function ExternalAlbumCard({
           </div>
         </div>
         {album.local_album_match && (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/30 text-success text-xs">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-surface/30 text-success text-xs">
             <Check className="w-3 h-3" />
             In library
           </span>
@@ -136,7 +136,7 @@ export function ExternalAlbumCard({
 
       {/* In-library badge — top-left if applicable */}
       {album.local_album_match && (
-        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-900/80 backdrop-blur-sm text-green-200 text-[10px] font-medium">
+        <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-success-surface/80 backdrop-blur-sm text-success-subtle text-[10px] font-medium">
           <Check className="w-3 h-3" />
           In library
         </div>

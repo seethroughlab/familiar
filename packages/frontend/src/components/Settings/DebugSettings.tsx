@@ -233,7 +233,7 @@ export function DebugSettings() {
                 onClick={toggleVisualizerDebug}
                 className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                   visualizerDebugEnabled
-                    ? 'bg-green-500/20 text-success'
+                    ? 'bg-success-strong/20 text-success'
                     : 'bg-zinc-700 text-zinc-300'
                 }`}
               >
@@ -335,9 +335,9 @@ export function DebugSettings() {
                   <div
                     key={err.id}
                     className={`p-2 rounded ${err.severity === 'error'
-                      ? 'bg-red-900/30 border border-red-800/50'
+                      ? 'bg-danger-surface/30 border border-danger-muted/50'
                       : err.severity === 'warning'
-                        ? 'bg-yellow-900/30 border border-yellow-800/50'
+                        ? 'bg-warning-surface/30 border border-warning-muted/50'
                         : 'bg-zinc-800/50 border border-zinc-700/50'
                       }`}
                   >
@@ -346,11 +346,11 @@ export function DebugSettings() {
                         className={`px-1.5 py-0.5 rounded text-[10px] ${err.category === 'network'
                           ? 'bg-orange-500/20 text-orange-400'
                           : err.category === 'auth'
-                            ? 'bg-red-500/20 text-danger'
+                            ? 'bg-danger-strong/20 text-danger'
                             : err.category === 'server'
-                              ? 'bg-red-500/20 text-danger'
+                              ? 'bg-danger-strong/20 text-danger'
                               : err.category === 'external'
-                                ? 'bg-yellow-500/20 text-warning'
+                                ? 'bg-warning-strong/20 text-warning'
                                 : 'bg-zinc-500/20 text-zinc-400'
                           }`}
                       >

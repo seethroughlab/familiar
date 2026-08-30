@@ -50,9 +50,9 @@ function ConfidenceBadge({ score }: { score: number }) {
   const percent = Math.round(score * 100);
   const colorClass =
     score >= 0.8
-      ? 'bg-green-500/20 text-success'
+      ? 'bg-success-strong/20 text-success'
       : score >= 0.5
-      ? 'bg-amber-500/20 text-warning'
+      ? 'bg-warning-strong/20 text-warning'
       : 'bg-zinc-700 text-zinc-400';
 
   return (
@@ -211,7 +211,7 @@ function TrackResultCard({
 
       {/* Error message */}
       {result.status === 'error' && identifyResult?.error && (
-        <div className="border-t border-zinc-700 px-3 py-2 bg-red-500/10">
+        <div className="border-t border-zinc-700 px-3 py-2 bg-danger-strong/10">
           <p className="text-xs text-danger">{identifyResult.error}</p>
         </div>
       )}
@@ -479,7 +479,7 @@ export function BulkAutoPopulatePanel({ trackIds, onApplyToTrack }: Props) {
 
           {/* Errors */}
           {progress?.errors && progress.errors.length > 0 && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-danger/20 rounded-lg">
+            <div className="mt-4 p-3 bg-danger-strong/10 border border-danger/20 rounded-lg">
               <p className="text-sm font-medium text-danger mb-2">
                 {progress.errors.length} error{progress.errors.length !== 1 ? 's' : ''}
               </p>

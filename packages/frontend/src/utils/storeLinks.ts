@@ -40,7 +40,7 @@ export const STORE_STYLES: Record<string, { color: string; abbrev: string }> = {
   qobuz: { color: 'bg-blue-600 hover:bg-blue-500', abbrev: 'QB' },
   '7digital': { color: 'bg-purple-600 hover:bg-purple-500', abbrev: '7D' },
   itunes: { color: 'bg-pink-600 hover:bg-pink-500', abbrev: 'IT' },
-  amazon: { color: 'bg-yellow-600 hover:bg-yellow-500', abbrev: 'AZ' },
+  amazon: { color: 'bg-warning-strong hover:bg-warning-strong', abbrev: 'AZ' },
 };
 
 export function generateSearchUrl(storeKey: string, artist: string, title: string, album?: string): string | null {
