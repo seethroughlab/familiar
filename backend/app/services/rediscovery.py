@@ -107,6 +107,11 @@ async def suggest_rediscovery(
         db,
         seed_track_ids=seed_ids[:SEED_SAMPLE_CAP],
         exclude_track_ids=heard_ids,
+        # Excluded by id at three plays, but *any* play makes a recording known well
+        # enough that a second file of it is not a discovery. Keeping these separate
+        # is what lets a track played twice come back as itself — a deep cut — while
+        # its duplicate does not.
+        duplicate_key_ids=set(seed_ids),
         # Carries ADR-0004's rejection signal into discovery (ADR-0101 point 4):
         # `_demote_rejected` reads it, so a track the listener has already dismissed
         # does not come back at the top of the list.

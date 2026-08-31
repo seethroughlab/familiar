@@ -84,6 +84,12 @@ async def suggest_for_collection(
     *,
     seed_track_ids: Sequence[UUID],
     exclude_track_ids: set[UUID] | None = None,
+    #: Tracks whose *metadata* marks a recording as already known, when that is a
+    #: wider set than the ids being excluded. Rediscovery excludes by id at three
+    #: plays but considers anything played at all "already heard" for the purpose of
+    #: spotting a duplicate file. Defaults to `exclude_track_ids`, which is right when
+    #: the two sets are the same — favourites, playlists.
+    duplicate_key_ids: set[UUID] | None = None,
     profile_id: UUID | None = None,
     limit: int = 10,
 ) -> list[Suggestion]:
@@ -121,7 +127,9 @@ async def suggest_for_collection(
     ]
 
     candidates = _drop_duplicate_recordings(candidates)
-    candidates = await _drop_recordings_already_in_the_collection(db, candidates, excluded)
+    candidates = await _drop_recordings_already_in_the_collection(
+        db, candidates, duplicate_key_ids if duplicate_key_ids is not None else excluded
+    )
     candidates = await _demote_rejected(db, candidates, profile_id)
 
     # Agreement first; single votes only to fill. A three-track playlist cannot produce two votes for
@@ -277,11 +285,14 @@ async def _drop_recordings_already_in_the_collection(
     — that folds duplicates among *candidates*, and here the duplicate is on the other
     side of the comparison.
 
-    **Keyed on the *excluded* set, not the seeds**, and the difference is not
-    cosmetic. For rediscovery the seeds are everything ever played, which includes the
-    barely-played tracks the feature most wants to resurface — filtering against those
-    drops exactly the deep-cut case it exists to serve. The excluded set is "what the
-    listener already has", which is the question being asked.
+    **The candidate is exempt from its own key**, and that exemption is the whole
+    subtlety. A track played twice and offered back *as itself* is the deep cut this
+    feature exists to resurface. The same metadata on a *different row* is a second
+    file of something already heard, and useless. Two earlier versions of this filter
+    got it wrong in opposite directions — one keyed on seeds and killed deep cuts, one
+    keyed on the heard set and let duplicates of barely-played tracks through, which
+    is how Interpol's "Anywhere" was still being suggested because you play Interpol's
+    "Anywhere".
     """
     from app.services.normalize import normalize_for_duplicate_matching
 
@@ -293,14 +304,14 @@ async def _drop_recordings_already_in_the_collection(
             select(Track.artist, Track.title).where(Track.id.in_(list(excluded)))
         )
     ).all()
-    seed_keys = {
+    collection_keys = {
         (
             normalize_for_duplicate_matching(artist, strip_articles=True),
             normalize_for_duplicate_matching(title),
         )
         for artist, title in rows
     }
-    seed_keys.discard(("", ""))
+    collection_keys.discard(("", ""))
 
     kept = []
     for candidate in candidates:
@@ -308,7 +319,7 @@ async def _drop_recordings_already_in_the_collection(
             normalize_for_duplicate_matching(candidate.track.artist, strip_articles=True),
             normalize_for_duplicate_matching(candidate.track.title),
         )
-        if key in seed_keys:
+        if key in collection_keys and candidate.track.id not in excluded:
             continue
         kept.append(candidate)
     return kept

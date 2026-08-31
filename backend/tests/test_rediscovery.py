@@ -190,13 +190,17 @@ async def test_a_second_file_of_a_played_track_is_not_suggested(async_db):
     await _track_with_embedding(
         async_db, title="Genuinely New", artist="Someone Else", embedding=_vec(0.97)
     )
+    # Played *twice* — below HEARD_THRESHOLD, so not excluded by id. This is the
+    # production shape: the duplicate slipped through two earlier versions of the
+    # filter precisely because the played copy was not in the excluded set.
     await insert_test_play_history(
-        async_db, profile.id, played.id, play_count=10, last_played_at=utcnow()
+        async_db, profile.id, played.id, play_count=2, last_played_at=utcnow()
     )
     await async_db.commit()
 
     suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
 
+    dupes = [s for s in suggestions if s.track.title == "Anywhere" and s.track.id != played.id]
+    assert not dupes, "a duplicate file of a played track is not a discovery"
     titles = {s.track.title for s in suggestions}
-    assert "Anywhere" not in titles, "a duplicate file of a played track is not a discovery"
     assert "Genuinely New" in titles, "and the real suggestion still comes through"
