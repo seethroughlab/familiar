@@ -548,3 +548,127 @@ async def test_save_does_not_raise_when_a_release_already_exists_in_two_contexts
         release_name="Reality Awaits",
     )
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# ADR-0099 point 1: the read path is a database query, and stays one
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_new_releases_view_never_calls_musicbrainz(async_db, monkeypatch):
+    """The load-bearing assertion of Phase 1.
+
+    Reading the returned releases proves the cache is wired up; it does not prove
+    the live scan is gone. So MusicBrainz is made to explode: if any code path
+    still reaches it, this test raises rather than quietly passing.
+
+    That path is what hung an MCP host for 240 seconds on 2026-08-30.
+    """
+    def _explode(*args, **kwargs):
+        raise AssertionError("the read path called MusicBrainz — ADR-0099 point 1")
+
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.get_artist_releases_recent", _explode
+    )
+    monkeypatch.setattr("app.services.metadata.musicbrainz.search_artist", _explode)
+
+    async_db.add(
+        ExternalAlbumCache(
+            release_id="rg-view-1",
+            discovery_context=DISCOVERY_CONTEXT,
+            artist_name="Tycho",
+            artist_name_normalized=normalize_artist_name("Tycho"),
+            release_name="Anotherwave",
+            release_date=utcnow().replace(tzinfo=None) - timedelta(days=3),
+            discovered_at=utcnow().replace(tzinfo=None),
+        )
+    )
+    await async_db.flush()
+
+    view = await NewReleasesService(async_db).get_new_releases_view()
+
+    assert [r["title"] for r in view["releases"]] == ["Anotherwave"]
+    assert view["as_of"] is not None
+    assert view["age_hours"] is not None and view["age_hours"] < 1
+
+
+@pytest.mark.asyncio
+async def test_new_releases_view_reports_never_run_distinctly(async_db):
+    """An empty cache is 'discovery has not run', not 'there is nothing new'."""
+    view = await NewReleasesService(async_db).get_new_releases_view()
+
+    assert view["releases"] == []
+    assert view["as_of"] is None
+    assert view["age_hours"] is None
+    assert "not the same as" in view["note"]
+
+
+@pytest.mark.asyncio
+async def test_new_releases_view_reports_stale_data_as_stale(async_db):
+    """Five days old is what production actually served while the job crashed."""
+    old = utcnow().replace(tzinfo=None) - timedelta(days=5)
+    async_db.add(
+        ExternalAlbumCache(
+            release_id="rg-view-stale",
+            discovery_context=DISCOVERY_CONTEXT,
+            artist_name="Coil",
+            artist_name_normalized=normalize_artist_name("Coil"),
+            release_name="Aqua Regalia",
+            release_date=old,
+            discovered_at=old,
+        )
+    )
+    await async_db.flush()
+
+    view = await NewReleasesService(async_db).get_new_releases_view()
+
+    assert view["age_hours"] >= 100
+    assert "stale" in view["note"]
+    assert "5 day(s) ago" in view["note"]
+
+
+@pytest.mark.asyncio
+async def test_new_releases_view_excludes_dismissed(async_db):
+    """A dismissal is the listener's decision and the read path must honour it."""
+    now = utcnow().replace(tzinfo=None)
+    for release_id, dismissed in (("rg-keep", False), ("rg-drop", True)):
+        async_db.add(
+            ExternalAlbumCache(
+                release_id=release_id,
+                discovery_context=DISCOVERY_CONTEXT,
+                artist_name="Squarepusher",
+                artist_name_normalized=normalize_artist_name("Squarepusher"),
+                release_name=release_id,
+                release_date=now,
+                discovered_at=now,
+                dismissed=dismissed,
+            )
+        )
+    await async_db.flush()
+
+    view = await NewReleasesService(async_db).get_new_releases_view()
+    assert [r["title"] for r in view["releases"]] == ["rg-keep"]
+
+
+@pytest.mark.asyncio
+async def test_new_releases_view_in_library_comes_from_the_precompute(async_db):
+    """`local_album_match` was computed at write time; the read does no matching."""
+    now = utcnow().replace(tzinfo=None)
+    async_db.add(
+        ExternalAlbumCache(
+            release_id="rg-owned",
+            discovery_context=DISCOVERY_CONTEXT,
+            artist_name="Brian Eno",
+            artist_name_normalized=normalize_artist_name("Brian Eno"),
+            release_name="Afterlife",
+            release_date=now,
+            discovered_at=now,
+            local_album_match=True,
+        )
+    )
+    await async_db.flush()
+
+    view = await NewReleasesService(async_db).get_new_releases_view()
+    assert view["releases"][0]["in_library"] is True
+    assert view["new_releases_not_in_library"] == 0

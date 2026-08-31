@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.api.deps import DbSession, RequiredProfile
 from app.services.new_releases import NewReleasesService
@@ -15,7 +16,46 @@ from app.services.tasks import (
 router = APIRouter(prefix="/new-releases", tags=["new-releases"])
 
 
-@router.get("")
+class NewReleaseItem(BaseModel):
+    """A discovered release by an artist in the library.
+
+    Deliberately *not* ``ExternalAlbumResponse``, which the recommendation surfaces
+    use: that model requires ``match_score`` and ``seed_artist``, and this surface has
+    no notion of either — a release by an artist you already listen to was not matched
+    against a seed. Sharing the model would mean inventing two values to satisfy it.
+    """
+
+    id: str
+    artist_name: str
+    release_name: str
+    release_type: str | None
+    release_date: str | None
+    artwork_url: str
+    external_url: str | None
+    track_count: int | None
+    local_album_match: bool
+    dismissed: bool
+    discovered_at: str
+    # {store_name: {"url": ..., "label": ...}} from generate_release_search_urls()
+    purchase_links: dict[str, dict[str, str]]
+
+
+class NewReleasesListResponse(BaseModel):
+    """A page of discovered releases, with the age of the data behind it."""
+
+    releases: list[NewReleaseItem]
+    total: int
+    limit: int
+    offset: int
+    #: When discovery last wrote a release, and how long ago that was. ``None`` means
+    #: it has never written one — which is not the same as "there is nothing new",
+    #: and a client showing an empty list must be able to tell the two apart
+    #: (ADR-0099 points 7 and 8).
+    as_of: str | None = None
+    age_hours: float | None = None
+
+
+@router.get("", response_model=NewReleasesListResponse)
 async def list_new_releases(
     db: DbSession,
     limit: int = Query(default=50, ge=1, le=100),
@@ -45,11 +85,15 @@ async def list_new_releases(
         include_owned=include_owned,
     )
 
+    as_of, age_hours = await service.get_discovery_freshness()
+
     return {
         "releases": releases,
         "total": total,
         "limit": limit,
         "offset": offset,
+        "as_of": as_of.isoformat() if as_of else None,
+        "age_hours": round(age_hours, 1) if age_hours is not None else None,
     }
 
 

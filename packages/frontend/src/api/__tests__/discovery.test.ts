@@ -69,18 +69,6 @@ describe('newReleasesApi', () => {
     expect(result.new_releases_available).toBe(4);
   });
 
-  it('check() POSTs /new-releases/check with params', async () => {
-    mockApi.post.mockResolvedValueOnce({
-      data: { status: 'started', message: 'New releases check started' },
-    });
-
-    const result = await newReleasesApi.check({ days_back: 30, force: true });
-    expect(mockApi.post).toHaveBeenCalledWith('/new-releases/check', null, {
-      params: { days_back: 30, force: true },
-    });
-    expect(result.status).toBe('started');
-  });
-
   it('checkBatch() POSTs /new-releases/check/batch with params', async () => {
     mockApi.post.mockResolvedValueOnce({
       data: { status: 'started', message: 'Priority-based new releases check started (batch size: 75)' },

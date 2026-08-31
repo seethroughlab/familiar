@@ -669,45 +669,6 @@
         "title": "ArtistListResponse",
         "type": "object"
       },
-      "ArtistNewReleasesResponse": {
-        "description": "New releases from artists in the user's library.",
-        "properties": {
-          "artists_checked": {
-            "title": "Artists Checked",
-            "type": "integer"
-          },
-          "artists_skipped": {
-            "title": "Artists Skipped",
-            "type": "integer"
-          },
-          "note": {
-            "title": "Note",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "partial": {
-            "default": false,
-            "title": "Partial",
-            "type": "boolean"
-          },
-          "releases": {
-            "items": {
-              "$ref": "#/components/schemas/NewRelease"
-            },
-            "title": "Releases",
-            "type": "array"
-          }
-        },
-        "required": [
-          "releases",
-          "artists_checked",
-          "artists_skipped"
-        ],
-        "title": "ArtistNewReleasesResponse",
-        "type": "object"
-      },
       "ArtistSearchResponse": {
         "properties": {
           "results": {
@@ -5688,8 +5649,8 @@
         "title": "MusicMapResponse",
         "type": "object"
       },
-      "NewRelease": {
-        "description": "A recent release by a library artist.",
+      "NewReleaseItem": {
+        "description": "A discovered release by an artist in the library.\n\nDeliberately *not* ``ExternalAlbumResponse``, which the recommendation surfaces\nuse: that model requires ``match_score`` and ``seed_artist``, and this surface has\nno notion of either \u2014 a release by an artist you already listen to was not matched\nagainst a seed. Sharing the model would mean inventing two values to satisfy it.",
         "properties": {
           "artist_name": {
             "title": "Artist Name",
@@ -5697,24 +5658,50 @@
           },
           "artwork_url": {
             "title": "Artwork Url",
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": "string"
           },
-          "in_library": {
-            "title": "In Library",
+          "discovered_at": {
+            "title": "Discovered At",
+            "type": "string"
+          },
+          "dismissed": {
+            "title": "Dismissed",
             "type": "boolean"
           },
-          "musicbrainz_release_group_id": {
-            "title": "Musicbrainz Release Group Id",
+          "external_url": {
+            "title": "External Url",
             "type": [
               "string",
               "null"
             ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "local_album_match": {
+            "title": "Local Album Match",
+            "type": "boolean"
+          },
+          "purchase_links": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Purchase Links",
+            "type": "object"
           },
           "release_date": {
             "title": "Release Date",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "release_name": {
+            "title": "Release Name",
             "type": "string"
           },
           "release_type": {
@@ -5724,21 +5711,75 @@
               "null"
             ]
           },
-          "title": {
-            "title": "Title",
-            "type": "string"
+          "track_count": {
+            "title": "Track Count",
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
+          "id",
           "artist_name",
-          "title",
+          "release_name",
           "release_type",
           "release_date",
           "artwork_url",
-          "musicbrainz_release_group_id",
-          "in_library"
+          "external_url",
+          "track_count",
+          "local_album_match",
+          "dismissed",
+          "discovered_at",
+          "purchase_links"
         ],
-        "title": "NewRelease",
+        "title": "NewReleaseItem",
+        "type": "object"
+      },
+      "NewReleasesListResponse": {
+        "description": "A page of discovered releases, with the age of the data behind it.",
+        "properties": {
+          "age_hours": {
+            "title": "Age Hours",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "as_of": {
+            "title": "As Of",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "releases": {
+            "items": {
+              "$ref": "#/components/schemas/NewReleaseItem"
+            },
+            "title": "Releases",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "releases",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "NewReleasesListResponse",
         "type": "object"
       },
       "OfflineManifestRequest": {
@@ -16450,109 +16491,6 @@
         ]
       }
     },
-    "/api/v1/library/artists/new-releases": {
-      "get": {
-        "description": "Find recent releases by your most-played artists via MusicBrainz.\n\nOn-demand lookup \u2014 may take 10-15 seconds depending on how many\nartists have MusicBrainz IDs cached.",
-        "operationId": "discover_get_artist_new_releases",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "days_back",
-            "required": false,
-            "schema": {
-              "default": 90,
-              "maximum": 365,
-              "minimum": 1,
-              "title": "Days Back",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 20,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Limit",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ArtistNewReleasesResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "400": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Bad Request"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unauthorized"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Unprocessable Entity"
-          },
-          "500": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            },
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "ProfileHeader": []
-          }
-        ],
-        "summary": "Get Artist New Releases",
-        "tags": [
-          "discover"
-        ]
-      }
-    },
     "/api/v1/library/artists/{artist_name}": {
       "get": {
         "description": "Get detailed artist information including Last.fm bio and library content.\n\nResolves the URL name to a canonical ``Artist`` row via ``ArtistAlias``,\nthen queries stats/albums/tracks via ``Track.canonical_artist_id``. The\nresponse ``name`` is the canonical name, not the URL input \u2014 that's\nwhat makes \"Beatles\" and \"The Beatles\" visually de-duplicate.\n\nLast.fm cache is read from / written to ``Artist.*`` (already migrated\nby Pass 1's backfill). The legacy ``ArtistInfo`` table is no longer\nwritten from this endpoint; Pass 3 will drop it.\n\nArgs:\n    artist_name: The artist name (URL-encoded)\n    refresh_lastfm: Force refresh of Last.fm data",
@@ -20006,9 +19944,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response New-Releases List New Releases",
-                  "type": "object"
+                  "$ref": "#/components/schemas/NewReleasesListResponse"
                 }
               }
             },
