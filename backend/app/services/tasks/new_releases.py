@@ -199,8 +199,10 @@ async def _check_artist_against_musicbrainz(
 ) -> None:
     """Resolve an artist's MB id, fetch recent releases, and persist them.
 
-    Mutates ``stats`` in place. Updates artist check cache only when an MB id
-    was successfully resolved (so retries on unmatched artists aren't suppressed).
+    Mutates ``stats`` in place. Records the check whenever MusicBrainz *answered* —
+    matched or not — so an artist with no MusicBrainz entry leaves the never-checked
+    backlog instead of being re-selected on every batch. Only a call that genuinely
+    failed leaves no record, and is retried next batch. See the comment at the write.
     """
     from app.services.metadata.musicbrainz import (
         get_artist_releases_recent,
@@ -210,6 +212,10 @@ async def _check_artist_against_musicbrainz(
 
     mb_id_to_use = mb_artist_id
     releases_for_artist: list[dict[str, Any]] = []
+    # Whether MusicBrainz was actually reached and answered. Distinct from whether it
+    # *matched*: "asked, no such artist" and "could not ask" have to be told apart, or
+    # the artist either churns forever or is written off on a network blip.
+    upstream_answered = False
 
     try:
         if not mb_id_to_use:
@@ -241,6 +247,8 @@ async def _check_artist_against_musicbrainz(
                         "musicbrainz_artist_id": mb_id_to_use,
                     }
                 )
+
+        upstream_answered = True
 
     except Exception as e:
         logger.warning(f"MusicBrainz lookup failed for {artist_name}: {e}")
@@ -275,11 +283,33 @@ async def _check_artist_against_musicbrainz(
         if saved:
             stats["releases_new"] += 1
 
-    if mb_id_to_use:
+    # **Record the check whenever MusicBrainz answered, matched or not.**
+    #
+    # This used to write only when an id resolved, so that an unmatched artist would be
+    # retried rather than cached-out. That reasoning optimised for a rare transient at
+    # the cost of the common structural case, and once ADR-0101 admitted unplayed
+    # artists to the rotation the cost stopped being bounded: an artist MusicBrainz has
+    # no entry for would be re-selected by the never-checked reserve on *every* batch,
+    # forever, displacing artists that have never been looked at even once. Measured on
+    # the live library — a 20-artist batch touched six cache rows and inserted none,
+    # while 2,937 artists had no row at all.
+    #
+    # A row without a `musicbrainz_artist_id` is the honest record of "asked, nothing
+    # matched": the artist leaves the backlog and rejoins the normal staleness rotation
+    # rather than churning. If the call *failed*, nothing is written and it is retried
+    # next batch.
+    #
+    # The imperfection worth naming: `search_artist` swallows a 503 and returns `None`,
+    # so a rate-limited window is indistinguishable here from a genuine no-match and
+    # costs one rotation. ADR-0099 point 6 is where that becomes visible; it is not
+    # fixable from this side today.
+    if mb_id_to_use or upstream_answered:
         await service.update_artist_cache(
             artist_normalized=normalized,
             musicbrainz_id=mb_id_to_use,
         )
+        if not mb_id_to_use:
+            stats["artists_unmatched"] = stats.get("artists_unmatched", 0) + 1
 
 
 async def run_new_releases_check(
@@ -302,6 +332,7 @@ async def run_new_releases_check(
         "releases_new": 0,
         "musicbrainz_queries": 0,
         "artists_failed": 0,
+        "artists_unmatched": 0,
     }
 
     local_engine, local_session_maker = create_task_engine_session()
@@ -382,6 +413,7 @@ async def run_prioritized_new_releases_check(
         "releases_new": 0,
         "musicbrainz_queries": 0,
         "artists_failed": 0,
+        "artists_unmatched": 0,
     }
 
     local_engine, local_session_maker = create_task_engine_session()
@@ -442,6 +474,7 @@ async def run_prioritized_new_releases_check(
         logger.info(
             f"Priority-based new releases check complete: "
             f"{stats['artists_checked']} artists, {stats['releases_new']} new releases, "
+            f"{stats.get('artists_unmatched', 0)} unmatched, "
             f"{stats.get('artists_failed', 0)} failed"
         )
         return {"status": "success", **stats}
