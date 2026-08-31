@@ -168,3 +168,35 @@ async def test_a_track_played_once_long_ago_can_still_come_back(async_db):
     assert forgotten.id in {s.track.id for s in suggestions}, (
         "a track sampled once years ago is exactly what rediscovery is for"
     )
+
+
+@pytest.mark.asyncio
+async def test_a_second_file_of_a_played_track_is_not_suggested(async_db):
+    """"Listen to this thing you already play" is worse than no suggestion.
+
+    `exclude_track_ids` works on ids, so a library holding the same recording twice
+    has one copy excluded and the other free to come back — with similarity 1.0 and
+    its own seed as the reason. Four of ten suggestions did exactly this on the live
+    library the day rediscovery shipped.
+    """
+    profile = await insert_test_profile(async_db)
+    played = await _track_with_embedding(
+        async_db, title="Anywhere", artist="Interpol", embedding=_vec(1.0)
+    )
+    # A second file of the same recording: different row, identical metadata.
+    await _track_with_embedding(
+        async_db, title="Anywhere", artist="Interpol", embedding=_vec(1.0)
+    )
+    await _track_with_embedding(
+        async_db, title="Genuinely New", artist="Someone Else", embedding=_vec(0.97)
+    )
+    await insert_test_play_history(
+        async_db, profile.id, played.id, play_count=10, last_played_at=utcnow()
+    )
+    await async_db.commit()
+
+    suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
+
+    titles = {s.track.title for s in suggestions}
+    assert "Anywhere" not in titles, "a duplicate file of a played track is not a discovery"
+    assert "Genuinely New" in titles, "and the real suggestion still comes through"

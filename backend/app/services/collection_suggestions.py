@@ -121,6 +121,7 @@ async def suggest_for_collection(
     ]
 
     candidates = _drop_duplicate_recordings(candidates)
+    candidates = await _drop_recordings_already_in_the_collection(db, candidates, excluded)
     candidates = await _demote_rejected(db, candidates, profile_id)
 
     # Agreement first; single votes only to fill. A three-track playlist cannot produce two votes for
@@ -255,6 +256,60 @@ def _drop_duplicate_recordings(candidates: list[Suggestion]) -> list[Suggestion]
         if key in seen:
             continue
         seen.add(key)
+        kept.append(candidate)
+    return kept
+
+
+async def _drop_recordings_already_in_the_collection(
+    db: AsyncSession,
+    candidates: list[Suggestion],
+    excluded: set[UUID],
+) -> list[Suggestion]:
+    """Drop candidates that are another *file* of a track already in the collection.
+
+    `exclude_track_ids` works on ids, so a library holding the same recording twice —
+    an album cut and a single, two rips of one release — has one copy excluded and the
+    other free to be suggested. It comes back with similarity 1.0 and its own seed as
+    the reason, which reads as "listen to this thing you already play".
+
+    Seen on the live library the day rediscovery shipped: four of ten suggestions were
+    a track recommended because of itself. `_drop_duplicate_recordings` cannot catch it
+    — that folds duplicates among *candidates*, and here the duplicate is on the other
+    side of the comparison.
+
+    **Keyed on the *excluded* set, not the seeds**, and the difference is not
+    cosmetic. For rediscovery the seeds are everything ever played, which includes the
+    barely-played tracks the feature most wants to resurface — filtering against those
+    drops exactly the deep-cut case it exists to serve. The excluded set is "what the
+    listener already has", which is the question being asked.
+    """
+    from app.services.normalize import normalize_for_duplicate_matching
+
+    if not candidates or not excluded:
+        return candidates
+
+    rows = (
+        await db.execute(
+            select(Track.artist, Track.title).where(Track.id.in_(list(excluded)))
+        )
+    ).all()
+    seed_keys = {
+        (
+            normalize_for_duplicate_matching(artist, strip_articles=True),
+            normalize_for_duplicate_matching(title),
+        )
+        for artist, title in rows
+    }
+    seed_keys.discard(("", ""))
+
+    kept = []
+    for candidate in candidates:
+        key = (
+            normalize_for_duplicate_matching(candidate.track.artist, strip_articles=True),
+            normalize_for_duplicate_matching(candidate.track.title),
+        )
+        if key in seed_keys:
+            continue
         kept.append(candidate)
     return kept
 
