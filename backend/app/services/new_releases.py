@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, func, or_, select
+from sqlalchemy import Float, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -89,6 +89,24 @@ def plausible_release_date(
     if value - reference > MAX_RELEASE_DATE_LOOKAHEAD:
         return None
     return value
+
+
+#: Share of each discovery batch reserved for artists never checked at all.
+#:
+#: **Without a reserve, admitting unplayed artists to the pool accomplishes nothing.**
+#: They score zero on both recency and frequency, so they sort below every artist with
+#: any listening history — and measured on 2026-08-31 the played set alone oversubscribes
+#: the rotation: 706 played artists eligible at any moment against a capacity of 525 per
+#: seven-day cycle. A queue that refills faster than it drains never reaches its tail.
+#:
+#: One third rather than a half or a tenth, and the tension is real in both directions.
+#: Too small and the 2,932 never-checked artists take years; too large and new releases by
+#: the artists someone actually listens to go unnoticed while the backlog is walked. Two
+#: thirds keeps the listened-to set current, which is the thing a person notices.
+#:
+#: This is a backlog mechanism, not a permanent policy: once every artist has been checked
+#: once, no artist matches the reserve and the whole batch is priority-ordered again.
+NEVER_CHECKED_BATCH_SHARE = 1 / 3
 
 
 # Beyond this, the precompute is old enough that a caller should say so out loud.
@@ -460,14 +478,24 @@ class NewReleasesService:
         batch_size: int = 75,
         min_days_since_check: int = 7,
     ) -> list[dict[str, Any]]:
-        """Return artists prioritized by listening recency (60%) + frequency (40%).
+        """Return library artists prioritized by listening recency (60%) + frequency (40%).
 
-        Groups by canonical ``Artist.id`` so spelling variants share one
-        priority score. ``ArtistCheckCache`` is joined on a Python-side
-        normalized form of ``Artist.name`` — the cache table is legacy
-        string-keyed and stays that way; the join condition uses the same
-        ``lower(trim(Artist.name))`` normalization the resolver wrote
-        with.
+        **Every artist in the library is a candidate, whether or not you have played
+        them.** This used to select *from* ``ProfilePlayHistory``, which made play
+        history a gate rather than a priority: 2,614 of 3,453 owned artists had no row
+        there and were structurally invisible to new-release discovery. Nothing in
+        ADR-0099 asked for that — it was an implementation accident, recorded as a bug
+        in ADR-0101.
+
+        Play history is now an outer join and decides *order*, not membership. An
+        artist you have never played scores zero and sorts last, which is correct and,
+        on its own, still useless — see ``NEVER_CHECKED_BATCH_SHARE``.
+
+        Groups by canonical ``Artist.id`` so spelling variants share one priority
+        score. ``ArtistCheckCache`` is joined on a Python-side normalized form of
+        ``Artist.name`` — the cache table is legacy string-keyed and stays that way;
+        the join condition uses the same ``lower(trim(Artist.name))`` normalization the
+        resolver wrote with.
         """
         artist_stats = (
             select(
@@ -476,12 +504,21 @@ class NewReleasesService:
                 Artist.musicbrainz_id.label("musicbrainz_artist_id"),
                 func.lower(func.trim(Artist.name)).label("artist_normalized"),
                 func.max(ProfilePlayHistory.last_played_at).label("last_played"),
-                func.sum(ProfilePlayHistory.play_count).label("total_plays"),
+                # `coalesce` matters: an artist with no play history has a NULL sum,
+                # and NULL propagates through `ln()` to a NULL priority score, which
+                # sorts unpredictably rather than last.
+                func.coalesce(func.sum(ProfilePlayHistory.play_count), 0).label("total_plays"),
             )
-            .select_from(ProfilePlayHistory)
-            .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .join(Artist, Artist.id == Track.canonical_artist_id)
-            .where(ProfilePlayHistory.profile_id == profile_id)
+            .select_from(Artist)
+            .join(Track, Track.canonical_artist_id == Artist.id)
+            .outerjoin(
+                ProfilePlayHistory,
+                and_(
+                    ProfilePlayHistory.track_id == Track.id,
+                    ProfilePlayHistory.profile_id == profile_id,
+                ),
+            )
+            .where(Track.status == TrackStatus.ACTIVE)
             .group_by(
                 Artist.id,
                 Artist.name,
@@ -509,32 +546,54 @@ class NewReleasesService:
 
         priority_score = (recency_score + frequency_score).label("priority_score")
 
-        query = (
-            select(
-                artist_stats.c.artist_normalized,
-                artist_stats.c.artist_name,
-                artist_stats.c.musicbrainz_artist_id,
-                artist_stats.c.last_played,
-                artist_stats.c.total_plays,
-                priority_score,
+        def eligible(*, never_checked_only: bool, limit: int, exclude: set[str]):
+            """Eligible artists in priority order, optionally only the unchecked ones."""
+            stale = or_(
+                ArtistCheckCache.last_checked_at.is_(None),
+                ArtistCheckCache.last_checked_at < cache_cutoff,
             )
-            .select_from(artist_stats)
-            .outerjoin(
-                ArtistCheckCache,
-                artist_stats.c.artist_normalized == ArtistCheckCache.artist_name_normalized,
-            )
-            .where(
-                or_(
-                    ArtistCheckCache.last_checked_at.is_(None),
-                    ArtistCheckCache.last_checked_at < cache_cutoff,
+            conditions = [ArtistCheckCache.last_checked_at.is_(None)] if never_checked_only else [stale]
+            if exclude:
+                conditions.append(artist_stats.c.artist_normalized.notin_(exclude))
+            return (
+                select(
+                    artist_stats.c.artist_normalized,
+                    artist_stats.c.artist_name,
+                    artist_stats.c.musicbrainz_artist_id,
+                    artist_stats.c.last_played,
+                    artist_stats.c.total_plays,
+                    priority_score,
+                    ArtistCheckCache.last_checked_at.label("last_checked_at"),
                 )
+                .select_from(artist_stats)
+                .outerjoin(
+                    ArtistCheckCache,
+                    artist_stats.c.artist_normalized == ArtistCheckCache.artist_name_normalized,
+                )
+                .where(*conditions)
+                .order_by(priority_score.desc())
+                .limit(limit)
             )
-            .order_by(priority_score.desc())
-            .limit(batch_size)
-        )
 
-        result = await self.db.execute(query)
-        rows = result.fetchall()
+        # **The reserved slots are the half of this fix that does the work.** Widening the
+        # pool alone changes nothing: measured 2026-08-31, 706 played artists are eligible
+        # at any moment against a capacity of 525 per seven-day cycle, so the played set
+        # oversubscribes on its own and anything scoring zero waits behind a queue that
+        # refills faster than it drains. A fix that is correct in the query and inert in
+        # effect is not a fix.
+        reserved = max(1, round(batch_size * NEVER_CHECKED_BATCH_SHARE))
+        first_pass = (await self.db.execute(
+            eligible(never_checked_only=True, limit=reserved, exclude=set())
+        )).fetchall()
+
+        seen = {row.artist_normalized for row in first_pass}
+        remainder = (await self.db.execute(
+            eligible(
+                never_checked_only=False,
+                limit=max(0, batch_size - len(first_pass)),
+                exclude=seen,
+            )
+        )).fetchall()
 
         return [
             {
@@ -544,8 +603,13 @@ class NewReleasesService:
                 "last_played": row.last_played.isoformat() if row.last_played else None,
                 "total_plays": row.total_plays,
                 "priority_score": float(row.priority_score) if row.priority_score else 0.0,
+                # Read off the row rather than from membership of the reserved slice:
+                # the remainder is filtered on "stale *or* never checked", so it can
+                # legitimately contain never-checked artists too once the reserve is
+                # smaller than the backlog.
+                "never_checked": row.last_checked_at is None,
             }
-            for row in rows
+            for row in [*first_pass, *remainder]
         ]
 
     async def get_rotation_status(self, profile_id: UUID) -> dict[str, Any]:
