@@ -27,8 +27,28 @@ Implementation:
   A `not_instrumented` state was added after deployment showed the aggregate badge reading
   `never_succeeded` forever for sources nothing had wired — which is the ADR's own conflation, one
   level up.
-- **Points 5, 11 and 12 are not built.** Last.fm and Bandcamp report `not_instrumented`, which is the
-  honest state and the thing that flips when they are wired.
+- **Point 11** (`familiar` #250) — ListenBrainz, chosen over point 5's sources after probing all three
+  against the live services. One unauthenticated call returns 7,713 fresh releases carrying
+  MusicBrainz ids; 87 matched this library and 63 were new, the other 24 collapsing onto rows
+  MusicBrainz had already written. That collapse is the point: `release_group_mbid` *is*
+  `external_album_cache.release_id`, so the existing partial unique index dedupes across sources with
+  no fuzzy matching anywhere. Runs every three hours — one request, then local filtering — against
+  MusicBrainz's one-per-second-per-artist.
+- **Point 12** (#251) — `discovery_enabled` plus a flag per source. Off means no discovery request
+  leaves the machine; the read path still serves what is cached. The half that needed care is that a
+  disabled source keeps its last success forever, so without an explicit `disabled` state it read
+  `working` indefinitely after being switched off — this ADR's own confusion, reintroduced by the
+  switch meant to resolve it.
+- **Point 5 is not built, and should not be built as written.** Its premise — "both are already
+  integrated" — is true and misleading, and probing the live services is what showed it.
+  **Last.fm has no release API**; it was retired in 2016. It offers similar artists, so it cannot
+  produce a release and can only feed more artists into MusicBrainz, which means it does not remove
+  the single-upstream exposure point 5 credits it with. **Bandcamp returns no release dates** from
+  either its search or its album endpoint, so a 2026 record is indistinguishable from a 2002 one;
+  its search also answers "Coil" with *Dödsrit — Mortal Coil*. The date is reachable inside the
+  page's `data-tralbum` attribute at ~1.9 s per album, scraped, with no API contract — a project
+  rather than an integration, and worth doing only for the *purchasable* angle rather than for
+  freshness. Both report `not_instrumented`, which is the honest state.
 
 **Four of the fixes in this ADR were inert when first written** — correct in the code and changing
 nothing observable — and each was caught by checking the running system rather than the test suite.
