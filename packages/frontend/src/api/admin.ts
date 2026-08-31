@@ -72,7 +72,30 @@ export interface WorkerStatus {
   recent_failures: TaskFailure[];
 }
 
+export interface DiscoverySourceHealth {
+  source: string;
+  /** working | degraded | backing_off | failing | never_succeeded */
+  state: string;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_failure_kind: string | null;
+  last_failure_detail: string | null;
+  consecutive_failures: number;
+  items_contributed: number;
+  backoff_until: string | null;
+}
+
+export interface DiscoveryHealth {
+  sources: DiscoverySourceHealth[];
+  status: string;
+}
+
 export const healthApi = {
+  getDiscoverySources: async (): Promise<DiscoveryHealth> => {
+    const { data } = await api.get('/health/discovery-sources');
+    return data;
+  },
+
   getSystemHealth: async (): Promise<SystemHealth> => {
     const { data } = await api.get('/health/system');
     return data;

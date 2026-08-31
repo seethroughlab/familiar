@@ -276,12 +276,14 @@ async def _check_artist_against_musicbrainz(
         # having failed outright. `upstream_answered` stays False, so nothing is
         # recorded and the next batch retries the artist.
         stats["artists_timed_out"] = stats.get("artists_timed_out", 0) + 1
+        stats["_source_failure"] = ("rate_limited", f"no answer in {MUSICBRAINZ_CALL_TIMEOUT_SECONDS}s")
         logger.warning(
             "discovery_musicbrainz_timeout",
             extra={"artist": artist_name, "timeout_s": MUSICBRAINZ_CALL_TIMEOUT_SECONDS},
         )
 
     except Exception as e:
+        stats["_source_failure"] = ("http_error", str(e))
         logger.warning(f"MusicBrainz lookup failed for {artist_name}: {e}")
 
     for release in releases_for_artist:
@@ -449,6 +451,20 @@ async def run_prioritized_new_releases_check(
         "artists_timed_out": 0,
     }
 
+    from app.services.discovery import get_recorder
+
+    health = get_recorder()
+
+    # **Backoff is consulted before the work, not just reported after it** (ADR-0099
+    # point 4). A source in backoff is skipped and the batch ends immediately rather
+    # than spending ten slots re-confirming an outage. With one source this looks like
+    # a guard; the shape is what makes a second source able to keep running while this
+    # one is down.
+    if await health.should_skip("musicbrainz"):
+        logger.info("discovery_batch_skipped", extra={"reason": "musicbrainz backing off"})
+        await health.record_success("discovery_batch", items=0)
+        return {"status": "skipped", "reason": "musicbrainz backing off", **stats}
+
     local_engine, local_session_maker = create_task_engine_session()
 
     try:
@@ -504,6 +520,19 @@ async def run_prioritized_new_releases_check(
             new=stats["releases_new"],
         )
 
+        # One health write per source per batch rather than per artist: ten writes to
+        # say the same thing costs ten transactions and tells nobody anything more.
+        #
+        # **"Answered" is the success condition, not "found something".** A source that
+        # replies correctly and has no new releases is working; conflating the two is
+        # how a healthy upstream would start reading as broken every quiet week.
+        answered = stats["musicbrainz_queries"] > 0 or stats.get("artists_unmatched", 0) > 0
+        if answered:
+            await health.record_success("musicbrainz", items=stats["releases_new"])
+        elif stats.get("_source_failure"):
+            kind, detail = stats["_source_failure"]
+            await health.record_failure("musicbrainz", kind=kind, detail=detail)
+
         logger.info(
             f"Priority-based new releases check complete: "
             f"{stats['artists_checked']} artists, {stats['releases_new']} new releases, "
@@ -511,11 +540,19 @@ async def run_prioritized_new_releases_check(
             f"{stats.get('artists_timed_out', 0)} timed out, "
             f"{stats.get('artists_failed', 0)} failed"
         )
+
+        # ADR-0099 point 10: the job's own outcome, separately from its upstreams'.
+        # The nineteen-night outage had a perfectly healthy MusicBrainz and a dead
+        # writer — a source-only view would have shown all green throughout.
+        await health.record_success("discovery_batch", items=stats["releases_new"])
+
+        stats.pop("_source_failure", None)
         return {"status": "success", **stats}
 
     except Exception as e:
         logger.error(f"Priority-based new releases check failed: {e}", exc_info=True)
         progress.error(str(e))
+        await health.record_failure("discovery_batch", kind="crashed", detail=str(e))
         return {"status": "error", "error": str(e)}
     finally:
         await local_engine.dispose()

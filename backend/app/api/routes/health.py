@@ -1,6 +1,7 @@
 """Health check endpoints."""
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ from sqlalchemy import func, select, text
 from app.api.deps import DbSession
 from app.config import FEATURES_VERSION, get_app_version
 from app.db.models import Track, TrackAnalysis
+from app.utils.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -494,3 +496,85 @@ async def get_worker_status(db: DbSession) -> WorkerStatus:
         recent_failures=recent_failures,
         background_events=background_events,
     )
+
+
+class DiscoverySourceHealthResponse(BaseModel):
+    """Whether one discovery source is working — not whether it is configured."""
+
+    source: str
+    #: working | degraded | backing_off | failing | never_succeeded
+    state: str
+    last_success_at: str | None = None
+    last_failure_at: str | None = None
+    last_failure_kind: str | None = None
+    last_failure_detail: str | None = None
+    consecutive_failures: int = 0
+    items_contributed: int = 0
+    backoff_until: str | None = None
+
+
+class DiscoveryHealthResponse(BaseModel):
+    """Health of every discovery source, plus the job that drives them."""
+
+    sources: list[DiscoverySourceHealthResponse]
+    #: Worst state across the list, so a caller can render one badge.
+    status: str
+
+
+def _source_state(row: Any, now: datetime) -> str:
+    """Turn a health row into the word a person reads.
+
+    **`never_succeeded` is its own state and not a kind of "no data"** (ADR-0099
+    point 8). It was the true state for nineteen nights while the nightly job crashed,
+    and rendering it as "nothing found yet" is what let that pass unnoticed.
+    """
+    if row.backoff_until is not None and row.backoff_until > now:
+        return "backing_off"
+    if row.last_success_at is None:
+        return "never_succeeded"
+    if row.consecutive_failures >= 3:
+        return "failing"
+    if row.consecutive_failures > 0:
+        return "degraded"
+    return "working"
+
+
+@router.get("/health/discovery-sources", response_model=DiscoveryHealthResponse)
+async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
+    """Report whether each discovery source is working.
+
+    Deliberately **not** folded into `/health/system`'s `services` list: `ServiceStatus`
+    carries only name/status/message/details, so the four facts ADR-0099 point 6 asks
+    for — last success, last failure and its kind, contribution, backoff — would land
+    in an untyped `details` dict, which is what `lint_openapi` exists to stop. It is
+    also a different question from "is the process up".
+    """
+    from app.db.models import DiscoverySourceHealth
+
+    now = utcnow().replace(tzinfo=None)
+    rows = (
+        (await db.execute(select(DiscoverySourceHealth).order_by(DiscoverySourceHealth.source)))
+        .scalars()
+        .all()
+    )
+
+    sources = [
+        DiscoverySourceHealthResponse(
+            source=row.source,
+            state=_source_state(row, now),
+            last_success_at=row.last_success_at.isoformat() if row.last_success_at else None,
+            last_failure_at=row.last_failure_at.isoformat() if row.last_failure_at else None,
+            last_failure_kind=row.last_failure_kind,
+            last_failure_detail=row.last_failure_detail,
+            consecutive_failures=row.consecutive_failures,
+            items_contributed=row.items_contributed,
+            backoff_until=row.backoff_until.isoformat() if row.backoff_until else None,
+        )
+        for row in rows
+    ]
+
+    # Worst-wins, matching how `/health/system` aggregates its services.
+    severity = {"working": 0, "degraded": 1, "backing_off": 2, "never_succeeded": 3, "failing": 4}
+    worst = max(sources, key=lambda s: severity.get(s.state, 0), default=None)
+
+    return DiscoveryHealthResponse(sources=sources, status=worst.state if worst else "working")

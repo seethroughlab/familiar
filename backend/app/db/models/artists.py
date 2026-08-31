@@ -217,3 +217,62 @@ class ExternalAlbumCache(Base):
     local_album_match: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
 
     discovered_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class DiscoverySourceHealth(Base):
+    """Whether each discovery source is actually working (ADR-0099 points 6, 8, 10).
+
+    **Not "is a key configured", which is the question that already had an answer and
+    was the wrong one.** `panels/server/ApiKeyStatus.tsx` reports configuration, and a
+    source can hold a valid key, be scheduled, run every night, fail every time, and
+    look identical to a healthy one. That is what happened: nineteen consecutive
+    nightly crashes, logged at ERROR, surfaced nowhere.
+
+    **Postgres rather than Redis, deliberately.** The obvious home was the existing
+    `TASK_FAILURES_KEY` list, but it expires after 24 hours and the APScheduler
+    jobstore is in-memory — so "last succeeded five days ago" would become "no data"
+    on a container restart, and a stale record that quietly disappears is the precise
+    failure this table exists to prevent.
+
+    `backoff_until` is **control, not telemetry**: the batch reads it before deciding
+    whether to call a source, and the dashboard renders the same column. That is what
+    makes one source being down actually not stop the others, rather than merely
+    being reported.
+
+    Rows are seeded by the migration, because ADR-0099 point 8 needs "has never
+    succeeded" to be *representable* — an absent row reads as "not a thing" rather
+    than "has never worked".
+    """
+
+    __tablename__ = "discovery_source_health"
+
+    #: 'musicbrainz' | 'lastfm' | 'bandcamp', and 'discovery_batch' for the job itself.
+    source: Mapped[str] = mapped_column(String(40), primary_key=True)
+
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_failure_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    #: rate_limited | timeout | http_error | bad_response | not_configured | crashed
+    last_failure_kind: Mapped[str | None] = mapped_column(String(40))
+    last_failure_detail: Mapped[str | None] = mapped_column(Text)
+
+    # `server_default` rather than a Python-side `default=`: the baseline migration
+    # builds a fresh database with `Base.metadata.create_all()`, so the DDL comes from
+    # this model — and a Python default is invisible to the raw INSERT that seeds the
+    # rows, which then fails the NOT NULL. `updated_at` below already had it right.
+    consecutive_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    #: How much this source has actually contributed. A source that answers every call
+    #: and yields nothing is a different problem from one that errors, and neither is
+    #: visible from a success timestamp alone.
+    items_contributed: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+
+    backoff_until: Mapped[datetime | None] = mapped_column(DateTime)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )

@@ -12,6 +12,7 @@ from .artists import (
     Artist,
     ArtistAlias,
     ArtistCheckCache,
+    DiscoverySourceHealth,
     ExternalAlbumCache,
     ExternalArtistImageCache,
 )
@@ -53,6 +54,7 @@ __all__ = [
     "Artist",
     "ArtistAlias",
     "ArtistCheckCache",
+    "DiscoverySourceHealth",
     "ExternalAlbumCache",
     "ExternalArtistImageCache",
     "FrontendLog",
