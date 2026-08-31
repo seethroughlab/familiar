@@ -115,3 +115,20 @@ describe('DiscoverySources', () => {
     ).toBeTruthy();
   });
 });
+
+describe('DiscoverySources — unmonitored sources', () => {
+  it('a source nothing has attempted reads as not monitored, not as broken', async () => {
+    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+      status: 'working',
+      sources: [
+        source({ source: 'bandcamp', state: 'not_instrumented', last_success_at: null }),
+      ],
+    });
+    renderPanel();
+
+    expect(await screen.findByText('Not monitored')).toBeTruthy();
+    expect(screen.getByText(/not yet reporting health/)).toBeTruthy();
+    // The alarming wording belongs to never_succeeded, not to this.
+    expect(screen.queryByText(/never found anything/)).toBeNull();
+  });
+});

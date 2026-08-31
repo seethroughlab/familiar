@@ -149,20 +149,52 @@ async def test_an_unreadable_health_record_does_not_stop_discovery(async_db):
 
 
 @pytest.mark.asyncio
-async def test_never_succeeded_is_distinct_from_working(async_db, client):
-    """ADR-0099 point 8, as a shape a client can render.
+async def test_tried_and_never_succeeded_is_distinct_from_never_tried(async_db, client):
+    """ADR-0099 point 8, and the distinction that keeps it meaningful.
 
-    A seeded row with no success is *not* "nothing found yet" — it was the true
-    state for nineteen nights and nothing said so.
+    A source that has been *attempted* and never succeeded is a failure and was the
+    true state for nineteen nights. A source nothing has attempted is merely
+    unmonitored — Last.fm and Bandcamp are in that position until point 5 wires
+    them. Reporting the second as the first makes the aggregate badge permanently
+    alarming and conflates "unmonitored" with "broken", which is the conflation this
+    surface exists to remove.
     """
-    async_db.add(DiscoverySourceHealth(source="musicbrainz"))
+    async_db.add(
+        DiscoverySourceHealth(
+            source="musicbrainz",
+            last_attempt_at=utcnow().replace(tzinfo=None),
+        )
+    )
+    async_db.add(DiscoverySourceHealth(source="bandcamp"))
     await async_db.commit()
 
     data = client.get("/api/v1/health/discovery-sources").json()
     by_source = {s["source"]: s for s in data["sources"]}
 
     assert by_source["musicbrainz"]["state"] == "never_succeeded"
+    assert by_source["bandcamp"]["state"] == "not_instrumented"
+    # Worst-wins, but an unmonitored source must not drive the aggregate.
     assert data["status"] == "never_succeeded"
+
+
+@pytest.mark.asyncio
+async def test_an_unmonitored_source_alone_does_not_make_discovery_look_broken(
+    async_db, client
+):
+    """The production shape on the day this shipped: two sources wired, two not."""
+    async_db.add(
+        DiscoverySourceHealth(
+            source="musicbrainz",
+            last_attempt_at=utcnow().replace(tzinfo=None),
+            last_success_at=utcnow().replace(tzinfo=None),
+        )
+    )
+    async_db.add(DiscoverySourceHealth(source="lastfm"))
+    async_db.add(DiscoverySourceHealth(source="bandcamp"))
+    await async_db.commit()
+
+    data = client.get("/api/v1/health/discovery-sources").json()
+    assert data["status"] == "working"
 
 
 @pytest.mark.asyncio

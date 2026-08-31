@@ -502,7 +502,7 @@ class DiscoverySourceHealthResponse(BaseModel):
     """Whether one discovery source is working — not whether it is configured."""
 
     source: str
-    #: working | degraded | backing_off | failing | never_succeeded
+    #: working | degraded | backing_off | failing | never_succeeded | not_instrumented
     state: str
     last_success_at: str | None = None
     last_failure_at: str | None = None
@@ -527,9 +527,19 @@ def _source_state(row: Any, now: datetime) -> str:
     **`never_succeeded` is its own state and not a kind of "no data"** (ADR-0099
     point 8). It was the true state for nineteen nights while the nightly job crashed,
     and rendering it as "nothing found yet" is what let that pass unnoticed.
+
+    **`not_instrumented` is the state that keeps `never_succeeded` meaningful.** A row
+    with no attempt recorded means nothing has ever *tried* this source, which is a
+    different fact from having tried and never succeeded. Last.fm and Bandcamp are in
+    this position today: both are integrated for recommendations, neither is wired to
+    the recorder until ADR-0099 point 5. Reporting them as failures would make the
+    aggregate badge permanently alarming and would conflate "unmonitored" with
+    "broken" — the exact conflation this surface exists to remove.
     """
     if row.backoff_until is not None and row.backoff_until > now:
         return "backing_off"
+    if row.last_attempt_at is None and row.last_success_at is None:
+        return "not_instrumented"
     if row.last_success_at is None:
         return "never_succeeded"
     if row.consecutive_failures >= 3:
@@ -574,7 +584,16 @@ async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     ]
 
     # Worst-wins, matching how `/health/system` aggregates its services.
-    severity = {"working": 0, "degraded": 1, "backing_off": 2, "never_succeeded": 3, "failing": 4}
+    # `not_instrumented` sits at the bottom so it never drives the aggregate: a source
+    # nothing has attempted is not evidence that discovery is unhealthy.
+    severity = {
+        "not_instrumented": -1,
+        "working": 0,
+        "degraded": 1,
+        "backing_off": 2,
+        "never_succeeded": 3,
+        "failing": 4,
+    }
     worst = max(sources, key=lambda s: severity.get(s.state, 0), default=None)
 
     return DiscoveryHealthResponse(sources=sources, status=worst.state if worst else "working")

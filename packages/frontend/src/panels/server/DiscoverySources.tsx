@@ -32,6 +32,10 @@ const STATE_STYLES: Record<string, { label: string; cls: string; Icon: typeof Ch
   backing_off: { label: 'Backing off', cls: 'text-warning', Icon: Clock },
   failing: { label: 'Failing', cls: 'text-danger', Icon: XCircle },
   never_succeeded: { label: 'Never succeeded', cls: 'text-danger', Icon: HelpCircle },
+  // Nothing has attempted this source yet — unmonitored, not broken. Neutral on
+  // purpose: colouring it would make the panel cry wolf about a source that is
+  // simply not wired to the recorder until ADR-0099 point 5.
+  not_instrumented: { label: 'Not monitored', cls: 'text-zinc-500', Icon: HelpCircle },
 };
 
 function relative(iso: string | null): string | null {
@@ -73,7 +77,9 @@ function SourceRow({ source }: { source: DiscoverySourceHealth }) {
         <p className="text-xs text-zinc-400 mt-0.5">
           {lastSuccess
             ? `Last found something ${lastSuccess}`
-            : 'Has never found anything — this is not the same as "nothing new"'}
+            : source.state === 'not_instrumented'
+              ? 'Used for recommendations; not yet reporting health'
+              : 'Has never found anything — this is not the same as "nothing new"'}
         </p>
 
         {source.last_failure_kind && (
