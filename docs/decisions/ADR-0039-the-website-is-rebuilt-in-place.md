@@ -1,6 +1,14 @@
 # ADR-0039: The Website Is Rebuilt in Place
 
-Status: accepted
+Status: accepted — point 1's "no build step" clause amended by
+[ADR-0103](ADR-0103-the-visualizer-contract-is-published-with-a-gallery.md)
+
+Point 1's other three clauses stand and were reaffirmed on 2026-08-31 when
+[ADR-0069](ADR-0069-the-site-adopts-a-static-site-generator.md) was **rejected**: still no
+generator, no new dependency, no `packages/` workspace. What changed is narrower than the
+clause reads — the deploy runs one script over one known file to render
+`docs/VISUALIZER_API.md`, which point 6 anticipated. Point 6 itself is untouched and is
+still the thing to consult before a second document, an index or permalinks exist.
 
 Date: 2026-08-06
 
