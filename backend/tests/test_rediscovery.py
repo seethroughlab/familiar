@@ -76,7 +76,7 @@ async def test_an_unheard_track_by_an_artist_never_played_can_surface(async_db):
     suggestions, seed_count = await suggest_rediscovery(async_db, profile_id=profile.id)
 
     assert seed_count == 1
-    names = {s.track.artist for s in suggestions}
+    names = {r.suggestion.track.artist for r in suggestions}
     assert "Never Played Artist" in names, (
         "the candidate pool must not be limited to artists already played"
     )
@@ -104,10 +104,10 @@ async def test_every_suggestion_carries_a_real_played_track_as_its_reason(async_
     suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
 
     assert suggestions
-    for s in suggestions:
-        assert s.because_of is not None
-        assert s.because_of.id == seed.id
-        assert s.similarity > 0
+    for r in suggestions:
+        assert r.because_of is not None
+        assert r.because_of.id == seed.id
+        assert r.suggestion.similarity > 0
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,7 @@ async def test_a_track_in_rotation_is_not_suggested_back(async_db):
 
     suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
 
-    assert in_rotation.id not in {s.track.id for s in suggestions}
+    assert in_rotation.id not in {r.suggestion.track.id for r in suggestions}
 
 
 @pytest.mark.asyncio
@@ -165,7 +165,7 @@ async def test_a_track_played_once_long_ago_can_still_come_back(async_db):
 
     suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
 
-    assert forgotten.id in {s.track.id for s in suggestions}, (
+    assert forgotten.id in {r.suggestion.track.id for r in suggestions}, (
         "a track sampled once years ago is exactly what rediscovery is for"
     )
 
@@ -200,7 +200,39 @@ async def test_a_second_file_of_a_played_track_is_not_suggested(async_db):
 
     suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
 
-    dupes = [s for s in suggestions if s.track.title == "Anywhere" and s.track.id != played.id]
+    dupes = [
+        r for r in suggestions
+        if r.suggestion.track.title == "Anywhere" and r.suggestion.track.id != played.id
+    ]
     assert not dupes, "a duplicate file of a played track is not a discovery"
-    titles = {s.track.title for s in suggestions}
+    titles = {r.suggestion.track.title for r in suggestions}
     assert "Genuinely New" in titles, "and the real suggestion still comes through"
+
+
+@pytest.mark.asyncio
+async def test_a_track_that_reaches_itself_does_not_borrow_a_reason(async_db):
+    """"Because you play Anywhere" — about Anywhere — is not a reason.
+
+    A track played once is below `HEARD_THRESHOLD`, so it is both a seed and a
+    candidate, and it reaches itself at similarity 1.0. That is the deep-cut case
+    working correctly; the defect was presentational. Four of the first fifteen live
+    suggestions read this way, and I spent three commits fixing a duplicate-file bug
+    that was not the cause before checking the database and finding one row, not two.
+
+    `because_of` is `None` for these, and the caller says "played once" instead.
+    """
+    profile = await insert_test_profile(async_db)
+    once = await _track_with_embedding(
+        async_db, title="Anywhere", artist="Interpol", embedding=_vec(1.0)
+    )
+    await insert_test_play_history(
+        async_db, profile.id, once.id, play_count=1, last_played_at=utcnow()
+    )
+    await async_db.commit()
+
+    suggestions, _ = await suggest_rediscovery(async_db, profile_id=profile.id)
+
+    self_reached = [r for r in suggestions if r.suggestion.track.id == once.id]
+    assert self_reached, "a track played once should still be resurfaced"
+    assert self_reached[0].because_of is None, "it cannot be its own reason"
+    assert self_reached[0].play_count == 1, "so the caller can say 'played once'"

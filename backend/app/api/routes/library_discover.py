@@ -53,8 +53,12 @@ class RediscoverySuggestion(BaseModel):
     #: **The reason, as a real pair of tracks.** ADR-0093 tried three times to name a
     #: cluster and failed each time; "because you play X" is both true and checkable
     #: where a generated label is neither. ADR-0101 point 3 keeps that rule here.
+    #: ``null`` when the track reached itself — a deep cut, played once and forgotten.
+    #: The client says "played once" rather than borrowing a reason that is not one.
     because_of_title: str | None
     because_of_artist: str | None
+    #: This profile's plays of the suggested track. Zero for genuinely unheard music.
+    play_count: int
     similarity: float
     #: How many of your played tracks independently reached this one. Agreement, not
     #: an average — see `collection_suggestions` for why the average was abandoned.
@@ -267,19 +271,20 @@ async def get_discover_dashboard(
     rediscovery = [
         RediscoverySuggestion(
             track=DiscoverTrack(
-                id=str(s.track.id),
-                title=s.track.title,
-                artist=s.track.artist,
-                album=s.track.album,
-                duration_seconds=s.track.duration_seconds,
-                play_count=0,
+                id=str(r.suggestion.track.id),
+                title=r.suggestion.track.title,
+                artist=r.suggestion.track.artist,
+                album=r.suggestion.track.album,
+                duration_seconds=r.suggestion.track.duration_seconds,
+                play_count=r.play_count,
             ),
-            because_of_title=s.because_of.title,
-            because_of_artist=s.because_of.artist,
-            similarity=round(s.similarity, 4),
-            votes=s.votes,
+            because_of_title=r.because_of.title if r.because_of else None,
+            because_of_artist=r.because_of.artist if r.because_of else None,
+            play_count=r.play_count,
+            similarity=round(r.suggestion.similarity, 4),
+            votes=r.suggestion.votes,
         )
-        for s in suggestions
+        for r in suggestions
     ]
 
     # 3. Get recently added count (last 30 days)

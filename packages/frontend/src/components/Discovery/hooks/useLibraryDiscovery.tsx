@@ -41,9 +41,13 @@ export function useLibraryDiscovery({
         id: s.track.id,
         entityType: 'track' as const,
         name: s.track.title || 'Unknown Track',
+        // A self-reached track has no *other* track to justify it, so it says what
+        // is actually true about it instead of borrowing a reason.
         subtitle: s.because_of_title
           ? `${s.track.artist || 'Unknown Artist'} · because you play ${s.because_of_title}`
-          : s.track.artist || 'Unknown Artist',
+          : s.play_count > 0
+            ? `${s.track.artist || 'Unknown Artist'} · played ${s.play_count === 1 ? 'once' : `${s.play_count} times`}, long ago`
+            : s.track.artist || 'Unknown Artist',
         inLibrary: true,
         playbackContext: {
           artist: s.track.artist || '',

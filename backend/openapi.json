@@ -7489,6 +7489,10 @@
               "null"
             ]
           },
+          "play_count": {
+            "title": "Play Count",
+            "type": "integer"
+          },
           "similarity": {
             "title": "Similarity",
             "type": "number"
@@ -7505,6 +7509,7 @@
           "track",
           "because_of_title",
           "because_of_artist",
+          "play_count",
           "similarity",
           "votes"
         ],

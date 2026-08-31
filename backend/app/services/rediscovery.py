@@ -24,6 +24,7 @@ scales and returned the library's most generically average music both times.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import select
@@ -55,12 +56,28 @@ HEARD_THRESHOLD = 3
 #: the symptom is a track that never appears and no error anywhere.
 
 
+@dataclass
+class Rediscovery:
+    """A suggestion, and enough context to explain itself honestly.
+
+    ``because_of`` is ``None`` when the track reached *itself* — which happens for a
+    track played once and long forgotten, the deep-cut case. Saying "because you play
+    Anywhere" about Anywhere is not a reason, it is a bug wearing a reason's clothes,
+    and it is what four of the first fifteen live suggestions did.
+    """
+
+    suggestion: Suggestion
+    #: ``None`` for a self-reached track; the caller says "played once" instead.
+    because_of: Track | None
+    play_count: int
+
+
 async def suggest_rediscovery(
     db: AsyncSession,
     *,
     profile_id: UUID,
     limit: int = 15,
-) -> tuple[list[Suggestion], int]:
+) -> tuple[list[Rediscovery], int]:
     """Unheard library tracks ranked against recent listening.
 
     Returns the suggestions and the number of seeds behind them, because a caller
@@ -118,4 +135,26 @@ async def suggest_rediscovery(
         profile_id=profile_id,
         limit=limit,
     )
-    return suggestions, len(seed_ids)
+
+    # Play counts for what came back, so a self-reached track can say "played once"
+    # rather than borrowing a reason it does not have. Fifteen ids, one query.
+    counts: dict[UUID, int] = {}
+    if suggestions:
+        rows = (
+            await db.execute(
+                select(ProfilePlayHistory.track_id, ProfilePlayHistory.play_count).where(
+                    ProfilePlayHistory.profile_id == profile_id,
+                    ProfilePlayHistory.track_id.in_([s.track.id for s in suggestions]),
+                )
+            )
+        ).all()
+        counts = {track_id: play_count for track_id, play_count in rows}
+
+    return [
+        Rediscovery(
+            suggestion=s,
+            because_of=None if s.because_of.id == s.track.id else s.because_of,
+            play_count=counts.get(s.track.id, 0),
+        )
+        for s in suggestions
+    ], len(seed_ids)
