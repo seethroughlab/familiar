@@ -2708,6 +2708,92 @@
         "title": "DiscoverTrack",
         "type": "object"
       },
+      "DiscoveryHealthResponse": {
+        "description": "Health of every discovery source, plus the job that drives them.",
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoverySourceHealthResponse"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sources",
+          "status"
+        ],
+        "title": "DiscoveryHealthResponse",
+        "type": "object"
+      },
+      "DiscoverySourceHealthResponse": {
+        "description": "Whether one discovery source is working \u2014 not whether it is configured.",
+        "properties": {
+          "backoff_until": {
+            "title": "Backoff Until",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "consecutive_failures": {
+            "default": 0,
+            "title": "Consecutive Failures",
+            "type": "integer"
+          },
+          "items_contributed": {
+            "default": 0,
+            "title": "Items Contributed",
+            "type": "integer"
+          },
+          "last_failure_at": {
+            "title": "Last Failure At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_failure_detail": {
+            "title": "Last Failure Detail",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_failure_kind": {
+            "title": "Last Failure Kind",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_success_at": {
+            "title": "Last Success At",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "state"
+        ],
+        "title": "DiscoverySourceHealthResponse",
+        "type": "object"
+      },
       "DownloadRequest": {
         "description": "Request to download a video.",
         "properties": {
@@ -15088,6 +15174,78 @@
           }
         },
         "summary": "Db Health Check",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/health/discovery-sources": {
+      "get": {
+        "description": "Report whether each discovery source is working.\n\nDeliberately **not** folded into `/health/system`'s `services` list: `ServiceStatus`\ncarries only name/status/message/details, so the four facts ADR-0099 point 6 asks\nfor \u2014 last success, last failure and its kind, contribution, backoff \u2014 would land\nin an untyped `details` dict, which is what `lint_openapi` exists to stop. It is\nalso a different question from \"is the process up\".",
+        "operationId": "system_discovery_source_health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "summary": "Discovery Source Health",
         "tags": [
           "system"
         ]

@@ -12,6 +12,7 @@
  */
 import { AdminPage, AdminSection } from './AdminPage';
 import { SystemStatus } from '../panels/server/SystemStatus';
+import { DiscoverySources } from '../panels/server/DiscoverySources';
 import { ApiKeyStatus } from '../panels/server/ApiKeyStatus';
 import { ServerTokenSettings } from '../panels/server/ServerTokenSettings';
 import { ProfileSettings } from '../panels/server/ProfileSettings';
@@ -35,6 +36,13 @@ export function ServerPage() {
 
       {/* Renders its own section, or nothing at all when idle. Inherited from the status menu
           ADR-0080 removed — `artwork_fetch` and `s3_backup` report their progress nowhere else. */}
+      {/* Its own section rather than folded into Health: ADR-0058 point 2 names the
+          destination, and whether an upstream is answering is a different question
+          from whether this process is up. */}
+      <AdminSection title="Discovery">
+        <DiscoverySources />
+      </AdminSection>
+
       <BackgroundJobs />
 
       <AdminSection title="Access">

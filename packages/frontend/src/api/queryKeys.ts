@@ -94,6 +94,11 @@ export const queryKeys = {
     autoDownload: ['favorites-auto-download'] as const,
   },
 
+  // ── Health ────────────────────────────────────────────────────────────
+  discoverySources: {
+    all: ['discovery-sources'] as const,
+  },
+
   // ── Settings & Config ─────────────────────────────────────────────────
   appSettings: {
     all: ['app-settings'] as const,

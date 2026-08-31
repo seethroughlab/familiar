@@ -19,6 +19,7 @@ from app.db.models import (
     Artist,
     ArtistAlias,
     ArtistCheckCache,
+    DiscoverySourceHealth,
     ExternalAlbumCache,
     ExternalArtistImageCache,
     MixTape,
@@ -101,6 +102,9 @@ def make_profile_headers(profile: dict) -> dict[str, str]:
 # ArtistAlias FKs to Artist with CASCADE; Track.canonical_artist_id FKs
 # to Artist with SET NULL — so deleting tracks first then artists is safe.
 _CLEANUP_TABLES = [
+    # Seeded by its migration, so it survives between tests and one test's backoff
+    # leaks into the next. Truncated here; the recorder recreates rows on demand.
+    DiscoverySourceHealth,
     MixTape,
     PlaylistTrack,
     Playlist,
