@@ -101,3 +101,35 @@ def test_disabled_beats_every_other_state():
     now = utcnow().replace(tzinfo=None)
     assert _source_state(_Failing(), now, enabled=True) == "backing_off"
     assert _source_state(_Failing(), now, enabled=False) == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# The switch has to be reachable, or it is not a switch
+# ---------------------------------------------------------------------------
+
+
+def test_the_flags_are_on_the_settings_api(client):
+    """Point 12 says "edited in the admin UI", which means the API carries them.
+
+    Found by toggling on the live server and watching nothing happen: the values
+    persisted to `settings.json` but `PUT /settings` silently ignored the fields and
+    `GET` never returned them, because that route has its own allowlisting schema.
+    A setting the API does not expose is a setting nobody can change.
+    """
+    body = client.get("/api/v1/settings").json()
+    for key in (
+        "discovery_enabled",
+        "discovery_musicbrainz_enabled",
+        "discovery_listenbrainz_enabled",
+    ):
+        assert key in body, f"{key} is not exposed by GET /settings"
+
+
+def test_the_flags_can_be_written_through_the_settings_api(client):
+    updated = client.put(
+        "/api/v1/settings", json={"discovery_musicbrainz_enabled": False}
+    ).json()
+    assert updated["discovery_musicbrainz_enabled"] is False
+
+    client.put("/api/v1/settings", json={"discovery_musicbrainz_enabled": True})
+    assert client.get("/api/v1/settings").json()["discovery_musicbrainz_enabled"] is True

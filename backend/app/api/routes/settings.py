@@ -56,6 +56,9 @@ class SettingsResponse(BaseModel):
     queue_sync_enabled: bool
 
     # Community cache
+    discovery_enabled: bool
+    discovery_musicbrainz_enabled: bool
+    discovery_listenbrainz_enabled: bool
     community_cache_enabled: bool
     community_cache_contribute: bool
     community_cache_url: str
@@ -99,6 +102,9 @@ class SettingsUpdateRequest(BaseModel):
     queue_sync_enabled: bool | None = None
 
     # Community cache
+    discovery_enabled: bool | None = None
+    discovery_musicbrainz_enabled: bool | None = None
+    discovery_listenbrainz_enabled: bool | None = None
     community_cache_enabled: bool | None = None
     community_cache_contribute: bool | None = None
     community_cache_url: str | None = None

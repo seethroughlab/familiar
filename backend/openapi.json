@@ -8157,6 +8157,18 @@
             "title": "Community Cache Url",
             "type": "string"
           },
+          "discovery_enabled": {
+            "title": "Discovery Enabled",
+            "type": "boolean"
+          },
+          "discovery_listenbrainz_enabled": {
+            "title": "Discovery Listenbrainz Enabled",
+            "type": "boolean"
+          },
+          "discovery_musicbrainz_enabled": {
+            "title": "Discovery Musicbrainz Enabled",
+            "type": "boolean"
+          },
           "external_features_enabled": {
             "title": "External Features Enabled",
             "type": "boolean"
@@ -8235,6 +8247,9 @@
           "clap_status",
           "external_features_enabled",
           "queue_sync_enabled",
+          "discovery_enabled",
+          "discovery_musicbrainz_enabled",
+          "discovery_listenbrainz_enabled",
           "community_cache_enabled",
           "community_cache_contribute",
           "community_cache_url",
@@ -8295,6 +8310,27 @@
             "title": "Device Stream Base Url",
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "discovery_enabled": {
+            "title": "Discovery Enabled",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "discovery_listenbrainz_enabled": {
+            "title": "Discovery Listenbrainz Enabled",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "discovery_musicbrainz_enabled": {
+            "title": "Discovery Musicbrainz Enabled",
+            "type": [
+              "boolean",
               "null"
             ]
           },
