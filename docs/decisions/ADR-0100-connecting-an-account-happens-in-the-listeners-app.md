@@ -1,6 +1,6 @@
 # ADR-0100: Connecting an Account Happens in the Listener's App
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-30
 
