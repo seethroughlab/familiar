@@ -48,6 +48,13 @@ jobs:
           rm -rf _site/scripts _site/ILLUSTRATIONS.md _site/README.md \
                  _site/e2e _site/playwright.config.ts _site/visualizers.json
 
+      # ADR-0069 point 5's concern, kept after that ADR was rejected: the claim
+      # ledger is the only mechanism standing between this site and lying by
+      # attrition, and until now nothing ran it. `--offline` here because the
+      # external-link and live-site checks belong after the deploy, not before it.
+      - name: Check site claims
+        run: python3 site/scripts/check-claims.py --offline
+
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
         with:
@@ -56,3 +63,11 @@ jobs:
           projectName: familiar-site
           directory: _site
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      # ADR-0097: the live site served an April build for four months while every
+      # check passed, because they all audited the working tree. This one fetches
+      # what is actually published, and it can only run after the deploy.
+      - name: Verify the deployed site
+        run: |
+          sleep 30
+          python3 site/scripts/check-claims.py

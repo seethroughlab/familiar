@@ -1,6 +1,29 @@
 # ADR-0069: The Site Adopts a Static Site Generator
 
-Status: proposed
+Status: rejected
+
+**Rejected 2026-08-31, and not because its reasoning was wrong.** Its trigger was
+`ADR-0039` point 6 — rendered docs arriving — and that condition did arrive: `ADR-0103`
+published `docs/VISUALIZER_API.md` on the site. It was done with **one script over one
+known file**, added to the `Assemble site` step that already copied and pruned, and the
+result was a rendered page with no toolchain, no plugins, no content model and no
+dependency. The migration this ADR describes — Eleventy, a dev dependency, byte-identical
+re-renders of every existing page — would have been a large change to reach the same place.
+
+Two things kept, because they were the valuable half:
+
+- **Point 5's concern is now implemented.** "`check-claims.py` runs against the build
+  output, and the build fails if it fails" — the script was run by no workflow at all, so
+  the ledger `ADR-0055` point 2 calls the only thing standing between this site and lying
+  by attrition was purely manual. `cloudflare-pages.yml` now runs it before the deploy and
+  again against the live site afterwards.
+- **`ADR-0039` point 6 still stands**, and this ADR's own framing is the reason. Point 6
+  asks for the decision to be *made again* when docs want to be a section with an index and
+  permalinks. One rendered document is not that. A second one, or an index, still is — and
+  this ADR remains the right starting point when it happens.
+
+`ADR-0055`, the condition in point 6, has since landed, so this was no longer blocked. It
+is rejected on its merits rather than left proposed indefinitely.
 
 Date: 2026-08-17
 
