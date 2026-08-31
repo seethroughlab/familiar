@@ -56,6 +56,25 @@ class AppSettings(BaseModel):
     # External feature lookup (skip local librosa analysis when possible)
     external_features_enabled: bool = True  # Look up features from external services
 
+    # Discovery — finding music you do not own (ADR-0099 point 12).
+    #
+    # **This exists because the posture changed.** Discovery was an occasional nightly
+    # job; it is now a process that contacts MusicBrainz every twenty minutes and
+    # ListenBrainz every three hours, about what this listener plays. That is a
+    # different thing to run on someone's own hardware without an off switch, and a
+    # self-hosted music server should let its owner decline it in one place.
+    #
+    # Off means no discovery request leaves the machine. The read path still serves
+    # whatever is already cached — turning it off stops new lookups, it does not
+    # empty the shelf.
+    discovery_enabled: bool = True
+
+    # Per source, because they fail and cost differently and are polled independently.
+    # Turning one off in response to it misbehaving must not mean turning discovery
+    # off entirely — which is effectively what happened on 2026-08-30.
+    discovery_musicbrainz_enabled: bool = True
+    discovery_listenbrainz_enabled: bool = True
+
     # Community embedding cache (share CLAP embeddings with other users)
     community_cache_enabled: bool = True  # Look up embeddings from community cache
     community_cache_contribute: bool = False  # Contribute computed embeddings (opt-in)

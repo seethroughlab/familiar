@@ -12,7 +12,7 @@
  * throughout the outage.
  */
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle, Clock, HelpCircle, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, HelpCircle, PowerOff, XCircle } from 'lucide-react';
 import { healthApi, type DiscoverySourceHealth } from '../../api/admin';
 import { queryKeys } from '../../api/queryKeys';
 
@@ -37,6 +37,9 @@ const STATE_STYLES: Record<string, { label: string; cls: string; Icon: typeof Ch
   // purpose: colouring it would make the panel cry wolf about a source that is
   // simply not wired to the recorder until ADR-0099 point 5.
   not_instrumented: { label: 'Not monitored', cls: 'text-zinc-500', Icon: HelpCircle },
+  // Switched off by the owner. Neutral, and distinct from every failure state: "off"
+  // must not look like "broken", which is the confusion this panel exists to remove.
+  disabled: { label: 'Off', cls: 'text-zinc-500', Icon: PowerOff },
 };
 
 function relative(iso: string | null): string | null {
@@ -76,7 +79,9 @@ function SourceRow({ source }: { source: DiscoverySourceHealth }) {
 
         {/* "Last found something", not "last ran" — the distinction the outage turned on. */}
         <p className="text-xs text-zinc-400 mt-0.5">
-          {lastSuccess
+          {source.state === 'disabled'
+            ? 'Turned off in settings; cached results are still served'
+            : lastSuccess
             ? `Last found something ${lastSuccess}`
             : source.state === 'not_instrumented'
               ? 'Used for recommendations; not yet reporting health'

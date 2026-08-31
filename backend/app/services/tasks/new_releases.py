@@ -451,7 +451,14 @@ async def run_prioritized_new_releases_check(
         "artists_timed_out": 0,
     }
 
-    from app.services.discovery import get_recorder
+    from app.services.discovery import get_recorder, source_enabled
+
+    # ADR-0099 point 12. Checked before anything else, including backoff: when
+    # discovery is off, no request leaves the machine and nothing is recorded as a
+    # failure either — being switched off is not a fault.
+    if not source_enabled("musicbrainz"):
+        logger.info("discovery_batch_skipped", extra={"reason": "disabled"})
+        return {"status": "disabled", **stats}
 
     health = get_recorder()
 

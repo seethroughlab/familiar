@@ -502,7 +502,8 @@ class DiscoverySourceHealthResponse(BaseModel):
     """Whether one discovery source is working — not whether it is configured."""
 
     source: str
-    #: working | degraded | backing_off | failing | never_succeeded | not_instrumented
+    #: working | degraded | backing_off | failing | never_succeeded |
+    #: not_instrumented | disabled
     state: str
     last_success_at: str | None = None
     last_failure_at: str | None = None
@@ -521,7 +522,7 @@ class DiscoveryHealthResponse(BaseModel):
     status: str
 
 
-def _source_state(row: Any, now: datetime) -> str:
+def _source_state(row: Any, now: datetime, enabled: bool = True) -> str:
     """Turn a health row into the word a person reads.
 
     **`never_succeeded` is its own state and not a kind of "no data"** (ADR-0099
@@ -536,6 +537,13 @@ def _source_state(row: Any, now: datetime) -> str:
     aggregate badge permanently alarming and would conflate "unmonitored" with
     "broken" — the exact conflation this surface exists to remove.
     """
+    # **Checked first, because a disabled source keeps its last success forever.**
+    # Without this it would read `working` indefinitely after being switched off, and
+    # "off" would be indistinguishable from "fine" — the confusion this whole surface
+    # exists to remove, reintroduced by the switch meant to give the owner control.
+    if not enabled:
+        return "disabled"
+
     if row.backoff_until is not None and row.backoff_until > now:
         return "backing_off"
     if row.last_attempt_at is None and row.last_success_at is None:
@@ -560,6 +568,7 @@ async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     also a different question from "is the process up".
     """
     from app.db.models import DiscoverySourceHealth
+    from app.services.discovery import source_enabled
 
     now = utcnow().replace(tzinfo=None)
     rows = (
@@ -571,7 +580,7 @@ async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     sources = [
         DiscoverySourceHealthResponse(
             source=row.source,
-            state=_source_state(row, now),
+            state=_source_state(row, now, enabled=source_enabled(row.source)),
             last_success_at=row.last_success_at.isoformat() if row.last_success_at else None,
             last_failure_at=row.last_failure_at.isoformat() if row.last_failure_at else None,
             last_failure_kind=row.last_failure_kind,
@@ -587,6 +596,9 @@ async def discovery_source_health(db: DbSession) -> DiscoveryHealthResponse:
     # `not_instrumented` sits at the bottom so it never drives the aggregate: a source
     # nothing has attempted is not evidence that discovery is unhealthy.
     severity = {
+        # Neither of these drives the aggregate: a source the owner turned off is not
+        # evidence that discovery is unhealthy, any more than an unmonitored one is.
+        "disabled": -2,
         "not_instrumented": -1,
         "working": 0,
         "degraded": 1,
