@@ -562,8 +562,14 @@ export interface DiscoverRecommendedArtist {
 }
 
 export interface LibraryDiscoverResponse {
-  unheard_tracks: DiscoverTrack[];
-  deep_cuts: DiscoverTrack[];
+  /**
+   * Owned, unheard, ranked against listening (ADR-0101). Replaces `unheard_tracks`
+   * and `deep_cuts`, which were random picks limited to artists already played.
+   */
+  rediscovery: RediscoverySuggestion[];
+  /** Seeds behind the list, so an empty result can distinguish "no listening
+   *  history yet" from "nothing similar found". */
+  rediscovery_seed_count: number;
   recommended_artists: DiscoverRecommendedArtist[];
   recently_added_count: number;
 }

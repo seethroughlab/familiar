@@ -29,55 +29,41 @@ export function useLibraryDiscovery({
 
     const sections: DiscoverySection[] = [];
 
-    // Section 1: Unheard tracks by top artists
-    if (data.unheard_tracks && data.unheard_tracks.length > 0) {
-      const items: DiscoveryItem[] = data.unheard_tracks.map((track) => ({
-        id: track.id,
+    // Section 1: rediscovery — owned, unheard, ranked against real listening.
+    //
+    // Replaces the old "Unheard in Your Library" and "Deep Cuts", which were
+    // `ORDER BY random()` over tracks by artists already played. The subtitle now
+    // carries *why* each track is here — a real played track, not a generated label
+    // (ADR-0101 point 3, inherited from ADR-0093's three failed attempts at naming a
+    // cluster).
+    if (data.rediscovery && data.rediscovery.length > 0) {
+      const items: DiscoveryItem[] = data.rediscovery.map((s) => ({
+        id: s.track.id,
         entityType: 'track' as const,
-        name: track.title || 'Unknown Track',
-        subtitle: track.artist || 'Unknown Artist',
+        name: s.track.title || 'Unknown Track',
+        // A self-reached track has no *other* track to justify it, so it says what
+        // is actually true about it instead of borrowing a reason.
+        subtitle: s.because_of_title
+          ? `${s.track.artist || 'Unknown Artist'} · because you play ${s.because_of_title}`
+          : s.play_count > 0
+            ? `${s.track.artist || 'Unknown Artist'} · played ${s.play_count === 1 ? 'once' : `${s.play_count} times`}, long ago`
+            : s.track.artist || 'Unknown Artist',
         inLibrary: true,
         playbackContext: {
-          artist: track.artist || '',
-          album: track.album || undefined,
-          trackId: track.id,
+          artist: s.track.artist || '',
+          album: s.track.album || undefined,
+          trackId: s.track.id,
         },
       }));
 
       sections.push({
-        id: 'unheard-tracks',
-        title: 'Unheard in Your Library',
-        description: "Tracks by artists you love that you haven't played yet",
+        id: 'rediscovery',
+        title: 'In Your Library, Unheard',
+        description: 'Ranked against what you actually listen to',
         entityType: 'track',
         items,
         layout: 'tracklist',
-        rawTracks: data.unheard_tracks,
-      });
-    }
-
-    // Section 2: Deep cuts (low play count)
-    if (data.deep_cuts && data.deep_cuts.length > 0) {
-      const items: DiscoveryItem[] = data.deep_cuts.map((track) => ({
-        id: track.id,
-        entityType: 'track' as const,
-        name: track.title || 'Unknown Track',
-        subtitle: `${track.artist || 'Unknown Artist'} · ${track.play_count} ${track.play_count === 1 ? 'play' : 'plays'}`,
-        inLibrary: true,
-        playbackContext: {
-          artist: track.artist || '',
-          album: track.album || undefined,
-          trackId: track.id,
-        },
-      }));
-
-      sections.push({
-        id: 'deep-cuts',
-        title: 'Deep Cuts by Your Favorites',
-        description: 'Least-played tracks by your most-played artists',
-        entityType: 'track',
-        items,
-        layout: 'tracklist',
-        rawTracks: data.deep_cuts,
+        rawTracks: data.rediscovery.map((s) => s.track),
       });
     }
 
