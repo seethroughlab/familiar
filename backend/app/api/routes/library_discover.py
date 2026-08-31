@@ -1,6 +1,7 @@
 """Discovery dashboard endpoints."""
 
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
@@ -45,12 +46,33 @@ class DiscoverRecommendedArtist(BaseModel):
     based_on_artist: str  # Which library artist triggered this recommendation
 
 
+class RediscoverySuggestion(BaseModel):
+    """An unheard library track, and the played track that reached it."""
+
+    track: DiscoverTrack
+    #: **The reason, as a real pair of tracks.** ADR-0093 tried three times to name a
+    #: cluster and failed each time; "because you play X" is both true and checkable
+    #: where a generated label is neither. ADR-0101 point 3 keeps that rule here.
+    because_of_title: str | None
+    because_of_artist: str | None
+    similarity: float
+    #: How many of your played tracks independently reached this one. Agreement, not
+    #: an average — see `collection_suggestions` for why the average was abandoned.
+    votes: int
+
+
 class DiscoverResponse(BaseModel):
     """Aggregated discovery data for the dashboard."""
 
-    # Track-based discovery
-    unheard_tracks: list[DiscoverTrack]
-    deep_cuts: list[DiscoverTrack]
+    #: Owned, unheard, ranked against what you actually listen to (ADR-0101).
+    #:
+    #: Replaces `unheard_tracks` and `deep_cuts`, which were `ORDER BY random()` over
+    #: tracks by artists already played — not a ranking, and unable to reach an artist
+    #: the listener had never played however well it matched.
+    rediscovery: list[RediscoverySuggestion]
+    #: Seeds behind the list, so an empty result can say *why*. No listening history
+    #: and nothing similar found are different answers (ADR-0101 point 7).
+    rediscovery_seed_count: int
 
     # Recommended artists based on top-played artists (external only)
     recommended_artists: list[DiscoverRecommendedArtist]
@@ -76,7 +98,6 @@ async def get_discover_dashboard(
     - Recommended artists based on most-played
     - Recently added track count
     """
-    from datetime import timedelta
 
     from app.db.models import ProfilePlayHistory
     from app.services.lastfm import get_lastfm_service
@@ -101,7 +122,6 @@ async def get_discover_dashboard(
     )
     play_result = await db.execute(play_history_query)
     top_artists = play_result.fetchall()
-    top_artist_ids = [row.artist_id for row in top_artists]
 
     seen_recommendations: set[str] = set()
     similar_candidates: list[tuple[str, str, dict, str]] = []  # (name, normalized, similar_data, based_on)
@@ -232,87 +252,35 @@ async def get_discover_dashboard(
     schedule_background_resolve(unresolved)
 
     # 2. Track-based discovery using top canonical artist ids.
-    unheard_tracks: list[DiscoverTrack] = []
-    deep_cuts: list[DiscoverTrack] = []
+    # **Ranked against listening, not ordered at random** (ADR-0101 point 2).
+    #
+    # The engine is ADR-0093's: each played track's nearest neighbours, counted by how
+    # many seeds independently reach a candidate. Crucially the candidate pool is the
+    # whole library, so an unheard record by an artist never played can surface if it
+    # sounds like what this listener loves — which the previous top-artist filter made
+    # impossible by construction.
+    from app.services.rediscovery import suggest_rediscovery
 
-    if top_artist_ids:
-        # Subquery: track IDs this profile has played.
-        played_track_ids = (
-            select(ProfilePlayHistory.track_id)
-            .where(ProfilePlayHistory.profile_id == profile.id)
+    suggestions, seed_count = await suggest_rediscovery(
+        db, profile_id=profile.id, limit=15
+    )
+    rediscovery = [
+        RediscoverySuggestion(
+            track=DiscoverTrack(
+                id=str(s.track.id),
+                title=s.track.title,
+                artist=s.track.artist,
+                album=s.track.album,
+                duration_seconds=s.track.duration_seconds,
+                play_count=0,
+            ),
+            because_of_title=s.because_of.title,
+            because_of_artist=s.because_of.artist,
+            similarity=round(s.similarity, 4),
+            votes=s.votes,
         )
-
-        # Unheard tracks: by top canonical artists, never played by this profile.
-        unheard_query = (
-            select(
-                Track.id,
-                Track.title,
-                Track.artist,
-                Track.album,
-                Track.duration_seconds,
-            )
-            .where(
-                Track.canonical_artist_id.in_(top_artist_ids),
-                Track.status == TrackStatus.ACTIVE,
-                Track.id.notin_(played_track_ids),
-            )
-            .order_by(func.random())
-            .limit(15)
-        )
-        unheard_result = await db.execute(unheard_query)
-        unheard_rows = unheard_result.fetchall()
-        unheard_track_ids = set()
-
-        for row in unheard_rows:
-            unheard_track_ids.add(row.id)
-            unheard_tracks.append(
-                DiscoverTrack(
-                    id=str(row.id),
-                    title=row.title,
-                    artist=row.artist,
-                    album=row.album,
-                    duration_seconds=row.duration_seconds,
-                    play_count=0,
-                )
-            )
-
-        # Deep cuts: by top canonical artists, played but low play count.
-        deep_cuts_query = (
-            select(
-                Track.id,
-                Track.title,
-                Track.artist,
-                Track.album,
-                Track.duration_seconds,
-                ProfilePlayHistory.play_count,
-            )
-            .join(ProfilePlayHistory, ProfilePlayHistory.track_id == Track.id)
-            .where(
-                Track.canonical_artist_id.in_(top_artist_ids),
-                Track.status == TrackStatus.ACTIVE,
-                ProfilePlayHistory.profile_id == profile.id,
-                ProfilePlayHistory.play_count > 0,
-            )
-            .order_by(ProfilePlayHistory.play_count.asc())
-            .limit(20)  # Fetch extra to filter out unheard overlap
-        )
-        deep_cuts_result = await db.execute(deep_cuts_query)
-
-        for row in deep_cuts_result.fetchall():
-            if row.id in unheard_track_ids:
-                continue
-            deep_cuts.append(
-                DiscoverTrack(
-                    id=str(row.id),
-                    title=row.title,
-                    artist=row.artist,
-                    album=row.album,
-                    duration_seconds=row.duration_seconds,
-                    play_count=row.play_count,
-                )
-            )
-            if len(deep_cuts) >= 15:
-                break
+        for s in suggestions
+    ]
 
     # 3. Get recently added count (last 30 days)
     thirty_days_ago = utcnow() - timedelta(days=30)
@@ -326,8 +294,8 @@ async def get_discover_dashboard(
     recently_added_count = await db.scalar(recent_query) or 0
 
     return DiscoverResponse(
-        unheard_tracks=unheard_tracks,
-        deep_cuts=deep_cuts,
+        rediscovery=rediscovery,
+        rediscovery_seed_count=seed_count,
         recommended_artists=recommended_artists,
         recently_added_count=recently_added_count,
     )

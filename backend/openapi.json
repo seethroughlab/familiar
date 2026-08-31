@@ -2622,13 +2622,6 @@
       "DiscoverResponse": {
         "description": "Aggregated discovery data for the dashboard.",
         "properties": {
-          "deep_cuts": {
-            "items": {
-              "$ref": "#/components/schemas/DiscoverTrack"
-            },
-            "title": "Deep Cuts",
-            "type": "array"
-          },
           "recently_added_count": {
             "title": "Recently Added Count",
             "type": "integer"
@@ -2640,17 +2633,21 @@
             "title": "Recommended Artists",
             "type": "array"
           },
-          "unheard_tracks": {
+          "rediscovery": {
             "items": {
-              "$ref": "#/components/schemas/DiscoverTrack"
+              "$ref": "#/components/schemas/RediscoverySuggestion"
             },
-            "title": "Unheard Tracks",
+            "title": "Rediscovery",
             "type": "array"
+          },
+          "rediscovery_seed_count": {
+            "title": "Rediscovery Seed Count",
+            "type": "integer"
           }
         },
         "required": [
-          "unheard_tracks",
-          "deep_cuts",
+          "rediscovery",
+          "rediscovery_seed_count",
           "recommended_artists",
           "recently_added_count"
         ],
@@ -7473,6 +7470,45 @@
           "local_track_id"
         ],
         "title": "RecommendedTrackResponse",
+        "type": "object"
+      },
+      "RediscoverySuggestion": {
+        "description": "An unheard library track, and the played track that reached it.",
+        "properties": {
+          "because_of_artist": {
+            "title": "Because Of Artist",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "because_of_title": {
+            "title": "Because Of Title",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "similarity": {
+            "title": "Similarity",
+            "type": "number"
+          },
+          "track": {
+            "$ref": "#/components/schemas/DiscoverTrack"
+          },
+          "votes": {
+            "title": "Votes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "track",
+          "because_of_title",
+          "because_of_artist",
+          "similarity",
+          "votes"
+        ],
+        "title": "RediscoverySuggestion",
         "type": "object"
       },
       "RefetchGeneratedResponse": {

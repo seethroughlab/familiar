@@ -204,32 +204,3 @@ export interface PlaylistDiscoveryInput {
   sourcesUsed: string[];
 }
 
-// From LibraryDiscoverResponse
-export interface LibraryDiscoveryInput {
-  unheardTracks: Array<{
-    id: string;
-    title: string | null;
-    artist: string | null;
-    album: string | null;
-    duration_seconds: number | null;
-    play_count: number;
-  }>;
-  deepCuts: Array<{
-    id: string;
-    title: string | null;
-    artist: string | null;
-    album: string | null;
-    duration_seconds: number | null;
-    play_count: number;
-  }>;
-  recommendedArtists: Array<{
-    name: string;
-    match_score: number;
-    in_library: boolean;
-    track_count: number | null;
-    image_url: string | null;
-    lastfm_url: string | null;
-    bandcamp_url: string | null;
-    based_on_artist: string;
-  }>;
-}
