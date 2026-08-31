@@ -1,6 +1,6 @@
 # ADR-0101: Discovery Ranks Against the Listening Model
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-31
 
