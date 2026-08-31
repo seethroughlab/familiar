@@ -34,6 +34,10 @@ jobs:
       - name: Assemble site
         run: |
           set -euo pipefail
+          # Render docs/VISUALIZER_API.md into site/visualizers.html before the copy
+          # (ADR-0103 point 1). The Markdown file stays the source; this is one script
+          # over one known file, not a generator -- see ADR-0039 point 6.
+          python3 site/scripts/render-docs.py
           mkdir -p _site
           cp -R site/. _site/
           cp -R screenshots _site/screenshots
@@ -42,7 +46,7 @@ jobs:
           # README describing the directory itself, and the Playwright suite that tests the
           # install toggle (ADR-0095) along with its config and run artefacts.
           rm -rf _site/scripts _site/ILLUSTRATIONS.md _site/README.md \
-                 _site/e2e _site/playwright.config.ts
+                 _site/e2e _site/playwright.config.ts _site/visualizers.json
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/pages-action@v1
