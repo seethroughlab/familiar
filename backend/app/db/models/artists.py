@@ -6,7 +6,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
-    Float,
     ForeignKey,
     Index,
     Integer,
@@ -132,9 +131,10 @@ class ArtistCheckCache(Base):
     musicbrainz_artist_id: Mapped[str | None] = mapped_column(String(36))
     last_checked_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    # Priority-based checking
-    check_priority: Mapped[float] = mapped_column(Float, default=0.0)
-    priority_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # No `check_priority` column: the score is profile-relative and this table is
+    # keyed per artist for the whole installation, so a stored value would be one
+    # listener's opinion imposed on everyone. Recomputed per run in
+    # `get_prioritized_artists_batch`. Dropped 2026-08-31, see ADR-0101.
 
 
 class ExternalAlbumCache(Base):

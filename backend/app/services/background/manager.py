@@ -13,6 +13,16 @@ from .sync import SyncMixin
 
 logger = logging.getLogger(__name__)
 
+#: How often a discovery batch runs, and how many artists it checks (ADR-0099 point 3).
+#:
+#: The pair is the decision, not either number alone: ten per twenty minutes is 720 a
+#: day against a library of 3,453 artists on a seven-day re-check window, which needs
+#: 493 a day to keep up. Raising the batch without lengthening the interval is what
+#: would make this a bad citizen of a public, unauthenticated, one-request-per-second
+#: service — so change them together and recompute the duty cycle.
+DISCOVERY_INTERVAL_MINUTES = 20
+DISCOVERY_BATCH_SIZE = 10
+
 
 class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
     """Manages background tasks in the API process.
@@ -104,11 +114,33 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 replace_existing=True,
             )
 
-            # Daily new-releases check (prioritized batch) at 3:00 AM
+            # Discovery runs continuously, in small prioritised batches (ADR-0099 point 3).
+            #
+            # **A single nightly sweep is why one bad window cost a whole day.** The job
+            # either won the race at 03:00 or the library learned nothing for
+            # twenty-four hours — and when it crashed, it crashed on the same artist at
+            # the same time every night for nineteen nights. On a short interval a
+            # rate-limited window costs one batch and the next picks up where it
+            # stopped, because `ArtistCheckCache.last_checked_at` is the resumption
+            # state.
+            #
+            # Ten artists per twenty minutes is 720 a day. The library has 3,453 artists
+            # and a seven-day re-check window, so keeping up needs 493 a day — this has
+            # headroom without being greedy. MusicBrainz allows one request a second, so
+            # a batch is roughly 10-20 seconds of upstream time out of 1,200: a duty
+            # cycle near 1%, which is what "small enough to be a good citizen" has to
+            # mean for an unauthenticated public service.
             self._scheduler.add_job(
-                self._daily_new_releases_check,
-                CronTrigger(hour=3, minute=0),
-                id="daily_new_releases",
+                self._discovery_batch,
+                IntervalTrigger(minutes=DISCOVERY_INTERVAL_MINUTES),
+                id="discovery_batch",
+                # None of the daily jobs needed these, because a run could not overlap
+                # its own next trigger. At twenty minutes it can: a batch stalled behind
+                # a rate-limited upstream must not have a second copy started on top of
+                # it, and a container restart must not replay every tick it missed.
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=300,
                 replace_existing=True,
             )
 
