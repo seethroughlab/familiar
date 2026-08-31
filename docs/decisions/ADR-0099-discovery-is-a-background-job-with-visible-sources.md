@@ -1,6 +1,38 @@
 # ADR-0099: Discovery Is a Background Job, and Its Sources Are Visible
 
-Status: proposed
+Status: accepted
+
+Implementation:
+- **Phase 0** (`familiar` #243) — the crash. `save_discovered_release` deduped on `release_id`
+  alone against a table whose uniqueness is three *partial* indexes, one per context. One release in
+  two contexts stopped nineteen consecutive nights. Fixed as an upsert scoped by context, plus
+  per-artist fault isolation with the rollback that makes it work. Verified live: the 75-artist batch
+  that had been dying completed with `0 failed`.
+- **Phase 1** (#244) — point 1. The MCP tool that hung for 240 seconds now reads the cache and
+  answers in **12 ms**. `GET /library/artists/new-releases` was *deleted* rather than converted: it
+  had no callers in either repository, because the Discover page the Mac and iPhone show is the
+  embedded web surface, which already read the cached endpoint. Point 7 shipped with it, as three
+  states rather than two — never run, stale, current.
+- **Rotation gate** (#246) — not a point here, a bug ADR-0101 named. The batch selected *from*
+  `ProfilePlayHistory`, hiding 2,614 of 3,453 owned artists. Widening the pool alone changed nothing,
+  because the played set already oversubscribed the rotation; a reserved share for never-checked
+  artists is what makes coverage advance. A second defect surfaced only on deployment: artists
+  MusicBrainz cannot match were re-selected every batch forever, so the backlog never drained.
+- **Phase 2** (#247) — points 2 and 3. Ten artists every twenty minutes, ~1% duty cycle, with
+  `max_instances`/`coalesce` that a daily job never needed. Profiles now take turns rather than the
+  first one deciding for the household. `check_priority` dropped: profile-relative value, table keyed
+  per artist.
+- **Phase 3** (#248) — points 4, 6, 8, 10. `discovery_source_health` in Postgres, because Redis
+  expires and the jobstore is in-memory. `backoff_until` is read by the batch, not just rendered.
+  A `not_instrumented` state was added after deployment showed the aggregate badge reading
+  `never_succeeded` forever for sources nothing had wired — which is the ADR's own conflation, one
+  level up.
+- **Points 5, 11 and 12 are not built.** Last.fm and Bandcamp report `not_instrumented`, which is the
+  honest state and the thing that flips when they are wired.
+
+**Four of the fixes in this ADR were inert when first written** — correct in the code and changing
+nothing observable — and each was caught by checking the running system rather than the test suite.
+That is the same lesson the original defect taught, and it is the most reusable thing here.
 
 Date: 2026-08-30
 
@@ -152,6 +184,61 @@ stopped everything at once. Last.fm and Bandcamp are integrated and barely used 
     finish, did it write. A source that answered perfectly while our own writer crashed must not read
     as healthy — which is exactly the state that held for nineteen nights, and which points 6 and 8
     as originally written would have rendered green.
+
+### 11. The sources, and why these
+
+| source | what it adds | key | notes |
+|---|---|---|---|
+| **MusicBrainz** | release groups per artist | none | already integrated; rate-limits at 1 req/s and answers **503** silently |
+| **ListenBrainz** | `GET /1/user/{user}/fresh_releases` — releases by artists you actually listen to | token | **shares MusicBrainz IDs**, so it joins to existing rows with no new matching |
+| **Last.fm** | similar artists → their releases | yes, configured | already integrated and barely used for discovery; free tier is 5 req/s |
+| **Bandcamp** | what is purchasable, and its editorial layer | none | already integrated for purchase recommendations |
+
+**ListenBrainz is the significant addition.** It is the same MetaBrainz family as MusicBrainz, so
+its identifiers are the ones already in the database — no fuzzy artist matching, which is where
+cross-source discovery usually goes wrong. Its fresh-releases endpoint is *personalised to listening
+history* rather than to what is in the library, which answers a different question than MusicBrainz
+does. And it rate-limits **explicitly**, returning `X-RateLimit-Remaining` and `X-RateLimit-Reset-In`
+headers with a `429` — a source that says how much budget is left, rather than a silent 503 with a
+retry buried in a library's `INFO` log.
+
+**Deferred, with reasons.** *Deezer* has a usable free tier but introduces a second identifier space
+and would need matching logic that ListenBrainz does not. *Spotify* requires registering an OAuth
+application, and a project whose premise is not depending on a streaming service should not need one
+to find out what came out this week. *SoundCloud* has no dependable free API.
+
+### 12. Discovery is configured the way everything else is, and can be turned off
+
+`AppSettings` already has a shape for this: a credential field beside an `_enabled` flag, persisted
+in `data/settings.json`, edited in the admin UI —
+`lastfm_api_key`/`community_cache_enabled`/`s3_backup_enabled` and the rest. Discovery follows it
+rather than inventing a second mechanism.
+
+**`discovery_enabled`, defaulting to on, switches the whole subsystem off.** There is no such
+setting today, and there needs to be. This ADR turns an occasional nightly job into a process that
+continuously contacts four third parties about what a person listens to; that is a change in
+posture, not just in cadence, and a self-hosted music server should let its owner decline it in one
+place. Off means the background job does not run and no discovery request leaves the machine — the
+read path still serves whatever is already cached.
+
+**Each source has its own `_enabled` flag**, because they fail and cost differently and point 4
+polls them independently. Turning MusicBrainz off while leaving Last.fm on has to be expressible, or
+the response to one source misbehaving is to disable discovery entirely — which is what effectively
+happened on 2026-08-30.
+
+**A source that is enabled but unconfigured is an error state, not a silent skip.** Last.fm without
+a key, ListenBrainz without a token: the health surface reports *"enabled, cannot run: no token"*.
+Silently skipping is how a source configured months ago and broken since goes unnoticed, which is
+the failure this whole ADR is about.
+
+**Cadence is a single interval setting, not per-source.** Per-source cadence sounds more flexible
+and is a trap: four intervals interact with four rate limits and nobody can predict the result. One
+interval, with each source's own limiter deciding how much of a batch it can take.
+
+**Disabling a source does not delete what it found.** Its rows stay, marked with their `source`
+from a `source` column, and stop being refreshed. Deleting on disable would make a toggle destructive and make
+"turn it off and see" an expensive experiment. What a disabled source's stale rows look like to a
+reader is point 7's job.
 
 ## Alternatives Considered
 
