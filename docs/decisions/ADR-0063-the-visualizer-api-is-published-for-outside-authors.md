@@ -1,6 +1,7 @@
 # ADR-0063: The Visualizer API Is Published for Outside Authors
 
-Status: proposed
+Status: superseded by
+[ADR-0103](ADR-0103-the-visualizer-contract-is-published-with-a-gallery.md)
 
 Date: 2026-08-17
 
