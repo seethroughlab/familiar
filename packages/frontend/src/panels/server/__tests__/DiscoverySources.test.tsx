@@ -132,3 +132,20 @@ describe('DiscoverySources — unmonitored sources', () => {
     expect(screen.queryByText(/never found anything/)).toBeNull();
   });
 });
+
+describe('DiscoverySources — switched off', () => {
+  it('a disabled source reads as off, not as broken or as working', async () => {
+    vi.mocked(healthApi.getDiscoverySources).mockResolvedValue({
+      status: 'working',
+      sources: [source({ state: 'disabled', last_success_at: iso(30) })],
+    });
+    renderPanel();
+
+    expect(await screen.findByText('Off')).toBeTruthy();
+    expect(screen.getByText(/cached results are still served/)).toBeTruthy();
+    // It kept a last_success_at from before it was switched off; that must not be
+    // what the row leads with, or "off" reads as "fine".
+    expect(screen.queryByText(/Last found something/)).toBeNull();
+    expect(screen.queryByText('Failing')).toBeNull();
+  });
+});

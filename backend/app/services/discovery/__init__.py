@@ -8,6 +8,7 @@ from app.services.discovery.sources import (
     SourceHealthRecorder,
     backoff_seconds,
     get_recorder,
+    source_enabled,
 )
 
-__all__ = ["SourceHealthRecorder", "backoff_seconds", "get_recorder"]
+__all__ = ["SourceHealthRecorder", "backoff_seconds", "get_recorder", "source_enabled"]

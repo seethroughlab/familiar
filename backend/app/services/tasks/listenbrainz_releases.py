@@ -29,7 +29,7 @@ async def run_listenbrainz_fresh_releases(days: int | None = None) -> dict[str, 
     """
     from app.db.models import Artist, Track, TrackStatus
     from app.db.session import create_task_engine_session
-    from app.services.discovery import get_recorder
+    from app.services.discovery import get_recorder, source_enabled
     from app.services.discovery.listenbrainz import (
         DEFAULT_DAYS,
         fetch_fresh_releases,
@@ -44,6 +44,12 @@ async def run_listenbrainz_fresh_releases(days: int | None = None) -> dict[str, 
         "releases_new": 0,
         "artists_with_mbid": 0,
     }
+
+    # Checked before backoff: being switched off is not a fault, so it records
+    # nothing and reports a state of its own (ADR-0099 point 12).
+    if not source_enabled(SOURCE):
+        logger.info("listenbrainz_skipped", extra={"reason": "disabled"})
+        return {"status": "disabled", **stats}
 
     if await health.should_skip(SOURCE):
         logger.info("listenbrainz_skipped", extra={"reason": "backing off"})

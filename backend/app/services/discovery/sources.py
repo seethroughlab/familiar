@@ -143,6 +143,34 @@ class SourceHealthRecorder:
             return False
 
 
+def source_enabled(source: str) -> bool:
+    """Whether this source may be contacted at all (ADR-0099 point 12).
+
+    Two gates, and the master one is the point: `discovery_enabled` off means **no
+    discovery request leaves the machine**, whichever source is asking. The
+    per-source flags exist so that turning one off in response to it misbehaving is
+    not the same as turning discovery off entirely.
+
+    Read at call time rather than cached, so a toggle in the admin UI takes effect on
+    the next batch rather than at the next restart.
+
+    **Read off the settings object directly, not through `get_effective`.** That
+    helper resolves precedence with `if app_value:` — plain truthiness — so a boolean
+    explicitly set to `False` falls through every branch and comes back as `None`,
+    indistinguishable from unset. It is fine for the API keys it was written for,
+    where empty means absent; it cannot express a disabled flag. Every other boolean
+    setting in the codebase reads the attribute directly for the same reason.
+    """
+    from app.services.app_settings import get_app_settings_service
+
+    app_settings = get_app_settings_service().get()
+    if not getattr(app_settings, "discovery_enabled", True):
+        return False
+    # A source with no flag of its own is governed by the master switch alone —
+    # `discovery_batch` is the job itself, not an upstream.
+    return bool(getattr(app_settings, f"discovery_{source}_enabled", True))
+
+
 def get_recorder() -> SourceHealthRecorder:
     """A recorder backed by its own engine, per the class docstring."""
     from app.db.session import create_task_engine_session
