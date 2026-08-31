@@ -91,6 +91,54 @@ def plausible_release_date(
     return value
 
 
+# Beyond this, the precompute is old enough that a caller should say so out loud.
+# Three days rather than one: discovery rotates through the library over roughly a
+# day, so a result from yesterday is normal operation, not a problem.
+STALE_AFTER_HOURS = 72.0
+
+
+def new_release_note(
+    *,
+    found: int,
+    new_count: int,
+    days_back: int,
+    as_of: datetime | None,
+    age_hours: float | None,
+) -> str:
+    """What to tell a person about results whose age they cannot see.
+
+    The interesting case is the unhappy one, and it keeps being unrepresentable. The
+    first version could only say "found N" or "found none", so a scan cut short by a
+    rate-limited upstream reported "No recent releases found" — a confident wrong
+    answer. This is the same rule applied to *time*: an empty list means one of three
+    quite different things, and the note is where they are told apart.
+
+    **"Never run" is its own case on purpose** (ADR-0099 point 8). It was the true
+    state for nineteen nights while the nightly job crashed, and nothing said so.
+    """
+    if as_of is None:
+        return (
+            "Discovery has not recorded any releases yet, so this is not the same as "
+            "'nothing new' — the background job may not have run successfully. Check "
+            "the Server page."
+        )
+
+    if age_hours is not None and age_hours >= STALE_AFTER_HOURS:
+        days = int(age_hours // 24)
+        stamp = f"{days} day(s) ago" if days else f"{int(age_hours)} hour(s) ago"
+        return (
+            f"{found} release(s) ({new_count} not in library), but discovery last found "
+            f"anything {stamp} — these results are stale and something new may be missing."
+        )
+
+    if found:
+        return (
+            f"Found {found} recent releases ({new_count} not in library) from the last "
+            f"{days_back} days."
+        )
+    return f"No new releases in the last {days_back} days."
+
+
 class NewReleasesService:
     """Service for discovering new releases from artists in the user's library."""
 
@@ -240,6 +288,91 @@ class NewReleasesService:
         # `None` still means "already had this one" and callers counting new releases
         # keep counting the same thing.
         return result.scalar_one_or_none()
+
+    async def get_discovery_freshness(self) -> tuple[datetime | None, float | None]:
+        """When discovery last wrote, and how many hours ago that was.
+
+        ``None`` means it has never written anything — which is a different
+        statement from "there is nothing new", and the two must not be collapsed.
+        """
+        result = await self.db.execute(
+            select(func.max(ExternalAlbumCache.discovered_at)).where(
+                ExternalAlbumCache.discovery_context == DISCOVERY_CONTEXT
+            )
+        )
+        as_of: datetime | None = result.scalar()
+        if as_of is None:
+            return None, None
+        age_hours = (utcnow().replace(tzinfo=None) - as_of).total_seconds() / 3600.0
+        return as_of, max(0.0, age_hours)
+
+    async def get_new_releases_view(
+        self,
+        days_back: int = 90,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        """Recent releases for a listener, read from the precompute. Never calls out.
+
+        **This is the read path, and it is a database query by decision** (ADR-0099
+        point 1). It used to be a live MusicBrainz scan of the top fifteen artists on
+        the request path, which is what hung an MCP host for 240 seconds while a
+        populated cache sat beside it.
+
+        The response carries the *age* of what it returns (point 7). A caller has to be
+        able to tell "nothing new" from "discovery last succeeded five days ago" from
+        "discovery has never run" — an empty list looks identical in all three and leads
+        to opposite conclusions.
+        """
+        as_of, age_hours = await self.get_discovery_freshness()
+
+        cutoff = utcnow().replace(tzinfo=None) - timedelta(days=days_back)
+        query = (
+            select(ExternalAlbumCache)
+            .where(
+                ExternalAlbumCache.discovery_context == DISCOVERY_CONTEXT,
+                ExternalAlbumCache.dismissed.is_(False),
+                or_(
+                    ExternalAlbumCache.release_date.is_(None),
+                    ExternalAlbumCache.release_date >= cutoff,
+                ),
+            )
+            .order_by(
+                ExternalAlbumCache.release_date.desc().nullslast(),
+                ExternalAlbumCache.discovered_at.desc(),
+            )
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        rows = result.scalars().all()
+
+        releases = [
+            {
+                "artist": r.artist_name,
+                "title": r.release_name,
+                "type": r.release_type,
+                "date": r.release_date.isoformat() if r.release_date else None,
+                # Computed by the background job at write time via
+                # `check_user_has_release`, so the read path does no matching work.
+                "in_library": r.local_album_match,
+            }
+            for r in rows
+        ]
+        new_count = sum(1 for r in releases if not r["in_library"])
+
+        return {
+            "releases": releases,
+            "count": len(releases),
+            "new_releases_not_in_library": new_count,
+            "as_of": as_of.isoformat() if as_of else None,
+            "age_hours": round(age_hours, 1) if age_hours is not None else None,
+            "note": new_release_note(
+                found=len(releases),
+                new_count=new_count,
+                days_back=days_back,
+                as_of=as_of,
+                age_hours=age_hours,
+            ),
+        }
 
     async def get_cached_releases(
         self,

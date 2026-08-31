@@ -70,6 +70,14 @@ export interface NewReleasesListResponse {
   total: number;
   limit: number;
   offset: number;
+  /**
+   * When discovery last wrote a release, and how long ago. `null` means it has
+   * never written one — which is not the same as "there is nothing new". An empty
+   * list looks identical in both cases, so a client must not render it as
+   * "no new releases" without checking this (ADR-0099 points 7 and 8).
+   */
+  as_of: string | null;
+  age_hours: number | null;
 }
 
 export interface NewReleasesListParams {
@@ -87,11 +95,6 @@ export const newReleasesApi = {
 
   async getStatus(): Promise<NewReleasesStatus> {
     const { data } = await api.get('/new-releases/status');
-    return data;
-  },
-
-  async check(params?: { days_back?: number; force?: boolean }): Promise<{ status: string; message: string }> {
-    const { data } = await api.post('/new-releases/check', null, { params });
     return data;
   },
 

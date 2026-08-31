@@ -1,10 +1,8 @@
-"""Discovery tool handlers (bandcamp, similar artists, track identification, external similar tracks)."""
+"""Discovery tool handlers (bandcamp, similar artists, new releases, track identification)."""
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import time
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -345,9 +343,17 @@ class DiscoveryHandlersMixin:
         days_back: int = 90,
         limit: int = 20,
     ) -> dict[str, Any]:
-        """Find recent releases by the user's most-played artists via MusicBrainz."""
-        from app.db.models import ProfilePlayHistory
-        from app.services.metadata.musicbrainz import get_artist_releases_recent
+        """Recent releases by the user's artists, read from the discovery precompute.
+
+        **This reads a table. It does not call MusicBrainz** (ADR-0099 point 1).
+
+        It used to walk the top fifteen artists and query MusicBrainz live, on the
+        tool-call path, which is what hung a host for 240 seconds on 2026-08-30 — the
+        host reporting a bare "Tool execution failed" that pointed at the app rather
+        than the upstream. Bounding that scan made the symptom survivable; moving the
+        read to the cache the background job already fills removes it.
+        """
+        from app.services.new_releases import NewReleasesService
 
         if not self.profile_id:
             return {"error": "Profile required for new releases lookup"}
@@ -358,132 +364,8 @@ class DiscoveryHandlersMixin:
         except (ValueError, TypeError):
             days_back, limit = 90, 20
 
-        # Top 15 canonical artists by play count, with MBID directly off
-        # the canonical row (Pass 1's strict-match resolver wrote it).
-        play_query = (
-            select(
-                Artist.id.label("artist_id"),
-                Artist.name.label("artist_name"),
-                Artist.musicbrainz_id.label("musicbrainz_id"),
-                func.sum(ProfilePlayHistory.play_count).label("total_plays"),
-            )
-            .join(Track, ProfilePlayHistory.track_id == Track.id)
-            .join(Artist, Artist.id == Track.canonical_artist_id)
-            .where(ProfilePlayHistory.profile_id == self.profile_id)
-            .group_by(Artist.id, Artist.name, Artist.musicbrainz_id)
-            .order_by(func.sum(ProfilePlayHistory.play_count).desc())
-            .limit(15)
-        )
-        play_result = await self.db.execute(play_query)
-        top_artists = play_result.fetchall()
-
-        if not top_artists:
-            return {"releases": [], "artists_checked": 0, "note": "No play history found."}
-
-        all_releases: list[dict[str, Any]] = []
-        artists_checked = 0
-        artists_skipped = 0
-
-        # **Bounded, because MusicBrainz stalls and `musicbrainzngs` hides it.**
-        #
-        # A 503 is answered by retrying with backoff, logged at INFO, and the caller is told
-        # nothing. MusicBrainz rate-limits to one request a second per client, so when this runs
-        # alongside the background artist resolver it gets 503s — and fifteen artists, each retried,
-        # turns a scan that should take fifteen seconds into one that never returns. Observed on
-        # 2026-08-30 at 240 seconds with no response, which an MCP host reports as a bare
-        # "Tool execution failed" pointing at the app rather than at the upstream.
-        #
-        # The budgets live in `library_artists` so the tool and the HTTP endpoint cannot drift into
-        # disagreeing about how long a person will wait.
-        from app.api.routes.library_artists import (
-            NEW_RELEASE_PER_ARTIST_TIMEOUT_SECONDS,
-            NEW_RELEASE_SCAN_BUDGET_SECONDS,
-        )
-
-        deadline = time.monotonic() + NEW_RELEASE_SCAN_BUDGET_SECONDS
-        partial = False
-        stalled = False
-
-        for row in top_artists:
-            if not row.musicbrainz_id:
-                artists_skipped += 1
-                continue
-
-            if time.monotonic() > deadline:
-                partial = True
-                break
-
-            artists_checked += 1
-            try:
-                releases = await asyncio.wait_for(
-                    asyncio.to_thread(get_artist_releases_recent, row.musicbrainz_id, days_back),
-                    timeout=NEW_RELEASE_PER_ARTIST_TIMEOUT_SECONDS,
-                )
-            except TimeoutError:
-                # `wait_for` cannot cancel the thread; it finishes in the background. Acceptable —
-                # it is one bounded HTTP call, and the alternative is holding the tool open for it.
-                partial = True
-                stalled = True
-                continue
-
-            for r in releases:
-                all_releases.append(
-                    {
-                        "artist": row.artist_name,
-                        "title": r["title"],
-                        "type": r.get("release_type"),
-                        "date": r["release_date"],
-                        "in_library": False,
-                    }
-                )
-
-        # Cross-reference with the library by canonical artist + album.
-        if all_releases:
-            album_pairs_query = (
-                select(
-                    Artist.name.label("artist_name"),
-                    func.lower(func.trim(Track.album)).label("album_lower"),
-                )
-                .join(Track, Track.canonical_artist_id == Artist.id)
-                .where(
-                    Track.album.isnot(None),
-                    Track.status == TrackStatus.ACTIVE,
-                )
-                .distinct()
-            )
-            album_result = await self.db.execute(album_pairs_query)
-            library_albums = {
-                (row.artist_name.lower().strip(), row.album_lower) for row in album_result.all()
-            }
-
-            for release in all_releases:
-                key = (release["artist"].lower().strip(), release["title"].lower().strip())
-                if key in library_albums:
-                    release["in_library"] = True
-
-        all_releases.sort(key=lambda r: r["date"], reverse=True)
-        all_releases = all_releases[:limit]
-
-        new_count = sum(1 for r in all_releases if not r["in_library"])
-        return {
-            "releases": all_releases,
-            "artists_checked": artists_checked,
-            "artists_skipped": artists_skipped,
-            "count": len(all_releases),
-            "new_releases_not_in_library": new_count,
-            "partial": partial,
-            # The note is what the host reads aloud, so it has to distinguish "nothing new" from
-            # "we ran out of time" — an empty list looks identical either way and leads to
-            # opposite conclusions.
-            "note": _new_release_note(
-                found=len(all_releases),
-                new_count=new_count,
-                artists_checked=artists_checked,
-                days_back=days_back,
-                partial=partial,
-                stalled=stalled,
-            ),
-        }
+        service = NewReleasesService(self.db)
+        return await service.get_new_releases_view(days_back=days_back, limit=limit)
 
     async def _get_discovery_recommendations(
         self: "ToolExecutor",
@@ -757,131 +639,3 @@ class DiscoveryHandlersMixin:
             "note": "Track not found in library. Use get_similar_artists_in_library to find related artists.",
             "bandcamp_search_url": f"https://bandcamp.com/search?q={artist.replace(' ', '+')}+{title.replace(' ', '+')}",
         }
-
-    async def _get_similar_tracks_external(
-        self: "ToolExecutor",
-        artist: str,
-        track: str,
-        limit: int = 10,
-    ) -> dict[str, Any]:
-        """Get similar tracks from Last.fm.
-
-        Returns tracks that may not be in the library.
-        Use when building discovery playlists or when reference track isn't in library.
-        """
-        from app.services.lastfm import get_lastfm_service
-
-        try:
-            limit = int(float(limit)) if limit else 10
-        except (ValueError, TypeError):
-            limit = 10
-
-        lastfm = get_lastfm_service()
-
-        if not lastfm.is_configured():
-            return {
-                "tracks": [],
-                "count": 0,
-                "error": "Last.fm API not configured. Add Last.fm API key in Settings.",
-            }
-
-        # Get similar tracks from Last.fm
-        similar_tracks = await lastfm.get_similar_tracks(artist, track, limit=limit * 2)
-
-        if not similar_tracks:
-            return {
-                "reference_track": {"artist": artist, "track": track},
-                "tracks": [],
-                "count": 0,
-                "note": "No similar tracks found via Last.fm.",
-            }
-
-        # Check which similar tracks are in the local library
-        tracks_with_status: list[dict[str, Any]] = []
-
-        for similar in similar_tracks[:limit]:
-            similar_name = similar.get("name", "")
-            similar_artist_data = similar.get("artist", {})
-            similar_artist = (
-                similar_artist_data.get("name", "")
-                if isinstance(similar_artist_data, dict)
-                else str(similar_artist_data)
-            )
-
-            if not similar_name or not similar_artist:
-                continue
-
-            # Check if in local library
-            stmt = (
-                select(Track)
-                .where(
-                    Track.active_filter(),
-                    func.lower(Track.title) == similar_name.lower(),
-                    func.lower(Track.artist) == similar_artist.lower(),
-                )
-                .limit(1)
-            )
-            result = await self.db.execute(stmt)
-            local_track = result.scalar_one_or_none()
-
-            track_info: dict[str, Any] = {
-                "title": similar_name,
-                "artist": similar_artist,
-                "match_score": round(float(similar.get("match", 0)), 2),
-                "lastfm_url": similar.get("url"),
-            }
-
-            if local_track:
-                track_info["in_library"] = True
-                track_info["local_track_id"] = str(local_track.id)
-                track_info["album"] = local_track.album
-            else:
-                track_info["in_library"] = False
-
-            tracks_with_status.append(track_info)
-
-        in_library_count = sum(1 for t in tracks_with_status if t.get("in_library"))
-
-        return {
-            "reference_track": {"artist": artist, "track": track},
-            "tracks": tracks_with_status,
-            "count": len(tracks_with_status),
-            "in_library": in_library_count,
-            "missing": len(tracks_with_status) - in_library_count,
-            "note": f"Found {len(tracks_with_status)} similar tracks ({in_library_count} in library, {len(tracks_with_status) - in_library_count} not in library).",
-        }
-
-
-def _new_release_note(
-    *,
-    found: int,
-    new_count: int,
-    artists_checked: int,
-    days_back: int,
-    partial: bool,
-    stalled: bool,
-) -> str:
-    """What to tell a person about a scan that may not have finished.
-
-    Separated from the handler because the interesting case is the unhappy one, and it was
-    previously unrepresentable: the old note could only say "found N" or "found none", so a scan cut
-    short by a rate-limited upstream reported "No recent releases found" — a confident wrong answer.
-    """
-    if stalled:
-        return (
-            f"MusicBrainz did not answer in time for some artists, so this is partial: "
-            f"{found} release(s) from {artists_checked} artist(s). It rate-limits to one request a "
-            "second and returns 503 when that is exceeded, which is usually temporary — try again "
-            "in a minute."
-        )
-    if partial:
-        return (
-            f"Stopped early to stay responsive: {found} release(s) from the first "
-            f"{artists_checked} artist(s). Ask again to continue where MusicBrainz left off."
-        )
-    if found:
-        return (
-            f"Found {found} recent releases ({new_count} not in library) from {artists_checked} "
-            f"artists (last {days_back} days)."
-        )
-    return f"No recent releases found in the last {days_back} days."

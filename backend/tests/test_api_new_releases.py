@@ -36,11 +36,39 @@ def _seed_release(
 class TestListNewReleases:
     @pytest.mark.asyncio
     async def test_empty(self, async_db, client: TestClient):
+        """An empty cache reports *why* it is empty, not just that it is.
+
+        `as_of: None` means discovery has never written a release — which is not
+        the same as "there is nothing new", though both render as an empty list.
+        Telling them apart is ADR-0099 points 7 and 8, and the reason a five-day
+        gap went unnoticed for five days.
+        """
         await async_db.commit()
         resp = client.get("/api/v1/new-releases")
         assert resp.status_code == 200
         data = resp.json()
-        assert data == {"releases": [], "total": 0, "limit": 50, "offset": 0}
+        assert data == {
+            "releases": [],
+            "total": 0,
+            "limit": 50,
+            "offset": 0,
+            "as_of": None,
+            "age_hours": None,
+        }
+
+    @pytest.mark.asyncio
+    async def test_reports_when_discovery_last_found_something(
+        self, async_db, client: TestClient
+    ):
+        """A populated cache carries its own age, so a client can say how old it is."""
+        _seed_release(async_db, release_id="rg-freshness", artist="Tycho")
+        await async_db.commit()
+
+        data = client.get("/api/v1/new-releases").json()
+
+        assert data["as_of"] is not None
+        assert data["age_hours"] is not None
+        assert data["age_hours"] < 24
 
     @pytest.mark.asyncio
     async def test_excludes_dismissed_and_owned_by_default(

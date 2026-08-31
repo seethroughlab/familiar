@@ -373,7 +373,7 @@ MUSIC_TOOLS: list[dict[str, Any]] = [
     # Discovery tools
     {
         "name": "get_new_releases",
-        "description": "Find recent releases by the user's most-played artists via MusicBrainz. Use when the user asks about new music from artists they listen to, what's new, or recent releases. May take 10-15 seconds due to MusicBrainz lookups. Returns releases with in_library flag indicating if the user already has them.",
+        "description": "Recent releases by the user's most-played artists. Use when the user asks about new music from artists they listen to, what's new, or recent releases. Reads precomputed discovery data and returns immediately. Returns releases with in_library flag indicating if the user already has them, plus `as_of` and `age_hours` for when discovery last found anything, and a `note` that distinguishes 'nothing new' from stale or never-run data — report that distinction rather than presenting stale results as current.",
         "input_schema": {
             "type": "object",
             "properties": {

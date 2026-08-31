@@ -232,7 +232,6 @@ ALLOWED_UNTYPED_OPERATIONS = {
     ("POST", "/api/v1/export-import/export"),
     ("POST", "/api/v1/export-import/library/export"),
     ("POST", "/api/v1/external-albums/{external_album_id}/dismiss"),
-    ("GET", "/api/v1/new-releases"),
     ("POST", "/api/v1/new-releases/check"),
     ("POST", "/api/v1/new-releases/check/batch"),
     ("GET", "/api/v1/new-releases/status"),
