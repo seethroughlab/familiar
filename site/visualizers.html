@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visualizer API — Familiar</title>
+  <meta name="description" content="Write a visualizer for Familiar: a folder with an index.html, four events, and no libraries to learn.">
+  <link rel="icon" type="image/svg+xml" href="./assets/icon.svg">
+  <link rel="stylesheet" href="./assets/site.css">
+</head>
+<body>
+
+<nav class="topnav" aria-label="Primary">
+  <a class="topnav-brand" href="./">
+    <img src="./assets/icon.svg" alt="" aria-hidden="true">
+    <span>Familiar</span>
+  </a>
+  <div class="topnav-links">
+    <a href="./#features">Features</a>
+    <a href="./#features">Ask</a>
+    <a href="./#comparison">Compare</a>
+    <a href="https://github.com/seethroughlab/familiar" target="_blank" rel="noopener" class="topnav-github" aria-label="GitHub">GitHub</a>
+    <a href="./#install" class="topnav-install">Install</a>
+  </div>
+</nav>
+
+<main id="top" class="doc">
+  <h1>Visualizer API</h1>
+  <p class="doc-meta">
+    Contract version <strong>apiVersion&nbsp;1</strong>.
+    Rendered from <a href="https://github.com/seethroughlab/familiar/blob/main/docs/VISUALIZER_API.md">docs/VISUALIZER_API.md</a>,
+    which is the source of truth.
+  </p>
+<p>A visualizer is <strong>a folder with an <code>index.html</code></strong>. Familiar loads it in its own sandboxed frame and</p>
+<p>posts it events. That is the whole contract.</p>
+<p>It lends you nothing — no React, no three.js, no globals. Whatever you build the document from is</p>
+<p>your business: a canvas, WebGL, shaders, p5, a <code>&lt;video&gt;</code>, or plain HTML.</p>
+<p>&gt; This replaces the previous contract, in which a visualizer was a React component registered onto</p>
+<p>&gt; <code>window.Familiar</code> and evaluated inside the host page. See</p>
+<p>&gt; <a href="decisions/ADR-0087-a-visualizer-is-a-document-not-a-component.md">ADR-0087</a> for why it changed and</p>
+<p>&gt; what it cost.</p>
+<h2>The smallest visualizer that works</h2>
+<pre><code>&lt;!doctype html&gt;
+&lt;meta charset="utf-8"&gt;
+&lt;style&gt;html,body{margin:0;height:100%;background:#000}canvas{display:block;width:100%;height:100%}&lt;/style&gt;
+&lt;canvas id="c"&gt;&lt;/canvas&gt;
+&lt;script&gt;
+  const ctx = document.getElementById('c').getContext('2d');
+  let level = 0;
+
+  window.addEventListener('message', (event) =&gt; {
+    const message = event.data;
+    if (message?.type === 'familiar:audio') level = message.payload.bass;
+  });
+
+  (function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 10000, 10000);
+    ctx.fillStyle = '#0af';
+    ctx.fillRect(0, 0, 10000, level * 400);
+    requestAnimationFrame(draw);
+  })();
+
+  // Last, once you are listening.
+  parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');
+&lt;/script&gt;</code></pre>
+<p>No build step, no dependencies, no imports. Drop that in a folder with a manifest and it is a</p>
+<p>visualizer.</p>
+<h2>The folder</h2>
+<pre><code>my-visualizer/
+  familiar-plugin.json    required
+  index.html              required — the entry point
+  …anything else          your JS, CSS, models, shaders, images</code></pre>
+<pre><code>{
+  "name": "My Visualizer",
+  "id": "my-visualizer",
+  "version": "1.0.0",
+  "type": "visualizer",
+  "description": "One line, shown in the picker.",
+  "author": { "name": "You" },
+  "main": "index.html",
+  "familiar": { "apiVersion": 1 },
+  "icon": "Sparkles",
+  "affinity": { "tags": [], "ranges": [] }
+}</code></pre>
+<p><code>id</code> must be lowercase letters, digits and hyphens — it goes in a URL. <code>apiVersion</code> is the version of</p>
+<p>*this event contract*; a manifest declaring one the host does not implement is refused with a reason</p>
+<p>shown in the picker rather than loaded and left to fail.</p>
+<h2>The events</h2>
+<p>Three come in. One goes out.</p>
+<h3><code>familiar:ready</code> — you → Familiar</h3>
+<p>Send it once, <strong>after</strong> you have attached your <code>message</code> listener. Familiar does not post anything</p>
+<p>until it arrives, so a visualizer that sends it too early misses the first track, and one that never</p>
+<p>sends it receives nothing at all.</p>
+<pre><code>parent.postMessage({ type: 'familiar:ready', apiVersion: 1 }, '*');</code></pre>
+<h3><code>familiar:track</code> — the track changed</h3>
+<pre><code>{
+  type: 'familiar:track',
+  apiVersion: 1,
+  payload: {
+    id: string | null,
+    title: string | null,
+    artist: string | null,
+    album: string | null,
+    artworkUrl: string | null,   // load it directly; it is a normal URL
+    duration: number,            // seconds
+    features: {                  // null when the track has not been analysed
+      bpm?: number, key?: string, energy?: number, valence?: number,
+      danceability?: number, acousticness?: number, /* … */
+    } | null,
+    lyrics: Array&lt;{ text: string, startTime: number, endTime?: number }&gt; | null,
+  }
+}</code></pre>
+<h3><code>familiar:state</code> — transport</h3>
+<pre><code>{ type: 'familiar:state', apiVersion: 1, payload: { isPlaying: boolean, currentTime: number } }</code></pre>
+<p><code>currentTime</code> is seconds, and it is the playhead you should sync to.</p>
+<h3><code>familiar:audio</code> — an analysis frame</h3>
+<p>Sent on the host's animation loop while something is playing.</p>
+<pre><code>{
+  type: 'familiar:audio',
+  apiVersion: 1,
+  payload: {
+    bass: number,             // 0..1
+    mid: number,              // 0..1
+    treble: number,           // 0..1
+    averageFrequency: number, // 0..255
+    frequencyData: number[],  // 0..255 per bin
+    beat: number,             // 0..1 — spikes on an onset, then decays
+    onset: boolean,           // true only on the frame a transient is detected
+  }
+}</code></pre>
+<p><strong><code>beat</code> and <code>onset</code> are what you want for anything rhythmic.</strong> <code>bass</code> follows the low end</p>
+<p>continuously, which is not the same thing: a track with a sustained bass note holds <code>bass</code> high and</p>
+<p>produces no beats at all. <code>beat</code> is an envelope that spikes and falls, so it reads as pulse; <code>onset</code></p>
+<p>is a single-frame flag, which is what you spawn a ripple or flip a tile on.</p>
+<p>These two were missing from the first version of this contract while the host computed them all</p>
+<p>along — so a visualizer keying off them rendered perfectly and never moved. If you are debugging a</p>
+<p>plugin that looks frozen, log the payload before assuming your own maths is wrong.</p>
+<p><strong>Already smoothed.</strong> Frames reach the host from a native player at about 10 Hz — macOS clamps the</p>
+<p>audio tap — and the host reconstructs a 60 Hz signal before sending. You do not need to interpolate</p>
+<p>it again, and doing so will make you late.</p>
+<h2>You are obliged to receive, never to implement</h2>
+<p>A visualizer that ignores every event and draws a still image is a valid visualizer. There is no</p>
+<p>lifecycle to satisfy, nothing to return, and no function you must export. Listen for what you want</p>
+<p>and ignore the rest.</p>
+<h2>Three things that will bite you</h2>
+<p>These are not style advice. Each one produced a visualizer that loaded and drew nothing, and each</p>
+<p>took real time to diagnose because the failure is invisible from outside the frame.</p>
+<h3>1. Use a classic script, not a module</h3>
+<pre><code>&lt;script src="./app.js"&gt;&lt;/script&gt;          &lt;!-- yes --&gt;
+&lt;script type="module" src="./app.js"&gt;&lt;/script&gt;   &lt;!-- no --&gt;</code></pre>
+<p>Your document has an <strong>opaque origin</strong>, because it is sandboxed without <code>allow-same-origin</code>. Module</p>
+<p>scripts are always fetched with CORS, so the request arrives as <code>Origin: null</code> and is refused —</p>
+<p>including for a file sitting in your own folder. If you use a bundler, build to an IIFE.</p>
+<p>An *inline* <code>&lt;script&gt;</code> has no such problem, which is why the smallest example above works and a</p>
+<p>bundled one may not.</p>
+<h3>2. Anything you <code>fetch</code> needs CORS headers</h3>
+<p>Same cause, wider effect. <code>fetch</code>, <code>XMLHttpRequest</code>, and therefore any loader built on them —</p>
+<p><code>GLTFLoader</code>, a shader fetched at runtime, a JSON config — are CORS-checked and will fail against a</p>
+<p>server that does not send <code>Access-Control-Allow-Origin</code>.</p>
+<p>Familiar's own loader sends it for files in your folder, so a model beside your <code>index.html</code> loads</p>
+<p>fine. A file from somewhere else depends on that host's headers.</p>
+<p><code>&lt;script src&gt;</code>, <code>&lt;img&gt;</code>, <code>&lt;link rel="stylesheet"&gt;</code> and <code>&lt;video&gt;</code> are <strong>not</strong> CORS-checked. If you can</p>
+<p>express a dependency as one of those, it will always work.</p>
+<h3>3. Bundlers and <code>process.env.NODE_ENV</code></h3>
+<p>If you bundle a library that reads <code>process.env.NODE_ENV</code> — React does — a library-mode build will</p>
+<p>not define it, and your bundle throws <code>process is not defined</code> on its first line. In Vite:</p>
+<pre><code>define: { 'process.env.NODE_ENV': '"production"' }</code></pre>
+<h2>Affinity — what your visualizer suits</h2>
+<p>Optional. Declares what a track should be like for the server to pick you when the listener has</p>
+<p>"Match to the Music" on (<a href="decisions/ADR-0064-visualizers-declare-affinity-and-the-server-ranks-them.md">ADR-0064</a>).</p>
+<pre><code>"affinity": {
+  "tags": ["danceable", "drums", "funk"],
+  "ranges": [{ "feature": "danceability", "minimum": 0.5 }]
+}</code></pre>
+<p>Declaring nothing scores neutral, which is the honest answer for a visualizer that suits anything —</p>
+<p>not last place. A tag or feature the server does not recognise is ignored and reported in the picker</p>
+<p>rather than failing the manifest.</p>
+<h2>Installing</h2>
+<p>Put the folder in Familiar's <code>Visualizers</code> directory — Settings has a button that reveals it — and</p>
+<p>reopen the visualizer. There is no install-from-URL</p>
+<p>(<a href="decisions/ADR-0034-visualizers-are-drop-in-bundles.md">ADR-0034</a> point 5).</p>
+<p>A folder with no manifest is ignored silently, because that directory accumulates <code>.DS_Store</code> and</p>
+<p>half-unzipped archives. A folder *with* a manifest that cannot be used is reported in the picker,</p>
+<p>with the reason.</p>
+<h2>When it does not appear</h2>
+<ul>
+<li><strong>Not in the picker at all</strong> — no <code>familiar-plugin.json</code>, or it is not valid JSON.</li>
+<li><strong>Listed with a reason</strong> — the manifest parsed but was refused; the reason says which part.</li>
+<li><strong>Listed but blank</strong> — the document loaded and drew nothing. Almost always one of the three traps</li>
+</ul>
+<p>above. Open the folder's <code>index.html</code> directly in a browser: everything except the events works</p>
+<p>there, and the console will show you the CORS or <code>process</code> error.</p>
+<ul>
+<li><strong>Draws but never moves</strong> — you are probably not sending <code>familiar:ready</code>, so no events follow.</li>
+</ul>
+<h2>What Familiar guarantees, and what it does not</h2>
+<p><strong>Guaranteed:</strong> your document is loaded from your folder, its files are served with CORS headers, and</p>
+<p>the four events keep the shapes above for as long as <code>apiVersion</code> is 1.</p>
+<p><strong>Not guaranteed:</strong> anything about libraries. Familiar ships no THREE, no React, no drei for you to</p>
+<p>borrow, and there is no shared folder to load them from</p>
+<p>(<a href="decisions/ADR-0087-a-visualizer-is-a-document-not-a-component.md">ADR-0087</a> point 7). Bundle what</p>
+<p>you need. The visualizers Familiar ships do exactly that, and are worth reading as worked examples —</p>
+<p><code>spectrum</code> is 106 lines of canvas with no build step at all; <code>beat-tiles</code> is a three.js scene that</p>
+<p>carries its own copy.</p>
+<h2 id="gallery">The gallery</h2>
+<p>These five ship with Familiar and are seeded into your <code>Visualizers/</code> folder the first time it runs. Each is a folder with an <code>index.html</code> — the same thing yours will be.</p>
+<ul class="viz-grid"><li class="viz-card"><h3>Spectrum</h3><p>Frequency bars on a canvas. One file, no build step, no libraries.</p><p class="viz-meta">Ships with Familiar · apiVersion 1</p></li>
+<li class="viz-card"><h3>Beat Tiles</h3><p>Reflective tiles pulsing with the beat, over the album cover.</p><p class="viz-meta">Ships with Familiar · apiVersion 1</p></li>
+<li class="viz-card"><h3>Reactive Terrain</h3><p>A wireframe landscape driven by the music, with a car on an endless road.</p><p class="viz-meta">Ships with Familiar · apiVersion 1</p></li>
+<li class="viz-card"><h3>Lyrics</h3><p>Scrolling synced lyrics over a drifting field of the song's words.</p><p class="viz-meta">Ships with Familiar · apiVersion 1</p></li>
+<li class="viz-card"><h3>Lyric Storm</h3><p>The song's own words drifting through a dark 3D space, reacting to the music.</p><p class="viz-meta">Ships with Familiar · apiVersion 1</p></li></ul>
+<h3>Written by other people</h3>
+<p>None yet — this is a new contract. If you write one, <a href="https://github.com/seethroughlab/familiar/blob/main/site/visualizers.json">open a pull request against <code>site/visualizers.json</code></a> with a name, an author, the <code>apiVersion</code> you target and a link to your repository. Familiar links to your code; it does not host it.</p>
+</main>
+
+<footer class="site-footer">
+  <p><a href="./">Familiar</a> · <a href="./faq.html">FAQ</a> · <a href="./privacy.html">Privacy</a></p>
+</footer>
+
+</body>
+</html>

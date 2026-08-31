@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "The visualizer gallery's data (ADR-0103 points 2-5).",
+    "",
+    "`shipped` mirrors familiar-plugin.json in the app bundle's Visualizers.bundle/.",
+    "It is duplicated here rather than read across repositories because the site is a",
+    "separate deploy that cannot reach familiar-apple. site/scripts/check-claims.py",
+    "asserts the two agree whenever both are checked out, so the copy cannot drift",
+    "silently -- hand-copying these drifted on the first attempt, which is why it is",
+    "generated and checked rather than typed.",
+    "",
+    "`submitted` is where third-party entries go, by pull request (point 4). Every",
+    "field is something a reviewer can check: a name, an author, an apiVersion and a",
+    "URL that resolves. Not 'works great with electronic music' (point 5)."
+  ],
+  "shipped": [
+    {
+      "id": "spectrum",
+      "name": "Spectrum",
+      "description": "Frequency bars on a canvas. One file, no build step, no libraries.",
+      "author": "Familiar",
+      "apiVersion": 1
+    },
+    {
+      "id": "beat-tiles",
+      "name": "Beat Tiles",
+      "description": "Reflective tiles pulsing with the beat, over the album cover.",
+      "author": "Familiar",
+      "apiVersion": 1
+    },
+    {
+      "id": "reactive-terrain",
+      "name": "Reactive Terrain",
+      "description": "A wireframe landscape driven by the music, with a car on an endless road.",
+      "author": "Familiar",
+      "apiVersion": 1
+    },
+    {
+      "id": "lyrics",
+      "name": "Lyrics",
+      "description": "Scrolling synced lyrics over a drifting field of the song's words.",
+      "author": "Familiar",
+      "apiVersion": 1
+    },
+    {
+      "id": "lyric-storm",
+      "name": "Lyric Storm",
+      "description": "The song's own words drifting through a dark 3D space, reacting to the music.",
+      "author": "Familiar",
+      "apiVersion": 1
+    }
+  ],
+  "submitted": []
+}

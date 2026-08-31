@@ -953,3 +953,45 @@ footer a { color: var(--text-secondary); }
   font-size: 0.88rem;
   color: var(--text-muted);
 }
+
+/* ── Rendered docs and the visualizer gallery (ADR-0103) ─────────────────── */
+
+.doc {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 4rem;
+}
+.doc h1 { margin-bottom: .25rem; }
+.doc h2 { margin-top: 2.5rem; }
+.doc h3 { margin-top: 1.75rem; }
+.doc p, .doc li { line-height: 1.65; }
+.doc code {
+  font-size: .9em;
+  padding: .1em .35em;
+  border-radius: 3px;
+  background: rgba(127, 127, 127, .14);
+}
+.doc pre {
+  overflow-x: auto;          /* long lines scroll rather than widening the page */
+  padding: 1rem;
+  border-radius: 6px;
+  background: rgba(127, 127, 127, .1);
+}
+.doc pre code { background: none; padding: 0; }
+.doc-meta { font-size: .9rem; opacity: .75; margin-top: 0; }
+
+.viz-grid {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+.viz-card {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(127, 127, 127, .25);
+  border-radius: 8px;
+}
+.viz-card h3 { margin: 0 0 .4rem; font-size: 1.05rem; }
+.viz-card p { margin: 0 0 .4rem; font-size: .93rem; }
+.viz-meta { opacity: .7; font-size: .85rem !important; }
