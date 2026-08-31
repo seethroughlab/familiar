@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from app.services.background.events import record_background_event
+from app.services.redis_client import get_redis
 from app.utils.time import utcnow
 
 if TYPE_CHECKING:
@@ -369,8 +370,19 @@ class SyncMixin(_SyncBase):
             logger.error(f"prioritized new_releases check failed: {e}", exc_info=True)
             return {"status": "error", "error": str(e)}
 
-    async def _daily_new_releases_check(self) -> None:
-        """APScheduler entry: pick the first profile and run a prioritized batch."""
+    async def _discovery_batch(self) -> None:
+        """APScheduler entry: one small prioritised batch, for one profile in turn.
+
+        **Profiles take turns rather than the first one always winning.** This used to
+        `select(Profile.id).limit(1)`, so on a shared library one listener's play
+        history decided what the whole household discovered — while the rows it writes
+        are not profile-scoped at all, so everyone saw the result of one person's taste.
+        `_daily_external_albums_refresh` directly below already made the opposite choice
+        for its own case.
+
+        The cursor lives in Redis because it is a hint, not state worth a table: if it
+        is lost the rotation restarts at the first profile, which costs one batch.
+        """
         from sqlalchemy import select
         from sqlalchemy.ext.asyncio import (
             AsyncSession,
@@ -380,26 +392,48 @@ class SyncMixin(_SyncBase):
 
         from app.config import settings
         from app.db.models import Profile
+        from app.services.background.manager import DISCOVERY_BATCH_SIZE
+
+        cursor_key = "familiar:discovery:profile_cursor"
 
         try:
             engine = create_async_engine(settings.database_url)
             async_session = async_sessionmaker(engine, class_=AsyncSession)
             try:
                 async with async_session() as db:
-                    result = await db.execute(select(Profile.id).limit(1))
-                    profile_row = result.first()
-                    if not profile_row:
-                        logger.info(
-                            "Daily new releases check: no profiles, skipping"
-                        )
-                        return
-                    profile_id = str(profile_row[0])
+                    # Ordered by id so the rotation is stable across restarts — without
+                    # an ORDER BY the cursor indexes into an arbitrary order and can
+                    # revisit one profile while skipping another indefinitely.
+                    result = await db.execute(select(Profile.id).order_by(Profile.id))
+                    profile_ids = [str(row[0]) for row in result.all()]
             finally:
                 await engine.dispose()
 
-            await self.run_prioritized_new_releases_check(profile_id=profile_id)
+            if not profile_ids:
+                logger.info("discovery_batch_skipped", extra={"reason": "no profiles"})
+                return
+
+            index = 0
+            try:
+                raw = get_redis().get(cursor_key)
+                if raw is not None:
+                    index = int(raw) % len(profile_ids)
+            except Exception:
+                # A missing or unreadable cursor costs one batch, not a failure.
+                index = 0
+
+            profile_id = profile_ids[index]
+            try:
+                get_redis().set(cursor_key, (index + 1) % len(profile_ids))
+            except Exception:
+                logger.debug("discovery cursor not persisted", exc_info=True)
+
+            await self.run_prioritized_new_releases_check(
+                profile_id=profile_id,
+                batch_size=DISCOVERY_BATCH_SIZE,
+            )
         except Exception as e:
-            logger.warning(f"Daily new releases check failed: {e}")
+            logger.warning(f"Discovery batch failed: {e}")
 
     async def _daily_external_albums_refresh(self) -> None:
         """APScheduler entry: recompute "Albums you might want" for every profile.

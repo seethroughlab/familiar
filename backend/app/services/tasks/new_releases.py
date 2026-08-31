@@ -31,6 +31,19 @@ def _artist_names_match(searched: str, found: str) -> bool:
 
 NEW_RELEASES_PROGRESS_KEY = "familiar:new_releases:progress"
 
+#: How long any one MusicBrainz call may take before the artist is skipped.
+#:
+#: Inherited from the request path that ADR-0099 Phase 1 deleted, where it existed to
+#: stop a person waiting. Here the reason is different and better: `musicbrainzngs`
+#: answers a 503 by retrying with backoff, silently, so one throttled artist could
+#: otherwise absorb an entire batch's wall-clock and starve the nine behind it. A
+#: stalled artist now costs one slot out of ten.
+#:
+#: `asyncio.wait_for` cannot cancel the thread — the call finishes in the background
+#: pool regardless. That is accepted: it is one bounded HTTP request, and the artist is
+#: left unrecorded so the next batch retries it.
+MUSICBRAINZ_CALL_TIMEOUT_SECONDS = 6.0
+
 
 async def _check_one_artist_isolated(
     db: Any,
@@ -219,7 +232,10 @@ async def _check_artist_against_musicbrainz(
 
     try:
         if not mb_id_to_use:
-            mb_result = await asyncio.to_thread(search_artist, artist_name)
+            mb_result = await asyncio.wait_for(
+                asyncio.to_thread(search_artist, artist_name),
+                timeout=MUSICBRAINZ_CALL_TIMEOUT_SECONDS,
+            )
             if mb_result and mb_result.get("score", 0) >= 80:
                 if _artist_names_match(artist_name, mb_result.get("name", "")):
                     mb_id_to_use = mb_result["musicbrainz_artist_id"]
@@ -230,8 +246,11 @@ async def _check_artist_against_musicbrainz(
                     )
 
         if mb_id_to_use:
-            recent = await asyncio.to_thread(
-                get_artist_releases_recent, mb_id_to_use, days_back=days_back
+            recent = await asyncio.wait_for(
+                asyncio.to_thread(
+                    get_artist_releases_recent, mb_id_to_use, days_back=days_back
+                ),
+                timeout=MUSICBRAINZ_CALL_TIMEOUT_SECONDS,
             )
             stats["musicbrainz_queries"] += 1
 
@@ -249,6 +268,18 @@ async def _check_artist_against_musicbrainz(
                 )
 
         upstream_answered = True
+
+    except TimeoutError:
+        # Logged apart from other failures because this is the *rate-limit signature*:
+        # `musicbrainzngs` retries a 503 with backoff and reports nothing, so a call
+        # that runs past the bound has almost certainly been throttled rather than
+        # having failed outright. `upstream_answered` stays False, so nothing is
+        # recorded and the next batch retries the artist.
+        stats["artists_timed_out"] = stats.get("artists_timed_out", 0) + 1
+        logger.warning(
+            "discovery_musicbrainz_timeout",
+            extra={"artist": artist_name, "timeout_s": MUSICBRAINZ_CALL_TIMEOUT_SECONDS},
+        )
 
     except Exception as e:
         logger.warning(f"MusicBrainz lookup failed for {artist_name}: {e}")
@@ -333,6 +364,7 @@ async def run_new_releases_check(
         "musicbrainz_queries": 0,
         "artists_failed": 0,
         "artists_unmatched": 0,
+        "artists_timed_out": 0,
     }
 
     local_engine, local_session_maker = create_task_engine_session()
@@ -414,6 +446,7 @@ async def run_prioritized_new_releases_check(
         "musicbrainz_queries": 0,
         "artists_failed": 0,
         "artists_unmatched": 0,
+        "artists_timed_out": 0,
     }
 
     local_engine, local_session_maker = create_task_engine_session()
@@ -475,6 +508,7 @@ async def run_prioritized_new_releases_check(
             f"Priority-based new releases check complete: "
             f"{stats['artists_checked']} artists, {stats['releases_new']} new releases, "
             f"{stats.get('artists_unmatched', 0)} unmatched, "
+            f"{stats.get('artists_timed_out', 0)} timed out, "
             f"{stats.get('artists_failed', 0)} failed"
         )
         return {"status": "success", **stats}
