@@ -435,6 +435,22 @@ class SyncMixin(_SyncBase):
         except Exception as e:
             logger.warning(f"Discovery batch failed: {e}")
 
+    async def _listenbrainz_fresh_releases(self) -> None:
+        """APScheduler entry: one ListenBrainz call, filtered to this library.
+
+        No profile loop: unlike the recommendation refresh below, what ListenBrainz
+        returns is filtered by *library* artists rather than by anyone's play history,
+        so the result is the same for every listener and doing it once is right.
+        """
+        from app.services.tasks.listenbrainz_releases import (
+            run_listenbrainz_fresh_releases,
+        )
+
+        try:
+            await run_listenbrainz_fresh_releases()
+        except Exception as e:
+            logger.warning(f"ListenBrainz fresh releases failed: {e}")
+
     async def _daily_external_albums_refresh(self) -> None:
         """APScheduler entry: recompute "Albums you might want" for every profile.
 

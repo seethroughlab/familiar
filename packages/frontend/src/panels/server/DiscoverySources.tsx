@@ -21,6 +21,7 @@ const REFRESH_MS = 30_000;
 /** Human labels. The source key is an implementation detail, not a name. */
 const SOURCE_LABELS: Record<string, string> = {
   musicbrainz: 'MusicBrainz',
+  listenbrainz: 'ListenBrainz',
   lastfm: 'Last.fm',
   bandcamp: 'Bandcamp',
   discovery_batch: 'Discovery job',

@@ -23,6 +23,15 @@ logger = logging.getLogger(__name__)
 DISCOVERY_INTERVAL_MINUTES = 20
 DISCOVERY_BATCH_SIZE = 10
 
+#: ListenBrainz runs on its own, much slower cadence (ADR-0099 point 11).
+#:
+#: It is a different *shape* of request: one call returning every fresh release
+#: rather than one call per artist. Folding it into the twenty-minute batch would
+#: fetch well over a megabyte to look at ten artists. Three hours is eight calls a
+#: day against a limit that reports 30 remaining per window, and the source's
+#: thirty-day lookback means nothing is missed between runs.
+LISTENBRAINZ_INTERVAL_HOURS = 3
+
 
 class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
     """Manages background tasks in the API process.
@@ -151,6 +160,16 @@ class BackgroundManager(ExecutorMixin, AnalysisMixin, SyncMixin, BackupMixin):
                 self._daily_external_albums_refresh,
                 CronTrigger(hour=3, minute=15),
                 id="daily_external_albums",
+                replace_existing=True,
+            )
+
+            self._scheduler.add_job(
+                self._listenbrainz_fresh_releases,
+                IntervalTrigger(hours=LISTENBRAINZ_INTERVAL_HOURS),
+                id="listenbrainz_fresh_releases",
+                max_instances=1,
+                coalesce=True,
+                misfire_grace_time=600,
                 replace_existing=True,
             )
 
