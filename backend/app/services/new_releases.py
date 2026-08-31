@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy import Float, and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models import (
     Artist,
@@ -552,7 +553,12 @@ class NewReleasesService:
                 ArtistCheckCache.last_checked_at.is_(None),
                 ArtistCheckCache.last_checked_at < cache_cutoff,
             )
-            conditions = [ArtistCheckCache.last_checked_at.is_(None)] if never_checked_only else [stale]
+            # Annotated because the two branches produce different SQLAlchemy types —
+            # `.is_()` gives a BinaryExpression and `or_()` a ColumnElement — and mypy
+            # infers the list from whichever branch it sees first.
+            conditions: list[ColumnElement[bool]] = (
+                [ArtistCheckCache.last_checked_at.is_(None)] if never_checked_only else [stale]
+            )
             if exclude:
                 conditions.append(artist_stats.c.artist_normalized.notin_(exclude))
             return (
