@@ -672,3 +672,142 @@ async def test_new_releases_view_in_library_comes_from_the_precompute(async_db):
     view = await NewReleasesService(async_db).get_new_releases_view()
     assert view["releases"][0]["in_library"] is True
     assert view["new_releases_not_in_library"] == 0
+
+
+# ---------------------------------------------------------------------------
+# ADR-0101: play history is a priority, not a gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_artist_you_own_but_never_played_is_a_candidate(async_db):
+    """The bug, in one test.
+
+    ``get_prioritized_artists_batch`` used to select *from* ``ProfilePlayHistory``,
+    which made a play row a condition of membership rather than a source of order.
+    On the production library that hid **2,614 of 3,453 owned artists** from
+    new-release discovery entirely — they could never be checked, however long the
+    rotation ran.
+    """
+    profile = await insert_test_profile(async_db)
+    played = await insert_test_track(async_db, artist="Played Artist", album="A")
+    await insert_test_track(async_db, artist="Never Played Artist", album="B")
+    await insert_test_play_history(
+        async_db, profile.id, played.id, play_count=10, last_played_at=utcnow()
+    )
+    await async_db.commit()
+
+    batch = await NewReleasesService(async_db).get_prioritized_artists_batch(
+        profile_id=profile.id, batch_size=10
+    )
+
+    names = {a["name"] for a in batch}
+    assert "Never Played Artist" in names, "owning it is enough to be a candidate"
+    assert "Played Artist" in names
+
+
+@pytest.mark.asyncio
+async def test_play_history_still_decides_order(async_db):
+    """Widening the pool must not flatten the priority it replaced."""
+    profile = await insert_test_profile(async_db)
+    played = await insert_test_track(async_db, artist="Zzz Played", album="A")
+    await insert_test_track(async_db, artist="Aaa Never Played", album="B")
+    await insert_test_play_history(
+        async_db, profile.id, played.id, play_count=50, last_played_at=utcnow()
+    )
+    await async_db.commit()
+
+    batch = await NewReleasesService(async_db).get_prioritized_artists_batch(
+        profile_id=profile.id, batch_size=10
+    )
+
+    by_name = {a["name"]: a for a in batch}
+    assert by_name["Zzz Played"]["priority_score"] > by_name["Aaa Never Played"]["priority_score"]
+    assert by_name["Aaa Never Played"]["priority_score"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_never_checked_artists_get_reserved_slots(async_db):
+    """The half of the fix that stops it being inert.
+
+    Reproduces the production shape: the played artists have all been checked before
+    and are merely *stale*, while the owned-but-unplayed ones have never been checked
+    at all. Priority alone would spend every slot on the stale played set, which
+    regenerates faster than the rotation drains it — so widening the pool would change
+    nothing observable. The reserve is what guarantees forward progress.
+    """
+    profile = await insert_test_profile(async_db)
+    now = utcnow()
+
+    for i in range(6):
+        t = await insert_test_track(async_db, artist=f"Played {i}", album=f"P{i}")
+        await insert_test_play_history(
+            async_db, profile.id, t.id, play_count=100 - i, last_played_at=now
+        )
+        async_db.add(
+            ArtistCheckCache(
+                artist_name_normalized=f"played {i}",
+                last_checked_at=now - timedelta(days=30),
+            )
+        )
+    for i in range(3):
+        await insert_test_track(async_db, artist=f"Unplayed {i}", album=f"U{i}")
+    await async_db.commit()
+
+    batch = await NewReleasesService(async_db).get_prioritized_artists_batch(
+        profile_id=profile.id, batch_size=3
+    )
+
+    assert len(batch) == 3
+    unplayed = [a for a in batch if a["name"].startswith("Unplayed")]
+    assert unplayed, (
+        "without the reserve the six stale played artists take every slot and the "
+        "unplayed ones are never reached — the bug wearing a different hat"
+    )
+    assert all(a["never_checked"] for a in unplayed)
+
+
+@pytest.mark.asyncio
+async def test_a_played_artist_never_checked_outranks_an_unplayed_one(async_db):
+    """The reserve is ordered by priority, not by how little you listen.
+
+    "Never checked" is the backlog, and a played artist can be in it too. When one is,
+    it should take the reserved slot ahead of an artist you have never played — the
+    reserve exists to guarantee progress through the backlog, not to invert taste.
+    """
+    profile = await insert_test_profile(async_db)
+    t = await insert_test_track(async_db, artist="Played Unchecked", album="A")
+    await insert_test_play_history(
+        async_db, profile.id, t.id, play_count=40, last_played_at=utcnow()
+    )
+    await insert_test_track(async_db, artist="Unplayed Unchecked", album="B")
+    await async_db.commit()
+
+    batch = await NewReleasesService(async_db).get_prioritized_artists_batch(
+        profile_id=profile.id, batch_size=1
+    )
+
+    assert [a["name"] for a in batch] == ["Played Unchecked"]
+
+
+@pytest.mark.asyncio
+async def test_a_recently_checked_artist_is_still_skipped(async_db):
+    """Widening the pool must not defeat the staleness filter."""
+    profile = await insert_test_profile(async_db)
+    t = await insert_test_track(async_db, artist="Checked Yesterday", album="A")
+    await insert_test_play_history(
+        async_db, profile.id, t.id, play_count=5, last_played_at=utcnow()
+    )
+    async_db.add(
+        ArtistCheckCache(
+            artist_name_normalized="checked yesterday",
+            last_checked_at=utcnow() - timedelta(days=1),
+        )
+    )
+    await async_db.commit()
+
+    batch = await NewReleasesService(async_db).get_prioritized_artists_batch(
+        profile_id=profile.id, batch_size=10, min_days_since_check=7
+    )
+
+    assert "Checked Yesterday" not in {a["name"] for a in batch}

@@ -11,7 +11,10 @@ from typing import Any
 
 import pytest
 
-from app.services.tasks.new_releases import _check_one_artist_isolated
+from app.services.tasks.new_releases import (
+    _check_artist_against_musicbrainz,
+    _check_one_artist_isolated,
+)
 
 
 class _RecordingSession:
@@ -146,3 +149,82 @@ async def test_one_failing_artist_does_not_abort_the_batch(monkeypatch):
     assert stats["artists_failed"] == 1
     assert stats["releases_new"] == 2
     assert db.calls == ["commit", "rollback", "commit"]
+
+
+# ---------------------------------------------------------------------------
+# The backlog must actually drain (ADR-0101 follow-through)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingService:
+    """Captures update_artist_cache calls without touching a database."""
+
+    def __init__(self) -> None:
+        self.cached: list[tuple[str, str | None]] = []
+
+    async def save_discovered_release(self, **kwargs: Any):
+        return None
+
+    async def update_artist_cache(self, *, artist_normalized: str, musicbrainz_id=None):
+        self.cached.append((artist_normalized, musicbrainz_id))
+
+
+@pytest.mark.asyncio
+async def test_an_artist_musicbrainz_cannot_match_is_still_recorded_as_checked(
+    monkeypatch,
+):
+    """Otherwise the never-checked reserve re-picks it forever.
+
+    Found on the live library: with unplayed artists admitted to the rotation, a
+    20-artist batch touched six cache rows and inserted none, while 2,937 artists
+    had no row at all. Artists MusicBrainz has no entry for were being re-selected
+    every batch and displacing artists never looked at even once — so widening the
+    pool drained nothing.
+
+    "Asked, nothing matched" is recorded with a NULL musicbrainz id: the artist
+    leaves the backlog and rejoins the ordinary staleness rotation.
+    """
+    monkeypatch.setattr(
+        "app.services.metadata.musicbrainz.search_artist", lambda *a, **k: None
+    )
+    service = _RecordingService()
+    stats: dict[str, Any] = {"releases_found": 0, "releases_new": 0, "musicbrainz_queries": 0}
+
+    await _check_artist_against_musicbrainz(
+        service=service,
+        artist_name="Obscure Local Band",
+        normalized="obscure local band",
+        mb_artist_id=None,
+        days_back=90,
+        stats=stats,
+    )
+
+    assert service.cached == [("obscure local band", None)]
+    assert stats["artists_unmatched"] == 1
+
+
+@pytest.mark.asyncio
+async def test_an_artist_whose_lookup_errored_is_not_recorded(monkeypatch):
+    """The other half: a failed call must be retried, not written off.
+
+    Distinguishing these is the whole point. Recording a network blip as "checked"
+    would silently drop the artist for a full rotation.
+    """
+    def _boom(*a: Any, **k: Any):
+        raise ConnectionError("musicbrainz unreachable")
+
+    monkeypatch.setattr("app.services.metadata.musicbrainz.search_artist", _boom)
+    service = _RecordingService()
+    stats: dict[str, Any] = {"releases_found": 0, "releases_new": 0, "musicbrainz_queries": 0}
+
+    await _check_artist_against_musicbrainz(
+        service=service,
+        artist_name="Unreachable Artist",
+        normalized="unreachable artist",
+        mb_artist_id=None,
+        days_back=90,
+        stats=stats,
+    )
+
+    assert service.cached == [], "a failed lookup leaves no record, so it retries"
+    assert stats.get("artists_unmatched", 0) == 0
