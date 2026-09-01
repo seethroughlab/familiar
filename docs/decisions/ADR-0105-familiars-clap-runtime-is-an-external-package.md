@@ -159,9 +159,23 @@ dependency removes the exposure; pinning it would only defer it.
 - **Tradeoff** — Familiar gains a dependency on a repository it does not solely control, and a
   release of that package can break analysis. The surface is small and the contract is pinned in
   point 3, but the coupling is real and is the price of not being the reference implementation.
-- **Tradeoff** — CUDA and MPS acceleration go away. `get_device()` currently selects them, but
-  analysis runs single-worker on the NAS where neither applies, and decode dominates the per-track
-  cost regardless. An installation with a GPU loses an advantage it was probably not using.
+- **Positive** — **GPU acceleration becomes cheaper to adopt, not unavailable.** An earlier draft of
+  this ADR said CUDA and MPS "go away", which was wrong twice over. ONNX Runtime runs this graph on
+  CUDA, DirectML or ROCm, and `onnxruntime-gpu` is roughly 200 MB against the ~5 GB of a CUDA-enabled
+  torch build — which is precisely why `docker/Dockerfile:79` installs torch from the CPU-only index
+  today. Measured on the NAS on 2026-09-01: `torch 2.13.0+cpu`, `cuda available: False`,
+  `mps available: False`, `get_device() -> cpu`. **Familiar has never used a GPU in production**, and
+  the 31.6s per track measured under `ADR-0104` is the CPU path. Nothing is lost, and the cheaper
+  runtime makes the GTX 980 sitting in that machine a realistic option for the first time.
+- **Tradeoff** — an accelerated provider is not known to produce vectors comparable with CPU ones, so
+  `clapback-embed` defaults to `CPUExecutionProvider` and takes `CLAPBACK_PROVIDERS` as an opt-in
+  override. Treat a non-CPU provider the way point 5 treats fp16 — useful locally, not safe to
+  contribute until measured with `scripts/compare_vectors.py`.
+- **Tradeoff** — **CoreML does not work at all** for this graph, so Apple silicon gets no
+  acceleration by this route. Measured: it supports 735 of 3086 nodes, warns that it "does not
+  support shapes with dimension values of 0" across HTSAT's Swin attention slices, and the partition
+  it does accept fails at runtime with "Unable to compute the prediction using a neural network
+  model". This is recorded so nobody spends an afternoon rediscovering it.
 - **Tradeoff** — 614 MB of model artifacts must be fetched at build time from somewhere that stays
   available. `silero_vad.onnx` already carries this risk; this raises the stakes.
 - **Follow-up** — whether the text encoder can ship at int8, which would take 502 MB to 120 MB. It
