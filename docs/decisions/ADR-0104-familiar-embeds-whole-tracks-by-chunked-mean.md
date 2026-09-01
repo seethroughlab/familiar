@@ -1,8 +1,30 @@
 # ADR-0104: Familiar Embeds Whole Tracks by Chunked Mean
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-01
+
+Implementation:
+- Accepted and implemented 2026-09-01 on `adr-0104-chunked-mean`. `extract_embedding`
+  (`app/services/analysis.py`) now walks consecutive 480,000-sample windows, mean-pools the raw
+  encoder outputs and L2-normalises; `EMBEDDING_VERSION` is 7. The re-analysis of 26,471 embeddings
+  drives itself from the existing two-hourly sync — nothing was scheduled for it.
+- **Point 2 turned out to change more than pooling.** The previous implementation returned the raw
+  encoder output *un-normalised*. Every consumer uses cosine — `cosine_distance` in pgvector,
+  `cosine_similarity` in `ego_map.py` and `embedding_map.py`, no L2 or inner-product operator
+  anywhere — so normalising at write time is behaviour-preserving, and it makes
+  `embedding_map.py:500` normalising again at read time redundant rather than wrong.
+- **Point 5's assertion is unreachable in normal operation, deliberately.** Floor division already
+  guarantees every window is exactly `window` samples. It exists because the failure it guards is
+  silent: `rand_trunc` would start taking a random crop and every embedding would become
+  irreproducible without a single type changing.
+- **The tests could not go where the existing ones are.** `tests/test_analysis.py` opens with
+  `pytest.importorskip("librosa")` and CI runs `uv sync --extra dev`, which installs neither librosa
+  nor torch — so that whole file is skipped in CI, including both existing `extract_embedding`
+  tests. `tests/test_embedding_windowing.py` fakes the two lazily-imported modules instead, so it
+  runs in CI against the real function. Verified against the pre-change implementation restored with
+  `git show`: 14 of 19 fail, and the 5 that pass are the ones that should (single-window tracks,
+  dimensionality, the disabled path, the constant guard).
 
 Extends [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), whose point 4 made the
 CLAP checkpoint pin a long-term commitment, and corrects a premise in it.

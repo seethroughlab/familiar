@@ -137,15 +137,33 @@ def check_analysis_capabilities() -> None:
         logger.info("Analysis capabilities: features=enabled, embeddings=enabled")
 
 
+#: CLAP's audio encoder sees exactly ten seconds and no more. HTSAT's positional
+#: embeddings are sized for a 1001x64 mel, so both ONNX and PyTorch reject anything
+#: else — the latter with "the wav size should be less than or equal to the swin
+#: input size". This is a property of the checkpoint, not a tuning parameter, and a
+#: longer track is therefore several observations rather than one (ADR-0104).
+EMBEDDING_WINDOW_SECONDS = 10
+
+
 def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | None:
-    """Extract CLAP audio embedding from file.
+    """Extract a CLAP audio embedding representing the whole track.
+
+    The track is split into consecutive non-overlapping ten-second windows, each
+    embedded separately, and the raw vectors are mean-pooled and L2-normalised
+    (ADR-0104 points 1 and 2).
+
+    A trailing partial window is dropped rather than zero-padded: padding injects
+    silence the track does not contain and pulls the mean toward "quiet" in
+    proportion to how short the remainder is. What is dropped is under ten seconds
+    of material that the other windows already represent. A track shorter than one
+    window has nothing to drop, and falls through to the extractor's `repeatpad`.
 
     Args:
         file_path: Path to audio file
         target_sr: Target sample rate for CLAP (48kHz recommended)
 
     Returns:
-        512-dimensional embedding as list of floats, or None on error
+        512-dimensional embedding as list of floats, or None if CLAP is disabled
     """
     # Skip CLAP if torch isn't available
     if not _torch_available:
@@ -166,34 +184,55 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
         # Load audio file
         audio, sr = librosa.load(file_path, sr=target_sr, mono=True)
 
-        # Limit to 10 seconds for embedding (CLAP works best with short clips)
-        max_samples = target_sr * 10
-        if len(audio) > max_samples:
-            # Take middle section
-            start = (len(audio) - max_samples) // 2
-            audio = audio[start:start + max_samples]
+        window = target_sr * EMBEDDING_WINDOW_SECONDS
+        n_windows = max(1, len(audio) // window)
 
         # Load model
         model, processor = load_clap_model()
         device = get_device()
 
-        # Process audio
-        inputs = processor(
-            audio=audio,
-            sampling_rate=target_sr,
-            return_tensors="pt",
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
+        vectors = []
+        for i in range(n_windows):
+            chunk = audio[i * window:(i + 1) * window]
 
-        # Get embedding
-        with torch.no_grad():
-            audio_embed = model.get_audio_features(**inputs)
+            # ADR-0104 point 5. `ClapFeatureExtractor` defaults to
+            # truncation="rand_trunc", which takes a *random* crop of anything longer
+            # than one window — so reproducibility here rests entirely on every chunk
+            # being exactly `window` samples. Floor division guarantees that today;
+            # this asserts it, because the failure is silent and turns every embedding
+            # in the library irreproducible without changing a single type.
+            if len(audio) >= window and len(chunk) != window:
+                raise AnalysisError(
+                    f"window {i} is {len(chunk)} samples, expected {window} — "
+                    "rand_trunc would take a random crop and embeddings would "
+                    "stop being reproducible"
+                )
 
-        # Convert to list
-        embedding = audio_embed.cpu().numpy().flatten().tolist()
+            inputs = processor(
+                audio=chunk,
+                sampling_rate=target_sr,
+                return_tensors="pt",
+            )
+            inputs = {k: v.to(device) for k, v in inputs.items()}
 
-        return embedding
+            with torch.no_grad():
+                audio_embed = model.get_audio_features(**inputs)
 
+            vectors.append(audio_embed.cpu().numpy().flatten())
+
+        # Mean of the raw encoder outputs, then normalise — not a mean of vectors
+        # already normalised. The two differ, and this is the one ADR-0104 measured.
+        mean_vector = np.mean(vectors, axis=0)
+        magnitude = float(np.linalg.norm(mean_vector))
+        if magnitude == 0.0:
+            # No direction, so no meaningful similarity. Storing it would place the
+            # track at an arbitrary point rather than nowhere.
+            raise AnalysisError("embedding has zero magnitude")
+
+        return (mean_vector / magnitude).tolist()
+
+    except AnalysisError:
+        raise
     except Exception as e:
         logger.error(f"Error extracting embedding from {file_path}: {e}")
         raise AnalysisError(f"Embedding extraction failed: {e}") from e

@@ -112,7 +112,14 @@ FEATURES_VERSION = 8
 #   v2: First CLAP 512-dim embeddings
 #   v5: Re-extract (psutil fix)
 #   v6: Matched features version at loudness addition
-EMBEDDING_VERSION = 6
+#   v7: Whole track by chunked mean, L2-normalised, instead of the middle 10s (ADR-0104)
+#
+# This constant is the identity of the embedding *pipeline*, not of the checkpoint.
+# ADR-0104 point 6: windowing, pooling, mel parameters, truncation and precision all
+# belong to it, and any change moving vectors by more than ~1e-6 must bump it — the
+# community cache keys on this value, and vectors from two pipelines are not
+# comparable. `laion/clap-htsat-unfused:v1` staying fixed does not make them so.
+EMBEDDING_VERSION = 7
 
 # Melodic history:
 #   v5: basic-pitch MIDI transcription + melodic feature extraction
