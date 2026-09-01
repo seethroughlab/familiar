@@ -18,6 +18,20 @@ Implementation:
   guarantees every window is exactly `window` samples. It exists because the failure it guards is
   silent: `rand_trunc` would start taking a random crop and every embedding would become
   irreproducible without a single type changing.
+- **The re-analysis costs six times what the Consequences section estimated.** Deployed and started
+  2026-09-01. Measured on the NAS from the database rather than from the sync's own progress:
+  **19 tracks in 600 seconds, 31.6s per track, ~230 hours remaining** — nine or ten days of
+  background work, not the two or three days 38 hours implied. Nothing is wrong; the estimate was
+  taken on an M-series Mac and quoted prominently enough to read as the expected cost.
+  **Do not size an analysis pass from a laptop measurement.**
+- **The obvious explanation for that gap is not the right one.** CLAP is loaded once per track —
+  `load_clap_model()` is `@lru_cache`, but `max_tasks_per_child=1` gives every track a fresh
+  interpreter, so the cache never survives; 23 loads were logged for 23 tracks. That looks like the
+  dominant cost and is not: the load itself measures **~1.6s** of a 32–46s cycle. The remainder is
+  spread across process spawn, the `torch` import, decode and the 32 window inferences, with no
+  single term to remove. Raising `max_tasks_per_child` would recover the import and the load —
+  perhaps a fifth — at the cost of the memory isolation it exists to provide, and is not obviously
+  worth it.
 - **The tests could not go where the existing ones are.** `tests/test_analysis.py` opens with
   `pytest.importorskip("librosa")` and CI runs `uv sync --extra dev`, which installs neither librosa
   nor torch — so that whole file is skipped in CI, including both existing `extract_embedding`
@@ -198,9 +212,9 @@ carrying the guarantee.
   re-analysis.
 - **Tradeoff** — **26,471 embeddings must be recomputed.** Measured on an M-series Mac, a 323-second
   track costs ~3.4s to decode and ~1.8s for 32 windows against ~20ms today, so roughly 5.2s per
-  track against 3.4s. At that rate the library is on the order of 38 hours of single-worker analysis,
-  and Phase 3b's four-hour cap means **about ten consecutive syncs**. The NAS is the machine that
-  will actually run it and has not been measured.
+  track against 3.4s — on the order of 38 hours. **That figure was wrong for the machine that runs
+  it, by a factor of six.** See the Implementation note below: the NAS measures 31.6s per track, so
+  the real cost is ~230 hours. The conclusion is unchanged and the estimate should not be trusted.
 - **Tradeoff** — inference cost per track rises ~53%. Decode still dominates, so the wall-clock
   increase is smaller than the inference increase suggests.
 - **Tradeoff** — v6 and v7 vectors are incomparable, so the library is mixed for the ~ten syncs the
