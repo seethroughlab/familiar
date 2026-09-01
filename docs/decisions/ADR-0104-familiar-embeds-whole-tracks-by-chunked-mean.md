@@ -32,6 +32,17 @@ Implementation:
   single term to remove. Raising `max_tasks_per_child` would recover the import and the load —
   perhaps a fifth — at the cost of the memory isolation it exists to provide, and is not obviously
   worth it.
+- **The rate is steady, and confirmed by a second measurement six hours later.** 19 tracks in 600s
+  (31.6s each) and 17 tracks in 540s (31.7s each), on windows six hours apart. **~231 hours, about
+  ten days.** The two agreeing matters more than either alone: the first was taken minutes after the
+  phase began, when startup costs could still have been in it.
+- **"Library sync complete" does not mean the re-analysis stopped**, and reading it that way wastes
+  an afternoon. The sync loop queues tracks and monitors; the background worker drains the queue
+  independently and keeps going after the loop exits. The second measurement above was taken
+  entirely while `/library/sync/status` reported `completed`, at full rate. The honest progress
+  meter is `count(*) where embedding_version >= 7`, not the sync's own phase or percentage — which
+  is `ADR-0097`'s lesson again, in a new place: **a status whose subject is not the thing you care
+  about.**
 - **The tests could not go where the existing ones are.** `tests/test_analysis.py` opens with
   `pytest.importorskip("librosa")` and CI runs `uv sync --extra dev`, which installs neither librosa
   nor torch — so that whole file is skipped in CI, including both existing `extract_embedding`
