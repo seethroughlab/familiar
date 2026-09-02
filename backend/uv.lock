@@ -630,7 +630,7 @@ wheels = [
 [[package]]
 name = "clapback-embed"
 version = "0.1.0"
-source = { git = "https://github.com/seethroughlab/familiar-cache.git?subdirectory=packages%2Fembed&rev=main#c2bcbf4fa1c135a78090aad620694217f63adc50" }
+source = { git = "https://github.com/seethroughlab/familiar-cache.git?subdirectory=packages%2Fembed&rev=main#1623538905e5b38256f29fb5ce67deb30cb5d652" }
 dependencies = [
     { name = "huggingface-hub" },
     { name = "librosa" },
