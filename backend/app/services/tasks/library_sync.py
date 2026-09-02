@@ -22,7 +22,7 @@ from app.services.tasks.library_sync_progress import (
     SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW,
     SYNC_QUEUE_CHURN_WINDOW_SECONDS,
     SyncProgressReporter,
-    _register_phase_requeue_attempt,
+    should_force_exit_for_churn,
 )
 from app.utils.time import utcnow
 
@@ -279,11 +279,26 @@ async def run_library_sync(
         *,
         limit: int,
         stall_recovery: bool = False,
+        made_progress: bool = False,
     ) -> tuple[int, bool]:
-        """Queue tracks while enforcing per-phase churn guardrails."""
+        """Queue tracks while enforcing per-phase churn guardrails.
+
+        `made_progress` says whether tracks completed since the last call, and
+        resets the window when they did.
+
+        Without it the guard counted *every* attempt, productive or not. The loops
+        below sleep 2s and queue on each pass, so a phase with work to do makes
+        150 attempts per 300s window against a limit of 60 — meaning **any phase
+        that ran longer than about two minutes force-exited**, regardless of how
+        well it was going. Observed as `queue_churn_limit_exceeded:61/60:300s` on
+        both the features and embeddings phases of a healthy sync.
+
+        Churn is re-queueing that achieves nothing. Queueing while tracks are
+        completing is the loop working, so it must not count against the limit.
+        """
         now = time.monotonic()
         attempts = phase_requeue_windows.setdefault(phase, deque())
-        if _register_phase_requeue_attempt(attempts, now):
+        if should_force_exit_for_churn(attempts, now, made_progress=made_progress):
             reason = (
                 f"queue_churn_limit_exceeded:{len(attempts)}/"
                 f"{SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW}:{int(SYNC_QUEUE_CHURN_WINDOW_SECONDS)}s"
@@ -384,7 +399,8 @@ async def run_library_sync(
                     break
 
                 # Check for stall (no progress in stall_threshold seconds)
-                if features_done > last_features_done:
+                features_progressed = features_done > last_features_done
+                if features_progressed:
                     last_features_progress_time = time.time()
                     last_features_done = features_done
                 elif time.time() - last_features_progress_time > features_stall_threshold:
@@ -401,6 +417,7 @@ async def run_library_sync(
                         queue_tracks_for_features,
                         limit=200,
                         stall_recovery=True,
+                        made_progress=features_progressed,
                     )
                     if forced_exit:
                         break
@@ -420,6 +437,7 @@ async def run_library_sync(
                         "features",
                         queue_tracks_for_features,
                         limit=100,
+                        made_progress=features_progressed,
                     )
                     if forced_exit:
                         break
@@ -505,7 +523,8 @@ async def run_library_sync(
                         break
 
                     # Check for stall (no progress in stall_threshold seconds)
-                    if embeddings_done > last_embeddings_done:
+                    embeddings_progressed = embeddings_done > last_embeddings_done
+                    if embeddings_progressed:
                         last_progress_time = time.time()
                         last_embeddings_done = embeddings_done
                     elif time.time() - last_progress_time > stall_threshold:
@@ -524,6 +543,7 @@ async def run_library_sync(
                             queue_tracks_for_embeddings,
                             limit=200,
                             stall_recovery=True,
+                            made_progress=embeddings_progressed,
                         )
                         if forced_exit:
                             analyzed_count = embeddings_success
@@ -548,6 +568,7 @@ async def run_library_sync(
                             "embeddings",
                             queue_tracks_for_embeddings,
                             limit=100,
+                            made_progress=embeddings_progressed,
                         )
                         if forced_exit:
                             analyzed_count = embeddings_success
