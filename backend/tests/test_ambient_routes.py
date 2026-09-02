@@ -14,6 +14,8 @@ that shipped, so each gets a test that would have caught it:
 
 The last of those was live on `main` until this change: `get_candidates` was fixed for exactly
 this and carries a comment saying so; the two seed paths were missed.
+
+**Two routes come back, not the three that were deleted** — see `test_there_is_no_descriptor_route`.
 """
 
 from typing import get_args
@@ -130,23 +132,40 @@ async def test_descriptor_is_none_for_an_unknown_track(async_db):
 # The wire contract
 # ---------------------------------------------------------------------------
 
-def test_malformed_track_id_is_a_422_not_a_500(client, test_profile):
+def test_candidates_rejects_a_malformed_current_track_id(client):
     """The defect `radio.py` documented and the deleted ambient routes kept.
 
     They declared `track_id: str` and called bare `UUID(track_id)`, so a malformed id raised
     `ValueError` inside the handler and surfaced as a 500. `radio.py:39-40` chose `UUID` for
     exactly this reason while the ambient routes were still shipping the bug next door.
     """
-    response = client.get("/api/v1/ambient/descriptor/not-a-uuid")
-    assert response.status_code == 422
-
-
-def test_candidates_rejects_a_malformed_current_track_id(client):
     response = client.post(
         "/api/v1/ambient/candidates",
         json={"current_track_id": "not-a-uuid"},
     )
     assert response.status_code == 422
+
+
+def test_seed_rejects_a_malformed_track_id(client):
+    """The same guard on the other surviving route.
+
+    Asserted separately rather than assumed: the two routes declare their ids independently, so
+    one could be tightened and the other left as it was.
+    """
+    response = client.post("/api/v1/ambient/seed", json={"track_id": "not-a-uuid"})
+    assert response.status_code == 422
+
+
+def test_there_is_no_descriptor_route(client):
+    """`GET /ambient/descriptor/{id}` is deliberately not restored (ADR-0106 point 1).
+
+    `seed` already resolves a descriptor from a track id, so a separate lookup had no caller — and
+    a route with no caller is what ADR-0077 deleted all three of these for. Restoring it "for
+    completeness" would have reintroduced exactly that shape. Asserted so the next person to read
+    the deleted file and notice a missing endpoint finds the reason rather than the gap.
+    """
+    response = client.get(f"/api/v1/ambient/descriptor/{uuid4()}")
+    assert response.status_code == 404
 
 
 def test_an_unknown_filter_preset_is_refused_by_the_schema(client):

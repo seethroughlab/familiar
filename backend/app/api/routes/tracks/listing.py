@@ -461,25 +461,7 @@ async def list_tracks(
     for track in tracks:
         response = TrackResponse.model_validate(track)
         if include_features and track.analyses:
-            latest = track.analyses[0]
-            if latest.bpm is not None:
-                response.features = TrackFeaturesResponse(
-                    bpm=latest.bpm,
-                    key=latest.key,
-                    energy=latest.energy,
-                    danceability=latest.danceability,
-                    valence=latest.valence,
-                    acousticness=latest.acousticness,
-                    instrumentalness=latest.instrumentalness,
-                    speechiness=latest.speechiness,
-                    brightness=latest.brightness,
-                    harmonic_complexity=latest.harmonic_complexity,
-                    swing_ratio=latest.swing_ratio,
-                    syncopation=latest.syncopation,
-                    loudness_lufs=latest.loudness_lufs,
-                    track_peak=latest.track_peak,
-                    replaygain_track_gain=latest.replaygain_track_gain,
-                )
+            response.features = TrackFeaturesResponse.from_analysis(track.analyses[0])
         if track.id in play_history_map:
             ph = play_history_map[track.id]
             response.last_played_at = ph.last_played_at
@@ -666,24 +648,6 @@ async def get_track(db: DbSession, track_id: UUID) -> TrackResponse:
 
     # Get latest analysis features
     if track.analyses:
-        latest = track.analyses[0]
-        if latest.bpm is not None:
-            response.features = TrackFeaturesResponse(
-                bpm=latest.bpm,
-                key=latest.key,
-                energy=latest.energy,
-                danceability=latest.danceability,
-                valence=latest.valence,
-                acousticness=latest.acousticness,
-                instrumentalness=latest.instrumentalness,
-                speechiness=latest.speechiness,
-                brightness=latest.brightness,
-                harmonic_complexity=latest.harmonic_complexity,
-                swing_ratio=latest.swing_ratio,
-                syncopation=latest.syncopation,
-                loudness_lufs=latest.loudness_lufs,
-                track_peak=latest.track_peak,
-                replaygain_track_gain=latest.replaygain_track_gain,
-            )
+        response.features = TrackFeaturesResponse.from_analysis(track.analyses[0])
 
     return response

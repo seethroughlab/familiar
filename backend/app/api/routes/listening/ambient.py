@@ -21,6 +21,11 @@ and `Track` has no `features` attribute to populate it from.
 **Four defects from the deleted version are not reproduced here.** They are called out at their
 sites below: string ids that 500 on malformed input, an `intensity` that was accepted and dropped,
 a `pool_collapsed` that was hardcoded, and seeds that could be files no longer on disk.
+
+**Two operations, not the three that were deleted.** `GET /ambient/descriptor/{track_id}` is not
+restored: `seed` already resolves a descriptor from a track id, so a separate lookup had no caller —
+and a route with no caller is what ADR-0077 deleted these for in the first place. Restoring it
+"for completeness" would have reintroduced the exact shape, six days after it was removed.
 """
 
 from typing import Literal
@@ -30,7 +35,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from app.api.deps import DbSession
-from app.api.exceptions import NotFoundError, TrackNotFoundError
+from app.api.exceptions import NotFoundError
 from app.services.ambient import (
     find_seed_by_artist,
     get_candidates,
@@ -187,12 +192,3 @@ async def candidates(request: CandidatesRequest, db: DbSession) -> CandidatesRes
         pool_size=pool_size,
         pool_collapsed=pool_collapsed,
     )
-
-
-@router.get("/descriptor/{track_id}", response_model=AmbientDescriptorResponse)
-async def descriptor(track_id: UUID, db: DbSession) -> AmbientDescriptorResponse:
-    """Get a single track's ambient descriptor."""
-    resolved = await get_track_descriptor(db, track_id)
-    if not resolved:
-        raise TrackNotFoundError("Track not found or not analyzed")
-    return AmbientDescriptorResponse(**resolved.to_dict())

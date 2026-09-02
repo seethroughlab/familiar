@@ -5,6 +5,14 @@ Status: accepted
 Date: 2026-09-01
 
 Implementation:
+- **Two routes, not three, and a defect fixed on radio.** Reviewed after acceptance against the
+  question "could an existing endpoint have done this?". `GET /ambient/descriptor/{track_id}` had no
+  caller and is not restored (point 1). `POST /radio/suggestions` now populates `features`, which it
+  had answered `null` for since the field existed — `Track` has no `features` attribute and only
+  `routes/tracks/listing.py` ever filled one, so radio's own client has never been able to tell you
+  a suggestion's key or tempo. The block that fills it was already written out twice in `listing.py`
+  and is now `TrackFeaturesResponse.from_analysis`, called from all three sites rather than copied
+  into a fourth.
 - **The server half is built** on `worktree-ambient-mode-revival`:
   `app/api/routes/listening/ambient.py`, registered through `listening/__init__.py`, with the tag
   metadata and `OPENAPI_TAG_GROUPS` entry in `main.py`, the `VENDORED_TAGS` and
@@ -129,9 +137,15 @@ Mixtapes has already left that list, under `ADR-0014`.
 
 ## Decision
 
-1. **The three ambient routes return, under the `ambient` tag, at their original paths.**
-   `POST /api/v1/ambient/seed`, `POST /api/v1/ambient/candidates` and
-   `GET /api/v1/ambient/descriptor/{track_id}`. The file lands at
+1. **Two of the three ambient routes return, under the `ambient` tag, at their original paths.**
+   `POST /api/v1/ambient/seed` and `POST /api/v1/ambient/candidates`.
+   **`GET /api/v1/ambient/descriptor/{track_id}` does not come back**, and the reason is this ADR's
+   own subject applied to itself: `seed` already resolves a descriptor from a track id, so a
+   separate lookup has no caller — and a route with no caller is what ADR-0077 deleted all three of
+   these for. Restoring it out of fidelity to the deleted file would have reintroduced exactly that
+   shape six days after it was removed. `tests/test_ambient_routes.py` asserts its absence, so the
+   next reader to compare against the old file finds the reason rather than the gap.
+   The file lands at
    `app/api/routes/listening/ambient.py` beside `radio.py` and `offline.py`: `listening/` is a
    module prefix and not a URL one (`ADR-0074` point 5), so the paths are unchanged from what
    `db7a8dc7` deleted.
@@ -160,9 +174,14 @@ Mixtapes has already left that list, under `ADR-0014`.
 4. **The routes stay profile-less, and the exemption is written per-function.** The reason is in
    `radio.py`'s own docstring: ambient ranks purely on musical compatibility with the current track
    and needs no notion of who is listening, which is a contrast radio draws deliberately and does
-   not inherit. `AMBIENT`'s `taste_weight` and `max_negative_penalty` are both 0, so a profile id
-   would reorder nothing, and the two POSTs are POSTs because they carry a body rather than because
-   they mutate anything.
+   not inherit. The two POSTs are POSTs because they carry a body rather than because they mutate
+   anything.
+   **This point is weaker than it first reads, and should not be leaned on.** `AMBIENT`'s
+   `taste_weight` and `max_negative_penalty` are both 0, so a profile id would reorder nothing —
+   which cuts both ways: being profile-less costs nothing, and so would being profile-aware, since
+   the Swift client sends `X-Profile-ID` on every request regardless. If ambient ever gains a taste
+   term this reverses with no argument to overcome. What actually separates ambient from radio is
+   point 3's response shape, not this.
    The stale `"ambient"` entry in `lint_profile_contracts.py`'s `ALLOWLISTED_MODULES` is **deleted
    rather than repointed**. It has exempted nothing since ADR-0077, and it would not have covered
    the restored file either: module keys there are *paths*, and the routes now live at
@@ -218,11 +237,22 @@ The engine's survival through all three is the tell: five callers still want wha
 
 **Serve ambient from `POST /radio/suggestions` with `profile: "ambient"`.** No new routes, no tag,
 no schema change, and the Swift client can already call it today — genuinely the cheapest option and
-the one to beat. Rejected on point 3's grounds: the response is `TrackResponse`, which carries none
-of the musical fields the drone and the snippet window are computed from, and there is no
-`filter_preset`. Fixing that means either widening `TrackResponse` for every consumer or adding an
-ambient-shaped response to a radio-shaped endpoint, at which point it is the ambient route with a
-misleading name.
+the one to beat. It was reconsidered after this ADR was accepted, which is how the descriptor route
+in point 1 came to be dropped, and it survives that second look — but by a narrower margin than the
+first pass suggested.
+
+What folding `candidates` into radio would actually cost is three additive changes, two of them
+harmless: optional `filter_preset` and `intensity` params whose defaults preserve radio's behaviour
+exactly, and populating `features` on the response — which is worth doing regardless, and is done
+here, because it was answering `null` for every caller. The third is the objection:
+`suggested_start_pct` is a snippet-window hint, and radio plays whole tracks. It would be a field on
+a shared contract that exactly one caller can interpret, which is a capability with no caller wearing
+a disguise.
+
+`seed` does not fold at all, and that is the firmer half: "where do I start" is a different question
+from "what comes after this". Surprise-me and seed-by-artist have no meaning on an endpoint keyed by
+`current_track_id`, so folding them means a request model with two disjoint shapes and a path that
+names neither.
 
 **Restore the routes but leave the tag ungenerated, and hand-write the Swift client.** Consistent
 with `ADR-0007` point 8, which hand-writes streaming, SSE and artwork. Rejected because those are
