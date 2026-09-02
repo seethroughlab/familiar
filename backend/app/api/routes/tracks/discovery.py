@@ -135,6 +135,11 @@ async def get_similar_tracks(
     similar_query = (
         select(Track)
         .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+        # Excludes MISSING tracks — files no longer on disk, which 404 on stream. Every other
+        # similarity query in the codebase has carried this for a while (`services/ambient.py`,
+        # `playlist_generation`, `collection_suggestions`, the LLM search handlers); the two in
+        # this file did not, so "similar tracks" could and did offer tracks that cannot play.
+        .where(Track.active_filter())
         .where(Track.id != track_id)
         .where(TrackAnalysis.embedding.isnot(None))
         .order_by(TrackAnalysis.embedding.cosine_distance(embedding))
@@ -188,6 +193,8 @@ async def get_track_discover(
         similar_query = (
             select(Track)
             .join(TrackAnalysis, Track.id == TrackAnalysis.track_id)
+            # See `get_similar_tracks` above — same query, same omission, same fix.
+            .where(Track.active_filter())
             .where(Track.id != track_id)
             .where(TrackAnalysis.embedding.isnot(None))
             .order_by(TrackAnalysis.embedding.cosine_distance(embedding))
