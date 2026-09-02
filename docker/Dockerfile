@@ -191,6 +191,15 @@ COPY --chown=familiar:familiar backend/migrations ./migrations
 COPY --from=frontend-builder --chown=familiar:familiar /app/packages/web/dist ./static
 
 # Download silero-vad ONNX model (~2MB) for voice activity detection
+#
+# This lands under /app/data, which is a named volume in production. It works
+# only because the volume was first created by an image that already contained
+# it — named volumes copy the image's contents in once, at creation, and never
+# again. **Replacing this file in the image would not reach any existing
+# installation**, silently. The CLAP encoders hit exactly that and now live in
+# /app/models instead; this one is left where it is because moving it would
+# strand the copy already in every deployed volume, but it should move the next
+# time silero is updated for any other reason.
 RUN mkdir -p /app/data/models \
     && curl -fsSL -o /app/data/models/silero_vad.onnx \
        https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
@@ -206,9 +215,21 @@ RUN mkdir -p /app/data/models \
 # 9m12s of a 17m30s CI build on 2026-08-05 — /app/.venv is a CPU torch build
 # with analysis extras, and walking it dominated the image. Do not reintroduce
 # a recursive chown over /app; add --chown to the COPY instead.
-# The ONNX encoders, generated in stage 3b. --chown here for the same reason the
-# COPYs above use it: a recursive chown over /app took 9m12s of a 17m30s build.
-COPY --from=onnx-export --chown=familiar:familiar /models /app/data/models/clapback
+# The ONNX encoders, generated in stage 3b.
+#
+# **Deliberately NOT under /app/data.** That path is a named volume in
+# docker-compose.prod.yml (app_data, which persists settings.json), and a named
+# volume only initialises from the image the first time it is created. On any
+# existing installation the volume predates these files, so shipping them to
+# /app/data/models would put them in the image and hide them from the container —
+# which is exactly what happened: the release smoke test passed under `docker run`
+# with no volumes and the same image failed on the NAS with "clap_audio.onnx not
+# found". The stale silero_vad.onnx sitting in that volume is the fossil of the
+# same mechanism working once, years ago.
+#
+# --chown here for the same reason the COPYs above use it: a recursive chown over
+# /app took 9m12s of a 17m30s build.
+COPY --from=onnx-export --chown=familiar:familiar /models /app/models/clapback
 
 RUN mkdir -p /data/music /data/art /data/videos /data/mixtapes /app/data \
     && chown familiar:familiar /app /app/VERSION \
@@ -224,7 +245,8 @@ ENTRYPOINT ["/entrypoint.sh"]
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Where clapback-embed finds the encoders copied in from the export stage.
-ENV CLAPBACK_MODEL_DIR=/app/data/models/clapback
+# /app/models, not /app/data/models — see the COPY above for why that matters.
+ENV CLAPBACK_MODEL_DIR=/app/models/clapback
 
 # The CUDA libraries arrive as pip packages under site-packages/nvidia/*/lib, which
 # the dynamic linker does not search on its own. Without this the CUDA provider
