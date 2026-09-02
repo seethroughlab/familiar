@@ -62,7 +62,11 @@ WORKDIR /app
 FROM python-base AS python-deps
 
 # g++ is needed to compile miniaudio (a pyatv dependency) which has no aarch64 wheel
-RUN apt-get update && apt-get install -y --no-install-recommends g++ && rm -rf /var/lib/apt/lists/*
+# git is needed by uv to resolve `clapback-embed @ git+...`, which is published
+# from the familiar-cache repository and not yet on an index. This is a builder
+# stage, so git does not reach the production image — and if the package ever
+# ships to PyPI, this line goes with the git dependency.
+RUN apt-get update && apt-get install -y --no-install-recommends g++ git && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency files first for caching
 COPY backend/pyproject.toml ./
