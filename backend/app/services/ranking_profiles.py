@@ -7,9 +7,16 @@ instrumental content. Radio is that same engine with different numbers, so the w
 live here rather than being duplicated into a second recommender that would drift.
 
 ``AMBIENT`` reproduces the previous hard-coded behaviour **exactly**, including the
-intensity overrides and every adjustment. That is a hard requirement, not an aspiration —
-ambient mode is shipped, and `tests/test_ambient_scoring.py` characterised it before this
-split landed so any drift fails a test.
+intensity overrides and every adjustment. That is a hard requirement, not an aspiration, and
+`tests/test_ambient_scoring.py` characterised it before this split landed so any drift fails a
+test.
+
+This paragraph used to justify that requirement with "ambient mode is shipped". It stopped being
+true on 2026-08-11 and stayed here for four months: the Capacitor app took the synth, the web
+player took the UI, and ADR-0077 took the routes. **For that whole period this profile was pinned
+byte-exact to protect a feature that did not exist** — the requirement outliving its reason, which
+is worth more than the sentence that hid it. Ambient ships again on the Mac under ADR-0106 and
+ADR-0107, so the reason is back; the test is what kept the behaviour intact in the meantime.
 
 ``RADIO`` weights are a starting guess, as ADR-0005 says they must be: they cannot be
 tuned until ADR-0004 listening events accumulate.

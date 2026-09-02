@@ -365,6 +365,11 @@ OPENAPI_TAGS = [
     {"name": "offline", "description":
         "The precomputed offline ranking manifest (ADR-0006), so a client can rank without "
         "carrying a scorer."},
+    {"name": "ambient", "description":
+        "A session of harmonically-chained snippets: a seed, then a walk through the library "
+        "under the `AMBIENT` weight profile, with the window to play and the key to tune a drone "
+        "to (ADR-0106). The same engine radio uses, asked a different question — which is what "
+        "ADR-0005 decided it was."},
     {"name": "commands", "description":
         "The command channel an MCP client uses to actuate a native player (ADR-0044), and the "
         "artifacts a command asks it to produce (ADR-0053). **Nothing here plays anything** — the "
@@ -429,8 +434,8 @@ OPENAPI_TAG_GROUPS = [
     {"name": "Music", "tags": ["library", "tracks", "map", "analysis", "artwork"]},
     {"name": "Collections", "tags": ["playlists", "smart-playlists", "mixtapes", "favorites"]},
     {"name": "Playback", "tags": [
-        "playback-session", "radio", "offline", "commands", "plays", "outputs", "videos",
-        "visualizers"]},
+        "playback-session", "radio", "offline", "ambient", "commands", "plays", "outputs",
+        "videos", "visualizers"]},
     {"name": "Discovery", "tags": ["discover", "lastfm", "new-releases", "external-albums"]},
     {"name": "Curation", "tags": [
         "ingest", "metadata", "identification", "duplicates",

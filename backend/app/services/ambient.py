@@ -426,6 +426,11 @@ async def pick_surprise_seed(
     from the pool, so the final seed is as quiet as the library allows.
     """
     base_conditions = [
+        # The same exclusion `get_candidates` gained and this path did not: a MISSING track is a
+        # file no longer on disk and 404s on stream. Missing it here is worse than missing it
+        # there — a bad candidate is one skipped transition, a bad *seed* is a session that
+        # cannot start at all. Restored with the routes under ADR-0106 point 6.
+        Track.active_filter(),
         TrackAnalysis.instrumentalness >= 0.5,
         TrackAnalysis.speechiness <= 0.5,
         TrackAnalysis.energy <= 0.7,
@@ -729,6 +734,8 @@ async def find_seed_by_artist(
 ) -> AmbientDescriptor | None:
     """Find a seed track by artist name (best ambient fitness)."""
     base_conditions = [
+        # See `pick_surprise_seed` — the same missing exclusion, for the same reason.
+        Track.active_filter(),
         Track.artist.ilike(f"%{artist_name}%"),
         Track.duration_seconds >= 45,
         TrackAnalysis.energy.isnot(None),
