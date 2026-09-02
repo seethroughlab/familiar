@@ -4,6 +4,35 @@ Status: accepted
 
 Date: 2026-09-01
 
+Implementation:
+- **Built on `familiar-apple` branch `ambient-mode`** (`familiar`'s half of point 2 is on
+  `worktree-ambient-mode-revival`). `FamiliarKit` gains `AmbientSession`, `AmbientPolicy`,
+  `AmbientController`, `AmbientSynthEngine` and `AmbientAudioTransport`; `App/Shared` gains
+  `AmbientView` and `ServerAmbientSource`; `NativeAudioEngine` gains `init(role:)` and nothing else.
+  Both schemes build; 1,071 tests pass with 50 skipped, 42 of them new.
+- **Point 1's forcing functions both fired.** `LibraryRoutingTests` and `NavigationCommandTests`
+  failed until `ambient` was added to their hand-maintained lists, and the routing switches failed
+  the build until every arm was written. The sidebar row is the one site nothing checked, exactly as
+  the point says.
+- **The transport had to live in `FamiliarKit`, not `App/Shared`.** `NativeAudioEngine` is internal
+  to the module, so nothing in the app target can construct the `.secondary` engine point 5
+  describes. That is convenient rather than awkward — the second instance sits beside the rules
+  about what a second instance may do.
+- **Point 12's rewrite was larger than "not as-is" suggests.** Beyond the three faults listed, the
+  synth needed `nonisolated(unsafe)` on the state pointer with its invariant written beside it,
+  because `UnsafeMutablePointer` is not `Sendable` even when its pointee is.
+- **A defect this work introduced and the tests caught**: the controller's two waits — a window
+  ending and an intermission passing — were one injected clock, so a test clock that returned
+  instantly made every window end the moment it began and ran a session to the end of its plan.
+  They are named separately now, which is also the honest description of what they are.
+- **Not verified, and it is the part that matters: nobody has heard it.** No assertion distinguishes
+  a drone that glides from one that steps. See the Consequences.
+- **A prerequisite this uncovered, unrelated to ambient.** Re-vendoring the current schema stopped
+  the macOS target compiling: ADR-0099/0101 replaced `unheard_tracks` and `deep_cuts` with
+  `rediscovery`, and `HomeStore` still read the removed fields. Home now shows one Rediscover
+  section carrying the provenance ADR-0101 added, rather than a flattened list — dropping the
+  "because you played X" would leave the old Unheard section under a new heading.
+
 Depends on [ADR-0106](ADR-0106-ambient-mode-returns-as-a-reachable-surface.md), which **executes
 first** and now has: the three endpoints this surface is built on exist, are generated, and reach
 Swift as `ambientSeed`, `ambientCandidates` and `ambientDescriptor`. Extends

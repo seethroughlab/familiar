@@ -30,9 +30,21 @@ Implementation:
   by hand instead: 19 tags and 14 operations, identical on both sides. **The guarantee that these
   cannot drift holds only from the main checkout, and the worktree convention defeats it.**
 - **The schema this vendors supersedes the unpushed `sync-schema-adr-0099` branch**, whose single
-  commit was itself a schema vendor. Compared before overwriting: no shared path differs, no
-  component is removed, and it adds `/health/discovery-sources` — which had landed on `origin/main`
-  in the two days since that branch was cut — alongside the three ambient paths.
+  commit was itself a schema vendor and which was already behind `origin/main`.
+- **It is not the clean superset it first appeared to be, and the way that was missed is the useful
+  part.** The first comparison checked which *paths* existed, whether any shared path's content
+  differed, and which *components* existed — and found only additions. It did not compare the
+  **contents of components present in both**, and three of those changed:
+  `SettingsResponse` and `SettingsUpdateRequest` gain three discovery fields, which is safe, and
+  **`DiscoverResponse` drops `unheard_tracks` and `deep_cuts` for `rediscovery` and
+  `rediscovery_seed_count`** under ADR-0099/0101. `App/Shared/HomeStore.swift:66-67` still reads
+  the two removed fields, so re-vendoring the current schema stops the macOS target compiling.
+  **Comparing a schema means comparing paths, path contents, component presence *and* component
+  contents; three of the four are not enough.**
+- The break is a real one and not an artefact: the Mac app is behind the server on ADR-0099/0101's
+  discover change, and any branch bringing the schema up to date exposes it. Two sections on Home
+  become one list carrying its own provenance, which is a Home-screen decision belonging to
+  ADR-0101 rather than to this ADR — so it is recorded here and left to that work.
 
 Amends [ADR-0001](ADR-0001-native-apple-clients-supersede-capacitor.md) point 5, which put
 "ambient/generative mode" out of native v1 "and possibly permanently", **and

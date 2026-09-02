@@ -48,6 +48,9 @@ PLAYBACK_TOOLS = {
 #: quietly dropped (ADR-0053 point 2).
 NAVIGATION_DESTINATIONS = [
     "home",
+    # ADR-0107. Mac-only like "music_map" and "videos" below, and second because the Swift side's
+    # `allCommandRoutes` is asserted against this list **in order** rather than as a set.
+    "ambient",
     "tracks",
     "albums",
     "artists",
