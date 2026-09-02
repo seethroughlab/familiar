@@ -3,7 +3,6 @@
 import importlib.util
 import logging
 import os
-from functools import lru_cache
 from pathlib import Path
 
 import acoustid
@@ -12,10 +11,17 @@ import numpy as np
 # Cheap at import time: vocal_detection imports onnxruntime lazily, inside its functions.
 from app.services.vocal_detection import VADError
 
-# Check torch availability without importing it (~0 memory cost)
-# The actual torch import happens lazily inside functions that need it
-_torch_available = importlib.util.find_spec("torch") is not None
-_torch_import_error: str | None = "torch package not installed" if not _torch_available else None
+# CLAP now runs through `clapback-embed` (ADR-0105), which is ONNX-based and pulls
+# in neither torch nor transformers. Checked without importing, as before: the
+# package loads onnxruntime lazily, but the import still costs real time.
+#
+# `_torch_available` kept its name for one release because callers outside this
+# module tested it; it is now the embedder check and nothing here imports torch.
+_embedder_available = importlib.util.find_spec("clapback_embed") is not None
+_torch_available = _embedder_available  # deprecated alias, see above
+_torch_import_error: str | None = (
+    None if _embedder_available else "clapback-embed package not installed"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,56 +46,36 @@ def get_acoustid_api_key() -> str:
     except Exception:
         return ""
 
-# Lazy load the CLAP model to avoid loading on import
-_clap_model = None
-_clap_processor = None
+# `get_device()` and `load_clap_model()` are gone with ADR-0105. Device selection
+# is now the embedder's, via CLAPBACK_PROVIDERS, and the model is an ONNX artifact
+# rather than a torch module — so there is nothing here to cache or move.
 
 
-def get_device() -> str:
-    """Get the best available device for inference.
+def embedder_providers() -> list[str]:
+    """Execution providers the embedder will actually use.
 
-    Note: MPS (Apple Silicon) doesn't work well with subprocess workers,
-    so we use CPU for background analysis tasks.
+    Surfaced for the health view: ONNX Runtime **silently falls back to CPU** when a
+    requested provider fails to load, so "CUDA was requested" and "CUDA is running"
+    are different facts and only the second one matters.
     """
-    if not _torch_available:
-        return "cpu"
+    if not _embedder_available:
+        return []
+    from clapback_embed.artifacts import providers
 
-    # Check if we're in a subprocess worker
-    # MPS doesn't work reliably in subprocesses, so use CPU
-    if os.environ.get("FORKED_BY_MULTIPROCESSING"):
-        return "cpu"
-
-    import torch
-
-    if torch.cuda.is_available():
-        return "cuda"
-    elif torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+    return providers()
 
 
-@lru_cache(maxsize=1)
-def load_clap_model() -> tuple:  # Returns (model, processor)
-    """Load the CLAP model (cached)."""
-    global _clap_model, _clap_processor
+def embedder_active_providers() -> list[str]:
+    """Providers actually bound to the loaded session, not the ones asked for."""
+    if not _embedder_available:
+        return []
+    try:
+        from clapback_embed.artifacts import audio_session
 
-    if _clap_model is None:
-        from transformers import ClapModel, ClapProcessor
-
-        model_name = "laion/clap-htsat-unfused"
-        logger.info(f"Loading CLAP model: {model_name}")
-
-        device = get_device()
-        logger.info(f"Using device: {device}")
-
-        _clap_processor = ClapProcessor.from_pretrained(model_name)
-        _clap_model = ClapModel.from_pretrained(model_name)
-        _clap_model = _clap_model.to(device)
-        _clap_model.eval()
-
-        logger.info("CLAP model loaded successfully")
-
-    return _clap_model, _clap_processor
+        return list(audio_session().get_providers())
+    except Exception as exc:  # missing artifacts, unusable GPU, anything
+        logger.debug(f"Could not resolve active embedder providers: {exc}")
+        return []
 
 
 def get_analysis_capabilities() -> dict:
@@ -105,19 +91,24 @@ def get_analysis_capabilities() -> dict:
 
     clap_status = get_app_settings_service().get_clap_status()
 
-    embeddings_enabled = clap_status["enabled"] and _torch_available
+    embeddings_enabled = clap_status["enabled"] and _embedder_available
     embeddings_disabled_reason = None
 
     if not clap_status["enabled"]:
         embeddings_disabled_reason = clap_status["reason"]
-    elif not _torch_available:
-        embeddings_disabled_reason = f"PyTorch not available: {_torch_import_error or 'import failed'}"
+    elif not _embedder_available:
+        embeddings_disabled_reason = f"Embedder unavailable: {_torch_import_error or 'import failed'}"
 
     return {
         "embeddings_enabled": embeddings_enabled,
         "embeddings_disabled_reason": embeddings_disabled_reason,
         "features_enabled": True,  # librosa is always available
         "clap_status": clap_status,
+        # Requested vs actually bound. ONNX Runtime falls back to CPU *silently*
+        # when a provider fails to load, so a GPU that is configured but not
+        # working looks identical to one that is — except here.
+        "embedder_providers_requested": embedder_providers(),
+        "embedder_providers_active": embedder_active_providers(),
     }
 
 
@@ -131,46 +122,39 @@ def check_analysis_capabilities() -> None:
         logger.warning(
             f"CLAP embeddings DISABLED: {caps['embeddings_disabled_reason']}. "
             "Audio similarity features (Music Map) will not work. "
-            "Install PyTorch to enable: uv add torch --optional analysis"
+            "Install the embedder to enable: uv sync --extra analysis"
         )
     else:
         logger.info("Analysis capabilities: features=enabled, embeddings=enabled")
 
 
-#: CLAP's audio encoder sees exactly ten seconds and no more. HTSAT's positional
-#: embeddings are sized for a 1001x64 mel, so both ONNX and PyTorch reject anything
-#: else — the latter with "the wav size should be less than or equal to the swin
-#: input size". This is a property of the checkpoint, not a tuning parameter, and a
-#: longer track is therefore several observations rather than one (ADR-0104).
-EMBEDDING_WINDOW_SECONDS = 10
-
-
 def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | None:
     """Extract a CLAP audio embedding representing the whole track.
 
-    The track is split into consecutive non-overlapping ten-second windows, each
-    embedded separately, and the raw vectors are mean-pooled and L2-normalised
-    (ADR-0104 points 1 and 2).
+    The windowing, mel front-end, pooling and precision all live in
+    `clapback-embed` now (ADR-0105). That is not a refactor for tidiness: the
+    community cache can only tell "two contributors disagree about the audio" from
+    "two contributors ran different code" if there is exactly one implementation,
+    and Familiar running its own copy defeated that by construction.
 
-    A trailing partial window is dropped rather than zero-padded: padding injects
-    silence the track does not contain and pulls the mean toward "quiet" in
-    proportion to how short the remainder is. What is dropped is under ten seconds
-    of material that the other windows already represent. A track shorter than one
-    window has nothing to drop, and falls through to the extractor's `repeatpad`.
+    Behaviour is unchanged from ADR-0104 — consecutive 480,000-sample windows,
+    mean-pooled raw encoder outputs, L2-normalised — and the vectors match the
+    previous torch path to 1.2e-07, against the 6.0e-08 that `float4` storage
+    already costs. `EMBEDDING_VERSION` therefore does not bump.
 
     Args:
         file_path: Path to audio file
-        target_sr: Target sample rate for CLAP (48kHz recommended)
+        target_sr: Ignored; the sample rate is part of the pinned contract and
+            changing it would change every vector. Kept so existing callers and
+            tests do not break.
 
     Returns:
         512-dimensional embedding as list of floats, or None if CLAP is disabled
     """
-    # Skip CLAP if torch isn't available
-    if not _torch_available:
-        logger.debug("CLAP embeddings disabled (torch not available)")
+    if not _embedder_available:
+        logger.debug("CLAP embeddings disabled (clapback-embed not installed)")
         return None
 
-    # Skip CLAP if disabled via settings or env var
     from app.services.app_settings import get_app_settings_service
     clap_enabled, reason = get_app_settings_service().is_clap_embeddings_enabled()
     if not clap_enabled:
@@ -178,61 +162,9 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
         return None
 
     try:
-        import librosa
-        import torch
+        from clapback_embed import embed_file
 
-        # Load audio file
-        audio, sr = librosa.load(file_path, sr=target_sr, mono=True)
-
-        window = target_sr * EMBEDDING_WINDOW_SECONDS
-        n_windows = max(1, len(audio) // window)
-
-        # Load model
-        model, processor = load_clap_model()
-        device = get_device()
-
-        vectors = []
-        for i in range(n_windows):
-            chunk = audio[i * window:(i + 1) * window]
-
-            # ADR-0104 point 5. `ClapFeatureExtractor` defaults to
-            # truncation="rand_trunc", which takes a *random* crop of anything longer
-            # than one window — so reproducibility here rests entirely on every chunk
-            # being exactly `window` samples. Floor division guarantees that today;
-            # this asserts it, because the failure is silent and turns every embedding
-            # in the library irreproducible without changing a single type.
-            if len(audio) >= window and len(chunk) != window:
-                raise AnalysisError(
-                    f"window {i} is {len(chunk)} samples, expected {window} — "
-                    "rand_trunc would take a random crop and embeddings would "
-                    "stop being reproducible"
-                )
-
-            inputs = processor(
-                audio=chunk,
-                sampling_rate=target_sr,
-                return_tensors="pt",
-            )
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-
-            with torch.no_grad():
-                audio_embed = model.get_audio_features(**inputs)
-
-            vectors.append(audio_embed.cpu().numpy().flatten())
-
-        # Mean of the raw encoder outputs, then normalise — not a mean of vectors
-        # already normalised. The two differ, and this is the one ADR-0104 measured.
-        mean_vector = np.mean(vectors, axis=0)
-        magnitude = float(np.linalg.norm(mean_vector))
-        if magnitude == 0.0:
-            # No direction, so no meaningful similarity. Storing it would place the
-            # track at an arbitrary point rather than nowhere.
-            raise AnalysisError("embedding has zero magnitude")
-
-        return (mean_vector / magnitude).tolist()
-
-    except AnalysisError:
-        raise
+        return embed_file(file_path)
     except Exception as e:
         logger.error(f"Error extracting embedding from {file_path}: {e}")
         raise AnalysisError(f"Embedding extraction failed: {e}") from e
@@ -241,8 +173,13 @@ def extract_embedding(file_path: Path, target_sr: int = 48000) -> list[float] | 
 def extract_text_embedding(text: str) -> list[float] | None:
     """Extract CLAP text embedding from a text description.
 
-    CLAP embeds text and audio into the same 512-dimensional space,
-    enabling text-to-audio semantic search.
+    CLAP embeds text and audio into the same 512-dimensional space, which is what
+    makes "gloomy with Eastern influences" a query rather than a keyword search.
+
+    Runs on HuggingFace `tokenizers` alone — no `transformers`. That was the open
+    question when ADR-0105 was written, since a tokenizer is not obviously
+    separable from the library that ships it; measured at cosine 1.0000000000
+    against `transformers` + `torch`.
 
     Args:
         text: Natural language description (e.g., "gloomy with Eastern influences")
@@ -250,8 +187,8 @@ def extract_text_embedding(text: str) -> list[float] | None:
     Returns:
         512-dimensional embedding as list of floats, or None if CLAP is disabled
     """
-    if not _torch_available:
-        logger.debug("CLAP text embeddings disabled (torch not available)")
+    if not _embedder_available:
+        logger.debug("CLAP text embeddings disabled (clapback-embed not installed)")
         return None
 
     from app.services.app_settings import get_app_settings_service
@@ -261,27 +198,9 @@ def extract_text_embedding(text: str) -> list[float] | None:
         return None
 
     try:
-        import torch
+        from clapback_embed import embed_text
 
-        model, processor = load_clap_model()
-        device = get_device()
-
-        # Process text input
-        inputs = processor(
-            text=[text],  # CLAP expects a list of texts
-            return_tensors="pt",
-            padding=True,
-        )
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-
-        # Get text embedding
-        with torch.no_grad():
-            text_embed = model.get_text_features(**inputs)
-
-        # Convert to list
-        embedding = text_embed.cpu().numpy().flatten().tolist()
-        return embedding
-
+        return embed_text(text)
     except Exception as e:
         logger.error(f"Error extracting text embedding for '{text}': {e}")
         return None

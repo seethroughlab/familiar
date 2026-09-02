@@ -1,6 +1,6 @@
 # ADR-0105: Familiar's CLAP Runtime Is an External Package
 
-Status: proposed
+Status: accepted
 
 Date: 2026-09-01
 
@@ -9,6 +9,35 @@ Familiar embeds. This decides *what computes it*.
 
 Relates to [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), whose shared corpus is
 only meaningful if independent installations compute the same function.
+
+Implementation:
+- Accepted and implemented 2026-09-02. `extract_embedding` and `extract_text_embedding` delegate to
+  `clapback-embed`; `get_device()`, `load_clap_model()` and the module-level model cache are gone,
+  along with `torch` and `transformers` from the `analysis` extra.
+- **The GPU path is real, and was the hard part.** Measured on the NAS's GTX 980 (Maxwell, sm_52):
+  the full pipeline runs at **2.32s/track against 10.01s on CPU — 4.3x** — and CUDA and CPU vectors
+  agree to **6.6e-14**, a thousand times tighter than the 6.0e-08 that `float4` storage costs.
+  Unlike fp16, GPU output is corpus-safe, so point 5 does not have to exclude it.
+- **Every wrong CUDA stack silently fell back to the CPU and reported success.** Four of them: ORT
+  1.29 wants CUDA 13; ORT 1.20 wants CUDA 12 with cuDNN 9; a CUDA 12.6 image is refused by driver
+  535, which caps at 12.2; and ORT 1.18.1's default wheel is a CUDA **11** build. Only
+  `onnxruntime-gpu==1.18.1` with CUDA 11.8 and `nvidia-cudnn-cu11==8.9.6.50` runs — and the
+  unpinned cuDNN wheel now ships 9.x, so that pin is load-bearing. **A check that does not assert
+  `get_providers()` contains `CUDAExecutionProvider` proves nothing**, which is why
+  `get_analysis_capabilities()` now reports requested and active providers separately.
+- **No base-image change was needed.** The CUDA userspace arrives as pip packages onto the existing
+  `python:3.11-slim`, with `LD_LIBRARY_PATH` pointing at `site-packages/nvidia/*/lib` — without
+  which the provider fails to load and, again, the CPU is used silently.
+- **Point 7 became a build stage rather than a download.** An `onnx-export` stage installs torch and
+  transformers, runs `export_models.py`, and is not copied from; the final image takes only the
+  artifacts. The runtime stays ONNX-only while the artifacts remain reproducible from the pinned
+  checkpoint rather than trusted from a URL, and point 7's hosting question never has to be answered.
+- **The real prerequisite was not in this repository.** The NAS had an NVIDIA display driver and no
+  compute stack: `libcuda.so` was absent entirely, `nvidia-smi` was not installed, and a driver
+  upgrade to 535.309.01 had left the 535.261.03 kernel module loaded — which broke
+  `nvidia-container-cli` for *every* container on the host, not just Familiar's. A reboot plus
+  `nvidia-smi` and `libcuda1` fixed it. Familiar had never used a GPU in production, and the reason
+  was three layers below the Dockerfile.
 
 ## Context
 

@@ -81,10 +81,17 @@ services:
       resources:
         limits:
           cpus: '6.0'    # Max 6 CPU cores, leaving 2 for Postgres, Redis and the OS
-          memory: 6G     # Max 6GB RAM (CLAP model needs ~4GB peak)
+          memory: 10G    # Each analysis worker holds a CLAP model
         reservations:
           cpus: '0.5'    # Guaranteed 0.5 cores
           memory: 512M   # Guaranteed 512MB
+          # GPU is optional: with no NVIDIA runtime present the container starts
+          # normally and the embedder uses the CPU, which produces the same vectors
+          # (6.6e-14 apart, against float4 storage's 6.0e-08).
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     # Use journald for persistent logging that survives reboots
     logging:
       driver: journald
@@ -101,6 +108,12 @@ services:
       - DATABASE_URL=postgresql+asyncpg://familiar:${POSTGRES_PASSWORD:-familiar}@postgres:5432/familiar
       - REDIS_URL=redis://redis:6379/0
       - MUSIC_LIBRARY_PATH=/music
+      # Needed for libcuda.so to reach the container. The toolkit's default
+      # capability set is `utility`, which provides nvidia-smi and NVML but *not*
+      # compute — so the GPU looks present while CUDA cannot initialise, and ONNX
+      # Runtime then falls back to the CPU without failing.
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - NVIDIA_VISIBLE_DEVICES=all
       - ART_PATH=/data/art
       - VIDEOS_PATH=/data/videos
       - MIXTAPES_PATH=/data/mixtapes

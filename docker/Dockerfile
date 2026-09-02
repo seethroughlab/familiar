@@ -62,7 +62,11 @@ WORKDIR /app
 FROM python-base AS python-deps
 
 # g++ is needed to compile miniaudio (a pyatv dependency) which has no aarch64 wheel
-RUN apt-get update && apt-get install -y --no-install-recommends g++ && rm -rf /var/lib/apt/lists/*
+# git is needed by uv to resolve `clapback-embed @ git+...`, which is published
+# from the familiar-cache repository and not yet on an index. This is a builder
+# stage, so git does not reach the production image — and if the package ever
+# ships to PyPI, this line goes with the git dependency.
+RUN apt-get update && apt-get install -y --no-install-recommends g++ git && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency files first for caching
 COPY backend/pyproject.toml ./
@@ -73,11 +77,71 @@ COPY backend/README.md ./
 # Install CPU-only PyTorch AFTER uv sync (~200MB vs ~5GB for CUDA version)
 # Install yt-dlp for YouTube video downloads
 # Note: uv sync removes packages not in lockfile, so these must come last
+# CUDA userspace for the GPU path. Pinned hard, because every mismatched
+# combination **silently falls back to CPU and reports success** — ONNX Runtime
+# logs a warning and carries on, so a broken GPU build looks exactly like a
+# working one. Four combinations were tried before this one ran; see ADR-0105.
+#
+#   onnxruntime-gpu 1.18.1  is the last wheel built against CUDA 11
+#   nvidia-cudnn-cu11       MUST be pinned to 8.x — the unpinned wheel now ships
+#                           cuDNN 9, which 1.18.1 cannot load
+#   driver 535 caps at CUDA 12.2, and ORT >=1.19 wants CUDA 12 + cuDNN 9, so
+#   CUDA 11.8 is the only rung where both ends meet on the deployment host.
+#
+# Harmless without a GPU: the provider fails to initialise and CPU is used, which
+# is the same outcome as not installing it.
+#
+# x86_64 only: onnxruntime-gpu publishes no aarch64 wheels (manylinux_*_x86_64 and
+# win_amd64 only), and CUDA is not reachable on the arm64 builds regardless. On
+# aarch64 the CPU `onnxruntime` that clapback-embed depends on is left in place,
+# which is the same outcome as before this change.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv && \
     uv sync --frozen --no-dev --extra analysis && \
-    uv pip install torch --index-url https://download.pytorch.org/whl/cpu && \
+    if [ "$(uname -m)" = "x86_64" ]; then \
+        uv pip install \
+            'onnxruntime-gpu==1.18.1' \
+            'nvidia-cudnn-cu11==8.9.6.50' \
+            nvidia-cublas-cu11 nvidia-cuda-runtime-cu11 \
+            nvidia-cufft-cu11 nvidia-curand-cu11; \
+    else \
+        echo "aarch64: skipping CUDA runtime, embedder will use CPU"; \
+    fi && \
     uv pip install 'yt-dlp[default]'
+
+# =============================================================================
+# Stage 3b: Export the ONNX encoders
+# =============================================================================
+# The artifacts are 112 MB (audio) and 502 MB (text) and are generated here rather
+# than vendored or downloaded. torch and transformers are needed to export them and
+# are needed by nothing at runtime, so they live in a stage the final image does not
+# copy from — which is how the runtime stays ONNX-only while the artifacts stay
+# reproducible from the pinned checkpoint rather than trusted from a URL.
+#
+# `export_models.py` verifies every export against PyTorch before writing. An
+# artifact that disagrees is worse than a missing one: it yields plausible vectors
+# that are comparable with nothing.
+#
+# transformers is bounded here even though the runtime no longer depends on it at
+# all. The artifacts *are* the contract, so the thing that produces them cannot
+# float: an unpinned range already broke this stage once, when `processor(audios=)`
+# was deprecated out from under it. `<5` because 5.x changes `get_text_features`
+# to return an object rather than a tensor — the export wrapper handles both, but
+# the boundary is a real one and should be crossed deliberately.
+FROM python-base AS onnx-export
+WORKDIR /export
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv /opt/exportenv && \
+    VIRTUAL_ENV=/opt/exportenv uv pip install \
+        torch --index-url https://download.pytorch.org/whl/cpu && \
+    VIRTUAL_ENV=/opt/exportenv uv pip install \
+        'transformers>=4.40,<5' onnx onnxruntime numpy
+# Fetched rather than COPY --from: `scripts/` is not part of the wheel, so it does
+# not exist in the installed package. Same mechanism the image already uses for
+# silero_vad.onnx below.
+ADD https://raw.githubusercontent.com/seethroughlab/familiar-cache/main/packages/embed/scripts/export_models.py ./export_models.py
+RUN --mount=type=cache,target=/root/.cache/huggingface \
+    /opt/exportenv/bin/python export_models.py --out /models
 
 # =============================================================================
 # Stage 4: Production image
@@ -142,6 +206,10 @@ RUN mkdir -p /app/data/models \
 # 9m12s of a 17m30s CI build on 2026-08-05 — /app/.venv is a CPU torch build
 # with analysis extras, and walking it dominated the image. Do not reintroduce
 # a recursive chown over /app; add --chown to the COPY instead.
+# The ONNX encoders, generated in stage 3b. --chown here for the same reason the
+# COPYs above use it: a recursive chown over /app took 9m12s of a 17m30s build.
+COPY --from=onnx-export --chown=familiar:familiar /models /app/data/models/clapback
+
 RUN mkdir -p /data/music /data/art /data/videos /data/mixtapes /app/data \
     && chown familiar:familiar /app /app/VERSION \
     && chown -R familiar:familiar /data /app/data
@@ -154,6 +222,20 @@ ENTRYPOINT ["/entrypoint.sh"]
 
 # Ensure the virtual environment is in PATH
 ENV PATH="/app/.venv/bin:$PATH"
+
+# Where clapback-embed finds the encoders copied in from the export stage.
+ENV CLAPBACK_MODEL_DIR=/app/data/models/clapback
+
+# The CUDA libraries arrive as pip packages under site-packages/nvidia/*/lib, which
+# the dynamic linker does not search on its own. Without this the CUDA provider
+# fails to load and ONNX Runtime **silently uses the CPU** — the failure mode that
+# cost four attempts in ADR-0105.
+ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.11/site-packages/nvidia/cudnn/lib:/app/.venv/lib/python3.11/site-packages/nvidia/cublas/lib:/app/.venv/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/app/.venv/lib/python3.11/site-packages/nvidia/cufft/lib:/app/.venv/lib/python3.11/site-packages/nvidia/curand/lib"
+
+# Ask for the GPU, fall back to CPU. Both are corpus-safe: CUDA and CPU vectors
+# agree to 6.6e-14, against the 6.0e-08 that float4 storage already costs
+# (measured on a GTX 980, ADR-0105). Unlike fp16, this is not a precision tradeoff.
+ENV CLAPBACK_PROVIDERS="CUDAExecutionProvider,CPUExecutionProvider"
 
 # Default environment variables
 ENV DATABASE_URL=postgresql+asyncpg://familiar:familiar@postgres:5432/familiar \

@@ -16,7 +16,6 @@ from app.services.analysis import (
     extract_features,
     generate_fingerprint,
     get_analysis_capabilities,
-    get_device,
 )
 
 # Path to test audio fixtures
@@ -198,20 +197,10 @@ class TestGetAnalysisCapabilities:
             assert isinstance(caps["embeddings_disabled_reason"], str)
 
 
-class TestGetDevice:
-    """Tests for device detection."""
-
-    def test_get_device_returns_string(self):
-        """Should return a device string."""
-        device = get_device()
-        assert isinstance(device, str)
-        assert device in ["cpu", "cuda", "mps"]
-
-    def test_get_device_cpu_when_no_torch(self):
-        """Should return cpu when torch is not available."""
-        with patch("app.services.analysis._torch_available", False):
-            device = get_device()
-            assert device == "cpu"
+# `TestGetDevice` is gone with ADR-0105. Device selection is no longer Familiar's:
+# `clapback-embed` picks execution providers from CLAPBACK_PROVIDERS, and what
+# matters is not which was *requested* but which actually bound — asserted in
+# tests/test_embedder_delegation.py, which unlike this file runs in CI.
 
 
 class TestExtractEmbedding:
