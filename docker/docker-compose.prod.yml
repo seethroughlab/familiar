@@ -85,13 +85,6 @@ services:
         reservations:
           cpus: '0.5'    # Guaranteed 0.5 cores
           memory: 512M   # Guaranteed 512MB
-          # GPU is optional: with no NVIDIA runtime present the container starts
-          # normally and the embedder uses the CPU, which produces the same vectors
-          # (6.6e-14 apart, against float4 storage's 6.0e-08).
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     # Use journald for persistent logging that survives reboots
     logging:
       driver: journald
