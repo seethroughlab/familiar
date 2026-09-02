@@ -121,6 +121,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # `export_models.py` verifies every export against PyTorch before writing. An
 # artifact that disagrees is worse than a missing one: it yields plausible vectors
 # that are comparable with nothing.
+#
+# transformers is bounded here even though the runtime no longer depends on it at
+# all. The artifacts *are* the contract, so the thing that produces them cannot
+# float: an unpinned range already broke this stage once, when `processor(audios=)`
+# was deprecated out from under it. `<5` because 5.x changes `get_text_features`
+# to return an object rather than a tensor — the export wrapper handles both, but
+# the boundary is a real one and should be crossed deliberately.
 FROM python-base AS onnx-export
 WORKDIR /export
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -128,7 +135,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     VIRTUAL_ENV=/opt/exportenv uv pip install \
         torch --index-url https://download.pytorch.org/whl/cpu && \
     VIRTUAL_ENV=/opt/exportenv uv pip install \
-        transformers onnx onnxruntime numpy
+        'transformers>=4.40,<5' onnx onnxruntime numpy
 # Fetched rather than COPY --from: `scripts/` is not part of the wheel, so it does
 # not exist in the installed package. Same mechanism the image already uses for
 # silero_vad.onnx below.
