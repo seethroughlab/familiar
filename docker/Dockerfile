@@ -90,14 +90,23 @@ COPY backend/README.md ./
 #
 # Harmless without a GPU: the provider fails to initialise and CPU is used, which
 # is the same outcome as not installing it.
+#
+# x86_64 only: onnxruntime-gpu publishes no aarch64 wheels (manylinux_*_x86_64 and
+# win_amd64 only), and CUDA is not reachable on the arm64 builds regardless. On
+# aarch64 the CPU `onnxruntime` that clapback-embed depends on is left in place,
+# which is the same outcome as before this change.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv && \
     uv sync --frozen --no-dev --extra analysis && \
-    uv pip install \
-        'onnxruntime-gpu==1.18.1' \
-        'nvidia-cudnn-cu11==8.9.6.50' \
-        nvidia-cublas-cu11 nvidia-cuda-runtime-cu11 \
-        nvidia-cufft-cu11 nvidia-curand-cu11 && \
+    if [ "$(uname -m)" = "x86_64" ]; then \
+        uv pip install \
+            'onnxruntime-gpu==1.18.1' \
+            'nvidia-cudnn-cu11==8.9.6.50' \
+            nvidia-cublas-cu11 nvidia-cuda-runtime-cu11 \
+            nvidia-cufft-cu11 nvidia-curand-cu11; \
+    else \
+        echo "aarch64: skipping CUDA runtime, embedder will use CPU"; \
+    fi && \
     uv pip install 'yt-dlp[default]'
 
 # =============================================================================
