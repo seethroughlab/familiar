@@ -23,7 +23,6 @@ pytest.importorskip("librosa")
 from app.services.analysis import (  # noqa: E402
     extract_embedding,
     extract_text_embedding,
-    get_device,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "audio"
@@ -39,21 +38,7 @@ def _mock_clap_enabled():
     )
 
 
-class TestGetDeviceReal:
-    """Test device detection with real torch (no mocks)."""
-
-    def test_returns_valid_device(self):
-        device = get_device()
-        assert device in ("cpu", "cuda", "mps")
-
-    def test_cpu_in_subprocess(self):
-        """Subprocess workers should always get CPU (MPS is unreliable in forks)."""
-        os.environ["FORKED_BY_MULTIPROCESSING"] = "1"
-        try:
-            device = get_device()
-            assert device == "cpu"
-        finally:
-            del os.environ["FORKED_BY_MULTIPROCESSING"]
+# TestGetDeviceReal removed with ADR-0105 — see tests/test_embedder_delegation.py.
 
 
 class TestExtractEmbeddingReal:
