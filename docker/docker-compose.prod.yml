@@ -81,7 +81,9 @@ services:
       resources:
         limits:
           cpus: '6.0'    # Max 6 CPU cores, leaving 2 for Postgres, Redis and the OS
-          memory: 10G    # Each analysis worker holds a CLAP model
+          memory: 12G    # Each worker holds a CLAP model, a CUDA context and up to
+                         # ~2 GB of decoded audio for a long file. Measured 1.57G
+                         # idle; the ceiling exists for the long-form tail.
         reservations:
           cpus: '0.5'    # Guaranteed 0.5 cores
           memory: 512M   # Guaranteed 512MB
@@ -106,6 +108,13 @@ services:
       # even amortise its own interpreter start. Measured on the deployment host —
       # 1 worker 15.7s/track, 3 workers 11.3s/track, and with the GPU 2.9s.
       #
+      # Two, not three, because the GPU changed the memory arithmetic: each worker
+      # now holds a CUDA context as well as its decode buffer, and a 57-minute DJ
+      # mix decodes to 2.0 GB. Three workers on long-form files exhausted both a
+      # 10 GB and a 12 GB limit (ADR-0105). Long files sort to the end of a
+      # re-analysis, so this only shows up in the last few hundred tracks of a run —
+      # the tail is the worst case, not the average.
+      #
       # Each worker holds a CLAP model, so this trades memory for throughput; raise
       # it and the `memory` limit together. Three workers measured 2.3 GiB against
       # the 10G limit, so there is room, but scaling is sub-linear because decode
@@ -115,7 +124,7 @@ services:
       # the environment at process start, so changing it needs the container
       # recreated. A recreate discards anything `deploy-dev.sh` copied in, so re-run
       # `make deploy-dev` afterwards or the container silently reverts to the image.
-      - MAX_ANALYSIS_WORKERS=${MAX_ANALYSIS_WORKERS:-3}
+      - MAX_ANALYSIS_WORKERS=${MAX_ANALYSIS_WORKERS:-2}
       # A single worker crash breaks the ProcessPoolExecutor. Without recovery,
       # every task after it fails against the dead pool until the circuit breaker
       # disables the executor outright — 10,283 consecutive failures on

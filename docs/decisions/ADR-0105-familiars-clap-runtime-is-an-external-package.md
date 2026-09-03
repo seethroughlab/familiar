@@ -11,6 +11,32 @@ Relates to [ADR-0102](ADR-0102-the-community-cache-gains-a-recording-key.md), wh
 only meaningful if independent installations compute the same function.
 
 Implementation:
+- **The GPU made each analysis worker more expensive in host RAM, and the tail of a library is where
+  that bites.** Every worker now holds a CUDA context alongside its decode buffer, so three workers
+  that were comfortable on the CPU path were not on the GPU one. Measured 2026-09-03: a 57-minute
+  DJ mix decodes to **2.01 GB peak RSS**, and three workers on such files exhausted first a 10 GB and
+  then a 12 GB container limit — `memory.events` recorded `oom_kill 2` at both. The deployment now
+  runs **two** workers at 12 GB.
+- **This only appeared at the end of a full re-analysis, and not by chance.** Long files are the slow
+  ones, so they accumulate at the back of the queue; the last few hundred tracks of a 26,000-track
+  run were almost entirely DJ mixes and extended pieces. A library re-analysis is therefore not a
+  uniform workload — its tail is its worst case, and sizing from the average is sizing for the part
+  that already finished.
+- **`docker update` must never be used on a container with a GPU.** Raising the memory limit that way
+  avoids a recreate, which is exactly why it was chosen — and it silently rewrites the cgroup device
+  allowlist without the NVIDIA permissions. `/dev/nvidia0` remains present and `DeviceRequests` still
+  reads correctly, while every CUDA initialisation fails with *"no CUDA-capable device is
+  detected"*: a message that points at hardware when the cause is a container reconfiguration. It
+  produced 294 spurious embedding failures before it was spotted. Recreate from compose instead, so
+  the limit is recorded there rather than applied live.
+- **Verify a provider in a spawned worker, not just the main process.** `get_analysis_capabilities()`
+  reported CUDA bound in the API process while every analysis subprocess failed to initialise it.
+  The check that matters is the one run where the work happens.
+- **The real fix is not a worker count.** A 57-minute file should not need a gigabyte of resident
+  audio to produce one 512-float vector. `clapback-embed` decodes whole-file and then windows it;
+  decoding a window at a time would make the memory cost independent of track length and stop the
+  worker count from depending on what music somebody owns. Recorded as a follow-up against the
+  package rather than absorbed with RAM on every host that runs it.
 - Accepted and implemented 2026-09-02. `extract_embedding` and `extract_text_embedding` delegate to
   `clapback-embed`; `get_device()`, `load_clap_model()` and the module-level model cache are gone,
   along with `torch` and `transformers` from the `analysis` extra.
