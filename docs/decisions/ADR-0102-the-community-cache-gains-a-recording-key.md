@@ -1,6 +1,6 @@
 # ADR-0102: The Community Cache Gains a Recording Key
 
-Status: proposed
+Status: accepted
 
 Date: 2026-08-31
 
