@@ -69,13 +69,16 @@ dev = [
 ]
 
 # Phase 1.5: Audio analysis
-# Note: torch is installed separately in Docker with CPU-only version (~200MB vs ~5GB CUDA)
-# For local dev with GPU: uv pip install torch
-# For local dev CPU-only: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+#
+# torch and transformers are gone (ADR-0105). CLAP runs through `clapback-embed`,
+# which is ONNX-based: 593 MB of packages and a 1.1 GB checkpoint download leave the
+# image, and GPU acceleration becomes ~200 MB of onnxruntime-gpu rather than a ~5 GB
+# CUDA torch build. The `transformers>=4.30.0` range was also unbounded against a
+# call whose return type it changed in 5.x, in a path with no test coverage.
 analysis = [
     "librosa>=0.10.0",
     "numpy>=1.24.0",
-    "transformers>=4.30.0", # For CLAP model
+    "clapback-embed @ git+https://github.com/seethroughlab/clapback.git@main#subdirectory=packages/embed",
     "soundfile>=0.12.0", # Audio file loading
     "umap-learn>=0.5.0", # Dimensionality reduction for music map
     "pyloudnorm>=0.1.0", # EBU R128 loudness measurement
@@ -89,6 +92,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+
+# `clapback-embed` is installed from git rather than PyPI — it is published from
+# the clapback repository and has no release on an index yet. hatchling
+# refuses direct references without this.
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.ruff]
 line-length = 100

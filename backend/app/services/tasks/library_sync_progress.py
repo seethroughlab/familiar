@@ -34,6 +34,34 @@ def _register_phase_requeue_attempt(
     return len(attempts) > max_attempts
 
 
+def should_force_exit_for_churn(
+    attempts: deque[float],
+    now: float,
+    *,
+    made_progress: bool,
+    window_seconds: float = SYNC_QUEUE_CHURN_WINDOW_SECONDS,
+    max_attempts: int = SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW,
+) -> bool:
+    """Should this phase give up because it is re-queueing to no effect?
+
+    Churn is queueing that achieves nothing. Queueing while tracks are completing
+    is the loop doing its job, so `made_progress` resets the window.
+
+    Without that reset the guard counted every attempt: the phase loops sleep 2s
+    and queue on each pass, giving 150 attempts per 300s window against a limit
+    of 60, so **any phase running longer than about two minutes force-exited**
+    however well it was going. Observed as
+    `queue_churn_limit_exceeded:61/60:300s` on both features and embeddings
+    during a healthy sync.
+
+    Kept here rather than inline in `_guarded_queue` so it can be tested: the
+    caller is a closure over sync state and cannot be imported.
+    """
+    if made_progress:
+        attempts.clear()
+    return _register_phase_requeue_attempt(attempts, now, window_seconds, max_attempts)
+
+
 class SyncProgressReporter:
     """Reports unified sync progress to Redis for API consumption.
 

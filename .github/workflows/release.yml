@@ -210,17 +210,16 @@ jobs:
       - name: Pull built image (native arch)
         run: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }}
 
-      - name: Smoke test (torch import only)
+      - name: Smoke test (imports, artifacts, providers)
         run: |
           docker run --rm \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }} \
             python /app/scripts/smoke_test_clap.py --skip-model
 
-      - name: Smoke test (full CLAP)
+      - name: Smoke test (real embeddings)
         timeout-minutes: 15
         run: |
           docker run --rm \
-            -v familiar-hf-cache:/root/.cache/huggingface \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }} \
             python /app/scripts/smoke_test_clap.py
 

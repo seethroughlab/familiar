@@ -126,7 +126,7 @@ class ExecutorMixin:
             )
             logger.error(
                 f"Executor disabled after {self._consecutive_executor_failures} consecutive "
-                f"failures. Manual reset required (POST /api/v1/analysis/reset-executor)."
+                f"failures. Manual reset required (POST /api/v1/library/analysis/executor/reset)."
             )
             return False
 
@@ -310,14 +310,14 @@ class ExecutorMixin:
             else:
                 raise RuntimeError(
                     "Process pool executor is disabled due to repeated OOM failures. "
-                    "Reset manually via POST /api/v1/analysis/reset-executor "
+                    "Reset manually via POST /api/v1/library/analysis/executor/reset "
                     "or restart the container with more memory."
                 )
 
         if self._executor_disabled:
             raise RuntimeError(
                 "Process pool executor is disabled due to repeated OOM failures. "
-                "Reset manually via POST /api/v1/analysis/reset-executor "
+                "Reset manually via POST /api/v1/library/analysis/executor/reset "
                 "or restart the container with more memory."
             )
 
@@ -373,7 +373,7 @@ class ExecutorMixin:
                         logger.error(
                             f"Executor disabled after {self._consecutive_executor_failures} "
                             f"consecutive failures. Manual reset required "
-                            f"(POST /api/v1/analysis/reset-executor)."
+                            f"(POST /api/v1/library/analysis/executor/reset)."
                         )
                     raise
         raise last_error  # type: ignore[misc]
