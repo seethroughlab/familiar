@@ -63,7 +63,7 @@ FROM python-base AS python-deps
 
 # g++ is needed to compile miniaudio (a pyatv dependency) which has no aarch64 wheel
 # git is needed by uv to resolve `clapback-embed @ git+...`, which is published
-# from the familiar-cache repository and not yet on an index. This is a builder
+# from the clapback repository and not yet on an index. This is a builder
 # stage, so git does not reach the production image — and if the package ever
 # ships to PyPI, this line goes with the git dependency.
 RUN apt-get update && apt-get install -y --no-install-recommends g++ git && rm -rf /var/lib/apt/lists/*
@@ -139,7 +139,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Fetched rather than COPY --from: `scripts/` is not part of the wheel, so it does
 # not exist in the installed package. Same mechanism the image already uses for
 # silero_vad.onnx below.
-ADD https://raw.githubusercontent.com/seethroughlab/familiar-cache/main/packages/embed/scripts/export_models.py ./export_models.py
+ADD https://raw.githubusercontent.com/seethroughlab/clapback/main/packages/embed/scripts/export_models.py ./export_models.py
 RUN --mount=type=cache,target=/root/.cache/huggingface \
     /opt/exportenv/bin/python export_models.py --out /models
 

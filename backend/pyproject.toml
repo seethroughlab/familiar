@@ -78,7 +78,7 @@ dev = [
 analysis = [
     "librosa>=0.10.0",
     "numpy>=1.24.0",
-    "clapback-embed @ git+https://github.com/seethroughlab/familiar-cache.git@main#subdirectory=packages/embed",
+    "clapback-embed @ git+https://github.com/seethroughlab/clapback.git@main#subdirectory=packages/embed",
     "soundfile>=0.12.0", # Audio file loading
     "umap-learn>=0.5.0", # Dimensionality reduction for music map
     "pyloudnorm>=0.1.0", # EBU R128 loudness measurement
@@ -94,7 +94,7 @@ build-backend = "hatchling.build"
 packages = ["app"]
 
 # `clapback-embed` is installed from git rather than PyPI — it is published from
-# the familiar-cache repository and has no release on an index yet. hatchling
+# the clapback repository and has no release on an index yet. hatchling
 # refuses direct references without this.
 [tool.hatch.metadata]
 allow-direct-references = true
