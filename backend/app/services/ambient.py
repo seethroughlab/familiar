@@ -272,6 +272,21 @@ def score_candidate(
     ):
         total += profile.quiet_energy_bonus
 
+    # Pull back toward calm, in absolute terms.
+    #
+    # Scaled by how far past the ceiling the candidate is, so a track just over it is nudged and a
+    # genuinely loud one is pushed hard. Both energy and brightness count: a quiet but very bright
+    # track — a cymbal-heavy recording, a thin live mix — is as wrong for this as a loud one, and
+    # `energy` alone does not catch it.
+    if profile.liveliness_penalty:
+        excess = max(
+            _safe_float(candidate.energy) - profile.liveliness_ceiling,
+            _safe_float(candidate.brightness) - profile.liveliness_ceiling,
+        )
+        if excess > 0:
+            headroom = max(1.0 - profile.liveliness_ceiling, 1e-6)
+            total -= profile.liveliness_penalty * min(excess / headroom, 1.0)
+
     # Dark filter bonus for minor keys
     if profile.minor_key_bonus and candidate.modal_character and "minor" in (candidate.modal_character or "").lower():
         total += profile.minor_key_bonus  # Small bonus, mainly used by dark filter

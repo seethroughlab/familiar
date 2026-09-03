@@ -52,6 +52,21 @@ class RankingProfile:
     bpm_threshold: float = 40.0
     quiet_energy_bonus: float = 0.0
     quiet_energy_threshold: float = 0.35
+
+    # How hard to pull the chain back toward calm, regardless of where it currently is.
+    #
+    # **This exists because every other energy term is relative.** `score_candidate` measures
+    # energy as *proximity* to the current track, so each step resembles the last and nothing
+    # resists a slow climb — a session seeded on something quiet random-walks its way into
+    # whatever the library has, which for ambient means it eventually stops being ambient.
+    # `quiet_energy_bonus` was the only absolute pull and it is gated on `intensity == "quiet"`,
+    # so at the default intensity there was none at all.
+    #
+    # Applied as a penalty above a ceiling rather than a bonus below a floor: a bonus lifts the
+    # calm candidates a session already had plenty of, where a penalty is what actually keeps a
+    # loud one from winning on embedding similarity alone.
+    liveliness_ceiling: float = 1.0
+    liveliness_penalty: float = 0.0
     minor_key_bonus: float = 0.0
     artist_cooldown_penalty: float = 0.0
 
@@ -93,6 +108,12 @@ AMBIENT = RankingProfile(
     quiet_energy_bonus=0.10,
     minor_key_bonus=0.02,
     artist_cooldown_penalty=0.25,
+    # Added after listening: sessions drifted out of ambient territory within a few windows,
+    # because energy was only ever measured against the previous track. 0.55 is above `soft`'s
+    # 0.5 ceiling on purpose — this is a pull rather than a gate, and the filter presets are
+    # still where a hard limit belongs.
+    liveliness_ceiling=0.55,
+    liveliness_penalty=0.30,
 )
 
 
