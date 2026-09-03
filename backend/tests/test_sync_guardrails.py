@@ -8,9 +8,10 @@ from app.services.tasks.analysis_pipeline import (
     ANALYSIS_RETRY_WINDOW_HOURS,
     _analysis_failure_cutoff,
 )
-from app.services.tasks.library_sync import (
-    SyncProgressReporter,
+from app.services.tasks.library_sync import SyncProgressReporter
+from app.services.tasks.library_sync_progress import (
     _register_phase_requeue_attempt,
+    should_force_exit_for_churn,
 )
 from app.utils.time import utcnow
 
@@ -147,3 +148,77 @@ class TestSyncLeavesEditedMetadataAlone:
             "the guard that keeps edited metadata has moved or changed shape — check what the Mac's "
             "track editor and sync pane now promise"
         )
+
+
+class TestChurnGuardDoesNotPunishProgress:
+    """The guard must distinguish churn from a phase that is simply busy.
+
+    It could not. The phase loops sleep 2s and queue on every pass, so a phase
+    with work to do makes 150 attempts per 300s window against a limit of 60 —
+    meaning **any phase running longer than about two minutes force-exited**,
+    however well it was going. Seen in production as
+    `queue_churn_limit_exceeded:61/60:300s` on both features and embeddings
+    during a healthy sync, capping every run at roughly two minutes of queueing.
+
+    It stayed hidden because the background worker keeps draining the queue after
+    the loop exits, so throughput looked fine until the work got fast enough to
+    empty the queue before the next sync refilled it.
+    """
+
+    def test_the_loop_cadence_alone_exceeds_the_limit(self) -> None:
+        """The arithmetic that made the old behaviour unavoidable.
+
+        This asserts the *relationship* between the constants and the loop, which
+        is what was actually wrong — not a bug in the counting.
+        """
+        from app.services.tasks.library_sync_progress import (
+            SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW,
+            SYNC_QUEUE_CHURN_WINDOW_SECONDS,
+        )
+
+        loop_sleep_seconds = 2
+        attempts_per_window = SYNC_QUEUE_CHURN_WINDOW_SECONDS / loop_sleep_seconds
+        assert attempts_per_window > SYNC_MAX_REQUEUE_ATTEMPTS_PER_WINDOW, (
+            "a busy phase cannot stay under the limit on cadence alone, so the "
+            "guard must be reset by progress rather than counting every attempt"
+        )
+
+    def test_progress_resets_the_window(self) -> None:
+        """A phase completing tracks can queue indefinitely.
+
+        200 iterations is 400 simulated seconds — well past the point where the
+        old behaviour force-exited at 60.
+        """
+        attempts: deque[float] = deque()
+        now = 0.0
+        for _ in range(200):
+            assert not should_force_exit_for_churn(attempts, now, made_progress=True)
+            now += 2.0
+
+    def test_churn_without_progress_still_trips(self) -> None:
+        """The guard must keep doing its actual job.
+
+        Queueing repeatedly while nothing completes is a genuine infinite loop and
+        has to be caught — the fix must not amount to disabling it.
+        """
+        attempts: deque[float] = deque()
+        now = 0.0
+        tripped = False
+        for _ in range(200):
+            if should_force_exit_for_churn(attempts, now, made_progress=False):
+                tripped = True
+                break
+            now += 2.0
+        assert tripped, "no progress for 200 attempts must still force an exit"
+
+    def test_progress_after_near_miss_clears_accumulated_attempts(self) -> None:
+        """Intermittent progress must not leave the phase one attempt from death."""
+        attempts: deque[float] = deque()
+        now = 0.0
+        for _ in range(59):
+            assert not should_force_exit_for_churn(attempts, now, made_progress=False)
+            now += 2.0
+        assert len(attempts) == 59
+        # one track completes
+        assert not should_force_exit_for_churn(attempts, now, made_progress=True)
+        assert len(attempts) == 1, "the window must reset, not merely not-trip"
